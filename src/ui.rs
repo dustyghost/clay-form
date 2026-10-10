@@ -2,10 +2,16 @@
 use crate::{
     command::{Command, PendingAction},
     document::Document,
+    preferences::{Action, Dock, Hold, Preferences, Shortcut, Tool},
     sculpt::{Alpha, Axis, Kind},
 };
 use eframe::egui::{self, Color32, Sense, Vec2};
 pub(crate) struct UiState {
+    pub preferences: Preferences,
+    pub settings_open: bool,
+    pub layout_open: bool,
+    pub capturing: Option<Action>,
+    pub settings_message: String,
     pub selected: usize,
     pub path: String,
     pub preset_path: String,
@@ -20,6 +26,11 @@ pub(crate) struct UiState {
 impl Default for UiState {
     fn default() -> Self {
         Self {
+            preferences: Preferences::default(),
+            settings_open: false,
+            layout_open: false,
+            capturing: None,
+            settings_message: String::new(),
             selected: 0,
             path: "sculpt.clay".into(),
             preset_path: "brush.brush.json".into(),
@@ -39,6 +50,16 @@ impl UiState {
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.strong("CLAY FORM");
+                ui.menu_button("Settings", |ui| {
+                    if ui.button("Key settings…").clicked() {
+                        self.settings_open = true;
+                        ui.close();
+                    }
+                    if ui.button("Customize workspace…").clicked() {
+                        self.layout_open = true;
+                        ui.close();
+                    }
+                });
                 if ui.button("New sphere").clicked() {
                     commands.push(Command::Request(PendingAction::New));
                 }
@@ -149,13 +170,91 @@ impl UiState {
         pressure: f32,
     ) -> Vec<Command> {
         let mut commands = Vec::new();
-        egui::SidePanel::left("brushes")
-            .default_width(260.)
-            .show(ctx, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    self.brush_controls(ui, document, tablet_status, pressure, &mut commands)
+        for dock in [Dock::Left, Dock::Right] {
+            if !self.preferences.panels.iter().any(|p| p.dock == dock) {
+                continue;
+            }
+            let panel = if dock == Dock::Left {
+                egui::SidePanel::left("tools_left")
+            } else {
+                egui::SidePanel::right("tools_right")
+            };
+            let width = if dock == Dock::Left {
+                self.preferences.left_width
+            } else {
+                self.preferences.right_width
+            };
+            let response = panel
+                .default_width(width)
+                .width_range(180. ..=600.)
+                .show(ctx, |ui| {
+                    egui::ScrollArea::vertical()
+                        .id_salt(format!("{dock:?}"))
+                        .show(ui, |ui| {
+                            for index in 0..self.preferences.panels.len() {
+                                if self.preferences.panels[index].dock != dock {
+                                    continue;
+                                }
+                                let tool = self.preferences.panels[index].tool;
+                                let header = egui::CollapsingHeader::new(tool.label())
+                                    .id_salt(tool.label())
+                                    .open(Some(self.preferences.panels[index].open))
+                                    .show(ui, |ui| {
+                                        self.tool_controls(
+                                            tool,
+                                            ui,
+                                            document,
+                                            tablet_status,
+                                            pressure,
+                                            &mut commands,
+                                        );
+                                    });
+                                if header.header_response.clicked() {
+                                    self.preferences.panels[index].open =
+                                        !self.preferences.panels[index].open;
+                                }
+                            }
+                        });
                 });
-            });
+            if dock == Dock::Left {
+                self.preferences.left_width = response.response.rect.width();
+            } else {
+                self.preferences.right_width = response.response.rect.width();
+            }
+        }
+        for index in 0..self.preferences.panels.len() {
+            let panel = self.preferences.panels[index].clone();
+            if panel.dock != Dock::Floating {
+                continue;
+            }
+            let mut visible = true;
+            if let Some(response) = egui::Window::new(panel.tool.label())
+                .id(egui::Id::new(("tool", panel.tool.label())))
+                .open(&mut visible)
+                .default_pos(panel.position)
+                .default_width(260.)
+                .show(ctx, |ui| {
+                    egui::ScrollArea::vertical()
+                        .max_height(600.)
+                        .show(ui, |ui| {
+                            self.tool_controls(
+                                panel.tool,
+                                ui,
+                                document,
+                                tablet_status,
+                                pressure,
+                                &mut commands,
+                            )
+                        });
+                })
+            {
+                self.preferences.panels[index].position =
+                    [response.response.rect.min.x, response.response.rect.min.y];
+            }
+            if !visible {
+                self.preferences.panels[index].dock = Dock::Hidden;
+            }
+        }
         commands
     }
     pub fn status_bar(&self, ctx: &egui::Context) {
@@ -188,91 +287,224 @@ impl UiState {
             });
         command
     }
-    fn brush_controls(
+    fn tool_controls(
         &mut self,
+        tool: Tool,
         ui: &mut egui::Ui,
         document: &Document,
         tablet_status: &str,
         pressure: f32,
         commands: &mut Vec<Command>,
     ) {
-        ui.heading("Brush library");
-        for (i, b) in document.brushes().iter().enumerate() {
-            ui.selectable_value(&mut self.selected, i, &b.name);
-        }
-        if ui.button("Duplicate brush").clicked() {
-            commands.push(Command::DuplicateBrush(self.selected));
-        }
-        ui.separator();
         let original = &document.brushes()[self.selected];
         let mut edited = original.clone();
         let b = &mut edited;
-        ui.text_edit_singleline(&mut b.name);
-        egui::ComboBox::from_label("Operation")
-            .selected_text(format!("{:?}", b.kind))
-            .show_ui(ui, |ui| {
-                for k in Kind::ALL {
-                    ui.selectable_value(&mut b.kind, k, format!("{k:?}"));
+        match tool {
+            Tool::Library => {
+                for (i, b) in document.brushes().iter().enumerate() {
+                    ui.selectable_value(&mut self.selected, i, &b.name);
                 }
+                if ui.button("Duplicate brush").clicked() {
+                    commands.push(Command::DuplicateBrush(self.selected));
+                }
+            }
+            Tool::Brush => {
+                ui.text_edit_singleline(&mut b.name);
+                egui::ComboBox::from_label("Operation")
+                    .selected_text(format!("{:?}", b.kind))
+                    .show_ui(ui, |ui| {
+                        for k in Kind::ALL {
+                            ui.selectable_value(&mut b.kind, k, format!("{k:?}"));
+                        }
+                    });
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut b.subtract, false, "+ Add");
+                    ui.selectable_value(&mut b.subtract, true, "− Subtract");
+                });
+                ui.add(egui::Slider::new(&mut b.radius, 1. ..=500.).text("Radius (px)"));
+                ui.add(egui::Slider::new(&mut b.strength, 0. ..=1.).text("Strength"));
+                ui.add(egui::Slider::new(&mut b.spacing, 0.01..=1.).text("Spacing"));
+                ui.add(egui::Slider::new(&mut b.falloff, 0.1..=8.).text("Falloff"));
+                ui.add(egui::Slider::new(&mut b.rotation, 0. ..=360.).text("Alpha rotation"));
+                ui.checkbox(&mut b.pressure, "Pressure → strength");
+                ui.checkbox(&mut b.pressure_radius, "Pressure → radius");
+                ui.add(egui::Slider::new(&mut b.pressure_curve, 0.1..=4.).text("Pressure curve"));
+            }
+            Tool::Alpha => {
+                ui.label("Alpha");
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut b.alpha, Alpha::Soft, "Soft");
+                    ui.selectable_value(&mut b.alpha, Alpha::Hard, "Hard");
+                    ui.selectable_value(&mut b.alpha, Alpha::Square, "Square");
+                });
+                if matches!(b.alpha, Alpha::Image { .. }) {
+                    ui.label("Custom image alpha loaded");
+                }
+                let (r, p) = ui.allocate_painter(Vec2::splat(100.), Sense::hover());
+
+                for y in 0..32 {
+                    for x in 0..32 {
+                        let value =
+                            (255. * b.weight(x as f32 / 15.5 - 1., 1. - y as f32 / 15.5)) as u8;
+                        p.rect_filled(
+                            egui::Rect::from_min_size(
+                                r.rect.min + Vec2::new(x as f32, y as f32) * 3.125,
+                                Vec2::splat(3.125),
+                            ),
+                            0.,
+                            Color32::from_gray(value),
+                        );
+                    }
+                }
+                ui.label("Image path (PNG/JPEG)");
+                ui.text_edit_singleline(&mut self.alpha_path);
+                if ui.button("Load alpha").clicked() {
+                    commands.push(Command::LoadAlpha(self.selected));
+                }
+            }
+            Tool::Presets => {
+                ui.label("Preset path");
+                ui.text_edit_singleline(&mut self.preset_path);
+                ui.horizontal(|ui| {
+                    if ui.button("Save preset").clicked() {
+                        commands.push(Command::SavePreset(self.selected));
+                    }
+                    if ui.button("Load preset").clicked() {
+                        commands.push(Command::LoadPreset);
+                    }
+                });
+            }
+            Tool::Tablet => {
+                ui.label(tablet_status);
+                ui.label(format!("Pressure: {:.0}%", pressure * 100.));
+                ui.label(format!("Left / pen: sculpt; empty space: orbit\nCorner gizmo: drag or click axis\n{:?}: reverse brush\n{:?}: smooth\nRight drag: orbit\nMiddle drag: pan\nWheel: zoom", self.preferences.reverse, self.preferences.smooth));
+            }
+        }
+        if &edited != original {
+            commands.push(Command::UpdateBrush(self.selected, edited));
+        }
+    }
+}
+
+impl UiState {
+    pub fn settings(&mut self, ctx: &egui::Context) {
+        if !self.settings_open {
+            self.capturing = None;
+        }
+        if let Some(action) = self.capturing {
+            let event = ctx.input(|i| {
+                i.events.iter().find_map(|e| match e {
+                    egui::Event::Key {
+                        key,
+                        pressed: true,
+                        repeat: false,
+                        modifiers,
+                        ..
+                    } => Some((*key, *modifiers)),
+                    _ => None,
+                })
             });
-        ui.horizontal(|ui| {
-            ui.selectable_value(&mut b.subtract, false, "+ Add");
-            ui.selectable_value(&mut b.subtract, true, "− Subtract");
-        });
-        ui.add(egui::Slider::new(&mut b.radius, 1. ..=500.).text("Radius (px)"));
-        ui.add(egui::Slider::new(&mut b.strength, 0. ..=1.).text("Strength"));
-        ui.add(egui::Slider::new(&mut b.spacing, 0.01..=1.).text("Spacing"));
-        ui.add(egui::Slider::new(&mut b.falloff, 0.1..=8.).text("Falloff"));
-        ui.add(egui::Slider::new(&mut b.rotation, 0. ..=360.).text("Alpha rotation"));
-        ui.checkbox(&mut b.pressure, "Pressure → strength");
-        ui.checkbox(&mut b.pressure_radius, "Pressure → radius");
-        ui.add(egui::Slider::new(&mut b.pressure_curve, 0.1..=4.).text("Pressure curve"));
-        ui.label("Alpha");
-        ui.horizontal(|ui| {
-            ui.selectable_value(&mut b.alpha, Alpha::Soft, "Soft");
-            ui.selectable_value(&mut b.alpha, Alpha::Hard, "Hard");
-            ui.selectable_value(&mut b.alpha, Alpha::Square, "Square");
-        });
-        if matches!(b.alpha, Alpha::Image { .. }) {
-            ui.label("Custom image alpha loaded");
+            if let Some((key, modifiers)) = event {
+                if key == egui::Key::Escape {
+                    self.capturing = None;
+                } else {
+                    match self.preferences.bind(action, Shortcut::new(key, modifiers)) {
+                        Ok(()) => {
+                            self.settings_message = format!("Updated {}", action.label());
+                            self.capturing = None;
+                        }
+                        Err(error) => self.settings_message = error,
+                    }
+                }
+                ctx.input_mut(|i| {
+                    i.events
+                        .retain(|e| !matches!(e, egui::Event::Key { .. } | egui::Event::Text(_)))
+                });
+            }
         }
-        if b != original {
-            commands.push(Command::UpdateBrush(self.selected, b.clone()));
-        }
-        let (r, p) = ui.allocate_painter(Vec2::splat(100.), Sense::hover());
-        let b = &edited;
-        for y in 0..32 {
-            for x in 0..32 {
-                let value = (255. * b.weight(x as f32 / 15.5 - 1., 1. - y as f32 / 15.5)) as u8;
-                p.rect_filled(
-                    egui::Rect::from_min_size(
-                        r.rect.min + Vec2::new(x as f32, y as f32) * 3.125,
-                        Vec2::splat(3.125),
-                    ),
-                    0.,
-                    Color32::from_gray(value),
+        egui::Window::new("Key settings")
+            .open(&mut self.settings_open)
+            .default_width(460.)
+            .show(ctx, |ui| {
+                ui.label("Click a shortcut, then press the new combination. Escape cancels.");
+                ui.label(
+                    "Shortcuts pause while typing or editing settings. Changes save automatically.",
                 );
+                egui::Grid::new("bindings").striped(true).show(ui, |ui| {
+                    for (action, binding) in &mut self.preferences.bindings {
+                        ui.label(action.label());
+                        let label = if self.capturing == Some(*action) {
+                            "Press keys…".into()
+                        } else {
+                            binding.as_ref().map_or("Unbound".into(), |b| b.label())
+                        };
+                        if ui.button(label).clicked() {
+                            self.capturing = Some(*action);
+                            self.settings_message.clear();
+                        }
+                        if ui.small_button("Clear").clicked() {
+                            *binding = None;
+                            if self.capturing == Some(*action) {
+                                self.capturing = None;
+                            }
+                        }
+                        ui.end_row();
+                    }
+                });
+                ui.separator();
+                for (label, hold) in [
+                    ("Hold to smooth", &mut self.preferences.smooth),
+                    ("Hold to reverse", &mut self.preferences.reverse),
+                ] {
+                    egui::ComboBox::from_label(label)
+                        .selected_text(format!("{hold:?}"))
+                        .show_ui(ui, |ui| {
+                            for value in Hold::ALL {
+                                ui.selectable_value(hold, value, format!("{value:?}"));
+                            }
+                        });
+                }
+                if self.preferences.smooth == self.preferences.reverse
+                    && self.preferences.smooth != Hold::Disabled
+                {
+                    ui.label("Both effects will apply with this modifier.");
+                }
+                if ui.button("Reset keys to defaults").clicked() {
+                    let defaults = Preferences::default();
+                    self.preferences.bindings = defaults.bindings;
+                    self.preferences.smooth = defaults.smooth;
+                    self.preferences.reverse = defaults.reverse;
+                    self.capturing = None;
+                }
+                ui.label(&self.settings_message);
+            });
+        egui::Window::new("Customize workspace").open(&mut self.layout_open).default_width(520.).show(ctx, |ui| {
+            ui.label("Choose where each tool group lives. Use arrows to change its order.");
+            ui.label("Side panels resize by dragging their edge. Floating windows drag by their title.");
+            ui.label("Changes save automatically; hidden groups can be restored here.");
+            let mut reorder = None;
+            for index in 0..self.preferences.panels.len() {
+                ui.push_id(index, |ui| {
+                    ui.horizontal(|ui| {
+                        let panel = &mut self.preferences.panels[index];
+                        ui.label(panel.tool.label());
+                        egui::ComboBox::from_id_salt("dock").selected_text(format!("{:?}",panel.dock)).show_ui(ui, |ui| {
+                            for dock in Dock::ALL { ui.selectable_value(&mut panel.dock, dock, format!("{dock:?}")); }
+                        });
+                        ui.add_enabled(matches!(panel.dock,Dock::Left | Dock::Right), egui::Checkbox::new(&mut panel.open, "Expanded"));
+                        if ui.add_enabled(index > 0, egui::Button::new("↑")).clicked() { reorder = Some((index,index-1)); }
+                        if ui.add_enabled(index < Tool::ALL.len()-1, egui::Button::new("↓")).clicked() { reorder = Some((index,index+1)); }
+                    });
+                });
             }
-        }
-        ui.label("Image path (PNG/JPEG)");
-        ui.text_edit_singleline(&mut self.alpha_path);
-        if ui.button("Load alpha").clicked() {
-            commands.push(Command::LoadAlpha(self.selected));
-        }
-        ui.separator();
-        ui.label("Preset path");
-        ui.text_edit_singleline(&mut self.preset_path);
-        ui.horizontal(|ui| {
-            if ui.button("Save preset").clicked() {
-                commands.push(Command::SavePreset(self.selected));
-            }
-            if ui.button("Load preset").clicked() {
-                commands.push(Command::LoadPreset);
+            if let Some((a,b)) = reorder { self.preferences.panels.swap(a,b); }
+            if ui.add(egui::Slider::new(&mut self.preferences.left_width,180. ..=600.).text("Left width")).changed() { ctx.memory_mut(|m| m.data.remove::<egui::containers::panel::PanelState>(egui::Id::new("tools_left"))); }
+            if ui.add(egui::Slider::new(&mut self.preferences.right_width,180. ..=600.).text("Right width")).changed() { ctx.memory_mut(|m| m.data.remove::<egui::containers::panel::PanelState>(egui::Id::new("tools_right"))); }
+            if ui.button("Reset workspace to defaults").clicked() {
+                let defaults = Preferences::default(); self.preferences.panels = defaults.panels; self.preferences.left_width = defaults.left_width; self.preferences.right_width = defaults.right_width;
+                // Remove remembered panel sizes/positions so reset takes effect immediately.
+                ctx.memory_mut(|m| { m.reset_areas(); for id in ["tools_left","tools_right"] { m.data.remove::<egui::containers::panel::PanelState>(egui::Id::new(id)); } });
             }
         });
-        ui.separator();
-        ui.label(tablet_status);
-        ui.label(format!("Pressure: {:.0}%", pressure * 100.));
-        ui.label("Left / pen: sculpt; empty space: orbit\nCorner gizmo: drag or click axis\nAlt: reverse brush\nShift: smooth\nRight drag: orbit\nMiddle drag: pan\nWheel: zoom");
     }
 }

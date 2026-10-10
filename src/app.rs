@@ -4,6 +4,7 @@ use crate::{
     command::{Command, PendingAction},
     document::Document,
     persistence,
+    preferences::{self, Action, Preferences},
     tablet::Tablet,
     ui::UiState,
     viewport::{Viewport, ViewportOptions},
@@ -18,6 +19,9 @@ pub struct App {
     tablet: Tablet,
     pressure: f32,
     closing: bool,
+    preferences_path: Option<std::path::PathBuf>,
+    saved_preferences: Preferences,
+    preferences_changed: Option<std::time::Instant>,
 }
 impl Default for App {
     fn default() -> Self {
@@ -29,10 +33,100 @@ impl Default for App {
             tablet: Tablet::new(),
             pressure: 1.,
             closing: false,
+            preferences_path: None,
+            saved_preferences: Preferences::default(),
+            preferences_changed: None,
         }
     }
 }
 impl App {
+    pub fn new() -> Self {
+        let mut app = Self::default();
+        let path = preferences::path();
+        if path.exists() {
+            match preferences::load(&path) {
+                Ok(prefs) => {
+                    app.ui.preferences = prefs.clone();
+                    app.saved_preferences = prefs;
+                }
+                Err(error) => app.ui.status = format!("Could not load preferences: {error}"),
+            }
+        }
+        app.preferences_path = Some(path);
+        app
+    }
+    fn save_preferences(&mut self) {
+        if self.ui.preferences == self.saved_preferences {
+            return;
+        }
+        if let Some(path) = &self.preferences_path {
+            match preferences::save(path, &self.ui.preferences) {
+                Ok(()) => {
+                    self.saved_preferences = self.ui.preferences.clone();
+                    self.preferences_changed = None;
+                }
+                Err(error) => {
+                    self.ui.status = format!("Could not save preferences: {error}");
+                    self.preferences_changed = Some(std::time::Instant::now());
+                }
+            }
+        }
+    }
+    fn shortcuts(&mut self, ctx: &egui::Context) {
+        if ctx.wants_keyboard_input()
+            || self.ui.pending.is_some()
+            || self.ui.settings_open
+            || self.ui.layout_open
+        {
+            return;
+        }
+        for action in self.ui.preferences.actions(ctx) {
+            let command = match action {
+                Action::Save => Some(Command::Save),
+                Action::Open => Some(Command::Request(PendingAction::Open(self.ui.path.clone()))),
+                Action::New => Some(Command::Request(PendingAction::New)),
+                Action::Undo => Some(Command::Undo),
+                Action::Redo => Some(Command::Redo),
+                Action::ResetView => Some(Command::ResetView),
+                Action::Symmetry => {
+                    let mut symmetry = self.document.symmetry().clone();
+                    symmetry.enabled = !symmetry.enabled;
+                    Some(Command::SetSymmetry(symmetry))
+                }
+                Action::Wireframe => {
+                    self.ui.wire = !self.ui.wire;
+                    None
+                }
+                Action::Guides => {
+                    self.ui.show_symmetry_guides = !self.ui.show_symmetry_guides;
+                    None
+                }
+                Action::Smaller | Action::Larger => {
+                    let mut brush = self.document.brushes()[self.ui.selected].clone();
+                    brush.radius = (brush.radius
+                        * if action == Action::Smaller { 0.9 } else { 1.1 })
+                    .clamp(1., 500.);
+                    Some(Command::UpdateBrush(self.ui.selected, brush))
+                }
+                Action::PreviousBrush => {
+                    self.ui.selected = (self.ui.selected + self.document.brushes().len() - 1)
+                        % self.document.brushes().len();
+                    None
+                }
+                Action::NextBrush => {
+                    self.ui.selected = (self.ui.selected + 1) % self.document.brushes().len();
+                    None
+                }
+            };
+            if let Some(command) = command {
+                self.dispatch(command, ctx);
+            }
+            if self.ui.pending.is_some() {
+                break;
+            }
+        }
+    }
+
     fn save_to(&mut self, path: &str) -> bool {
         match persistence::save_project(path, &self.document.project()) {
             Ok(()) => {
@@ -174,12 +268,19 @@ impl App {
                 wire: self.ui.wire,
                 show_guides: self.ui.show_symmetry_guides,
                 guide_opacity: self.ui.guide_opacity,
-                enabled: self.ui.pending.is_none(),
+                enabled: self.ui.pending.is_none()
+                    && !self.ui.settings_open
+                    && !self.ui.layout_open,
+                smooth: self.ui.preferences.smooth,
+                reverse: self.ui.preferences.reverse,
             },
         );
     }
 }
 impl eframe::App for App {
+    fn on_exit(&mut self, _: Option<&eframe::glow::Context>) {
+        self.save_preferences();
+    }
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         let native_pressure = ctx.input(|i| {
             i.events.iter().rev().find_map(|event| match event {
@@ -204,10 +305,22 @@ impl eframe::App for App {
         {
             self.dispatch(command, ctx);
         }
+        self.ui.settings(ctx);
+        self.shortcuts(ctx);
         self.ui.status_bar(ctx);
         egui::CentralPanel::default().show(ctx, |ui| self.show_viewport(ui));
         if let Some(command) = self.ui.confirmation(ctx) {
             self.dispatch(command, ctx);
+        }
+        if self.ui.preferences != self.saved_preferences {
+            let since = self
+                .preferences_changed
+                .get_or_insert_with(std::time::Instant::now);
+            if since.elapsed() >= std::time::Duration::from_millis(750) {
+                self.save_preferences();
+            }
+        } else {
+            self.preferences_changed = None;
         }
         ctx.request_repaint_after(std::time::Duration::from_millis(33));
     }

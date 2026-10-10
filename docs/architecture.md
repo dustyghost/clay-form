@@ -26,6 +26,7 @@ flowchart LR
 | `persistence.rs` | Read/write version 1 JSON, import image alphas, and export OBJ. |
 | `camera.rs` | Session-only orbit, pan, zoom and camera basis. |
 | `viewport/` | Lock a drag into sculpt/orbit/gizmo mode; translate pointer movement into camera changes or dabs. Rendering/picking, the gizmo, and symmetry surface guides each have their own module. |
+| `preferences.rs` | Validate shortcut assignments and tool layout; load/save independent user preferences. |
 | `ui.rs` | Render toolbar, brush controls and confirmation dialog; emit commands without file or mesh operations. |
 | `tablet.rs`, `tablet/linux.rs` | Publish normalized pressure and diagnostics; discover/read Linux devices in a worker that stops and joins when dropped. |
 
@@ -44,3 +45,5 @@ The version 1 `.clay` and `.brush.json` formats remain compatible. Projects now 
 ## Extending the app
 
 Add brush data and algorithms in `sculpt/`, then expose their settings in `ui.rs`. Add user operations as commands handled by `App`; put their document effects in `Document` methods. Keep device-specific logic under `tablet/`, and keep render or picking changes under `viewport/`. Introduce a trait or a new subsystem when a second implementation needs it; the existing concrete modules are sufficient for the current app.
+
+User preferences use their own versioned JSON file in the user configuration directory. UI edits bindings and layout without touching the document. The controller loads preferences at desktop startup, saves after a debounce and on exit, and translates keyboard actions into existing commands. Viewport options carry the chosen hold modifiers. Tests use explicit temporary paths and do not read or write the user configuration.

@@ -72,3 +72,13 @@ git init -b main
 git add Cargo.toml Cargo.lock .gitignore README.md src
 git commit -m "Create Clay Form sculpting prototype"
 ```
+
+## Key settings and workspace
+
+Open **Settings → Key settings** to rebind or clear shortcuts. Click a binding and press its replacement; Escape cancels. Conflicting shortcuts are rejected. Smooth and reverse hold modifiers are configurable too. Shortcuts pause during text entry and settings editing.
+
+Defaults: Ctrl+S saves, Ctrl+O opens the project path, Ctrl+N creates a sphere, Ctrl+Z undoes, Ctrl+Shift+Z redoes, F resets the view, X toggles symmetry, W toggles wireframe, G toggles symmetry guides, brackets change brush radius, and comma/period select brushes.
+
+Open **Settings → Customize workspace** to place brush library, brush settings, alpha, presets, and tablet/navigation groups on the left, right, in floating windows, or hidden. Arrows reorder groups, headers collapse them, panel edges resize them, and floating titles move them. Closing a floating tool hides it; restore it in the workspace editor. Reset buttons restore key or layout defaults independently.
+
+Preferences save automatically after a short delay and on exit, separately from sculpt projects, to `$XDG_CONFIG_HOME/clay-form/preferences.json` or `~/.config/clay-form/preferences.json`. Invalid preferences fall back to defaults with a status message. This is group-level layout customization; individual controls stay within their tool groups.

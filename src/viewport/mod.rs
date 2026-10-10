@@ -5,6 +5,7 @@ mod scene;
 use crate::{
     camera::Camera,
     document::Document,
+    preferences::Hold,
     sculpt::{Dab, Kind},
 };
 use eframe::egui::{self, Color32, Pos2, Sense, Vec2};
@@ -31,6 +32,8 @@ pub(crate) struct ViewportOptions {
     pub show_guides: bool,
     pub guide_opacity: f32,
     pub enabled: bool,
+    pub smooth: Hold,
+    pub reverse: Hold,
 }
 impl Viewport {
     pub(crate) fn cancel(&mut self, document: &mut Document) {
@@ -57,15 +60,15 @@ impl Viewport {
             .hover_pos()
             .or_else(|| response.interact_pointer_pos());
         let modifiers = ui.input(|i| i.modifiers);
-        if response.hovered() {
+        if options.enabled && response.hovered() {
             let scroll = ui.input(|i| i.smooth_scroll_delta.y);
             camera.zoom_by(scroll);
         }
-        if response.dragged_by(egui::PointerButton::Secondary) {
+        if options.enabled && response.dragged_by(egui::PointerButton::Secondary) {
             let d = ui.input(|i| i.pointer.delta());
             camera.orbit(d);
         }
-        if response.dragged_by(egui::PointerButton::Middle) {
+        if options.enabled && response.dragged_by(egui::PointerButton::Middle) {
             camera.pan += ui.input(|i| i.pointer.delta());
         }
         let primary =
@@ -109,11 +112,7 @@ impl Viewport {
             }
             self.gesture = None;
         }
-        let drawing = primary
-            && self.gesture == Some(Gesture::Sculpt)
-            && !modifiers.ctrl
-            && !modifiers.command
-            && options.enabled;
+        let drawing = primary && self.gesture == Some(Gesture::Sculpt) && options.enabled;
         if drawing && !self.stroke {
             document.begin_stroke();
             self.stroke = true;
@@ -141,7 +140,7 @@ impl Viewport {
                 radius,
                 egui::Stroke::new(
                     1.5,
-                    if b.subtract ^ modifiers.alt {
+                    if b.subtract ^ options.reverse.active(modifiers) {
                         Color32::from_rgb(255, 140, 100)
                     } else {
                         Color32::from_rgb(125, 210, 245)
@@ -163,7 +162,7 @@ impl Viewport {
                         let hit = scene.pick(document.mesh(), point);
                         if let Some((p, n)) = hit {
                             let mut brush = b.clone();
-                            if modifiers.shift {
+                            if options.smooth.active(modifiers) {
                                 brush.kind = Kind::Smooth;
                             }
                             let d = (right * ((pos.x - previous.x) / scale)
@@ -179,7 +178,7 @@ impl Viewport {
                                     radius: radius / scale,
                                     pressure: options.pressure,
                                     delta: d,
-                                    invert: modifiers.alt,
+                                    invert: options.reverse.active(modifiers),
                                 },
                             );
                         }

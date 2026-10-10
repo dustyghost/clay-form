@@ -184,3 +184,80 @@ fn failed_open_after_discard_keeps_existing_unsaved_content() {
     );
     assert!(app.document.can_undo());
 }
+
+#[test]
+fn custom_shortcut_changes_view_and_pauses_during_settings_and_text_entry() {
+    use crate::preferences::{Action, Shortcut};
+    let mut app = App::default();
+    app.ui
+        .preferences
+        .bind(
+            Action::Wireframe,
+            Shortcut::new(egui::Key::F2, egui::Modifiers::NONE),
+        )
+        .unwrap();
+    let ctx = egui::Context::default();
+    for (settings, typing, expected) in [
+        (false, false, true),
+        (true, false, true),
+        (false, true, true),
+    ] {
+        app.ui.settings_open = settings;
+        let _ = ctx.run(
+            egui::RawInput {
+                events: vec![egui::Event::Key {
+                    key: egui::Key::F2,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+                ..Default::default()
+            },
+            |ctx| {
+                if typing {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        ui.text_edit_singleline(&mut app.ui.path).request_focus();
+                    });
+                }
+                app.shortcuts(ctx);
+                assert_eq!(app.ui.wire, expected);
+            },
+        );
+    }
+}
+
+#[test]
+fn customized_tool_groups_render_in_all_docks_and_settings() {
+    use crate::preferences::Dock;
+    let mut app = App::default();
+    app.ui.preferences.panels[0].dock = Dock::Right;
+    app.ui.preferences.panels[2].dock = Dock::Floating;
+    app.ui.preferences.panels[3].dock = Dock::Hidden;
+    app.ui.settings_open = true;
+    app.ui.layout_open = true;
+    let ctx = egui::Context::default();
+    for _ in 0..3 {
+        let _ = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1280., 850.),
+                )),
+                ..Default::default()
+            },
+            |ctx| {
+                assert!(app.ui.toolbar(ctx, &app.document).is_empty());
+                assert!(
+                    app.ui
+                        .brush_panel(ctx, &app.document, "Test tablet", 1.)
+                        .is_empty()
+                );
+                app.ui.settings(ctx);
+                egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+            },
+        );
+    }
+    app.ui.preferences.validate().unwrap();
+    assert!(!app.document.is_dirty());
+}

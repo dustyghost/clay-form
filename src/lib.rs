@@ -5,6 +5,7 @@ mod command;
 pub mod document;
 mod history;
 pub mod persistence;
+mod preferences;
 pub mod sculpt;
 mod tablet;
 mod ui;

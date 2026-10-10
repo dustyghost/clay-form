@@ -7,6 +7,6 @@ fn main() -> eframe::Result {
             viewport: egui::ViewportBuilder::default().with_inner_size([1280., 850.]),
             ..Default::default()
         },
-        Box::new(|_| Ok(Box::<App>::default())),
+        Box::new(|_| Ok(Box::new(App::new()))),
     )
 }
