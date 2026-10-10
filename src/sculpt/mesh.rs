@@ -108,13 +108,19 @@ impl Mesh {
             let mut selected = None;
             for dab in dabs {
                 let offset = old[i] - dab.center;
-                if offset.len() > dab.radius * 1.5 || normals[i].dot(dab.normal) < 0.1 {
+                if offset.len() > dab.radius * 1.5
+                    || (b.kind != Kind::Snake && normals[i].dot(dab.normal) < 0.1)
+                {
                     continue;
                 }
-                let weight = b.weight(
-                    offset.dot(dab.right) / dab.radius,
-                    offset.dot(dab.up) / dab.radius,
-                );
+                let weight = if b.kind == Kind::Snake {
+                    b.snake_weight(*dab, offset)
+                } else {
+                    b.weight(
+                        offset.dot(dab.right) / dab.radius,
+                        offset.dot(dab.up) / dab.radius,
+                    )
+                };
                 let strength = b.strength
                     * if b.pressure {
                         dab.pressure.powf(b.pressure_curve)

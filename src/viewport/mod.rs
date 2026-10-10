@@ -20,6 +20,7 @@ pub(crate) enum Gesture {
 struct SnakeStroke {
     center: Vec3,
     normal: Vec3,
+    mobility: f32,
 }
 #[derive(Default)]
 pub(crate) struct Viewport {
@@ -195,7 +196,15 @@ impl Viewport {
             if drawing {
                 let previous = self.last.unwrap_or(pos);
                 let distance = pos.distance(previous);
-                let spacing = (radius * b.spacing).max(1.);
+                let spacing = (radius
+                    * if b.kind == Kind::Snake {
+                        // Drag displacement must remain small compared with the
+                        // support, even when a preset requests widely spaced dabs.
+                        b.spacing.min(0.1)
+                    } else {
+                        b.spacing
+                    })
+                .max(1.);
                 if self.last.is_none()
                     || distance >= spacing
                     || matches!(b.kind, Kind::Grab | Kind::Snake)
@@ -215,7 +224,24 @@ impl Viewport {
                             if self.snake.is_none()
                                 && let Some((center, normal)) = scene.pick(point)
                             {
-                                self.snake = Some(SnakeStroke { center, normal });
+                                let seed = document
+                                    .mesh()
+                                    .vertices
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(i, _)| document.mesh().mask[*i] < 0.999)
+                                    .min_by(|(_, a), (_, b)| {
+                                        (**a - center).len().total_cmp(&(**b - center).len())
+                                    });
+                                if let Some((index, &tip)) =
+                                    seed.filter(|(_, v)| (**v - center).len() < radius / scale)
+                                {
+                                    self.snake = Some(SnakeStroke {
+                                        center: tip,
+                                        normal,
+                                        mobility: 1. - document.mesh().mask[index],
+                                    });
+                                }
                             }
                             self.snake
                                 .as_ref()
@@ -242,19 +268,10 @@ impl Viewport {
                                 && deformed
                                 && let Some(snake) = &mut self.snake
                             {
-                                let desired = snake.center + brush.snake_motion(dab);
-                                if let Some((_, vertex)) = document
-                                    .mesh()
-                                    .vertices
-                                    .iter()
-                                    .enumerate()
-                                    .filter(|(i, _)| document.mesh().mask[*i] < 0.999)
-                                    .min_by(|(_, a), (_, b)| {
-                                        (**a - desired).len().total_cmp(&(**b - desired).len())
-                                    })
-                                {
-                                    snake.center = *vertex;
-                                }
+                                // Keep a continuous handle; snapping to a globally nearest
+                                // vertex jumps between the shaft and tip as topology changes.
+                                snake.center =
+                                    snake.center + brush.snake_motion(dab) * snake.mobility;
                             }
                         }
                     }

@@ -92,6 +92,23 @@ impl Brush {
             pressure_curve: 1.,
         }
     }
+    pub(crate) fn snake_weight(&self, dab: super::Dab, offset: super::Vec3) -> f32 {
+        let r = offset.len() / dab.radius;
+        // Keep a rigid core: repeatedly attenuating every off-center vertex
+        // pinches a long drag down to a single needle, even after remeshing.
+        let t = ((1. - r) / 0.65).clamp(0., 1.);
+        let volume = t * t * (3. - 2. * t);
+        match &self.alpha {
+            Alpha::Soft => volume.powf(self.falloff),
+            _ => {
+                volume
+                    * self.weight(
+                        offset.dot(dab.right) / dab.radius,
+                        offset.dot(dab.up) / dab.radius,
+                    )
+            }
+        }
+    }
     pub fn snake_motion(&self, dab: super::Dab) -> super::Vec3 {
         let gain = self.strength
             * if self.pressure {

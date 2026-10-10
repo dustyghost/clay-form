@@ -161,3 +161,65 @@ fn snake_brush_pulls_with_alpha_pressure_mask_and_reverse() {
     protected.stamp(&brush, dab);
     assert_eq!(protected, original);
 }
+
+#[test]
+fn long_snake_drag_keeps_a_regular_surface() {
+    check_long_snake_drag(false);
+}
+
+#[test]
+fn curved_snake_drag_keeps_a_regular_surface() {
+    check_long_snake_drag(true);
+}
+
+fn check_long_snake_drag(curved: bool) {
+    let mut mesh = Mesh::sphere();
+    let brush = Brush::new(Kind::Snake);
+    let settings = super::AdaptiveSettings {
+        enabled: true,
+        detail: 5.,
+        ..Default::default()
+    };
+    let mut dab = Dab {
+        center: Vec3(0., 1., 0.),
+        normal: Vec3(0., 1., 0.),
+        right: Vec3(1., 0., 0.),
+        up: Vec3(0., 0., 1.),
+        radius: 0.3,
+        pressure: 1.,
+        delta: Vec3(0.025, 0., 0.),
+        invert: false,
+    };
+    for step in 0..160 {
+        if curved {
+            dab.delta = Vec3(0.025, 0., 0.018 * (step as f32 * 0.06).cos());
+        }
+        let mut budget = super::AdaptiveBudget::default();
+        mesh.adapt(&brush, &[dab], &settings, &mut budget, true);
+        mesh.stamp(&brush, dab);
+        dab.center = dab.center + brush.snake_motion(dab);
+        mesh.adapt(&brush, &[dab], &settings, &mut budget, false);
+    }
+    mesh.validate_closed().unwrap();
+    assert!(
+        mesh.vertices.iter().any(|v| v.0 > 3.5),
+        "tip stopped following the long drag"
+    );
+    let mut poor = 0;
+    let mut local = 0;
+    for &[a, b, c] in &mesh.triangles {
+        let [a, b, c] = [a, b, c].map(|i| mesh.vertices[i]);
+        if (a.0 + b.0 + c.0) / 3. < 0.5 {
+            continue;
+        }
+        local += 1;
+        let sum = (b - a).dot(b - a) + (c - b).dot(c - b) + (a - c).dot(a - c);
+        let quality = 2. * 3f32.sqrt() * (b - a).cross(c - a).len() / sum;
+        if quality < 0.15 {
+            poor += 1;
+        }
+    }
+    assert!(local > 100, "no extended surface: {local}");
+    // Allow a small transition band of thin faces at the original surface.
+    assert!(poor * 50 < local, "{poor}/{local} stretched triangles");
+}

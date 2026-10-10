@@ -6,6 +6,9 @@ use super::{
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+// Face index followed by its directed edge and opposite vertex.
+type OrientedFaceEdge = (usize, usize, usize, usize);
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AdaptiveSettings {
@@ -61,6 +64,9 @@ pub(crate) struct Budget {
     pub splits: usize,
     pub collapses: usize,
     passes: usize,
+    flips: usize,
+    flip_passes: usize,
+    relax: bool,
 }
 impl Default for Budget {
     fn default() -> Self {
@@ -68,6 +74,9 @@ impl Default for Budget {
             splits: 256,
             collapses: 32,
             passes: 8,
+            flips: 128,
+            flip_passes: 2,
+            relax: true,
         }
     }
 }
@@ -118,7 +127,166 @@ impl Mesh {
                 }
             }
         }
+        if settings.refine && budget.flips > 0 && budget.flip_passes > 0 {
+            budget.flip_passes -= 1;
+            let count = self.improve_edges(brush, dabs, budget.flips.min(64));
+            budget.flips -= count;
+            changed |= count > 0;
+        }
+        if brush.kind == Kind::Snake && !collapse && settings.refine && budget.relax {
+            budget.relax = false;
+            changed |= self.relax_tip(brush, dabs, target);
+        }
         changed
+    }
+    // Redistribute vertices along the surface without Laplacian shrinkage.
+    // Splits and flips alone cannot undo the compression behind a moving tip.
+    fn relax_tip(&mut self, brush: &Brush, dabs: &[Dab], target: f32) -> bool {
+        let mut changed = false;
+        for _ in 0..2 {
+            let normals = self.normals();
+            let mut sums = vec![Vec3::default(); self.vertices.len()];
+            let mut counts = vec![0.; self.vertices.len()];
+            let mut active = vec![false; self.vertices.len()];
+            for &t @ [a, b, c] in &self.triangles {
+                if self.in_patch(t, brush, dabs) {
+                    for i in t {
+                        active[i] = true;
+                    }
+                }
+                for (i, j, k) in [(a, b, c), (b, c, a), (c, a, b)] {
+                    sums[i] = sums[i] + self.vertices[j] + self.vertices[k];
+                    counts[i] += 2.;
+                }
+            }
+            let mut moves = vec![Vec3::default(); self.vertices.len()];
+            for i in 0..moves.len() {
+                if !active[i]
+                    || self.mask[i] >= 0.999
+                    || counts[i] == 0.
+                    || dabs
+                        .iter()
+                        .any(|dab| (self.vertices[i] - dab.center).len() < dab.radius * 0.35)
+                {
+                    continue;
+                }
+                let offset = sums[i] * (1. / counts[i]) - self.vertices[i];
+                let tangent = offset - normals[i] * offset.dot(normals[i]);
+                let influence = dabs
+                    .iter()
+                    .map(|dab| brush.snake_weight(*dab, self.vertices[i] - dab.center))
+                    .fold(0f32, f32::max);
+                moves[i] = tangent * (0.5 * influence * (1. - self.mask[i]));
+                let length = moves[i].len();
+                if length > target * 0.5 {
+                    moves[i] = moves[i] * (target * 0.5 / length);
+                }
+            }
+            // Simultaneous proposals must not invert or flatten any incident face.
+            for pass in 0..5 {
+                let mut unsafe_vertices = HashSet::new();
+                for &t in &self.triangles {
+                    if t.iter().all(|&i| moves[i].len() == 0.) {
+                        continue;
+                    }
+                    let [a, b, c] = t.map(|i| self.vertices[i]);
+                    let [x, y, z] = t.map(|i| self.vertices[i] + moves[i]);
+                    let old = (b - a).cross(c - a);
+                    let new = (y - x).cross(z - x);
+                    if new.len() < old.len() * 0.3 || new.norm().dot(old.norm()) < 0.8 {
+                        unsafe_vertices.extend(t);
+                    }
+                }
+                if unsafe_vertices.is_empty() {
+                    break;
+                }
+                if pass == 4 {
+                    moves.fill(Vec3::default());
+                    break;
+                }
+                for i in unsafe_vertices {
+                    moves[i] = Vec3::default();
+                }
+            }
+            for (position, delta) in self.vertices.iter_mut().zip(moves) {
+                changed |= delta.len() > 0.;
+                *position = *position + delta;
+            }
+        }
+        changed
+    }
+    // Reconnect diagonals instead of repeatedly subdividing skinny triangles.
+    // No vertex positions or mask values change, and distant faces stay intact.
+    fn improve_edges(&mut self, brush: &Brush, dabs: &[Dab], limit: usize) -> usize {
+        let mut edges: BTreeMap<(usize, usize), Vec<OrientedFaceEdge>> = BTreeMap::new();
+        let mut existing = HashSet::new();
+        for (i, &[a, b, c]) in self.triangles.iter().enumerate() {
+            let local = self.in_patch([a, b, c], brush, dabs);
+            for (a, b, c) in [(a, b, c), (b, c, a), (c, a, b)] {
+                existing.insert(edge(a, b));
+                if local {
+                    edges.entry(edge(a, b)).or_default().push((i, a, b, c));
+                }
+            }
+        }
+        let quality = |t: [usize; 3]| {
+            let [a, b, c] = t.map(|i| self.vertices[i]);
+            let sum = (b - a).dot(b - a) + (c - b).dot(c - b) + (a - c).dot(a - c);
+            2. * 3f32.sqrt() * (b - a).cross(c - a).len() / sum.max(1e-20)
+        };
+        let normal = |t: [usize; 3]| {
+            let [a, b, c] = t.map(|i| self.vertices[i]);
+            (b - a).cross(c - a).norm()
+        };
+        let mut used = HashSet::new();
+        let mut replacements = Vec::new();
+        for pair in edges.values() {
+            let [(i, a, b, c), (j, x, y, d)] = pair.as_slice() else {
+                continue;
+            };
+            if replacements.len() >= limit {
+                break;
+            }
+            if a != y
+                || b != x
+                || c == d
+                || used.contains(i)
+                || used.contains(j)
+                || existing.contains(&edge(*c, *d))
+                || [*a, *b, *c, *d]
+                    .iter()
+                    .any(|&v| self.mask[v] > 0.95 || (self.mask[v] - self.mask[*a]).abs() > 0.05)
+            {
+                continue;
+            }
+            let old = [self.triangles[*i], self.triangles[*j]];
+            let new = [[*c, *d, *b], [*d, *c, *a]];
+            let n = normal(old[0]);
+            if n.dot(normal(old[1])) < 0.85
+                || new.iter().any(|&t| normal(t).dot(n) < 0.85)
+                || quality(new[0]).min(quality(new[1]))
+                    <= quality(old[0]).min(quality(old[1])) + 0.03
+            {
+                continue;
+            }
+            // Block the whole quadrilateral so simultaneous flips cannot
+            // introduce a duplicate diagonal or conflicting connectivity.
+            if [*a, *b, *c, *d]
+                .iter()
+                .any(|v| used.contains(&(self.triangles.len() + v)))
+            {
+                continue;
+            }
+            used.extend([*i, *j]);
+            used.extend([*a, *b, *c, *d].map(|v| self.triangles.len() + v));
+            replacements.push((*i, *j, new));
+        }
+        let count = replacements.len();
+        for (i, j, [a, b]) in replacements {
+            self.triangles[i] = a;
+            self.triangles[j] = b;
+        }
+        count
     }
     fn split_local(&mut self, brush: &Brush, dabs: &[Dab], target: f32, limit: usize) -> usize {
         if limit == 0 {
@@ -244,6 +412,14 @@ impl Mesh {
             if merged.len() >= limit {
                 break;
             }
+            if brush.kind == Kind::Snake
+                && dabs.iter().any(|dab| {
+                    (self.vertices[a] - dab.center).len() < dab.radius * 0.35
+                        || (self.vertices[b] - dab.center).len() < dab.radius * 0.35
+                })
+            {
+                continue;
+            }
             if blocked.contains(&a)
                 || blocked.contains(&b)
                 || self.mask[a] > 0.95
@@ -364,7 +540,7 @@ impl Mesh {
             if brush.pressure && dab.pressure <= 0. {
                 return false;
             }
-            if normal.dot(dab.normal) < 0.1 {
+            if brush.kind != Kind::Snake && normal.dot(dab.normal) < 0.1 {
                 return false;
             }
             let p = closest_triangle(dab.center, a, b, c);
