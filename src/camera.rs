@@ -31,6 +31,9 @@ impl Camera {
     pub fn zoom_step(&mut self, inward: bool) {
         self.set_zoom(self.zoom * if inward { 1.2 } else { 1. / 1.2 });
     }
+    pub fn zoom_drag(&mut self, delta: Vec2) {
+        self.zoom_by(-delta.y * 3.);
+    }
     pub fn reset(&mut self) {
         *self = Self::default();
     }

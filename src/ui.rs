@@ -488,7 +488,7 @@ impl UiState {
             Tool::Tablet => {
                 ui.label(tablet_status);
                 ui.label(format!("Pressure: {:.0}%", pressure * 100.));
-                ui.label(format!("Left / pen: sculpt; empty space: orbit\nCorner gizmo: drag or click axis\n{:?}: reverse brush\n{:?}: smooth\nRight drag: orbit\nMiddle drag: pan\nWheel: zoom", self.preferences.reverse, self.preferences.smooth));
+                ui.label(format!("Left / pen: sculpt; empty space: orbit\nCorner gizmo: drag or click axis\n{:?}: reverse brush\n{:?}: smooth\nRight drag: orbit\nMiddle drag: pan\nWheel: zoom\n{:?} + drag: zoom (up=in, down=out)", self.preferences.reverse, self.preferences.smooth, self.preferences.zoom_hold));
             }
         }
         if &edited != original {
@@ -566,6 +566,10 @@ impl UiState {
                 for (label, hold) in [
                     ("Hold to smooth", &mut self.preferences.smooth),
                     ("Hold to reverse", &mut self.preferences.reverse),
+                    (
+                        "Hold to zoom while dragging",
+                        &mut self.preferences.zoom_hold,
+                    ),
                 ] {
                     egui::ComboBox::from_label(label)
                         .selected_text(format!("{hold:?}"))
@@ -574,6 +578,14 @@ impl UiState {
                                 ui.selectable_value(hold, value, format!("{value:?}"));
                             }
                         });
+                }
+                if self.preferences.zoom_hold != Hold::Disabled
+                    && (self.preferences.zoom_hold == self.preferences.smooth
+                        || self.preferences.zoom_hold == self.preferences.reverse)
+                {
+                    ui.label(
+                        "Zoom takes priority when starting a pen drag with a shared modifier.",
+                    );
                 }
                 if self.preferences.smooth == self.preferences.reverse
                     && self.preferences.smooth != Hold::Disabled
@@ -585,6 +597,7 @@ impl UiState {
                     self.preferences.bindings = defaults.bindings;
                     self.preferences.smooth = defaults.smooth;
                     self.preferences.reverse = defaults.reverse;
+                    self.preferences.zoom_hold = defaults.zoom_hold;
                     self.capturing = None;
                 }
                 ui.label(&self.settings_message);

@@ -482,3 +482,164 @@ fn zoom_buttons_and_rebound_keys_change_only_the_camera_and_respect_limits() {
     assert!(!app.document.is_dirty());
     assert!(!app.document.can_undo());
 }
+
+#[test]
+fn held_zoom_modifier_replaces_orbit_and_can_toggle_mid_drag() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let rect = navigation_frame(&mut app, &ctx, vec![]);
+    let empty = rect.min + egui::vec2(40., 40.);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(empty), primary_event(empty, true)],
+    );
+    let yaw = app.camera.yaw;
+    let pitch = app.camera.pitch;
+    let frame = |app: &mut App, pos: Pos2, modifiers: egui::Modifiers| {
+        let _ = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    Pos2::ZERO,
+                    egui::vec2(1000., 800.),
+                )),
+                modifiers,
+                events: vec![egui::Event::PointerMoved(pos)],
+                ..Default::default()
+            },
+            |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+            },
+        );
+    };
+    frame(
+        &mut app,
+        empty + egui::vec2(10., -20.),
+        egui::Modifiers::CTRL,
+    );
+    assert!(app.camera.zoom > 1.);
+    assert_eq!(app.camera.yaw, yaw);
+    assert_eq!(app.camera.pitch, pitch);
+    let zoom = app.camera.zoom;
+    frame(&mut app, empty + egui::vec2(20., 0.), egui::Modifiers::CTRL);
+    assert!(app.camera.zoom < zoom);
+    let zoom = app.camera.zoom;
+    frame(
+        &mut app,
+        empty + egui::vec2(40., 20.),
+        egui::Modifiers::NONE,
+    );
+    assert_eq!(app.camera.zoom, zoom);
+    assert_ne!(app.camera.yaw, yaw);
+    assert!(!app.document.is_dirty());
+    assert!(!app.document.can_undo());
+}
+
+#[test]
+fn holding_zoom_when_pen_drag_starts_over_clay_avoids_sculpting() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let center = navigation_frame(&mut app, &ctx, vec![]).center();
+    let original = app.document.mesh().clone();
+    let _ = ctx.run(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                Pos2::ZERO,
+                egui::vec2(1000., 800.),
+            )),
+            modifiers: egui::Modifiers::CTRL,
+            events: vec![
+                egui::Event::PointerMoved(center),
+                egui::Event::PointerButton {
+                    pos: center,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: egui::Modifiers::CTRL,
+                },
+            ],
+            ..Default::default()
+        },
+        |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+        },
+    );
+    assert!(app.viewport.gesture == Some(Gesture::Orbit));
+    let _ = ctx.run(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                Pos2::ZERO,
+                egui::vec2(1000., 800.),
+            )),
+            modifiers: egui::Modifiers::CTRL,
+            events: vec![egui::Event::PointerMoved(center - egui::vec2(0., 40.))],
+            ..Default::default()
+        },
+        |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+        },
+    );
+    assert!(app.camera.zoom > 1.);
+    assert_eq!(app.camera.yaw, 0.);
+    assert_eq!(app.document.mesh(), &original);
+    assert!(!app.document.is_dirty());
+    assert!(!app.document.can_undo());
+}
+
+#[test]
+fn custom_zoom_modifier_works_on_right_drag_and_gizmo() {
+    for (button, gizmo) in [
+        (egui::PointerButton::Secondary, false),
+        (egui::PointerButton::Primary, true),
+    ] {
+        let mut app = App::default();
+        app.ui.preferences.zoom_hold = crate::preferences::Hold::Alt;
+        let ctx = egui::Context::default();
+        let rect = navigation_frame(&mut app, &ctx, vec![]);
+        let start = if gizmo {
+            Pos2::new(rect.right() - 79., rect.top() + 79.)
+        } else {
+            rect.center()
+        };
+        let _ = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    Pos2::ZERO,
+                    egui::vec2(1000., 800.),
+                )),
+                modifiers: egui::Modifiers::ALT,
+                events: vec![
+                    egui::Event::PointerMoved(start),
+                    egui::Event::PointerButton {
+                        pos: start,
+                        button,
+                        pressed: true,
+                        modifiers: egui::Modifiers::ALT,
+                    },
+                ],
+                ..Default::default()
+            },
+            |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+            },
+        );
+        let _ = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    Pos2::ZERO,
+                    egui::vec2(1000., 800.),
+                )),
+                modifiers: egui::Modifiers::ALT,
+                events: vec![egui::Event::PointerMoved(start - egui::vec2(0., 40.))],
+                ..Default::default()
+            },
+            |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+            },
+        );
+        assert!(app.camera.zoom > 1.);
+        assert_eq!(app.camera.yaw, 0.);
+        assert_eq!(app.camera.pitch, 0.);
+        assert!(!app.document.is_dirty());
+        assert!(!app.document.can_undo());
+    }
+}

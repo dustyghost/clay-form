@@ -414,6 +414,7 @@ impl App {
                     && self.mesh_job.is_none(),
                 smooth: self.ui.preferences.smooth,
                 reverse: self.ui.preferences.reverse,
+                zoom_hold: self.ui.preferences.zoom_hold,
             },
         );
         if self.viewport.completed_stroke

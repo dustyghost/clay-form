@@ -36,6 +36,7 @@ pub(crate) struct ViewportOptions {
     pub enabled: bool,
     pub smooth: Hold,
     pub reverse: Hold,
+    pub zoom_hold: Hold,
 }
 impl Viewport {
     pub(crate) fn cancel(&mut self, document: &mut Document) {
@@ -76,13 +77,18 @@ impl Viewport {
             .hover_pos()
             .or_else(|| response.interact_pointer_pos());
         let modifiers = ui.input(|i| i.modifiers);
+        let zoom_held = options.zoom_hold.active(modifiers);
         if options.enabled && response.hovered() {
             let scroll = ui.input(|i| i.smooth_scroll_delta.y);
             camera.zoom_by(scroll);
         }
         if options.enabled && response.dragged_by(egui::PointerButton::Secondary) {
             let d = ui.input(|i| i.pointer.delta());
-            camera.orbit(d);
+            if zoom_held {
+                camera.zoom_drag(d);
+            } else {
+                camera.orbit(d);
+            }
         }
         if options.enabled && response.dragged_by(egui::PointerButton::Middle) {
             camera.pan += ui.input(|i| i.pointer.delta());
@@ -96,12 +102,14 @@ impl Viewport {
         {
             self.gesture = Some(if gizmo_rect.contains(pos) {
                 Gesture::Gizmo
+            } else if zoom_held {
+                Gesture::Orbit
             } else if scene.pick(document.mesh(), pos).is_some() {
                 Gesture::Sculpt
             } else {
                 Gesture::Orbit
             });
-            self.gizmo_dragged = false;
+            self.gizmo_dragged = zoom_held;
         }
         if primary
             && matches!(self.gesture, Some(Gesture::Orbit | Gesture::Gizmo))
@@ -110,8 +118,12 @@ impl Viewport {
             let delta = ui.input(|i| i.pointer.delta());
             // The press frame's pointer movement is not part of the drag.
             if !ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Primary)) {
-                camera.orbit(delta);
-                self.gizmo_dragged |= delta.length_sq() > 0.;
+                if zoom_held {
+                    camera.zoom_drag(delta);
+                } else {
+                    camera.orbit(delta);
+                }
+                self.gizmo_dragged |= delta.length_sq() > 0. || zoom_held;
             }
         }
         if !ui.input(|i| i.pointer.primary_down()) {

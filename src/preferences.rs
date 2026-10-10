@@ -174,6 +174,7 @@ pub(crate) struct Preferences {
     pub bindings: Vec<(Action, Option<Shortcut>)>,
     pub smooth: Hold,
     pub reverse: Hold,
+    pub zoom_hold: Hold,
     pub panels: Vec<Panel>,
     pub left_width: f32,
     pub right_width: f32,
@@ -212,6 +213,7 @@ impl Default for Preferences {
                 .collect(),
             smooth: Hold::Shift,
             reverse: Hold::Alt,
+            zoom_hold: Hold::Ctrl,
             panels: Tool::ALL
                 .into_iter()
                 .enumerate()
@@ -487,6 +489,24 @@ mod zoom_migration_tests {
                 .1
                 .is_some()
         );
+        std::fs::remove_file(path).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod zoom_hold_tests {
+    use super::*;
+    #[test]
+    fn older_preferences_get_ctrl_and_custom_hold_is_saved() {
+        let path = std::env::temp_dir().join(format!("clay-zoom-hold-{}.json", std::process::id()));
+        let mut old = serde_json::to_value(Preferences::default()).unwrap();
+        old.as_object_mut().unwrap().remove("zoom_hold");
+        crate::persistence::write_json(&path.to_string_lossy(), &old).unwrap();
+        let mut upgraded = load(&path).unwrap();
+        assert_eq!(upgraded.zoom_hold, Hold::Ctrl);
+        upgraded.zoom_hold = Hold::Alt;
+        save(&path, &upgraded).unwrap();
+        assert_eq!(load(&path).unwrap().zoom_hold, Hold::Alt);
         std::fs::remove_file(path).unwrap();
     }
 }
