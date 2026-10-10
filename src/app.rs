@@ -243,6 +243,8 @@ impl App {
                     | Command::Redo
                     | Command::ClearMask
                     | Command::SetMeshLevel(_)
+                    | Command::DeleteLowerLevels
+                    | Command::DeleteHigherLevels
                     | Command::SetDynamicMesh(_)
                     | Command::SetRemeshSettings(..)
                     | Command::Subdivide
@@ -291,6 +293,18 @@ impl App {
             Command::SetMeshLevel(level) => {
                 self.viewport.cancel(&mut self.document);
                 self.document.set_mesh_level(level)
+            }
+            Command::DeleteLowerLevels | Command::DeleteHigherLevels => {
+                let lower = matches!(command, Command::DeleteLowerLevels);
+                self.viewport.cancel(&mut self.document);
+                self.document.delete_mesh_levels(lower).map(|()| {
+                    self.ui.status = if lower {
+                        "Lower subdivision levels deleted"
+                    } else {
+                        "Higher subdivision levels deleted"
+                    }
+                    .into();
+                })
             }
             Command::SetDynamicMesh(enabled) => {
                 self.viewport.cancel(&mut self.document);

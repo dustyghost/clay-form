@@ -555,6 +555,10 @@ impl UiState {
                     if ui.add_enabled(settings.level()>1,egui::Button::new("Lower")).clicked() { commands.push(Command::SetMeshLevel(settings.level()-1)); }
                     if ui.add_enabled(settings.level()<settings.levels(),egui::Button::new("Higher")).clicked() { commands.push(Command::SetMeshLevel(settings.level()+1)); }
                 });
+                ui.horizontal(|ui| {
+                    if ui.add_enabled(!settings.lower.is_empty(),egui::Button::new("Delete lower")).on_hover_text("Remove all levels below the active level; keep the active surface and higher detail. Undo restores them.").clicked() { commands.push(Command::DeleteLowerLevels); }
+                    if ui.add_enabled(!settings.upper.is_empty(),egui::Button::new("Delete higher")).on_hover_text("Remove all levels above the active level; keep the active surface and lower levels. Undo restores them.").clicked() { commands.push(Command::DeleteHigherLevels); }
+                });
                 if ui.add_enabled(settings.upper.is_empty() && document.mesh().triangles.len() <= 250_000,egui::Button::new("Subdivide (+ level)")).clicked() { commands.push(Command::Subdivide); }
                 ui.label("Each division creates four triangles per face. Edit broad forms low and detail high.");
                 ui.label("Switching to dynamic keeps the active surface and discards stored levels. Undo restores them.");

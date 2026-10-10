@@ -55,6 +55,24 @@ impl Document {
         geometry.set_level(level)?;
         self.replace_geometry(geometry)
     }
+    /// Keep the active surface and the opposite side of the subdivision stack.
+    pub fn delete_mesh_levels(&mut self, lower: bool) -> Result<(), String> {
+        let levels = if lower {
+            &self.geometry.settings.lower
+        } else {
+            &self.geometry.settings.upper
+        };
+        if levels.is_empty() {
+            return Ok(());
+        }
+        let mut geometry = self.geometry.clone();
+        if lower {
+            geometry.settings.lower.clear();
+        } else {
+            geometry.settings.upper.clear();
+        }
+        self.replace_geometry(geometry)
+    }
     pub fn set_dynamic_mesh(&mut self, enabled: bool) -> Result<(), String> {
         if self.geometry.settings.dynamic == enabled {
             return Ok(());
@@ -367,5 +385,55 @@ mod protected_stroke_tests {
         document.geometry.mesh.mask.fill(1.);
         document.apply_dab(&brush, dab);
         assert!(!document.end_stroke());
+    }
+}
+
+#[cfg(test)]
+mod delete_level_tests {
+    use super::*;
+    #[test]
+    fn deleting_either_side_preserves_active_surface_and_restores_stack_on_undo() {
+        let mut document = Document::default();
+        let mut geometry = document.geometry_snapshot();
+        geometry.subdivide().unwrap();
+        geometry.subdivide().unwrap();
+        geometry.mesh.vertices.last_mut().unwrap().0 += 0.1;
+        *geometry.mesh.mask.last_mut().unwrap() = 0.6;
+        geometry.set_level(2).unwrap();
+        document.replace_geometry(geometry).unwrap();
+        let original = document.geometry_snapshot();
+        document.delete_mesh_levels(true).unwrap();
+        assert_eq!(document.mesh(), &original.mesh);
+        assert_eq!(document.mesh_settings().level(), 1);
+        assert_eq!(document.mesh_settings().upper, original.settings.upper);
+        document.set_mesh_level(2).unwrap();
+        document.mesh_settings().validate(document.mesh()).unwrap();
+        document.undo();
+        document.undo();
+        assert_eq!(document.geometry_snapshot(), original);
+        document.delete_mesh_levels(false).unwrap();
+        assert_eq!(document.mesh(), &original.mesh);
+        assert_eq!(document.mesh_settings().level(), 2);
+        assert_eq!(document.mesh_settings().levels(), 2);
+        assert_eq!(document.mesh_settings().lower, original.settings.lower);
+        let mut fresh = document.geometry_snapshot();
+        fresh.subdivide().unwrap();
+        fresh.settings.validate(&fresh.mesh).unwrap();
+        document.undo();
+        assert_eq!(document.geometry_snapshot(), original);
+        document.redo();
+        assert!(document.mesh_settings().upper.is_empty());
+        let loaded: Project =
+            serde_json::from_slice(&serde_json::to_vec(&document.project()).unwrap()).unwrap();
+        loaded.validate().unwrap();
+        assert_eq!(loaded.mesh_settings, document.mesh_settings().clone());
+    }
+    #[test]
+    fn deleting_absent_levels_is_a_clean_no_op() {
+        let mut document = Document::default();
+        document.delete_mesh_levels(true).unwrap();
+        document.delete_mesh_levels(false).unwrap();
+        assert!(!document.is_dirty());
+        assert!(!document.can_undo());
     }
 }

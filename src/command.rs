@@ -16,6 +16,8 @@ pub(crate) enum Command {
     ResetView,
     Subdivide,
     SetMeshLevel(usize),
+    DeleteLowerLevels,
+    DeleteHigherLevels,
     SetDynamicMesh(bool),
     SetRemeshSettings(u32, bool),
     Remesh,
