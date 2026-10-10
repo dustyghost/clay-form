@@ -362,3 +362,69 @@ fn automatic_remeshing_waits_for_stroke_release_and_is_undoable() {
     navigation_frame(&mut app, &ctx, vec![primary_event(center, false)]);
     assert!(app.mesh_job.is_none());
 }
+
+#[test]
+fn undo_redo_shortcuts_restore_geometry_and_report_the_action() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let before = app.document.geometry_snapshot();
+    app.document.clear_mask();
+    assert_eq!(app.document.undo_label(), Some("Clear mask"));
+    let press = |modifiers| egui::RawInput {
+        events: vec![egui::Event::Key {
+            key: egui::Key::Z,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers,
+        }],
+        ..Default::default()
+    };
+    let _ = ctx.run(press(egui::Modifiers::CTRL), |ctx| app.shortcuts(ctx));
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert_eq!(app.document.history_counts(), (0, 1));
+    assert_eq!(app.ui.status, "Undid: Clear mask");
+    let _ = ctx.run(
+        press(egui::Modifiers::CTRL | egui::Modifiers::SHIFT),
+        |ctx| app.shortcuts(ctx),
+    );
+    assert_eq!(app.document.history_counts(), (1, 0));
+    assert_eq!(app.ui.status, "Redid: Clear mask");
+    app.dispatch(Command::Redo, &ctx);
+    assert_eq!(app.ui.status, "Nothing to redo");
+}
+
+#[test]
+fn undo_during_a_pen_drag_restores_the_stroke_and_waits_for_release() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let before = app.document.mesh().clone();
+    let center = navigation_frame(&mut app, &ctx, vec![]).center();
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(center),
+            primary_event(center, true),
+        ],
+    );
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(center + egui::vec2(20., 0.))],
+    );
+    let sculpted = app.document.mesh().clone();
+    assert_ne!(sculpted, before);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.mesh(), &before);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(center + egui::vec2(40., 0.))],
+    );
+    assert_eq!(app.document.mesh(), &before);
+    assert!(app.document.can_redo());
+    navigation_frame(&mut app, &ctx, vec![primary_event(center, false)]);
+    app.dispatch(Command::Redo, &ctx);
+    assert_eq!(app.document.mesh(), &sculpted);
+}

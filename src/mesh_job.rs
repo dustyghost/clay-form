@@ -12,6 +12,12 @@ pub(crate) enum Operation {
     Remesh,
 }
 impl Operation {
+    pub fn history_label(self) -> &'static str {
+        match self {
+            Self::Subdivide => "Subdivide mesh",
+            Self::Remesh => "Remesh",
+        }
+    }
     pub fn label(self) -> &'static str {
         match self {
             Self::Subdivide => "Subdividing",
@@ -22,6 +28,7 @@ impl Operation {
 pub(crate) struct MeshJob {
     receiver: Receiver<Result<Geometry, String>>,
     cancel: Arc<AtomicBool>,
+    pub operation: Operation,
 }
 impl MeshJob {
     pub fn start(mut geometry: Geometry, operation: Operation) -> Result<Self, String> {
@@ -53,7 +60,11 @@ impl MeshJob {
                 let _ = sender.send(result);
             })
             .map_err(|e| e.to_string())?;
-        Ok(Self { receiver, cancel })
+        Ok(Self {
+            receiver,
+            cancel,
+            operation,
+        })
     }
     pub fn poll(&self) -> Option<Result<Geometry, String>> {
         match self.receiver.try_recv() {

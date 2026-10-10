@@ -169,9 +169,15 @@ impl App {
     }
     fn poll_mesh_job(&mut self) {
         if let Some(result) = self.mesh_job.as_ref().and_then(MeshJob::poll) {
-            self.mesh_job = None;
+            let label = self
+                .mesh_job
+                .take()
+                .expect("completed job")
+                .operation
+                .history_label();
             self.ui.mesh_busy = false;
-            match result.and_then(|geometry| self.document.replace_geometry(geometry)) {
+            match result.and_then(|geometry| self.document.replace_geometry_named(geometry, label))
+            {
                 Ok(()) => {
                     self.ui.status = format!(
                         "Mesh updated: {} vertices, {} faces",
@@ -270,13 +276,27 @@ impl App {
                     .map(|()| self.ui.status = format!("Exported {}", path.display()))
             }
             Command::Undo => {
+                let dragging = self.viewport.gesture.is_some();
                 self.viewport.cancel(&mut self.document);
+                if dragging {
+                    self.viewport.wait_for_release();
+                }
+                let label = self.document.undo_label();
                 self.document.undo();
+                self.ui.status =
+                    label.map_or("Nothing to undo".into(), |label| format!("Undid: {label}"));
                 Ok(())
             }
             Command::Redo => {
+                let dragging = self.viewport.gesture.is_some();
                 self.viewport.cancel(&mut self.document);
+                if dragging {
+                    self.viewport.wait_for_release();
+                }
+                let label = self.document.redo_label();
                 self.document.redo();
+                self.ui.status =
+                    label.map_or("Nothing to redo".into(), |label| format!("Redid: {label}"));
                 Ok(())
             }
             Command::ClearMask => {

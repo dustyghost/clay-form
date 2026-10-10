@@ -52,6 +52,49 @@ impl UiState {
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.strong("CLAY FORM");
+                ui.menu_button("Edit", |ui| {
+                    for (action, command, label, available) in [
+                        (
+                            Action::Undo,
+                            Command::Undo,
+                            document.undo_label(),
+                            document.can_undo(),
+                        ),
+                        (
+                            Action::Redo,
+                            Command::Redo,
+                            document.redo_label(),
+                            document.can_redo(),
+                        ),
+                    ] {
+                        let shortcut = self
+                            .preferences
+                            .bindings
+                            .iter()
+                            .find(|(a, _)| *a == action)
+                            .and_then(|(_, binding)| binding.as_ref())
+                            .map_or(String::new(), |b| b.label());
+                        let text = format!(
+                            "{}{}",
+                            action.label(),
+                            label.map_or(String::new(), |s| format!(" {s}"))
+                        );
+                        if ui
+                            .add_enabled(
+                                available && !self.mesh_busy && self.pending.is_none(),
+                                egui::Button::new(text).shortcut_text(shortcut),
+                            )
+                            .clicked()
+                        {
+                            commands.push(command);
+                            ui.close();
+                        }
+                    }
+                    ui.separator();
+                    let (undo, redo) = document.history_counts();
+                    ui.label(format!("{undo} undo steps • {redo} redo steps"));
+                    ui.label("Geometry and masks • history resets on New/Open");
+                });
                 ui.menu_button("Settings", |ui| {
                     if ui.button("Key settings…").clicked() {
                         self.settings_open = true;
@@ -89,13 +132,21 @@ impl UiState {
             });
             ui.horizontal(|ui| {
                 if ui
-                    .add_enabled(document.can_undo(), egui::Button::new("Undo"))
+                    .add_enabled(
+                        document.can_undo() && !self.mesh_busy && self.pending.is_none(),
+                        egui::Button::new("Undo"),
+                    )
+                    .on_hover_text(document.undo_label().unwrap_or("Nothing to undo"))
                     .clicked()
                 {
                     commands.push(Command::Undo);
                 }
                 if ui
-                    .add_enabled(document.can_redo(), egui::Button::new("Redo"))
+                    .add_enabled(
+                        document.can_redo() && !self.mesh_busy && self.pending.is_none(),
+                        egui::Button::new("Redo"),
+                    )
+                    .on_hover_text(document.redo_label().unwrap_or("Nothing to redo"))
                     .clicked()
                 {
                     commands.push(Command::Redo);

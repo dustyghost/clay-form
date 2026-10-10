@@ -3,17 +3,24 @@ use crate::sculpt::Geometry;
 use std::collections::VecDeque;
 const UNDO_LIMIT: usize = 24;
 const MEMORY_LIMIT: usize = 128 * 1024 * 1024;
+struct Entry {
+    geometry: Geometry,
+    label: &'static str,
+}
 #[derive(Default)]
 pub(crate) struct History {
-    undo: VecDeque<Geometry>,
-    redo: Vec<Geometry>,
+    undo: VecDeque<Entry>,
+    redo: Vec<Entry>,
 }
 impl History {
-    pub fn record(&mut self, mesh: &Geometry) {
-        self.redo.clear();
-        self.push_undo(mesh.clone());
+    pub fn record_named(&mut self, mesh: &Geometry, label: &'static str) {
+        self.record_owned(mesh.clone(), label);
     }
-    fn push_undo(&mut self, mesh: Geometry) {
+    pub fn record_owned(&mut self, geometry: Geometry, label: &'static str) {
+        self.redo.clear();
+        self.push_undo(Entry { geometry, label });
+    }
+    fn push_undo(&mut self, mesh: Entry) {
         if self.undo.len() == UNDO_LIMIT {
             self.undo.pop_front();
         }
@@ -23,7 +30,7 @@ impl History {
                 .undo
                 .iter()
                 .chain(self.redo.iter())
-                .map(geometry_bytes)
+                .map(|entry| geometry_bytes(&entry.geometry))
                 .sum::<usize>()
                 > MEMORY_LIMIT
         {
@@ -32,7 +39,10 @@ impl History {
     }
     pub fn undo(&mut self, mesh: &mut Geometry) -> bool {
         if let Some(previous) = self.undo.pop_back() {
-            self.redo.push(std::mem::replace(mesh, previous));
+            self.redo.push(Entry {
+                geometry: std::mem::replace(mesh, previous.geometry),
+                label: previous.label,
+            });
             true
         } else {
             false
@@ -40,12 +50,24 @@ impl History {
     }
     pub fn redo(&mut self, mesh: &mut Geometry) -> bool {
         if let Some(next) = self.redo.pop() {
-            let previous = std::mem::replace(mesh, next);
-            self.push_undo(previous);
+            let previous = std::mem::replace(mesh, next.geometry);
+            self.push_undo(Entry {
+                geometry: previous,
+                label: next.label,
+            });
             true
         } else {
             false
         }
+    }
+    pub fn undo_label(&self) -> Option<&'static str> {
+        self.undo.back().map(|entry| entry.label)
+    }
+    pub fn redo_label(&self) -> Option<&'static str> {
+        self.redo.last().map(|entry| entry.label)
+    }
+    pub fn counts(&self) -> (usize, usize) {
+        (self.undo.len(), self.redo.len())
     }
     pub fn can_undo(&self) -> bool {
         !self.undo.is_empty()
@@ -80,7 +102,7 @@ mod tests {
             mask: vec![0.],
         });
         for _ in 0..UNDO_LIMIT + 3 {
-            history.record(&mesh);
+            history.record_named(&mesh, "Brush stroke");
             mesh.mesh.vertices[0].0 += 1.;
         }
         for _ in 0..UNDO_LIMIT {

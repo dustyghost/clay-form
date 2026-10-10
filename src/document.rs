@@ -13,6 +13,7 @@ pub struct Document {
     dirty: bool,
     stroke_active: bool,
     stroke_deformed: bool,
+    stroke_before: Option<Geometry>,
     current_path: String,
 }
 impl Default for Document {
@@ -25,6 +26,7 @@ impl Default for Document {
             dirty: false,
             stroke_active: false,
             stroke_deformed: false,
+            stroke_before: None,
             current_path: "sculpt.clay".into(),
         }
     }
@@ -39,10 +41,18 @@ impl Document {
     pub(crate) fn geometry_snapshot(&self) -> Geometry {
         self.geometry.clone()
     }
+    #[cfg(test)]
     pub(crate) fn replace_geometry(&mut self, geometry: Geometry) -> Result<(), String> {
+        self.replace_geometry_named(geometry, "Mesh change")
+    }
+    pub(crate) fn replace_geometry_named(
+        &mut self,
+        geometry: Geometry,
+        label: &'static str,
+    ) -> Result<(), String> {
         geometry.settings.validate(&geometry.mesh)?;
         self.end_stroke();
-        self.history.record(&self.geometry);
+        self.history.record_named(&self.geometry, label);
         self.geometry = geometry;
         self.dirty = true;
         Ok(())
@@ -53,7 +63,7 @@ impl Document {
         }
         let mut geometry = self.geometry.clone();
         geometry.set_level(level)?;
-        self.replace_geometry(geometry)
+        self.replace_geometry_named(geometry, "Change subdivision level")
     }
     /// Keep the active surface and the opposite side of the subdivision stack.
     pub fn delete_mesh_levels(&mut self, lower: bool) -> Result<(), String> {
@@ -71,7 +81,14 @@ impl Document {
         } else {
             geometry.settings.upper.clear();
         }
-        self.replace_geometry(geometry)
+        self.replace_geometry_named(
+            geometry,
+            if lower {
+                "Delete lower levels"
+            } else {
+                "Delete higher levels"
+            },
+        )
     }
     pub fn set_dynamic_mesh(&mut self, enabled: bool) -> Result<(), String> {
         if self.geometry.settings.dynamic == enabled {
@@ -79,7 +96,7 @@ impl Document {
         }
         let mut geometry = self.geometry.clone();
         geometry.set_dynamic(enabled);
-        self.replace_geometry(geometry)
+        self.replace_geometry_named(geometry, "Switch mesh mode")
     }
     pub fn set_remesh_settings(&mut self, resolution: u32, auto: bool) -> Result<(), String> {
         if !(16..=96).contains(&resolution) {
@@ -102,6 +119,15 @@ impl Document {
     }
     pub fn current_path(&self) -> &str {
         &self.current_path
+    }
+    pub fn undo_label(&self) -> Option<&'static str> {
+        self.history.undo_label()
+    }
+    pub fn redo_label(&self) -> Option<&'static str> {
+        self.history.redo_label()
+    }
+    pub fn history_counts(&self) -> (usize, usize) {
+        self.history.counts()
     }
     pub fn can_undo(&self) -> bool {
         self.history.can_undo()
@@ -126,7 +152,7 @@ impl Document {
         self.geometry = Geometry::new(Mesh::sphere());
         self.history = History::default();
         self.dirty = false;
-        self.stroke_active = false;
+        self.end_stroke();
         self.current_path = "untitled.clay".into();
     }
     /// Validate before changing anything, so an invalid open leaves the current document intact.
@@ -139,13 +165,13 @@ impl Document {
         self.brushes = project.brushes;
         self.symmetry = project.symmetry;
         self.history = History::default();
-        self.stroke_active = false;
+        self.end_stroke();
         self.mark_saved(path);
         Ok(())
     }
     pub fn begin_stroke(&mut self) {
         if !self.stroke_active {
-            self.history.record(&self.geometry);
+            self.stroke_before = Some(self.geometry.clone());
             self.stroke_active = true;
             self.stroke_deformed = false;
         }
@@ -154,6 +180,7 @@ impl Document {
         let deformed = self.stroke_active && self.stroke_deformed;
         self.stroke_active = false;
         self.stroke_deformed = false;
+        self.stroke_before = None;
         deformed
     }
     pub fn symmetry(&self) -> &Symmetry {
@@ -169,11 +196,18 @@ impl Document {
     }
     pub fn apply_dab(&mut self, brush: &Brush, dab: Dab) {
         self.begin_stroke();
-        self.stroke_deformed |= self
+        let old_mask = (brush.kind == Kind::Mask).then(|| self.geometry.mesh.mask.clone());
+        let deformed = self
             .geometry
             .mesh
             .stamp_many(brush, &self.symmetry.dabs(dab));
-        self.dirty = true;
+        self.stroke_deformed |= deformed;
+        if deformed || old_mask.is_some_and(|mask| mask != self.geometry.mesh.mask) {
+            if let Some(before) = self.stroke_before.take() {
+                self.history.record_owned(before, "Brush stroke");
+            }
+            self.dirty = true;
+        }
     }
     pub fn undo(&mut self) {
         self.end_stroke();
@@ -189,7 +223,7 @@ impl Document {
     }
     pub fn clear_mask(&mut self) {
         self.end_stroke();
-        self.history.record(&self.geometry);
+        self.history.record_named(&self.geometry, "Clear mask");
         self.geometry.mesh.mask.fill(0.);
         for level in self
             .geometry
@@ -435,5 +469,56 @@ mod delete_level_tests {
         document.delete_mesh_levels(false).unwrap();
         assert!(!document.is_dirty());
         assert!(!document.can_undo());
+    }
+}
+
+#[cfg(test)]
+mod history_feedback_tests {
+    use super::*;
+    #[test]
+    fn no_effect_strokes_keep_redo_and_each_mesh_edit_has_a_history_label() {
+        let mut document = Document::default();
+        document.set_dynamic_mesh(true).unwrap();
+        document.undo();
+        assert_eq!(document.redo_label(), Some("Switch mesh mode"));
+        let mut brush = Brush::new(Kind::Standard);
+        brush.alpha = Alpha::Image {
+            width: 1,
+            height: 1,
+            pixels: vec![0.].into(),
+        };
+        document.apply_dab(
+            &brush,
+            Dab {
+                center: crate::sculpt::Vec3(0., 1., 0.),
+                normal: crate::sculpt::Vec3(0., 1., 0.),
+                right: crate::sculpt::Vec3(1., 0., 0.),
+                up: crate::sculpt::Vec3(0., 0., 1.),
+                radius: 0.3,
+                pressure: 1.,
+                delta: crate::sculpt::Vec3::default(),
+                invert: false,
+            },
+        );
+        document.end_stroke();
+        assert_eq!(document.history_counts(), (0, 1));
+        document.redo();
+        assert!(document.mesh_settings().dynamic);
+        document.undo();
+        let mut geometry = document.geometry_snapshot();
+        geometry.subdivide().unwrap();
+        document
+            .replace_geometry_named(geometry, "Subdivide mesh")
+            .unwrap();
+        assert_eq!(document.undo_label(), Some("Subdivide mesh"));
+        assert!(!document.can_redo());
+        document.delete_mesh_levels(true).unwrap();
+        assert_eq!(document.undo_label(), Some("Delete lower levels"));
+        document.undo();
+        assert_eq!(document.redo_label(), Some("Delete lower levels"));
+        document.set_mesh_level(1).unwrap();
+        assert_eq!(document.undo_label(), Some("Change subdivision level"));
+        document.delete_mesh_levels(false).unwrap();
+        assert_eq!(document.undo_label(), Some("Delete higher levels"));
     }
 }
