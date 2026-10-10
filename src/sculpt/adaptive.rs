@@ -102,18 +102,24 @@ impl Mesh {
         if !target.is_finite() || target <= 1e-7 {
             return false;
         }
+        let cleanup = brush.kind == Kind::Smooth && settings.simplify;
         let mut changed = false;
         if collapse && settings.simplify && budget.collapses > 0 {
             let count = self.collapse_local(
                 brush,
                 dabs,
-                target * settings.collapse_ratio,
+                target
+                    * if cleanup {
+                        (settings.collapse_ratio * 2.).min(0.95)
+                    } else {
+                        settings.collapse_ratio
+                    },
                 budget.collapses.min(32),
             );
             budget.collapses = 0;
             changed |= count > 0;
         }
-        if settings.refine && budget.splits > 0 {
+        if settings.refine && !cleanup && budget.splits > 0 {
             for _ in 0..4 {
                 if budget.passes == 0 {
                     break;
@@ -485,6 +491,18 @@ impl Mesh {
                 }
                 let [x, y, z] = new.map(|i| if i == a { position } else { self.vertices[i] });
                 let cross = (y - x).cross(z - x);
+                if brush.kind == Kind::Smooth {
+                    let quality = |x: Vec3, y: Vec3, z: Vec3| {
+                        let sum = (y - x).dot(y - x) + (z - y).dot(z - y) + (x - z).dot(x - z);
+                        2. * 3f32.sqrt() * (y - x).cross(z - x).len() / sum.max(1e-20)
+                    };
+                    let [u, v, w] = old.map(|i| self.vertices[i]);
+                    let minimum = (quality(u, v, w) * 0.8).clamp(0.2, 0.35);
+                    if quality(x, y, z) < minimum {
+                        safe = false;
+                        break;
+                    }
+                }
                 if cross.len() < threshold * threshold * 1e-5 || cross.norm().dot(normal(old)) < 0.8
                 {
                     safe = false;
@@ -674,6 +692,24 @@ mod tests {
                 .iter()
                 .all(|v| v.len() > 0.98 && v.len() < 1.001)
         );
+    }
+    #[test]
+    fn smooth_cleanup_never_refines_and_simplify_off_restores_refinement() {
+        let original = Mesh::sphere();
+        let mut mesh = original.clone();
+        let mut settings = AdaptiveSettings {
+            enabled: true,
+            detail: 2.,
+            ..Default::default()
+        };
+        let brush = Brush::new(Kind::Smooth);
+        mesh.adapt(&brush, &[dab()], &settings, &mut Budget::default(), true);
+        assert!(mesh.vertices.len() <= original.vertices.len());
+        mesh.validate_closed().unwrap();
+        settings.simplify = false;
+        mesh.adapt(&brush, &[dab()], &settings, &mut Budget::default(), true);
+        assert!(mesh.vertices.len() > original.vertices.len());
+        mesh.validate_closed().unwrap();
     }
     #[test]
     fn protected_zero_alpha_and_mask_brush_leave_topology_unchanged() {

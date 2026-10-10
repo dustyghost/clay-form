@@ -671,6 +671,7 @@ impl UiState {
                 ui.add_enabled(adaptive.simplify,egui::Slider::new(&mut adaptive.collapse_ratio,0.1..=0.8).text("Simplify ratio"));
                 if adaptive!=settings.adaptive { commands.push(Command::SetAdaptive(adaptive)); }
                 ui.label("Smaller edge sizes add detail. Masks are preserved; Mask brush keeps topology fixed.");
+                ui.label("Smooth + Simplify cleans up without adding vertices. Larger edge sizes and simplify ratios remove more density.");
                 ui.label("Local adaptation preserves separate parts; use voxel remeshing to fuse them.");
             } else if settings.dynamic {
                 ui.label("Voxel remeshing replaces topology and clears masks. Small details below the voxel size may be lost.");

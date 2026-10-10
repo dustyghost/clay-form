@@ -649,3 +649,84 @@ mod adaptive_validation_tests {
         assert!(!document.mesh_settings().adaptive.enabled);
     }
 }
+
+#[cfg(test)]
+mod adaptive_smooth_tests {
+    use super::*;
+    use crate::sculpt::Vec3;
+
+    #[test]
+    fn smooth_cleanup_reduces_density_preserves_masks_and_undoes_as_one_stroke() {
+        let mut document = Document::default();
+        let mut geometry = document.geometry_snapshot();
+        geometry.mesh = geometry.mesh.subdivide().unwrap();
+        geometry.mesh.vertices[0].1 += 0.06;
+        for (v, mask) in geometry.mesh.vertices.iter().zip(&mut geometry.mesh.mask) {
+            if v.1 < 0.5 {
+                *mask = 1.;
+            }
+        }
+        document
+            .replace_geometry_named(geometry, "Dense test surface")
+            .unwrap();
+        document
+            .set_adaptive(crate::sculpt::AdaptiveSettings {
+                enabled: true,
+                detail: 16.,
+                ..Default::default()
+            })
+            .unwrap();
+        let before = document.mesh().clone();
+        let history = document.history_counts().0;
+        let mut brush = Brush::new(Kind::Smooth);
+        brush.strength = 0.6;
+        let dab = Dab {
+            center: Vec3(0., 1., 0.),
+            normal: Vec3(0., 1., 0.),
+            right: Vec3(1., 0., 0.),
+            up: Vec3(0., 0., 1.),
+            radius: 0.4,
+            pressure: 1.,
+            delta: Vec3::default(),
+            invert: false,
+        };
+        for _ in 0..6 {
+            document.begin_sculpt_frame();
+            let count = document.mesh().vertices.len();
+            document.apply_dab(&brush, dab);
+            assert!(document.mesh().vertices.len() <= count);
+        }
+        document.end_stroke();
+        let after = document.mesh().clone();
+        assert!(after.vertices.len() < before.vertices.len() - 50);
+        assert!(
+            after
+                .vertices
+                .iter()
+                .map(|v| v.1)
+                .fold(f32::NEG_INFINITY, f32::max)
+                < 1.03
+        );
+        after.validate_closed().unwrap();
+        let protected: std::collections::HashSet<_> = after
+            .vertices
+            .iter()
+            .zip(&after.mask)
+            .filter(|(_, m)| **m == 1.)
+            .map(|(v, _)| (v.0.to_bits(), v.1.to_bits(), v.2.to_bits()))
+            .collect();
+        for (v, mask) in before.vertices.iter().zip(&before.mask) {
+            if *mask == 1. {
+                assert!(
+                    protected.contains(&(v.0.to_bits(), v.1.to_bits(), v.2.to_bits())),
+                    "protected vertex or mask changed"
+                );
+            }
+        }
+        assert_eq!(document.history_counts().0, history + 1);
+        document.undo();
+        assert_eq!(document.mesh(), &before);
+        document.redo();
+        assert_eq!(document.mesh(), &after);
+    }
+}
