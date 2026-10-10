@@ -186,7 +186,8 @@ impl Mesh {
         Ok(result)
     }
     pub(crate) fn smooth_remesh(&mut self) {
-        // Two mild relaxation passes remove the voxel staircase.
+        // Mild relaxation regularizes the extracted triangulation. Surface
+        // placement comes from the signed-distance field, not this smoothing.
         for _ in 0..2 {
             let mut sum = vec![Vec3::default(); self.vertices.len()];
             let mut count = vec![0u32; self.vertices.len()];

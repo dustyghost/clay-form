@@ -3,6 +3,7 @@
 //! padded so extraction never ends on its boundary. No third-party mesh code.
 use super::{
     Mesh, Vec3,
+    math::closest_triangle,
     subdivision::{MAX_TRIANGLES, MAX_VERTICES},
 };
 use std::collections::HashMap;
@@ -116,6 +117,58 @@ impl Mesh {
             }
         }
         drop(crossings);
+        // Binary occupancy supplies the union's sign, but it cannot locate the
+        // surface between samples. Measure actual distances in a narrow band
+        // so extraction interpolates crossings instead of snapping to midpoints.
+        let mut distance = vec![step * 3.; inside.len()];
+        for (index, &triangle) in self.triangles.iter().enumerate() {
+            if index % 1024 == 0 && cancelled() {
+                return Err("Mesh operation cancelled".into());
+            }
+            let [a, b, c] = triangle.map(|i| self.vertices[i]);
+            let coordinates = |v: Vec3| [v.0, v.1, v.2];
+            let points = [coordinates(a), coordinates(b), coordinates(c)];
+            let base = coordinates(origin);
+            let lo: [usize; 3] = std::array::from_fn(|i| {
+                ((points.iter().map(|p| p[i]).fold(f32::INFINITY, f32::min) - base[i]) / step - 2.)
+                    .floor()
+                    .max(0.) as usize
+            });
+            let hi: [usize; 3] = std::array::from_fn(|i| {
+                (((points
+                    .iter()
+                    .map(|p| p[i])
+                    .fold(f32::NEG_INFINITY, f32::max)
+                    - base[i])
+                    / step
+                    + 2.)
+                    .ceil() as usize)
+                    .min(dims[i] - 1)
+            });
+            for z in lo[2]..=hi[2] {
+                if cancelled() {
+                    return Err("Mesh operation cancelled".into());
+                }
+                for y in lo[1]..=hi[1] {
+                    for x in lo[0]..=hi[0] {
+                        let i = grid.index(x, y, z);
+                        let p = grid.point(i);
+                        let d = (closest_triangle(p, a, b, c) - p).len();
+                        distance[i] = distance[i].min(d);
+                    }
+                }
+            }
+        }
+        let field: Vec<f32> = distance
+            .into_iter()
+            .zip(&inside)
+            .map(|(d, &inner)| {
+                // Avoid coincident vertices on different grid edges when the input
+                // surface lands exactly on a sample; retain the winding sign.
+                let d = d.max(step * 1e-5);
+                if inner { -d } else { d }
+            })
+            .collect();
         let mut mesh = Mesh {
             vertices: Vec::new(),
             triangles: Vec::new(),
@@ -161,7 +214,9 @@ impl Mesh {
                             let key = if a < b { (a, b) } else { (b, a) };
                             *edge_vertices.entry(key).or_insert_with(|| {
                                 let i = mesh.vertices.len();
-                                mesh.vertices.push((grid.point(a) + grid.point(b)) * 0.5);
+                                let t = field[a] / (field[a] - field[b]);
+                                mesh.vertices
+                                    .push(grid.point(a) + (grid.point(b) - grid.point(a)) * t);
                                 mesh.mask.push(0.);
                                 i
                             })
@@ -354,5 +409,42 @@ mod tests {
             .sum::<f32>()
             / remeshed.vertices.len() as f32;
         assert!(average_error < 0.06, "error={average_error}");
+    }
+    #[test]
+    fn high_resolution_sphere_has_smooth_normals_without_voxel_bands() {
+        let mesh = Mesh::sphere().remesh(64).unwrap();
+        let normals = mesh.normals();
+        let error = mesh
+            .vertices
+            .iter()
+            .zip(normals)
+            .map(|(p, n)| 1. - p.norm().dot(n))
+            .sum::<f32>()
+            / mesh.vertices.len() as f32;
+        assert!(error < 0.001, "normal error={error}");
+    }
+    #[test]
+    fn repeated_remeshing_does_not_reintroduce_bands_or_large_shape_drift() {
+        let mut mesh = Mesh::sphere();
+        for _ in 0..3 {
+            mesh = mesh.remesh(48).unwrap();
+            mesh.validate_closed().unwrap();
+            let normals = mesh.normals();
+            let error = mesh
+                .vertices
+                .iter()
+                .zip(normals)
+                .map(|(p, n)| 1. - p.norm().dot(n))
+                .sum::<f32>()
+                / mesh.vertices.len() as f32;
+            assert!(error < 0.002, "normal error={error}");
+            let radial_error = mesh
+                .vertices
+                .iter()
+                .map(|p| (p.len() - 1.).abs())
+                .sum::<f32>()
+                / mesh.vertices.len() as f32;
+            assert!(radial_error < 0.01, "shape drift={radial_error}");
+        }
     }
 }

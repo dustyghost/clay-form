@@ -38,3 +38,31 @@ impl Vec3 {
         self * (1. / self.len().max(1e-8))
     }
 }
+
+// Closest point via projected barycentric coordinates, then boundary segments.
+pub(crate) fn closest_triangle(p: Vec3, a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
+    let ab = b - a;
+    let ac = c - a;
+    let ap = p - a;
+    let d00 = ab.dot(ab);
+    let d01 = ab.dot(ac);
+    let d11 = ac.dot(ac);
+    let d20 = ap.dot(ab);
+    let d21 = ap.dot(ac);
+    let denominator = d00 * d11 - d01 * d01;
+    if denominator > 1e-20 {
+        let v = (d11 * d20 - d01 * d21) / denominator;
+        let w = (d00 * d21 - d01 * d20) / denominator;
+        if v >= 0. && w >= 0. && v + w <= 1. {
+            return a + ab * v + ac * w;
+        }
+    }
+    [(a, b), (b, c), (c, a)]
+        .into_iter()
+        .map(|(x, y)| {
+            let d = y - x;
+            x + d * ((p - x).dot(d) / d.dot(d).max(1e-20)).clamp(0., 1.)
+        })
+        .min_by(|x, y| (*x - p).len().total_cmp(&(*y - p).len()))
+        .unwrap()
+}
