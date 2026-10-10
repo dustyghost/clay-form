@@ -1,0 +1,15 @@
+/target/
+/dist/
+*.clay
+*.brush.json
+*.obj
+*.tmp
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.env
+.env.*
+!.env.example
+/.aws/
