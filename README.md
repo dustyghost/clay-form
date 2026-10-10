@@ -14,7 +14,8 @@ Linux requires a working Wayland or X11 desktop and OpenGL support. The first bu
 
 ## Sculpting
 
-- Left drag or pen tip: sculpt. Right drag: orbit. Middle drag: pan. Wheel: zoom.
+- Left drag or pen tip on the clay: sculpt. Start a left/pen drag in empty space to orbit; it stays an orbit gesture even if you cross the clay. Right drag: orbit. Middle drag: pan. Wheel: zoom.
+- The top-right orientation gizmo shows positive and negative X/Y/Z axes. Drag it to orbit, or click an axis to snap to that view. Dimmed axes point away from you.
 - Alt temporarily reverses the current brush. Shift temporarily uses Smooth.
 - Standard, Clay, Inflate, Smooth, Flatten, Pinch, Crease, Grab, and Mask are included.
 - Every brush uses an alpha, including Grab, smoothing and masking. Add/Subtract reverses its operation; subtracting Smooth sharpens, subtracting Flatten exaggerates surface relief, and subtracting Mask erases masking.
@@ -33,11 +34,24 @@ New, Open and closing the window prompt when the project has unsaved changes. Th
 
 The tablet's normal desktop driver provides pen cursor movement and tip/button input. On Linux, Clay Form additionally discovers devices named Huion under `/sys/class/input` and reads normalized `ABS_PRESSURE` from their `/dev/input/event*` device without taking exclusive control. The sidebar shows connection errors and live pressure. Native touch/pen pressure events are also accepted where eframe provides them. Otherwise strokes use full pressure.
 
+For the connected GS1331 (`256c:006d`), install the included device-specific rule from a normal terminal:
+
+```sh
+sudo install -m 0644 packaging/linux/72-clay-form-huion.rules /etc/udev/rules.d/72-clay-form-huion.rules
+sudo udevadm control --reload-rules
+```
+
+Unplug and reconnect the tablet, then restart Clay Form. The rule grants access to the active local desktop user for this model's tablet event devices using [systemd's uaccess mechanism](https://cgit.freedesktop.org/systemd/systemd/tree/src/login/70-uaccess.rules). It does not grant access to all input devices. Other models need their vendor/model IDs in a separate rule.
+
 Your normal user needs read access to the tablet event device. If the sidebar reports permission denied, configure device-specific access through your distribution's input/udev facilities. Do not run the application as root. Device access and pressure have not yet been verified with a physical Huion tablet; model names/drivers that do not contain “Huion” need a discovery extension. Tilt, eraser detection, and tablet express-key configuration are not implemented.
 
 ## Scope
 
 This is a first functional prototype, not a replacement for a production sculpting package. It uses a fixed triangle mesh and an orthographic viewport with CPU projection and egui rendering. There is no remeshing, subdivision, multiresolution, topology editing, layers, materials, or texture painting. Very deep folds can exceed the fixed mesh's useful resolution. Mesh/alpha file sizes are bounded on load.
+
+## Architecture
+
+The app separates document ownership, sculpting algorithms, UI commands, camera/navigation, rendering/picking, persistence, and tablet input. See [the architecture guide](docs/architecture.md) for responsibilities and extension points. Existing version 1 projects and brush presets remain compatible.
 
 ## Development
 
@@ -47,7 +61,7 @@ cargo test
 cargo clippy --all-targets -- -D warnings
 ```
 
-Tests cover the sphere's closed topology and outward normals, add/subtract deformation, mask protection, black alphas across every brush, project/preset disk saves with embedded custom alphas, and a simulated viewport pen stroke with undo.
+Tests cover brush and mask behavior, legacy JSON compatibility, project/preset disk saves, stroke and bounded undo/redo, failed loads, save/open protection, and simulated viewport/gizmo gestures.
 
 Initialize the repository if it has not already been initialized:
 
