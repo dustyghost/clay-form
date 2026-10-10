@@ -1,5 +1,6 @@
 //! Converts viewport gestures into camera movement and document sculpt dabs.
 mod gizmo;
+mod guides;
 mod scene;
 use crate::{
     camera::Camera,
@@ -27,7 +28,8 @@ pub(crate) struct ViewportOptions {
     pub selected: usize,
     pub pressure: f32,
     pub wire: bool,
-    pub symmetry: bool,
+    pub show_guides: bool,
+    pub guide_opacity: f32,
     pub enabled: bool,
 }
 impl Viewport {
@@ -179,13 +181,21 @@ impl Viewport {
                                     delta: d,
                                     invert: modifiers.alt,
                                 },
-                                options.symmetry,
                             );
                         }
                     }
                     self.last = Some(pos);
                 }
             }
+        }
+        if options.show_guides {
+            guides::paint(
+                &scene,
+                &painter,
+                document.mesh(),
+                document.symmetry(),
+                options.guide_opacity,
+            );
         }
         draw_gizmo(camera, &painter, gizmo_rect, pointer);
         painter.text(

@@ -84,25 +84,13 @@ impl Mesh {
         Ok(())
     }
     pub fn stamp(&mut self, b: &Brush, dab: Dab) {
-        let Dab {
-            center,
-            normal,
-            right,
-            up,
-            radius,
-            pressure,
-            delta,
-            invert,
-        } = dab;
+        self.stamp_many(b, &[dab]);
+    }
+    /// Evaluate all symmetry copies against the same geometry, taking the strongest
+    /// influence per vertex so overlapping copies cannot multiply brush strength.
+    pub fn stamp_many(&mut self, b: &Brush, dabs: &[Dab]) {
         let old = self.vertices.clone();
         let normals = self.normals();
-        let sign = if b.subtract ^ invert { -1. } else { 1. };
-        let strength = b.strength
-            * if b.pressure {
-                pressure.powf(b.pressure_curve)
-            } else {
-                1.
-            };
         let mut avg = vec![Vec3::default(); old.len()];
         let mut count = vec![0f32; old.len()];
         if b.kind == Kind::Smooth {
@@ -114,12 +102,45 @@ impl Mesh {
             }
         }
         for i in 0..old.len() {
-            let offset = old[i] - center;
-            if offset.len() > radius * 1.5 || normals[i].dot(normal) < 0.1 {
-                continue;
+            let mut strongest = 0.;
+            let mut selected = None;
+            for dab in dabs {
+                let offset = old[i] - dab.center;
+                if offset.len() > dab.radius * 1.5 || normals[i].dot(dab.normal) < 0.1 {
+                    continue;
+                }
+                let weight = b.weight(
+                    offset.dot(dab.right) / dab.radius,
+                    offset.dot(dab.up) / dab.radius,
+                );
+                let strength = b.strength
+                    * if b.pressure {
+                        dab.pressure.powf(b.pressure_curve)
+                    } else {
+                        1.
+                    };
+                let influence = weight * strength;
+                if influence > strongest {
+                    strongest = influence;
+                    selected = Some((*dab, offset));
+                }
             }
-            let weight = b.weight(offset.dot(right) / radius, offset.dot(up) / radius);
-            let w = weight * strength;
+            let Some((
+                Dab {
+                    center,
+                    normal,
+                    radius,
+                    delta,
+                    invert,
+                    ..
+                },
+                offset,
+            )) = selected
+            else {
+                continue;
+            };
+            let sign = if b.subtract ^ invert { -1. } else { 1. };
+            let w = strongest;
             if b.kind == Kind::Mask {
                 self.mask[i] = (self.mask[i] + w * sign).clamp(0., 1.);
                 continue;
@@ -137,7 +158,7 @@ impl Mesh {
                 Kind::Crease => {
                     (center - old[i]) * (w * 0.12 * sign) - normal * (radius * w * 0.08 * sign)
                 }
-                Kind::Grab => delta * (weight * strength * (1. - self.mask[i]) * sign),
+                Kind::Grab => delta * (w * sign),
                 Kind::Mask => Vec3::default(),
             };
             self.vertices[i] = old[i] + displacement;

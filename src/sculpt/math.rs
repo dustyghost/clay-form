@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, Mul, Sub};
-#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Vec3(pub f32, pub f32, pub f32);
 impl Add for Vec3 {
     type Output = Self;

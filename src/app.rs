@@ -113,6 +113,10 @@ impl App {
                 self.camera.reset();
                 Ok(())
             }
+            Command::SetSymmetry(symmetry) => {
+                self.viewport.cancel(&mut self.document);
+                self.document.set_symmetry(symmetry)
+            }
             Command::DuplicateBrush(index) => self
                 .document
                 .duplicate_brush(index)
@@ -168,7 +172,8 @@ impl App {
                 selected: self.ui.selected,
                 pressure: self.pressure,
                 wire: self.ui.wire,
-                symmetry: self.ui.symmetry,
+                show_guides: self.ui.show_symmetry_guides,
+                guide_opacity: self.ui.guide_opacity,
                 enabled: self.ui.pending.is_none(),
             },
         );

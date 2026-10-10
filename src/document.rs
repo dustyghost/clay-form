@@ -1,12 +1,13 @@
 //! Owns persistent content and mesh edits. No UI, window, or tablet dependencies.
 use crate::{
     history::History,
-    sculpt::{Alpha, Brush, Dab, Kind, Mesh, Project, Vec3, validate_brush},
+    sculpt::{Alpha, Brush, Dab, Kind, Mesh, Project, Symmetry, validate_brush},
 };
 pub struct Document {
     mesh: Mesh,
     brushes: Vec<Brush>,
     history: History,
+    symmetry: Symmetry,
     dirty: bool,
     stroke_active: bool,
     current_path: String,
@@ -17,6 +18,7 @@ impl Default for Document {
             mesh: Mesh::sphere(),
             brushes: Kind::ALL.into_iter().map(Brush::new).collect(),
             history: History::default(),
+            symmetry: Symmetry::default(),
             dirty: false,
             stroke_active: false,
             current_path: "sculpt.clay".into(),
@@ -47,6 +49,7 @@ impl Document {
             version: Project::VERSION,
             mesh: self.mesh.clone(),
             brushes: self.brushes.clone(),
+            symmetry: self.symmetry.clone(),
         }
     }
     pub fn mark_saved(&mut self, path: &str) {
@@ -65,6 +68,7 @@ impl Document {
         project.validate()?;
         self.mesh = project.mesh;
         self.brushes = project.brushes;
+        self.symmetry = project.symmetry;
         self.history = History::default();
         self.stroke_active = false;
         self.mark_saved(path);
@@ -79,23 +83,20 @@ impl Document {
     pub fn end_stroke(&mut self) {
         self.stroke_active = false;
     }
-    pub fn apply_dab(&mut self, brush: &Brush, dab: Dab, mirror_x: bool) {
-        self.begin_stroke();
-        self.mesh.stamp(brush, dab);
-        if mirror_x && dab.center.0.abs() > dab.radius {
-            let mirror = |v: Vec3| Vec3(-v.0, v.1, v.2);
-            self.mesh.stamp(
-                brush,
-                Dab {
-                    center: mirror(dab.center),
-                    normal: mirror(dab.normal),
-                    right: mirror(dab.right),
-                    up: mirror(dab.up),
-                    delta: mirror(dab.delta),
-                    ..dab
-                },
-            );
+    pub fn symmetry(&self) -> &Symmetry {
+        &self.symmetry
+    }
+    pub fn set_symmetry(&mut self, symmetry: Symmetry) -> Result<(), String> {
+        symmetry.validate()?;
+        if self.symmetry != symmetry {
+            self.symmetry = symmetry;
+            self.dirty = true;
         }
+        Ok(())
+    }
+    pub fn apply_dab(&mut self, brush: &Brush, dab: Dab) {
+        self.begin_stroke();
+        self.mesh.stamp_many(brush, &self.symmetry.dabs(dab));
         self.dirty = true;
     }
     pub fn undo(&mut self) {
@@ -160,6 +161,7 @@ impl Document {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sculpt::Vec3;
     #[test]
     fn whole_stroke_is_one_undo_step_and_new_edits_clear_redo() {
         let mut document = Document::default();
@@ -175,8 +177,8 @@ mod tests {
             delta: Vec3::default(),
             invert: false,
         };
-        document.apply_dab(&brush, dab, false);
-        document.apply_dab(&brush, dab, false);
+        document.apply_dab(&brush, dab);
+        document.apply_dab(&brush, dab);
         document.end_stroke();
         let sculpted = document.mesh.vertices[0].1;
         assert!(sculpted > original);
@@ -186,7 +188,7 @@ mod tests {
         document.redo();
         assert_eq!(document.mesh.vertices[0].1, sculpted);
         document.undo();
-        document.apply_dab(&brush, dab, false);
+        document.apply_dab(&brush, dab);
         assert!(!document.can_redo());
     }
     #[test]

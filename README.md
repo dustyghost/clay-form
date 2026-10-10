@@ -22,7 +22,9 @@ Linux requires a working Wayland or X11 desktop and OpenGL support. The first bu
 - Adjust radius, strength, alpha falloff, spacing, rotation, pressure strength/radius mapping, and pressure response curve. Grab moves the surface with the cursor; spacing does not affect Grab.
 - Choose Soft, Hard or Square alpha, or load a PNG/JPEG up to 2048 × 2048 pixels. White affects the surface, black protects it, and transparency reduces influence. Custom alpha pixels are embedded in presets and projects.
 - Duplicate any brush to create a named variation. Save/load a preset using its path field. Loading appends it to the library.
-- Mirror X applies strokes on opposite sides of the object's X axis. Clear mask removes all masking. Undo/Redo keeps the last 24 sculpt strokes in memory.
+- Enable **Symmetry** in the toolbar, then open **Symmetry settings**. Mirror across X/Y/Z independently or combine planes. Radial symmetry adds 2–16 repeats around X, Y, or Z; mirrors and radial repeats can be combined.
+- Adjust the symmetry center in object coordinates, or reset it to the origin. Surface lines show the active planes and radial boundaries as you orbit: X pink/red, Y green, Z blue, other radial boundaries gold. Guide visibility and opacity are adjustable.
+- Symmetry settings are saved in projects; older projects open with symmetry disabled. Overlapping symmetry copies use the strongest influence per vertex, preventing stronger strokes at the center seam. Clear mask removes all masking. Undo/Redo keeps the last 24 sculpt strokes in memory.
 
 ## Files
 

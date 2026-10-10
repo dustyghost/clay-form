@@ -131,11 +131,20 @@ mod tests {
             version: 1,
             mesh,
             brushes: vec![brush.clone()],
+            symmetry: crate::sculpt::Symmetry {
+                enabled: true,
+                mirror: [true, true, false],
+                radial: true,
+                radial_axis: crate::sculpt::Axis::Z,
+                radial_count: 8,
+                center: crate::sculpt::Vec3(0.1, 0.2, 0.3),
+            },
         };
         let path = dir.join("project.clay");
         save_project(path.to_str().unwrap(), &project).unwrap();
         let loaded = load_project(path.to_str().unwrap()).unwrap();
         loaded.mesh.validate().unwrap();
+        assert_eq!(loaded.symmetry, project.symmetry);
         assert_eq!(loaded.mesh.vertices[7].0, project.mesh.vertices[7].0);
         assert_eq!(loaded.mesh.mask[7], 0.75);
         assert!(loaded.brushes[0] == brush);

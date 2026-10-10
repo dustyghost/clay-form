@@ -7,9 +7,12 @@ use eframe::egui::{self, Color32, Pos2};
 pub(super) struct Scene {
     pub scale: f32,
     positions: Vec<Pos2>,
-    faces: Vec<(usize, f32)>,
+    pub(super) faces: Vec<(usize, f32)>,
     normals: Vec<Vec3>,
     view: Vec3,
+    pub(super) center: Pos2,
+    pub(super) right: Vec3,
+    pub(super) up: Vec3,
 }
 impl Scene {
     pub fn paint(
@@ -86,6 +89,9 @@ impl Scene {
             faces,
             normals,
             view,
+            center,
+            right,
+            up,
         }
     }
     pub fn pick(&self, mesh: &Mesh, point: Pos2) -> Option<(Vec3, Vec3)> {

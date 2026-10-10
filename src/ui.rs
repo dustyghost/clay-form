@@ -2,7 +2,7 @@
 use crate::{
     command::{Command, PendingAction},
     document::Document,
-    sculpt::{Alpha, Kind},
+    sculpt::{Alpha, Axis, Kind},
 };
 use eframe::egui::{self, Color32, Sense, Vec2};
 pub(crate) struct UiState {
@@ -14,7 +14,8 @@ pub(crate) struct UiState {
     pub pending: Option<PendingAction>,
     pub pending_save_path: String,
     pub wire: bool,
-    pub symmetry: bool,
+    pub show_symmetry_guides: bool,
+    pub guide_opacity: f32,
 }
 impl Default for UiState {
     fn default() -> Self {
@@ -27,7 +28,8 @@ impl Default for UiState {
             pending: None,
             pending_save_path: "sculpt.clay".into(),
             wire: false,
-            symmetry: false,
+            show_symmetry_guides: true,
+            guide_opacity: 0.85,
         }
     }
 }
@@ -69,7 +71,66 @@ impl UiState {
                     commands.push(Command::Redo);
                 }
                 ui.checkbox(&mut self.wire, "Wireframe");
-                ui.checkbox(&mut self.symmetry, "Mirror X");
+                let mut symmetry = document.symmetry().clone();
+                ui.checkbox(&mut symmetry.enabled, "Symmetry");
+                ui.menu_button("Symmetry settings", |ui| {
+                    ui.label("Mirror planes");
+                    ui.horizontal(|ui| {
+                        for (i, label) in ["X", "Y", "Z"].iter().enumerate() {
+                            ui.checkbox(&mut symmetry.mirror[i], *label);
+                        }
+                    });
+                    ui.checkbox(&mut symmetry.radial, "Radial symmetry");
+                    ui.add_enabled_ui(symmetry.radial, |ui| {
+                        egui::ComboBox::from_label("Radial axis")
+                            .selected_text(format!("{:?}", symmetry.radial_axis))
+                            .show_ui(ui, |ui| {
+                                for axis in Axis::ALL {
+                                    ui.selectable_value(
+                                        &mut symmetry.radial_axis,
+                                        axis,
+                                        format!("{axis:?}"),
+                                    );
+                                }
+                            });
+                        ui.add(
+                            egui::Slider::new(&mut symmetry.radial_count, 2..=16).text("Repeats"),
+                        );
+                    });
+                    ui.separator();
+                    ui.label("Symmetry center (object coordinates)");
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::DragValue::new(&mut symmetry.center.0)
+                                .speed(0.01)
+                                .range(-1_000_000. ..=1_000_000.)
+                                .prefix("X "),
+                        );
+                        ui.add(
+                            egui::DragValue::new(&mut symmetry.center.1)
+                                .speed(0.01)
+                                .range(-1_000_000. ..=1_000_000.)
+                                .prefix("Y "),
+                        );
+                        ui.add(
+                            egui::DragValue::new(&mut symmetry.center.2)
+                                .speed(0.01)
+                                .range(-1_000_000. ..=1_000_000.)
+                                .prefix("Z "),
+                        );
+                    });
+                    if ui.button("Center on origin").clicked() {
+                        symmetry.center = crate::sculpt::Vec3::default();
+                    }
+                    ui.checkbox(&mut self.show_symmetry_guides, "Show symmetry lines");
+                    ui.add(
+                        egui::Slider::new(&mut self.guide_opacity, 0.1..=1.).text("Guide opacity"),
+                    );
+                    ui.label("Mirror planes and radial repeats can be combined.");
+                });
+                if symmetry != *document.symmetry() {
+                    commands.push(Command::SetSymmetry(symmetry));
+                }
                 if ui.button("Clear mask").clicked() {
                     commands.push(Command::ClearMask);
                 }

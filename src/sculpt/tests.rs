@@ -104,6 +104,7 @@ fn project_roundtrip() {
         version: 1,
         mesh: Mesh::sphere(),
         brushes: Kind::ALL.into_iter().map(Brush::new).collect(),
+        symmetry: super::Symmetry::default(),
     };
     let bytes = serde_json::to_vec(&p).unwrap();
     let q: Project = serde_json::from_slice(&bytes).unwrap();
