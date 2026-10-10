@@ -4,6 +4,7 @@ pub mod camera;
 mod command;
 pub mod document;
 mod history;
+mod mesh_job;
 pub mod persistence;
 mod preferences;
 pub mod sculpt;

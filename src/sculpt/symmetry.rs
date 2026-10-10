@@ -210,7 +210,17 @@ mod tests {
             ..Default::default()
         };
         let mut mesh = Mesh::sphere();
-        let (a, b) = (1 + 47 * 192 + 46, 1 + 47 * 192 + 50);
+        let nearest = |point: Vec3| {
+            mesh.vertices
+                .iter()
+                .enumerate()
+                .min_by(|(_, a), (_, b)| (**a - point).len().total_cmp(&(**b - point).len()))
+                .unwrap()
+                .0
+        };
+        let a = nearest(Vec3(0.065, 0., 0.998));
+        let v = mesh.vertices[a];
+        let b = nearest(Vec3(-v.0, v.1, v.2));
         let before = mesh.vertices[a];
         let brush = Brush::new(Kind::Standard);
         mesh.stamp_many(&brush, &symmetry.dabs(dab(before)));

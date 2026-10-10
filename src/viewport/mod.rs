@@ -20,7 +20,9 @@ pub(crate) enum Gesture {
 #[derive(Default)]
 pub(crate) struct Viewport {
     pub(crate) gesture: Option<Gesture>,
+    pub(crate) completed_stroke: bool,
     gizmo_dragged: bool,
+    blocked_until_release: bool,
     stroke: bool,
     last: Option<Pos2>,
 }
@@ -40,6 +42,9 @@ impl Viewport {
         *self = Self::default();
         document.end_stroke();
     }
+    pub(crate) fn wait_for_release(&mut self) {
+        self.blocked_until_release = true;
+    }
     pub(crate) fn show(
         &mut self,
         ui: &mut egui::Ui,
@@ -47,6 +52,17 @@ impl Viewport {
         camera: &mut Camera,
         options: ViewportOptions,
     ) {
+        self.completed_stroke = false;
+        if !options.enabled && ui.input(|i| i.pointer.primary_down()) {
+            self.blocked_until_release = true;
+        }
+        if !ui.input(|i| i.pointer.primary_down()) {
+            self.blocked_until_release = false;
+        }
+        let options = ViewportOptions {
+            enabled: options.enabled && !self.blocked_until_release,
+            ..options
+        };
         let (response, painter) = ui.allocate_painter(ui.available_size(), Sense::drag());
         let rect = response.rect;
         let gizmo_rect = egui::Rect::from_min_size(
@@ -119,7 +135,7 @@ impl Viewport {
             self.last = None;
         }
         if !drawing {
-            document.end_stroke();
+            self.completed_stroke = document.end_stroke() && self.stroke;
             self.stroke = false;
             self.last = None;
         }

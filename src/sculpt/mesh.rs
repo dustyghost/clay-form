@@ -12,7 +12,7 @@ pub struct Dab {
     pub invert: bool,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Mesh {
     pub vertices: Vec<Vec3>,
     pub triangles: Vec<[usize; 3]>,
@@ -20,7 +20,7 @@ pub struct Mesh {
 }
 impl Mesh {
     pub fn sphere() -> Self {
-        let n = 96;
+        let n = 48;
         let mut v = vec![Vec3(0., 1., 0.)];
         for j in 1..n {
             let t = std::f32::consts::PI * j as f32 / n as f32;
@@ -62,7 +62,8 @@ impl Mesh {
         n.into_iter().map(Vec3::norm).collect()
     }
     pub fn validate(&self) -> Result<(), String> {
-        if self.vertices.len() > 500_000
+        if self.vertices.len() > super::subdivision::MAX_VERTICES
+            || self.triangles.len() > super::subdivision::MAX_TRIANGLES
             || self.vertices.is_empty()
             || self.mask.len() != self.vertices.len()
             || self
@@ -88,7 +89,8 @@ impl Mesh {
     }
     /// Evaluate all symmetry copies against the same geometry, taking the strongest
     /// influence per vertex so overlapping copies cannot multiply brush strength.
-    pub fn stamp_many(&mut self, b: &Brush, dabs: &[Dab]) {
+    pub fn stamp_many(&mut self, b: &Brush, dabs: &[Dab]) -> bool {
+        let mut deformed = false;
         let old = self.vertices.clone();
         let normals = self.normals();
         let mut avg = vec![Vec3::default(); old.len()];
@@ -162,6 +164,8 @@ impl Mesh {
                 Kind::Mask => Vec3::default(),
             };
             self.vertices[i] = old[i] + displacement;
+            deformed |= self.vertices[i] != old[i];
         }
+        deformed
     }
 }

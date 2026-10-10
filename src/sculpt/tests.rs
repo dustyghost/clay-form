@@ -101,6 +101,7 @@ fn black_alpha_protects_from_every_brush() {
 #[test]
 fn project_roundtrip() {
     let p = Project {
+        mesh_settings: crate::sculpt::MeshSettings::default(),
         version: 1,
         mesh: Mesh::sphere(),
         brushes: Kind::ALL.into_iter().map(Brush::new).collect(),

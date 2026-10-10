@@ -1,6 +1,6 @@
 # Clay Form
 
-A Rust desktop sculpting prototype built with eframe/egui. Start from a dense sphere and sculpt real mesh vertices with a pen or mouse.
+A Rust desktop sculpting prototype built with eframe/egui. Start from a sphere and sculpt real mesh vertices with a pen or mouse.
 
 ## Run
 
@@ -24,7 +24,17 @@ Linux requires a working Wayland or X11 desktop and OpenGL support. The first bu
 - Duplicate any brush to create a named variation. Save/load a preset using its path field. Loading appends it to the library.
 - Enable **Symmetry** in the toolbar, then open **Symmetry settings**. Mirror across X/Y/Z independently or combine planes. Radial symmetry adds 2–16 repeats around X, Y, or Z; mirrors and radial repeats can be combined.
 - Adjust the symmetry center in object coordinates, or reset it to the origin. Surface lines show the active planes and radial boundaries as you orbit: X pink/red, Y green, Z blue, other radial boundaries gold. Guide visibility and opacity are adjustable.
-- Symmetry settings are saved in projects; older projects open with symmetry disabled. Overlapping symmetry copies use the strongest influence per vertex, preventing stronger strokes at the center seam. Clear mask removes all masking. Undo/Redo keeps the last 24 sculpt strokes in memory.
+- Symmetry settings are saved in projects; older projects open with symmetry disabled. Overlapping symmetry copies use the strongest influence per vertex, preventing stronger strokes at the center seam. Clear mask removes all masking. Undo/Redo keeps up to 24 geometry edits within a 128 MB snapshot budget.
+
+## Mesh management
+
+Use the **Mesh** menu or the **Mesh management** panel. New spheres start at 4,514 vertices, leaving room for subdivision; opening older projects preserves their geometry.
+
+**Subdivision:** add a level with Subdivide, then select a level with the slider or Lower/Higher buttons. Each face splits into four triangles with shared edge midpoints, preserving the existing shape. This is linear subdivision rather than a smoothing subdivision surface. Lower-level edits propagate upward while retaining stored fine detail; sculpting higher levels updates their parent vertices when you step down. Mask values interpolate between levels. Subdivide from the highest level. The active mesh and all stored levels save in `.clay` projects. OBJ export writes the active level.
+
+**Dynamic mesh:** switch modes to keep the active surface as a single mesh, discarding stored subdivision levels. Choose resolution (16–96 voxels along the longest bounding-box axis) and click Remesh now. Voxel reconstruction redistributes geometry, joins overlapping outward-oriented closed shells, and preserves separated volumes. It requires a closed, consistently oriented mesh. Optional Remesh after each stroke runs when a geometry stroke ends; painting masks does not trigger it. This is whole-surface voxel remeshing, rather than local adaptive triangulation while the brush moves.
+
+Remeshing clears masks and can remove features thinner than a voxel. Start with a moderate resolution and raise it for detail. Subdivision and remeshing run in background workers; sculpt input pauses during the operation. Cancel keeps the original mesh. Mode switches, level changes, strokes, and completed topology operations can be undone, including restoring discarded levels. Failed operations leave geometry intact; a failed automatic remesh disables the automatic setting so you can adjust it before retrying.
 
 ## Files
 
@@ -49,7 +59,7 @@ Your normal user needs read access to the tablet event device. If the sidebar re
 
 ## Scope
 
-This is a first functional prototype, not a replacement for a production sculpting package. It uses a fixed triangle mesh and an orthographic viewport with CPU projection and egui rendering. There is no remeshing, subdivision, multiresolution, topology editing, layers, materials, or texture painting. Very deep folds can exceed the fixed mesh's useful resolution. Mesh/alpha file sizes are bounded on load.
+This is a first functional prototype, not a replacement for a production sculpting package. It uses triangle meshes and an orthographic viewport with CPU projection and egui rendering. Subdivision and voxel remeshing are implemented; adaptive per-dab topology, quad retopology, sculpt layers, materials, and texture painting are future work. Meshes are limited to 500,000 vertices and 1,000,000 triangles; very large meshes are slower in this CPU renderer. Mesh/alpha file sizes are bounded on load.
 
 ## Architecture
 
@@ -77,8 +87,8 @@ git commit -m "Create Clay Form sculpting prototype"
 
 Open **Settings → Key settings** to rebind or clear shortcuts. Click a binding and press its replacement; Escape cancels. Conflicting shortcuts are rejected. Smooth and reverse hold modifiers are configurable too. Shortcuts pause during text entry and settings editing.
 
-Defaults: Ctrl+S saves, Ctrl+O opens the project path, Ctrl+N creates a sphere, Ctrl+Z undoes, Ctrl+Shift+Z redoes, F resets the view, X toggles symmetry, W toggles wireframe, G toggles symmetry guides, brackets change brush radius, and comma/period select brushes.
+Defaults: Ctrl+S saves, Ctrl+O opens the project path, Ctrl+N creates a sphere, Ctrl+Z undoes, Ctrl+Shift+Z redoes, F resets the view, X toggles symmetry, W toggles wireframe, G toggles symmetry guides, brackets change brush radius, and comma/period select brushes. Ctrl+D subdivides, Shift+D selects a lower level, D selects a higher level, and Ctrl+R remeshes in dynamic mode. Existing preferences upgrade without losing custom bindings; new shortcuts that conflict with yours start unbound.
 
-Open **Settings → Customize workspace** to place brush library, brush settings, alpha, presets, and tablet/navigation groups on the left, right, in floating windows, or hidden. Arrows reorder groups, headers collapse them, panel edges resize them, and floating titles move them. Closing a floating tool hides it; restore it in the workspace editor. Reset buttons restore key or layout defaults independently.
+Open **Settings → Customize workspace** to place brush library, brush settings, alpha, presets, tablet/navigation, and mesh management groups on the left, right, in floating windows, or hidden. Arrows reorder groups, headers collapse them, panel edges resize them, and floating titles move them. Closing a floating tool hides it; restore it in the workspace editor. Reset buttons restore key or layout defaults independently.
 
 Preferences save automatically after a short delay and on exit, separately from sculpt projects, to `$XDG_CONFIG_HOME/clay-form/preferences.json` or `~/.config/clay-form/preferences.json`. Invalid preferences fall back to defaults with a status message. This is group-level layout customization; individual controls stay within their tool groups.

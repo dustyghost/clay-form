@@ -18,9 +18,13 @@ pub(crate) enum Action {
     Larger,
     PreviousBrush,
     NextBrush,
+    Subdivide,
+    LowerLevel,
+    HigherLevel,
+    Remesh,
 }
 impl Action {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 17] = [
         Self::Save,
         Self::Open,
         Self::New,
@@ -34,6 +38,10 @@ impl Action {
         Self::Larger,
         Self::PreviousBrush,
         Self::NextBrush,
+        Self::Subdivide,
+        Self::LowerLevel,
+        Self::HigherLevel,
+        Self::Remesh,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -50,6 +58,10 @@ impl Action {
             Self::Larger => "Larger brush",
             Self::PreviousBrush => "Previous brush",
             Self::NextBrush => "Next brush",
+            Self::Subdivide => "Subdivide mesh",
+            Self::LowerLevel => "Lower subdivision level",
+            Self::HigherLevel => "Higher subdivision level",
+            Self::Remesh => "Remesh dynamic mesh",
         }
     }
 }
@@ -110,14 +122,16 @@ pub(crate) enum Tool {
     Alpha,
     Presets,
     Tablet,
+    Mesh,
 }
 impl Tool {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Library,
         Self::Brush,
         Self::Alpha,
         Self::Presets,
         Self::Tablet,
+        Self::Mesh,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -126,6 +140,7 @@ impl Tool {
             Self::Alpha => "Alpha",
             Self::Presets => "Brush presets",
             Self::Tablet => "Tablet & navigation",
+            Self::Mesh => "Mesh management",
         }
     }
 }
@@ -175,6 +190,10 @@ impl Default for Preferences {
             (Key::CloseBracket, none),
             (Key::Comma, none),
             (Key::Period, none),
+            (Key::D, ctrl),
+            (Key::D, Modifiers::SHIFT),
+            (Key::D, none),
+            (Key::R, ctrl),
         ];
         Self {
             version: 1,
@@ -190,7 +209,11 @@ impl Default for Preferences {
                 .enumerate()
                 .map(|(i, tool)| Panel {
                     tool,
-                    dock: Dock::Left,
+                    dock: if tool == Tool::Mesh {
+                        Dock::Right
+                    } else {
+                        Dock::Left
+                    },
                     open: true,
                     position: [320. + i as f32 * 25., 100. + i as f32 * 25.],
                 })
@@ -286,7 +309,38 @@ pub(crate) fn save(path: &std::path::Path, prefs: &Preferences) -> Result<(), St
     crate::persistence::write_json(&path.to_string_lossy(), prefs)
 }
 pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
-    let prefs: Preferences = crate::persistence::read_json(&path.to_string_lossy())?;
+    let mut prefs: Preferences = crate::persistence::read_json(&path.to_string_lossy())?;
+    if prefs.bindings.len() == 13
+        && [
+            Action::Subdivide,
+            Action::LowerLevel,
+            Action::HigherLevel,
+            Action::Remesh,
+        ]
+        .iter()
+        .all(|new| !prefs.bindings.iter().any(|(a, _)| a == new))
+    {
+        for (action, mut shortcut) in Preferences::default().bindings.into_iter().skip(13) {
+            if shortcut.is_some()
+                && prefs
+                    .bindings
+                    .iter()
+                    .any(|(_, existing)| existing == &shortcut)
+            {
+                shortcut = None;
+            }
+            prefs.bindings.push((action, shortcut));
+        }
+    }
+    // Upgrade the original five-panel workspace without losing its custom layout.
+    if prefs.panels.len() == 5 && !prefs.panels.iter().any(|p| p.tool == Tool::Mesh) {
+        prefs.panels.push(Panel {
+            tool: Tool::Mesh,
+            dock: Dock::Right,
+            open: true,
+            position: [600., 120.],
+        });
+    }
     prefs.validate()?;
     Ok(prefs)
 }
@@ -349,5 +403,27 @@ mod tests {
                 assert!(prefs.actions(ctx).is_empty());
             },
         );
+    }
+}
+
+#[cfg(test)]
+mod migration_tests {
+    use super::*;
+    #[test]
+    fn existing_workspace_keeps_customizations_when_mesh_tools_are_added() {
+        let path =
+            std::env::temp_dir().join(format!("clay-layout-upgrade-{}.json", std::process::id()));
+        let mut old = Preferences::default();
+        old.panels.retain(|p| p.tool != Tool::Mesh);
+        old.bindings.truncate(13);
+        old.panels[0].dock = Dock::Floating;
+        crate::persistence::write_json(&path.to_string_lossy(), &old).unwrap();
+        let upgraded = load(&path).unwrap();
+        assert_eq!(&upgraded.panels[..5], &old.panels);
+        assert_eq!(upgraded.panels[5].tool, Tool::Mesh);
+        assert_eq!(upgraded.panels[5].dock, Dock::Right);
+        assert_eq!(&upgraded.bindings[..13], &old.bindings);
+        assert_eq!(upgraded.bindings.len(), 17);
+        std::fs::remove_file(path).unwrap();
     }
 }

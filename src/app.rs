@@ -3,6 +3,7 @@ use crate::{
     camera::Camera,
     command::{Command, PendingAction},
     document::Document,
+    mesh_job::{MeshJob, Operation},
     persistence,
     preferences::{self, Action, Preferences},
     tablet::Tablet,
@@ -19,6 +20,7 @@ pub struct App {
     tablet: Tablet,
     pressure: f32,
     closing: bool,
+    mesh_job: Option<MeshJob>,
     preferences_path: Option<std::path::PathBuf>,
     saved_preferences: Preferences,
     preferences_changed: Option<std::time::Instant>,
@@ -33,6 +35,7 @@ impl Default for App {
             tablet: Tablet::new(),
             pressure: 1.,
             closing: false,
+            mesh_job: None,
             preferences_path: None,
             saved_preferences: Preferences::default(),
             preferences_changed: None,
@@ -82,6 +85,20 @@ impl App {
         }
         for action in self.ui.preferences.actions(ctx) {
             let command = match action {
+                Action::Subdivide => Some(Command::Subdivide),
+                Action::Remesh => Some(Command::Remesh),
+                Action::LowerLevel => self
+                    .document
+                    .mesh_settings()
+                    .level()
+                    .checked_sub(1)
+                    .filter(|&n| n > 0)
+                    .map(Command::SetMeshLevel),
+                Action::HigherLevel => {
+                    let settings = self.document.mesh_settings();
+                    (settings.level() < settings.levels())
+                        .then(|| Command::SetMeshLevel(settings.level() + 1))
+                }
                 Action::Save => Some(Command::Save),
                 Action::Open => Some(Command::Request(PendingAction::Open(self.ui.path.clone()))),
                 Action::New => Some(Command::Request(PendingAction::New)),
@@ -127,6 +144,51 @@ impl App {
         }
     }
 
+    fn start_mesh_job(&mut self, operation: Operation) -> Result<(), String> {
+        if self.mesh_job.is_some() {
+            return Err("A mesh operation is already running".into());
+        }
+        let was_dragging = self.viewport.gesture.is_some();
+        self.viewport.cancel(&mut self.document);
+        self.mesh_job = Some(MeshJob::start(
+            self.document.geometry_snapshot(),
+            operation,
+        )?);
+        if was_dragging {
+            self.viewport.wait_for_release();
+        }
+        self.ui.mesh_busy = true;
+        self.ui.status = format!("{}…", operation.label());
+        Ok(())
+    }
+    fn cancel_mesh_job(&mut self) {
+        if self.mesh_job.take().is_some() {
+            self.ui.status = "Mesh operation cancelled; original mesh kept".into();
+        }
+        self.ui.mesh_busy = false;
+    }
+    fn poll_mesh_job(&mut self) {
+        if let Some(result) = self.mesh_job.as_ref().and_then(MeshJob::poll) {
+            self.mesh_job = None;
+            self.ui.mesh_busy = false;
+            match result.and_then(|geometry| self.document.replace_geometry(geometry)) {
+                Ok(()) => {
+                    self.ui.status = format!(
+                        "Mesh updated: {} vertices, {} faces",
+                        self.document.mesh().vertices.len(),
+                        self.document.mesh().triangles.len()
+                    )
+                }
+                Err(error) => {
+                    self.ui.status = error;
+                    if self.document.mesh_settings().auto_remesh {
+                        let resolution = self.document.mesh_settings().resolution;
+                        let _ = self.document.set_remesh_settings(resolution, false);
+                    }
+                }
+            }
+        }
+    }
     fn save_to(&mut self, path: &str) -> bool {
         match persistence::save_project(path, &self.document.project()) {
             Ok(()) => {
@@ -141,6 +203,7 @@ impl App {
         }
     }
     fn request(&mut self, action: PendingAction, ctx: &egui::Context) {
+        self.cancel_mesh_job();
         self.viewport.cancel(&mut self.document);
         if self.document.is_dirty() {
             self.ui.pending_save_path = self.document.current_path().into();
@@ -173,6 +236,22 @@ impl App {
         }
     }
     pub(crate) fn dispatch(&mut self, command: Command, ctx: &egui::Context) {
+        if self.mesh_job.is_some()
+            && matches!(
+                command,
+                Command::Undo
+                    | Command::Redo
+                    | Command::ClearMask
+                    | Command::SetMeshLevel(_)
+                    | Command::SetDynamicMesh(_)
+                    | Command::SetRemeshSettings(..)
+                    | Command::Subdivide
+                    | Command::Remesh
+            )
+        {
+            self.ui.status = "Wait for the mesh operation, or cancel it first".into();
+            return;
+        }
         let result: Result<(), String> = match command {
             Command::Request(action) => {
                 self.request(action, ctx);
@@ -202,6 +281,23 @@ impl App {
                 self.viewport.cancel(&mut self.document);
                 self.document.clear_mask();
                 Ok(())
+            }
+            Command::Subdivide => self.start_mesh_job(Operation::Subdivide),
+            Command::Remesh => self.start_mesh_job(Operation::Remesh),
+            Command::CancelMeshJob => {
+                self.cancel_mesh_job();
+                Ok(())
+            }
+            Command::SetMeshLevel(level) => {
+                self.viewport.cancel(&mut self.document);
+                self.document.set_mesh_level(level)
+            }
+            Command::SetDynamicMesh(enabled) => {
+                self.viewport.cancel(&mut self.document);
+                self.document.set_dynamic_mesh(enabled)
+            }
+            Command::SetRemeshSettings(resolution, auto) => {
+                self.document.set_remesh_settings(resolution, auto)
             }
             Command::ResetView => {
                 self.camera.reset();
@@ -270,11 +366,20 @@ impl App {
                 guide_opacity: self.ui.guide_opacity,
                 enabled: self.ui.pending.is_none()
                     && !self.ui.settings_open
-                    && !self.ui.layout_open,
+                    && !self.ui.layout_open
+                    && self.mesh_job.is_none(),
                 smooth: self.ui.preferences.smooth,
                 reverse: self.ui.preferences.reverse,
             },
         );
+        if self.viewport.completed_stroke
+            && self.document.mesh_settings().dynamic
+            && self.document.mesh_settings().auto_remesh
+            && self.mesh_job.is_none()
+            && let Err(error) = self.start_mesh_job(Operation::Remesh)
+        {
+            self.ui.status = error;
+        }
     }
 }
 impl eframe::App for App {
@@ -282,6 +387,7 @@ impl eframe::App for App {
         self.save_preferences();
     }
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
+        self.poll_mesh_job();
         let native_pressure = ctx.input(|i| {
             i.events.iter().rev().find_map(|event| match event {
                 egui::Event::Touch { force: Some(p), .. } => Some(*p),

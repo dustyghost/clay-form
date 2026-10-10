@@ -261,3 +261,104 @@ fn customized_tool_groups_render_in_all_docks_and_settings() {
     app.ui.preferences.validate().unwrap();
     assert!(!app.document.is_dirty());
 }
+
+fn finish_mesh_job(app: &mut App) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while app.mesh_job.is_some() {
+        app.poll_mesh_job();
+        assert!(std::time::Instant::now() < deadline, "mesh job timed out");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+#[test]
+fn background_mesh_jobs_commit_once_and_cancellation_or_failure_keeps_original() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let original = app.document.geometry_snapshot();
+    app.dispatch(Command::Subdivide, &ctx);
+    assert!(app.mesh_job.is_some());
+    app.dispatch(Command::Undo, &ctx); // Mesh edits are locked while the snapshot is in flight.
+    assert_eq!(app.document.geometry_snapshot(), original);
+    finish_mesh_job(&mut app);
+    assert_eq!(app.document.mesh_settings().level(), 2);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), original);
+    app.dispatch(Command::Subdivide, &ctx);
+    app.dispatch(Command::CancelMeshJob, &ctx);
+    app.poll_mesh_job();
+    assert_eq!(app.document.geometry_snapshot(), original);
+    app.dispatch(Command::SetDynamicMesh(true), &ctx);
+    app.dispatch(Command::SetRemeshSettings(16, false), &ctx);
+    let before = app.document.geometry_snapshot();
+    app.dispatch(Command::Remesh, &ctx);
+    finish_mesh_job(&mut app);
+    app.document.mesh().validate_closed().unwrap();
+    assert_ne!(
+        app.document.mesh().triangles.len(),
+        before.mesh.triangles.len()
+    );
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    app.dispatch(Command::SetDynamicMesh(false), &ctx);
+    let before = app.document.geometry_snapshot();
+    app.dispatch(Command::Remesh, &ctx);
+    finish_mesh_job(&mut app);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert!(app.ui.status.contains("Switch to dynamic"));
+}
+
+#[test]
+fn automatic_remeshing_waits_for_stroke_release_and_is_undoable() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.dispatch(Command::SetDynamicMesh(true), &ctx);
+    app.dispatch(Command::SetRemeshSettings(16, true), &ctx);
+    let rect = navigation_frame(&mut app, &ctx, vec![]);
+    let center = rect.center();
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(center),
+            primary_event(center, true),
+        ],
+    );
+    assert!(app.mesh_job.is_none());
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(center + egui::vec2(20., 0.))],
+    );
+    let sculpted = app.document.mesh().clone();
+    assert!(app.mesh_job.is_none());
+    navigation_frame(&mut app, &ctx, vec![primary_event(center, false)]);
+    assert!(app.mesh_job.is_some());
+    finish_mesh_job(&mut app);
+    assert_ne!(
+        app.document.mesh().triangles.len(),
+        sculpted.triangles.len()
+    );
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.mesh(), &sculpted);
+    // A pen held down during an explicit mesh operation must be lifted before
+    // sculpting can resume against the new topology.
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(center),
+            primary_event(center, true),
+        ],
+    );
+    app.dispatch(Command::Remesh, &ctx);
+    finish_mesh_job(&mut app);
+    let remeshed = app.document.mesh().clone();
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(center + egui::vec2(30., 0.))],
+    );
+    assert_eq!(app.document.mesh(), &remeshed);
+    navigation_frame(&mut app, &ctx, vec![primary_event(center, false)]);
+    assert!(app.mesh_job.is_none());
+}

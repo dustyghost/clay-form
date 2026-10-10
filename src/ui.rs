@@ -12,6 +12,7 @@ pub(crate) struct UiState {
     pub layout_open: bool,
     pub capturing: Option<Action>,
     pub settings_message: String,
+    pub mesh_busy: bool,
     pub selected: usize,
     pub path: String,
     pub preset_path: String,
@@ -31,6 +32,7 @@ impl Default for UiState {
             layout_open: false,
             capturing: None,
             settings_message: String::new(),
+            mesh_busy: false,
             selected: 0,
             path: "sculpt.clay".into(),
             preset_path: "brush.brush.json".into(),
@@ -73,6 +75,13 @@ impl UiState {
                 }
                 if ui.button("Export OBJ").clicked() {
                     commands.push(Command::Export);
+                }
+                ui.menu_button("Mesh", |ui| self.mesh_controls(ui, document, &mut commands));
+                if self.mesh_busy {
+                    ui.spinner();
+                    if ui.button("Cancel mesh operation").clicked() {
+                        commands.push(Command::CancelMeshJob);
+                    }
                 }
                 if document.is_dirty() {
                     ui.label("• Modified");
@@ -374,6 +383,7 @@ impl UiState {
                     }
                 });
             }
+            Tool::Mesh => self.mesh_controls(ui, document, commands),
             Tool::Tablet => {
                 ui.label(tablet_status);
                 ui.label(format!("Pressure: {:.0}%", pressure * 100.));
@@ -506,5 +516,53 @@ impl UiState {
                 ctx.memory_mut(|m| { m.reset_areas(); for id in ["tools_left","tools_right"] { m.data.remove::<egui::containers::panel::PanelState>(egui::Id::new(id)); } });
             }
         });
+    }
+}
+
+impl UiState {
+    fn mesh_controls(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &Document,
+        commands: &mut Vec<Command>,
+    ) {
+        let settings = document.mesh_settings();
+        ui.label(format!(
+            "{} vertices • {} faces",
+            document.mesh().vertices.len(),
+            document.mesh().triangles.len()
+        ));
+        ui.add_enabled_ui(!self.mesh_busy, |ui| {
+            ui.horizontal(|ui| {
+                if ui.selectable_label(!settings.dynamic,"Subdivision").clicked() { commands.push(Command::SetDynamicMesh(false)); }
+                if ui.selectable_label(settings.dynamic,"Dynamic mesh").clicked() { commands.push(Command::SetDynamicMesh(true)); }
+            });
+            if settings.dynamic {
+                ui.label("Voxel remeshing replaces topology and clears masks. Small details below the voxel size may be lost.");
+                let mut resolution=settings.resolution;
+                let mut auto=settings.auto_remesh;
+                ui.add(egui::Slider::new(&mut resolution,16..=96).text("Resolution"));
+                ui.label("Voxels along the longest bounding-box axis.");
+                ui.checkbox(&mut auto,"Remesh after each stroke");
+                if resolution!=settings.resolution || auto!=settings.auto_remesh { commands.push(Command::SetRemeshSettings(resolution,auto)); }
+                if ui.button("Remesh now").clicked() { commands.push(Command::Remesh); }
+            } else {
+                ui.label(format!("Level {} of {}",settings.level(),settings.levels()));
+                let mut level=settings.level();
+                ui.add(egui::Slider::new(&mut level,1..=settings.levels()).text("Active level"));
+                if level!=settings.level() { commands.push(Command::SetMeshLevel(level)); }
+                ui.horizontal(|ui| {
+                    if ui.add_enabled(settings.level()>1,egui::Button::new("Lower")).clicked() { commands.push(Command::SetMeshLevel(settings.level()-1)); }
+                    if ui.add_enabled(settings.level()<settings.levels(),egui::Button::new("Higher")).clicked() { commands.push(Command::SetMeshLevel(settings.level()+1)); }
+                });
+                if ui.add_enabled(settings.upper.is_empty() && document.mesh().triangles.len() <= 250_000,egui::Button::new("Subdivide (+ level)")).clicked() { commands.push(Command::Subdivide); }
+                ui.label("Each division creates four triangles per face. Edit broad forms low and detail high.");
+                ui.label("Switching to dynamic keeps the active surface and discards stored levels. Undo restores them.");
+            }
+        });
+        if self.mesh_busy {
+            ui.spinner();
+            ui.label("Working in the background…");
+        }
     }
 }

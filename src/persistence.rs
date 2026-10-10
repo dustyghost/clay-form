@@ -128,6 +128,7 @@ mod tests {
         mesh.mask[7] = 0.75;
         mesh.vertices[7].0 += 0.05;
         let project = Project {
+            mesh_settings: crate::sculpt::MeshSettings::default(),
             version: 1,
             mesh,
             brushes: vec![brush.clone()],
@@ -159,6 +160,54 @@ mod tests {
             path.to_str().unwrap(),
             dir.join("./project.clay").to_str().unwrap()
         ));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod mesh_storage_tests {
+    use super::*;
+    #[test]
+    fn mesh_levels_and_dynamic_settings_survive_files_and_obj_exports_active_level() {
+        let dir = std::env::temp_dir().join(format!("clay-mesh-storage-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut geometry = crate::sculpt::Geometry::new(Mesh::sphere());
+        geometry.subdivide().unwrap();
+        geometry.set_level(1).unwrap();
+        geometry.settings.resolution = 32;
+        geometry.settings.auto_remesh = true;
+        let project = Project {
+            version: Project::VERSION,
+            mesh: geometry.mesh,
+            mesh_settings: geometry.settings,
+            brushes: vec![Brush::new(crate::sculpt::Kind::Standard)],
+            symmetry: Default::default(),
+        };
+        let path = dir.join("levels.clay");
+        save_project(path.to_str().unwrap(), &project).unwrap();
+        let loaded = load_project(path.to_str().unwrap()).unwrap();
+        assert_eq!(loaded.mesh_settings, project.mesh_settings);
+        assert_eq!(loaded.mesh, project.mesh);
+        let obj = dir.join("active.obj");
+        export_obj(obj.to_str().unwrap(), &loaded.mesh).unwrap();
+        let text = std::fs::read_to_string(obj).unwrap();
+        assert_eq!(
+            text.lines().filter(|l| l.starts_with("f ")).count(),
+            loaded.mesh.triangles.len()
+        );
+        assert_eq!(
+            text.lines().filter(|l| l.starts_with("v ")).count(),
+            loaded.mesh.vertices.len()
+        );
+        let mut dynamic = project;
+        dynamic.mesh_settings.lower.clear();
+        dynamic.mesh_settings.upper.clear();
+        dynamic.mesh_settings.dynamic = true;
+        save_project(path.to_str().unwrap(), &dynamic).unwrap();
+        assert_eq!(
+            load_project(path.to_str().unwrap()).unwrap().mesh_settings,
+            dynamic.mesh_settings
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 }
