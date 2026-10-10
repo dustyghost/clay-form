@@ -22,9 +22,11 @@ pub(crate) enum Action {
     LowerLevel,
     HigherLevel,
     Remesh,
+    ZoomIn,
+    ZoomOut,
 }
 impl Action {
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 19] = [
         Self::Save,
         Self::Open,
         Self::New,
@@ -42,6 +44,8 @@ impl Action {
         Self::LowerLevel,
         Self::HigherLevel,
         Self::Remesh,
+        Self::ZoomIn,
+        Self::ZoomOut,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -62,6 +66,8 @@ impl Action {
             Self::LowerLevel => "Lower subdivision level",
             Self::HigherLevel => "Higher subdivision level",
             Self::Remesh => "Remesh dynamic mesh",
+            Self::ZoomIn => "Zoom in",
+            Self::ZoomOut => "Zoom out",
         }
     }
 }
@@ -194,6 +200,8 @@ impl Default for Preferences {
             (Key::D, Modifiers::SHIFT),
             (Key::D, none),
             (Key::R, ctrl),
+            (Key::Equals, none),
+            (Key::Minus, none),
         ];
         Self {
             version: 1,
@@ -332,6 +340,23 @@ pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
             prefs.bindings.push((action, shortcut));
         }
     }
+    if prefs.bindings.len() == 17
+        && [Action::ZoomIn, Action::ZoomOut]
+            .iter()
+            .all(|new| !prefs.bindings.iter().any(|(a, _)| a == new))
+    {
+        for (action, mut shortcut) in Preferences::default().bindings.into_iter().skip(17) {
+            if shortcut.is_some()
+                && prefs
+                    .bindings
+                    .iter()
+                    .any(|(_, existing)| existing == &shortcut)
+            {
+                shortcut = None;
+            }
+            prefs.bindings.push((action, shortcut));
+        }
+    }
     // Upgrade the original five-panel workspace without losing its custom layout.
     if prefs.panels.len() == 5 && !prefs.panels.iter().any(|p| p.tool == Tool::Mesh) {
         prefs.panels.push(Panel {
@@ -423,7 +448,45 @@ mod migration_tests {
         assert_eq!(upgraded.panels[5].tool, Tool::Mesh);
         assert_eq!(upgraded.panels[5].dock, Dock::Right);
         assert_eq!(&upgraded.bindings[..13], &old.bindings);
-        assert_eq!(upgraded.bindings.len(), 17);
+        assert_eq!(upgraded.bindings.len(), 19);
+        std::fs::remove_file(path).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod zoom_migration_tests {
+    use super::*;
+    #[test]
+    fn zoom_bindings_upgrade_existing_preferences_without_overwriting_conflicts() {
+        let path = std::env::temp_dir().join(format!("clay-zoom-keys-{}.json", std::process::id()));
+        let mut old = Preferences::default();
+        old.bindings.truncate(17);
+        old.bind(
+            Action::Wireframe,
+            Shortcut::new(Key::Equals, Modifiers::NONE),
+        )
+        .unwrap();
+        crate::persistence::write_json(&path.to_string_lossy(), &old).unwrap();
+        let upgraded = load(&path).unwrap();
+        assert_eq!(&upgraded.bindings[..17], &old.bindings);
+        assert!(
+            upgraded
+                .bindings
+                .iter()
+                .find(|(a, _)| *a == Action::ZoomIn)
+                .unwrap()
+                .1
+                .is_none()
+        );
+        assert!(
+            upgraded
+                .bindings
+                .iter()
+                .find(|(a, _)| *a == Action::ZoomOut)
+                .unwrap()
+                .1
+                .is_some()
+        );
         std::fs::remove_file(path).unwrap();
     }
 }

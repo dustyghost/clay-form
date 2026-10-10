@@ -47,7 +47,7 @@ impl Default for UiState {
     }
 }
 impl UiState {
-    pub fn toolbar(&mut self, ctx: &egui::Context, document: &Document) -> Vec<Command> {
+    pub fn toolbar(&mut self, ctx: &egui::Context, document: &Document, zoom: f32) -> Vec<Command> {
         let mut commands = Vec::new();
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -215,8 +215,58 @@ impl UiState {
                 if ui.button("Clear mask").clicked() {
                     commands.push(Command::ClearMask);
                 }
-                if ui.button("Reset view").clicked() {
-                    commands.push(Command::ResetView);
+                ui.menu_button("View", |ui| {
+                    if ui.button("Zoom in").clicked() {
+                        commands.push(Command::ZoomIn);
+                    }
+                    if ui.button("Zoom out").clicked() {
+                        commands.push(Command::ZoomOut);
+                    }
+                    let mut value = zoom;
+                    ui.add(
+                        egui::Slider::new(&mut value, 0.2..=8.)
+                            .logarithmic(true)
+                            .text("Zoom")
+                            .custom_formatter(|value, _| format!("{:.0}%", value * 100.))
+                            .custom_parser(|text| {
+                                text.trim()
+                                    .trim_end_matches('%')
+                                    .trim()
+                                    .parse::<f64>()
+                                    .ok()
+                                    .map(|percent| percent / 100.)
+                            }),
+                    );
+                    if value != zoom {
+                        commands.push(Command::SetZoom(value));
+                    }
+                    if ui.button("Reset zoom to 100%").clicked() {
+                        commands.push(Command::SetZoom(1.));
+                    }
+                    if ui.button("Reset view").clicked() {
+                        commands.push(Command::ResetView);
+                    }
+                });
+                if ui
+                    .add_enabled(zoom > 0.2, egui::Button::new("−"))
+                    .on_hover_text("Zoom out")
+                    .clicked()
+                {
+                    commands.push(Command::ZoomOut);
+                }
+                if ui
+                    .button(format!("{:.0}%", zoom * 100.))
+                    .on_hover_text("Reset zoom to 100% (keep rotation and pan)")
+                    .clicked()
+                {
+                    commands.push(Command::SetZoom(1.));
+                }
+                if ui
+                    .add_enabled(zoom < 8., egui::Button::new("+"))
+                    .on_hover_text("Zoom in")
+                    .clicked()
+                {
+                    commands.push(Command::ZoomIn);
                 }
             });
         });

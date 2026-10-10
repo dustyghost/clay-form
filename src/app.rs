@@ -105,6 +105,8 @@ impl App {
                 Action::Undo => Some(Command::Undo),
                 Action::Redo => Some(Command::Redo),
                 Action::ResetView => Some(Command::ResetView),
+                Action::ZoomIn => Some(Command::ZoomIn),
+                Action::ZoomOut => Some(Command::ZoomOut),
                 Action::Symmetry => {
                     let mut symmetry = self.document.symmetry().clone();
                     symmetry.enabled = !symmetry.enabled;
@@ -333,6 +335,14 @@ impl App {
             Command::SetRemeshSettings(resolution, auto) => {
                 self.document.set_remesh_settings(resolution, auto)
             }
+            Command::ZoomIn | Command::ZoomOut => {
+                self.camera.zoom_step(matches!(command, Command::ZoomIn));
+                Ok(())
+            }
+            Command::SetZoom(zoom) => {
+                self.camera.set_zoom(zoom);
+                Ok(())
+            }
             Command::ResetView => {
                 self.camera.reset();
                 Ok(())
@@ -436,7 +446,7 @@ impl eframe::App for App {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.request(PendingAction::Quit, ctx);
         }
-        for command in self.ui.toolbar(ctx, &self.document) {
+        for command in self.ui.toolbar(ctx, &self.document, self.camera.zoom) {
             self.dispatch(command, ctx);
         }
         for command in

@@ -98,3 +98,7 @@ Preferences save automatically after a short delay and on exit, separately from 
 Use the toolbar buttons or **Edit → Undo / Redo**. The Edit menu shows the action that will be restored, your configured shortcuts, and available step counts. Defaults are **Ctrl+Z** and **Ctrl+Shift+Z**, adjustable in Key settings. Button tooltips name the action; the status bar confirms each undo/redo.
 
 History includes complete brush strokes (including masks), clear mask, subdivision, remeshing, switching mesh modes, changing levels, and deleting levels. A stroke creates one entry only when geometry or masking actually changes. Empty/protected strokes preserve redo; a new geometry edit starts a new history branch. History resets on New/Open and is session-only. Brush settings, symmetry settings, camera movement, and workspace preferences are outside this geometry history. Undo/Redo pause during a mesh operation or an unsaved-changes prompt.
+
+## Zoom
+
+Use the toolbar **− / +** buttons, **View → Zoom in / Zoom out**, or the mouse wheel over the viewport. Default keys are **=** to zoom in and **−** to zoom out, configurable in Key settings. The View menu also has a zoom slider (20–800%). Click the toolbar percentage or View → Reset zoom to return to 100% while keeping rotation and pan; Reset view resets all camera navigation. Zoom is session-only and does not affect geometry or undo history.

@@ -247,7 +247,11 @@ fn customized_tool_groups_render_in_all_docks_and_settings() {
                 ..Default::default()
             },
             |ctx| {
-                assert!(app.ui.toolbar(ctx, &app.document).is_empty());
+                assert!(
+                    app.ui
+                        .toolbar(ctx, &app.document, app.camera.zoom)
+                        .is_empty()
+                );
                 assert!(
                     app.ui
                         .brush_panel(ctx, &app.document, "Test tablet", 1.)
@@ -427,4 +431,54 @@ fn undo_during_a_pen_drag_restores_the_stroke_and_waits_for_release() {
     navigation_frame(&mut app, &ctx, vec![primary_event(center, false)]);
     app.dispatch(Command::Redo, &ctx);
     assert_eq!(app.document.mesh(), &sculpted);
+}
+
+#[test]
+fn zoom_buttons_and_rebound_keys_change_only_the_camera_and_respect_limits() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let before = app.document.geometry_snapshot();
+    app.camera.yaw = 0.4;
+    app.camera.pan = egui::vec2(20., 10.);
+    app.dispatch(Command::ZoomIn, &ctx);
+    assert!(app.camera.zoom > 1.);
+    app.dispatch(Command::ZoomOut, &ctx);
+    assert!((app.camera.zoom - 1.).abs() < 1e-6);
+    for _ in 0..100 {
+        app.dispatch(Command::ZoomOut, &ctx);
+    }
+    assert_eq!(app.camera.zoom, 0.2);
+    for _ in 0..100 {
+        app.dispatch(Command::ZoomIn, &ctx);
+    }
+    assert_eq!(app.camera.zoom, 8.);
+    app.dispatch(Command::SetZoom(1.), &ctx);
+    assert_eq!(app.camera.yaw, 0.4);
+    assert_eq!(app.camera.pan, egui::vec2(20., 10.));
+    app.ui
+        .preferences
+        .bind(
+            crate::preferences::Action::ZoomIn,
+            crate::preferences::Shortcut::new(egui::Key::F3, egui::Modifiers::NONE),
+        )
+        .unwrap();
+    let _ = ctx.run(
+        egui::RawInput {
+            events: vec![egui::Event::Key {
+                key: egui::Key::F3,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            ..Default::default()
+        },
+        |ctx| app.shortcuts(ctx),
+    );
+    assert!(app.camera.zoom > 1.);
+    app.dispatch(Command::SetZoom(f32::NAN), &ctx);
+    assert!(app.camera.zoom.is_finite());
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert!(!app.document.is_dirty());
+    assert!(!app.document.can_undo());
 }

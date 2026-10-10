@@ -19,7 +19,17 @@ impl Default for Camera {
 }
 impl Camera {
     pub fn zoom_by(&mut self, scroll: f32) {
-        self.zoom = (self.zoom * (scroll * 0.002).exp()).clamp(0.2, 8.);
+        if scroll.is_finite() {
+            self.set_zoom(self.zoom * (scroll * 0.002).clamp(-20., 20.).exp());
+        }
+    }
+    pub fn set_zoom(&mut self, zoom: f32) {
+        if zoom.is_finite() {
+            self.zoom = zoom.clamp(0.2, 8.);
+        }
+    }
+    pub fn zoom_step(&mut self, inward: bool) {
+        self.set_zoom(self.zoom * if inward { 1.2 } else { 1. / 1.2 });
     }
     pub fn reset(&mut self) {
         *self = Self::default();
