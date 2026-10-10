@@ -1,5 +1,5 @@
 //! UI intent; execution and file access belong to the application controller.
-use crate::sculpt::{Brush, Symmetry};
+use crate::sculpt::{AdaptiveSettings, Brush, Kind, Symmetry};
 #[derive(Clone)]
 pub(crate) enum PendingAction {
     New,
@@ -22,10 +22,12 @@ pub(crate) enum Command {
     DeleteLowerLevels,
     DeleteHigherLevels,
     SetDynamicMesh(bool),
+    SetAdaptive(AdaptiveSettings),
     SetRemeshSettings(u32, bool),
     Remesh,
     CancelMeshJob,
     SetSymmetry(Symmetry),
+    AddBrush(Kind),
     DuplicateBrush(usize),
     UpdateBrush(usize, Brush),
     LoadAlpha(usize),

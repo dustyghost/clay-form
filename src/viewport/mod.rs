@@ -6,7 +6,7 @@ use crate::{
     camera::Camera,
     document::Document,
     preferences::Hold,
-    sculpt::{Dab, Kind},
+    sculpt::{Dab, Kind, Vec3},
 };
 use eframe::egui::{self, Color32, Pos2, Sense, Vec2};
 use gizmo::draw_gizmo;
@@ -17,6 +17,10 @@ pub(crate) enum Gesture {
     Orbit,
     Gizmo,
 }
+struct SnakeStroke {
+    center: Vec3,
+    normal: Vec3,
+}
 #[derive(Default)]
 pub(crate) struct Viewport {
     pub(crate) gesture: Option<Gesture>,
@@ -25,6 +29,7 @@ pub(crate) struct Viewport {
     blocked_until_release: bool,
     stroke: bool,
     last: Option<Pos2>,
+    snake: Option<SnakeStroke>,
 }
 #[derive(Clone, Copy)]
 pub(crate) struct ViewportOptions {
@@ -54,6 +59,7 @@ impl Viewport {
         options: ViewportOptions,
     ) {
         self.completed_stroke = false;
+        document.begin_sculpt_frame();
         if !options.enabled && ui.input(|i| i.pointer.primary_down()) {
             self.blocked_until_release = true;
         }
@@ -71,6 +77,15 @@ impl Viewport {
             Vec2::splat(134.),
         );
         let scene = Scene::paint(&painter, rect, document.mesh(), camera, options.wire);
+        if options.show_guides {
+            guides::paint(
+                &scene,
+                &painter,
+                document.mesh(),
+                document.symmetry(),
+                options.guide_opacity,
+            );
+        }
         let (right, up, _) = camera.basis();
         let scale = scene.scale;
         let pointer = response
@@ -104,7 +119,7 @@ impl Viewport {
                 Gesture::Gizmo
             } else if zoom_held {
                 Gesture::Orbit
-            } else if scene.pick(document.mesh(), pos).is_some() {
+            } else if scene.pick(pos).is_some() {
                 Gesture::Sculpt
             } else {
                 Gesture::Orbit
@@ -145,11 +160,13 @@ impl Viewport {
             document.begin_stroke();
             self.stroke = true;
             self.last = None;
+            self.snake = None;
         }
         if !drawing {
             self.completed_stroke = document.end_stroke() && self.stroke;
             self.stroke = false;
             self.last = None;
+            self.snake = None;
         }
         if let Some(pos) = pointer.filter(|p| {
             !gizmo_rect.contains(*p)
@@ -179,7 +196,10 @@ impl Viewport {
                 let previous = self.last.unwrap_or(pos);
                 let distance = pos.distance(previous);
                 let spacing = (radius * b.spacing).max(1.);
-                if self.last.is_none() || distance >= spacing || b.kind == Kind::Grab {
+                if self.last.is_none()
+                    || distance >= spacing
+                    || matches!(b.kind, Kind::Grab | Kind::Snake)
+                {
                     let steps = if b.kind == Kind::Grab {
                         1
                     } else {
@@ -187,42 +207,60 @@ impl Viewport {
                     };
                     for step in 1..=steps {
                         let point = previous + (pos - previous) * (step as f32 / steps as f32);
-                        let hit = scene.pick(document.mesh(), point);
-                        if let Some((p, n)) = hit {
-                            let mut brush = b.clone();
-                            if options.smooth.active(modifiers) {
-                                brush.kind = Kind::Smooth;
+                        let mut brush = b.clone();
+                        if options.smooth.active(modifiers) {
+                            brush.kind = Kind::Smooth;
+                        }
+                        let hit = if brush.kind == Kind::Snake {
+                            if self.snake.is_none()
+                                && let Some((center, normal)) = scene.pick(point)
+                            {
+                                self.snake = Some(SnakeStroke { center, normal });
                             }
+                            self.snake
+                                .as_ref()
+                                .map(|snake| (snake.center, snake.normal))
+                        } else {
+                            scene.pick(point)
+                        };
+                        if let Some((p, n)) = hit {
                             let d = (right * ((pos.x - previous.x) / scale)
                                 + up * ((previous.y - pos.y) / scale))
                                 * (1. / steps as f32);
-                            document.apply_dab(
-                                &brush,
-                                Dab {
-                                    center: p,
-                                    normal: n,
-                                    right,
-                                    up,
-                                    radius: radius / scale,
-                                    pressure: options.pressure,
-                                    delta: d,
-                                    invert: options.reverse.active(modifiers),
-                                },
-                            );
+                            let dab = Dab {
+                                center: p,
+                                normal: n,
+                                right,
+                                up,
+                                radius: radius / scale,
+                                pressure: options.pressure,
+                                delta: d,
+                                invert: options.reverse.active(modifiers),
+                            };
+                            let deformed = document.apply_dab(&brush, dab);
+                            if brush.kind == Kind::Snake
+                                && deformed
+                                && let Some(snake) = &mut self.snake
+                            {
+                                let desired = snake.center + brush.snake_motion(dab);
+                                if let Some((_, vertex)) = document
+                                    .mesh()
+                                    .vertices
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(i, _)| document.mesh().mask[*i] < 0.999)
+                                    .min_by(|(_, a), (_, b)| {
+                                        (**a - desired).len().total_cmp(&(**b - desired).len())
+                                    })
+                                {
+                                    snake.center = *vertex;
+                                }
+                            }
                         }
                     }
                     self.last = Some(pos);
                 }
             }
-        }
-        if options.show_guides {
-            guides::paint(
-                &scene,
-                &painter,
-                document.mesh(),
-                document.symmetry(),
-                options.guide_opacity,
-            );
         }
         draw_gizmo(camera, &painter, gizmo_rect, pointer);
         painter.text(

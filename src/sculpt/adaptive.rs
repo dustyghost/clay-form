@@ -1,0 +1,554 @@
+//! Local, conforming edge splits and conservative manifold edge collapses.
+use super::{
+    Alpha, Brush, Dab, Kind, Mesh, Vec3,
+    subdivision::{MAX_TRIANGLES, MAX_VERTICES},
+};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap, HashSet};
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AdaptiveSettings {
+    pub enabled: bool,
+    pub detail: f32,
+    pub relative: bool,
+    pub refine: bool,
+    pub simplify: bool,
+    pub collapse_ratio: f32,
+}
+impl Default for AdaptiveSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            detail: 8.,
+            relative: false,
+            refine: true,
+            simplify: true,
+            collapse_ratio: 0.4,
+        }
+    }
+}
+impl AdaptiveSettings {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+    pub fn validate(&self) -> Result<(), String> {
+        if !self.detail.is_finite()
+            || !(1. ..=32.).contains(&self.detail)
+            || !self.collapse_ratio.is_finite()
+            || !(0.1..=0.8).contains(&self.collapse_ratio)
+        {
+            return Err("Invalid adaptive sculpt settings".into());
+        }
+        Ok(())
+    }
+    pub fn edge_length(&self, brush: &Brush, dab: Dab) -> f32 {
+        if self.relative {
+            dab.radius * self.detail / 100.
+        } else {
+            let pixels = brush.radius
+                * if brush.pressure_radius {
+                    dab.pressure.powf(brush.pressure_curve).max(0.05)
+                } else {
+                    1.
+                };
+            dab.radius * self.detail / pixels
+        }
+    }
+}
+/// Bound topology work per rendered input frame, shared by all interpolated dabs.
+pub(crate) struct Budget {
+    pub splits: usize,
+    pub collapses: usize,
+    passes: usize,
+}
+impl Default for Budget {
+    fn default() -> Self {
+        Self {
+            splits: 256,
+            collapses: 32,
+            passes: 8,
+        }
+    }
+}
+
+impl Mesh {
+    pub(crate) fn adapt(
+        &mut self,
+        brush: &Brush,
+        dabs: &[Dab],
+        settings: &AdaptiveSettings,
+        budget: &mut Budget,
+        collapse: bool,
+    ) -> bool {
+        if !settings.enabled
+            || brush.kind == Kind::Mask
+            || brush.strength <= 0.
+            || dabs.is_empty()
+            || matches!(&brush.alpha,Alpha::Image { pixels,.. } if pixels.iter().all(|&p|p==0.))
+        {
+            return false;
+        }
+        let target = settings.edge_length(brush, dabs[0]);
+        if !target.is_finite() || target <= 1e-7 {
+            return false;
+        }
+        let mut changed = false;
+        if collapse && settings.simplify && budget.collapses > 0 {
+            let count = self.collapse_local(
+                brush,
+                dabs,
+                target * settings.collapse_ratio,
+                budget.collapses.min(32),
+            );
+            budget.collapses = 0;
+            changed |= count > 0;
+        }
+        if settings.refine && budget.splits > 0 {
+            for _ in 0..4 {
+                if budget.passes == 0 {
+                    break;
+                }
+                budget.passes -= 1;
+                let count = self.split_local(brush, dabs, target, budget.splits.min(64));
+                budget.splits -= count;
+                changed |= count > 0;
+                if count == 0 || budget.splits == 0 {
+                    break;
+                }
+            }
+        }
+        changed
+    }
+    fn split_local(&mut self, brush: &Brush, dabs: &[Dab], target: f32, limit: usize) -> usize {
+        if limit == 0 {
+            return 0;
+        }
+        let mut candidates = BTreeMap::new();
+        for &t in &self.triangles {
+            if !self.in_patch(t, brush, dabs) {
+                continue;
+            }
+            let [a, b, c] = t;
+            for (x, y) in [(a, b), (b, c), (c, a)] {
+                let length =
+                    (self.vertices[x] - self.vertices[y]).dot(self.vertices[x] - self.vertices[y]);
+                if length > target * target {
+                    candidates.insert(edge(x, y), length);
+                }
+            }
+        }
+        let mut candidates: Vec<_> = candidates.into_iter().collect();
+        candidates.sort_by(|(a, x), (b, y)| y.total_cmp(x).then(a.cmp(b)));
+        // Each manifold edge adds one vertex and two faces. Leave headroom for
+        // malformed/nonmanifold inputs as well; adaptive mode validates closure.
+        let capacity = limit
+            .min(MAX_VERTICES.saturating_sub(self.vertices.len()))
+            .min(MAX_TRIANGLES.saturating_sub(self.triangles.len()) / 2);
+        candidates.truncate(capacity);
+        if candidates.is_empty() {
+            return 0;
+        }
+        candidates.sort_by_key(|(edge, _)| *edge);
+        let mut mids = HashMap::new();
+        for &((a, b), _) in &candidates {
+            let index = self.vertices.len();
+            self.vertices
+                .push((self.vertices[a] + self.vertices[b]) * 0.5);
+            self.mask.push((self.mask[a] + self.mask[b]) * 0.5);
+            mids.insert((a, b), index);
+        }
+        let mut faces = Vec::with_capacity(self.triangles.len() + candidates.len() * 2);
+        for &[a, b, c] in &self.triangles {
+            let m = [
+                mids.get(&edge(a, b)).copied(),
+                mids.get(&edge(b, c)).copied(),
+                mids.get(&edge(c, a)).copied(),
+            ];
+            match m.iter().flatten().count() {
+                0 => faces.push([a, b, c]),
+                1 => {
+                    for i in 0..3 {
+                        if let Some(mid) = m[i] {
+                            let v = [a, b, c];
+                            let (x, y, z) = (v[i], v[(i + 1) % 3], v[(i + 2) % 3]);
+                            faces.extend([[x, mid, z], [mid, y, z]]);
+                        }
+                    }
+                }
+                2 => {
+                    let i = (0..3)
+                        .find(|&i| m[i].is_some() && m[(i + 1) % 3].is_some())
+                        .unwrap();
+                    let v = [a, b, c];
+                    let (x, y, z) = (v[i], v[(i + 1) % 3], v[(i + 2) % 3]);
+                    let p = m[i].unwrap();
+                    let q = m[(i + 1) % 3].unwrap();
+                    faces.push([y, q, p]);
+                    if (self.vertices[x] - self.vertices[q]).len()
+                        < (self.vertices[p] - self.vertices[z]).len()
+                    {
+                        faces.extend([[x, p, q], [x, q, z]]);
+                    } else {
+                        faces.extend([[x, p, z], [p, q, z]]);
+                    }
+                }
+                _ => {
+                    let [p, q, r] = m.map(Option::unwrap);
+                    faces.extend([[a, p, r], [p, b, q], [r, q, c], [p, q, r]]);
+                }
+            }
+        }
+        self.triangles = faces;
+        candidates.len()
+    }
+    fn collapse_local(
+        &mut self,
+        brush: &Brush,
+        dabs: &[Dab],
+        threshold: f32,
+        limit: usize,
+    ) -> usize {
+        let mut candidates = BTreeMap::new();
+        for &t in &self.triangles {
+            let [a, b, c] = t;
+            if self.in_patch(t, brush, dabs) {
+                for (a, b) in [(a, b), (b, c), (c, a)] {
+                    let length = (self.vertices[a] - self.vertices[b]).len();
+                    if length < threshold {
+                        candidates.insert(edge(a, b), length);
+                    }
+                }
+            }
+        }
+        if candidates.is_empty() {
+            return 0;
+        }
+        let mut neighbors = vec![Vec::new(); self.vertices.len()];
+        let mut incident = vec![Vec::new(); self.vertices.len()];
+        for (index, &[a, b, c]) in self.triangles.iter().enumerate() {
+            for (i, j, k) in [(a, b, c), (b, c, a), (c, a, b)] {
+                neighbors[i].extend([j, k]);
+                incident[i].push(index);
+            }
+        }
+        for ns in &mut neighbors {
+            ns.sort_unstable();
+            ns.dedup();
+        }
+        let mut candidates: Vec<_> = candidates.into_iter().collect();
+        candidates.sort_by(|(a, x), (b, y)| x.total_cmp(y).then(a.cmp(b)));
+        let mut blocked = HashSet::new();
+        let mut merged = HashMap::new();
+        for ((a, b), _) in candidates {
+            if merged.len() >= limit {
+                break;
+            }
+            if blocked.contains(&a)
+                || blocked.contains(&b)
+                || self.mask[a] > 0.95
+                || self.mask[b] > 0.95
+                || (self.mask[a] - self.mask[b]).abs() > 0.05
+            {
+                continue;
+            }
+            let shared: Vec<_> = incident[a]
+                .iter()
+                .copied()
+                .filter(|&i| self.triangles[i].contains(&b))
+                .collect();
+            if shared.len() != 2 {
+                continue;
+            }
+            let opposite: Vec<_> = shared
+                .iter()
+                .filter_map(|&i| {
+                    self.triangles[i]
+                        .iter()
+                        .copied()
+                        .find(|&v| v != a && v != b)
+                })
+                .collect();
+            let common: Vec<_> = neighbors[a]
+                .iter()
+                .copied()
+                .filter(|n| neighbors[b].binary_search(n).is_ok())
+                .collect();
+            if common.len() != 2
+                || opposite.len() != 2
+                || opposite[0] == opposite[1]
+                || !common.iter().all(|v| opposite.contains(v))
+            {
+                continue;
+            }
+            let normal = |t: [usize; 3]| {
+                let [x, y, z] = t.map(|i| self.vertices[i]);
+                (y - x).cross(z - x).norm()
+            };
+            if normal(self.triangles[shared[0]]).dot(normal(self.triangles[shared[1]])) < 0.85 {
+                continue;
+            }
+            let position = (self.vertices[a] + self.vertices[b]) * 0.5;
+            let mut local_keys = HashSet::new();
+            let mut safe = true;
+            let mut affected = incident[a].clone();
+            affected.extend(&incident[b]);
+            affected.sort_unstable();
+            affected.dedup();
+            for index in affected {
+                let old = self.triangles[index];
+                if old.contains(&a) && old.contains(&b) {
+                    continue;
+                }
+                let new = old.map(|i| if i == b { a } else { i });
+                let mut key = new;
+                key.sort_unstable();
+                if !local_keys.insert(key) {
+                    safe = false;
+                    break;
+                }
+                let [x, y, z] = new.map(|i| if i == a { position } else { self.vertices[i] });
+                let cross = (y - x).cross(z - x);
+                if cross.len() < threshold * threshold * 1e-5 || cross.norm().dot(normal(old)) < 0.8
+                {
+                    safe = false;
+                    break;
+                }
+            }
+            if !safe {
+                continue;
+            }
+            blocked.extend(neighbors[a].iter().copied());
+            blocked.extend(neighbors[b].iter().copied());
+            blocked.extend([a, b]);
+            merged.insert(b, a);
+        }
+        if merged.is_empty() {
+            return 0;
+        }
+        for (&b, &a) in &merged {
+            self.vertices[a] = (self.vertices[a] + self.vertices[b]) * 0.5;
+            self.mask[a] = (self.mask[a] + self.mask[b]) * 0.5;
+        }
+        let mut indices = vec![0; self.vertices.len()];
+        let mut vertices = Vec::with_capacity(self.vertices.len() - merged.len());
+        let mut mask = Vec::with_capacity(vertices.capacity());
+        for (i, &v) in self.vertices.iter().enumerate() {
+            if !merged.contains_key(&i) {
+                indices[i] = vertices.len();
+                vertices.push(v);
+                mask.push(self.mask[i]);
+            }
+        }
+        for (&b, &a) in &merged {
+            indices[b] = indices[a];
+        }
+        let triangles = self
+            .triangles
+            .iter()
+            .map(|t| t.map(|i| indices[i]))
+            .filter(|&[a, b, c]| a != b && b != c && a != c)
+            .collect();
+        self.vertices = vertices;
+        self.mask = mask;
+        self.triangles = triangles;
+        merged.len()
+    }
+    fn in_patch(&self, t: [usize; 3], brush: &Brush, dabs: &[Dab]) -> bool {
+        if t.iter().all(|&i| self.mask[i] >= 0.999) {
+            return false;
+        }
+        let [a, b, c] = t.map(|i| self.vertices[i]);
+        let normal = (b - a).cross(c - a).norm();
+        dabs.iter().any(|dab| {
+            if brush.pressure && dab.pressure <= 0. {
+                return false;
+            }
+            if normal.dot(dab.normal) < 0.1 {
+                return false;
+            }
+            let p = closest_triangle(dab.center, a, b, c);
+            let offset = p - dab.center;
+            if offset.len() > dab.radius {
+                return false;
+            }
+            [p, a, b, c, (a + b + c) * (1. / 3.)].into_iter().any(|p| {
+                let d = p - dab.center;
+                brush.weight(d.dot(dab.right) / dab.radius, d.dot(dab.up) / dab.radius) > 0.001
+            })
+        })
+    }
+}
+fn edge(a: usize, b: usize) -> (usize, usize) {
+    (a.min(b), a.max(b))
+}
+// Closest point via projected barycentric coordinates, then boundary segments.
+fn closest_triangle(p: Vec3, a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
+    let ab = b - a;
+    let ac = c - a;
+    let ap = p - a;
+    let d00 = ab.dot(ab);
+    let d01 = ab.dot(ac);
+    let d11 = ac.dot(ac);
+    let d20 = ap.dot(ab);
+    let d21 = ap.dot(ac);
+    let denominator = d00 * d11 - d01 * d01;
+    if denominator > 1e-20 {
+        let v = (d11 * d20 - d01 * d21) / denominator;
+        let w = (d00 * d21 - d01 * d20) / denominator;
+        if v >= 0. && w >= 0. && v + w <= 1. {
+            return a + ab * v + ac * w;
+        }
+    }
+    [(a, b), (b, c), (c, a)]
+        .into_iter()
+        .map(|(x, y)| {
+            let d = y - x;
+            x + d * ((p - x).dot(d) / d.dot(d).max(1e-20)).clamp(0., 1.)
+        })
+        .min_by(|x, y| (*x - p).len().total_cmp(&(*y - p).len()))
+        .unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn dab() -> Dab {
+        Dab {
+            center: Vec3(0., 0., 1.),
+            normal: Vec3(0., 0., 1.),
+            right: Vec3(1., 0., 0.),
+            up: Vec3(0., 1., 0.),
+            radius: 0.35,
+            pressure: 1.,
+            delta: Vec3::default(),
+            invert: false,
+        }
+    }
+    #[test]
+    fn local_refinement_is_conforming_preserves_masks_and_obeys_work_budget() {
+        let mut mesh = Mesh::sphere();
+        mesh.mask.iter_mut().for_each(|m| *m = 0.4);
+        let original = mesh.clone();
+        let settings = AdaptiveSettings {
+            enabled: true,
+            detail: 2.,
+            simplify: false,
+            ..Default::default()
+        };
+        let mut budget = Budget {
+            splits: 23,
+            collapses: 0,
+            ..Default::default()
+        };
+        assert!(mesh.adapt(
+            &Brush::new(Kind::Standard),
+            &[dab()],
+            &settings,
+            &mut budget,
+            false
+        ));
+        assert_eq!(mesh.vertices.len(), original.vertices.len() + 23);
+        assert_eq!(mesh.triangles.len(), original.triangles.len() + 46);
+        assert_eq!(
+            &mesh.vertices[..original.vertices.len()],
+            &original.vertices
+        );
+        assert!(
+            mesh.vertices[original.vertices.len()..]
+                .iter()
+                .all(|v| v.2 > 0.7)
+        );
+        assert!(mesh.mask.iter().all(|m| (*m - 0.4).abs() < 1e-6));
+        mesh.validate_closed().unwrap();
+        assert!(!mesh.adapt(
+            &Brush::new(Kind::Standard),
+            &[dab()],
+            &settings,
+            &mut budget,
+            false
+        ));
+    }
+    #[test]
+    fn dense_patch_simplification_preserves_closed_manifold_and_distant_surface() {
+        let mut mesh = Mesh::sphere();
+        let before = mesh.clone();
+        let settings = AdaptiveSettings {
+            enabled: true,
+            detail: 32.,
+            refine: false,
+            collapse_ratio: 0.8,
+            ..Default::default()
+        };
+        let mut budget = Budget::default();
+        assert!(mesh.adapt(
+            &Brush::new(Kind::Smooth),
+            &[dab()],
+            &settings,
+            &mut budget,
+            true
+        ));
+        assert!(mesh.vertices.len() < before.vertices.len());
+        mesh.validate_closed().unwrap();
+        for v in before.vertices.iter().filter(|v| v.2 < 0.5) {
+            assert!(mesh.vertices.contains(v));
+        }
+        assert!(
+            mesh.vertices
+                .iter()
+                .all(|v| v.len() > 0.98 && v.len() < 1.001)
+        );
+    }
+    #[test]
+    fn protected_zero_alpha_and_mask_brush_leave_topology_unchanged() {
+        let settings = AdaptiveSettings {
+            enabled: true,
+            detail: 1.,
+            ..Default::default()
+        };
+        let mut mesh = Mesh::sphere();
+        mesh.mask.fill(1.);
+        let before = mesh.clone();
+        assert!(!mesh.adapt(
+            &Brush::new(Kind::Snake),
+            &[dab()],
+            &settings,
+            &mut Budget::default(),
+            true
+        ));
+        assert_eq!(mesh, before);
+        mesh.mask.fill(0.);
+        let before = mesh.clone();
+        assert!(!mesh.adapt(
+            &Brush::new(Kind::Mask),
+            &[dab()],
+            &settings,
+            &mut Budget::default(),
+            true
+        ));
+        let mut brush = Brush::new(Kind::Snake);
+        brush.alpha = Alpha::Image {
+            width: 1,
+            height: 1,
+            pixels: vec![0.].into(),
+        };
+        assert!(!mesh.adapt(&brush, &[dab()], &settings, &mut Budget::default(), true));
+        assert_eq!(mesh, before);
+    }
+    #[test]
+    fn density_scales_with_view_and_relative_brush_size() {
+        let mut settings = AdaptiveSettings::default();
+        let brush = Brush::new(Kind::Standard);
+        let d = dab();
+        let mut closer = d;
+        closer.radius *= 0.5;
+        assert!(
+            (settings.edge_length(&brush, closer) * 2. - settings.edge_length(&brush, d)).abs()
+                < 1e-6
+        );
+        settings.relative = true;
+        assert!((settings.edge_length(&brush, d) - d.radius * settings.detail / 100.).abs() < 1e-6);
+        settings.detail = f32::NAN;
+        assert!(settings.validate().is_err());
+    }
+}

@@ -2,7 +2,8 @@
 use crate::{
     history::History,
     sculpt::{
-        Alpha, Brush, Dab, Geometry, Kind, Mesh, MeshSettings, Project, Symmetry, validate_brush,
+        AdaptiveBudget, AdaptiveSettings, Alpha, Brush, Dab, Geometry, Kind, Mesh, MeshSettings,
+        Project, Symmetry, validate_brush,
     },
 };
 pub struct Document {
@@ -15,6 +16,7 @@ pub struct Document {
     stroke_deformed: bool,
     stroke_before: Option<Geometry>,
     current_path: String,
+    adaptive_budget: AdaptiveBudget,
 }
 impl Default for Document {
     fn default() -> Self {
@@ -28,6 +30,7 @@ impl Default for Document {
             stroke_deformed: false,
             stroke_before: None,
             current_path: "sculpt.clay".into(),
+            adaptive_budget: AdaptiveBudget::default(),
         }
     }
 }
@@ -91,12 +94,35 @@ impl Document {
         )
     }
     pub fn set_dynamic_mesh(&mut self, enabled: bool) -> Result<(), String> {
-        if self.geometry.settings.dynamic == enabled {
+        if self.geometry.settings.dynamic == enabled && !self.geometry.settings.adaptive.enabled {
             return Ok(());
         }
         let mut geometry = self.geometry.clone();
         geometry.set_dynamic(enabled);
         self.replace_geometry_named(geometry, "Switch mesh mode")
+    }
+    pub fn set_adaptive(&mut self, settings: AdaptiveSettings) -> Result<(), String> {
+        settings.validate()?;
+        if self.geometry.settings.adaptive == settings {
+            return Ok(());
+        }
+        if self.geometry.settings.adaptive.enabled == settings.enabled {
+            self.end_stroke();
+            self.geometry.settings.adaptive = settings;
+            self.dirty = true;
+            return Ok(());
+        }
+        let mut geometry = self.geometry.clone();
+        if settings.enabled && !geometry.settings.adaptive.enabled {
+            geometry.settings.lower.clear();
+            geometry.settings.upper.clear();
+            geometry.settings.dynamic = false;
+        }
+        geometry.settings.adaptive = settings;
+        self.replace_geometry_named(geometry, "Adaptive sculpt settings")
+    }
+    pub(crate) fn begin_sculpt_frame(&mut self) {
+        self.adaptive_budget = AdaptiveBudget::default();
     }
     pub fn set_remesh_settings(&mut self, resolution: u32, auto: bool) -> Result<(), String> {
         if !(16..=96).contains(&resolution) {
@@ -174,6 +200,7 @@ impl Document {
             self.stroke_before = Some(self.geometry.clone());
             self.stroke_active = true;
             self.stroke_deformed = false;
+            self.adaptive_budget = AdaptiveBudget::default();
         }
     }
     pub fn end_stroke(&mut self) -> bool {
@@ -194,20 +221,50 @@ impl Document {
         }
         Ok(())
     }
-    pub fn apply_dab(&mut self, brush: &Brush, dab: Dab) {
+    pub fn apply_dab(&mut self, brush: &Brush, dab: Dab) -> bool {
         self.begin_stroke();
+        let dabs = self.symmetry.dabs(dab);
+        let settings = &self.geometry.settings.adaptive;
+        let before_topology =
+            self.geometry
+                .mesh
+                .adapt(brush, &dabs, settings, &mut self.adaptive_budget, true);
         let old_mask = (brush.kind == Kind::Mask).then(|| self.geometry.mesh.mask.clone());
-        let deformed = self
-            .geometry
-            .mesh
-            .stamp_many(brush, &self.symmetry.dabs(dab));
-        self.stroke_deformed |= deformed;
-        if deformed || old_mask.is_some_and(|mask| mask != self.geometry.mesh.mask) {
+        let deformed = self.geometry.mesh.stamp_many(brush, &dabs);
+        let mut after_dabs = dabs.clone();
+        if brush.kind == Kind::Snake {
+            for dab in &mut after_dabs {
+                dab.center = dab.center + brush.snake_motion(*dab);
+            }
+        }
+        let after_topology = self.geometry.mesh.adapt(
+            brush,
+            &after_dabs,
+            settings,
+            &mut self.adaptive_budget,
+            false,
+        );
+        self.stroke_deformed |= deformed || before_topology || after_topology;
+        if deformed
+            || before_topology
+            || after_topology
+            || old_mask.is_some_and(|mask| mask != self.geometry.mesh.mask)
+        {
             if let Some(before) = self.stroke_before.take() {
-                self.history.record_owned(before, "Brush stroke");
+                self.history.record_owned(
+                    before,
+                    if settings.enabled {
+                        "Adaptive brush stroke"
+                    } else if brush.kind == Kind::Snake {
+                        "Snake stroke"
+                    } else {
+                        "Brush stroke"
+                    },
+                );
             }
             self.dirty = true;
         }
+        deformed
     }
     pub fn undo(&mut self) {
         self.end_stroke();
@@ -520,5 +577,75 @@ mod history_feedback_tests {
         assert_eq!(document.undo_label(), Some("Change subdivision level"));
         document.delete_mesh_levels(false).unwrap();
         assert_eq!(document.undo_label(), Some("Delete higher levels"));
+    }
+}
+
+#[cfg(test)]
+mod adaptive_mode_tests {
+    use super::*;
+    #[test]
+    fn adaptive_mode_discards_levels_undo_restores_them_and_other_modes_exclude_it() {
+        let mut document = Document::default();
+        let mut geometry = document.geometry_snapshot();
+        geometry.subdivide().unwrap();
+        document.replace_geometry(geometry).unwrap();
+        let before = document.geometry_snapshot();
+        document
+            .set_adaptive(AdaptiveSettings {
+                enabled: true,
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(document.mesh_settings().levels(), 1);
+        assert!(!document.mesh_settings().dynamic);
+        assert_eq!(document.mesh(), &before.mesh);
+        document.undo();
+        assert_eq!(document.geometry_snapshot(), before);
+        document.redo();
+        assert!(document.mesh_settings().adaptive.enabled);
+        document.set_dynamic_mesh(true).unwrap();
+        assert!(!document.mesh_settings().adaptive.enabled);
+        document
+            .set_adaptive(AdaptiveSettings {
+                enabled: true,
+                ..Default::default()
+            })
+            .unwrap();
+        document.set_dynamic_mesh(false).unwrap();
+        assert!(!document.mesh_settings().adaptive.enabled);
+    }
+}
+
+#[cfg(test)]
+mod adaptive_validation_tests {
+    use super::*;
+    #[test]
+    fn invalid_adaptive_project_is_rejected_and_live_detail_edits_do_not_flood_history() {
+        let mut document = Document::default();
+        let original = serde_json::to_value(document.project()).unwrap();
+        let mut invalid = document.project();
+        invalid.mesh.triangles.pop();
+        invalid.mesh_settings.adaptive.enabled = true;
+        assert!(
+            document
+                .replace_project(invalid, "invalid-adaptive.clay")
+                .is_err()
+        );
+        assert_eq!(serde_json::to_value(document.project()).unwrap(), original);
+        document
+            .set_adaptive(AdaptiveSettings {
+                enabled: true,
+                ..Default::default()
+            })
+            .unwrap();
+        let count = document.history_counts();
+        for detail in [4., 5., 6., 7.] {
+            let mut settings = document.mesh_settings().adaptive.clone();
+            settings.detail = detail;
+            document.set_adaptive(settings).unwrap();
+        }
+        assert_eq!(document.history_counts(), count);
+        document.undo();
+        assert!(!document.mesh_settings().adaptive.enabled);
     }
 }

@@ -11,9 +11,10 @@ pub enum Kind {
     Crease,
     Grab,
     Mask,
+    Snake,
 }
 impl Kind {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::Standard,
         Self::Clay,
         Self::Inflate,
@@ -23,6 +24,7 @@ impl Kind {
         Self::Crease,
         Self::Grab,
         Self::Mask,
+        Self::Snake,
     ];
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -80,7 +82,7 @@ impl Brush {
             kind,
             alpha: Alpha::Soft,
             radius: 60.,
-            strength: 0.25,
+            strength: if kind == Kind::Snake { 1. } else { 0.25 },
             falloff: 1.5,
             spacing: 0.15,
             rotation: 0.,
@@ -89,6 +91,17 @@ impl Brush {
             pressure_radius: false,
             pressure_curve: 1.,
         }
+    }
+    pub fn snake_motion(&self, dab: super::Dab) -> super::Vec3 {
+        let gain = self.strength
+            * if self.pressure {
+                dab.pressure.powf(self.pressure_curve)
+            } else {
+                1.
+            }
+            * self.weight(0., 0.);
+        let sign = if self.subtract ^ dab.invert { -1. } else { 1. };
+        (dab.delta + dab.normal * (dab.delta.len() * 0.12)) * (gain * sign)
     }
     pub fn weight(&self, x: f32, y: f32) -> f32 {
         let (s, c) = self.rotation.to_radians().sin_cos();

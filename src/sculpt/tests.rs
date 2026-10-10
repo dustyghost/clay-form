@@ -114,3 +114,50 @@ fn project_roundtrip() {
         validate_brush(&b).unwrap();
     }
 }
+
+#[test]
+fn snake_brush_pulls_with_alpha_pressure_mask_and_reverse() {
+    let original = Mesh::sphere();
+    let mut brush = Brush::new(Kind::Snake);
+    let dab = Dab {
+        center: Vec3(0., 1., 0.),
+        normal: Vec3(0., 1., 0.),
+        right: Vec3(1., 0., 0.),
+        up: Vec3(0., 0., 1.),
+        radius: 0.3,
+        pressure: 1.,
+        delta: Vec3(0.2, 0., 0.),
+        invert: false,
+    };
+    let mut full = original.clone();
+    full.stamp(&brush, dab);
+    let motion = full.vertices[0] - original.vertices[0];
+    assert!(motion.0 > 0.19);
+    assert!(motion.1 > 0.);
+    let mut low = original.clone();
+    low.stamp(
+        &brush,
+        Dab {
+            pressure: 0.5,
+            ..dab
+        },
+    );
+    assert!(((low.vertices[0] - original.vertices[0]) - motion * 0.5).len() < 1e-6);
+    brush.subtract = true;
+    let mut reverse = original.clone();
+    reverse.stamp(&brush, dab);
+    assert!(((reverse.vertices[0] - original.vertices[0]) + motion).len() < 1e-6);
+    brush.subtract = false;
+    let mut masked = original.clone();
+    masked.mask.fill(1.);
+    masked.stamp(&brush, dab);
+    assert_eq!(masked.vertices, original.vertices);
+    brush.alpha = Alpha::Image {
+        width: 1,
+        height: 1,
+        pixels: vec![0.].into(),
+    };
+    let mut protected = original.clone();
+    protected.stamp(&brush, dab);
+    assert_eq!(protected, original);
+}

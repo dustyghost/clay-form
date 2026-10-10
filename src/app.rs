@@ -254,6 +254,7 @@ impl App {
                     | Command::DeleteLowerLevels
                     | Command::DeleteHigherLevels
                     | Command::SetDynamicMesh(_)
+                    | Command::SetAdaptive(_)
                     | Command::SetRemeshSettings(..)
                     | Command::Subdivide
                     | Command::Remesh
@@ -328,6 +329,10 @@ impl App {
                     .into();
                 })
             }
+            Command::SetAdaptive(settings) => {
+                self.viewport.cancel(&mut self.document);
+                self.document.set_adaptive(settings)
+            }
             Command::SetDynamicMesh(enabled) => {
                 self.viewport.cancel(&mut self.document);
                 self.document.set_dynamic_mesh(enabled)
@@ -351,6 +356,10 @@ impl App {
                 self.viewport.cancel(&mut self.document);
                 self.document.set_symmetry(symmetry)
             }
+            Command::AddBrush(kind) => self
+                .document
+                .append_brush(crate::sculpt::Brush::new(kind))
+                .map(|index| self.ui.selected = index),
             Command::DuplicateBrush(index) => self
                 .document
                 .duplicate_brush(index)

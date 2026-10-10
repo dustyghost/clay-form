@@ -411,6 +411,14 @@ impl UiState {
         let b = &mut edited;
         match tool {
             Tool::Library => {
+                ui.menu_button("Add brush", |ui| {
+                    for kind in Kind::ALL {
+                        if ui.button(format!("{kind:?}")).clicked() {
+                            commands.push(Command::AddBrush(kind));
+                            ui.close();
+                        }
+                    }
+                });
                 for (i, b) in document.brushes().iter().enumerate() {
                     ui.selectable_value(&mut self.selected, i, &b.name);
                 }
@@ -647,11 +655,24 @@ impl UiState {
             document.mesh().triangles.len()
         ));
         ui.add_enabled_ui(!self.mesh_busy, |ui| {
-            ui.horizontal(|ui| {
-                if ui.selectable_label(!settings.dynamic,"Subdivision").clicked() { commands.push(Command::SetDynamicMesh(false)); }
+            ui.horizontal_wrapped(|ui| {
+                if ui.selectable_label(!settings.dynamic && !settings.adaptive.enabled,"Subdivision").clicked() { commands.push(Command::SetDynamicMesh(false)); }
                 if ui.selectable_label(settings.dynamic,"Dynamic mesh").clicked() { commands.push(Command::SetDynamicMesh(true)); }
+                if ui.selectable_label(settings.adaptive.enabled,"Adaptive sculpt").clicked() { let mut adaptive=settings.adaptive.clone(); adaptive.enabled=true; commands.push(Command::SetAdaptive(adaptive)); }
             });
-            if settings.dynamic {
+            if settings.adaptive.enabled {
+                ui.label("Local triangle refinement while sculpting.");
+                let mut adaptive=settings.adaptive.clone();
+                ui.checkbox(&mut adaptive.relative,"Detail relative to brush size");
+                let label=if adaptive.relative { "Edge size (% of radius)" } else { "Edge size (px)" };
+                ui.add(egui::Slider::new(&mut adaptive.detail,1. ..=32.).text(label));
+                ui.checkbox(&mut adaptive.refine,"Refine stretched edges");
+                ui.checkbox(&mut adaptive.simplify,"Simplify dense areas");
+                ui.add_enabled(adaptive.simplify,egui::Slider::new(&mut adaptive.collapse_ratio,0.1..=0.8).text("Simplify ratio"));
+                if adaptive!=settings.adaptive { commands.push(Command::SetAdaptive(adaptive)); }
+                ui.label("Smaller edge sizes add detail. Masks are preserved; Mask brush keeps topology fixed.");
+                ui.label("Local adaptation preserves separate parts; use voxel remeshing to fuse them.");
+            } else if settings.dynamic {
                 ui.label("Voxel remeshing replaces topology and clears masks. Small details below the voxel size may be lost.");
                 let mut resolution=settings.resolution;
                 let mut auto=settings.auto_remesh;
@@ -675,7 +696,7 @@ impl UiState {
                 });
                 if ui.add_enabled(settings.upper.is_empty() && document.mesh().triangles.len() <= 250_000,egui::Button::new("Subdivide (+ level)")).clicked() { commands.push(Command::Subdivide); }
                 ui.label("Each division creates four triangles per face. Edit broad forms low and detail high.");
-                ui.label("Switching to dynamic keeps the active surface and discards stored levels. Undo restores them.");
+                ui.label("Switching to dynamic or adaptive keeps the active surface and discards stored levels. Undo restores them.");
             }
         });
         if self.mesh_busy {

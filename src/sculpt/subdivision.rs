@@ -1,5 +1,5 @@
 //! Linear triangle subdivision and a detail-preserving multiresolution stack.
-use super::{Mesh, Vec3};
+use super::{AdaptiveSettings, Mesh, Vec3};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -16,6 +16,8 @@ pub struct MeshSettings {
     pub dynamic: bool,
     pub resolution: u32,
     pub auto_remesh: bool,
+    #[serde(default, skip_serializing_if = "AdaptiveSettings::is_default")]
+    pub adaptive: AdaptiveSettings,
 }
 impl Default for MeshSettings {
     fn default() -> Self {
@@ -25,6 +27,7 @@ impl Default for MeshSettings {
             dynamic: false,
             resolution: 48,
             auto_remesh: false,
+            adaptive: AdaptiveSettings::default(),
         }
     }
 }
@@ -39,11 +42,16 @@ impl MeshSettings {
         self.lower.len() + self.upper.len() + 1
     }
     pub fn validate(&self, mesh: &Mesh) -> Result<(), String> {
-        if !(16..=96).contains(&self.resolution)
+        self.adaptive.validate()?;
+        if (self.adaptive.enabled && (self.dynamic || self.levels() != 1))
+            || !(16..=96).contains(&self.resolution)
             || self.levels() > MAX_LEVELS
             || (self.dynamic && self.levels() != 1)
         {
             return Err("Invalid mesh management settings".into());
+        }
+        if self.adaptive.enabled {
+            mesh.validate_closed()?;
         }
         let levels: Vec<&Mesh> = self
             .lower
@@ -81,7 +89,7 @@ impl Geometry {
         }
     }
     pub fn subdivide(&mut self) -> Result<(), String> {
-        if self.settings.dynamic {
+        if self.settings.dynamic || self.settings.adaptive.enabled {
             return Err("Switch to subdivision mode first".into());
         }
         if !self.settings.upper.is_empty() {
@@ -129,10 +137,11 @@ impl Geometry {
         Ok(())
     }
     pub fn set_dynamic(&mut self, enabled: bool) {
-        if self.settings.dynamic != enabled {
+        if self.settings.dynamic != enabled || self.settings.adaptive.enabled {
             self.settings.lower.clear();
             self.settings.upper.clear();
             self.settings.dynamic = enabled;
+            self.settings.adaptive.enabled = false;
         }
     }
 }

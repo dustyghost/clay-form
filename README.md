@@ -17,7 +17,7 @@ Linux requires a working Wayland or X11 desktop and OpenGL support. The first bu
 - Left drag or pen tip on the clay: sculpt. Start a left/pen drag in empty space to orbit; it stays an orbit gesture even if you cross the clay. Right drag: orbit. Middle drag: pan. Wheel: zoom.
 - The top-right orientation gizmo shows positive and negative X/Y/Z axes. Drag it to orbit, or click an axis to snap to that view. Dimmed axes point away from you.
 - Alt temporarily reverses the current brush. Shift temporarily uses Smooth.
-- Standard, Clay, Inflate, Smooth, Flatten, Pinch, Crease, Grab, and Mask are included.
+- Standard, Clay, Inflate, Smooth, Flatten, Pinch, Crease, Grab, Mask, and Snake are included.
 - Every brush uses an alpha, including Grab, smoothing and masking. Add/Subtract reverses its operation; subtracting Smooth sharpens, subtracting Flatten exaggerates surface relief, and subtracting Mask erases masking.
 - Adjust radius, strength, alpha falloff, spacing, rotation, pressure strength/radius mapping, and pressure response curve. Grab moves the surface with the cursor; spacing does not affect Grab.
 - Choose Soft, Hard or Square alpha, or load a PNG/JPEG up to 2048 × 2048 pixels. White affects the surface, black protects it, and transparency reduces influence. Custom alpha pixels are embedded in presets and projects.
@@ -59,7 +59,7 @@ Your normal user needs read access to the tablet event device. If the sidebar re
 
 ## Scope
 
-This is a first functional prototype, not a replacement for a production sculpting package. It uses triangle meshes and an orthographic viewport with CPU projection and egui rendering. Subdivision and voxel remeshing are implemented; adaptive per-dab topology, quad retopology, sculpt layers, materials, and texture painting are future work. Meshes are limited to 500,000 vertices and 1,000,000 triangles; very large meshes are slower in this CPU renderer. Mesh/alpha file sizes are bounded on load.
+This is a first functional prototype, not a replacement for a production sculpting package. It uses triangle meshes and an orthographic viewport with CPU projection and egui rendering. Subdivision, voxel remeshing, and local adaptive topology are implemented; quad retopology, sculpt layers, materials, and texture painting are future work. Meshes are limited to 500,000 vertices and 1,000,000 triangles; very large meshes are slower in this CPU renderer. Mesh/alpha file sizes are bounded on load.
 
 ## Architecture
 
@@ -104,3 +104,13 @@ History includes complete brush strokes (including masks), clear mask, subdivisi
 Use the toolbar **− / +** buttons, **View → Zoom in / Zoom out**, or the mouse wheel over the viewport. Default keys are **=** to zoom in and **−** to zoom out, configurable in Key settings. The View menu also has a zoom slider (20–800%). Click the toolbar percentage or View → Reset zoom to return to 100% while keeping rotation and pan; Reset view resets all camera navigation. Zoom is session-only and does not affect geometry or undo history.
 
 Hold **Ctrl** during an orbit drag to zoom instead of rotating: drag up to zoom in, down to zoom out. This works with right drag, empty-space left/pen drag, and gizmo dragging, including switching the modifier mid-drag. Starting a left/pen drag with Ctrl held also zooms over the clay without sculpting. Change the modifier (or disable it) under **Settings → Key settings → Hold to zoom while dragging**. Existing settings gain Ctrl as the default.
+
+## Snake brush and adaptive sculpting
+
+Choose **Snake** in the brush library, or use **Add brush → Snake** when working in an older project. Start on the clay and drag outward to pull a tapered form. Snake follows the tip after the cursor leaves the original surface, unlike an ordinary surface dab. It uses the same editable alpha, strength, radius, pressure, Add/Subtract, copy, and preset controls as other brushes. Shift temporarily smooths. Pair it with adaptive sculpting for stretched forms; without adaptation, it deforms the existing mesh.
+
+Select **Mesh → Adaptive sculpt**, or use the Mesh management panel. This is a adaptive sculpting-style local topology workflow, separate from whole-surface voxel remeshing. It splits long edges near each brush dab, shares new vertices across adjacent faces, and optionally collapses short edges in dense areas. It keeps separate parts separate and preserves masks. The Mask brush leaves topology unchanged, and fully protected or all-black-alpha strokes do not adapt it.
+
+**Edge size** sets the desired triangle edge length in screen pixels; lower values add detail. Enable **Detail relative to brush size** to interpret it as a percentage of the brush radius instead. Refinement and simplification can be enabled independently; **Simplify ratio** sets how short an edge must be relative to the target before it can collapse. Sharp edges, normal flips, and invalid manifold collapses are rejected conservatively. Density approaches the requested target over successive dabs with bounded per-frame work, rather than guaranteeing an exact edge length immediately. Existing mesh limits apply.
+
+Enabling adaptive mode keeps the active surface and discards stored subdivision levels; Undo restores them. It requires a closed, consistently oriented surface. Each complete adaptive brush stroke is one undo step, including its topology changes. Adaptive settings and geometry save with the project, and old files remain compatible. This first implementation uses CPU local splits/collapses; it does not use external sculpting application's proprietary algorithm or provide automatic fusion of intersecting parts. Use voxel remeshing when you want fusion.

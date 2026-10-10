@@ -211,3 +211,45 @@ mod mesh_storage_tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 }
+
+#[cfg(test)]
+mod adaptive_storage_tests {
+    use super::*;
+    #[test]
+    fn snake_presets_and_adaptive_project_settings_survive_disk() {
+        let dir =
+            std::env::temp_dir().join(format!("clay-adaptive-storage-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut document = crate::document::Document::default();
+        document
+            .set_adaptive(crate::sculpt::AdaptiveSettings {
+                enabled: true,
+                detail: 4.,
+                relative: true,
+                collapse_ratio: 0.3,
+                ..Default::default()
+            })
+            .unwrap();
+        let project = document.project();
+        let path = dir.join("adaptive.clay");
+        save_project(path.to_str().unwrap(), &project).unwrap();
+        let loaded = load_project(path.to_str().unwrap()).unwrap();
+        assert_eq!(
+            loaded.mesh_settings.adaptive,
+            project.mesh_settings.adaptive
+        );
+        let mut snake = Brush::new(crate::sculpt::Kind::Snake);
+        snake.name = "My snake".into();
+        snake.subtract = true;
+        snake.pressure_curve = 2.;
+        snake.alpha = Alpha::Image {
+            width: 2,
+            height: 1,
+            pixels: vec![0.2, 1.].into(),
+        };
+        let path = dir.join("snake.brush.json");
+        save_brush(path.to_str().unwrap(), &snake).unwrap();
+        assert!(load_brush(path.to_str().unwrap()).unwrap() == snake);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+}

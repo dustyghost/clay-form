@@ -7,6 +7,8 @@ use eframe::egui::{self, Color32, Pos2};
 pub(super) struct Scene {
     pub scale: f32,
     positions: Vec<Pos2>,
+    vertices: Vec<Vec3>,
+    triangles: Vec<[usize; 3]>,
     pub(super) faces: Vec<(usize, f32)>,
     normals: Vec<Vec3>,
     view: Vec3,
@@ -86,6 +88,8 @@ impl Scene {
         Self {
             scale,
             positions,
+            vertices: mesh.vertices.clone(),
+            triangles: mesh.triangles.clone(),
             faces,
             normals,
             view,
@@ -94,9 +98,10 @@ impl Scene {
             up,
         }
     }
-    pub fn pick(&self, mesh: &Mesh, point: Pos2) -> Option<(Vec3, Vec3)> {
+    pub fn pick(&self, point: Pos2) -> Option<(Vec3, Vec3)> {
         pick_surface(
-            mesh,
+            &self.vertices,
+            &self.triangles,
             &self.positions,
             &self.faces,
             &self.normals,
@@ -106,7 +111,8 @@ impl Scene {
     }
 }
 fn pick_surface(
-    mesh: &Mesh,
+    vertices: &[Vec3],
+    triangles: &[[usize; 3]],
     positions: &[Pos2],
     faces: &[(usize, f32)],
     normals: &[Vec3],
@@ -116,7 +122,7 @@ fn pick_surface(
     let mut hit = None;
     let mut depth = f32::NEG_INFINITY;
     for &(fi, _) in faces {
-        let t = mesh.triangles[fi];
+        let t = triangles[fi];
         let a = positions[t[0]];
         let v0 = positions[t[1]] - a;
         let v1 = positions[t[2]] - a;
@@ -128,9 +134,7 @@ fn pick_surface(
         let u = (v2.x * v1.y - v2.y * v1.x) / det;
         let v = (v0.x * v2.y - v0.y * v2.x) / det;
         if u >= 0. && v >= 0. && u + v <= 1. {
-            let p = mesh.vertices[t[0]] * (1. - u - v)
-                + mesh.vertices[t[1]] * u
-                + mesh.vertices[t[2]] * v;
+            let p = vertices[t[0]] * (1. - u - v) + vertices[t[1]] * u + vertices[t[2]] * v;
             let z = p.dot(view);
             if z > depth {
                 depth = z;

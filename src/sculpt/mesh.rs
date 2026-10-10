@@ -161,6 +161,7 @@ impl Mesh {
                     (center - old[i]) * (w * 0.12 * sign) - normal * (radius * w * 0.08 * sign)
                 }
                 Kind::Grab => delta * (w * sign),
+                Kind::Snake => (delta + normal * (delta.len() * 0.12)) * (w * sign),
                 Kind::Mask => Vec3::default(),
             };
             self.vertices[i] = old[i] + displacement;

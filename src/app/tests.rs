@@ -643,3 +643,93 @@ fn custom_zoom_modifier_works_on_right_drag_and_gizmo() {
         assert!(!app.document.can_undo());
     }
 }
+
+#[test]
+fn snake_drag_extends_beyond_model_with_adaptive_topology_and_one_undo_step() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.dispatch(
+        Command::SetAdaptive(crate::sculpt::AdaptiveSettings {
+            enabled: true,
+            detail: 5.,
+            simplify: false,
+            ..Default::default()
+        }),
+        &ctx,
+    );
+    app.dispatch(Command::AddBrush(crate::sculpt::Kind::Snake), &ctx);
+    assert_eq!(
+        app.document.brushes()[app.ui.selected].kind,
+        crate::sculpt::Kind::Snake
+    );
+    let original = app.document.mesh().clone();
+    let count = app.document.history_counts().0;
+    let center = navigation_frame(&mut app, &ctx, vec![]).center();
+    let start = center + egui::vec2(150., 0.);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    for step in 1..=14 {
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(
+                start + egui::vec2(step as f32 * 20., 0.),
+            )],
+        );
+    }
+    let end = start + egui::vec2(280., 0.);
+    navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+    let sculpted = app.document.mesh().clone();
+    assert!(sculpted.vertices.len() > original.vertices.len());
+    assert!(
+        sculpted.vertices.iter().any(|v| v.0 > 1.3),
+        "snake did not extend beyond the original sphere"
+    );
+    sculpted.validate_closed().unwrap();
+    assert_eq!(app.document.history_counts().0, count + 1);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.mesh(), &original);
+    app.dispatch(Command::Redo, &ctx);
+    assert_eq!(app.document.mesh(), &sculpted);
+}
+
+#[test]
+fn multiple_adaptive_dabs_with_symmetry_guides_use_stable_picking() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.dispatch(
+        Command::SetAdaptive(crate::sculpt::AdaptiveSettings {
+            enabled: true,
+            detail: 3.,
+            ..Default::default()
+        }),
+        &ctx,
+    );
+    let mut symmetry = app.document.symmetry().clone();
+    symmetry.enabled = true;
+    app.dispatch(Command::SetSymmetry(symmetry), &ctx);
+    let center = navigation_frame(&mut app, &ctx, vec![]).center();
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(center),
+            primary_event(center, true),
+        ],
+    );
+    for step in 1..=4 {
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(
+                center + egui::vec2(step as f32 * 40., 10.),
+            )],
+        );
+    }
+    navigation_frame(&mut app, &ctx, vec![primary_event(center, false)]);
+    app.document.mesh().validate_closed().unwrap();
+    assert!(app.document.mesh().vertices.len() > 4514);
+}
