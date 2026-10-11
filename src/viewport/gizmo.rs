@@ -9,7 +9,11 @@ pub(super) fn draw_gizmo(
 ) {
     let center = rect.center();
     painter.rect_filled(rect, 14., Color32::from_rgb(32, 38, 47));
-    painter.circle_stroke(center, 54., egui::Stroke::new(1., Color32::from_gray(80)));
+    painter.circle_stroke(
+        center,
+        54.,
+        egui::Stroke::new(1_f32, Color32::from_gray(80)),
+    );
     for Axis {
         position: pos,
         depth,
@@ -23,7 +27,7 @@ pub(super) fn draw_gizmo(
         } else {
             color
         };
-        painter.line_segment([center, pos], egui::Stroke::new(2., color));
+        painter.line_segment([center, pos], egui::Stroke::new(2_f32, color));
         let hovered = pointer.is_some_and(|p| p.distance(pos) < 13.);
         painter.circle_filled(pos, if hovered { 14. } else { 12. }, color);
         painter.text(

@@ -149,6 +149,7 @@ impl TransformControls {
             && (self.hit(document, scene, mode, op, pointer).is_some()
                 || (mode == TransformMode::ActionLine && op == TransformOperation::PlaceLine))
     }
+    #[allow(clippy::too_many_arguments)]
     pub fn update(
         &mut self,
         document: &mut Document,
@@ -272,12 +273,12 @@ impl TransformControls {
         {
             painter.line_segment(
                 line.map(|p| scene.project(p)),
-                egui::Stroke::new(3., Color32::GOLD),
+                egui::Stroke::new(3_f32, Color32::GOLD),
             );
         }
         for (point, _, color, label) in self.handles(document, scene, mode, op) {
             if mode == TransformMode::World {
-                painter.line_segment([origin, point], egui::Stroke::new(2.5, color));
+                painter.line_segment([origin, point], egui::Stroke::new(2.5_f32, color));
             }
             if op == TransformOperation::Scale {
                 painter.rect_filled(

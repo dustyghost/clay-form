@@ -119,7 +119,7 @@ impl Scene {
                 for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
                     painter.line_segment(
                         [positions[a], positions[b]],
-                        egui::Stroke::new(0.3, Color32::from_black_alpha(55)),
+                        egui::Stroke::new(0.3_f32, Color32::from_black_alpha(55)),
                     );
                 }
             }

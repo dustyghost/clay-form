@@ -801,7 +801,7 @@ impl UiState {
                                 let mut select_clicked = false;
                                 let mut frame = egui::Frame::group(ui.style());
                                 if active {
-                                    frame = frame.fill(Color32::from_rgb(37, 58, 68)).stroke(egui::Stroke::new(1.5, Color32::from_rgb(125, 210, 245)));
+                                    frame = frame.fill(Color32::from_rgb(37, 58, 68)).stroke(egui::Stroke::new(1.5_f32, Color32::from_rgb(125, 210, 245)));
                                 }
                                 let row = frame.show(ui, |ui| {
                                     ui.set_min_width(ui.available_width());
@@ -941,12 +941,12 @@ fn visibility_button(ui: &mut egui::Ui, visible: bool) -> egui::Response {
         c + Vec2::new(-4., 5.),
         c + Vec2::new(-9., 0.),
     ];
-    painter.add(egui::Shape::line(points, egui::Stroke::new(1.5, color)));
+    painter.add(egui::Shape::line(points, egui::Stroke::new(1.5_f32, color)));
     painter.circle_filled(c, 2.5, color);
     if !visible {
         painter.line_segment(
             [c + Vec2::new(-8., 8.), c + Vec2::new(8., -8.)],
-            egui::Stroke::new(2., color),
+            egui::Stroke::new(2_f32, color),
         );
     }
     response
@@ -1000,7 +1000,7 @@ fn model_thumbnail(ui: &mut egui::Ui, mesh: &crate::sculpt::Mesh, active: bool) 
             .map(|p| rect.center() + (p - center) * scale)
             .collect(),
         color,
-        egui::Stroke::new(1., Color32::from_gray(170)),
+        egui::Stroke::new(1_f32, Color32::from_gray(170)),
     ));
 }
 
@@ -1013,7 +1013,7 @@ fn reorder_button(ui: &mut egui::Ui, up: bool, enabled: bool) -> egui::Response 
         let c = rect.center();
         let direction = if up { -1. } else { 1. };
         let tip = c + Vec2::new(0., direction * 5.);
-        let stroke = egui::Stroke::new(1.5, visuals.fg_stroke.color);
+        let stroke = egui::Stroke::new(1.5_f32, visuals.fg_stroke.color);
         ui.painter()
             .line_segment([c - Vec2::new(0., direction * 5.), tip], stroke);
         ui.painter()

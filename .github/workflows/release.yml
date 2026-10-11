@@ -1,0 +1,149 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version from Cargo.toml, for example 0.1.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  REQUESTED_VERSION: "${{ inputs.version }}"
+
+jobs:
+  release:
+    name: Build and publish Linux release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build files
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libwayland-dev libxkbcommon-dev
+
+      - name: Resolve and validate version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          package_version="$(awk '
+            /^\[package\]$/ { in_package = 1; next }
+            in_package && /^\[/ { exit }
+            in_package && /^version = / {
+              gsub(/^version = "|".*$/, "")
+              print
+              exit
+            }
+          ' Cargo.toml)"
+
+          if [[ -z "$package_version" ]]; then
+            echo "::error::Could not read the package version from Cargo.toml"
+            exit 1
+          fi
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
+              echo "::error::Manual releases must run from the main branch"
+              exit 1
+            fi
+            version="$REQUESTED_VERSION"
+            tag="v$version"
+          else
+            tag="${GITHUB_REF_NAME}"
+            version="${tag#v}"
+          fi
+
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Version must be a semantic version such as 0.1.0 or 0.2.0-beta.1"
+            exit 1
+          fi
+
+          if [[ "$version" != "$package_version" ]]; then
+            echo "::error::Release version $version does not match Cargo.toml version $package_version"
+            exit 1
+          fi
+
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+          echo "ARCHIVE_NAME=clay-form-$tag-linux-x86_64" >> "$GITHUB_ENV"
+
+      - name: Run tests
+        run: cargo test --locked
+
+      - name: Build release binary
+        run: cargo build --release --locked
+
+      - name: Package release
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="dist/$ARCHIVE_NAME"
+          mkdir -p "$stage"
+          install -m 0755 target/release/clay-form "$stage/clay-form"
+          install -m 0644 README.md "$stage/README.md"
+          tar -C dist -czf "dist/$ARCHIVE_NAME.tar.gz" "$ARCHIVE_NAME"
+          (cd dist && sha256sum "$ARCHIVE_NAME.tar.gz" > SHA256SUMS)
+
+      - name: Create or verify release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+
+          if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
+            tagged_commit="$(git rev-list -n 1 "$TAG")"
+            current_commit="$(git rev-parse HEAD)"
+            if [[ "$tagged_commit" != "$current_commit" ]]; then
+              echo "::error::Tag $TAG already points to $tagged_commit instead of $current_commit"
+              exit 1
+            fi
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag --annotate "$TAG" --message "Clay Form $TAG"
+            git push origin "refs/tags/$TAG"
+          fi
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: "${{ github.token }}"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" \
+              "dist/$ARCHIVE_NAME.tar.gz" \
+              dist/SHA256SUMS \
+              --clobber
+          else
+            gh release create "$TAG" \
+              "dist/$ARCHIVE_NAME.tar.gz" \
+              dist/SHA256SUMS \
+              --verify-tag \
+              --title "Clay Form $TAG" \
+              --generate-notes
+          fi

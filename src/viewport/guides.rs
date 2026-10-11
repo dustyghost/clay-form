@@ -37,9 +37,12 @@ pub(super) fn paint(
                 let line = [project(a), project(b)];
                 painter.line_segment(
                     line,
-                    egui::Stroke::new(3., Color32::from_black_alpha((opacity * 150.) as u8)),
+                    egui::Stroke::new(3_f32, Color32::from_black_alpha((opacity * 150.) as u8)),
                 );
-                painter.line_segment(line, egui::Stroke::new(1.5, color.gamma_multiply(opacity)));
+                painter.line_segment(
+                    line,
+                    egui::Stroke::new(1.5_f32, color.gamma_multiply(opacity)),
+                );
             }
         }
     }

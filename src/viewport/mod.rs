@@ -248,7 +248,7 @@ impl Viewport {
                 pos,
                 radius,
                 egui::Stroke::new(
-                    1.5,
+                    1.5_f32,
                     if b.subtract ^ options.reverse.active(modifiers) {
                         Color32::from_rgb(255, 140, 100)
                     } else {
