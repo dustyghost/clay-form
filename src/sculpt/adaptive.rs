@@ -289,6 +289,9 @@ impl Mesh {
             replacements.push((*i, *j, new));
         }
         let count = replacements.len();
+        if count > 0 {
+            self.quads.clear();
+        }
         for (i, j, [a, b]) in replacements {
             self.triangles[i] = a;
             self.triangles[j] = b;
@@ -374,6 +377,7 @@ impl Mesh {
                 }
             }
         }
+        self.quads.clear();
         self.triangles = faces;
         candidates.len()
     }
@@ -546,6 +550,7 @@ impl Mesh {
             .collect();
         self.vertices = vertices;
         self.mask = mask;
+        self.quads.clear();
         self.triangles = triangles;
         merged.len()
     }

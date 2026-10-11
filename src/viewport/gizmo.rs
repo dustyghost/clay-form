@@ -1,4 +1,5 @@
 //! Orientation overlay and axis hit targets, projected from camera orientation.
+use super::controls;
 use crate::{camera::Camera, sculpt::Vec3};
 use eframe::egui::{self, Color32, Pos2, Vec2};
 pub(super) fn draw_gizmo(
@@ -29,7 +30,10 @@ pub(super) fn draw_gizmo(
         };
         painter.line_segment([center, pos], egui::Stroke::new(2_f32, color));
         let hovered = pointer.is_some_and(|p| p.distance(pos) < 13.);
-        painter.circle_filled(pos, if hovered { 14. } else { 12. }, color);
+        painter.circle_filled(pos, 12., color);
+        if hovered {
+            painter.circle_stroke(pos, 15., egui::Stroke::new(1.5, Color32::WHITE));
+        }
         painter.text(
             pos,
             egui::Align2::CENTER_CENTER,
@@ -60,48 +64,12 @@ pub(super) fn axes(camera: &Camera, center: Pos2) -> Vec<Axis> {
     let pi = std::f32::consts::PI;
     let half = std::f32::consts::FRAC_PI_2;
     let mut axes: Vec<_> = [
-        (
-            Vec3(1., 0., 0.),
-            "X",
-            Color32::from_rgb(240, 100, 100),
-            half,
-            0.,
-        ),
-        (
-            Vec3(-1., 0., 0.),
-            "−X",
-            Color32::from_rgb(240, 100, 100),
-            -half,
-            0.,
-        ),
-        (
-            Vec3(0., 1., 0.),
-            "Y",
-            Color32::from_rgb(130, 220, 130),
-            0.,
-            -half,
-        ),
-        (
-            Vec3(0., -1., 0.),
-            "−Y",
-            Color32::from_rgb(130, 220, 130),
-            0.,
-            half,
-        ),
-        (
-            Vec3(0., 0., 1.),
-            "Z",
-            Color32::from_rgb(100, 165, 250),
-            0.,
-            0.,
-        ),
-        (
-            Vec3(0., 0., -1.),
-            "−Z",
-            Color32::from_rgb(100, 165, 250),
-            pi,
-            0.,
-        ),
+        (Vec3(1., 0., 0.), "X", controls::AXES[0], half, 0.),
+        (Vec3(-1., 0., 0.), "−X", controls::AXES[0], -half, 0.),
+        (Vec3(0., 1., 0.), "Y", controls::AXES[1], 0., -half),
+        (Vec3(0., -1., 0.), "−Y", controls::AXES[1], 0., half),
+        (Vec3(0., 0., 1.), "Z", controls::AXES[2], 0., 0.),
+        (Vec3(0., 0., -1.), "−Z", controls::AXES[2], pi, 0.),
     ]
     .into_iter()
     .map(|(axis, label, color, yaw, pitch)| Axis {

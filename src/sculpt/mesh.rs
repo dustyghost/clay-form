@@ -16,12 +16,16 @@ pub struct Dab {
 pub struct Mesh {
     pub vertices: Vec<Vec3>,
     pub triangles: Vec<[usize; 3]>,
+    /// Polygon topology; triangles remain the surface used for picking and rendering.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub quads: Vec<[usize; 4]>,
     pub mask: Vec<f32>,
 }
 impl Mesh {
     /// Copy fully masked faces and compact their vertices; the boundary stays open.
     pub fn extract_masked(&self) -> Result<Self, String> {
         let mut result = Self {
+            quads: Vec::new(),
             vertices: Vec::new(),
             triangles: Vec::new(),
             mask: Vec::new(),
@@ -41,6 +45,11 @@ impl Mesh {
                 triangle[corner] = indices[i];
             }
             result.triangles.push(triangle);
+        }
+        for q in &self.quads {
+            if q.iter().all(|&i| self.mask[i] >= 0.5) {
+                result.quads.push(q.map(|i| indices[i]));
+            }
         }
         if result.triangles.is_empty() {
             return Err("Mask a region first: extraction needs faces with all three vertices at least 50% masked".into());
@@ -62,11 +71,13 @@ impl Mesh {
         v.push(Vec3(0., -1., 0.));
         let w = n * 2;
         let mut f = Vec::new();
+        let mut quads = Vec::new();
         for i in 0..w {
             f.push([0, 1 + (i + 1) % w, 1 + i]);
             for j in 0..n - 2 {
                 let a = 1 + j * w + i;
                 let b = 1 + j * w + (i + 1) % w;
+                quads.push([a, b, b + w, a + w]);
                 f.push([a, b, a + w]);
                 f.push([b, b + w, a + w]);
             }
@@ -74,6 +85,7 @@ impl Mesh {
         }
         let mask = vec![0.; v.len()];
         Self {
+            quads,
             vertices: v,
             triangles: f,
             mask,
@@ -94,6 +106,11 @@ impl Mesh {
         if self.vertices.len() > super::subdivision::MAX_VERTICES
             || self.triangles.len() > super::subdivision::MAX_TRIANGLES
             || self.vertices.is_empty()
+            || self
+                .quads
+                .iter()
+                .flatten()
+                .any(|&i| i >= self.vertices.len())
             || self.mask.len() != self.vertices.len()
             || self
                 .vertices
@@ -110,6 +127,36 @@ impl Mesh {
                 .any(|&i| i >= self.vertices.len())
         {
             return Err("Invalid mesh data".into());
+        }
+        if !self.quads.is_empty() {
+            let key = |mut t: [usize; 3]| {
+                t.sort_unstable();
+                t
+            };
+            let faces: std::collections::HashSet<_> =
+                self.triangles.iter().copied().map(key).collect();
+            let mut used = std::collections::HashSet::new();
+            for &[a, b, c, d] in &self.quads {
+                if [a, b, c, d]
+                    .iter()
+                    .copied()
+                    .collect::<std::collections::HashSet<_>>()
+                    .len()
+                    != 4
+                {
+                    return Err("Invalid quad face".into());
+                }
+                let pair = if faces.contains(&key([a, b, c])) && faces.contains(&key([a, c, d])) {
+                    [key([a, b, c]), key([a, c, d])]
+                } else if faces.contains(&key([a, b, d])) && faces.contains(&key([b, c, d])) {
+                    [key([a, b, d]), key([b, c, d])]
+                } else {
+                    return Err("Quad does not match surface triangulation".into());
+                };
+                if !used.insert(pair[0]) || !used.insert(pair[1]) {
+                    return Err("Overlapping quad faces".into());
+                }
+            }
         }
         Ok(())
     }
@@ -194,6 +241,16 @@ impl Mesh {
                 }
                 Kind::Crease => {
                     (center - old[i]) * (w * 0.12 * sign) - normal * (radius * w * 0.08 * sign)
+                }
+                Kind::Detail => {
+                    // A narrow incision with raised shoulders, plus tangent-only
+                    // pinching. Pinching stays inward when the depth is inverted.
+                    let tangent = offset - normal * offset.dot(normal);
+                    let r = tangent.len() / radius;
+                    let core = (-(r / 0.20).powi(2)).exp();
+                    let shoulder = (-((r - 0.38) / 0.13).powi(2)).exp();
+                    let depth = radius * (-0.18 * core + 0.045 * shoulder);
+                    normal * (depth * w * sign) - tangent * (0.12 * (-(r / 0.45).powi(2)).exp() * w)
                 }
                 Kind::Grab => delta * (w * sign),
                 Kind::Snake => (delta + normal * (delta.len() * 0.12)) * (w * sign),

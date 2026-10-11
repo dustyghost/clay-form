@@ -700,12 +700,13 @@ impl Document {
         }
         self.dirty = true;
     }
-    pub fn update_brush(&mut self, index: usize, brush: Brush) -> Result<(), String> {
+    pub fn update_brush(&mut self, index: usize, mut brush: Brush) -> Result<(), String> {
         validate_brush(&brush)?;
         let target = self
             .brushes
             .get_mut(index)
             .ok_or("Brush no longer exists")?;
+        brush.id = Some(target.identity());
         if *target != brush {
             *target = brush;
             self.dirty = true;
@@ -721,14 +722,60 @@ impl Document {
         brush.alpha = alpha;
         self.update_brush(index, brush)
     }
-    pub fn append_brush(&mut self, brush: Brush) -> Result<usize, String> {
+    pub fn append_brush(&mut self, mut brush: Brush) -> Result<usize, String> {
         validate_brush(&brush)?;
         if self.brushes.len() >= 256 {
             return Err("Brush library is limited to 256 presets".into());
         }
+        brush.ensure_identity();
+        if self
+            .brushes
+            .iter()
+            .any(|b| b.identity() == brush.identity())
+        {
+            brush.renew_identity();
+        }
         self.brushes.push(brush);
         self.dirty = true;
         Ok(self.brushes.len() - 1)
+    }
+    /// Validate and merge the entire batch before changing the library.
+    pub fn import_brushes(
+        &mut self,
+        incoming: Vec<Brush>,
+    ) -> Result<(usize, usize, Option<usize>), String> {
+        let mut brushes = self.brushes.clone();
+        let mut added = 0;
+        let mut updated = 0;
+        let mut last = None;
+        let mut seen = std::collections::HashSet::new();
+        for mut brush in incoming {
+            validate_brush(&brush)?;
+            brush.ensure_identity();
+            let id = brush.identity();
+            if let Some(index) = brushes.iter().position(|b| b.identity() == id) {
+                if brushes[index] != brush {
+                    brushes[index] = brush;
+                    if seen.insert(id) {
+                        updated += 1;
+                    }
+                }
+                last = Some(index);
+            } else {
+                if brushes.len() >= 256 {
+                    return Err("Brush library is limited to 256 presets".into());
+                }
+                last = Some(brushes.len());
+                brushes.push(brush);
+                seen.insert(id);
+                added += 1;
+            }
+        }
+        if brushes != self.brushes {
+            self.brushes = brushes;
+            self.dirty = true;
+        }
+        Ok((added, updated, last))
     }
     pub fn duplicate_brush(&mut self, index: usize) -> Result<usize, String> {
         let mut brush = self
@@ -737,6 +784,7 @@ impl Document {
             .ok_or("Brush no longer exists")?
             .clone();
         brush.name.push_str(" copy");
+        brush.renew_identity();
         self.append_brush(brush)
     }
 }
@@ -1507,5 +1555,59 @@ mod primitive_tests {
         invalid.mesh.vertices[0].0 += 0.1;
         assert!(loaded.replace_project(invalid, "bad.clay").is_err());
         assert_eq!(loaded.geometry_snapshot(), d.geometry_snapshot());
+    }
+}
+
+#[cfg(test)]
+mod brush_identity_tests {
+    use super::*;
+    #[test]
+    fn brush_import_updates_identity_without_duplicates() {
+        let mut doc = Document::default();
+        let library = doc.brushes().to_vec();
+        let count = library.len();
+        doc.mark_saved("test.clay");
+        assert_eq!(doc.import_brushes(library.clone()).unwrap().0, 0);
+        assert!(!doc.is_dirty());
+        let copy = doc.duplicate_brush(0).unwrap();
+        assert_ne!(doc.brushes()[copy].identity(), doc.brushes()[0].identity());
+        let mut brush = doc.brushes()[copy].clone();
+        let id = brush.identity();
+        brush.name = "Edited copy".into();
+        brush.icon = Some(crate::brush_icon::default_icon(Kind::Crease));
+        brush.id = Some(Brush::new(Kind::Mask).identity());
+        doc.update_brush(copy, brush).unwrap();
+        assert_eq!(doc.brushes()[copy].identity(), id);
+        let mut imported = doc.brushes()[copy].clone();
+        imported.strength = 0.37;
+        assert_eq!(
+            doc.import_brushes(vec![imported.clone(), imported])
+                .unwrap(),
+            (0, 1, Some(copy))
+        );
+        let exported = doc.brushes().to_vec();
+        doc.mark_saved("test.clay");
+        assert_eq!(doc.import_brushes(exported).unwrap().0, 0);
+        assert!(!doc.is_dirty());
+        assert_eq!(doc.brushes().len(), count + 1);
+    }
+    #[test]
+    fn brush_legacy_import_and_failed_batch_are_safe() {
+        let mut doc = Document::default();
+        let mut old = Brush::new(Kind::Clay);
+        old.id = None;
+        assert_eq!(old.identity(), Brush::new(Kind::Clay).identity());
+        old.name = "Legacy custom".into();
+        let index = doc.import_brushes(vec![old.clone()]).unwrap().2.unwrap();
+        assert_eq!(doc.import_brushes(vec![old]).unwrap(), (0, 0, Some(index)));
+        let before = serde_json::to_value(doc.project()).unwrap();
+        doc.mark_saved("test.clay");
+        let mut new = Brush::new(Kind::Grab);
+        new.renew_identity();
+        let mut bad = new.clone();
+        bad.strength = f32::NAN;
+        assert!(doc.import_brushes(vec![new, bad]).is_err());
+        assert_eq!(serde_json::to_value(doc.project()).unwrap(), before);
+        assert!(!doc.is_dirty());
     }
 }

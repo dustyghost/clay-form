@@ -81,6 +81,7 @@ impl App {
             || self.ui.pending.is_some()
             || self.ui.settings_open
             || self.ui.layout_open
+            || self.ui.icon_capture_open()
         {
             return;
         }
@@ -513,10 +514,43 @@ impl App {
                     .map(|()| self.ui.status = "Brush saved".into())
             }
             Command::LoadPreset => persistence::load_brush(&self.ui.preset_path)
-                .and_then(|brush| self.document.append_brush(brush))
-                .map(|index| {
-                    self.ui.selected = index;
-                    self.ui.status = "Brush loaded".into();
+                .and_then(|brush| self.document.import_brushes(vec![brush]))
+                .map(|(added, updated, index)| {
+                    if let Some(index) = index {
+                        self.ui.selected = index;
+                    }
+                    self.ui.status = format!("Imported brush: {added} added, {updated} updated");
+                }),
+            Command::CaptureBrushIcon(index) => {
+                self.viewport.cancel(&mut self.document);
+                crate::brush_icon::capture(self.document.mesh(), &self.camera).and_then(|icon| {
+                    let brush = self
+                        .document
+                        .brushes()
+                        .get(index)
+                        .ok_or("Brush no longer exists")?;
+                    self.ui.set_icon_shot(ctx, index, brush, icon);
+                    Ok(())
+                })
+            }
+            Command::ExportIconImage(path, icon) => image::save_buffer_with_format(
+                &path,
+                &icon.rgba,
+                icon.size as u32,
+                icon.size as u32,
+                image::ColorType::Rgba8,
+                image::ImageFormat::Png,
+            )
+            .map_err(|e| e.to_string())
+            .map(|()| self.ui.status = format!("Saved square capture: {path}")),
+            Command::ExportBrushLibrary => {
+                persistence::save_brush_library(&self.ui.library_path, self.document.brushes())
+                    .map(|()| self.ui.status = "Brush library exported".into())
+            }
+            Command::ImportBrushLibrary => persistence::load_brush_library(&self.ui.library_path)
+                .and_then(|brushes| self.document.import_brushes(brushes))
+                .map(|(added, updated, _)| {
+                    self.ui.status = format!("Imported library: {added} added, {updated} updated")
                 }),
             Command::SaveAndContinue => {
                 if let Some(action) = self.ui.pending.clone() {
@@ -553,7 +587,8 @@ impl App {
         for command in primitive_commands {
             self.dispatch(command, ui.ctx());
         }
-        let enabled = self.ui.primitive_warning.is_none()
+        let enabled = !self.ui.icon_capture_open()
+            && self.ui.primitive_warning.is_none()
             && self.ui.pending.is_none()
             && !self.ui.settings_open
             && !self.ui.layout_open
@@ -594,6 +629,8 @@ impl App {
                 selected: self.ui.selected,
                 pressure: self.pressure,
                 wire: self.ui.wire,
+                wire_mode: self.ui.wire_mode,
+                wire_triangles: self.ui.wire_triangles,
                 show_guides: self.ui.show_symmetry_guides,
                 guide_opacity: self.ui.guide_opacity,
                 enabled: enabled && !over_toolbar && !over_editor && !over_resolution,
@@ -645,6 +682,9 @@ impl eframe::App for App {
         self.shortcuts(ctx);
         self.ui.status_bar(ctx);
         egui::CentralPanel::default().show(ctx, |ui| self.show_viewport(ui));
+        if let Some(command) = self.ui.icon_capture_popup(ctx, &self.document) {
+            self.dispatch(command, ctx);
+        }
         if let Some(command) = self.ui.confirmation(ctx) {
             self.dispatch(command, ctx);
         }

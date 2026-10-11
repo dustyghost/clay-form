@@ -1,4 +1,5 @@
 //! Converts viewport gestures into camera movement and document sculpt dabs.
+mod controls;
 mod gizmo;
 mod guides;
 mod primitive;
@@ -47,6 +48,8 @@ pub(crate) struct ViewportOptions {
     pub selected: usize,
     pub pressure: f32,
     pub wire: bool,
+    pub wire_mode: WireMode,
+    pub wire_triangles: bool,
     pub show_guides: bool,
     pub guide_opacity: f32,
     pub enabled: bool,
@@ -96,7 +99,15 @@ impl Viewport {
             Pos2::new(rect.right() - 146., rect.top() + 12.),
             Vec2::splat(134.),
         );
-        let scene = Scene::paint(&painter, rect, document, camera, options.wire);
+        let scene = Scene::paint(
+            &painter,
+            rect,
+            document,
+            camera,
+            options.wire,
+            options.wire_mode,
+            options.wire_triangles,
+        );
         if options.show_guides && document.active_visible() {
             guides::paint(
                 &scene,
@@ -237,9 +248,9 @@ impl Viewport {
             painter.text(
                 rect.left_bottom() + Vec2::new(16., -16.),
                 egui::Align2::LEFT_BOTTOM,
-                "Primitive · drag green handles · convert to start sculpting",
+                "Primitive · teal: shape · violet diamonds: spans (drag left / right) · convert to sculpt",
                 egui::FontId::proportional(13.),
-                Color32::from_rgb(130, 235, 185),
+                controls::NEUTRAL,
             );
             return;
         }
@@ -379,4 +390,12 @@ impl Viewport {
             Color32::GRAY,
         );
     }
+}
+
+#[derive(Clone, Copy, Default, PartialEq)]
+pub(crate) enum WireMode {
+    #[default]
+    Visible,
+    Front,
+    Transparent,
 }

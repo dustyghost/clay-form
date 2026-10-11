@@ -1,11 +1,11 @@
 //! Direct manipulation of parametric shape and facial controls.
-use super::scene::Scene;
+use super::{controls, scene::Scene};
 use crate::{
     document::Document,
     sculpt::{Primitive, PrimitiveKind as Kind, Vec3},
 };
-use eframe::egui::{self, Color32, Pos2, Vec2};
-#[derive(Clone, Copy)]
+use eframe::egui::{self, Pos2, Vec2};
+#[derive(Clone, Copy, PartialEq)]
 enum Control {
     Dimension(usize),
     Uniform,
@@ -13,6 +13,57 @@ enum Control {
     TopRadius,
     TubeRadius,
     Face(usize),
+    Resolution(Resolution),
+}
+#[derive(Clone, Copy, PartialEq)]
+enum Resolution {
+    Spans(usize),
+    Segments,
+    Rings,
+    Subdivisions,
+}
+impl Resolution {
+    fn value(self, p: &Primitive) -> u32 {
+        match self {
+            Self::Spans(i) => p.divisions[i],
+            Self::Segments => p.segments,
+            Self::Rings => p.rings,
+            Self::Subdivisions => p.subdivisions,
+        }
+    }
+    fn limits(self, p: &Primitive) -> (u32, u32) {
+        match self {
+            Self::Spans(_) => (1, 128),
+            Self::Segments => (3, 256),
+            Self::Rings => (if p.kind == Kind::Torus { 3 } else { 2 }, 128),
+            Self::Subdivisions => (1, 6),
+        }
+    }
+    fn set(self, p: &mut Primitive, value: u32) {
+        match self {
+            Self::Spans(i) => p.divisions[i] = value,
+            Self::Segments => p.segments = value,
+            Self::Rings => p.rings = value,
+            Self::Subdivisions => p.subdivisions = value,
+        }
+    }
+}
+fn screen_point(h: Handle, scene: &Scene) -> Pos2 {
+    if matches!(h.control, Control::Resolution(_)) {
+        let anchor = scene.active_bounds.right_top();
+        Pos2::new(
+            (anchor.x + 24.).clamp(
+                scene.rect.left() + 20.,
+                (scene.rect.right() - 155.).max(scene.rect.left() + 20.),
+            ),
+            (anchor.y + 16. + h.offset.y).clamp(
+                scene.rect.top() + 20.,
+                (scene.rect.bottom() - 90. + h.offset.y).max(scene.rect.top() + 20.),
+            ),
+        )
+    } else {
+        scene.project(h.point) + h.offset
+    }
 }
 #[derive(Clone, Copy)]
 struct Handle {
@@ -26,6 +77,7 @@ struct Handle {
 pub(super) struct PrimitiveControls {
     drag: Option<Handle>,
     last: Option<Pos2>,
+    span_remainder: f32,
 }
 fn handles(p: &Primitive) -> Vec<Handle> {
     let mut result = Vec::new();
@@ -308,17 +360,51 @@ fn handles(p: &Primitive) -> Vec<Handle> {
             );
         }
     }
+    let resolution: Vec<(Resolution, &str)> = match p.kind {
+        Kind::Cube => vec![
+            (Resolution::Spans(0), "X spans"),
+            (Resolution::Spans(1), "Y spans"),
+            (Resolution::Spans(2), "Z spans"),
+        ],
+        Kind::Plane | Kind::Grid => vec![
+            (Resolution::Spans(0), "X spans"),
+            (Resolution::Spans(1), "Y spans"),
+        ],
+        Kind::Cylinder | Kind::Cone => vec![
+            (Resolution::Segments, "Sides"),
+            (Resolution::Spans(1), "Height spans"),
+        ],
+        Kind::Circle => vec![(Resolution::Segments, "Vertices")],
+        Kind::UvSphere | Kind::HumanHead => vec![
+            (Resolution::Segments, "Segments"),
+            (Resolution::Rings, "Rings"),
+        ],
+        Kind::Torus => vec![
+            (Resolution::Segments, "Ring spans"),
+            (Resolution::Rings, "Tube spans"),
+        ],
+        Kind::Icosphere => vec![(Resolution::Subdivisions, "Subdivisions")],
+    };
+    for (row, (control, label)) in resolution.into_iter().enumerate() {
+        add(
+            Vec3(1., 1., 0.),
+            Vec3(1., 0., 0.),
+            Control::Resolution(control),
+            label,
+            Vec2::new(0., row as f32 * 28.),
+        );
+    }
     result
 }
 impl PrimitiveControls {
     fn hit(&self, document: &Document, scene: &Scene, point: Pos2) -> Option<Handle> {
         handles(document.primitive()?)
             .into_iter()
-            .filter(|h| (scene.project(h.point) + h.offset).distance(point) <= 10.)
+            .filter(|h| screen_point(*h, scene).distance(point) <= controls::HIT_RADIUS)
             .min_by(|a, b| {
-                (scene.project(a.point) + a.offset)
+                screen_point(*a, scene)
                     .distance(point)
-                    .total_cmp(&(scene.project(b.point) + b.offset).distance(point))
+                    .total_cmp(&screen_point(*b, scene).distance(point))
             })
     }
     pub fn can_drag(&self, document: &Document, scene: &Scene, point: Pos2) -> bool {
@@ -336,6 +422,7 @@ impl PrimitiveControls {
                 document.end_primitive_edit();
             }
             self.last = None;
+            self.span_remainder = 0.;
             return;
         }
         let Some(point) = pointer else {
@@ -365,6 +452,17 @@ impl PrimitiveControls {
         };
         let world = amount / scene.scale / length;
         match h.control {
+            Control::Resolution(control) => {
+                self.span_remainder += delta.x / 12.;
+                let steps = self.span_remainder.trunc() as i32;
+                if steps == 0 {
+                    return;
+                }
+                self.span_remainder -= steps as f32;
+                let (min, max) = control.limits(&p);
+                let value = (control.value(&p) as i32 + steps).clamp(min as i32, max as i32) as u32;
+                control.set(&mut p, value);
+            }
             Control::Dimension(index) => {
                 let value = match index {
                     0 => &mut p.size.0,
@@ -432,40 +530,67 @@ impl PrimitiveControls {
         let Some(params) = document.primitive().filter(|_| document.active_visible()) else {
             return;
         };
+        let hovered = pointer.and_then(|p| self.hit(document, scene, p));
         for h in handles(params) {
             let anchor = scene.project(h.point);
-            let point = anchor + h.offset;
-            let hovered = pointer.is_some_and(|p| p.distance(point) <= 10.);
-            let active = self.drag.is_some_and(|drag| drag.label == h.label);
-            let color = if hovered || active {
-                Color32::WHITE
-            } else {
-                Color32::from_rgb(130, 235, 185)
+            let point = screen_point(h, scene);
+            let hot = hovered.is_some_and(|hover| hover.control == h.control);
+            let active = self.drag.is_some_and(|drag| drag.control == h.control);
+            let (color, marker) = match h.control {
+                Control::Resolution(_) => (controls::TOPOLOGY, controls::Marker::Diamond),
+                Control::Dimension(_) | Control::Uniform => {
+                    (controls::SHAPE, controls::Marker::Square)
+                }
+                _ => (controls::SHAPE, controls::Marker::Circle),
             };
-            if h.offset != Vec2::ZERO {
-                painter.line_segment([anchor, point], egui::Stroke::new(1., color));
+            if h.offset != Vec2::ZERO && !matches!(h.control, Control::Resolution(_)) {
+                painter.line_segment(
+                    [anchor, point],
+                    egui::Stroke::new(1., color.gamma_multiply(0.6)),
+                );
             }
-            painter.circle_filled(point, 6., Color32::from_rgb(22, 43, 35));
-            painter.circle_stroke(point, 6., egui::Stroke::new(2., color));
-            if hovered || active {
+            controls::marker(painter, point, marker, color, hot || active);
+            if let Control::Resolution(control) = h.control {
+                controls::label(
+                    painter,
+                    point + Vec2::new(14., -7.),
+                    &format!("{} · {}", h.label, control.value(params)),
+                    color,
+                );
+            }
+            if hot || active {
                 let axis = h.axis.norm();
-                let projected = Vec2::new(axis.dot(scene.right), -axis.dot(scene.up));
+                let projected = if matches!(h.control, Control::Resolution(_)) {
+                    Vec2::X
+                } else {
+                    Vec2::new(axis.dot(scene.right), -axis.dot(scene.up))
+                };
                 let direction = if projected.length_sq() > 0.04 {
                     projected.normalized()
                 } else {
                     Vec2::X
                 };
                 painter.line_segment(
-                    [point - direction * 28., point + direction * 28.],
+                    [point - direction * 28., point - direction * 12.],
                     egui::Stroke::new(1., color),
                 );
-                painter.text(
-                    point + Vec2::new(12., -12.),
-                    egui::Align2::LEFT_BOTTOM,
-                    h.label,
-                    egui::FontId::proportional(13.),
-                    color,
-                );
+                if !matches!(h.control, Control::Resolution(_)) {
+                    painter.line_segment(
+                        [point + direction * 12., point + direction * 28.],
+                        egui::Stroke::new(1., color),
+                    );
+                }
+                let caption = if matches!(h.control, Control::Resolution(_)) {
+                    "Drag left / right · 12 px per span".to_owned()
+                } else {
+                    h.label.to_owned()
+                };
+                let caption_point = if matches!(h.control, Control::Resolution(_)) {
+                    point + Vec2::new(14., -30. - h.offset.y)
+                } else {
+                    point + Vec2::new(14., -30.)
+                };
+                controls::label(painter, caption_point, &caption, color);
             }
         }
     }
@@ -486,9 +611,110 @@ mod tests {
                 document,
                 &Camera::default(),
                 false,
+                crate::viewport::WireMode::Visible,
+                false,
             ));
         });
         result.unwrap()
+    }
+    #[test]
+    fn every_primitive_has_resolution_handles_that_preserve_shape_and_undo() {
+        for kind in Kind::ALL {
+            let mut params = Primitive::for_kind(kind);
+            params.segments = 24;
+            params.rings = 16;
+            let expected = match kind {
+                Kind::Cube => 3,
+                Kind::Circle | Kind::Icosphere => 1,
+                _ => 2,
+            };
+            let resolution: Vec<_> = handles(&params)
+                .into_iter()
+                .filter(|h| matches!(h.control, Control::Resolution(_)))
+                .collect();
+            assert_eq!(resolution.len(), expected, "{}", kind.label());
+            for handle in resolution {
+                let Control::Resolution(control) = handle.control else {
+                    unreachable!()
+                };
+                let mut document = Document::default();
+                document.initialize_primitive().unwrap();
+                document.update_primitive(params.clone()).unwrap();
+                document.end_primitive_edit();
+                let before = document.geometry_snapshot();
+                let history = document.history_counts().0;
+                let view = scene(&document);
+                let point = screen_point(handle, &view);
+                let mut controls = PrimitiveControls::default();
+                assert!(controls.can_drag(&document, &view, point));
+                assert!(
+                    controls
+                        .hit(&document, &view, point)
+                        .is_some_and(|h| h.control == handle.control)
+                );
+                controls.update(&mut document, &view, Some(point), true);
+                for step in 1..=6 {
+                    controls.update(
+                        &mut document,
+                        &view,
+                        Some(point + Vec2::new(step as f32 * 4., 0.)),
+                        true,
+                    );
+                }
+                controls.update(&mut document, &view, None, false);
+                let mut expected = params.clone();
+                let (_, max) = control.limits(&params);
+                control.set(&mut expected, (control.value(&params) + 2).min(max));
+                assert_eq!(
+                    document.primitive(),
+                    Some(&expected),
+                    "{} {}",
+                    kind.label(),
+                    handle.label
+                );
+                assert_eq!(document.history_counts().0, history + 1);
+                document.mesh_settings().validate(document.mesh()).unwrap();
+                document.undo();
+                assert_eq!(document.geometry_snapshot(), before);
+            }
+        }
+    }
+    #[test]
+    fn spans_accumulate_small_drags_reverse_and_clamp_without_empty_undo() {
+        let mut params = Primitive::for_kind(Kind::Plane);
+        params.divisions = [2; 3];
+        let mut document = Document::default();
+        document.initialize_primitive().unwrap();
+        document.update_primitive(params).unwrap();
+        document.end_primitive_edit();
+        let view = scene(&document);
+        let handle = handles(document.primitive().unwrap())
+            .into_iter()
+            .find(|h| h.control == Control::Resolution(Resolution::Spans(0)))
+            .unwrap();
+        let point = screen_point(handle, &view);
+        let mut controls = PrimitiveControls::default();
+        let history = document.history_counts().0;
+        controls.update(&mut document, &view, Some(point), true);
+        controls.update(&mut document, &view, Some(point + Vec2::new(4., 0.)), true);
+        controls.update(&mut document, &view, None, false);
+        assert_eq!(document.history_counts().0, history);
+        controls.update(&mut document, &view, Some(point), true);
+        controls.update(&mut document, &view, Some(point - Vec2::new(24., 0.)), true);
+        assert_eq!(document.primitive().unwrap().divisions[0], 1);
+        controls.update(&mut document, &view, Some(point - Vec2::new(12., 0.)), true);
+        assert_eq!(document.primitive().unwrap().divisions[0], 2);
+        controls.update(
+            &mut document,
+            &view,
+            Some(point + Vec2::new(4000., 0.)),
+            true,
+        );
+        assert_eq!(document.primitive().unwrap().divisions[0], 128);
+        controls.update(&mut document, &view, None, false);
+        assert_eq!(document.history_counts().0, history + 1);
+        document.undo();
+        assert_eq!(document.primitive().unwrap().divisions[0], 2);
     }
     #[test]
     fn mouth_and_eyelid_handles_drag_and_restore_with_undo() {

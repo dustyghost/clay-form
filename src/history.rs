@@ -102,6 +102,7 @@ mod tests {
     fn oldest_snapshots_are_evicted_at_the_limit() {
         let mut history = History::default();
         let mut mesh = Geometry::new(Mesh {
+            quads: Vec::new(),
             vertices: vec![Vec3::default()],
             triangles: vec![],
             mask: vec![0.],

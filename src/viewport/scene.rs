@@ -7,6 +7,8 @@ use crate::{
 use eframe::egui::{self, Color32, Pos2};
 pub(super) struct Scene {
     pub scale: f32,
+    pub(super) rect: egui::Rect,
+    pub(super) active_bounds: egui::Rect,
     positions: Vec<Pos2>,
     vertices: Vec<Vec3>,
     triangles: Vec<[usize; 3]>,
@@ -27,9 +29,12 @@ impl Scene {
         document: &Document,
         camera: &Camera,
         wire: bool,
+        mode: super::WireMode,
+        show_triangles: bool,
     ) -> Self {
         let active = document.active_model_index();
         let mut mesh = Mesh {
+            quads: Vec::new(),
             vertices: Vec::new(),
             triangles: Vec::new(),
             mask: Vec::new(),
@@ -51,6 +56,8 @@ impl Scene {
                     outlines.push([offset + i, offset + (i + 1) % surface.vertices.len()]);
                 }
             }
+            mesh.quads
+                .extend(surface.quads.iter().map(|q| q.map(|i| i + offset)));
             mesh.vertices.extend_from_slice(&surface.vertices);
             mesh.mask.extend_from_slice(&surface.mask);
             mesh.triangles
@@ -113,30 +120,153 @@ impl Scene {
                 ),
             );
         }
-        for &(i, _) in &faces {
-            for &v in &mesh.triangles[i] {
-                rendered.indices.push(v as u32);
+        use super::WireMode;
+        let edge_key = |a: usize, b: usize| if a < b { (a, b) } else { (b, a) };
+        let mut hidden = std::collections::HashSet::new();
+        if !show_triangles {
+            for &[a, b, c, d] in &mesh.quads {
+                hidden.insert(edge_key(a, c));
+                hidden.insert(edge_key(b, d));
             }
         }
-        painter.add(egui::Shape::mesh(rendered));
+        // A viewport-sized depth buffer also handles intersecting submodels and
+        // partial edge occlusion, independently of the surface painter order.
+        let width = rect.width().ceil().max(1.) as usize;
+        let height = rect.height().ceil().max(1.) as usize;
+        let mut depth = Vec::new();
+        if wire && mode == WireMode::Visible {
+            depth.resize(width * height, f32::NEG_INFINITY);
+            for &(i, _) in &faces {
+                let t = mesh.triangles[i];
+                let p = t.map(|v| positions[v] - rect.min);
+                let z = t.map(|v| mesh.vertices[v].dot(view));
+                let det =
+                    (p[1].x - p[0].x) * (p[2].y - p[0].y) - (p[1].y - p[0].y) * (p[2].x - p[0].x);
+                if det.abs() < 1e-7 {
+                    continue;
+                }
+                let min_x = p
+                    .iter()
+                    .map(|p| p.x)
+                    .fold(f32::INFINITY, f32::min)
+                    .floor()
+                    .max(0.) as usize;
+                let max_x = (p
+                    .iter()
+                    .map(|p| p.x)
+                    .fold(f32::NEG_INFINITY, f32::max)
+                    .ceil()
+                    .max(0.) as usize)
+                    .min(width - 1);
+                let min_y = p
+                    .iter()
+                    .map(|p| p.y)
+                    .fold(f32::INFINITY, f32::min)
+                    .floor()
+                    .max(0.) as usize;
+                let max_y = (p
+                    .iter()
+                    .map(|p| p.y)
+                    .fold(f32::NEG_INFINITY, f32::max)
+                    .ceil()
+                    .max(0.) as usize)
+                    .min(height - 1);
+                for y in min_y..=max_y {
+                    for x in min_x..=max_x {
+                        let dx = x as f32 + 0.5 - p[0].x;
+                        let dy = y as f32 + 0.5 - p[0].y;
+                        let u = (dx * (p[2].y - p[0].y) - dy * (p[2].x - p[0].x)) / det;
+                        let v = ((p[1].x - p[0].x) * dy - (p[1].y - p[0].y) * dx) / det;
+                        if u >= 0. && v >= 0. && u + v <= 1. {
+                            let d = z[0] * (1. - u - v) + z[1] * u + z[2] * v;
+                            depth[y * width + x] = depth[y * width + x].max(d);
+                        }
+                    }
+                }
+            }
+        }
+        let mut seen_edges = std::collections::HashSet::new();
+        let mut draw_edges = |i: usize| {
+            let t = mesh.triangles[i];
+            for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
+                if !hidden.contains(&edge_key(a, b)) && seen_edges.insert(edge_key(a, b)) {
+                    let stroke = egui::Stroke::new(
+                        0.7,
+                        if mode == WireMode::Transparent {
+                            Color32::from_rgb(170, 185, 200)
+                        } else {
+                            Color32::from_black_alpha(110)
+                        },
+                    );
+                    if depth.is_empty() {
+                        painter.line_segment([positions[a], positions[b]], stroke);
+                    } else {
+                        let pa = positions[a];
+                        let pb = positions[b];
+                        let za = mesh.vertices[a].dot(view);
+                        let zb = mesh.vertices[b].dot(view);
+                        let steps = (pb - pa).length().ceil().max(1.) as usize;
+                        let mut start = None;
+                        for step in 0..=steps {
+                            let t = step as f32 / steps as f32;
+                            let p = pa + (pb - pa) * t;
+                            let x = (p.x - rect.min.x).floor() as isize;
+                            let y = (p.y - rect.min.y).floor() as isize;
+                            let visible = x >= 0
+                                && y >= 0
+                                && (x as usize) < width
+                                && (y as usize) < height
+                                && za * (1. - t) + zb * t + 2. / scale
+                                    >= depth[y as usize * width + x as usize];
+                            if visible {
+                                if start.is_none() {
+                                    start = Some(p);
+                                }
+                            } else if let Some(from) = start.take() {
+                                painter.line_segment([from, p], stroke);
+                            }
+                            if step == steps
+                                && let Some(from) = start.take()
+                            {
+                                painter.line_segment([from, p], stroke);
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        if !wire || mode != WireMode::Transparent {
+            for &(i, _) in &faces {
+                rendered.indices.extend(mesh.triangles[i].map(|v| v as u32));
+            }
+            painter.add(egui::Shape::mesh(rendered));
+        }
+        if wire {
+            if mode == WireMode::Transparent {
+                for i in 0..mesh.triangles.len() {
+                    draw_edges(i);
+                }
+            } else {
+                for &(i, _) in &faces {
+                    draw_edges(i);
+                }
+            }
+        }
         for edge in outlines {
             painter.line_segment(
                 edge.map(|i| positions[i]),
                 egui::Stroke::new(2., Color32::from_rgb(190, 155, 125)),
             );
         }
-        if wire {
-            for &(i, _) in &faces {
-                let t = mesh.triangles[i];
-                for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
-                    painter.line_segment(
-                        [positions[a], positions[b]],
-                        egui::Stroke::new(0.3_f32, Color32::from_black_alpha(55)),
-                    );
-                }
-            }
-        }
+        let active_bounds = positions
+            .iter()
+            .take(active_vertices)
+            .fold(egui::Rect::NOTHING, |bounds, &p| {
+                bounds.union(egui::Rect::from_min_max(p, p))
+            });
         Self {
+            rect,
+            active_bounds,
             scale,
             positions,
             vertices: mesh.vertices.clone(),
@@ -223,6 +353,83 @@ fn pick_surface(
 mod tests {
     use super::*;
     use crate::sculpt::{Transform, Vec3};
+    fn wire_shapes(
+        document: &Document,
+        mode: super::super::WireMode,
+        triangles: bool,
+    ) -> Vec<egui::epaint::ClippedShape> {
+        let context = egui::Context::default();
+        context
+            .run(egui::RawInput::default(), |ctx| {
+                Scene::paint(
+                    &ctx.layer_painter(egui::LayerId::background()),
+                    egui::Rect::from_min_size(Pos2::ZERO, egui::Vec2::splat(800.)),
+                    document,
+                    &Camera::default(),
+                    true,
+                    mode,
+                    triangles,
+                );
+            })
+            .shapes
+    }
+    fn line_count(shapes: &[egui::epaint::ClippedShape]) -> usize {
+        shapes
+            .iter()
+            .filter(|s| matches!(s.shape, egui::Shape::LineSegment { .. }))
+            .count()
+    }
+    #[test]
+    fn wire_modes_hide_occluded_edges_and_transparency_removes_surfaces() {
+        use super::super::WireMode;
+        use crate::sculpt::{Geometry, Primitive, PrimitiveKind};
+        let mut p = Primitive::for_kind(PrimitiveKind::Plane);
+        p.divisions = [1; 3];
+        let mut document = Document::default();
+        document
+            .replace_geometry(Geometry::new(p.mesh().unwrap()))
+            .unwrap();
+        assert_eq!(
+            line_count(&wire_shapes(&document, WireMode::Front, false)),
+            4
+        );
+        assert_eq!(
+            line_count(&wire_shapes(&document, WireMode::Front, true)),
+            5
+        );
+        document.duplicate_model(false).unwrap();
+        document
+            .apply_transform(
+                Transform {
+                    translation: Vec3(0., 0., 2.),
+                    scale: Vec3(1.2, 1.2, 1.2),
+                    ..Default::default()
+                },
+                false,
+            )
+            .unwrap();
+        document.end_stroke();
+        let front = wire_shapes(&document, WireMode::Front, false);
+        let visible = wire_shapes(&document, WireMode::Visible, false);
+        assert_eq!(line_count(&front), 8);
+        assert_eq!(line_count(&visible), 4);
+        let transparent = wire_shapes(&document, WireMode::Transparent, false);
+        assert_eq!(line_count(&transparent), 8);
+        assert!(
+            !transparent
+                .iter()
+                .any(|s| matches!(s.shape, egui::Shape::Mesh(_)))
+        );
+        let mut cube = Primitive::for_kind(PrimitiveKind::Cube);
+        cube.divisions = [1; 3];
+        document
+            .replace_geometry(Geometry::new(cube.mesh().unwrap()))
+            .unwrap();
+        assert!(
+            line_count(&wire_shapes(&document, WireMode::Transparent, false))
+                > line_count(&wire_shapes(&document, WireMode::Front, false))
+        );
+    }
     fn scene(document: &Document) -> Scene {
         let context = egui::Context::default();
         let mut scene = None;
@@ -233,6 +440,8 @@ mod tests {
                 egui::Rect::from_min_size(Pos2::ZERO, egui::Vec2::splat(800.)),
                 document,
                 &Camera::default(),
+                false,
+                super::super::WireMode::Visible,
                 false,
             ));
         });

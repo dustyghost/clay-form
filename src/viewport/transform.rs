@@ -1,5 +1,5 @@
 //! World-axis handles and a user-positioned Action Line.
-use super::scene::Scene;
+use super::{controls, scene::Scene};
 use crate::{
     document::Document,
     sculpt::{Transform, Vec3},
@@ -19,7 +19,7 @@ pub(crate) enum TransformOperation {
     Scale,
     PlaceLine,
 }
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 enum Handle {
     Axis(Vec3, Vec2),
     Free,
@@ -66,7 +66,7 @@ impl TransformControls {
                 } else {
                     Handle::Free
                 },
-                Color32::WHITE,
+                controls::NEUTRAL,
                 if op == TransformOperation::Scale {
                     "ALL"
                 } else {
@@ -74,9 +74,9 @@ impl TransformControls {
                 },
             )];
             for (axis, color, label) in [
-                (Vec3(1., 0., 0.), Color32::from_rgb(245, 105, 110), "X"),
-                (Vec3(0., 1., 0.), Color32::from_rgb(120, 225, 145), "Y"),
-                (Vec3(0., 0., 1.), Color32::from_rgb(110, 165, 250), "Z"),
+                (Vec3(1., 0., 0.), controls::AXES[0], "X"),
+                (Vec3(0., 1., 0.), controls::AXES[1], "Y"),
+                (Vec3(0., 0., 1.), controls::AXES[2], "Z"),
             ] {
                 let projected = Vec2::new(axis.dot(scene.right), -axis.dot(scene.up));
                 if projected.length() > 0.1 {
@@ -96,26 +96,26 @@ impl TransformControls {
             let projected = Vec2::new(direction.dot(scene.right), -direction.dot(scene.up));
             match op {
                 TransformOperation::PlaceLine => vec![
-                    (start, Handle::LineStart, Color32::GOLD, "START"),
-                    (end, Handle::LineEnd, Color32::GOLD, "END"),
+                    (start, Handle::LineStart, controls::ACTION, "START"),
+                    (end, Handle::LineEnd, controls::ACTION, "END"),
                 ],
                 TransformOperation::Move => vec![(
                     start + (end - start) * 0.5,
                     Handle::LineMove,
-                    Color32::GOLD,
+                    controls::ACTION,
                     "MOVE",
                 )],
                 TransformOperation::Scale => vec![
                     (
                         end,
                         Handle::LineScale(direction, projected),
-                        Color32::GOLD,
+                        controls::ACTION,
                         "STRETCH",
                     ),
                     (
                         start + (end - start) * 0.5,
                         Handle::Uniform,
-                        Color32::WHITE,
+                        controls::NEUTRAL,
                         "ALL",
                     ),
                 ],
@@ -134,7 +134,7 @@ impl TransformControls {
     ) -> Option<Handle> {
         self.handles(document, scene, mode, op)
             .into_iter()
-            .find(|(p, _, _, _)| p.distance(pointer) <= 15.)
+            .find(|(p, _, _, _)| p.distance(pointer) <= controls::HIT_RADIUS)
             .map(|(_, h, _, _)| h)
     }
     pub fn can_drag(
@@ -273,29 +273,37 @@ impl TransformControls {
         {
             painter.line_segment(
                 line.map(|p| scene.project(p)),
-                egui::Stroke::new(3_f32, Color32::GOLD),
+                egui::Stroke::new(3., controls::ACTION),
             );
         }
-        for (point, _, color, label) in self.handles(document, scene, mode, op) {
+        let pointer = painter.ctx().pointer_hover_pos();
+        let hovered = pointer.and_then(|p| self.hit(document, scene, mode, op, p));
+        for (point, handle, color, label) in self.handles(document, scene, mode, op) {
             if mode == TransformMode::World {
-                painter.line_segment([origin, point], egui::Stroke::new(2.5_f32, color));
+                painter.line_segment([origin, point], egui::Stroke::new(2., color));
             }
-            if op == TransformOperation::Scale {
-                painter.rect_filled(
-                    egui::Rect::from_center_size(point, Vec2::splat(12.)),
-                    2.,
-                    color,
-                );
+            let highlighted =
+                self.drag.is_some_and(|h| h == handle) || hovered.is_some_and(|h| h == handle);
+            let marker = if op == TransformOperation::Scale {
+                controls::Marker::Square
             } else {
-                painter.circle_filled(point, 6., color);
-            }
-            painter.text(
-                point + Vec2::new(9., -9.),
-                egui::Align2::LEFT_BOTTOM,
-                label,
-                egui::FontId::proportional(12.),
-                color,
-            );
+                controls::Marker::Circle
+            };
+            controls::marker(painter, point, marker, color, highlighted);
+            let caption = if mode == TransformMode::World && matches!(handle, Handle::Axis(..)) {
+                format!(
+                    "{} {}",
+                    if op == TransformOperation::Scale {
+                        "Scale"
+                    } else {
+                        "Move"
+                    },
+                    label
+                )
+            } else {
+                label.to_owned()
+            };
+            controls::label(painter, point + Vec2::new(12., -20.), &caption, color);
         }
     }
 }

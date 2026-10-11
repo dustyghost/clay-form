@@ -47,7 +47,42 @@ pub fn load_brush(path: &str) -> Result<Brush, String> {
 }
 pub fn save_brush(path: &str, brush: &Brush) -> Result<(), String> {
     validate_brush(brush)?;
-    write_json(path, brush)
+    let mut brush = brush.clone();
+    brush.ensure_identity();
+    write_json(path, &brush)
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct BrushLibrary {
+    pub version: u32,
+    pub brushes: Vec<Brush>,
+}
+impl BrushLibrary {
+    fn validate(&self) -> Result<(), String> {
+        if self.version != 1 || self.brushes.len() > 256 {
+            return Err("Invalid brush library version or size".into());
+        }
+        for brush in &self.brushes {
+            validate_brush(brush)?;
+        }
+        Ok(())
+    }
+}
+pub fn save_brush_library(path: &str, brushes: &[Brush]) -> Result<(), String> {
+    let mut brushes = brushes.to_vec();
+    for b in &mut brushes {
+        b.ensure_identity();
+    }
+    let library = BrushLibrary {
+        version: 1,
+        brushes,
+    };
+    library.validate()?;
+    write_json(path, &library)
+}
+pub fn load_brush_library(path: &str) -> Result<Vec<Brush>, String> {
+    let library: BrushLibrary = read_json(path)?;
+    library.validate()?;
+    Ok(library.brushes)
 }
 pub fn load_alpha(path: &str) -> Result<Alpha, String> {
     let reader = image::ImageReader::open(path).map_err(|e| e.to_string())?;
@@ -71,11 +106,26 @@ pub fn load_alpha(path: &str) -> Result<Alpha, String> {
     })
 }
 pub fn export_obj(path: &str, mesh: &Mesh) -> Result<(), String> {
+    mesh.validate()?;
     let mut text = String::from("# Clay Form mesh\n");
     for v in &mesh.vertices {
         text.push_str(&format!("v {} {} {}\n", v.0, v.1, v.2));
     }
+    let key = |mut t: [usize; 3]| {
+        t.sort_unstable();
+        t
+    };
+    let mut quad_triangles = std::collections::HashSet::new();
+    for &[a, b, c, d] in &mesh.quads {
+        text.push_str(&format!("f {} {} {} {}\n", a + 1, b + 1, c + 1, d + 1));
+        for t in [[a, b, c], [a, c, d], [a, b, d], [b, c, d]] {
+            quad_triangles.insert(key(t));
+        }
+    }
     for &[a, b, c] in &mesh.triangles {
+        if quad_triangles.contains(&key([a, b, c])) {
+            continue;
+        }
         text.push_str(&format!("f {} {} {}\n", a + 1, b + 1, c + 1));
     }
     std::fs::write(path, text).map_err(|e| e.to_string())
@@ -199,7 +249,7 @@ mod mesh_storage_tests {
         let text = std::fs::read_to_string(obj).unwrap();
         assert_eq!(
             text.lines().filter(|l| l.starts_with("f ")).count(),
-            loaded.mesh.triangles.len()
+            loaded.mesh.triangles.len() - loaded.mesh.quads.len()
         );
         assert_eq!(
             text.lines().filter(|l| l.starts_with("v ")).count(),
@@ -256,6 +306,40 @@ mod adaptive_storage_tests {
         let path = dir.join("snake.brush.json");
         save_brush(path.to_str().unwrap(), &snake).unwrap();
         assert!(load_brush(path.to_str().unwrap()).unwrap() == snake);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod brush_library_tests {
+    use super::*;
+    #[test]
+    fn brush_library_and_icon_roundtrip_with_compact_png() {
+        let dir = std::env::temp_dir().join(format!("clay-brush-library-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut brush = Brush::new(crate::sculpt::Kind::Standard);
+        brush.icon = Some(
+            crate::brush_icon::capture(
+                crate::document::Document::default().mesh(),
+                &crate::camera::Camera::default(),
+            )
+            .unwrap(),
+        );
+        let encoded = serde_json::to_vec(&brush).unwrap();
+        assert!(encoded.len() < 100_000);
+        assert!(serde_json::from_slice::<Brush>(&encoded).unwrap() == brush);
+        let preset = dir.join("icon.brush.json");
+        save_brush(preset.to_str().unwrap(), &brush).unwrap();
+        assert!(load_brush(preset.to_str().unwrap()).unwrap() == brush);
+        let library = dir.join("library.brushes.json");
+        save_brush_library(library.to_str().unwrap(), &[brush.clone()]).unwrap();
+        assert!(load_brush_library(library.to_str().unwrap()).unwrap() == vec![brush.clone()]);
+        let mut value = serde_json::to_value(&brush).unwrap();
+        value["icon"]["size"] = serde_json::json!(64);
+        assert!(serde_json::from_value::<Brush>(value).is_err());
+        let mut value = serde_json::to_value(&brush).unwrap();
+        value["icon"]["png"] = serde_json::json!([1, 2, 3]);
+        assert!(serde_json::from_value::<Brush>(value).is_err());
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

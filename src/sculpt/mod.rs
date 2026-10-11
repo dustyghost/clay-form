@@ -9,7 +9,7 @@ mod subdivision;
 mod symmetry;
 pub use adaptive::AdaptiveSettings;
 pub(crate) use adaptive::Budget as AdaptiveBudget;
-pub use brush::{Alpha, Brush, Kind, validate_brush};
+pub use brush::{Alpha, Brush, BrushIcon, Kind, validate_brush};
 pub use math::Vec3;
 pub use mesh::{Dab, Mesh};
 pub use project::{ModelMetadata, Project, SceneSettings, Submodel};

@@ -942,6 +942,7 @@ fn transform_button_activates_floating_controls_with_one_click() {
     let mut app = App::default();
     let ctx = egui::Context::default();
     let before = app.document.geometry_snapshot();
+    frame(&mut app, &ctx, vec![]); // Let the taller toolbar settle its panel height.
     let output = frame(&mut app, &ctx, vec![]);
     let point = output
         .shapes
@@ -1147,4 +1148,75 @@ fn viewport_face_pose_panel_opens_the_jaw_with_one_click_and_undo_restores_it() 
     assert!(app.viewport.gesture.is_none());
     app.document.undo();
     assert_eq!(app.document.geometry_snapshot(), before);
+}
+
+#[test]
+fn brush_icon_capture_preview_cancel_and_assignment() {
+    fn frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) -> egui::FullOutput {
+        ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    Pos2::ZERO,
+                    Vec2::new(1000., 800.),
+                )),
+                events,
+                ..Default::default()
+            },
+            |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+                if let Some(command) = app.ui.icon_capture_popup(ctx, &app.document) {
+                    app.dispatch(command, ctx);
+                }
+            },
+        )
+    }
+    fn button(output: egui::FullOutput, label: &str) -> Pos2 {
+        output
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.text() == label => {
+                    Some(text.pos + text.galley.size() * 0.5)
+                }
+                _ => None,
+            })
+            .expect("capture action is visible")
+    }
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let before = app.document.geometry_snapshot();
+    app.document.mark_saved("test.clay");
+    app.dispatch(Command::CaptureBrushIcon(0), &ctx);
+    assert!(app.ui.icon_capture_open());
+    frame(&mut app, &ctx, vec![]);
+    let cancel = button(frame(&mut app, &ctx, vec![]), "Cancel");
+    frame(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(cancel),
+            primary_event(cancel, true),
+        ],
+    );
+    frame(&mut app, &ctx, vec![primary_event(cancel, false)]);
+    assert!(!app.ui.icon_capture_open());
+    assert!(!app.document.is_dirty());
+    assert!(app.document.brushes()[0].icon.is_none());
+    app.dispatch(Command::CaptureBrushIcon(0), &ctx);
+    frame(&mut app, &ctx, vec![]);
+    let assign = button(frame(&mut app, &ctx, vec![]), "Use as brush icon");
+    frame(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(assign),
+            primary_event(assign, true),
+        ],
+    );
+    frame(&mut app, &ctx, vec![primary_event(assign, false)]);
+    assert!(!app.ui.icon_capture_open());
+    assert!(app.document.brushes()[0].icon.is_some());
+    assert!(app.document.is_dirty());
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert!(!app.document.can_undo());
 }

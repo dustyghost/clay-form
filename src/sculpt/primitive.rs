@@ -118,6 +118,7 @@ pub struct Primitive {
     pub top_radius: f32,
     pub tube_radius: f32,
     pub filled: bool,
+    pub triangulated: bool,
     pub head: HeadOptions,
     pub center: Vec3,
     /// Affine placement preserves world/Action Line edits when regenerating.
@@ -136,6 +137,7 @@ impl Default for Primitive {
             top_radius: 0.,
             tube_radius: 0.25,
             filled: true,
+            triangulated: false,
             head: HeadOptions::default(),
             center: Vec3::default(),
             basis: [Vec3(1., 0., 0.), Vec3(0., 1., 0.), Vec3(0., 0., 1.)],
@@ -295,12 +297,16 @@ impl Primitive {
             );
             *vertex = self.center + self.basis[0] * p.0 + self.basis[1] * p.1 + self.basis[2] * p.2;
         }
+        if self.triangulated {
+            mesh.quads.clear();
+        }
         mesh.validate()?;
         Ok(mesh)
     }
 }
 fn empty() -> Mesh {
     Mesh {
+        quads: Vec::new(),
         vertices: vec![],
         triangles: vec![],
         mask: vec![],
@@ -321,6 +327,15 @@ fn triangle(mesh: &mut Mesh, mut indices: [usize; 3], normal: Vec3) {
 }
 fn quad(mesh: &mut Mesh, indices: [usize; 4], normal: Vec3) {
     let [a, b, c, d] = indices;
+    let mut polygon = indices;
+    if (mesh.vertices[b] - mesh.vertices[a])
+        .cross(mesh.vertices[c] - mesh.vertices[a])
+        .dot(normal)
+        < 0.
+    {
+        polygon.swap(1, 3);
+    }
+    mesh.quads.push(polygon);
     triangle(mesh, [a, b, c], normal);
     triangle(mesh, [a, c, d], normal);
 }
@@ -424,6 +439,7 @@ fn uv_sphere(segments: u32, rings: u32) -> Mesh {
         for j in 0..r - 2 {
             let a = 1 + j * n + i;
             let b = 1 + j * n + (i + 1) % n;
+            mesh.quads.push([a, b, b + n, a + n]);
             mesh.triangles.extend([[a, b, a + n], [b, b + n, a + n]]);
         }
         mesh.triangles
@@ -609,6 +625,7 @@ fn attach_neck(mesh: &mut Mesh, h: &HeadOptions, n: u32) {
     mesh.vertices.truncate(keep);
     mesh.mask.truncate(keep);
     mesh.triangles.retain(|f| f.iter().all(|i| *i < keep));
+    mesh.quads.retain(|f| f.iter().all(|i| *i < keep));
     let boundary = 1 + cut * n;
     let length = 0.40 + h.neck_length * 0.32;
     let width = 0.44 + h.neck_width * 0.16;
@@ -646,6 +663,8 @@ fn attach_neck(mesh: &mut Mesh, h: &HeadOptions, n: u32) {
         let current = keep + j * n;
         for i in 0..n {
             let next = (i + 1) % n;
+            mesh.quads
+                .push([previous + i, previous + next, current + next, current + i]);
             mesh.triangles.extend([
                 [previous + i, previous + next, current + i],
                 [previous + next, current + next, current + i],
@@ -686,11 +705,16 @@ fn append_ears(mesh: &mut Mesh, h: &HeadOptions, n: u32, r: u32) {
             );
         }
         if sign < 0. {
+            for q in &mut part.quads {
+                q.swap(1, 3);
+            }
             for f in &mut part.triangles {
                 f.swap(1, 2);
             }
         }
         let offset = mesh.vertices.len();
+        mesh.quads
+            .extend(part.quads.into_iter().map(|f| f.map(|i| i + offset)));
         mesh.vertices.extend(part.vertices);
         mesh.mask.extend(part.mask);
         mesh.triangles
@@ -1101,6 +1125,8 @@ fn append_ellipsoid(
         *v = center + Vec3(shape.0 * size.0, shape.1 * size.1, shape.2 * size.2);
     }
     let offset = mesh.vertices.len();
+    mesh.quads
+        .extend(part.quads.into_iter().map(|f| f.map(|i| i + offset)));
     mesh.vertices.extend(part.vertices);
     mesh.mask.extend(part.mask);
     mesh.triangles

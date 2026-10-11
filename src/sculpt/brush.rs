@@ -12,9 +12,10 @@ pub enum Kind {
     Grab,
     Mask,
     Snake,
+    Detail,
 }
 impl Kind {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::Standard,
         Self::Clay,
         Self::Inflate,
@@ -25,6 +26,7 @@ impl Kind {
         Self::Grab,
         Self::Mask,
         Self::Snake,
+        Self::Detail,
     ];
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -60,8 +62,138 @@ impl PartialEq for Alpha {
         }
     }
 }
+#[derive(Clone, Debug, PartialEq)]
+pub struct BrushIcon {
+    pub size: usize,
+    pub rgba: Arc<[u8]>,
+}
+impl BrushIcon {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.size == 0 || self.size > 256 || self.rgba.len() != self.size * self.size * 4 {
+            return Err("Invalid brush icon (maximum 256 × 256)".into());
+        }
+        Ok(())
+    }
+}
+#[derive(Serialize, Deserialize)]
+struct IconFile {
+    size: usize,
+    png: Vec<u8>,
+}
+impl Serialize for BrushIcon {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use image::ImageEncoder;
+        self.validate().map_err(serde::ser::Error::custom)?;
+        let mut png = Vec::new();
+        image::codecs::png::PngEncoder::new_with_quality(
+            &mut png,
+            image::codecs::png::CompressionType::Best,
+            image::codecs::png::FilterType::Adaptive,
+        )
+        .write_image(
+            &self.rgba,
+            self.size as u32,
+            self.size as u32,
+            image::ExtendedColorType::Rgba8,
+        )
+        .map_err(serde::ser::Error::custom)?;
+        IconFile {
+            size: self.size,
+            png,
+        }
+        .serialize(serializer)
+    }
+}
+impl<'de> Deserialize<'de> for BrushIcon {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let file = IconFile::deserialize(deserializer)?;
+        if file.size == 0 || file.size > 256 || file.png.len() > 1024 * 1024 {
+            return Err(serde::de::Error::custom(
+                "Invalid brush icon dimensions or data",
+            ));
+        }
+        let mut reader = image::ImageReader::with_format(
+            std::io::Cursor::new(file.png),
+            image::ImageFormat::Png,
+        );
+        let mut limits = image::Limits::default();
+        limits.max_image_width = Some(256);
+        limits.max_image_height = Some(256);
+        reader.limits(limits);
+        let image = reader
+            .decode()
+            .map_err(serde::de::Error::custom)?
+            .to_rgba8();
+        if image.width() != file.size as u32 || image.height() != file.size as u32 {
+            return Err(serde::de::Error::custom(
+                "Brush icon size does not match image",
+            ));
+        }
+        Ok(Self {
+            size: file.size,
+            rgba: image.into_raw().into(),
+        })
+    }
+}
+fn guid(bytes: [u8; 16]) -> String {
+    let h = bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
+    format!(
+        "{}-{}-{}-{}-{}",
+        &h[..8],
+        &h[8..12],
+        &h[12..16],
+        &h[16..20],
+        &h[20..]
+    )
+}
+fn content_guid(data: &[u8]) -> String {
+    let mut a = 0xcbf29ce484222325u64;
+    let mut b = 0x84222325cbf29ce4u64;
+    for &v in data {
+        a = (a ^ v as u64).wrapping_mul(0x100000001b3);
+        b = (b ^ (v as u64 + 1)).wrapping_mul(0x100000001b3);
+    }
+    let mut bytes = [0; 16];
+    bytes[..8].copy_from_slice(&a.to_le_bytes());
+    bytes[8..].copy_from_slice(&b.to_le_bytes());
+    bytes[6] = (bytes[6] & 15) | 0x80;
+    bytes[8] = (bytes[8] & 63) | 0x80;
+    guid(bytes)
+}
+pub(crate) fn fresh_brush_id() -> String {
+    use std::{
+        hash::{BuildHasher, Hasher},
+        io::Read,
+        sync::atomic::{AtomicU64, Ordering},
+    };
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let mut bytes = [0; 16];
+    if std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| f.read_exact(&mut bytes))
+        .is_err()
+    {
+        for chunk in bytes.chunks_mut(8) {
+            let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+            h.write_u64(COUNTER.fetch_add(1, Ordering::Relaxed));
+            h.write_u128(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos(),
+            );
+            chunk.copy_from_slice(&h.finish().to_le_bytes());
+        }
+    }
+    bytes[6] = (bytes[6] & 15) | 0x40;
+    bytes[8] = (bytes[8] & 63) | 0x80;
+    guid(bytes)
+}
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Brush {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<BrushIcon>,
     pub name: String,
     pub kind: Kind,
     pub alpha: Alpha,
@@ -78,19 +210,44 @@ pub struct Brush {
 impl Brush {
     pub fn new(kind: Kind) -> Self {
         Self {
+            id: Some(content_guid(
+                format!("clay-form/default-brush/{kind:?}").as_bytes(),
+            )),
+            icon: None,
             name: format!("{kind:?}"),
             kind,
             alpha: Alpha::Soft,
             radius: 60.,
-            strength: if kind == Kind::Snake { 1. } else { 0.25 },
+            strength: match kind {
+                Kind::Snake => 1.,
+                Kind::Detail => 0.35,
+                _ => 0.25,
+            },
             falloff: 1.5,
-            spacing: 0.15,
+            spacing: if kind == Kind::Detail { 0.08 } else { 0.15 },
             rotation: 0.,
             subtract: false,
             pressure: true,
             pressure_radius: false,
             pressure_curve: 1.,
         }
+    }
+    pub fn identity(&self) -> String {
+        if let Some(id) = &self.id {
+            return id.to_ascii_lowercase();
+        }
+        let mut default = Self::new(self.kind);
+        let id = default.id.take().unwrap();
+        if *self == default {
+            return id;
+        }
+        content_guid(&serde_json::to_vec(self).expect("brush serialization"))
+    }
+    pub fn ensure_identity(&mut self) {
+        self.id = Some(self.identity());
+    }
+    pub(crate) fn renew_identity(&mut self) {
+        self.id = Some(fresh_brush_id());
     }
     pub(crate) fn snake_weight(&self, dab: super::Dab, offset: super::Vec3) -> f32 {
         let r = offset.len() / dab.radius;
@@ -164,6 +321,21 @@ pub fn validate_brush(b: &Brush) -> Result<(), String> {
         || !(0.1..=4.).contains(&b.pressure_curve)
     {
         return Err("Invalid brush settings".into());
+    }
+    if let Some(id) = &b.id
+        && (id.len() != 36
+            || id.bytes().enumerate().any(|(i, c)| {
+                if [8, 13, 18, 23].contains(&i) {
+                    c != b'-'
+                } else {
+                    !c.is_ascii_hexdigit()
+                }
+            }))
+    {
+        return Err("Invalid brush identity".into());
+    }
+    if let Some(icon) = &b.icon {
+        icon.validate()?;
     }
     if let Alpha::Image {
         width,

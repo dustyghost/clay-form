@@ -1,5 +1,6 @@
 //! Clay Form: a UI-independent sculpt document with desktop input/rendering adapters.
 mod app;
+mod brush_icon;
 pub mod camera;
 mod command;
 pub mod document;

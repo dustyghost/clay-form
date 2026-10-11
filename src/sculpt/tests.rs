@@ -226,3 +226,73 @@ fn check_long_snake_drag(curved: bool) {
     // Allow a small transition band of thin faces at the original surface.
     assert!(poor * 50 < local, "{poor}/{local} stretched triangles");
 }
+
+#[test]
+fn detail_carves_sharp_center_raised_shoulders_and_inverts_depth() {
+    let mut plane = Mesh {
+        quads: Vec::new(),
+        vertices: vec![],
+        triangles: vec![],
+        mask: vec![0.; 41 * 41],
+    };
+    for y in 0..41 {
+        for x in 0..41 {
+            plane
+                .vertices
+                .push(Vec3(x as f32 / 20. - 1., y as f32 / 20. - 1., 0.));
+        }
+    }
+    for y in 0..40 {
+        for x in 0..40 {
+            let a = y * 41 + x;
+            plane
+                .triangles
+                .extend([[a, a + 1, a + 41], [a + 1, a + 42, a + 41]]);
+        }
+    }
+    let brush = Brush::new(Kind::Detail);
+    let dab = Dab {
+        center: Vec3::default(),
+        normal: Vec3(0., 0., 1.),
+        right: Vec3(1., 0., 0.),
+        up: Vec3(0., 1., 0.),
+        radius: 1.,
+        pressure: 1.,
+        delta: Vec3::default(),
+        invert: false,
+    };
+    let center = 20 * 41 + 20;
+    let shoulder = center + 8;
+    let original = plane.clone();
+    assert!(plane.stamp_many(&brush, &[dab]));
+    assert!(plane.vertices[center].2 < -0.05);
+    assert!(plane.vertices[shoulder].2 > 0.005);
+    assert!(plane.vertices[shoulder].0 < original.vertices[shoulder].0);
+    assert_eq!(plane.vertices[0], original.vertices[0]);
+    let mut inverse = original.clone();
+    inverse.stamp(
+        &brush,
+        Dab {
+            invert: true,
+            ..dab
+        },
+    );
+    assert!((inverse.vertices[center].2 + plane.vertices[center].2).abs() < 1e-6);
+    assert!((inverse.vertices[shoulder].2 + plane.vertices[shoulder].2).abs() < 1e-6);
+    assert_eq!(inverse.vertices[shoulder].0, plane.vertices[shoulder].0);
+    let mut protected = original.clone();
+    protected.mask[center] = 1.;
+    protected.stamp(&brush, dab);
+    assert_eq!(protected.vertices[center], original.vertices[center]);
+    let mut pressure = original;
+    pressure.stamp(
+        &brush,
+        Dab {
+            pressure: 0.5,
+            ..dab
+        },
+    );
+    assert!((pressure.vertices[center].2 - plane.vertices[center].2 * 0.5).abs() < 1e-6);
+    let json = serde_json::to_vec(&brush).unwrap();
+    assert!(serde_json::from_slice::<Brush>(&json).unwrap() == brush);
+}

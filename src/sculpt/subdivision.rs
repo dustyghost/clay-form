@@ -1,4 +1,4 @@
-//! Linear triangle subdivision and a detail-preserving multiresolution stack.
+//! Linear polygon subdivision and a detail-preserving multiresolution stack.
 use super::{AdaptiveSettings, Mesh, Vec3};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -45,18 +45,22 @@ impl MeshSettings {
         self.lower.len() + self.upper.len() + 1
     }
     pub fn validate(&self, mesh: &Mesh) -> Result<(), String> {
-        if let Some(primitive) = &self.primitive {
-            if self.levels() != 1
+        if let Some(primitive) = &self.primitive
+            && (self.levels() != 1
                 || self.dynamic
                 || self.adaptive.enabled
                 || self.auto_remesh
-                || primitive.mesh()? != *mesh
-            {
-                return Err(
-                    "Primitive preview does not match its parameters; convert before sculpting"
-                        .into(),
-                );
-            }
+                || {
+                    let mut expected = primitive.mesh()?;
+                    expected.quads.clear();
+                    let mut actual = mesh.clone();
+                    actual.quads.clear();
+                    expected != actual
+                })
+        {
+            return Err(
+                "Primitive preview does not match its parameters; convert before sculpting".into(),
+            );
         }
         self.adaptive.validate()?;
         if (self.adaptive.enabled && (self.dynamic || self.levels() != 1))
@@ -171,7 +175,7 @@ impl Geometry {
     }
 }
 impl Mesh {
-    /// Split each triangle into four; shared edges share midpoint vertices.
+    /// Split each quad or triangle into four; shared edges share midpoint vertices.
     /// Original vertices retain their indices, which is the multiresolution contract.
     pub fn subdivide(&self) -> Result<Self, String> {
         self.validate()?;
@@ -182,32 +186,69 @@ impl Mesh {
             return Err("Subdivision would exceed the one-million-face limit".into());
         }
         let mut result = Self {
+            quads: Vec::new(),
             vertices: self.vertices.clone(),
             mask: self.mask.clone(),
             triangles: Vec::with_capacity(self.triangles.len() * 4),
         };
+        let key = |mut t: [usize; 3]| {
+            t.sort_unstable();
+            t
+        };
+        let mut polygons = std::collections::HashSet::new();
+        for &[a, b, c, d] in &self.quads {
+            for t in [[a, b, c], [a, c, d], [a, b, d], [b, c, d]] {
+                polygons.insert(key(t));
+            }
+        }
         let mut edges = HashMap::new();
-        for &[a, b, c] in &self.triangles {
-            let mut mids = [0; 3];
-            for (i, (x, y)) in [(a, b), (b, c), (c, a)].into_iter().enumerate() {
+        let midpoint =
+            |result: &mut Mesh, edges: &mut HashMap<(usize, usize), usize>, x: usize, y: usize| {
                 let edge = if x < y { (x, y) } else { (y, x) };
-                mids[i] = *edges.entry(edge).or_insert_with(|| {
-                    let index = result.vertices.len();
+                *edges.entry(edge).or_insert_with(|| {
+                    let i = result.vertices.len();
                     result
                         .vertices
                         .push((self.vertices[x] + self.vertices[y]) * 0.5);
                     result.mask.push((self.mask[x] + self.mask[y]) * 0.5);
-                    index
-                });
+                    i
+                })
+            };
+        for &[a, b, c] in &self.triangles {
+            if polygons.contains(&key([a, b, c])) {
+                continue;
             }
-            if result.vertices.len() > MAX_VERTICES {
-                return Err("Subdivision would exceed the 500,000-vertex limit".into());
-            }
-            let [ab, bc, ca] = mids;
+            let ab = midpoint(&mut result, &mut edges, a, b);
+            let bc = midpoint(&mut result, &mut edges, b, c);
+            let ca = midpoint(&mut result, &mut edges, c, a);
             result
                 .triangles
                 .extend([[a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]]);
         }
+        for &[a, b, c, d] in &self.quads {
+            let ab = midpoint(&mut result, &mut edges, a, b);
+            let bc = midpoint(&mut result, &mut edges, b, c);
+            let cd = midpoint(&mut result, &mut edges, c, d);
+            let da = midpoint(&mut result, &mut edges, d, a);
+            let center = result.vertices.len();
+            result.vertices.push(
+                (self.vertices[a] + self.vertices[b] + self.vertices[c] + self.vertices[d]) * 0.25,
+            );
+            result
+                .mask
+                .push((self.mask[a] + self.mask[b] + self.mask[c] + self.mask[d]) * 0.25);
+            for q in [
+                [a, ab, center, da],
+                [ab, b, bc, center],
+                [center, bc, c, cd],
+                [da, center, cd, d],
+            ] {
+                result.quads.push(q);
+                let [a, b, c, d] = q;
+                result.triangles.extend([[a, b, c], [a, c, d]]);
+            }
+        }
+        result.validate()?;
         Ok(result)
     }
     pub(crate) fn smooth_remesh(&mut self) {
@@ -234,8 +275,59 @@ impl Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn primitive_quads_survive_subdivision_and_serialization() {
+        use crate::sculpt::{Primitive, PrimitiveKind};
+        for kind in [
+            PrimitiveKind::Cube,
+            PrimitiveKind::Grid,
+            PrimitiveKind::UvSphere,
+            PrimitiveKind::Cylinder,
+            PrimitiveKind::Torus,
+            PrimitiveKind::HumanHead,
+        ] {
+            let mut primitive = Primitive::for_kind(kind);
+            if kind == PrimitiveKind::HumanHead {
+                primitive.segments = 24;
+                primitive.rings = 16;
+            }
+            let mesh = primitive.mesh().unwrap();
+            assert!(!mesh.quads.is_empty());
+            let refined = mesh.subdivide().unwrap();
+            assert_eq!(refined.quads.len(), mesh.quads.len() * 4);
+            assert_eq!(refined.triangles.len(), mesh.triangles.len() * 4);
+            refined.validate().unwrap();
+            let saved = serde_json::to_string(&refined).unwrap();
+            assert_eq!(serde_json::from_str::<Mesh>(&saved).unwrap(), refined);
+            if kind != PrimitiveKind::Grid {
+                refined.validate_closed().unwrap();
+            }
+        }
+    }
+    #[test]
+    fn triangle_primitive_option_and_legacy_meshes_are_supported() {
+        use crate::sculpt::Primitive;
+        let mut p = Primitive {
+            divisions: [1; 3],
+            ..Default::default()
+        };
+        let quad_mesh = p.mesh().unwrap();
+        p.triangulated = true;
+        let triangle_mesh = p.mesh().unwrap();
+        assert!(triangle_mesh.quads.is_empty());
+        assert_eq!(triangle_mesh.triangles, quad_mesh.triangles);
+        let mut legacy = serde_json::to_value(&quad_mesh).unwrap();
+        legacy.as_object_mut().unwrap().remove("quads");
+        let legacy: Mesh = serde_json::from_value(legacy).unwrap();
+        legacy.validate().unwrap();
+        assert!(legacy.quads.is_empty());
+        let mut invalid = quad_mesh;
+        invalid.quads[0][1] = invalid.quads[0][0];
+        assert!(invalid.validate().is_err());
+    }
     fn tetrahedron() -> Mesh {
         Mesh {
+            quads: Vec::new(),
             vertices: vec![
                 Vec3(1., 1., 1.),
                 Vec3(-1., -1., 1.),

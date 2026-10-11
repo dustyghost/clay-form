@@ -79,11 +79,11 @@ impl UiState {
                         if params.kind == Kind::HumanHead {
                             ui.separator();
                             ui.strong("Face pose");
-                            if params.head.anatomy_version < 2 {
-                                if ui.button("Reset head proportions").clicked() {
-                                    params.head = Default::default();
-                                    params.size = Primitive::for_kind(Kind::HumanHead).size;
-                                }
+                            if params.head.anatomy_version < 2
+                                && ui.button("Reset head proportions").clicked()
+                            {
+                                params.head = Default::default();
+                                params.size = Primitive::for_kind(Kind::HumanHead).size;
                             }
                             let h = &mut params.head;
                             ui.add(
@@ -107,6 +107,7 @@ impl UiState {
                                 ui.weak("Lids: 0 = open, 1 = closed.");
                             }
                         }
+                        ui.checkbox(&mut params.triangulated, "Triangle topology");
                         ui.checkbox(&mut self.wire, "Wireframe");
                         ui.weak(format!(
                             "{} vertices · {} triangles",
@@ -250,6 +251,7 @@ impl UiState {
                         ui.weak("Eyes, teeth and tongue are separate surfaces within this submodel. Convert to sculpt their anatomy.");
                     }
                     ui.separator();
+                    ui.checkbox(&mut params.triangulated,"Triangle topology");
                     ui.checkbox(&mut self.wire,"Show wireframe");
                     ui.label(format!("{} vertices · {} triangles",document.mesh().vertices.len(),document.mesh().triangles.len()));
                     if params!=*current {commands.push(Command::UpdatePrimitive(params.clone()));}

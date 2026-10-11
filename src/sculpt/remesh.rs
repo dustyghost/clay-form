@@ -170,6 +170,7 @@ impl Mesh {
             })
             .collect();
         let mut mesh = Mesh {
+            quads: Vec::new(),
             vertices: Vec::new(),
             triangles: Vec::new(),
             mask: Vec::new(),
@@ -293,6 +294,7 @@ mod tests {
     use super::*;
     fn cube(offset: Vec3) -> Mesh {
         Mesh {
+            quads: Vec::new(),
             vertices: vec![
                 Vec3(-1., -1., -1.),
                 Vec3(1., -1., -1.),

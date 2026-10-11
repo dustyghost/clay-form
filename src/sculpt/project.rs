@@ -110,8 +110,14 @@ impl Project {
         if self.brushes.is_empty() || self.brushes.len() > 256 {
             return Err("Invalid brush library".into());
         }
+        let mut identities = std::collections::HashSet::new();
         for brush in &self.brushes {
             validate_brush(brush)?;
+            if let Some(id) = &brush.id
+                && !identities.insert(id.to_ascii_lowercase())
+            {
+                return Err("Duplicate brush identity in project".into());
+            }
         }
         Ok(())
     }
