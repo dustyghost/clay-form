@@ -78,6 +78,9 @@ impl MeshSettings {
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct Geometry {
+    pub scene: super::SceneSettings,
+    pub name: String,
+    pub submodels: Vec<super::project::Submodel>,
     pub mesh: Mesh,
     pub settings: MeshSettings,
 }
@@ -85,6 +88,9 @@ impl Geometry {
     pub fn new(mesh: Mesh) -> Self {
         Self {
             mesh,
+            name: "Model".into(),
+            scene: super::SceneSettings::default(),
+            submodels: Vec::new(),
             settings: MeshSettings::default(),
         }
     }

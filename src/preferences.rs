@@ -129,15 +129,19 @@ pub(crate) enum Tool {
     Presets,
     Tablet,
     Mesh,
+    Transform,
+    Submodels,
 }
 impl Tool {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 8] = [
         Self::Library,
         Self::Brush,
         Self::Alpha,
         Self::Presets,
         Self::Tablet,
         Self::Mesh,
+        Self::Transform,
+        Self::Submodels,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -147,6 +151,8 @@ impl Tool {
             Self::Presets => "Brush presets",
             Self::Tablet => "Tablet & navigation",
             Self::Mesh => "Mesh management",
+            Self::Transform => "Transform",
+            Self::Submodels => "Submodels",
         }
     }
 }
@@ -219,7 +225,7 @@ impl Default for Preferences {
                 .enumerate()
                 .map(|(i, tool)| Panel {
                     tool,
-                    dock: if tool == Tool::Mesh {
+                    dock: if matches!(tool, Tool::Mesh | Tool::Transform | Tool::Submodels) {
                         Dock::Right
                     } else {
                         Dock::Left
@@ -368,6 +374,16 @@ pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
             position: [600., 120.],
         });
     }
+    for tool in [Tool::Transform, Tool::Submodels] {
+        if !prefs.panels.iter().any(|p| p.tool == tool) {
+            prefs.panels.push(Panel {
+                tool,
+                dock: Dock::Right,
+                open: true,
+                position: [600., 180.],
+            });
+        }
+    }
     prefs.validate()?;
     Ok(prefs)
 }
@@ -441,7 +457,8 @@ mod migration_tests {
         let path =
             std::env::temp_dir().join(format!("clay-layout-upgrade-{}.json", std::process::id()));
         let mut old = Preferences::default();
-        old.panels.retain(|p| p.tool != Tool::Mesh);
+        old.panels
+            .retain(|p| !matches!(p.tool, Tool::Mesh | Tool::Transform | Tool::Submodels));
         old.bindings.truncate(13);
         old.panels[0].dock = Dock::Floating;
         crate::persistence::write_json(&path.to_string_lossy(), &old).unwrap();

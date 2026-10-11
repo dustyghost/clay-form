@@ -2,6 +2,7 @@
 mod gizmo;
 mod guides;
 mod scene;
+mod transform;
 use crate::{
     camera::Camera,
     document::Document,
@@ -11,11 +12,13 @@ use crate::{
 use eframe::egui::{self, Color32, Pos2, Sense, Vec2};
 use gizmo::draw_gizmo;
 use scene::Scene;
+pub(crate) use transform::{TransformMode, TransformOperation};
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum Gesture {
     Sculpt,
     Orbit,
     Gizmo,
+    Transform,
 }
 struct SnakeStroke {
     center: Vec3,
@@ -31,9 +34,13 @@ pub(crate) struct Viewport {
     stroke: bool,
     last: Option<Pos2>,
     snake: Option<SnakeStroke>,
+    transform: transform::TransformControls,
 }
 #[derive(Clone, Copy)]
 pub(crate) struct ViewportOptions {
+    pub transform_mode: TransformMode,
+    pub transform_operation: TransformOperation,
+    pub respect_mask: bool,
     pub selected: usize,
     pub pressure: f32,
     pub wire: bool,
@@ -48,6 +55,15 @@ impl Viewport {
     pub(crate) fn cancel(&mut self, document: &mut Document) {
         *self = Self::default();
         document.end_stroke();
+    }
+    pub(crate) fn finish_transform_drag(&mut self, document: &mut Document) {
+        let line = self.transform.line;
+        let dragging = self.gesture.is_some();
+        self.cancel(document);
+        self.transform.line = line;
+        if dragging {
+            self.wait_for_release();
+        }
     }
     pub(crate) fn wait_for_release(&mut self) {
         self.blocked_until_release = true;
@@ -77,8 +93,8 @@ impl Viewport {
             Pos2::new(rect.right() - 146., rect.top() + 12.),
             Vec2::splat(134.),
         );
-        let scene = Scene::paint(&painter, rect, document.mesh(), camera, options.wire);
-        if options.show_guides {
+        let scene = Scene::paint(&painter, rect, document, camera, options.wire);
+        if options.show_guides && document.active_visible() {
             guides::paint(
                 &scene,
                 &painter,
@@ -114,13 +130,36 @@ impl Viewport {
         if primary
             && self.gesture.is_none()
             && options.enabled
+            && !zoom_held
+            && options.transform_mode == TransformMode::Sculpt
+            && let Some(point) = pointer.filter(|p| !gizmo_rect.contains(*p))
+            && let Some((owner, _, _)) = scene.pick_model(point)
+            && owner != document.active_model_index()
+        {
+            let _ = document.select_submodel(owner);
+            self.wait_for_release();
+            return;
+        }
+        if primary
+            && self.gesture.is_none()
+            && options.enabled
             && let Some(pos) = pointer
         {
             self.gesture = Some(if gizmo_rect.contains(pos) {
                 Gesture::Gizmo
             } else if zoom_held {
                 Gesture::Orbit
-            } else if scene.pick(pos).is_some() {
+            } else if options.transform_mode != TransformMode::Sculpt
+                && self.transform.can_drag(
+                    document,
+                    &scene,
+                    options.transform_mode,
+                    options.transform_operation,
+                    pos,
+                )
+            {
+                Gesture::Transform
+            } else if options.transform_mode == TransformMode::Sculpt && scene.pick(pos).is_some() {
                 Gesture::Sculpt
             } else {
                 Gesture::Orbit
@@ -155,6 +194,30 @@ impl Viewport {
                 camera.pitch = axis.pitch;
             }
             self.gesture = None;
+        }
+        if options.transform_mode != TransformMode::Sculpt {
+            let dragging = primary && self.gesture == Some(Gesture::Transform) && options.enabled;
+            self.transform.update(
+                document,
+                &scene,
+                options.transform_mode,
+                options.transform_operation,
+                pointer,
+                dragging,
+                options.respect_mask,
+            );
+            if !dragging {
+                document.end_stroke();
+            }
+            self.transform.paint(
+                document,
+                &scene,
+                &painter,
+                options.transform_mode,
+                options.transform_operation,
+            );
+            draw_gizmo(camera, &painter, gizmo_rect, pointer);
+            return;
         }
         let drawing = primary && self.gesture == Some(Gesture::Sculpt) && options.enabled;
         if drawing && !self.stroke {

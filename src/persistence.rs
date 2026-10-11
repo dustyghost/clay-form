@@ -128,6 +128,9 @@ mod tests {
         mesh.mask[7] = 0.75;
         mesh.vertices[7].0 += 0.05;
         let project = Project {
+            scene: Default::default(),
+            model_name: "Model".into(),
+            submodels: Vec::new(),
             mesh_settings: crate::sculpt::MeshSettings::default(),
             version: 1,
             mesh,
@@ -177,6 +180,9 @@ mod mesh_storage_tests {
         geometry.settings.resolution = 32;
         geometry.settings.auto_remesh = true;
         let project = Project {
+            scene: Default::default(),
+            model_name: "Model".into(),
+            submodels: Vec::new(),
             version: Project::VERSION,
             mesh: geometry.mesh,
             mesh_settings: geometry.settings,

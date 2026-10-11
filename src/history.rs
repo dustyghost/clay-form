@@ -81,6 +81,11 @@ fn geometry_bytes(geometry: &Geometry) -> usize {
     std::iter::once(&geometry.mesh)
         .chain(geometry.settings.lower.iter())
         .chain(geometry.settings.upper.iter())
+        .chain(geometry.submodels.iter().flat_map(|model| {
+            std::iter::once(&model.mesh)
+                .chain(model.mesh_settings.lower.iter())
+                .chain(model.mesh_settings.upper.iter())
+        }))
         .map(|mesh| {
             mesh.vertices.len() * std::mem::size_of::<crate::sculpt::Vec3>()
                 + mesh.mask.len() * std::mem::size_of::<f32>()

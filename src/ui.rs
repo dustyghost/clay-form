@@ -7,6 +7,11 @@ use crate::{
 };
 use eframe::egui::{self, Color32, Sense, Vec2};
 pub(crate) struct UiState {
+    pub transform_mode: crate::viewport::TransformMode,
+    pub transform_operation: crate::viewport::TransformOperation,
+    pub respect_transform_mask: bool,
+    group_name: String,
+    rename_model: Option<(usize, String, String)>,
     pub preferences: Preferences,
     pub settings_open: bool,
     pub layout_open: bool,
@@ -27,6 +32,11 @@ pub(crate) struct UiState {
 impl Default for UiState {
     fn default() -> Self {
         Self {
+            transform_mode: crate::viewport::TransformMode::Sculpt,
+            transform_operation: crate::viewport::TransformOperation::Move,
+            respect_transform_mask: true,
+            group_name: String::new(),
+            rename_model: None,
             preferences: Preferences::default(),
             settings_open: false,
             layout_open: false,
@@ -120,6 +130,24 @@ impl UiState {
                     commands.push(Command::Export);
                 }
                 ui.menu_button("Mesh", |ui| self.mesh_controls(ui, document, &mut commands));
+                if ui
+                    .add_enabled(
+                        !self.mesh_busy,
+                        egui::Button::new("Transform").selected(
+                            self.transform_mode != crate::viewport::TransformMode::Sculpt,
+                        ),
+                    )
+                    .on_hover_text("Activate transforms and show the viewport controls")
+                    .clicked()
+                    && self.transform_mode == crate::viewport::TransformMode::Sculpt
+                {
+                    commands.push(Command::TransformMode(
+                        crate::viewport::TransformMode::World,
+                    ));
+                }
+                ui.menu_button("Submodels", |ui| {
+                    self.submodel_controls(ui, document, &mut commands)
+                });
                 if self.mesh_busy {
                     ui.spinner();
                     if ui.button("Cancel mesh operation").clicked() {
@@ -322,6 +350,16 @@ impl UiState {
                                 if header.header_response.clicked() {
                                     self.preferences.panels[index].open =
                                         !self.preferences.panels[index].open;
+                                    if tool == Tool::Transform
+                                        && self.preferences.panels[index].open
+                                        && !self.mesh_busy
+                                        && self.transform_mode
+                                            == crate::viewport::TransformMode::Sculpt
+                                    {
+                                        commands.push(Command::TransformMode(
+                                            crate::viewport::TransformMode::World,
+                                        ));
+                                    }
                                 }
                             }
                         });
@@ -493,6 +531,8 @@ impl UiState {
                 });
             }
             Tool::Mesh => self.mesh_controls(ui, document, commands),
+            Tool::Transform => self.transform_controls(ui, commands),
+            Tool::Submodels => self.submodel_controls(ui, document, commands),
             Tool::Tablet => {
                 ui.label(tablet_status);
                 ui.label(format!("Pressure: {:.0}%", pressure * 100.));
@@ -642,6 +682,182 @@ impl UiState {
 }
 
 impl UiState {
+    pub(crate) fn transform_toolbar(
+        &mut self,
+        ctx: &egui::Context,
+        viewport: egui::Rect,
+        enabled: bool,
+    ) -> (Vec<Command>, Option<egui::Rect>) {
+        use crate::viewport::{TransformMode as Mode, TransformOperation as Operation};
+        if self.transform_mode == Mode::Sculpt {
+            return (Vec::new(), None);
+        }
+        let mut commands = Vec::new();
+        let response = egui::Area::new(egui::Id::new("viewport_transform_toolbar"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(viewport.left_top() + Vec2::splat(12.))
+            .constrain_to(viewport)
+            .show(ctx, |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    ui.set_max_width((viewport.width() - 32.).clamp(160., 300.));
+                    ui.add_enabled_ui(enabled, |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.strong("Transform");
+                            for (mode, label) in [(Mode::World, "World axes"), (Mode::ActionLine, "Action Line")] {
+                                if ui.selectable_label(self.transform_mode == mode, label).clicked() {
+                                    commands.push(Command::TransformMode(mode));
+                                }
+                            }
+                            if ui.small_button("Done").on_hover_text("Return to sculpting").clicked() {
+                                commands.push(Command::TransformMode(Mode::Sculpt));
+                            }
+                        });
+                        ui.separator();
+                        ui.horizontal_wrapped(|ui| {
+                            for (operation, label, hint) in [
+                                (Operation::PlaceLine, "Set line", "Drag to place the pivot and direction; drag either endpoint to adjust"),
+                                (Operation::Move, "Move", "Drag an axis or the middle handle to move the model"),
+                                (Operation::Scale, "Scale", "Drag an axis/end to stretch, or the middle to scale uniformly"),
+                            ] {
+                                if operation == Operation::PlaceLine && self.transform_mode != Mode::ActionLine { continue; }
+                                if ui.selectable_label(self.transform_operation == operation, label).on_hover_text(hint).clicked() {
+                                    commands.push(Command::TransformOperation(operation));
+                                }
+                            }
+                        });
+                        let mut respect = self.respect_transform_mask;
+                        if ui.checkbox(&mut respect, "Respect mask").on_hover_text("Protect masked vertices; turn off to transform the whole model").changed() {
+                            commands.push(Command::RespectTransformMask(respect));
+                        }
+                    });
+                });
+            });
+        (commands, Some(response.response.rect))
+    }
+    fn transform_controls(&mut self, ui: &mut egui::Ui, commands: &mut Vec<Command>) {
+        use crate::viewport::{TransformMode as Mode, TransformOperation as Operation};
+        ui.add_enabled_ui(!self.mesh_busy, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                for (mode, label) in [(Mode::Sculpt, "Sculpt"), (Mode::World, "World axes"), (Mode::ActionLine, "Action Line")] {
+                    if ui.selectable_label(self.transform_mode == mode, label).clicked() { commands.push(Command::TransformMode(mode)); }
+                }
+            });
+            if self.transform_mode != Mode::Sculpt {
+                ui.horizontal_wrapped(|ui| {
+                    for (op, label) in [(Operation::Move, "Move"), (Operation::Scale, "Scale"), (Operation::PlaceLine, "Set line")] {
+                        if op == Operation::PlaceLine && self.transform_mode != Mode::ActionLine { continue; }
+                        if ui.selectable_label(self.transform_operation == op, label).clicked() { commands.push(Command::TransformOperation(op)); }
+                    }
+                });
+                let mut respect = self.respect_transform_mask;
+                if ui.checkbox(&mut respect, "Respect mask").changed() { commands.push(Command::RespectTransformMask(respect)); }
+                if self.transform_mode == Mode::World {
+                    ui.label("Drag X/Y/Z handles. Center moves in the view plane or scales uniformly. Orbit to expose an axis facing the camera.");
+                } else {
+                    ui.label("Set line: drag to place the pivot and direction; adjust either endpoint. Move: drag the middle. Scale: drag the end to stretch, or the middle to scale uniformly.");
+                }
+                ui.label("Each drag is one undo step; all subdivision levels follow.");
+            }
+        });
+    }
+    fn submodel_controls(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &Document,
+        commands: &mut Vec<Command>,
+    ) {
+        ui.label("Click a model row to select it. The eye toggles visibility.");
+        ui.add_enabled_ui(!self.mesh_busy, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("Duplicate").clicked() { commands.push(Command::DuplicateModel); }
+                if ui.button("Extract masked").on_hover_text("Copy faces at least 50% masked at every vertex; keep the source. Boundaries remain open.").clicked() { commands.push(Command::ExtractMasked); }
+            });
+            ui.horizontal(|ui| {
+                ui.add(egui::TextEdit::singleline(&mut self.group_name).desired_width(120.).hint_text("New group"));
+                if ui.button("+ Group").clicked() { commands.push(Command::AddGroup(std::mem::take(&mut self.group_name))); }
+            });
+            ui.separator();
+            let groups = std::iter::once(String::new()).chain(document.groups().iter().cloned()).collect::<Vec<_>>();
+            for (section, group) in groups.iter().enumerate() {
+                let indices: Vec<_> = (0..document.model_count()).filter(|&i| document.model(i).unwrap().metadata.group == *group).collect();
+                if section == 0 && indices.is_empty() { continue; }
+                ui.push_id(("submodel_group", group), |ui| {
+                    egui::CollapsingHeader::new(if group.is_empty() { "Ungrouped" } else { group }).default_open(true).show(ui, |ui| {
+                        if section > 0 {
+                            ui.horizontal(|ui| {
+                                let all_visible = indices.iter().all(|&i|document.model(i).unwrap().metadata.visible);
+                                if visibility_button(ui, all_visible).on_hover_text("Show/hide this group").clicked() { commands.push(Command::GroupVisible(group.clone(), !all_visible)); }
+                                let index = section - 1;
+                                if reorder_button(ui, true, index > 0).on_hover_text("Move group up").clicked() { commands.push(Command::ReorderGroup(index, index-1)); }
+                                if reorder_button(ui, false, index+1 < document.groups().len()).on_hover_text("Move group down").clicked() { commands.push(Command::ReorderGroup(index, index+1)); }
+                                if ui.small_button("Ungroup").clicked() { commands.push(Command::RemoveGroup(group.clone())); }
+                            });
+                        }
+                        for (position, &index) in indices.iter().enumerate() {
+                            let model = document.model(index).unwrap();
+                            ui.push_id(index, |ui| {
+                                let active = index == document.active_model_index();
+                                let mut control_hit = false;
+                                let mut select_clicked = false;
+                                let mut frame = egui::Frame::group(ui.style());
+                                if active {
+                                    frame = frame.fill(Color32::from_rgb(37, 58, 68)).stroke(egui::Stroke::new(1.5, Color32::from_rgb(125, 210, 245)));
+                                }
+                                let row = frame.show(ui, |ui| {
+                                    ui.set_min_width(ui.available_width());
+                                    ui.horizontal(|ui| {
+                                        let eye = visibility_button(ui, model.metadata.visible).on_hover_text(if model.metadata.visible { "Hide model" } else { "Show model" });
+                                        control_hit |= eye.contains_pointer();
+                                        if eye.clicked() {
+                                            let mut metadata = model.metadata.clone(); metadata.visible = !metadata.visible;
+                                            commands.push(Command::EditSubmodel(index, model.name.into(), metadata));
+                                        }
+                                        model_thumbnail(ui, model.display_mesh(false), active);
+                                        ui.vertical(|ui| {
+                                            select_clicked |= ui.selectable_label(active, model.name).on_hover_text("Select this submodel for sculpting or transforms").clicked();
+                                            ui.horizontal(|ui| {
+                                                let up = reorder_button(ui, true, position > 0).on_hover_text("Move model up in group");
+                                                let down = reorder_button(ui, false, position+1 < indices.len()).on_hover_text("Move model down in group");
+                                                control_hit |= up.contains_pointer() || down.contains_pointer();
+                                                if up.clicked() { commands.push(Command::ReorderSubmodel(index, indices[position-1])); }
+                                                if down.clicked() { commands.push(Command::ReorderSubmodel(index, indices[position+1])); }
+                                                if active { ui.small("Active"); }
+                                            });
+                                        });
+                                    });
+                                });
+                                if select_clicked || (ui.is_enabled() && row.response.contains_pointer() && !control_hit && ui.input(|i| i.pointer.primary_clicked())) {
+                                    commands.push(Command::SelectSubmodel(index));
+                                }
+                            });
+                        }
+                        if indices.is_empty() { ui.weak("Empty group"); }
+                    });
+                });
+            }
+            ui.separator();
+            let index = document.active_model_index();
+            let model = document.model(index).unwrap();
+            if self.rename_model.as_ref().is_none_or(|(target, original, _)| *target != index || original != model.name) {
+                self.rename_model = Some((index, model.name.into(), model.name.into()));
+            }
+            let (_, _, draft) = self.rename_model.as_mut().unwrap();
+            ui.horizontal(|ui| {
+                ui.label("Name");
+                let response = ui.add(egui::TextEdit::singleline(draft).desired_width(140.));
+                if (response.lost_focus() || (response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)))) && draft != model.name {
+                    commands.push(Command::EditSubmodel(index, draft.clone(), model.metadata.clone()));
+                }
+            });
+            let mut group = model.metadata.group.clone();
+            egui::ComboBox::from_id_salt("active_model_group").selected_text(if group.is_empty() { "Ungrouped" } else { &group }).show_ui(ui, |ui| {
+                ui.selectable_value(&mut group, String::new(), "Ungrouped");
+                for name in document.groups() { ui.selectable_value(&mut group, name.clone(), name); }
+            });
+            if group != model.metadata.group { let mut metadata = model.metadata.clone(); metadata.group = group; commands.push(Command::EditSubmodel(index, model.name.into(), metadata)); }
+            if !document.active_visible() { ui.weak("Active model is hidden; show it to sculpt or transform."); }
+        });
+    }
     fn mesh_controls(
         &mut self,
         ui: &mut egui::Ui,
@@ -705,4 +921,106 @@ impl UiState {
             ui.label("Working in the background…");
         }
     }
+}
+
+fn visibility_button(ui: &mut egui::Ui, visible: bool) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(24.), Sense::click());
+    let painter = ui.painter();
+    let color = if visible {
+        Color32::from_rgb(150, 215, 245)
+    } else {
+        Color32::GRAY
+    };
+    let c = rect.center();
+    let points = vec![
+        c + Vec2::new(-9., 0.),
+        c + Vec2::new(-4., -5.),
+        c + Vec2::new(4., -5.),
+        c + Vec2::new(9., 0.),
+        c + Vec2::new(4., 5.),
+        c + Vec2::new(-4., 5.),
+        c + Vec2::new(-9., 0.),
+    ];
+    painter.add(egui::Shape::line(points, egui::Stroke::new(1.5, color)));
+    painter.circle_filled(c, 2.5, color);
+    if !visible {
+        painter.line_segment(
+            [c + Vec2::new(-8., 8.), c + Vec2::new(8., -8.)],
+            egui::Stroke::new(2., color),
+        );
+    }
+    response
+}
+fn model_thumbnail(ui: &mut egui::Ui, mesh: &crate::sculpt::Mesh, active: bool) {
+    let (rect, _) = ui.allocate_exact_size(Vec2::splat(42.), Sense::hover());
+    let mut points: Vec<Vec2> = mesh
+        .vertices
+        .iter()
+        .step_by((mesh.vertices.len() / 256).max(1))
+        .map(|v| Vec2::new(v.0 * 0.8 - v.2 * 0.6, -v.1 * 0.9 + v.0 * 0.2 + v.2 * 0.25))
+        .collect();
+    points.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
+    points.dedup();
+    if points.len() < 3 {
+        return;
+    }
+    let cross = |a: Vec2, b: Vec2, c: Vec2| (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    let mut hull: Vec<Vec2> = Vec::new();
+    for &p in &points {
+        while hull.len() >= 2 && cross(hull[hull.len() - 2], hull[hull.len() - 1], p) <= 0. {
+            hull.pop();
+        }
+        hull.push(p);
+    }
+    let lower = hull.len();
+    for &p in points.iter().rev().skip(1) {
+        while hull.len() > lower && cross(hull[hull.len() - 2], hull[hull.len() - 1], p) <= 0. {
+            hull.pop();
+        }
+        hull.push(p);
+    }
+    hull.pop();
+    let min = points
+        .iter()
+        .fold(Vec2::splat(f32::INFINITY), |a, b| a.min(*b));
+    let max = points
+        .iter()
+        .fold(Vec2::splat(f32::NEG_INFINITY), |a, b| a.max(*b));
+    let scale = 34. / (max - min).max_elem().max(0.001);
+    let center = (min + max) * 0.5;
+    let color = if active {
+        Color32::from_rgb(190, 155, 125)
+    } else {
+        Color32::from_rgb(110, 128, 145)
+    };
+    ui.painter()
+        .rect_filled(rect, 4., Color32::from_rgb(25, 29, 35));
+    ui.painter().add(egui::Shape::convex_polygon(
+        hull.into_iter()
+            .map(|p| rect.center() + (p - center) * scale)
+            .collect(),
+        color,
+        egui::Stroke::new(1., Color32::from_gray(170)),
+    ));
+}
+
+/// Draw reorder arrows directly so the controls do not depend on font glyphs.
+fn reorder_button(ui: &mut egui::Ui, up: bool, enabled: bool) -> egui::Response {
+    ui.add_enabled_ui(enabled, |ui| {
+        let (rect, response) = ui.allocate_exact_size(Vec2::new(24., 20.), Sense::click());
+        let visuals = ui.style().interact(&response);
+        ui.painter().rect_filled(rect, 3., visuals.bg_fill);
+        let c = rect.center();
+        let direction = if up { -1. } else { 1. };
+        let tip = c + Vec2::new(0., direction * 5.);
+        let stroke = egui::Stroke::new(1.5, visuals.fg_stroke.color);
+        ui.painter()
+            .line_segment([c - Vec2::new(0., direction * 5.), tip], stroke);
+        ui.painter()
+            .line_segment([tip + Vec2::new(-4., -direction * 4.), tip], stroke);
+        ui.painter()
+            .line_segment([tip + Vec2::new(4., -direction * 4.), tip], stroke);
+        response
+    })
+    .inner
 }

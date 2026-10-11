@@ -733,3 +733,237 @@ fn multiple_adaptive_dabs_with_symmetry_guides_use_stable_picking() {
     app.document.mesh().validate_closed().unwrap();
     assert!(app.document.mesh().vertices.len() > 4514);
 }
+
+#[test]
+fn world_handles_move_scale_and_undo_without_sculpting_or_camera_motion() {
+    use crate::viewport::{TransformMode, TransformOperation};
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let rect = navigation_frame(&mut app, &ctx, vec![]);
+    let before = app.document.geometry_snapshot();
+    app.dispatch(Command::TransformMode(TransformMode::World), &ctx);
+    let start = rect.center() + Vec2::new(85., 0.);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    let end = start + Vec2::new(60., 0.);
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+    navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+    let delta = app.document.mesh().vertices[0] - before.mesh.vertices[0];
+    assert!(delta.0 > 0.1 && delta.1.abs() < 1e-5 && delta.2.abs() < 1e-5);
+    assert_eq!(app.document.undo_label(), Some("Transform submodel"));
+    assert_eq!(app.document.history_counts(), (1, 0));
+    assert_eq!(app.camera.yaw, 0.);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    app.dispatch(Command::TransformOperation(TransformOperation::Scale), &ctx);
+    let start = rect.center();
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    let end = start + Vec2::new(-60., 0.);
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+    navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+    assert!(app.document.mesh().vertices[0].1 < 0.8);
+    assert_eq!(app.document.history_counts(), (1, 0));
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), before);
+}
+#[test]
+fn action_line_placement_moves_and_stretches_with_one_undo_per_drag() {
+    use crate::viewport::{TransformMode, TransformOperation};
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let rect = navigation_frame(&mut app, &ctx, vec![]);
+    let before = app.document.geometry_snapshot();
+    app.dispatch(Command::TransformMode(TransformMode::ActionLine), &ctx);
+    let start = rect.center() + Vec2::new(-60., 0.);
+    let end = rect.center() + Vec2::new(60., 0.);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+    navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert!(!app.document.can_undo());
+    app.dispatch(Command::TransformOperation(TransformOperation::Move), &ctx);
+    let start = rect.center();
+    let end = start + Vec2::new(40., 0.);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+    navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+    assert!(app.document.mesh().vertices[0].0 > 0.1);
+    assert_eq!(app.document.history_counts(), (1, 0));
+    let moved = app.document.geometry_snapshot();
+    app.dispatch(Command::TransformOperation(TransformOperation::Scale), &ctx);
+    let start = rect.center() + Vec2::new(100., 0.);
+    let end = start + Vec2::new(-40., 0.);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+    navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+    assert_eq!(app.document.history_counts(), (2, 0));
+    assert_eq!(app.document.mesh().vertices[0].1, moved.mesh.vertices[0].1);
+    let width = |mesh: &crate::sculpt::Mesh| {
+        mesh.vertices
+            .iter()
+            .map(|v| v.0)
+            .fold(f32::NEG_INFINITY, f32::max)
+            - mesh
+                .vertices
+                .iter()
+                .map(|v| v.0)
+                .fold(f32::INFINITY, f32::min)
+    };
+    assert!(width(app.document.mesh()) < width(&moved.mesh) * 0.8);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), moved);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), before);
+}
+#[test]
+fn click_inactive_surface_selects_it_without_deforming_until_release() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.document.duplicate_model(false).unwrap();
+    app.document
+        .apply_transform(
+            crate::sculpt::Transform {
+                translation: crate::sculpt::Vec3(0., 0., 2.),
+                ..Default::default()
+            },
+            false,
+        )
+        .unwrap();
+    app.document.end_stroke();
+    app.document.select_submodel(1).unwrap();
+    let before = app.document.mesh().clone();
+    let rect = navigation_frame(&mut app, &ctx, vec![]);
+    let point = rect.center();
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(point), primary_event(point, true)],
+    );
+    assert_eq!(app.document.active_model_index(), 0);
+    let selected = app.document.mesh().clone();
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(point + Vec2::new(10., 0.))],
+    );
+    assert_eq!(app.document.mesh(), &selected);
+    assert_eq!(app.document.model(1).unwrap().mesh, &before);
+    navigation_frame(&mut app, &ctx, vec![primary_event(point, false)]);
+}
+
+#[test]
+fn floating_transform_toolbar_switches_operation_without_editing_the_model() {
+    use crate::viewport::{TransformMode, TransformOperation};
+    fn frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) -> egui::FullOutput {
+        ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    Pos2::ZERO,
+                    Vec2::new(1000., 800.),
+                )),
+                events,
+                ..Default::default()
+            },
+            |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+            },
+        )
+    }
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let before = app.document.geometry_snapshot();
+    app.dispatch(Command::TransformMode(TransformMode::ActionLine), &ctx);
+    frame(&mut app, &ctx, vec![]);
+    let output = frame(&mut app, &ctx, vec![]);
+    let point = output
+        .shapes
+        .iter()
+        .find_map(|shape| match &shape.shape {
+            egui::Shape::Text(text) if text.galley.text() == "Scale" => {
+                Some(text.pos + text.galley.size() * 0.5)
+            }
+            _ => None,
+        })
+        .expect("Scale is directly visible in the floating toolbar");
+    frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(point), primary_event(point, true)],
+    );
+    frame(&mut app, &ctx, vec![primary_event(point, false)]);
+    assert_eq!(app.ui.transform_operation, TransformOperation::Scale);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert!(!app.document.can_undo());
+    assert!(app.viewport.gesture.is_none());
+    app.dispatch(Command::TransformMode(TransformMode::Sculpt), &ctx);
+    let (commands, rect) = app.ui.transform_toolbar(&ctx, egui::Rect::EVERYTHING, true);
+    assert!(commands.is_empty() && rect.is_none());
+}
+
+#[test]
+fn transform_button_activates_floating_controls_with_one_click() {
+    fn frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) -> egui::FullOutput {
+        ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    Pos2::ZERO,
+                    Vec2::new(1400., 800.),
+                )),
+                events,
+                ..Default::default()
+            },
+            |ctx| {
+                for command in app.ui.toolbar(ctx, &app.document, app.camera.zoom) {
+                    app.dispatch(command, ctx);
+                }
+                egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+            },
+        )
+    }
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let before = app.document.geometry_snapshot();
+    let output = frame(&mut app, &ctx, vec![]);
+    let point = output
+        .shapes
+        .iter()
+        .find_map(|shape| match &shape.shape {
+            egui::Shape::Text(text) if text.galley.text() == "Transform" => {
+                Some(text.pos + text.galley.size() * 0.5)
+            }
+            _ => None,
+        })
+        .unwrap();
+    frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(point), primary_event(point, true)],
+    );
+    frame(&mut app, &ctx, vec![primary_event(point, false)]);
+    assert_eq!(app.ui.transform_mode, crate::viewport::TransformMode::World);
+    let output = frame(&mut app, &ctx, vec![]);
+    assert!(output.shapes.iter().any(
+        |shape| matches!(&shape.shape,egui::Shape::Text(text) if text.galley.text()=="Scale")
+    ));
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert!(!app.document.can_undo());
+}

@@ -19,6 +19,35 @@ pub struct Mesh {
     pub mask: Vec<f32>,
 }
 impl Mesh {
+    /// Copy fully masked faces and compact their vertices; the boundary stays open.
+    pub fn extract_masked(&self) -> Result<Self, String> {
+        let mut result = Self {
+            vertices: Vec::new(),
+            triangles: Vec::new(),
+            mask: Vec::new(),
+        };
+        let mut indices = vec![usize::MAX; self.vertices.len()];
+        for face in &self.triangles {
+            if !face.iter().all(|&i| self.mask[i] >= 0.5) {
+                continue;
+            }
+            let mut triangle = [0; 3];
+            for (corner, &i) in face.iter().enumerate() {
+                if indices[i] == usize::MAX {
+                    indices[i] = result.vertices.len();
+                    result.vertices.push(self.vertices[i]);
+                    result.mask.push(0.);
+                }
+                triangle[corner] = indices[i];
+            }
+            result.triangles.push(triangle);
+        }
+        if result.triangles.is_empty() {
+            return Err("Mask a region first: extraction needs faces with all three vertices at least 50% masked".into());
+        }
+        result.validate()?;
+        Ok(result)
+    }
     pub fn sphere() -> Self {
         let n = 48;
         let mut v = vec![Vec3(0., 1., 0.)];

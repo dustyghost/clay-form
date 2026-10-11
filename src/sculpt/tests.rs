@@ -101,6 +101,9 @@ fn black_alpha_protects_from_every_brush() {
 #[test]
 fn project_roundtrip() {
     let p = Project {
+        scene: Default::default(),
+        model_name: "Model".into(),
+        submodels: Vec::new(),
         mesh_settings: crate::sculpt::MeshSettings::default(),
         version: 1,
         mesh: Mesh::sphere(),

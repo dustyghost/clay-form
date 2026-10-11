@@ -6,6 +6,21 @@ use crate::{
         Project, Symmetry, validate_brush,
     },
 };
+pub struct ModelRef<'a> {
+    pub name: &'a str,
+    pub metadata: &'a crate::sculpt::ModelMetadata,
+    pub mesh: &'a Mesh,
+    pub settings: &'a MeshSettings,
+}
+impl ModelRef<'_> {
+    pub fn display_mesh(&self, active: bool) -> &Mesh {
+        if active {
+            self.mesh
+        } else {
+            self.settings.lower.first().unwrap_or(self.mesh)
+        }
+    }
+}
 pub struct Document {
     geometry: Geometry,
     brushes: Vec<Brush>,
@@ -35,6 +50,297 @@ impl Default for Document {
     }
 }
 impl Document {
+    pub fn active_model_index(&self) -> usize {
+        self.geometry.scene.active_index
+    }
+    pub fn model_count(&self) -> usize {
+        self.geometry.submodels.len() + 1
+    }
+    pub fn model(&self, index: usize) -> Option<ModelRef<'_>> {
+        if index >= self.model_count() {
+            return None;
+        }
+        if index == self.active_model_index() {
+            Some(ModelRef {
+                name: &self.geometry.name,
+                metadata: &self.geometry.scene.active_metadata,
+                mesh: self.mesh(),
+                settings: self.mesh_settings(),
+            })
+        } else {
+            let model = &self.geometry.submodels[if index > self.active_model_index() {
+                index - 1
+            } else {
+                index
+            }];
+            Some(ModelRef {
+                name: &model.name,
+                metadata: &model.metadata,
+                mesh: &model.mesh,
+                settings: &model.mesh_settings,
+            })
+        }
+    }
+    pub fn submodel_names(&self) -> impl Iterator<Item = &str> {
+        (0..self.model_count()).map(|i| self.model(i).unwrap().name)
+    }
+    pub fn groups(&self) -> &[String] {
+        &self.geometry.scene.groups
+    }
+    pub fn active_visible(&self) -> bool {
+        self.geometry.scene.active_metadata.visible
+    }
+    fn ordered_models(&self) -> Vec<crate::sculpt::Submodel> {
+        (0..self.model_count())
+            .map(|i| {
+                let m = self.model(i).unwrap();
+                crate::sculpt::Submodel {
+                    name: m.name.into(),
+                    metadata: m.metadata.clone(),
+                    mesh: m.mesh.clone(),
+                    mesh_settings: m.settings.clone(),
+                }
+            })
+            .collect()
+    }
+    fn install_models(&mut self, mut models: Vec<crate::sculpt::Submodel>, active: usize) {
+        let selected = models.remove(active);
+        self.geometry.mesh = selected.mesh;
+        self.geometry.settings = selected.mesh_settings;
+        self.geometry.name = selected.name;
+        self.geometry.scene.active_metadata = selected.metadata;
+        self.geometry.scene.active_index = active;
+        self.geometry.submodels = models;
+        self.dirty = true;
+    }
+    pub fn select_submodel(&mut self, index: usize) -> Result<(), String> {
+        if index >= self.model_count() {
+            return Err("Submodel no longer exists".into());
+        }
+        if index == self.active_model_index() {
+            return Ok(());
+        }
+        self.end_stroke();
+        self.history.record_named(&self.geometry, "Select submodel");
+        self.install_models(self.ordered_models(), index);
+        Ok(())
+    }
+    pub fn duplicate_model(&mut self, extract: bool) -> Result<(), String> {
+        if self.model_count() >= 64 {
+            return Err("Submodels are limited to 64".into());
+        }
+        let mesh = if extract {
+            self.mesh().extract_masked()?
+        } else {
+            self.mesh().clone()
+        };
+        let settings = if extract {
+            MeshSettings::default()
+        } else {
+            self.geometry.settings.clone()
+        };
+        self.end_stroke();
+        self.history.record_named(
+            &self.geometry,
+            if extract {
+                "Extract masked submodel"
+            } else {
+                "Duplicate submodel"
+            },
+        );
+        let base = if extract { "Extract" } else { "Copy" };
+        let mut number = 1;
+        let name = loop {
+            let name = format!("{base} {number}");
+            if !self.submodel_names().any(|existing| existing == name) {
+                break name;
+            }
+            number += 1;
+        };
+        let mut models = self.ordered_models();
+        let index = self.active_model_index();
+        let mut metadata = self.geometry.scene.active_metadata.clone();
+        metadata.visible = true;
+        models.insert(
+            index,
+            crate::sculpt::Submodel {
+                name,
+                metadata,
+                mesh,
+                mesh_settings: settings,
+            },
+        );
+        self.install_models(models, index);
+        Ok(())
+    }
+    pub fn set_model_metadata(
+        &mut self,
+        index: usize,
+        name: String,
+        metadata: crate::sculpt::ModelMetadata,
+    ) -> Result<(), String> {
+        if name.trim().is_empty()
+            || name.len() > 128
+            || index >= self.model_count()
+            || (!metadata.group.is_empty() && !self.groups().contains(&metadata.group))
+        {
+            return Err("Invalid submodel name or group".into());
+        }
+        let model = self.model(index).unwrap();
+        if model.name == name && *model.metadata == metadata {
+            return Ok(());
+        }
+        self.end_stroke();
+        self.history.record_named(&self.geometry, "Edit submodel");
+        if index == self.active_model_index() {
+            self.geometry.name = name;
+            self.geometry.scene.active_metadata = metadata;
+        } else {
+            let slot = if index > self.active_model_index() {
+                index - 1
+            } else {
+                index
+            };
+            self.geometry.submodels[slot].name = name;
+            self.geometry.submodels[slot].metadata = metadata;
+        }
+        self.dirty = true;
+        Ok(())
+    }
+    pub fn reorder_model(&mut self, from: usize, to: usize) -> Result<(), String> {
+        if from >= self.model_count() || to >= self.model_count() {
+            return Err("Invalid submodel order".into());
+        }
+        if from == to {
+            return Ok(());
+        }
+        self.end_stroke();
+        self.history
+            .record_named(&self.geometry, "Reorder submodels");
+        let active = self.active_model_index();
+        let new_active = if active == from {
+            to
+        } else if from < active && to >= active {
+            active - 1
+        } else if from > active && to <= active {
+            active + 1
+        } else {
+            active
+        };
+        let mut models = self.ordered_models();
+        let moved = models.remove(from);
+        models.insert(to, moved);
+        self.install_models(models, new_active);
+        Ok(())
+    }
+    pub fn add_group(&mut self, name: String) -> Result<(), String> {
+        let name = name.trim().to_string();
+        if name.is_empty()
+            || name.len() > 128
+            || self.groups().len() >= 64
+            || self.groups().contains(&name)
+        {
+            return Err("Choose a unique group name (up to 128 bytes)".into());
+        }
+        self.end_stroke();
+        self.history
+            .record_named(&self.geometry, "Add submodel group");
+        self.geometry.scene.groups.push(name);
+        self.dirty = true;
+        Ok(())
+    }
+    pub fn remove_group(&mut self, name: &str) -> Result<(), String> {
+        if !self.groups().iter().any(|g| g == name) {
+            return Err("Group no longer exists".into());
+        }
+        self.end_stroke();
+        self.history
+            .record_named(&self.geometry, "Ungroup submodels");
+        self.geometry.scene.groups.retain(|g| g != name);
+        if self.geometry.scene.active_metadata.group == name {
+            self.geometry.scene.active_metadata.group.clear();
+        }
+        for m in &mut self.geometry.submodels {
+            if m.metadata.group == name {
+                m.metadata.group.clear();
+            }
+        }
+        self.dirty = true;
+        Ok(())
+    }
+    pub fn reorder_group(&mut self, from: usize, to: usize) -> Result<(), String> {
+        if from >= self.groups().len() || to >= self.groups().len() {
+            return Err("Invalid group order".into());
+        }
+        if from == to {
+            return Ok(());
+        }
+        self.end_stroke();
+        self.history.record_named(&self.geometry, "Reorder groups");
+        let group = self.geometry.scene.groups.remove(from);
+        self.geometry.scene.groups.insert(to, group);
+        self.dirty = true;
+        Ok(())
+    }
+    pub fn set_group_visible(&mut self, name: &str, visible: bool) -> Result<(), String> {
+        if !self.groups().iter().any(|g| g == name) {
+            return Err("Group no longer exists".into());
+        }
+        if !(0..self.model_count()).any(|i| {
+            let m = self.model(i).unwrap();
+            m.metadata.group == name && m.metadata.visible != visible
+        }) {
+            return Ok(());
+        }
+        self.end_stroke();
+        self.history
+            .record_named(&self.geometry, "Group visibility");
+        if self.geometry.scene.active_metadata.group == name {
+            self.geometry.scene.active_metadata.visible = visible;
+        }
+        for m in &mut self.geometry.submodels {
+            if m.metadata.group == name {
+                m.metadata.visible = visible;
+            }
+        }
+        self.dirty = true;
+        Ok(())
+    }
+    /// Apply each drag increment to every stored level; a drag is one undo entry.
+    pub fn apply_transform(
+        &mut self,
+        transform: crate::sculpt::Transform,
+        respect_mask: bool,
+    ) -> Result<bool, String> {
+        transform.validate()?;
+        if transform.is_identity() {
+            return Ok(false);
+        }
+        if !self.active_visible() {
+            return Err("Show the active submodel before transforming it".into());
+        }
+        let mut geometry = self.geometry.clone();
+        for mesh in std::iter::once(&mut geometry.mesh)
+            .chain(geometry.settings.lower.iter_mut())
+            .chain(geometry.settings.upper.iter_mut())
+        {
+            for (vertex, mask) in mesh.vertices.iter_mut().zip(&mesh.mask) {
+                let mobility = if respect_mask { 1. - mask } else { 1. };
+                *vertex = *vertex + (transform.point(*vertex) - *vertex) * mobility;
+            }
+            mesh.validate()?;
+        }
+        if geometry == self.geometry {
+            return Ok(false);
+        }
+        self.begin_stroke();
+        if let Some(before) = self.stroke_before.take() {
+            self.history.record_owned(before, "Transform submodel");
+        }
+        self.geometry = geometry;
+        self.dirty = true;
+        Ok(true)
+    }
     pub fn mesh(&self) -> &Mesh {
         &self.geometry.mesh
     }
@@ -164,6 +470,9 @@ impl Document {
     pub fn project(&self) -> Project {
         Project {
             version: Project::VERSION,
+            scene: self.geometry.scene.clone(),
+            model_name: self.geometry.name.clone(),
+            submodels: self.geometry.submodels.clone(),
             mesh: self.geometry.mesh.clone(),
             brushes: self.brushes.clone(),
             symmetry: self.symmetry.clone(),
@@ -185,6 +494,9 @@ impl Document {
     pub fn replace_project(&mut self, project: Project, path: &str) -> Result<(), String> {
         project.validate()?;
         self.geometry = Geometry {
+            scene: project.scene,
+            name: project.model_name,
+            submodels: project.submodels,
             mesh: project.mesh,
             settings: project.mesh_settings,
         };
@@ -222,6 +534,9 @@ impl Document {
         Ok(())
     }
     pub fn apply_dab(&mut self, brush: &Brush, dab: Dab) -> bool {
+        if !self.active_visible() {
+            return false;
+        }
         self.begin_stroke();
         let dabs = self.symmetry.dabs(dab);
         let settings = &self.geometry.settings.adaptive;
@@ -728,5 +1043,267 @@ mod adaptive_smooth_tests {
         assert_eq!(document.mesh(), &before);
         document.redo();
         assert_eq!(document.mesh(), &after);
+    }
+}
+
+#[cfg(test)]
+mod submodel_tests {
+    use super::*;
+
+    #[test]
+    fn duplication_preserves_stack_and_switching_and_creation_undo_as_a_scene() {
+        let mut document = Document::default();
+        let mut geometry = document.geometry_snapshot();
+        geometry.subdivide().unwrap();
+        geometry.mesh.mask[0] = 0.8;
+        document.replace_geometry(geometry).unwrap();
+        let source = document.geometry_snapshot();
+        document.duplicate_model(false).unwrap();
+        assert_eq!(document.mesh(), &source.mesh);
+        assert_eq!(document.mesh_settings(), &source.settings);
+        assert_eq!(
+            document.submodel_names().collect::<Vec<_>>(),
+            vec!["Copy 1", "Model"]
+        );
+        document.clear_mask();
+        document.select_submodel(1).unwrap();
+        assert_eq!(document.mesh().mask[0], 0.8);
+        document.undo();
+        assert_eq!(document.geometry.name, "Copy 1");
+        assert_eq!(document.mesh().mask[0], 0.);
+        document.undo();
+        assert_eq!(document.mesh().mask[0], 0.8);
+        document.undo();
+        assert_eq!(document.geometry_snapshot(), source);
+        document.redo();
+        let project: Project =
+            serde_json::from_slice(&serde_json::to_vec(&document.project()).unwrap()).unwrap();
+        let mut restored = Document::default();
+        restored.replace_project(project, "submodels.clay").unwrap();
+        assert_eq!(restored.geometry_snapshot(), document.geometry_snapshot());
+        let before = restored.geometry_snapshot();
+        let mut invalid = restored.project();
+        invalid.submodels[0].mesh.mask.clear();
+        assert!(restored.replace_project(invalid, "bad.clay").is_err());
+        assert_eq!(restored.geometry_snapshot(), before);
+    }
+
+    #[test]
+    fn extraction_compacts_selected_faces_keeps_source_and_fails_transactionally() {
+        let mut document = Document::default();
+        let before = document.geometry_snapshot();
+        assert!(document.duplicate_model(true).is_err());
+        assert_eq!(document.geometry_snapshot(), before);
+        assert!(!document.is_dirty());
+        assert!(!document.can_undo());
+        for (vertex, mask) in document
+            .geometry
+            .mesh
+            .vertices
+            .iter()
+            .zip(&mut document.geometry.mesh.mask)
+        {
+            if vertex.1 > 0.7 {
+                *mask = 0.5;
+            }
+        }
+        let source = document.geometry_snapshot();
+        let faces = source
+            .mesh
+            .triangles
+            .iter()
+            .filter(|face| face.iter().all(|&i| source.mesh.mask[i] >= 0.5))
+            .count();
+        document.duplicate_model(true).unwrap();
+        assert_eq!(document.mesh().triangles.len(), faces);
+        assert!(faces > 0 && faces < source.mesh.triangles.len());
+        assert!(document.mesh().vertices.len() < source.mesh.vertices.len());
+        assert!(document.mesh().mask.iter().all(|&mask| mask == 0.));
+        assert_eq!(document.geometry.submodels[0].mesh, source.mesh);
+        document.mesh().validate().unwrap();
+        document.undo();
+        assert_eq!(document.geometry_snapshot(), source);
+        document.redo();
+        assert_eq!(document.geometry.name, "Extract 1");
+    }
+}
+
+#[cfg(test)]
+mod scene_transform_tests {
+    use super::*;
+    use crate::sculpt::{ModelMetadata, Transform, Vec3};
+    #[test]
+    fn transforms_follow_all_levels_preserve_inactive_models_and_undo_once_per_drag() {
+        let mut document = Document::default();
+        let mut geometry = document.geometry_snapshot();
+        geometry.subdivide().unwrap();
+        geometry.mesh.mask[0] = 1.;
+        geometry.settings.lower[0].mask[0] = 1.;
+        document.replace_geometry(geometry).unwrap();
+        document.duplicate_model(false).unwrap();
+        let before = document.geometry_snapshot();
+        let count = document.history_counts();
+        let transform = Transform {
+            pivot: Vec3(0.2, 0.1, 0.),
+            translation: Vec3(0.3, 0., 0.),
+            scale: Vec3(0.8, 0.8, 0.8),
+            ..Default::default()
+        };
+        for _ in 0..3 {
+            document.apply_transform(transform, true).unwrap();
+        }
+        assert!(
+            !document.end_stroke(),
+            "transforms must not trigger automatic remeshing"
+        );
+        assert_eq!(document.history_counts().0, count.0 + 1);
+        assert_eq!(document.geometry.submodels, before.submodels);
+        assert_eq!(document.mesh().vertices[0], before.mesh.vertices[0]);
+        assert_eq!(
+            document.mesh_settings().lower[0].vertices[0],
+            before.settings.lower[0].vertices[0]
+        );
+        let expected = transform.point(transform.point(transform.point(before.mesh.vertices[1])));
+        assert!((document.mesh().vertices[1] - expected).len() < 1e-5);
+        document.mesh_settings().validate(document.mesh()).unwrap();
+        let after = document.geometry_snapshot();
+        document.undo();
+        assert_eq!(document.geometry_snapshot(), before);
+        document.redo();
+        assert_eq!(document.geometry_snapshot(), after);
+        document.undo();
+        document.apply_transform(transform, false).unwrap();
+        document.end_stroke();
+        assert!(
+            (document.mesh().vertices[0] - transform.point(before.mesh.vertices[0])).len() < 1e-5
+        );
+        assert!(!document.can_redo());
+    }
+    #[test]
+    fn invalid_identity_and_hidden_transforms_are_transactional() {
+        let mut document = Document::default();
+        let before = document.geometry_snapshot();
+        assert!(
+            !document
+                .apply_transform(
+                    Transform {
+                        pivot: Vec3(0.17, 0.24, 0.33),
+                        ..Default::default()
+                    },
+                    true
+                )
+                .unwrap()
+        );
+        assert!(
+            document
+                .apply_transform(
+                    Transform {
+                        scale: Vec3(0., 1., 1.),
+                        ..Default::default()
+                    },
+                    false
+                )
+                .is_err()
+        );
+        assert!(
+            document
+                .apply_transform(
+                    Transform {
+                        translation: Vec3(f32::NAN, 0., 0.),
+                        ..Default::default()
+                    },
+                    false
+                )
+                .is_err()
+        );
+        assert_eq!(document.geometry_snapshot(), before);
+        assert!(!document.can_undo());
+        document
+            .set_model_metadata(
+                0,
+                "Model".into(),
+                ModelMetadata {
+                    visible: false,
+                    group: String::new(),
+                },
+            )
+            .unwrap();
+        let hidden = document.geometry_snapshot();
+        assert!(
+            document
+                .apply_transform(
+                    Transform {
+                        translation: Vec3(1., 0., 0.),
+                        ..Default::default()
+                    },
+                    false
+                )
+                .is_err()
+        );
+        assert_eq!(document.geometry_snapshot(), hidden);
+    }
+    #[test]
+    fn groups_order_and_visibility_survive_selection_roundtrip_and_undo() {
+        let mut document = Document::default();
+        document.duplicate_model(false).unwrap();
+        document.duplicate_model(false).unwrap();
+        document.add_group("Body".into()).unwrap();
+        document.add_group("Details".into()).unwrap();
+        document
+            .set_model_metadata(
+                0,
+                "Eyes".into(),
+                ModelMetadata {
+                    visible: true,
+                    group: "Details".into(),
+                },
+            )
+            .unwrap();
+        document
+            .set_model_metadata(
+                2,
+                "Base".into(),
+                ModelMetadata {
+                    visible: true,
+                    group: "Body".into(),
+                },
+            )
+            .unwrap();
+        let names: Vec<_> = document.submodel_names().map(str::to_string).collect();
+        document.select_submodel(2).unwrap();
+        assert_eq!(
+            document.submodel_names().collect::<Vec<_>>(),
+            names.iter().map(String::as_str).collect::<Vec<_>>()
+        );
+        assert_eq!(document.active_model_index(), 2);
+        document.reorder_model(2, 0).unwrap();
+        assert_eq!(document.active_model_index(), 0);
+        assert_eq!(document.submodel_names().next(), Some("Base"));
+        document.set_group_visible("Body", false).unwrap();
+        assert!(!document.active_visible());
+        let hidden = document.geometry_snapshot();
+        document.undo();
+        assert!(document.active_visible());
+        document.redo();
+        assert_eq!(document.geometry_snapshot(), hidden);
+        document.reorder_group(1, 0).unwrap();
+        assert_eq!(document.groups(), &["Details", "Body"]);
+        let json = serde_json::to_vec(&document.project()).unwrap();
+        let project: Project = serde_json::from_slice(&json).unwrap();
+        let mut restored = Document::default();
+        restored.replace_project(project, "scene.clay").unwrap();
+        assert_eq!(restored.geometry_snapshot(), document.geometry_snapshot());
+        restored.remove_group("Body").unwrap();
+        assert_eq!(restored.model(0).unwrap().metadata.group, "");
+        assert_eq!(restored.model_count(), 3);
+        restored.undo();
+        assert_eq!(restored.geometry_snapshot(), document.geometry_snapshot());
+        let mut invalid = restored.project();
+        invalid.scene.active_index = 10;
+        assert!(restored.replace_project(invalid, "bad.clay").is_err());
+        let mut invalid = restored.project();
+        invalid.submodels[0].metadata.group = "Missing".into();
+        assert!(restored.replace_project(invalid, "bad.clay").is_err());
+        assert_eq!(restored.geometry_snapshot(), document.geometry_snapshot());
     }
 }

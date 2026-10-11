@@ -249,6 +249,18 @@ impl App {
                 command,
                 Command::Undo
                     | Command::Redo
+                    | Command::EditSubmodel(..)
+                    | Command::ReorderSubmodel(..)
+                    | Command::AddGroup(_)
+                    | Command::RemoveGroup(_)
+                    | Command::ReorderGroup(..)
+                    | Command::GroupVisible(..)
+                    | Command::TransformMode(_)
+                    | Command::TransformOperation(_)
+                    | Command::RespectTransformMask(_)
+                    | Command::SelectSubmodel(_)
+                    | Command::DuplicateModel
+                    | Command::ExtractMasked
                     | Command::ClearMask
                     | Command::SetMeshLevel(_)
                     | Command::DeleteLowerLevels
@@ -301,6 +313,67 @@ impl App {
                 self.ui.status =
                     label.map_or("Nothing to redo".into(), |label| format!("Redid: {label}"));
                 Ok(())
+            }
+            Command::TransformMode(mode) => {
+                self.viewport.finish_transform_drag(&mut self.document);
+                self.ui.transform_mode = mode;
+                self.ui.transform_operation = if mode == crate::viewport::TransformMode::ActionLine
+                {
+                    crate::viewport::TransformOperation::PlaceLine
+                } else {
+                    crate::viewport::TransformOperation::Move
+                };
+                self.ui.status = match mode { crate::viewport::TransformMode::Sculpt => "Sculpt mode", crate::viewport::TransformMode::World => "World axes: drag an axis or the center handle", crate::viewport::TransformMode::ActionLine => "Action Line: drag to place a pivot and direction, then choose Move or Scale" }.into();
+                Ok(())
+            }
+            Command::TransformOperation(operation) => {
+                self.viewport.finish_transform_drag(&mut self.document);
+                self.ui.transform_operation = operation;
+                Ok(())
+            }
+            Command::RespectTransformMask(respect) => {
+                self.viewport.finish_transform_drag(&mut self.document);
+                self.ui.respect_transform_mask = respect;
+                Ok(())
+            }
+            Command::EditSubmodel(index, name, metadata) => {
+                self.viewport.cancel(&mut self.document);
+                self.document.set_model_metadata(index, name, metadata)
+            }
+            Command::ReorderSubmodel(from, to) => {
+                self.viewport.cancel(&mut self.document);
+                self.document.reorder_model(from, to)
+            }
+            Command::AddGroup(name) => {
+                self.viewport.cancel(&mut self.document);
+                self.document.add_group(name)
+            }
+            Command::RemoveGroup(name) => {
+                self.viewport.cancel(&mut self.document);
+                self.document.remove_group(&name)
+            }
+            Command::ReorderGroup(from, to) => {
+                self.viewport.cancel(&mut self.document);
+                self.document.reorder_group(from, to)
+            }
+            Command::GroupVisible(name, visible) => {
+                self.viewport.cancel(&mut self.document);
+                self.document.set_group_visible(&name, visible)
+            }
+            Command::SelectSubmodel(index) => {
+                self.viewport.cancel(&mut self.document);
+                self.document.select_submodel(index)
+            }
+            Command::DuplicateModel | Command::ExtractMasked => {
+                self.viewport.cancel(&mut self.document);
+                let extract = matches!(command, Command::ExtractMasked);
+                self.document.duplicate_model(extract).map(|()| {
+                    self.ui.status = if extract {
+                        "Masked surface extracted; source kept".into()
+                    } else {
+                        "Model duplicated".into()
+                    }
+                })
             }
             Command::ClearMask => {
                 self.viewport.cancel(&mut self.document);
@@ -407,20 +480,34 @@ impl App {
         }
     }
     pub(crate) fn show_viewport(&mut self, ui: &mut egui::Ui) {
+        let enabled = self.ui.pending.is_none()
+            && !self.ui.settings_open
+            && !self.ui.layout_open
+            && self.mesh_job.is_none();
+        let (commands, toolbar_rect) =
+            self.ui
+                .transform_toolbar(ui.ctx(), ui.available_rect_before_wrap(), enabled);
+        for command in commands {
+            self.dispatch(command, ui.ctx());
+        }
+        // A toolbar click must never also grab a handle or place an Action Line.
+        let over_toolbar = toolbar_rect.is_some_and(|rect| {
+            ui.input(|i| i.pointer.hover_pos().is_some_and(|p| rect.contains(p)))
+        });
         self.viewport.show(
             ui,
             &mut self.document,
             &mut self.camera,
             ViewportOptions {
+                transform_mode: self.ui.transform_mode,
+                transform_operation: self.ui.transform_operation,
+                respect_mask: self.ui.respect_transform_mask,
                 selected: self.ui.selected,
                 pressure: self.pressure,
                 wire: self.ui.wire,
                 show_guides: self.ui.show_symmetry_guides,
                 guide_opacity: self.ui.guide_opacity,
-                enabled: self.ui.pending.is_none()
-                    && !self.ui.settings_open
-                    && !self.ui.layout_open
-                    && self.mesh_job.is_none(),
+                enabled: enabled && !over_toolbar,
                 smooth: self.ui.preferences.smooth,
                 reverse: self.ui.preferences.reverse,
                 zoom_hold: self.ui.preferences.zoom_hold,
