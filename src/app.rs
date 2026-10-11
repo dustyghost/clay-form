@@ -77,6 +77,7 @@ impl App {
     }
     fn shortcuts(&mut self, ctx: &egui::Context) {
         if ctx.wants_keyboard_input()
+            || self.ui.primitive_warning.is_some()
             || self.ui.pending.is_some()
             || self.ui.settings_open
             || self.ui.layout_open
@@ -147,6 +148,7 @@ impl App {
     }
 
     fn start_mesh_job(&mut self, operation: Operation) -> Result<(), String> {
+        self.document.require_sculpt_mesh()?;
         if self.mesh_job.is_some() {
             return Err("A mesh operation is already running".into());
         }
@@ -244,10 +246,29 @@ impl App {
         }
     }
     pub(crate) fn dispatch(&mut self, command: Command, ctx: &egui::Context) {
+        if self.ui.primitive_warning.is_some()
+            && !matches!(
+                command,
+                Command::ConfirmPrimitive | Command::CancelPrimitive
+            )
+        {
+            self.ui.status = "Confirm or cancel primitive replacement first".into();
+            return;
+        }
+        if !matches!(
+            command,
+            Command::UpdatePrimitive(_) | Command::EndPrimitiveEdit
+        ) {
+            self.document.end_primitive_edit();
+        }
         if self.mesh_job.is_some()
             && matches!(
                 command,
-                Command::Undo
+                Command::RequestPrimitive
+                    | Command::ConfirmPrimitive
+                    | Command::UpdatePrimitive(_)
+                    | Command::ConvertPrimitive
+                    | Command::Undo
                     | Command::Redo
                     | Command::EditSubmodel(..)
                     | Command::ReorderSubmodel(..)
@@ -313,6 +334,52 @@ impl App {
                 self.ui.status =
                     label.map_or("Nothing to redo".into(), |label| format!("Redid: {label}"));
                 Ok(())
+            }
+            Command::RequestPrimitive => {
+                self.viewport.cancel(&mut self.document);
+                if self.document.primitive().is_some() {
+                    self.ui.primitive_editor_open = true;
+                } else {
+                    self.ui.primitive_warning = Some((
+                        self.document.active_model_index(),
+                        self.document
+                            .model(self.document.active_model_index())
+                            .unwrap()
+                            .name
+                            .into(),
+                    ));
+                }
+                Ok(())
+            }
+            Command::CancelPrimitive => {
+                self.ui.primitive_warning = None;
+                Ok(())
+            }
+            Command::ConfirmPrimitive => {
+                if let Some((index, name)) = self.ui.primitive_warning.take() {
+                    if self.document.active_model_index() != index
+                        || self.document.model(index).is_none_or(|m| m.name != name)
+                    {
+                        Err("Submodel changed; request primitive replacement again".into())
+                    } else {
+                        self.document.initialize_primitive().map(|()| {self.ui.primitive_editor_open=true;self.ui.transform_mode=crate::viewport::TransformMode::Sculpt;self.ui.status="Parametric primitive: drag shape handles or edit parameters; convert when ready to sculpt".into();})
+                    }
+                } else {
+                    Ok(())
+                }
+            }
+            Command::UpdatePrimitive(primitive) => self.document.update_primitive(primitive),
+            Command::EndPrimitiveEdit => {
+                self.document.end_primitive_edit();
+                Ok(())
+            }
+            Command::ConvertPrimitive => {
+                self.viewport.cancel(&mut self.document);
+                self.document.convert_primitive().map(|()| {
+                    self.ui.primitive_editor_open = false;
+                    self.ui.status =
+                        "Primitive converted: geometry is now editable with sculpt brushes".into();
+                })
             }
             Command::TransformMode(mode) => {
                 self.viewport.finish_transform_drag(&mut self.document);
@@ -480,7 +547,14 @@ impl App {
         }
     }
     pub(crate) fn show_viewport(&mut self, ui: &mut egui::Ui) {
-        let enabled = self.ui.pending.is_none()
+        let (primitive_commands, editor_rect) =
+            self.ui
+                .primitive_popup(ui.ctx(), ui.available_rect_before_wrap(), &self.document);
+        for command in primitive_commands {
+            self.dispatch(command, ui.ctx());
+        }
+        let enabled = self.ui.primitive_warning.is_none()
+            && self.ui.pending.is_none()
             && !self.ui.settings_open
             && !self.ui.layout_open
             && self.mesh_job.is_none();
@@ -490,7 +564,22 @@ impl App {
         for command in commands {
             self.dispatch(command, ui.ctx());
         }
+        let (commands, resolution_rect) = self.ui.primitive_resolution_toolbar(
+            ui.ctx(),
+            ui.available_rect_before_wrap(),
+            &self.document,
+            enabled,
+        );
+        for command in commands {
+            self.dispatch(command, ui.ctx());
+        }
+        let over_resolution = resolution_rect.is_some_and(|rect| {
+            ui.input(|i| i.pointer.hover_pos().is_some_and(|p| rect.contains(p)))
+        });
         // A toolbar click must never also grab a handle or place an Action Line.
+        let over_editor = editor_rect.is_some_and(|rect| {
+            ui.input(|i| i.pointer.hover_pos().is_some_and(|p| rect.contains(p)))
+        });
         let over_toolbar = toolbar_rect.is_some_and(|rect| {
             ui.input(|i| i.pointer.hover_pos().is_some_and(|p| rect.contains(p)))
         });
@@ -507,7 +596,7 @@ impl App {
                 wire: self.ui.wire,
                 show_guides: self.ui.show_symmetry_guides,
                 guide_opacity: self.ui.guide_opacity,
-                enabled: enabled && !over_toolbar,
+                enabled: enabled && !over_toolbar && !over_editor && !over_resolution,
                 smooth: self.ui.preferences.smooth,
                 reverse: self.ui.preferences.reverse,
                 zoom_hold: self.ui.preferences.zoom_hold,

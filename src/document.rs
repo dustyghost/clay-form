@@ -27,6 +27,7 @@ pub struct Document {
     history: History,
     symmetry: Symmetry,
     dirty: bool,
+    primitive_edit_active: bool,
     stroke_active: bool,
     stroke_deformed: bool,
     stroke_before: Option<Geometry>,
@@ -41,6 +42,7 @@ impl Default for Document {
             history: History::default(),
             symmetry: Symmetry::default(),
             dirty: false,
+            primitive_edit_active: false,
             stroke_active: false,
             stroke_deformed: false,
             stroke_before: None,
@@ -50,6 +52,72 @@ impl Default for Document {
     }
 }
 impl Document {
+    pub fn primitive(&self) -> Option<&crate::sculpt::Primitive> {
+        self.mesh_settings().primitive.as_ref()
+    }
+    pub fn require_sculpt_mesh(&self) -> Result<(), String> {
+        if self.primitive().is_some() {
+            Err("Convert the primitive to a sculpting mesh first".into())
+        } else {
+            Ok(())
+        }
+    }
+    pub fn initialize_primitive(&mut self) -> Result<(), String> {
+        let mut primitive = crate::sculpt::Primitive::default();
+        let mut min = crate::sculpt::Vec3(f32::INFINITY, f32::INFINITY, f32::INFINITY);
+        let mut max = crate::sculpt::Vec3(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY);
+        for p in &self.mesh().vertices {
+            min = crate::sculpt::Vec3(min.0.min(p.0), min.1.min(p.1), min.2.min(p.2));
+            max = crate::sculpt::Vec3(max.0.max(p.0), max.1.max(p.1), max.2.max(p.2));
+        }
+        primitive.center = (min + max) * 0.5;
+        let mut geometry = self.geometry.clone();
+        geometry.mesh = primitive.mesh()?;
+        geometry.settings = MeshSettings {
+            primitive: Some(primitive),
+            ..Default::default()
+        };
+        self.end_primitive_edit();
+        self.replace_geometry_named(geometry, "Initialize primitive")
+    }
+    /// Continuous slider updates are one edit until the pointer is released.
+    pub fn update_primitive(&mut self, primitive: crate::sculpt::Primitive) -> Result<(), String> {
+        let Some(current) = self.primitive() else {
+            return Err("The active submodel is no longer a primitive".into());
+        };
+        if *current == primitive {
+            return Ok(());
+        }
+        let mesh = primitive.mesh()?;
+        self.end_stroke();
+        if !self.primitive_edit_active {
+            self.history
+                .record_named(&self.geometry, "Edit primitive parameters");
+            self.primitive_edit_active = true;
+        }
+        self.geometry.mesh = mesh;
+        self.geometry.settings = MeshSettings {
+            primitive: Some(primitive),
+            ..Default::default()
+        };
+        self.dirty = true;
+        Ok(())
+    }
+    pub fn end_primitive_edit(&mut self) {
+        self.primitive_edit_active = false;
+    }
+    pub fn convert_primitive(&mut self) -> Result<(), String> {
+        if self.primitive().is_none() {
+            return Err("The active submodel is already a sculpting mesh".into());
+        }
+        if self.mesh().triangles.is_empty() {
+            return Err("Fill the circle before converting it to a sculpting mesh".into());
+        }
+        self.end_primitive_edit();
+        let mut geometry = self.geometry.clone();
+        geometry.settings.primitive = None;
+        self.replace_geometry_named(geometry, "Convert primitive to sculpting mesh")
+    }
     pub fn active_model_index(&self) -> usize {
         self.geometry.scene.active_index
     }
@@ -114,6 +182,7 @@ impl Document {
         self.dirty = true;
     }
     pub fn select_submodel(&mut self, index: usize) -> Result<(), String> {
+        self.end_primitive_edit();
         if index >= self.model_count() {
             return Err("Submodel no longer exists".into());
         }
@@ -129,6 +198,10 @@ impl Document {
         if self.model_count() >= 64 {
             return Err("Submodels are limited to 64".into());
         }
+        if extract {
+            self.require_sculpt_mesh()?;
+        }
+        self.end_primitive_edit();
         let mesh = if extract {
             self.mesh().extract_masked()?
         } else {
@@ -320,15 +393,22 @@ impl Document {
             return Err("Show the active submodel before transforming it".into());
         }
         let mut geometry = self.geometry.clone();
-        for mesh in std::iter::once(&mut geometry.mesh)
-            .chain(geometry.settings.lower.iter_mut())
-            .chain(geometry.settings.upper.iter_mut())
-        {
-            for (vertex, mask) in mesh.vertices.iter_mut().zip(&mesh.mask) {
-                let mobility = if respect_mask { 1. - mask } else { 1. };
-                *vertex = *vertex + (transform.point(*vertex) - *vertex) * mobility;
+        self.end_primitive_edit();
+        if let Some(primitive) = self.primitive() {
+            let primitive = primitive.transformed(transform)?;
+            geometry.mesh = primitive.mesh()?;
+            geometry.settings.primitive = Some(primitive);
+        } else {
+            for mesh in std::iter::once(&mut geometry.mesh)
+                .chain(geometry.settings.lower.iter_mut())
+                .chain(geometry.settings.upper.iter_mut())
+            {
+                for (vertex, mask) in mesh.vertices.iter_mut().zip(&mesh.mask) {
+                    let mobility = if respect_mask { 1. - mask } else { 1. };
+                    *vertex = *vertex + (transform.point(*vertex) - *vertex) * mobility;
+                }
+                mesh.validate()?;
             }
-            mesh.validate()?;
         }
         if geometry == self.geometry {
             return Ok(false);
@@ -367,6 +447,7 @@ impl Document {
         Ok(())
     }
     pub fn set_mesh_level(&mut self, level: usize) -> Result<(), String> {
+        self.require_sculpt_mesh()?;
         if level == self.geometry.settings.level() {
             return Ok(());
         }
@@ -376,6 +457,7 @@ impl Document {
     }
     /// Keep the active surface and the opposite side of the subdivision stack.
     pub fn delete_mesh_levels(&mut self, lower: bool) -> Result<(), String> {
+        self.require_sculpt_mesh()?;
         let levels = if lower {
             &self.geometry.settings.lower
         } else {
@@ -400,6 +482,7 @@ impl Document {
         )
     }
     pub fn set_dynamic_mesh(&mut self, enabled: bool) -> Result<(), String> {
+        self.require_sculpt_mesh()?;
         if self.geometry.settings.dynamic == enabled && !self.geometry.settings.adaptive.enabled {
             return Ok(());
         }
@@ -408,6 +491,7 @@ impl Document {
         self.replace_geometry_named(geometry, "Switch mesh mode")
     }
     pub fn set_adaptive(&mut self, settings: AdaptiveSettings) -> Result<(), String> {
+        self.require_sculpt_mesh()?;
         settings.validate()?;
         if self.geometry.settings.adaptive == settings {
             return Ok(());
@@ -431,6 +515,7 @@ impl Document {
         self.adaptive_budget = AdaptiveBudget::default();
     }
     pub fn set_remesh_settings(&mut self, resolution: u32, auto: bool) -> Result<(), String> {
+        self.require_sculpt_mesh()?;
         if !(16..=96).contains(&resolution) {
             return Err("Remesh resolution must be between 16 and 96".into());
         }
@@ -484,6 +569,7 @@ impl Document {
         self.dirty = false;
     }
     pub fn new_sphere(&mut self) {
+        self.end_primitive_edit();
         self.geometry = Geometry::new(Mesh::sphere());
         self.history = History::default();
         self.dirty = false;
@@ -493,6 +579,7 @@ impl Document {
     /// Validate before changing anything, so an invalid open leaves the current document intact.
     pub fn replace_project(&mut self, project: Project, path: &str) -> Result<(), String> {
         project.validate()?;
+        self.end_primitive_edit();
         self.geometry = Geometry {
             scene: project.scene,
             name: project.model_name,
@@ -534,7 +621,7 @@ impl Document {
         Ok(())
     }
     pub fn apply_dab(&mut self, brush: &Brush, dab: Dab) -> bool {
-        if !self.active_visible() {
+        if !self.active_visible() || self.primitive().is_some() {
             return false;
         }
         self.begin_stroke();
@@ -582,18 +669,23 @@ impl Document {
         deformed
     }
     pub fn undo(&mut self) {
+        self.end_primitive_edit();
         self.end_stroke();
         if self.history.undo(&mut self.geometry) {
             self.dirty = true;
         }
     }
     pub fn redo(&mut self) {
+        self.end_primitive_edit();
         self.end_stroke();
         if self.history.redo(&mut self.geometry) {
             self.dirty = true;
         }
     }
     pub fn clear_mask(&mut self) {
+        if self.primitive().is_some() {
+            return;
+        }
         self.end_stroke();
         self.history.record_named(&self.geometry, "Clear mask");
         self.geometry.mesh.mask.fill(0.);
@@ -1305,5 +1397,115 @@ mod scene_transform_tests {
         invalid.submodels[0].metadata.group = "Missing".into();
         assert!(restored.replace_project(invalid, "bad.clay").is_err());
         assert_eq!(restored.geometry_snapshot(), document.geometry_snapshot());
+    }
+}
+
+#[cfg(test)]
+mod primitive_tests {
+    use super::*;
+    use crate::sculpt::{Primitive, PrimitiveKind, Transform, Vec3};
+    #[test]
+    fn primitive_replacement_conversion_and_parameter_drags_restore_with_undo() {
+        let mut d = Document::default();
+        d.duplicate_model(false).unwrap();
+        let mut geometry = d.geometry_snapshot();
+        geometry.subdivide().unwrap();
+        geometry.mesh.mask[0] = 0.7;
+        d.replace_geometry(geometry).unwrap();
+        let before = d.geometry_snapshot();
+        d.initialize_primitive().unwrap();
+        assert!(d.primitive().is_some());
+        assert_eq!(d.mesh_settings().levels(), 1);
+        assert!(d.mesh().mask.iter().all(|m| *m == 0.));
+        assert_eq!(d.geometry.submodels, before.submodels);
+        let initialized = d.geometry_snapshot();
+        let count = d.history_counts();
+        for size in [2.2, 2.4, 2.6] {
+            let mut p = d.primitive().unwrap().clone();
+            p.size.0 = size;
+            d.update_primitive(p).unwrap();
+        }
+        d.end_primitive_edit();
+        assert_eq!(d.history_counts().0, count.0 + 1);
+        let preview = d.geometry_snapshot();
+        d.convert_primitive().unwrap();
+        assert!(d.primitive().is_none());
+        assert_eq!(d.mesh(), &preview.mesh);
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), preview);
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), initialized);
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), before);
+        d.redo();
+        assert_eq!(d.geometry_snapshot(), initialized);
+    }
+    #[test]
+    fn live_primitive_blocks_brushes_topology_and_invalid_recipe_updates() {
+        let mut d = Document::default();
+        d.initialize_primitive().unwrap();
+        let original = d.geometry_snapshot();
+        let dab = Dab {
+            center: Vec3(0., 1., 0.),
+            normal: Vec3(0., 1., 0.),
+            right: Vec3(1., 0., 0.),
+            up: Vec3(0., 0., 1.),
+            radius: 0.5,
+            pressure: 1.,
+            delta: Vec3::default(),
+            invert: false,
+        };
+        assert!(!d.apply_dab(&Brush::new(Kind::Standard), dab));
+        assert!(!d.apply_dab(&Brush::new(Kind::Mask), dab));
+        assert!(d.set_dynamic_mesh(true).is_err());
+        assert!(
+            d.set_adaptive(AdaptiveSettings {
+                enabled: true,
+                ..Default::default()
+            })
+            .is_err()
+        );
+        let mut invalid = d.primitive().unwrap().clone();
+        invalid.divisions[0] = 0;
+        assert!(d.update_primitive(invalid).is_err());
+        assert_eq!(d.geometry_snapshot(), original);
+        let mut ring = Primitive::for_kind(PrimitiveKind::Circle);
+        ring.filled = false;
+        d.update_primitive(ring).unwrap();
+        d.end_primitive_edit();
+        assert!(d.convert_primitive().is_err());
+    }
+    #[test]
+    fn primitive_recipes_follow_transforms_duplicate_switch_and_project_roundtrip() {
+        let mut d = Document::default();
+        d.initialize_primitive().unwrap();
+        let transform = Transform {
+            pivot: Vec3(0.1, 0.2, 0.3),
+            translation: Vec3(0.4, 0., 0.),
+            scale: Vec3(0.8, 1.2, 1.1),
+            stretch: Some((Vec3(1., 1., 0.).norm(), 0.7)),
+        };
+        d.apply_transform(transform, false).unwrap();
+        d.end_stroke();
+        d.mesh_settings().validate(d.mesh()).unwrap();
+        let mut p = d.primitive().unwrap().clone();
+        let center = p.center;
+        let basis = p.basis;
+        p.divisions = [3, 4, 5];
+        d.update_primitive(p).unwrap();
+        d.end_primitive_edit();
+        assert_eq!(d.primitive().unwrap().center, center);
+        assert_eq!(d.primitive().unwrap().basis, basis);
+        d.duplicate_model(false).unwrap();
+        d.select_submodel(1).unwrap();
+        let json = serde_json::to_vec(&d.project()).unwrap();
+        let project: Project = serde_json::from_slice(&json).unwrap();
+        let mut loaded = Document::default();
+        loaded.replace_project(project, "primitive.clay").unwrap();
+        assert_eq!(loaded.geometry_snapshot(), d.geometry_snapshot());
+        let mut invalid = loaded.project();
+        invalid.mesh.vertices[0].0 += 0.1;
+        assert!(loaded.replace_project(invalid, "bad.clay").is_err());
+        assert_eq!(loaded.geometry_snapshot(), d.geometry_snapshot());
     }
 }

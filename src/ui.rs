@@ -6,7 +6,10 @@ use crate::{
     sculpt::{Alpha, Axis, Kind},
 };
 use eframe::egui::{self, Color32, Sense, Vec2};
+mod primitive;
 pub(crate) struct UiState {
+    pub(crate) primitive_warning: Option<(usize, String)>,
+    pub(crate) primitive_editor_open: bool,
     pub transform_mode: crate::viewport::TransformMode,
     pub transform_operation: crate::viewport::TransformOperation,
     pub respect_transform_mask: bool,
@@ -32,6 +35,8 @@ pub(crate) struct UiState {
 impl Default for UiState {
     fn default() -> Self {
         Self {
+            primitive_warning: None,
+            primitive_editor_open: false,
             transform_mode: crate::viewport::TransformMode::Sculpt,
             transform_operation: crate::viewport::TransformOperation::Move,
             respect_transform_mask: true,
@@ -144,6 +149,19 @@ impl UiState {
                     commands.push(Command::TransformMode(
                         crate::viewport::TransformMode::World,
                     ));
+                }
+                if ui
+                    .add_enabled(
+                        !self.mesh_busy,
+                        egui::Button::new(if document.primitive().is_some() {
+                            "Edit primitive"
+                        } else {
+                            "Primitive"
+                        }),
+                    )
+                    .clicked()
+                {
+                    commands.push(Command::RequestPrimitive);
                 }
                 ui.menu_button("Submodels", |ui| {
                     self.submodel_controls(ui, document, &mut commands)
@@ -769,6 +787,7 @@ impl UiState {
         ui.label("Click a model row to select it. The eye toggles visibility.");
         ui.add_enabled_ui(!self.mesh_busy, |ui| {
             ui.horizontal_wrapped(|ui| {
+                if ui.button(if document.primitive().is_some() {"Edit primitive"} else {"Primitive"}).clicked() { commands.push(Command::RequestPrimitive); }
                 if ui.button("Duplicate").clicked() { commands.push(Command::DuplicateModel); }
                 if ui.button("Extract masked").on_hover_text("Copy faces at least 50% masked at every vertex; keep the source. Boundaries remain open.").clicked() { commands.push(Command::ExtractMasked); }
             });
@@ -864,6 +883,16 @@ impl UiState {
         document: &Document,
         commands: &mut Vec<Command>,
     ) {
+        if document.primitive().is_some() {
+            ui.label("This submodel is a parametric primitive. Convert it before sculpting or changing topology.");
+            if ui.button("Edit primitive").clicked() {
+                commands.push(Command::RequestPrimitive);
+            }
+            if ui.button("Convert to sculpting mesh").clicked() {
+                commands.push(Command::ConvertPrimitive);
+            }
+            return;
+        }
         let settings = document.mesh_settings();
         ui.label(format!(
             "{} vertices • {} faces",

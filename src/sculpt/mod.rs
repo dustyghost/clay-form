@@ -20,3 +20,6 @@ mod tests;
 
 mod transform;
 pub use transform::Transform;
+
+mod primitive;
+pub use primitive::{HeadOptions, Primitive, PrimitiveKind};

@@ -35,6 +35,7 @@ impl Scene {
             mask: Vec::new(),
         };
         let mut owners = Vec::new();
+        let mut outlines = Vec::new();
         let mut active_vertices = 0;
         for index in
             std::iter::once(active).chain((0..document.model_count()).filter(|i| *i != active))
@@ -45,6 +46,11 @@ impl Scene {
             }
             let surface = model.display_mesh(index == active);
             let offset = mesh.vertices.len();
+            if surface.triangles.is_empty() && surface.vertices.len() > 1 {
+                for i in 0..surface.vertices.len() {
+                    outlines.push([offset + i, offset + (i + 1) % surface.vertices.len()]);
+                }
+            }
             mesh.vertices.extend_from_slice(&surface.vertices);
             mesh.mask.extend_from_slice(&surface.mask);
             mesh.triangles
@@ -113,6 +119,12 @@ impl Scene {
             }
         }
         painter.add(egui::Shape::mesh(rendered));
+        for edge in outlines {
+            painter.line_segment(
+                edge.map(|i| positions[i]),
+                egui::Stroke::new(2., Color32::from_rgb(190, 155, 125)),
+            );
+        }
         if wire {
             for &(i, _) in &faces {
                 let t = mesh.triangles[i];

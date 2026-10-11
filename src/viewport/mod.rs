@@ -1,6 +1,7 @@
 //! Converts viewport gestures into camera movement and document sculpt dabs.
 mod gizmo;
 mod guides;
+mod primitive;
 mod scene;
 mod transform;
 use crate::{
@@ -19,6 +20,7 @@ pub(crate) enum Gesture {
     Orbit,
     Gizmo,
     Transform,
+    Primitive,
 }
 struct SnakeStroke {
     center: Vec3,
@@ -35,6 +37,7 @@ pub(crate) struct Viewport {
     last: Option<Pos2>,
     snake: Option<SnakeStroke>,
     transform: transform::TransformControls,
+    primitive: primitive::PrimitiveControls,
 }
 #[derive(Clone, Copy)]
 pub(crate) struct ViewportOptions {
@@ -159,7 +162,14 @@ impl Viewport {
                 )
             {
                 Gesture::Transform
-            } else if options.transform_mode == TransformMode::Sculpt && scene.pick(pos).is_some() {
+            } else if options.transform_mode == TransformMode::Sculpt
+                && self.primitive.can_drag(document, &scene, pos)
+            {
+                Gesture::Primitive
+            } else if options.transform_mode == TransformMode::Sculpt
+                && document.primitive().is_none()
+                && scene.pick(pos).is_some()
+            {
                 Gesture::Sculpt
             } else {
                 Gesture::Orbit
@@ -217,6 +227,20 @@ impl Viewport {
                 options.transform_operation,
             );
             draw_gizmo(camera, &painter, gizmo_rect, pointer);
+            return;
+        }
+        if document.primitive().is_some() {
+            let dragging = primary && self.gesture == Some(Gesture::Primitive) && options.enabled;
+            self.primitive.update(document, &scene, pointer, dragging);
+            self.primitive.paint(document, &scene, &painter, pointer);
+            draw_gizmo(camera, &painter, gizmo_rect, pointer);
+            painter.text(
+                rect.left_bottom() + Vec2::new(16., -16.),
+                egui::Align2::LEFT_BOTTOM,
+                "Primitive · drag green handles · convert to start sculpting",
+                egui::FontId::proportional(13.),
+                Color32::from_rgb(130, 235, 185),
+            );
             return;
         }
         let drawing = primary && self.gesture == Some(Gesture::Sculpt) && options.enabled;

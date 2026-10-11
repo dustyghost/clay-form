@@ -11,6 +11,8 @@ const MAX_LEVELS: usize = 8;
 #[serde(default)]
 pub struct MeshSettings {
     /// Lowest to nearest lower level; higher levels are stored highest to nearest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primitive: Option<super::Primitive>,
     pub lower: Vec<Mesh>,
     pub upper: Vec<Mesh>,
     pub dynamic: bool,
@@ -22,6 +24,7 @@ pub struct MeshSettings {
 impl Default for MeshSettings {
     fn default() -> Self {
         Self {
+            primitive: None,
             lower: Vec::new(),
             upper: Vec::new(),
             dynamic: false,
@@ -42,6 +45,19 @@ impl MeshSettings {
         self.lower.len() + self.upper.len() + 1
     }
     pub fn validate(&self, mesh: &Mesh) -> Result<(), String> {
+        if let Some(primitive) = &self.primitive {
+            if self.levels() != 1
+                || self.dynamic
+                || self.adaptive.enabled
+                || self.auto_remesh
+                || primitive.mesh()? != *mesh
+            {
+                return Err(
+                    "Primitive preview does not match its parameters; convert before sculpting"
+                        .into(),
+                );
+            }
+        }
         self.adaptive.validate()?;
         if (self.adaptive.enabled && (self.dynamic || self.levels() != 1))
             || !(16..=96).contains(&self.resolution)
@@ -95,6 +111,9 @@ impl Geometry {
         }
     }
     pub fn subdivide(&mut self) -> Result<(), String> {
+        if self.settings.primitive.is_some() {
+            return Err("Convert the primitive to a sculpting mesh first".into());
+        }
         if self.settings.dynamic || self.settings.adaptive.enabled {
             return Err("Switch to subdivision mode first".into());
         }
