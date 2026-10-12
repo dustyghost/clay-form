@@ -106,3 +106,12 @@ Geometry-changing edits, mask edits, model selection/visibility, undo/redo, topo
 The Mask menu emits explicit invert/delete commands, gated during topology jobs. Inversion complements active and stored-level masks without changing positions. Deletion removes fully masked triangles at the 50% threshold, retains quads only when their complete triangulation survives, and compacts remaining vertices in their original order. Surviving masks, model metadata, and inactive submodels are preserved. A cut resets the active subdivision stack and closed-surface modes; one undo snapshot restores the original geometry and settings. Both edits invalidate the GPU display cache.
 
 Deleting all surface faces leaves an empty active model with no vertices. Mesh/project validation accepts this state; rendering and picking handle it, subdivision/remeshing report that there are no faces, and initializing a primitive places it at the origin. Transform handles are hidden for empty meshes. Empty models remain saveable and undoable.
+
+
+## Temporary thickness
+
+An optional, default-omitted `ModelMetadata::temporary_thickness` stores a total centered shell thickness per submodel. `sculpt/thickness.rs` verifies oriented manifold edges and boundary loops, offsets front/back layers along source normals, reverses the back-layer winding, and joins boundary edges with quad walls. It preserves masks and polygon topology and observes the ordinary mesh-size limits. This is a normal-offset shell, without self-intersection repair.
+
+The renderer caches a separate shell display mesh when thickness is enabled. The CPU scene still uses the original geometry for picking, guides, and controls, so preview faces never introduce invalid sculpting indices. Render-only shells are rebuilt when the document display revision changes and use the existing GPU pipeline. Subdivision LOD selection remains per model. Invalid/inapplicable preview settings on changed topology fall back to the original display surface; Apply validates before changing the document.
+
+Thickness-value drags share one history entry until release. Apply generates the same shell as the preview, clears the setting, converts primitive recipes, and resets the active subdivision/topology settings in one undoable geometry transaction. Default metadata serialization keeps legacy projects unchanged.

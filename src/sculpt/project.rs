@@ -8,6 +8,9 @@ pub struct Submodel {
     pub mesh: Mesh,
     pub mesh_settings: MeshSettings,
 }
+fn zero_thickness(value: &f32) -> bool {
+    *value == 0.
+}
 fn visible_default() -> bool {
     true
 }
@@ -17,16 +20,27 @@ pub struct ModelMetadata {
     pub visible: bool,
     #[serde(default)]
     pub group: String,
+    #[serde(default, skip_serializing_if = "zero_thickness")]
+    pub temporary_thickness: f32,
 }
 impl Default for ModelMetadata {
     fn default() -> Self {
         Self {
             visible: true,
             group: String::new(),
+            temporary_thickness: 0.,
         }
     }
 }
 impl ModelMetadata {
+    pub fn validate(&self) -> Result<(), String> {
+        if !self.temporary_thickness.is_finite()
+            || !(0. ..=100.).contains(&self.temporary_thickness)
+        {
+            return Err("Invalid temporary thickness".into());
+        }
+        Ok(())
+    }
     pub fn is_default(&self) -> bool {
         self == &Self::default()
     }
@@ -88,6 +102,7 @@ impl Project {
         for metadata in std::iter::once(&self.scene.active_metadata)
             .chain(self.submodels.iter().map(|m| &m.metadata))
         {
+            metadata.validate()?;
             if !metadata.group.is_empty() && !self.scene.groups.contains(&metadata.group) {
                 return Err("Submodel refers to a missing group".into());
             }

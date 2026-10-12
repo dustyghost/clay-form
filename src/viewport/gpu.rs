@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex};
 pub(super) struct Renderer {
     revision: Option<u64>,
     geometry: Option<Arc<DisplayMesh>>,
+    render_geometry: Option<Arc<DisplayMesh>>,
     gpu: Arc<Mutex<Gpu>>,
     preview: Arc<Mutex<Preview>>,
 }
@@ -22,12 +23,22 @@ impl Renderer {
             preview: Arc::new(Mutex::new(Preview::default())),
             revision: None,
             geometry: None,
+            render_geometry: None,
             gpu: Arc::new(Mutex::new(Gpu::new(gl)?)),
         })
     }
     pub fn geometry(&mut self, document: &Document) -> Arc<DisplayMesh> {
         if self.revision != Some(document.display_revision()) {
             self.geometry = Some(Arc::new(DisplayMesh::new(document)));
+            self.render_geometry = Some(
+                if (0..document.model_count())
+                    .any(|i| document.model(i).unwrap().metadata.temporary_thickness > 0.)
+                {
+                    Arc::new(DisplayMesh::preview(document))
+                } else {
+                    self.geometry.as_ref().unwrap().clone()
+                },
+            );
             self.revision = Some(document.display_revision());
         }
         self.geometry.as_ref().unwrap().clone()
@@ -43,7 +54,7 @@ impl Renderer {
     ) {
         let gpu = self.gpu.clone();
         let preview = self.preview.clone();
-        let geometry = scene.geometry.clone();
+        let geometry = self.render_geometry.as_ref().unwrap().clone();
         let params = Params::new(
             rect,
             scene.right,

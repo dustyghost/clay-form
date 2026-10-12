@@ -155,3 +155,10 @@ Wireframe options beside the Wireframe button select visible surfaces (edges hid
 Primitive resolution can also be changed with the violet diamond handles beside the model: drag left or right to change spans, sides, segments, rings or subdivision levels. The live count updates as you drag, and each drag is one Undo step. Teal circles identify radii and anatomical controls, teal squares identify size controls, and the world transform and camera gizmo share labelled X/Y/Z colours. Hovering or dragging adds a white ring while retaining the control colour.
 
 For renderer ownership, validation, and the opt-in load profile, see [GPU rendering](docs/gpu-rendering.md).
+
+
+### Temporary thickness
+
+In **Submodels → Thickness · open meshes**, enable **Temporary thickness** and set the total thickness in model units. The preview offsets half the amount to each side of the surface and adds walls around boundary loops. Orbit to inspect it. Each submodel saves its own value; duplication retains it. The original sculpting vertices, masks, subdivision levels, and surface picking remain unchanged until you apply it. OBJ exports the original surface while thickness is temporary.
+
+**Apply thickness** turns the exact preview into a closed sculpting mesh, preserves masks and complete quads, clears the temporary setting, and resets subdivision levels and topology modes. Applying a primitive preview converts it to a sculpting mesh. Other submodels stay unchanged. Undo restores the original surface, recipe/levels, and thickness setting. Thickness works on consistently oriented open surfaces with nonbranching boundary loops; closed meshes and outlines without faces are not eligible. Large normal offsets can intersect at tight folds or concave areas, so inspect the preview before applying.

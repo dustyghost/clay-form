@@ -15,6 +15,8 @@ pub(crate) enum Command {
     ClearMask,
     InvertMask,
     DeleteMasked,
+    SetTemporaryThickness(f32),
+    ApplyThickness,
     RequestPrimitive,
     ConfirmPrimitive,
     CancelPrimitive,

@@ -291,6 +291,8 @@ impl App {
                     | Command::ClearMask
                     | Command::InvertMask
                     | Command::DeleteMasked
+                    | Command::SetTemporaryThickness(_)
+                    | Command::ApplyThickness
                     | Command::SetMeshLevel(_)
                     | Command::DeleteLowerLevels
                     | Command::DeleteHigherLevels
@@ -449,6 +451,16 @@ impl App {
                         "Model duplicated".into()
                     }
                 })
+            }
+            Command::SetTemporaryThickness(value) => {
+                self.viewport.cancel(&mut self.document);
+                self.document.set_temporary_thickness(value)
+            }
+            Command::ApplyThickness => {
+                self.viewport.cancel(&mut self.document);
+                self.document
+                    .apply_thickness()
+                    .map(|()| self.ui.status = "Thickness applied; closed shell created".into())
             }
             Command::InvertMask => {
                 self.viewport.cancel(&mut self.document);
@@ -728,6 +740,9 @@ impl eframe::App for App {
             }
         } else {
             self.preferences_changed = None;
+        }
+        if !ctx.input(|i| i.pointer.any_down()) {
+            self.document.end_thickness_edit();
         }
         ctx.request_repaint_after(std::time::Duration::from_millis(33));
     }

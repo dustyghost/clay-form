@@ -1059,6 +1059,23 @@ impl UiState {
                 for name in document.groups() { ui.selectable_value(&mut group, name.clone(), name); }
             });
             if group != model.metadata.group { let mut metadata = model.metadata.clone(); metadata.group = group; commands.push(Command::EditSubmodel(index, model.name.into(), metadata)); }
+            ui.separator();
+            ui.label("Thickness · open meshes");
+            let mut thickness=model.metadata.temporary_thickness;
+            let mut enabled=thickness>0.;
+            ui.add_enabled_ui(!model.mesh.triangles.is_empty(),|ui| {
+                if ui.checkbox(&mut enabled,"Temporary thickness").on_hover_text("Preview a centered shell with closed edges. The sculpting surface stays unchanged until Apply.").changed() {
+                    commands.push(Command::SetTemporaryThickness(if enabled {0.05}else{0.}));
+                }
+                if thickness>0. {
+                    if ui.add(egui::DragValue::new(&mut thickness).speed(0.005).range(0.0001..=100.).prefix("Thickness ")).on_hover_text("Total shell thickness in model units, centered on the surface.").changed() {
+                        commands.push(Command::SetTemporaryThickness(thickness));
+                    }
+                    if ui.add_enabled(model.metadata.visible,design::button(ui,Glyph::Mesh,"Apply thickness")).on_hover_text("Bake the preview into a closed mesh. Resets subdivision levels and converts primitives to a sculpting mesh. Undo restores the original.").clicked() {
+                        commands.push(Command::ApplyThickness);
+                    }
+                }
+            });
             if !document.active_visible() { ui.weak("Active model is hidden; show it to sculpt or transform."); }
         });
     }

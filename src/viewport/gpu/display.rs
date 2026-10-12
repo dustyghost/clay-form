@@ -16,6 +16,12 @@ pub(crate) struct DisplayMesh {
 }
 impl DisplayMesh {
     pub fn new(document: &Document) -> Self {
+        Self::build(document, false)
+    }
+    pub(super) fn preview(document: &Document) -> Self {
+        Self::build(document, true)
+    }
+    fn build(document: &Document, preview: bool) -> Self {
         let active = document.active_model_index();
         let mut mesh = Mesh {
             vertices: Vec::new(),
@@ -33,7 +39,13 @@ impl DisplayMesh {
             if !model.metadata.visible {
                 continue;
             }
-            let surface = model.display_mesh(index == active);
+            let original = model.display_mesh(index == active);
+            let shell = if preview && model.metadata.temporary_thickness > 0. {
+                original.solidify(model.metadata.temporary_thickness).ok()
+            } else {
+                None
+            };
+            let surface = shell.as_ref().unwrap_or(original);
             let offset = mesh.vertices.len();
             if surface.triangles.is_empty() && surface.vertices.len() > 1 {
                 for i in 0..surface.vertices.len() {

@@ -29,6 +29,7 @@ pub struct Document {
     symmetry: Symmetry,
     dirty: bool,
     primitive_edit_active: bool,
+    thickness_edit_active: bool,
     stroke_active: bool,
     stroke_deformed: bool,
     stroke_before: Option<Geometry>,
@@ -45,6 +46,7 @@ impl Default for Document {
             symmetry: Symmetry::default(),
             dirty: false,
             primitive_edit_active: false,
+            thickness_edit_active: false,
             stroke_active: false,
             stroke_deformed: false,
             stroke_before: None,
@@ -95,6 +97,7 @@ impl Document {
     }
     /// Continuous slider updates are one edit until the pointer is released.
     pub fn update_primitive(&mut self, primitive: crate::sculpt::Primitive) -> Result<(), String> {
+        self.end_thickness_edit();
         let Some(current) = self.primitive() else {
             return Err("The active submodel is no longer a primitive".into());
         };
@@ -119,6 +122,7 @@ impl Document {
     }
     pub fn end_primitive_edit(&mut self) {
         self.primitive_edit_active = false;
+        self.end_thickness_edit();
     }
     pub fn convert_primitive(&mut self) -> Result<(), String> {
         if self.primitive().is_none() {
@@ -267,6 +271,8 @@ impl Document {
         name: String,
         metadata: crate::sculpt::ModelMetadata,
     ) -> Result<(), String> {
+        metadata.validate()?;
+        self.end_thickness_edit();
         if name.trim().is_empty()
             || name.len() > 128
             || index >= self.model_count()
@@ -458,6 +464,7 @@ impl Document {
         label: &'static str,
     ) -> Result<(), String> {
         geometry.settings.validate(&geometry.mesh)?;
+        self.end_thickness_edit();
         self.end_stroke();
         self.history.record_named(&self.geometry, label);
         self.geometry = geometry;
@@ -616,6 +623,7 @@ impl Document {
         Ok(())
     }
     pub fn begin_stroke(&mut self) {
+        self.end_thickness_edit();
         if !self.stroke_active {
             self.stroke_before = Some(self.geometry.clone());
             self.stroke_active = true;
@@ -705,6 +713,47 @@ impl Document {
             self.dirty = true;
             self.display_changed();
         }
+    }
+    pub fn set_temporary_thickness(&mut self, value: f32) -> Result<(), String> {
+        let mut metadata = self.geometry.scene.active_metadata.clone();
+        metadata.temporary_thickness = value;
+        metadata.validate()?;
+        if metadata == self.geometry.scene.active_metadata {
+            return Ok(());
+        }
+        if value > 0. {
+            self.mesh().solidify(value)?;
+        }
+        self.end_stroke();
+        self.primitive_edit_active = false;
+        if !self.thickness_edit_active {
+            self.history
+                .record_named(&self.geometry, "Edit temporary thickness");
+            self.thickness_edit_active = true;
+        }
+        self.geometry.scene.active_metadata = metadata;
+        self.dirty = true;
+        self.display_changed();
+        Ok(())
+    }
+    pub(crate) fn end_thickness_edit(&mut self) {
+        self.thickness_edit_active = false;
+    }
+    pub fn apply_thickness(&mut self) -> Result<(), String> {
+        if !self.active_visible() {
+            return Err("Show the active model before applying thickness".into());
+        }
+        let amount = self.geometry.scene.active_metadata.temporary_thickness;
+        let shell = self.mesh().solidify(amount)?;
+        self.end_primitive_edit();
+        let mut geometry = self.geometry.clone();
+        geometry.mesh = shell;
+        geometry.settings = MeshSettings {
+            resolution: geometry.settings.resolution,
+            ..Default::default()
+        };
+        geometry.scene.active_metadata.temporary_thickness = 0.;
+        self.replace_geometry_named(geometry, "Apply thickness")
     }
     pub fn invert_mask(&mut self) -> Result<(), String> {
         self.require_sculpt_mesh()?;
@@ -1428,6 +1477,7 @@ mod scene_transform_tests {
                 ModelMetadata {
                     visible: false,
                     group: String::new(),
+                    ..Default::default()
                 },
             )
             .unwrap();
@@ -1459,6 +1509,7 @@ mod scene_transform_tests {
                 ModelMetadata {
                     visible: true,
                     group: "Details".into(),
+                    ..Default::default()
                 },
             )
             .unwrap();
@@ -1469,6 +1520,7 @@ mod scene_transform_tests {
                 ModelMetadata {
                     visible: true,
                     group: "Body".into(),
+                    ..Default::default()
                 },
             )
             .unwrap();
@@ -1831,5 +1883,74 @@ mod mask_edit_tests {
         assert_eq!(d.geometry_snapshot(), masked);
         d.undo();
         assert_eq!(d.geometry_snapshot(), original);
+    }
+}
+
+#[cfg(test)]
+mod thickness_edit_tests {
+    use super::*;
+    use crate::sculpt::{Primitive, PrimitiveKind};
+    #[test]
+    fn temporary_thickness_is_per_model_persistent_and_bakes_undoably() {
+        let plane = Primitive::for_kind(PrimitiveKind::Plane);
+        let mut geometry = Geometry::new(plane.mesh().unwrap());
+        geometry.settings.primitive = Some(plane);
+        let mut d = Document::default();
+        d.replace_geometry(geometry).unwrap();
+        let original = d.geometry_snapshot();
+        let count = d.history_counts().0;
+        d.set_temporary_thickness(0.1).unwrap();
+        d.set_temporary_thickness(0.2).unwrap();
+        assert_eq!(
+            d.history_counts().0,
+            count + 1,
+            "one slider drag must be one undo step"
+        );
+        d.end_thickness_edit();
+        assert_eq!(
+            d.mesh(),
+            &original.mesh,
+            "preview must not change the editing surface"
+        );
+        let saved = serde_json::to_string(&d.project()).unwrap();
+        let loaded: Project = serde_json::from_str(&saved).unwrap();
+        loaded.validate().unwrap();
+        let mut restored = Document::default();
+        restored.replace_project(loaded, "thickness.clay").unwrap();
+        assert_eq!(restored.model(0).unwrap().metadata.temporary_thickness, 0.2);
+        d.duplicate_model(false).unwrap();
+        d.set_temporary_thickness(0.3).unwrap();
+        d.end_thickness_edit();
+        assert_eq!(d.model(1).unwrap().metadata.temporary_thickness, 0.2);
+        let before = d.geometry_snapshot();
+        d.apply_thickness().unwrap();
+        let after = d.geometry_snapshot();
+        d.mesh().validate_closed().unwrap();
+        assert!(d.primitive().is_none());
+        assert_eq!(d.mesh_settings().levels(), 1);
+        assert_eq!(d.model(0).unwrap().metadata.temporary_thickness, 0.);
+        assert_eq!(before.submodels, after.submodels);
+        assert_eq!(d.undo_label(), Some("Apply thickness"));
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), before);
+        d.redo();
+        assert_eq!(d.geometry_snapshot(), after);
+        let before = d.geometry_snapshot();
+        assert!(d.set_temporary_thickness(0.2).is_err());
+        assert_eq!(d.geometry_snapshot(), before);
+    }
+    #[test]
+    fn thickness_off_preserves_legacy_project_shape_and_invalid_values_fail_safely() {
+        let mut d = Document::default();
+        let before = serde_json::to_value(d.project()).unwrap();
+        assert!(!before.to_string().contains("temporary_thickness"));
+        let count = d.history_counts();
+        assert!(d.set_temporary_thickness(f32::NAN).is_err());
+        assert!(d.set_temporary_thickness(0.1).is_err());
+        assert_eq!(d.history_counts(), count);
+        assert_eq!(serde_json::to_value(d.project()).unwrap(), before);
+        let mut invalid = d.project();
+        invalid.scene.active_metadata.temporary_thickness = -1.;
+        assert!(invalid.validate().is_err());
     }
 }

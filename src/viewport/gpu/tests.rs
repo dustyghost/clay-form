@@ -527,6 +527,89 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             );
             assert_eq!(gl.get_error(), glow::NO_ERROR);
         }
+        // Temporary shells are display-only; picking keeps the original mesh.
+        let plane = Primitive::for_kind(PrimitiveKind::Plane);
+        document
+            .replace_geometry(Geometry::new(plane.mesh().unwrap()))
+            .unwrap();
+        let original = document.mesh().clone();
+        document.set_temporary_thickness(0.2).unwrap();
+        let base = renderer.geometry(&document);
+        let shell = renderer.render_geometry.as_ref().unwrap().clone();
+        assert_eq!(base.mesh, original);
+        assert_eq!(shell.mesh, original.solidify(0.2).unwrap());
+        shell.mesh.validate_closed().unwrap();
+        {
+            let mut gpu = renderer.gpu.lock().unwrap();
+            gpu.upload(&gl, &shell);
+            gpu.paint(
+                &gl,
+                &params,
+                [256, 256],
+                false,
+                WireMode::Visible,
+                false,
+                &Preview::default(),
+            );
+            assert_eq!(gl.get_error(), glow::NO_ERROR);
+        }
+        if let Ok(path) = std::env::var("CLAY_THICKNESS_PREVIEW") {
+            let camera = Camera {
+                yaw: 0.65,
+                pitch: 0.4,
+                ..Default::default()
+            };
+            let (right, up, view) = camera.basis();
+            let params = Params::new(
+                rect,
+                right,
+                up,
+                view,
+                89.6,
+                rect.center(),
+                shell.depth_extent,
+            );
+            let mut gpu = renderer.gpu.lock().unwrap();
+            gpu.paint(
+                &gl,
+                &params,
+                [256, 256],
+                false,
+                WireMode::Visible,
+                false,
+                &Preview::default(),
+            );
+            let mut pixels = vec![0; 256 * 256 * 4];
+            gl.bind_framebuffer(
+                glow::READ_FRAMEBUFFER,
+                Some(gpu.target.as_ref().unwrap().framebuffer),
+            );
+            gl.read_pixels(
+                0,
+                0,
+                256,
+                256,
+                glow::RGBA,
+                glow::UNSIGNED_BYTE,
+                glow::PixelPackData::Slice(Some(&mut pixels)),
+            );
+            gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
+            let mut flipped = Vec::with_capacity(pixels.len());
+            for row in pixels.chunks_exact(256 * 4).rev() {
+                flipped.extend_from_slice(row);
+            }
+            image::save_buffer(path, &flipped, 256, 256, image::ColorType::Rgba8).unwrap();
+        }
+        document.apply_thickness().unwrap();
+        let baked = renderer.geometry(&document);
+        assert_eq!(
+            shell.mesh, baked.mesh,
+            "Apply must match the preview exactly"
+        );
+        assert!(
+            Arc::ptr_eq(&baked, renderer.render_geometry.as_ref().unwrap()),
+            "baked geometry no longer needs a second display mesh"
+        );
         let handle = renderer.gpu.clone();
         let mut viewport = super::super::Viewport {
             renderer: Some(renderer),
