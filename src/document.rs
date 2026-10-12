@@ -30,6 +30,8 @@ pub struct Document {
     dirty: bool,
     primitive_edit_active: bool,
     thickness_edit_active: bool,
+    mask_adjustment_label: Option<&'static str>,
+    mask_intensity_baseline: Option<(f32, Vec<Vec<f32>>)>,
     stroke_active: bool,
     stroke_deformed: bool,
     stroke_before: Option<Geometry>,
@@ -39,7 +41,7 @@ pub struct Document {
 impl Default for Document {
     fn default() -> Self {
         Self {
-            geometry: Geometry::new(Mesh::sphere()),
+            geometry: Geometry::new(Mesh::starting_sphere()),
             display_revision: 0,
             brushes: Kind::ALL.into_iter().map(Brush::new).collect(),
             history: History::default(),
@@ -47,6 +49,8 @@ impl Default for Document {
             dirty: false,
             primitive_edit_active: false,
             thickness_edit_active: false,
+            mask_adjustment_label: None,
+            mask_intensity_baseline: None,
             stroke_active: false,
             stroke_deformed: false,
             stroke_before: None,
@@ -123,6 +127,7 @@ impl Document {
     pub fn end_primitive_edit(&mut self) {
         self.primitive_edit_active = false;
         self.end_thickness_edit();
+        self.end_mask_adjustment();
     }
     pub fn convert_primitive(&mut self) -> Result<(), String> {
         if self.primitive().is_none() {
@@ -222,7 +227,8 @@ impl Document {
         }
         self.end_primitive_edit();
         let mesh = if extract {
-            self.mesh().extract_masked()?
+            self.mesh()
+                .extract_masked_threshold(self.geometry.scene.active_metadata.mask_threshold)?
         } else {
             self.mesh().clone()
         };
@@ -272,6 +278,7 @@ impl Document {
         metadata: crate::sculpt::ModelMetadata,
     ) -> Result<(), String> {
         metadata.validate()?;
+        self.end_mask_adjustment();
         self.end_thickness_edit();
         if name.trim().is_empty()
             || name.len() > 128
@@ -281,6 +288,16 @@ impl Document {
             return Err("Invalid submodel name or group".into());
         }
         let model = self.model(index).unwrap();
+        let old = model.metadata;
+        if metadata.temporary_thickness > 0.
+            && (old.temporary_thickness != metadata.temporary_thickness
+                || old.thickness_groups != metadata.thickness_groups
+                || old.thickness_group_mask != metadata.thickness_group_mask
+                || old.thickness_mask_rim != metadata.thickness_mask_rim
+                || (old.mask_threshold != metadata.mask_threshold && metadata.thickness_group_mask))
+        {
+            model.mesh.solidify_with_metadata(&metadata)?;
+        }
         if model.name == name && *model.metadata == metadata {
             return Ok(());
         }
@@ -465,6 +482,7 @@ impl Document {
     ) -> Result<(), String> {
         geometry.settings.validate(&geometry.mesh)?;
         self.end_thickness_edit();
+        self.end_mask_adjustment();
         self.end_stroke();
         self.history.record_named(&self.geometry, label);
         self.geometry = geometry;
@@ -596,7 +614,7 @@ impl Document {
     }
     pub fn new_sphere(&mut self) {
         self.end_primitive_edit();
-        self.geometry = Geometry::new(Mesh::sphere());
+        self.geometry = Geometry::new(Mesh::starting_sphere());
         self.display_changed();
         self.history = History::default();
         self.dirty = false;
@@ -624,6 +642,7 @@ impl Document {
     }
     pub fn begin_stroke(&mut self) {
         self.end_thickness_edit();
+        self.end_mask_adjustment();
         if !self.stroke_active {
             self.stroke_before = Some(self.geometry.clone());
             self.stroke_active = true;
@@ -714,6 +733,158 @@ impl Document {
             self.display_changed();
         }
     }
+    fn edit_group_meshes(
+        &mut self,
+        label: &'static str,
+        mut edit: impl FnMut(&mut Mesh) -> Result<(), String>,
+    ) -> Result<(), String> {
+        self.require_sculpt_mesh()?;
+        self.end_primitive_edit();
+        self.end_stroke();
+        let mut geometry = self.geometry.clone();
+        for mesh in std::iter::once(&mut geometry.mesh)
+            .chain(geometry.settings.lower.iter_mut())
+            .chain(geometry.settings.upper.iter_mut())
+        {
+            edit(mesh)?;
+        }
+        if geometry == self.geometry {
+            return Ok(());
+        }
+        self.replace_geometry_named(geometry, label)
+    }
+    pub fn create_vertex_group(&mut self, name: String, all: bool) -> Result<usize, String> {
+        let threshold = self.geometry.scene.active_metadata.mask_threshold;
+        if self.mesh().vertices.is_empty()
+            || (!all
+                && !self
+                    .mesh()
+                    .mask
+                    .iter()
+                    .any(|&m| crate::sculpt::mask_selected(m, threshold)))
+        {
+            return Err("Mask vertices above the threshold first, or use Group all".into());
+        }
+        let index = self.mesh().vertex_groups.len();
+        self.edit_group_meshes("Create vertex group", |mesh| {
+            mesh.create_vertex_group(name.clone(), threshold, all)
+                .map(|_| ())
+        })?;
+        Ok(index)
+    }
+    pub fn assign_mask_to_group(&mut self, index: usize, remove: bool) -> Result<(), String> {
+        let threshold = self.geometry.scene.active_metadata.mask_threshold;
+        self.edit_group_meshes(
+            if remove {
+                "Remove masked vertices from group"
+            } else {
+                "Assign masked vertices to group"
+            },
+            |mesh| mesh.assign_mask_to_group(index, threshold, remove),
+        )
+    }
+    pub fn mask_from_group(&mut self, index: usize) -> Result<(), String> {
+        self.edit_group_meshes("Mask vertex group", |mesh| mesh.mask_from_group(index))
+    }
+    pub fn remove_vertex_group(&mut self, index: usize) -> Result<(), String> {
+        self.edit_group_meshes("Delete vertex group", |mesh| {
+            mesh.remove_vertex_group(index)
+        })
+    }
+    pub fn set_vertex_group_visible(&mut self, index: usize, visible: bool) -> Result<(), String> {
+        self.edit_group_meshes("Polygroup visibility", |mesh| {
+            mesh.vertex_groups
+                .get_mut(index)
+                .ok_or("Vertex group no longer exists")?
+                .visible = visible;
+            Ok(())
+        })
+    }
+    pub fn rename_vertex_group(&mut self, index: usize, name: String) -> Result<(), String> {
+        self.edit_group_meshes("Rename vertex group", |mesh| {
+            mesh.rename_vertex_group(index, name.clone())
+        })
+    }
+    pub fn grow_mask(&mut self, grow: bool) -> Result<(), String> {
+        self.edit_group_meshes(if grow { "Grow mask" } else { "Shrink mask" }, |mesh| {
+            mesh.grow_mask(grow);
+            Ok(())
+        })
+    }
+    pub fn mask_peak(&self) -> f32 {
+        std::iter::once(&self.geometry.mesh)
+            .chain(self.geometry.settings.lower.iter())
+            .chain(self.geometry.settings.upper.iter())
+            .flat_map(|m| m.mask.iter())
+            .copied()
+            .fold(0., f32::max)
+    }
+    pub fn set_mask_intensity(&mut self, amount: f32) -> Result<(), String> {
+        self.require_sculpt_mesh()?;
+        if !amount.is_finite() || !(0. ..=1.).contains(&amount) {
+            return Err("Mask intensity must be between 0% and 100%".into());
+        }
+        self.end_stroke();
+        self.end_thickness_edit();
+        self.primitive_edit_active = false;
+        if self.mask_adjustment_label != Some("Mask intensity") {
+            let peak = self.mask_peak();
+            if peak == 0. || peak == amount {
+                return Ok(());
+            }
+            self.history.record_named(&self.geometry, "Mask intensity");
+            self.mask_intensity_baseline = Some((
+                peak,
+                std::iter::once(&self.geometry.mesh)
+                    .chain(self.geometry.settings.lower.iter())
+                    .chain(self.geometry.settings.upper.iter())
+                    .map(|mesh| mesh.mask.clone())
+                    .collect(),
+            ));
+            self.mask_adjustment_label = Some("Mask intensity");
+        }
+        let (peak, masks) = self.mask_intensity_baseline.as_ref().unwrap();
+        for (mesh, old) in std::iter::once(&mut self.geometry.mesh)
+            .chain(self.geometry.settings.lower.iter_mut())
+            .chain(self.geometry.settings.upper.iter_mut())
+            .zip(masks)
+        {
+            for (value, &original) in mesh.mask.iter_mut().zip(old) {
+                *value = (original / peak * amount).clamp(0., 1.);
+            }
+        }
+        self.dirty = true;
+        self.display_changed();
+        Ok(())
+    }
+    pub fn set_mask_threshold(&mut self, amount: f32) -> Result<(), String> {
+        if !amount.is_finite() || !(0. ..=1.).contains(&amount) {
+            return Err("Mask threshold must be between 0% and 100%".into());
+        }
+        let mut metadata = self.geometry.scene.active_metadata.clone();
+        metadata.mask_threshold = amount;
+        if metadata == self.geometry.scene.active_metadata {
+            return Ok(());
+        }
+        if metadata.temporary_thickness > 0. && metadata.thickness_group_mask {
+            self.mesh().solidify_with_metadata(&metadata)?;
+        }
+        self.end_stroke();
+        self.end_thickness_edit();
+        self.primitive_edit_active = false;
+        if self.mask_adjustment_label != Some("Mask threshold") {
+            self.history.record_named(&self.geometry, "Mask threshold");
+            self.mask_adjustment_label = Some("Mask threshold");
+        }
+        self.geometry.scene.active_metadata = metadata;
+        self.dirty = true;
+        self.display_changed();
+        Ok(())
+    }
+    pub(crate) fn end_mask_adjustment(&mut self) {
+        self.mask_adjustment_label = None;
+        self.mask_intensity_baseline = None;
+    }
     pub fn set_temporary_thickness(&mut self, value: f32) -> Result<(), String> {
         let mut metadata = self.geometry.scene.active_metadata.clone();
         metadata.temporary_thickness = value;
@@ -722,9 +893,10 @@ impl Document {
             return Ok(());
         }
         if value > 0. {
-            self.mesh().solidify(value)?;
+            self.mesh().solidify_with_metadata(&metadata)?;
         }
         self.end_stroke();
+        self.end_mask_adjustment();
         self.primitive_edit_active = false;
         if !self.thickness_edit_active {
             self.history
@@ -743,8 +915,9 @@ impl Document {
         if !self.active_visible() {
             return Err("Show the active model before applying thickness".into());
         }
-        let amount = self.geometry.scene.active_metadata.temporary_thickness;
-        let shell = self.mesh().solidify(amount)?;
+        let shell = self
+            .mesh()
+            .solidify_with_metadata(&self.geometry.scene.active_metadata)?;
         self.end_primitive_edit();
         let mut geometry = self.geometry.clone();
         geometry.mesh = shell;
@@ -779,7 +952,10 @@ impl Document {
         if !self.active_visible() {
             return Err("Show the active model before deleting masked surface".into());
         }
-        let Some(mesh) = self.mesh().delete_masked()? else {
+        let Some(mesh) = self
+            .mesh()
+            .delete_masked_threshold(self.geometry.scene.active_metadata.mask_threshold)?
+        else {
             return Ok(false);
         };
         let mut geometry = self.geometry.clone();
@@ -905,6 +1081,170 @@ impl Document {
 mod tests {
     use super::*;
     use crate::sculpt::Vec3;
+    #[test]
+    fn starting_sphere_has_a_group_and_visibility_is_saved_and_undoable() {
+        let mut d = Document::default();
+        assert_eq!(d.mesh().vertex_groups[0].name, "Base");
+        assert!(d.mesh().vertex_groups[0].weights.iter().all(|&w| w == 1.));
+        assert!(d.mesh().polygroups.iter().all(|&id| id == 1));
+        assert!(!d.is_dirty());
+        d.geometry.subdivide().unwrap();
+        let before = d.geometry_snapshot();
+        d.set_vertex_group_visible(0, false).unwrap();
+        assert!(!d.mesh().vertex_groups[0].visible);
+        assert!(!d.mesh_settings().lower[0].vertex_groups[0].visible);
+        assert_eq!(d.mesh().vertices, before.mesh.vertices);
+        let json = serde_json::to_string(&d.project()).unwrap();
+        let loaded: Project = serde_json::from_str(&json).unwrap();
+        loaded.validate().unwrap();
+        assert!(!loaded.mesh.vertex_groups[0].visible);
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), before);
+        d.redo();
+        assert!(!d.mesh().vertex_groups[0].visible);
+        d.new_sphere();
+        assert!(d.mesh().vertex_groups[0].visible);
+        assert_eq!(d.mesh().vertex_groups.len(), 1);
+        assert!(!d.can_undo());
+    }
+    #[test]
+    fn mask_threshold_controls_grouping_and_deletion_per_submodel() {
+        let mut mesh = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Plane)
+            .mesh()
+            .unwrap();
+        mesh.mask.fill(0.6);
+        let mut d = Document::default();
+        d.replace_geometry(Geometry::new(mesh)).unwrap();
+        d.set_mask_threshold(0.8).unwrap();
+        assert!(!d.delete_masked().unwrap());
+        assert!(d.create_vertex_group("Surface".into(), false).is_err());
+        d.set_mask_threshold(0.6).unwrap();
+        d.end_mask_adjustment();
+        d.create_vertex_group("Surface".into(), false).unwrap();
+        assert_eq!(d.mesh().polygroups, vec![1; 2]);
+        let before = d.geometry_snapshot();
+        assert!(d.delete_masked().unwrap());
+        assert!(d.mesh().vertices.is_empty());
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), before);
+        d.duplicate_model(false).unwrap();
+        d.set_mask_threshold(0.9).unwrap();
+        assert_eq!(d.model(0).unwrap().metadata.mask_threshold, 0.9);
+        assert_eq!(d.model(1).unwrap().metadata.mask_threshold, 0.6);
+        d.project().validate().unwrap();
+    }
+    #[test]
+    fn intensity_preserves_soft_ratios_and_undo_restores_the_mask() {
+        let mut mesh = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Plane)
+            .mesh()
+            .unwrap();
+        mesh.mask = vec![0., 0.2, 0.4, 0.8];
+        let mut d = Document::default();
+        d.replace_geometry(Geometry::new(mesh)).unwrap();
+        let before = d.geometry_snapshot();
+        d.set_mask_intensity(0.4).unwrap();
+        assert!(
+            d.mesh()
+                .mask
+                .iter()
+                .zip([0., 0.1, 0.2, 0.4])
+                .all(|(&a, b)| (a - b).abs() < 1e-6)
+        );
+        assert_eq!(d.mask_peak(), 0.4);
+        d.set_mask_intensity(1.).unwrap();
+        assert!(
+            d.mesh()
+                .mask
+                .iter()
+                .zip([0., 0.25, 0.5, 1.])
+                .all(|(&a, b)| (a - b).abs() < 1e-6)
+        );
+        assert_eq!(d.mask_peak(), 1.);
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), before);
+    }
+    #[test]
+    fn groups_and_mask_intensity_are_independent_undoable_and_survive_levels() {
+        let mut geometry = Geometry::new(
+            crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Cube)
+                .mesh()
+                .unwrap(),
+        );
+        geometry.subdivide().unwrap();
+        geometry.mesh.mask[geometry.settings.lower[0].vertices.len()] = 0.8;
+        let mut d = Document::default();
+        d.replace_geometry(geometry).unwrap();
+        d.duplicate_model(false).unwrap();
+        let before = d.geometry_snapshot();
+        d.create_vertex_group("Fine detail".into(), false).unwrap();
+        let grouped = d.geometry_snapshot();
+        assert_eq!(grouped.submodels, before.submodels);
+        assert!(
+            grouped.settings.lower[0].vertex_groups[0]
+                .weights
+                .iter()
+                .all(|&w| w == 0.)
+        );
+        assert_eq!(
+            grouped.mesh.vertex_groups[0]
+                .weights
+                .iter()
+                .filter(|&&w| w > 0.)
+                .count(),
+            1
+        );
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), before);
+        d.redo();
+        assert_eq!(d.geometry_snapshot(), grouped);
+        let count = d.history_counts().0;
+        d.set_mask_intensity(0.).unwrap();
+        d.set_mask_intensity(0.4).unwrap();
+        assert!((d.mask_peak() - 0.4).abs() < 1e-6);
+        assert_eq!(d.history_counts().0, count + 1);
+        assert_eq!(d.mesh().vertex_groups, grouped.mesh.vertex_groups);
+        d.end_mask_adjustment();
+        d.mask_from_group(0).unwrap();
+        assert_eq!(d.mesh().mask, grouped.mesh.mask);
+        d.set_mesh_level(1).unwrap();
+        d.set_mesh_level(2).unwrap();
+        assert_eq!(d.mesh().vertex_groups, grouped.mesh.vertex_groups);
+        d.rename_vertex_group(0, "Detail".into()).unwrap();
+        let project = d.project();
+        project.validate().unwrap();
+        let loaded: Project =
+            serde_json::from_str(&serde_json::to_string(&project).unwrap()).unwrap();
+        loaded.validate().unwrap();
+        assert_eq!(
+            serde_json::to_value(loaded).unwrap(),
+            serde_json::to_value(project).unwrap()
+        );
+    }
+    #[test]
+    fn thickness_group_preview_matches_apply_and_undo() {
+        let mut d = Document::default();
+        d.replace_geometry(Geometry::new(
+            crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Plane)
+                .mesh()
+                .unwrap(),
+        ))
+        .unwrap();
+        d.set_temporary_thickness(0.2).unwrap();
+        let model = d.model(0).unwrap();
+        let mut options = model.metadata.clone();
+        options.thickness_groups = true;
+        options.thickness_mask_rim = true;
+        d.set_model_metadata(0, model.name.into(), options.clone())
+            .unwrap();
+        let before = d.geometry_snapshot();
+        let expected = d.mesh().solidify_with_metadata(&options).unwrap();
+        d.apply_thickness().unwrap();
+        assert_eq!(d.mesh(), &expected);
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), before);
+        d.redo();
+        assert_eq!(d.mesh(), &expected);
+    }
     #[test]
     fn whole_stroke_is_one_undo_step_and_new_edits_clear_redo() {
         let mut document = Document::default();
@@ -1789,6 +2129,8 @@ mod mask_edit_tests {
     #[test]
     fn delete_masked_cuts_and_compacts_preserving_remaining_quads_and_masks() {
         let mesh = Mesh {
+            vertex_groups: Vec::new(),
+            polygroups: Vec::new(),
             vertices: vec![
                 crate::sculpt::Vec3(0., 0., 0.),
                 crate::sculpt::Vec3(1., 0., 0.),

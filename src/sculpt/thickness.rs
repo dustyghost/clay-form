@@ -6,6 +6,17 @@ use super::{
 use std::collections::HashMap;
 impl Mesh {
     pub fn solidify(&self, thickness: f32) -> Result<Self, String> {
+        self.solidify_impl(thickness, None)
+    }
+    pub fn solidify_with_metadata(&self, metadata: &super::ModelMetadata) -> Result<Self, String> {
+        metadata.validate()?;
+        self.solidify_impl(metadata.temporary_thickness, Some(metadata))
+    }
+    fn solidify_impl(
+        &self,
+        thickness: f32,
+        metadata: Option<&super::ModelMetadata>,
+    ) -> Result<Self, String> {
         self.validate()?;
         if !thickness.is_finite() || thickness <= 0. || thickness > 100. {
             return Err("Thickness must be greater than zero and at most 100 model units".into());
@@ -60,6 +71,29 @@ impl Mesh {
         }
         let normals = self.normals();
         let mut shell = Mesh {
+            vertex_groups: self
+                .vertex_groups
+                .iter()
+                .map(|g| super::VertexGroup {
+                    visible: g.visible,
+                    name: g.name.clone(),
+                    weights: g
+                        .weights
+                        .iter()
+                        .copied()
+                        .chain(g.weights.iter().copied())
+                        .collect(),
+                })
+                .collect(),
+            polygroups: if self.polygroups.is_empty() {
+                Vec::new()
+            } else {
+                self.polygroups
+                    .iter()
+                    .copied()
+                    .chain(self.polygroups.iter().copied())
+                    .collect()
+            },
             vertices: self
                 .vertices
                 .iter()
@@ -91,10 +125,72 @@ impl Mesh {
                 .iter()
                 .map(|&[a, b, c, d]| [a + n, d + n, c + n, b + n]),
         );
+        let boundary_vertices: std::collections::HashSet<_> =
+            boundary.iter().flat_map(|&(a, b)| [a, b]).collect();
         for (a, b) in boundary {
             shell.quads.push([b, a, a + n, b + n]);
             shell.triangles.extend([[b, a, a + n], [b, a + n, b + n]]);
+            if !self.polygroups.is_empty() {
+                shell.polygroups.extend([0; 2]);
+            }
         }
+        if let Some(options) = metadata {
+            if options.thickness_mask_rim {
+                for &i in &boundary_vertices {
+                    shell.mask[i] = 1.;
+                    shell.mask[i + n] = 1.;
+                }
+            }
+            if options.thickness_groups {
+                if shell.vertex_groups.len() + 3 > 64 {
+                    return Err("Thickness groups would exceed the 64-group limit".into());
+                }
+                if shell.polygroups.is_empty() {
+                    shell.polygroups = vec![0; shell.triangles.len()];
+                }
+                for (part, name) in ["Thickness front", "Thickness back", "Thickness rim"]
+                    .into_iter()
+                    .enumerate()
+                {
+                    let name = shell.unique_group_name(name);
+                    let id = shell.vertex_groups.len() + 1;
+                    let weights = (0..n * 2)
+                        .map(|i| {
+                            let selected = match part {
+                                0 => i < n,
+                                1 => i >= n,
+                                _ => boundary_vertices.contains(&(i % n)),
+                            };
+                            if selected { 1. } else { 0. }
+                        })
+                        .collect();
+                    shell.vertex_groups.push(super::VertexGroup {
+                        visible: true,
+                        name,
+                        weights,
+                    });
+                    let faces = self.triangles.len();
+                    let range = match part {
+                        0 => 0..faces,
+                        1 => faces..faces * 2,
+                        _ => faces * 2..shell.triangles.len(),
+                    };
+                    for i in range {
+                        shell.polygroups[i] = id;
+                    }
+                }
+            }
+            if options.thickness_group_mask
+                && shell
+                    .mask
+                    .iter()
+                    .any(|&m| super::mask_selected(m, options.mask_threshold))
+            {
+                let name = shell.unique_group_name("Thickness masked");
+                shell.create_vertex_group(name, options.mask_threshold, false)?;
+            }
+        }
+        shell.canonicalize_polygroups();
         if shell.triangles.iter().any(|&[a, b, c]| {
             (shell.vertices[b] - shell.vertices[a])
                 .cross(shell.vertices[c] - shell.vertices[a])

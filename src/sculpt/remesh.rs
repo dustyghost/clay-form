@@ -170,6 +170,8 @@ impl Mesh {
             })
             .collect();
         let mut mesh = Mesh {
+            vertex_groups: Vec::new(),
+            polygroups: Vec::new(),
             quads: Vec::new(),
             vertices: Vec::new(),
             triangles: Vec::new(),
@@ -268,6 +270,7 @@ impl Mesh {
             return Err("No surface found at this resolution; increase resolution".into());
         }
         mesh.smooth_remesh();
+        self.transfer_groups_to(&mut mesh);
         mesh.validate_closed()?;
         Ok(mesh)
     }
@@ -294,6 +297,8 @@ mod tests {
     use super::*;
     fn cube(offset: Vec3) -> Mesh {
         Mesh {
+            vertex_groups: Vec::new(),
+            polygroups: Vec::new(),
             quads: Vec::new(),
             vertices: vec![
                 Vec3(-1., -1., -1.),

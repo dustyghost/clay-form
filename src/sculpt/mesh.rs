@@ -20,19 +20,33 @@ pub struct Mesh {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub quads: Vec<[usize; 4]>,
     pub mask: Vec<f32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub vertex_groups: Vec<super::VertexGroup>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub polygroups: Vec<usize>,
 }
 impl Mesh {
     /// Copy fully masked faces and compact their vertices; the boundary stays open.
     pub fn extract_masked(&self) -> Result<Self, String> {
+        self.extract_masked_threshold(0.5)
+    }
+    pub fn extract_masked_threshold(&self, threshold: f32) -> Result<Self, String> {
         let mut result = Self {
+            vertex_groups: Vec::new(),
+            polygroups: Vec::new(),
             quads: Vec::new(),
             vertices: Vec::new(),
             triangles: Vec::new(),
             mask: Vec::new(),
         };
         let mut indices = vec![usize::MAX; self.vertices.len()];
-        for face in &self.triangles {
-            if !face.iter().all(|&i| self.mask[i] >= 0.5) {
+        let mut old_vertices = Vec::new();
+        let mut old_faces = Vec::new();
+        for (fi, face) in self.triangles.iter().enumerate() {
+            if !face
+                .iter()
+                .all(|&i| super::mask_selected(self.mask[i], threshold))
+            {
                 continue;
             }
             let mut triangle = [0; 3];
@@ -40,31 +54,52 @@ impl Mesh {
                 if indices[i] == usize::MAX {
                     indices[i] = result.vertices.len();
                     result.vertices.push(self.vertices[i]);
+                    old_vertices.push(i);
                     result.mask.push(0.);
                 }
                 triangle[corner] = indices[i];
             }
             result.triangles.push(triangle);
+            old_faces.push(fi);
         }
         for q in &self.quads {
-            if q.iter().all(|&i| self.mask[i] >= 0.5) {
+            if q.iter()
+                .all(|&i| super::mask_selected(self.mask[i], threshold))
+            {
                 result.quads.push(q.map(|i| indices[i]));
             }
         }
         if result.triangles.is_empty() {
-            return Err("Mask a region first: extraction needs faces with all three vertices at least 50% masked".into());
+            return Err("Mask faces above the threshold at every vertex before extraction".into());
         }
+        self.reindex_groups(&mut result, &old_vertices, &old_faces);
         result.validate()?;
         Ok(result)
     }
     /// Remove fully masked surface faces and compact surviving vertex indices.
     /// None means the mask did not cover any complete face.
     pub fn delete_masked(&self) -> Result<Option<Self>, String> {
+        self.delete_masked_threshold(0.5)
+    }
+    pub fn delete_masked_threshold(&self, threshold: f32) -> Result<Option<Self>, String> {
+        let old_faces: Vec<_> = self
+            .triangles
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| {
+                !t.iter()
+                    .all(|&i| super::mask_selected(self.mask[i], threshold))
+            })
+            .map(|(i, _)| i)
+            .collect();
         let kept: Vec<_> = self
             .triangles
             .iter()
             .copied()
-            .filter(|t| !t.iter().all(|&i| self.mask[i] >= 0.5))
+            .filter(|t| {
+                !t.iter()
+                    .all(|&i| super::mask_selected(self.mask[i], threshold))
+            })
             .collect();
         if kept.len() == self.triangles.len() {
             return Ok(None);
@@ -84,6 +119,8 @@ impl Mesh {
             })
             .collect();
         let mut result = Self {
+            vertex_groups: Vec::new(),
+            polygroups: Vec::new(),
             vertices: Vec::new(),
             triangles: Vec::new(),
             quads: Vec::new(),
@@ -93,15 +130,18 @@ impl Mesh {
         for &i in kept.iter().flatten() {
             indices[i] = 0;
         }
+        let mut old_vertices = Vec::new();
         for (i, index) in indices.iter_mut().enumerate() {
             if *index != usize::MAX {
                 *index = result.vertices.len();
                 result.vertices.push(self.vertices[i]);
+                old_vertices.push(i);
                 result.mask.push(self.mask[i]);
             }
         }
         result.triangles = kept.into_iter().map(|t| t.map(|i| indices[i])).collect();
         result.quads = quads.into_iter().map(|q| q.map(|i| indices[i])).collect();
+        self.reindex_groups(&mut result, &old_vertices, &old_faces);
         result.validate()?;
         Ok(Some(result))
     }
@@ -158,6 +198,7 @@ impl Mesh {
         n.into_iter().map(Vec3::norm).collect()
     }
     pub fn validate(&self) -> Result<(), String> {
+        self.validate_groups()?;
         if self.vertices.len() > super::subdivision::MAX_VERTICES
             || self.triangles.len() > super::subdivision::MAX_TRIANGLES
             || self
@@ -189,6 +230,15 @@ impl Mesh {
             };
             let faces: std::collections::HashSet<_> =
                 self.triangles.iter().copied().map(key).collect();
+            let group_ids: std::collections::HashMap<_, _> = if self.polygroups.is_empty() {
+                std::collections::HashMap::new()
+            } else {
+                self.triangles
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &t)| (key(t), self.polygroups[i]))
+                    .collect()
+            };
             let mut used = std::collections::HashSet::new();
             for &[a, b, c, d] in &self.quads {
                 if [a, b, c, d]
@@ -207,6 +257,9 @@ impl Mesh {
                 } else {
                     return Err("Quad does not match surface triangulation".into());
                 };
+                if !self.polygroups.is_empty() && group_ids[&pair[0]] != group_ids[&pair[1]] {
+                    return Err("Quad has inconsistent polygroup assignment".into());
+                }
                 if !used.insert(pair[0]) || !used.insert(pair[1]) {
                     return Err("Overlapping quad faces".into());
                 }
@@ -233,7 +286,11 @@ impl Mesh {
                 }
             }
         }
+        let sculptable = self.sculptable_vertices();
         for i in 0..old.len() {
+            if !sculptable[i] {
+                continue;
+            }
             let mut strongest = 0.;
             let mut selected = None;
             for dab in dabs {

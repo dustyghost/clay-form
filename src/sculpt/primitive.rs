@@ -306,6 +306,8 @@ impl Primitive {
 }
 fn empty() -> Mesh {
     Mesh {
+        vertex_groups: Vec::new(),
+        polygroups: Vec::new(),
         quads: Vec::new(),
         vertices: vec![],
         triangles: vec![],

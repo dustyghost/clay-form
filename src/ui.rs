@@ -14,11 +14,14 @@ pub(crate) struct UiState {
     icons: icons::Icons,
     pub library_path: String,
     pub(crate) primitive_warning: Option<(usize, String)>,
-    pub(crate) primitive_editor_open: bool,
+    pub(crate) primitive_controls_requested: bool,
     pub transform_mode: crate::viewport::TransformMode,
     pub transform_operation: crate::viewport::TransformOperation,
     pub respect_transform_mask: bool,
     group_name: String,
+    pub selected_vertex_group: Option<(usize, usize)>,
+    pub vertex_group_name: String,
+    pub vertex_group_rename: String,
     rename_model: Option<(usize, String, String)>,
     pub preferences: Preferences,
     pub settings_open: bool,
@@ -36,6 +39,7 @@ pub(crate) struct UiState {
     pub wire: bool,
     pub wire_mode: crate::viewport::WireMode,
     pub wire_triangles: bool,
+    pub show_polygroups: bool,
     pub show_backfaces: bool,
     pub backface_opacity: f32,
     pub show_symmetry_guides: bool,
@@ -47,11 +51,14 @@ impl Default for UiState {
             icons: Default::default(),
             library_path: "brush-library.brushes.json".into(),
             primitive_warning: None,
-            primitive_editor_open: false,
+            primitive_controls_requested: false,
             transform_mode: crate::viewport::TransformMode::Sculpt,
             transform_operation: crate::viewport::TransformOperation::Move,
             respect_transform_mask: true,
             group_name: String::new(),
+            selected_vertex_group: None,
+            vertex_group_name: String::new(),
+            vertex_group_rename: String::new(),
             rename_model: None,
             preferences: Preferences::default(),
             settings_open: false,
@@ -69,6 +76,7 @@ impl Default for UiState {
             wire: false,
             wire_mode: Default::default(),
             wire_triangles: false,
+            show_polygroups: true,
             show_backfaces: false,
             backface_opacity: 0.15,
             show_symmetry_guides: true,
@@ -337,13 +345,22 @@ impl UiState {
                     commands.push(Command::SetSymmetry(symmetry));
                 }
                 design::menu(ui, Glyph::Mask, "Mask", |ui| {
+                        let mut threshold = document.model(document.active_model_index()).unwrap().metadata.mask_threshold;
+                        if ui.add_enabled(!self.mesh_busy, egui::Slider::new(&mut threshold, 0. ..=1.).text("Selection threshold").custom_formatter(|v,_| format!("{:.0}%",v*100.)).custom_parser(|text| text.trim().trim_end_matches('%').trim().parse::<f64>().ok().map(|v|v/100.))).on_hover_text("Minimum vertex mask value for grouping, deletion and extraction. Zero-valued vertices are always excluded. Complete faces must meet the threshold at every corner.").changed() { commands.push(Command::MaskThreshold(threshold)); }
                     ui.add_enabled_ui(!self.mesh_busy && document.primitive().is_none(), |ui| {
                         if ui.add(design::button(ui, Glyph::Mask, "Clear mask")).clicked() { commands.push(Command::ClearMask); }
                         if ui.add(design::button(ui, Glyph::Restore, "Invert mask")).on_hover_text("Swap masked and unmasked areas, preserving soft mask values on every subdivision level.").clicked() { commands.push(Command::InvertMask); }
-                        if ui.add(design::button(ui, Glyph::Delete, "Delete masked")).on_hover_text("Remove faces at least 50% masked at every vertex. Creates open boundaries and resets subdivision levels and closed-surface modes. Undo restores everything.").clicked() { commands.push(Command::DeleteMasked); }
+                        ui.horizontal(|ui| {
+                            if ui.button("Expand mask").on_hover_text("Spread soft mask values by one mesh edge per click.").clicked() { commands.push(Command::GrowMask(true)); }
+                            if ui.button("Contract mask").on_hover_text("Tighten the mask by one mesh edge per click.").clicked() { commands.push(Command::GrowMask(false)); }
+                        });
+                        let mut intensity = document.mask_peak();
+                        if ui.add(egui::Slider::new(&mut intensity, 0. ..=1.).text("Mask intensity").custom_formatter(|v,_| format!("{:.0}%",v*100.)).custom_parser(|text| text.trim().trim_end_matches('%').trim().parse::<f64>().ok().map(|v|v/100.))).on_hover_text("Scale the mask on every subdivision level while preserving its soft falloff. Stored group weights stay unchanged.").changed() { commands.push(Command::MaskIntensity(intensity)); }
+                        if ui.add(design::button(ui, Glyph::Delete, "Delete masked")).on_hover_text("Remove faces meeting the mask threshold at every vertex. Creates open boundaries and resets subdivision levels and closed-surface modes. Undo restores everything.").clicked() { commands.push(Command::DeleteMasked); }
                     });
                 });
                 design::menu(ui, Glyph::View, "View", |ui| {
+                    ui.checkbox(&mut self.show_polygroups, "Show polygroup colors");
                     ui.checkbox(&mut self.show_backfaces, "Faint back-facing surfaces").on_hover_text("Show the reverse side of open surfaces translucently. Front-facing surfaces stay solid.");
                     if self.show_backfaces {
                         ui.add(egui::Slider::new(&mut self.backface_opacity, 0.02..=0.5).text("Back-face opacity").custom_formatter(|v,_|format!("{:.0}%",v*100.)).custom_parser(|text|text.trim().trim_end_matches('%').trim().parse::<f64>().ok().map(|v|v/100.)));
@@ -422,6 +439,16 @@ impl UiState {
         pressure: f32,
     ) -> Vec<Command> {
         let mut commands = Vec::new();
+        if self.primitive_controls_requested && document.primitive().is_some() {
+            for panel in &mut self.preferences.panels {
+                if panel.tool == Tool::Submodels {
+                    panel.open = true;
+                    if panel.dock == Dock::Hidden {
+                        panel.dock = Dock::Right;
+                    }
+                }
+            }
+        }
         for dock in [Dock::Left, Dock::Right] {
             if !self.preferences.panels.iter().any(|p| p.dock == dock) {
                 continue;
@@ -972,12 +999,12 @@ impl UiState {
         ui.label("Click a model row to select it. The eye toggles visibility.");
         ui.add_enabled_ui(!self.mesh_busy, |ui| {
             ui.horizontal_wrapped(|ui| {
-                if ui.add(design::button(ui, Glyph::Primitive, if document.primitive().is_some() {"Edit primitive"} else {"Primitive"})).clicked() { commands.push(Command::RequestPrimitive); }
+                if document.primitive().is_none() && ui.add(design::button(ui, Glyph::Primitive, "Primitive")).clicked() { commands.push(Command::RequestPrimitive); }
                 if ui.add(design::button(ui, Glyph::Copy, "Duplicate")).clicked() { commands.push(Command::DuplicateModel); }
-                if ui.add(design::button(ui, Glyph::Mask, "Extract masked")).on_hover_text("Copy faces at least 50% masked at every vertex; keep the source. Boundaries remain open.").clicked() { commands.push(Command::ExtractMasked); }
+                if ui.add(design::button(ui, Glyph::Mask, "Extract masked")).on_hover_text("Copy faces meeting the mask threshold at every vertex; keep the source. Boundaries remain open.").clicked() { commands.push(Command::ExtractMasked); }
             });
             ui.horizontal(|ui| {
-                ui.add(egui::TextEdit::singleline(&mut self.group_name).desired_width(120.).hint_text("New group"));
+                ui.add(egui::TextEdit::singleline(&mut self.group_name).desired_width(120.).hint_text("New submodel group"));
                 if ui.add(design::button(ui, Glyph::Layers, "+ Group")).clicked() { commands.push(Command::AddGroup(std::mem::take(&mut self.group_name))); }
             });
             ui.separator();
@@ -1060,6 +1087,41 @@ impl UiState {
             });
             if group != model.metadata.group { let mut metadata = model.metadata.clone(); metadata.group = group; commands.push(Command::EditSubmodel(index, model.name.into(), metadata)); }
             ui.separator();
+            self.primitive_controls(ui, document, commands);
+            ui.label("Vertex groups / Polygroups");
+            ui.add_enabled_ui(document.primitive().is_none(), |ui| {
+                ui.add(egui::TextEdit::singleline(&mut self.vertex_group_name).hint_text("New vertex group"));
+                ui.horizontal(|ui| {
+                    if ui.button("Group masked").clicked() { commands.push(Command::CreateVertexGroup(self.vertex_group_name.clone(), false)); }
+                    if ui.button("Group all").clicked() { commands.push(Command::CreateVertexGroup(self.vertex_group_name.clone(), true)); }
+                });
+                for (g, group) in model.mesh.vertex_groups.iter().enumerate() {
+                    let color = crate::sculpt::Mesh::group_color(g).map(|c| (c * 255.) as u8);
+                    ui.horizontal(|ui| {
+                        if visibility_button(ui, group.visible).on_hover_text("Show/hide this polygroup’s faces. Hidden faces cannot be picked or sculpted.").clicked() { commands.push(Command::VertexGroupVisible(g, !group.visible)); }
+                        ui.colored_label(Color32::from_rgb(color[0], color[1], color[2]), "●");
+                        if ui.selectable_label(self.selected_vertex_group == Some((index, g)), &group.name).on_hover_text(format!("{} weighted vertices", group.weights.iter().filter(|&&w| w > 0.).count())).clicked() {
+                            self.selected_vertex_group = Some((index, g));
+                            self.vertex_group_rename = group.name.clone();
+                        }
+                    });
+                }
+                if let Some((target, g)) = self.selected_vertex_group
+                    && target == index && g < model.mesh.vertex_groups.len() {
+                        ui.horizontal_wrapped(|ui| {
+                            if ui.button("Mask group").clicked() { commands.push(Command::MaskVertexGroup(g)); }
+                            if ui.button("Add masked").clicked() { commands.push(Command::AssignMaskToGroup(g, false)); }
+                            if ui.button("Remove masked").clicked() { commands.push(Command::AssignMaskToGroup(g, true)); }
+                        });
+                        ui.add(egui::TextEdit::singleline(&mut self.vertex_group_rename).hint_text("Rename group"));
+                        ui.horizontal(|ui| {
+                            if ui.button("Rename").clicked() { commands.push(Command::RenameVertexGroup(g, self.vertex_group_rename.clone())); }
+                            if ui.button("Delete group").clicked() { commands.push(Command::DeleteVertexGroup(g)); }
+                        });
+                }
+                ui.weak("Groups store soft vertex weights independently of the mask. Complete selected faces become polygroups.");
+            });
+            ui.separator();
             ui.label("Thickness · open meshes");
             let mut thickness=model.metadata.temporary_thickness;
             let mut enabled=thickness>0.;
@@ -1071,6 +1133,11 @@ impl UiState {
                     if ui.add(egui::DragValue::new(&mut thickness).speed(0.005).range(0.0001..=100.).prefix("Thickness ")).on_hover_text("Total shell thickness in model units, centered on the surface.").changed() {
                         commands.push(Command::SetTemporaryThickness(thickness));
                     }
+                    let mut metadata = model.metadata.clone();
+                    ui.checkbox(&mut metadata.thickness_groups, "Group front / back / rim");
+                    ui.checkbox(&mut metadata.thickness_mask_rim, "Mask rim vertices");
+                    ui.checkbox(&mut metadata.thickness_group_mask, "Group masked vertices");
+                    if metadata != *model.metadata { commands.push(Command::EditSubmodel(index, model.name.into(), metadata)); }
                     if ui.add_enabled(model.metadata.visible,design::button(ui,Glyph::Mesh,"Apply thickness")).on_hover_text("Bake the preview into a closed mesh. Resets subdivision levels and converts primitives to a sculpting mesh. Undo restores the original.").clicked() {
                         commands.push(Command::ApplyThickness);
                     }
@@ -1086,19 +1153,7 @@ impl UiState {
         commands: &mut Vec<Command>,
     ) {
         if document.primitive().is_some() {
-            ui.label("This submodel is a parametric primitive. Convert it before sculpting or changing topology.");
-            if ui
-                .add(design::button(ui, Glyph::Primitive, "Edit primitive"))
-                .clicked()
-            {
-                commands.push(Command::RequestPrimitive);
-            }
-            if ui
-                .add(design::button(ui, Glyph::Mesh, "Convert to sculpting mesh"))
-                .clicked()
-            {
-                commands.push(Command::ConvertPrimitive);
-            }
+            ui.label("This submodel is parametric. Edit its controls or convert it in Submodels → Primitive.");
             return;
         }
         let settings = document.mesh_settings();

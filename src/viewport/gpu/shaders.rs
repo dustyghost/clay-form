@@ -23,7 +23,8 @@ uniform float u_surface_opacity;
 uniform vec3 u_brush_center, u_brush_normal, u_brush_color, u_guide_center;
 uniform float u_brush_radius, u_guide_opacity;
 uniform vec4 u_brush_shape;
-uniform sampler2D u_alpha_image;
+uniform sampler2D u_alpha_image, u_poly_colors;
+uniform int u_show_polygroups;
 uniform vec3 u_guide_normals[32], u_guide_colors[32];
 uniform vec4 u_guide_sides[32];
 out vec4 color;
@@ -42,7 +43,13 @@ float alpha_weight(vec2 q) {
 void main() {
  vec3 light=normalize(u_view+u_up*0.7-u_right*0.5);
  float shade=0.25+0.75*max(dot(normalize(v_normal)*(u_backface==1 ? -1.0 : 1.0),light),0.0);
- vec3 rgb=v_color*shade*(1.0-v_mask*0.75);
+ vec3 base=v_color;
+ if(u_show_polygroups==1) {
+   int width=textureSize(u_poly_colors,0).x;
+   vec4 group=texelFetch(u_poly_colors,ivec2(gl_PrimitiveID%width,gl_PrimitiveID/width),0);
+   if(group.a>0.5) base=mix(v_color,group.rgb,mix(0.5,1.0,v_active));
+ }
+ vec3 rgb=base*shade*(1.0-v_mask*0.75);
  if(u_backface==1) { color=vec4(rgb,u_surface_opacity); return; }
  if(v_active>0.5) {
    for(int i=0;i<u_guide_count;i++) {
@@ -66,20 +73,25 @@ pub(super) const LINE_VERTEX: &str = r#"#version 330 core
 layout(location=0) in vec3 a_position;
 layout(location=1) in vec3 a_normal;
 layout(location=2) in vec3 a_other_normal;
+layout(location=3) in vec3 a_edge_color;
 uniform vec3 u_right, u_up, u_view;
 uniform vec4 u_projection;
 uniform float u_depth;
 out float v_front;
+out vec3 v_edge_color;
 void main() {
  gl_Position=vec4(dot(a_position,u_right)*u_projection.x+u_projection.z,
- dot(a_position,u_up)*u_projection.y+u_projection.w,-dot(a_position,u_view)*u_depth-0.00005,1.0);
+ dot(a_position,u_up)*u_projection.y+u_projection.w,-dot(a_position,u_view)*u_depth,1.0);
  v_front=max(dot(a_normal,u_view),dot(a_other_normal,u_view));
+ v_edge_color=a_edge_color;
 }"#;
 pub(super) const LINE_FRAGMENT: &str = r#"#version 330 core
 in float v_front;
+in vec3 v_edge_color;
 uniform int u_transparent;
 out vec4 color;
 void main() {
  if(u_transparent==0 && v_front<=0.0) discard;
+ if(v_edge_color.r>=0.0) { color=vec4(v_edge_color,1.0); return; }
  color=u_transparent==1 ? vec4(170.0/255.0,185.0/255.0,200.0/255.0,1.0) : vec4(0.0,0.0,0.0,0.43);
 }"#;

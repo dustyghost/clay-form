@@ -92,6 +92,9 @@ impl Renderer {
     pub fn set_backfaces(&self, opacity: f32) {
         self.preview.lock().unwrap().backface_opacity = opacity.clamp(0., 1.);
     }
+    pub fn set_polygroups(&self, enabled: bool) {
+        self.preview.lock().unwrap().show_polygroups = enabled;
+    }
     pub fn set_guides(&self, symmetry: &Symmetry, opacity: f32) {
         let mut preview = self.preview.lock().unwrap();
         preview.symmetry = Some((symmetry.clone(), opacity));
@@ -127,6 +130,7 @@ impl Renderer {
 
 #[derive(Default)]
 struct Preview {
+    show_polygroups: bool,
     backface_opacity: f32,
     brush: Option<BrushPreview>,
     symmetry: Option<(Symmetry, f32)>,
@@ -193,6 +197,8 @@ struct Gpu {
     edges_uploaded: bool,
     target: Option<Target>,
     destroyed: bool,
+    poly_texture: glow::Texture,
+    poly_available: bool,
     alpha_texture: Option<glow::Texture>,
     alpha_source: Option<Alpha>,
 }
@@ -273,6 +279,8 @@ impl Gpu {
                 edges_uploaded: false,
                 target: None,
                 destroyed: false,
+                poly_texture: gl.create_texture()?,
+                poly_available: false,
                 alpha_texture: None,
                 alpha_source: None,
             })
@@ -311,6 +319,43 @@ impl Gpu {
                 .collect();
             gl.buffer_data_u8_slice(glow::ELEMENT_ARRAY_BUFFER, &indices, glow::DYNAMIC_DRAW);
             self.index_count = (data.mesh.triangles.len() * 3) as i32;
+            let limit = gl.get_parameter_i32(glow::MAX_TEXTURE_SIZE) as usize;
+            let mut width = 4096.min(limit);
+            let mut height = data.poly_colors.len().div_ceil(width).max(1);
+            self.poly_available = height <= limit;
+            let mut colors: Vec<u8> = if self.poly_available {
+                data.poly_colors.iter().flatten().copied().collect()
+            } else {
+                width = 1;
+                height = 1;
+                vec![0; 4]
+            };
+            colors.resize(width * height * 4, 0);
+            gl.active_texture(glow::TEXTURE1);
+            gl.bind_texture(glow::TEXTURE_2D, Some(self.poly_texture));
+            gl.tex_image_2d(
+                glow::TEXTURE_2D,
+                0,
+                glow::RGBA8 as i32,
+                width as i32,
+                height as i32,
+                0,
+                glow::RGBA,
+                glow::UNSIGNED_BYTE,
+                glow::PixelUnpackData::Slice(Some(&colors)),
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MIN_FILTER,
+                glow::NEAREST as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MAG_FILTER,
+                glow::NEAREST as i32,
+            );
+            gl.bind_texture(glow::TEXTURE_2D, None);
+            gl.active_texture(glow::TEXTURE0);
             gl.bind_vertex_array(None);
             gl.bind_buffer(glow::ARRAY_BUFFER, None);
         }
@@ -329,16 +374,16 @@ impl Gpu {
             ] {
                 let edges = data.edges(triangles);
                 if triangles {
-                    self.triangle_edge_count = (edges.len() / 9) as i32;
+                    self.triangle_edge_count = (edges.len() / 12) as i32;
                 } else {
-                    self.edge_count = (edges.len() / 9) as i32;
+                    self.edge_count = (edges.len() / 12) as i32;
                 }
                 gl.bind_vertex_array(Some(vao));
                 gl.bind_buffer(glow::ARRAY_BUFFER, Some(buffer));
                 gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, &bytes(&edges), glow::DYNAMIC_DRAW);
-                for (attribute, offset) in [(0, 0), (1, 12), (2, 24)] {
+                for (attribute, offset) in [(0, 0), (1, 12), (2, 24), (3, 36)] {
                     gl.enable_vertex_attrib_array(attribute);
-                    gl.vertex_attrib_pointer_f32(attribute, 3, glow::FLOAT, false, 36, offset);
+                    gl.vertex_attrib_pointer_f32(attribute, 3, glow::FLOAT, false, 48, offset);
                 }
             }
             gl.bind_vertex_array(None);
@@ -371,6 +416,14 @@ impl Gpu {
         unsafe {
             let program = self.surface;
             let location = |name: &str| gl.get_uniform_location(program, name);
+            gl.uniform_1_i32(
+                location("u_show_polygroups").as_ref(),
+                i32::from(preview.show_polygroups && self.poly_available),
+            );
+            gl.uniform_1_i32(location("u_poly_colors").as_ref(), 1);
+            gl.active_texture(glow::TEXTURE1);
+            gl.bind_texture(glow::TEXTURE_2D, Some(self.poly_texture));
+            gl.active_texture(glow::TEXTURE0);
             let vec3 =
                 |name: &str, v: Vec3| gl.uniform_3_f32(location(name).as_ref(), v.0, v.1, v.2);
             gl.uniform_1_i32(
@@ -586,6 +639,12 @@ impl Gpu {
             gl.clear_depth_f32(1.);
             gl.clear_color(23. / 255., 26. / 255., 31. / 255., 1.);
             gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
+            if wire && mode == WireMode::Visible {
+                // Offset filled faces by their depth slope so coplanar lines
+                // survive pixel sampling on tilted surfaces without showing backs.
+                gl.enable(glow::POLYGON_OFFSET_FILL);
+                gl.polygon_offset(1., 1.);
+            }
             if !wire || mode != WireMode::Transparent {
                 gl.enable(glow::CULL_FACE);
                 gl.cull_face(glow::BACK);
@@ -632,6 +691,7 @@ impl Gpu {
                     gl.cull_face(glow::BACK);
                 }
             }
+            gl.disable(glow::POLYGON_OFFSET_FILL);
             if wire {
                 self.upload_edges(gl);
                 gl.depth_func(glow::LEQUAL);
@@ -688,6 +748,9 @@ impl Gpu {
             );
             gl.bind_framebuffer(glow::READ_FRAMEBUFFER, read);
             gl.viewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+            gl.active_texture(glow::TEXTURE1);
+            gl.bind_texture(glow::TEXTURE_2D, None);
+            gl.active_texture(glow::TEXTURE0);
             gl.bind_texture(glow::TEXTURE_2D, None);
             gl.bind_renderbuffer(glow::RENDERBUFFER, None);
             if srgb {
@@ -704,6 +767,7 @@ impl Gpu {
             if let Some(target) = self.target.take() {
                 target.destroy(gl);
             }
+            gl.delete_texture(self.poly_texture);
             if let Some(texture) = self.alpha_texture.take() {
                 gl.delete_texture(texture);
             }

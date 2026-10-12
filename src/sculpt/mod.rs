@@ -25,3 +25,11 @@ mod primitive;
 pub use primitive::{HeadOptions, Primitive, PrimitiveKind};
 
 mod thickness;
+
+mod groups;
+pub use groups::{VertexGroup, mask_selected};
+
+mod group_transfer;
+
+#[cfg(test)]
+mod group_tests;

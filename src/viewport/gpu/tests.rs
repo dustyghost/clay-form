@@ -13,13 +13,52 @@ fn display_cache_inputs_keep_quad_edges_and_model_ownership() {
         .replace_geometry(Geometry::new(cube.mesh().unwrap()))
         .unwrap();
     let display = DisplayMesh::new(&document);
-    assert_eq!(display.edges(false).len() / 18, 12);
-    assert_eq!(display.edges(true).len() / 18, 18);
+    assert_eq!(display.edges(false).len() / 24, 12);
+    assert_eq!(display.edges(true).len() / 24, 18);
     assert_eq!(display.active_vertices, 8);
     document.duplicate_model(false).unwrap();
     let display = DisplayMesh::new(&document);
     assert_eq!(display.mesh.vertices.len(), 16);
     assert!(display.owners.contains(&0) && display.owners.contains(&1));
+}
+
+#[test]
+fn similarly_named_groups_display_distinct_muted_colors_and_renames_keep_them() {
+    let mut plane = Primitive::for_kind(PrimitiveKind::Plane);
+    plane.divisions = [2, 1, 1];
+    let mut mesh = plane.mesh().unwrap();
+    mesh.create_vertex_group("Group 1".into(), 0.5, true)
+        .unwrap();
+    mesh.mask = mesh
+        .vertices
+        .iter()
+        .map(|p| if p.0 >= 0. { 1. } else { 0. })
+        .collect();
+    mesh.create_vertex_group("Group 2".into(), 0.5, false)
+        .unwrap();
+    let mut document = Document::default();
+    document.replace_geometry(Geometry::new(mesh)).unwrap();
+    let before = DisplayMesh::new(&document).poly_colors;
+    let distinct: std::collections::HashSet<_> = before.iter().copied().collect();
+    assert_eq!(
+        distinct.len(),
+        2,
+        "separate groups need separate face colors"
+    );
+    let mut colors = distinct.into_iter();
+    let a = colors.next().unwrap();
+    let b = colors.next().unwrap();
+    assert!(
+        a[..3]
+            .iter()
+            .zip(&b[..3])
+            .map(|(&a, &b)| (a as f32 - b as f32).powi(2))
+            .sum::<f32>()
+            .sqrt()
+            > 60.
+    );
+    document.rename_vertex_group(0, "Renamed".into()).unwrap();
+    assert_eq!(DisplayMesh::new(&document).poly_colors, before);
 }
 
 /// Real shader compilation and framebuffer readback, without opening a window.
@@ -163,6 +202,7 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         );
         assert!(transparent.chunks_exact(4).any(|p| p != [23, 26, 31, 255]));
         let make_preview = |alpha: Alpha| Preview {
+            show_polygroups: false,
             backface_opacity: 0.,
             brush: Some(BrushPreview {
                 center: Vec3(0., 0., 0.),
@@ -297,6 +337,7 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             ..Default::default()
         };
         let preview = Preview {
+            show_polygroups: false,
             backface_opacity: 0.,
             brush: None,
             symmetry: Some((symmetry, 1.)),
@@ -314,6 +355,76 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             read(&gpu)[center] > active_solid[center],
             "mirror guide appears on the surface"
         );
+        document
+            .create_vertex_group("GPU color".into(), true)
+            .unwrap();
+        let grouped = renderer.geometry(&document);
+        gpu.upload(&gl, &grouped);
+        let colored = Preview {
+            show_polygroups: true,
+            ..Default::default()
+        };
+        gpu.paint(
+            &gl,
+            &params,
+            [256, 256],
+            false,
+            WireMode::Visible,
+            false,
+            &colored,
+        );
+        assert_ne!(
+            &read(&gpu)[center..center + 3],
+            &active_solid[center..center + 3],
+            "polygroup color must reach the framebuffer"
+        );
+        gpu.paint(
+            &gl,
+            &params,
+            [256, 256],
+            false,
+            WireMode::Visible,
+            false,
+            &Preview::default(),
+        );
+        assert_eq!(
+            read(&gpu),
+            active_solid,
+            "hiding colors restores original shading"
+        );
+        document.set_vertex_group_visible(0, false).unwrap();
+        let hidden = renderer.geometry(&document);
+        assert_eq!(
+            hidden.mesh.triangles.len(),
+            grouped.mesh.triangles.len() - 2
+        );
+        gpu.upload(&gl, &hidden);
+        gpu.paint(
+            &gl,
+            &params,
+            [256, 256],
+            false,
+            WireMode::Visible,
+            false,
+            &Preview::default(),
+        );
+        assert_ne!(
+            &read(&gpu)[center..center + 3],
+            &active_solid[center..center + 3],
+            "hiding the foreground group reveals the surface behind it"
+        );
+        document.set_vertex_group_visible(0, true).unwrap();
+        gpu.upload(&gl, &renderer.geometry(&document));
+        gpu.paint(
+            &gl,
+            &params,
+            [256, 256],
+            false,
+            WireMode::Visible,
+            false,
+            &Preview::default(),
+        );
+        assert_eq!(read(&gpu), active_solid);
         gpu.paint(
             &gl,
             &params,
@@ -324,6 +435,66 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             &Preview::default(),
         );
         assert_eq!(gpu.target.as_ref().unwrap().size, [128, 128]);
+        let mut plane = Primitive::for_kind(PrimitiveKind::Plane);
+        plane.divisions = [2, 2, 1];
+        let mut geometry = Geometry::new(plane.mesh().unwrap());
+        geometry.settings.primitive = Some(plane);
+        document.replace_geometry(geometry).unwrap();
+        gpu.upload(&gl, &renderer.geometry(&document));
+        gpu.paint(
+            &gl,
+            &params,
+            [256, 256],
+            true,
+            WireMode::Transparent,
+            false,
+            &Preview::default(),
+        );
+        let wire = read(&gpu);
+        for axis in [0, 1] {
+            let color = super::super::controls::AXES[axis];
+            assert!(
+                wire.chunks_exact(4).any(|p| p[..3]
+                    .iter()
+                    .zip([color.r(), color.g(), color.b()])
+                    .all(|(&a, b)| a.abs_diff(b) <= 1)),
+                "axis color must reach the wireframe framebuffer"
+            );
+        }
+
+        let mut tilted = Primitive::for_kind(PrimitiveKind::Plane);
+        tilted.divisions = [2, 2, 1];
+        tilted.basis[1] = Vec3(0., 0.8, 0.6);
+        let mut geometry = Geometry::new(tilted.mesh().unwrap());
+        geometry.settings.primitive = Some(tilted);
+        document.replace_geometry(geometry).unwrap();
+        gpu.upload(&gl, &renderer.geometry(&document));
+        gpu.paint(
+            &gl,
+            &params,
+            [256, 256],
+            true,
+            WireMode::Visible,
+            false,
+            &Preview::default(),
+        );
+        let wire = read(&gpu);
+        let green = super::super::controls::AXES[1];
+        let covered = (44..212)
+            .filter(|&x| {
+                (126..130).any(|y| {
+                    let pixel = &wire[(y * 256 + x) * 4..(y * 256 + x) * 4 + 3];
+                    pixel
+                        .iter()
+                        .zip([green.r(), green.g(), green.b()])
+                        .all(|(&a, b)| a.abs_diff(b) <= 1)
+                })
+            })
+            .count();
+        assert!(
+            covered >= 160,
+            "tilted-face cut lines must remain continuous, got {covered} columns"
+        );
         assert_eq!(gl.get_error(), glow::NO_ERROR);
         gpu.destroy(&gl);
         gpu.destroy(&gl); // shutdown is safe even when a callback retains the handle

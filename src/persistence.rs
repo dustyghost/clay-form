@@ -10,6 +10,9 @@ pub(crate) fn read_json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T,
 }
 pub(crate) fn write_json<T: serde::Serialize>(path: &str, value: &T) -> Result<(), String> {
     let bytes = serde_json::to_vec(value).map_err(|e| e.to_string())?;
+    if bytes.len() > 128 * 1024 * 1024 {
+        return Err("File exceeds 128 MB limit; reduce mesh or group data before saving".into());
+    }
     let temp = format!("{path}.tmp");
     std::fs::write(&temp, bytes).map_err(|e| e.to_string())?;
     std::fs::rename(temp, path).map_err(|e| e.to_string())
@@ -115,8 +118,43 @@ pub fn export_obj(path: &str, mesh: &Mesh) -> Result<(), String> {
         t.sort_unstable();
         t
     };
+    let face_groups: std::collections::HashMap<_, _> = mesh
+        .triangles
+        .iter()
+        .enumerate()
+        .map(|(i, &t)| (key(t), mesh.polygroups.get(i).copied().unwrap_or(0)))
+        .collect();
+    let mut previous_group = usize::MAX;
+    let mut emit_group = |text: &mut String, id: usize| {
+        if !mesh.polygroups.is_empty() && previous_group != id {
+            let name = if id == 0 {
+                "ungrouped".to_string()
+            } else {
+                format!(
+                    "group_{}_{}",
+                    id,
+                    mesh.vertex_groups[id - 1]
+                        .name
+                        .chars()
+                        .map(|c| if c.is_whitespace() || c.is_control() || c == '#' {
+                            '_'
+                        } else {
+                            c
+                        })
+                        .collect::<String>()
+                )
+            };
+            text.push_str(&format!("g {name}\n"));
+            previous_group = id;
+        }
+    };
     let mut quad_triangles = std::collections::HashSet::new();
     for &[a, b, c, d] in &mesh.quads {
+        let id = [[a, b, c], [a, c, d], [a, b, d], [b, c, d]]
+            .into_iter()
+            .find_map(|t| face_groups.get(&key(t)).copied())
+            .unwrap_or(0);
+        emit_group(&mut text, id);
         text.push_str(&format!("f {} {} {} {}\n", a + 1, b + 1, c + 1, d + 1));
         for t in [[a, b, c], [a, c, d], [a, b, d], [b, c, d]] {
             quad_triangles.insert(key(t));
@@ -126,6 +164,7 @@ pub fn export_obj(path: &str, mesh: &Mesh) -> Result<(), String> {
         if quad_triangles.contains(&key([a, b, c])) {
             continue;
         }
+        emit_group(&mut text, face_groups[&key([a, b, c])]);
         text.push_str(&format!("f {} {} {}\n", a + 1, b + 1, c + 1));
     }
     std::fs::write(path, text).map_err(|e| e.to_string())
@@ -220,6 +259,28 @@ mod tests {
 #[cfg(test)]
 mod mesh_storage_tests {
     use super::*;
+    #[test]
+    fn obj_exports_quad_polygroups_with_safe_distinct_names() {
+        let mut mesh = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Plane)
+            .mesh()
+            .unwrap();
+        mesh.create_vertex_group("A B\n#C".into(), 0.5, true)
+            .unwrap();
+        let path = std::env::temp_dir().join(format!("clay-groups-{}.obj", std::process::id()));
+        export_obj(path.to_str().unwrap(), &mesh).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("g group_1_A_B__C\n"));
+        assert_eq!(text.lines().filter(|l| l.starts_with("f ")).count(), 1);
+        assert_eq!(
+            text.lines()
+                .find(|l| l.starts_with("f "))
+                .unwrap()
+                .split_whitespace()
+                .count(),
+            5
+        );
+        std::fs::remove_file(path).unwrap();
+    }
     #[test]
     fn mesh_levels_and_dynamic_settings_survive_files_and_obj_exports_active_level() {
         let dir = std::env::temp_dir().join(format!("clay-mesh-storage-{}", std::process::id()));

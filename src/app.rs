@@ -293,6 +293,15 @@ impl App {
                     | Command::DeleteMasked
                     | Command::SetTemporaryThickness(_)
                     | Command::ApplyThickness
+                    | Command::GrowMask(_)
+                    | Command::MaskIntensity(_)
+                    | Command::MaskThreshold(_)
+                    | Command::CreateVertexGroup(..)
+                    | Command::AssignMaskToGroup(..)
+                    | Command::MaskVertexGroup(_)
+                    | Command::RenameVertexGroup(..)
+                    | Command::DeleteVertexGroup(_)
+                    | Command::VertexGroupVisible(..)
                     | Command::SetMeshLevel(_)
                     | Command::DeleteLowerLevels
                     | Command::DeleteHigherLevels
@@ -348,7 +357,7 @@ impl App {
             Command::RequestPrimitive => {
                 self.viewport.cancel(&mut self.document);
                 if self.document.primitive().is_some() {
-                    self.ui.primitive_editor_open = true;
+                    self.ui.primitive_controls_requested = true;
                 } else {
                     self.ui.primitive_warning = Some((
                         self.document.active_model_index(),
@@ -372,7 +381,7 @@ impl App {
                     {
                         Err("Submodel changed; request primitive replacement again".into())
                     } else {
-                        self.document.initialize_primitive().map(|()| {self.ui.primitive_editor_open=true;self.ui.transform_mode=crate::viewport::TransformMode::Sculpt;self.ui.status="Parametric primitive: drag shape handles or edit parameters; convert when ready to sculpt".into();})
+                        self.document.initialize_primitive().map(|()| {self.ui.primitive_controls_requested=true;self.ui.transform_mode=crate::viewport::TransformMode::Sculpt;self.ui.status="Parametric primitive: drag shape handles or edit parameters; convert when ready to sculpt".into();})
                     }
                 } else {
                     Ok(())
@@ -386,7 +395,7 @@ impl App {
             Command::ConvertPrimitive => {
                 self.viewport.cancel(&mut self.document);
                 self.document.convert_primitive().map(|()| {
-                    self.ui.primitive_editor_open = false;
+                    self.ui.primitive_controls_requested = false;
                     self.ui.status =
                         "Primitive converted: geometry is now editable with sculpt brushes".into();
                 })
@@ -452,6 +461,45 @@ impl App {
                     }
                 })
             }
+            Command::GrowMask(grow) => {
+                self.viewport.cancel(&mut self.document);
+                self.document.grow_mask(grow)
+            }
+            Command::MaskIntensity(amount) => {
+                self.viewport.cancel(&mut self.document);
+                self.document.set_mask_intensity(amount)
+            }
+            Command::MaskThreshold(amount) => self.document.set_mask_threshold(amount),
+            Command::CreateVertexGroup(name, all) => {
+                self.viewport.cancel(&mut self.document);
+                self.document.create_vertex_group(name, all).map(|index| {
+                    self.ui.selected_vertex_group =
+                        Some((self.document.active_model_index(), index));
+                    self.ui.vertex_group_rename =
+                        self.document.mesh().vertex_groups[index].name.clone();
+                    self.ui.vertex_group_name.clear();
+                    self.ui.status = "Vertex group created".into();
+                })
+            }
+            Command::AssignMaskToGroup(index, remove) => {
+                self.viewport.cancel(&mut self.document);
+                self.document.assign_mask_to_group(index, remove)
+            }
+            Command::MaskVertexGroup(index) => {
+                self.viewport.cancel(&mut self.document);
+                self.document.mask_from_group(index)
+            }
+            Command::RenameVertexGroup(index, name) => {
+                self.document.rename_vertex_group(index, name)
+            }
+            Command::VertexGroupVisible(index, visible) => {
+                self.viewport.cancel(&mut self.document);
+                self.document.set_vertex_group_visible(index, visible)
+            }
+            Command::DeleteVertexGroup(index) => {
+                self.ui.selected_vertex_group = None;
+                self.document.remove_vertex_group(index)
+            }
             Command::SetTemporaryThickness(value) => {
                 self.viewport.cancel(&mut self.document);
                 self.document.set_temporary_thickness(value)
@@ -474,7 +522,7 @@ impl App {
                     self.ui.status = if changed {
                         "Masked surface deleted; subdivision levels reset".into()
                     } else {
-                        "No complete faces are at least 50% masked".into()
+                        "No complete faces meet the mask threshold".into()
                     };
                 })
             }
@@ -616,9 +664,7 @@ impl App {
         }
     }
     pub(crate) fn show_viewport(&mut self, ui: &mut egui::Ui) {
-        let (primitive_commands, editor_rect) =
-            self.ui
-                .primitive_popup(ui.ctx(), ui.available_rect_before_wrap(), &self.document);
+        let (primitive_commands, editor_rect) = self.ui.primitive_confirmation(ui.ctx());
         for command in primitive_commands {
             self.dispatch(command, ui.ctx());
         }
@@ -634,18 +680,6 @@ impl App {
         for command in commands {
             self.dispatch(command, ui.ctx());
         }
-        let (commands, resolution_rect) = self.ui.primitive_resolution_toolbar(
-            ui.ctx(),
-            ui.available_rect_before_wrap(),
-            &self.document,
-            enabled,
-        );
-        for command in commands {
-            self.dispatch(command, ui.ctx());
-        }
-        let over_resolution = resolution_rect.is_some_and(|rect| {
-            ui.input(|i| i.pointer.hover_pos().is_some_and(|p| rect.contains(p)))
-        });
         // A toolbar click must never also grab a handle or place an Action Line.
         let over_editor = editor_rect.is_some_and(|rect| {
             ui.input(|i| i.pointer.hover_pos().is_some_and(|p| rect.contains(p)))
@@ -666,6 +700,7 @@ impl App {
                 wire: self.ui.wire,
                 wire_mode: self.ui.wire_mode,
                 wire_triangles: self.ui.wire_triangles,
+                show_polygroups: self.ui.show_polygroups,
                 backface_opacity: if self.ui.show_backfaces {
                     self.ui.backface_opacity
                 } else {
@@ -673,7 +708,7 @@ impl App {
                 },
                 show_guides: self.ui.show_symmetry_guides,
                 guide_opacity: self.ui.guide_opacity,
-                enabled: enabled && !over_toolbar && !over_editor && !over_resolution,
+                enabled: enabled && !over_toolbar && !over_editor,
                 smooth: self.ui.preferences.smooth,
                 reverse: self.ui.preferences.reverse,
                 zoom_hold: self.ui.preferences.zoom_hold,
@@ -743,6 +778,7 @@ impl eframe::App for App {
         }
         if !ctx.input(|i| i.pointer.any_down()) {
             self.document.end_thickness_edit();
+            self.document.end_mask_adjustment();
         }
         ctx.request_repaint_after(std::time::Duration::from_millis(33));
     }

@@ -150,13 +150,14 @@ impl Mesh {
     // Splits and flips alone cannot undo the compression behind a moving tip.
     fn relax_tip(&mut self, brush: &Brush, dabs: &[Dab], target: f32) -> bool {
         let mut changed = false;
+        let sculptable = self.sculptable_vertices();
         for _ in 0..2 {
             let normals = self.normals();
             let mut sums = vec![Vec3::default(); self.vertices.len()];
             let mut counts = vec![0.; self.vertices.len()];
             let mut active = vec![false; self.vertices.len()];
-            for &t @ [a, b, c] in &self.triangles {
-                if self.in_patch(t, brush, dabs) {
+            for (fi, &t @ [a, b, c]) in self.triangles.iter().enumerate() {
+                if self.in_patch(fi, t, brush, dabs) {
                     for i in t {
                         active[i] = true;
                     }
@@ -168,7 +169,8 @@ impl Mesh {
             }
             let mut moves = vec![Vec3::default(); self.vertices.len()];
             for i in 0..moves.len() {
-                if !active[i]
+                if !sculptable[i]
+                    || !active[i]
                     || self.mask[i] >= 0.999
                     || counts[i] == 0.
                     || dabs
@@ -228,7 +230,7 @@ impl Mesh {
         let mut edges: BTreeMap<(usize, usize), Vec<OrientedFaceEdge>> = BTreeMap::new();
         let mut existing = HashSet::new();
         for (i, &[a, b, c]) in self.triangles.iter().enumerate() {
-            let local = self.in_patch([a, b, c], brush, dabs);
+            let local = self.in_patch(i, [a, b, c], brush, dabs);
             for (a, b, c) in [(a, b, c), (b, c, a), (c, a, b)] {
                 existing.insert(edge(a, b));
                 if local {
@@ -251,6 +253,9 @@ impl Mesh {
             let [(i, a, b, c), (j, x, y, d)] = pair.as_slice() else {
                 continue;
             };
+            if !self.polygroups.is_empty() && self.polygroups[*i] != self.polygroups[*j] {
+                continue;
+            }
             if replacements.len() >= limit {
                 break;
             }
@@ -303,8 +308,8 @@ impl Mesh {
             return 0;
         }
         let mut candidates = BTreeMap::new();
-        for &t in &self.triangles {
-            if !self.in_patch(t, brush, dabs) {
+        for (fi, &t) in self.triangles.iter().enumerate() {
+            if !self.in_patch(fi, t, brush, dabs) {
                 continue;
             }
             let [a, b, c] = t;
@@ -334,10 +339,15 @@ impl Mesh {
             self.vertices
                 .push((self.vertices[a] + self.vertices[b]) * 0.5);
             self.mask.push((self.mask[a] + self.mask[b]) * 0.5);
+            for g in &mut self.vertex_groups {
+                g.weights.push((g.weights[a] + g.weights[b]) * 0.5);
+            }
             mids.insert((a, b), index);
         }
         let mut faces = Vec::with_capacity(self.triangles.len() + candidates.len() * 2);
-        for &[a, b, c] in &self.triangles {
+        let mut new_groups = Vec::new();
+        for (fi, &[a, b, c]) in self.triangles.iter().enumerate() {
+            let start = faces.len();
             let m = [
                 mids.get(&edge(a, b)).copied(),
                 mids.get(&edge(b, c)).copied(),
@@ -376,7 +386,12 @@ impl Mesh {
                     faces.extend([[a, p, r], [p, b, q], [r, q, c], [p, q, r]]);
                 }
             }
+            if !self.polygroups.is_empty() {
+                new_groups.resize(faces.len(), self.polygroups[fi]);
+                debug_assert!(faces.len() > start);
+            }
         }
+        self.polygroups = new_groups;
         self.quads.clear();
         self.triangles = faces;
         candidates.len()
@@ -389,9 +404,9 @@ impl Mesh {
         limit: usize,
     ) -> usize {
         let mut candidates = BTreeMap::new();
-        for &t in &self.triangles {
+        for (fi, &t) in self.triangles.iter().enumerate() {
             let [a, b, c] = t;
-            if self.in_patch(t, brush, dabs) {
+            if self.in_patch(fi, t, brush, dabs) {
                 for (a, b) in [(a, b), (b, c), (c, a)] {
                     let length = (self.vertices[a] - self.vertices[b]).len();
                     if length < threshold {
@@ -439,11 +454,27 @@ impl Mesh {
             {
                 continue;
             }
+            if incident[a]
+                .iter()
+                .chain(&incident[b])
+                .any(|&i| !self.face_visible(i))
+            {
+                continue;
+            }
             let shared: Vec<_> = incident[a]
                 .iter()
                 .copied()
                 .filter(|&i| self.triangles[i].contains(&b))
                 .collect();
+            if !self.polygroups.is_empty() {
+                let a_groups: std::collections::HashSet<_> =
+                    incident[a].iter().map(|&i| self.polygroups[i]).collect();
+                let b_groups: std::collections::HashSet<_> =
+                    incident[b].iter().map(|&i| self.polygroups[i]).collect();
+                if a_groups != b_groups {
+                    continue;
+                }
+            }
             if shared.len() != 2 {
                 continue;
             }
@@ -528,6 +559,9 @@ impl Mesh {
         for (&b, &a) in &merged {
             self.vertices[a] = (self.vertices[a] + self.vertices[b]) * 0.5;
             self.mask[a] = (self.mask[a] + self.mask[b]) * 0.5;
+            for g in &mut self.vertex_groups {
+                g.weights[a] = (g.weights[a] + g.weights[b]) * 0.5;
+            }
         }
         let mut indices = vec![0; self.vertices.len()];
         let mut vertices = Vec::with_capacity(self.vertices.len() - merged.len());
@@ -542,20 +576,40 @@ impl Mesh {
         for (&b, &a) in &merged {
             indices[b] = indices[a];
         }
-        let triangles = self
+        let old_faces: Vec<_> = self
             .triangles
             .iter()
-            .map(|t| t.map(|i| indices[i]))
-            .filter(|&[a, b, c]| a != b && b != c && a != c)
+            .enumerate()
+            .filter(|(_, t)| {
+                let [a, b, c] = t.map(|i| indices[i]);
+                a != b && b != c && a != c
+            })
+            .map(|(i, _)| i)
             .collect();
+        let triangles = old_faces
+            .iter()
+            .map(|&i| self.triangles[i].map(|v| indices[v]))
+            .collect();
+        if !self.polygroups.is_empty() {
+            self.polygroups = old_faces.iter().map(|&i| self.polygroups[i]).collect();
+        }
+        for g in &mut self.vertex_groups {
+            g.weights = g
+                .weights
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| !merged.contains_key(i))
+                .map(|(_, w)| *w)
+                .collect();
+        }
         self.vertices = vertices;
         self.mask = mask;
         self.quads.clear();
         self.triangles = triangles;
         merged.len()
     }
-    fn in_patch(&self, t: [usize; 3], brush: &Brush, dabs: &[Dab]) -> bool {
-        if t.iter().all(|&i| self.mask[i] >= 0.999) {
+    fn in_patch(&self, face: usize, t: [usize; 3], brush: &Brush, dabs: &[Dab]) -> bool {
+        if !self.face_visible(face) || t.iter().all(|&i| self.mask[i] >= 0.999) {
             return false;
         }
         let [a, b, c] = t.map(|i| self.vertices[i]);
@@ -743,5 +797,37 @@ mod tests {
         assert!((settings.edge_length(&brush, d) - d.radius * settings.detail / 100.).abs() < 1e-6);
         settings.detail = f32::NAN;
         assert!(settings.validate().is_err());
+    }
+}
+
+#[cfg(test)]
+mod group_tests {
+    use super::*;
+    #[test]
+    fn adaptive_splits_and_collapses_preserve_groups() {
+        let mut m = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Cube)
+            .mesh()
+            .unwrap();
+        m.create_vertex_group("Whole".into(), 0.5, true).unwrap();
+        let brush = Brush::new(Kind::Standard);
+        let dab = Dab {
+            center: Vec3(0., 0., 1.),
+            normal: Vec3(0., 0., 1.),
+            right: Vec3(1., 0., 0.),
+            up: Vec3(0., 1., 0.),
+            radius: 10.,
+            pressure: 1.,
+            delta: Vec3::default(),
+            invert: false,
+        };
+        assert!(m.split_local(&brush, &[dab], 0.1, 16) > 0);
+        m.validate_closed().unwrap();
+        assert_eq!(m.polygroups, vec![1; m.triangles.len()]);
+        assert!(m.vertex_groups[0].weights.iter().all(|&w| w == 1.));
+        let count = m.collapse_local(&brush, &[dab], 3., 16);
+        assert!(count > 0);
+        m.validate_closed().unwrap();
+        assert_eq!(m.polygroups, vec![1; m.triangles.len()]);
+        assert!(m.vertex_groups[0].weights.iter().all(|&w| w == 1.));
     }
 }

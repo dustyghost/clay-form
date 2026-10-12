@@ -14,6 +14,7 @@ use crate::{
 };
 use eframe::egui::{self, Color32, Pos2, Sense, Vec2};
 use gizmo::draw_gizmo;
+pub(crate) const AXIS_COLORS: [Color32; 3] = controls::AXES;
 use scene::Scene;
 pub(crate) use transform::{TransformMode, TransformOperation};
 #[derive(Clone, Copy, PartialEq)]
@@ -52,6 +53,7 @@ pub(crate) struct ViewportOptions {
     pub wire: bool,
     pub wire_mode: WireMode,
     pub wire_triangles: bool,
+    pub show_polygroups: bool,
     pub backface_opacity: f32,
     pub show_guides: bool,
     pub guide_opacity: f32,
@@ -130,6 +132,7 @@ impl Viewport {
         );
         if let Some(renderer) = &self.renderer {
             renderer.set_backfaces(options.backface_opacity);
+            renderer.set_polygroups(options.show_polygroups);
         }
         if options.show_guides && document.active_visible() {
             if let Some(renderer) = &self.renderer {
@@ -149,6 +152,38 @@ impl Viewport {
         let pointer = response
             .hover_pos()
             .or_else(|| response.interact_pointer_pos());
+        if options.enabled
+            && response.hovered()
+            && let Some(pos) = pointer
+            && !gizmo_rect.contains(pos)
+            && scene.pick_model(pos).is_some()
+        {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::None);
+            let target = ui
+                .ctx()
+                .layer_painter(egui::LayerId::new(
+                    egui::Order::Tooltip,
+                    egui::Id::new("model_target_cursor"),
+                ))
+                .with_clip_rect(rect);
+            // A dark outline keeps the small red target readable on light groups.
+            for (color, width) in [
+                (Color32::from_black_alpha(210), 3.),
+                (Color32::from_rgb(235, 65, 65), 1.3),
+            ] {
+                let stroke = egui::Stroke::new(width, color);
+                target.circle_stroke(pos, 5., stroke);
+                for axis in [Vec2::X, Vec2::Y] {
+                    for sign in [-1., 1.] {
+                        target.line_segment(
+                            [pos + axis * (3. * sign), pos + axis * (8. * sign)],
+                            stroke,
+                        );
+                    }
+                }
+            }
+            target.circle_filled(pos, 1.2, Color32::from_rgb(235, 65, 65));
+        }
         let modifiers = ui.input(|i| i.modifiers);
         let zoom_held = options.zoom_hold.active(modifiers);
         if options.enabled && response.hovered() {
@@ -275,7 +310,7 @@ impl Viewport {
             painter.text(
                 rect.left_bottom() + Vec2::new(16., -16.),
                 egui::Align2::LEFT_BOTTOM,
-                "Primitive · teal: shape · violet diamonds: spans (drag left / right) · convert to sculpt",
+                "Primitive · teal: shape · axis-colored diamonds: spans (drag left / right) · convert to sculpt",
                 egui::FontId::proportional(13.),
                 controls::NEUTRAL,
             );

@@ -987,7 +987,7 @@ fn primitive_button_requires_explicit_replacement_and_cancel_keeps_the_scene() {
     app.dispatch(Command::RequestPrimitive, &ctx);
     app.dispatch(Command::ConfirmPrimitive, &ctx);
     assert!(app.document.primitive().is_some());
-    assert!(app.ui.primitive_editor_open);
+    assert!(app.ui.primitive_controls_requested);
     navigation_frame(&mut app, &ctx, vec![]);
     let count = app.document.history_counts();
     app.dispatch(Command::RequestPrimitive, &ctx);
@@ -995,7 +995,7 @@ fn primitive_button_requires_explicit_replacement_and_cancel_keeps_the_scene() {
     assert_eq!(app.document.history_counts(), count);
     app.dispatch(Command::ConvertPrimitive, &ctx);
     assert!(app.document.primitive().is_none());
-    assert!(!app.ui.primitive_editor_open);
+    assert!(!app.ui.primitive_controls_requested);
 }
 #[test]
 fn primitive_shape_handle_drag_edits_recipe_without_sculpting_and_undoes_once() {
@@ -1037,18 +1037,66 @@ fn primitive_shape_handle_drag_edits_recipe_without_sculpting_and_undoes_once() 
 }
 
 #[test]
-fn primitive_resolution_panel_changes_segments_without_opening_editor_or_dragging_model() {
+fn requesting_primitive_controls_reveals_the_submodels_section() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.document.initialize_primitive().unwrap();
+    let panel = app
+        .ui
+        .preferences
+        .panels
+        .iter_mut()
+        .find(|p| p.tool == crate::preferences::Tool::Submodels)
+        .unwrap();
+    panel.open = false;
+    panel.dock = crate::preferences::Dock::Hidden;
+    app.dispatch(Command::RequestPrimitive, &ctx);
+    let _ = ctx.run(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                Pos2::ZERO,
+                Vec2::new(1200., 1000.),
+            )),
+            ..Default::default()
+        },
+        |ctx| {
+            app.ui.brush_panel(ctx, &app.document, "", 1.);
+        },
+    );
+    let panel = app
+        .ui
+        .preferences
+        .panels
+        .iter()
+        .find(|p| p.tool == crate::preferences::Tool::Submodels)
+        .unwrap();
+    assert!(panel.open);
+    assert_eq!(panel.dock, crate::preferences::Dock::Right);
+    assert!(!app.ui.primitive_controls_requested);
+}
+
+#[test]
+fn primitive_sidebar_changes_segments_without_dragging_model_and_hides_after_conversion() {
     fn frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) -> egui::FullOutput {
         ctx.run(
             egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
                     Pos2::ZERO,
-                    Vec2::new(1000., 800.),
+                    Vec2::new(1000., 1800.),
                 )),
                 events,
                 ..Default::default()
             },
             |ctx| {
+                let mut commands = Vec::new();
+                egui::SidePanel::right("submodel_test_panel")
+                    .default_width(330.)
+                    .show(ctx, |ui| {
+                        app.ui.primitive_controls(ui, &app.document, &mut commands);
+                    });
+                for command in commands {
+                    app.dispatch(command, ctx);
+                }
                 egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
             },
         )
@@ -1074,6 +1122,15 @@ fn primitive_resolution_panel_changes_segments_without_opening_editor_or_draggin
             _ => None,
         })
         .collect();
+    assert_eq!(
+        texts.iter().filter(|(text, _)| *text == "Segments").count(),
+        1
+    );
+    assert!(
+        !texts
+            .iter()
+            .any(|(text, _)| *text == "Primitive shape" || text.starts_with("Resolution ·"))
+    );
     let row = texts
         .iter()
         .find(|(text, _)| *text == "Segments")
@@ -1092,26 +1149,38 @@ fn primitive_resolution_panel_changes_segments_without_opening_editor_or_draggin
     frame(&mut app, &ctx, vec![primary_event(plus, false)]);
     assert_eq!(app.document.primitive().unwrap().segments, 49);
     assert_eq!(app.document.history_counts().0, count + 1);
-    assert!(!app.ui.primitive_editor_open);
+    assert!(!app.ui.primitive_controls_requested);
     assert!(app.viewport.gesture.is_none());
     assert_eq!(app.camera.yaw, 0.);
     app.document.undo();
     assert_eq!(app.document.geometry_snapshot(), before);
+    app.dispatch(Command::ConvertPrimitive, &ctx);
+    let output = frame(&mut app, &ctx, vec![]);
+    assert!(!output.shapes.iter().any(|s| matches!(&s.shape,egui::Shape::Text(t) if t.galley.text() == "Segments" || t.galley.text().starts_with("Primitive ·"))));
 }
 
 #[test]
-fn viewport_face_pose_panel_opens_the_jaw_with_one_click_and_undo_restores_it() {
+fn primitive_sidebar_opens_the_jaw_with_one_click_and_undo_restores_it() {
     fn frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) -> egui::FullOutput {
         ctx.run(
             egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
                     Pos2::ZERO,
-                    Vec2::new(1000., 800.),
+                    Vec2::new(1000., 1800.),
                 )),
                 events,
                 ..Default::default()
             },
             |ctx| {
+                let mut commands = Vec::new();
+                egui::SidePanel::right("submodel_test_panel")
+                    .default_width(330.)
+                    .show(ctx, |ui| {
+                        app.ui.primitive_controls(ui, &app.document, &mut commands);
+                    });
+                for command in commands {
+                    app.dispatch(command, ctx);
+                }
                 egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
             },
         )
@@ -1128,16 +1197,24 @@ fn viewport_face_pose_panel_opens_the_jaw_with_one_click_and_undo_restores_it() 
     let before = app.document.geometry_snapshot();
     frame(&mut app, &ctx, vec![]);
     let output = frame(&mut app, &ctx, vec![]);
-    let point = output
+    let texts: Vec<_> = output
         .shapes
         .iter()
-        .find_map(|s| match &s.shape {
-            egui::Shape::Text(t) if t.galley.text() == "Open" => {
-                Some(t.pos + t.galley.size() * 0.5)
-            }
+        .filter_map(|s| match &s.shape {
+            egui::Shape::Text(t) => Some((t.galley.text(), t.pos + t.galley.size() * 0.5)),
             _ => None,
         })
-        .expect("mouth opening is available without the options popup");
+        .collect();
+    let close = texts
+        .iter()
+        .find(|(text, _)| *text == "Close mouth")
+        .unwrap()
+        .1;
+    let point = texts
+        .iter()
+        .find(|(text, pos)| *text == "Open mouth" && (pos.y - close.y).abs() < 5.)
+        .unwrap()
+        .1;
     frame(
         &mut app,
         &ctx,
@@ -1145,7 +1222,7 @@ fn viewport_face_pose_panel_opens_the_jaw_with_one_click_and_undo_restores_it() 
     );
     frame(&mut app, &ctx, vec![primary_event(point, false)]);
     assert_eq!(app.document.primitive().unwrap().head.mouth_open, 1.);
-    assert!(!app.ui.primitive_editor_open);
+    assert!(!app.ui.primitive_controls_requested);
     assert!(app.viewport.gesture.is_none());
     app.document.undo();
     assert_eq!(app.document.geometry_snapshot(), before);

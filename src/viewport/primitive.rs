@@ -537,10 +537,12 @@ impl PrimitiveControls {
             let hot = hovered.is_some_and(|hover| hover.control == h.control);
             let active = self.drag.is_some_and(|drag| drag.control == h.control);
             let (color, marker) = match h.control {
-                Control::Resolution(_) => (controls::TOPOLOGY, controls::Marker::Diamond),
-                Control::Dimension(_) | Control::Uniform => {
-                    (controls::SHAPE, controls::Marker::Square)
+                Control::Resolution(Resolution::Spans(axis)) => {
+                    (controls::AXES[axis], controls::Marker::Diamond)
                 }
+                Control::Dimension(axis) => (controls::AXES[axis], controls::Marker::Square),
+                Control::Resolution(_) => (controls::TOPOLOGY, controls::Marker::Diamond),
+                Control::Uniform => (controls::SHAPE, controls::Marker::Square),
                 _ => (controls::SHAPE, controls::Marker::Circle),
             };
             if h.offset != Vec2::ZERO && !matches!(h.control, Control::Resolution(_)) {

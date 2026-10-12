@@ -188,7 +188,9 @@ impl Scene {
                     if !hidden.contains(&edge_key(a, b)) && seen_edges.insert(edge_key(a, b)) {
                         let stroke = egui::Stroke::new(
                             0.7,
-                            if mode == WireMode::Transparent {
+                            if let Some(&color) = geometry.edge_colors.get(&edge_key(a, b)) {
+                                color
+                            } else if mode == WireMode::Transparent {
                                 Color32::from_rgb(170, 185, 200)
                             } else {
                                 Color32::from_black_alpha(110)
@@ -555,6 +557,25 @@ mod tests {
             line_count(&wire_shapes(&document, WireMode::Transparent, false))
                 > line_count(&wire_shapes(&document, WireMode::Front, false))
         );
+    }
+    #[test]
+    fn hiding_a_polygroup_removes_picking_and_wire_edges_without_changing_mesh() {
+        let mut d = Document::default();
+        let original = d.mesh().clone();
+        assert!(scene(&d).pick(egui::pos2(400., 400.)).is_some());
+        d.set_vertex_group_visible(0, false).unwrap();
+        let hidden = scene(&d);
+        assert!(hidden.geometry.mesh.triangles.is_empty());
+        assert!(hidden.pick(egui::pos2(400., 400.)).is_none());
+        assert!(hidden.pick_model(egui::pos2(400., 400.)).is_none());
+        assert_eq!(
+            line_count(&wire_shapes(&d, super::super::WireMode::Transparent, true)),
+            0
+        );
+        assert_eq!(d.mesh().vertices, original.vertices);
+        assert_eq!(d.mesh().triangles, original.triangles);
+        d.set_vertex_group_visible(0, true).unwrap();
+        assert!(scene(&d).pick(egui::pos2(400., 400.)).is_some());
     }
     fn scene(document: &Document) -> Scene {
         let context = egui::Context::default();

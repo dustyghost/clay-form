@@ -8,6 +8,15 @@ pub struct Submodel {
     pub mesh: Mesh,
     pub mesh_settings: MeshSettings,
 }
+fn default_threshold() -> f32 {
+    0.5
+}
+fn threshold_default(value: &f32) -> bool {
+    *value == 0.5
+}
+fn disabled(value: &bool) -> bool {
+    !*value
+}
 fn zero_thickness(value: &f32) -> bool {
     *value == 0.
 }
@@ -22,6 +31,17 @@ pub struct ModelMetadata {
     pub group: String,
     #[serde(default, skip_serializing_if = "zero_thickness")]
     pub temporary_thickness: f32,
+    #[serde(
+        default = "default_threshold",
+        skip_serializing_if = "threshold_default"
+    )]
+    pub mask_threshold: f32,
+    #[serde(default, skip_serializing_if = "disabled")]
+    pub thickness_groups: bool,
+    #[serde(default, skip_serializing_if = "disabled")]
+    pub thickness_mask_rim: bool,
+    #[serde(default, skip_serializing_if = "disabled")]
+    pub thickness_group_mask: bool,
 }
 impl Default for ModelMetadata {
     fn default() -> Self {
@@ -29,11 +49,18 @@ impl Default for ModelMetadata {
             visible: true,
             group: String::new(),
             temporary_thickness: 0.,
+            mask_threshold: 0.5,
+            thickness_groups: false,
+            thickness_mask_rim: false,
+            thickness_group_mask: false,
         }
     }
 }
 impl ModelMetadata {
     pub fn validate(&self) -> Result<(), String> {
+        if !self.mask_threshold.is_finite() || !(0. ..=1.).contains(&self.mask_threshold) {
+            return Err("Mask threshold must be between 0% and 100%".into());
+        }
         if !self.temporary_thickness.is_finite()
             || !(0. ..=100.).contains(&self.temporary_thickness)
         {

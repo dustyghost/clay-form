@@ -15,7 +15,7 @@ Use `src/ui/design.rs` for shared action buttons, menus, icons, brush tiles and 
 Use `src/viewport/controls.rs` for the overlay palette, markers and labels.
 
 - Teal identifies shape parameters. Squares change dimensions or uniform size; circles change radii and anatomical features.
-- Violet diamonds identify integer topology parameters: spans, segments and subdivision levels. Place these in a compact stack beside the model, with persistent names and current values. Drag horizontally; every 12 logical pixels changes one unit. Keep the existing resolution panel available for typing exact values.
+- Axis-colored diamonds identify X/Y/Z span counts; violet diamonds identify non-axis topology parameters such as segments and subdivision levels. Place these in a compact stack beside the model, with persistent names and current values. Drag horizontally; every 12 logical pixels changes one unit. Keep exact-value controls in the single collapsible Primitive section within Submodels; the section disappears after conversion.
 - World axes use the same coral X, green Y and blue Z colours in transform controls and the camera gizmo. Include axis names; colour alone must never communicate the axis.
 - Amber identifies Action Line controls. Neutral controls apply to all axes. Move and placement use circles; scale and stretch use squares.
 - Markers have dark interiors and a two-pixel coloured outline for contrast against both clay and wireframe. A white outer ring marks hover or dragging without replacing the semantic colour.

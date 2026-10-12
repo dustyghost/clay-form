@@ -84,6 +84,14 @@ impl MeshSettings {
         }
         for level in &levels {
             level.validate()?;
+            if level
+                .vertex_groups
+                .iter()
+                .map(|g| (&g.name, g.visible))
+                .ne(mesh.vertex_groups.iter().map(|g| (&g.name, g.visible)))
+            {
+                return Err("Subdivision levels have incompatible vertex groups".into());
+            }
         }
         for pair in levels.windows(2) {
             let refined = pair[0].subdivide()?;
@@ -143,6 +151,9 @@ impl Geometry {
             let count = lower.vertices.len();
             lower.vertices.copy_from_slice(&self.mesh.vertices[..count]);
             lower.mask.copy_from_slice(&self.mesh.mask[..count]);
+            for (low, high) in lower.vertex_groups.iter_mut().zip(&self.mesh.vertex_groups) {
+                low.weights.copy_from_slice(&high.weights[..count]);
+            }
             self.settings
                 .upper
                 .push(std::mem::replace(&mut self.mesh, lower));
@@ -153,11 +164,23 @@ impl Geometry {
             let mut baseline = self.mesh.clone();
             baseline.vertices.copy_from_slice(&higher.vertices[..count]);
             baseline.mask.copy_from_slice(&higher.mask[..count]);
+            for (base, high) in baseline.vertex_groups.iter_mut().zip(&higher.vertex_groups) {
+                base.weights.copy_from_slice(&high.weights[..count]);
+            }
             let old = baseline.subdivide()?;
             let new = self.mesh.subdivide()?;
             for i in 0..higher.vertices.len() {
                 higher.vertices[i] = higher.vertices[i] + (new.vertices[i] - old.vertices[i]);
                 higher.mask[i] = (higher.mask[i] + new.mask[i] - old.mask[i]).clamp(0., 1.);
+                for ((high, new), old) in higher
+                    .vertex_groups
+                    .iter_mut()
+                    .zip(&new.vertex_groups)
+                    .zip(&old.vertex_groups)
+                {
+                    high.weights[i] =
+                        (high.weights[i] + new.weights[i] - old.weights[i]).clamp(0., 1.);
+                }
             }
             self.settings
                 .lower
@@ -186,6 +209,8 @@ impl Mesh {
             return Err("Subdivision would exceed the one-million-face limit".into());
         }
         let mut result = Self {
+            vertex_groups: self.vertex_groups.clone(),
+            polygroups: Vec::new(),
             quads: Vec::new(),
             vertices: self.vertices.clone(),
             mask: self.mask.clone(),
@@ -211,10 +236,22 @@ impl Mesh {
                         .vertices
                         .push((self.vertices[x] + self.vertices[y]) * 0.5);
                     result.mask.push((self.mask[x] + self.mask[y]) * 0.5);
+                    for (group, old) in result.vertex_groups.iter_mut().zip(&self.vertex_groups) {
+                        group.weights.push((old.weights[x] + old.weights[y]) * 0.5);
+                    }
                     i
                 })
             };
-        for &[a, b, c] in &self.triangles {
+        let face_ids: HashMap<_, _> = if self.polygroups.is_empty() {
+            HashMap::new()
+        } else {
+            self.triangles
+                .iter()
+                .enumerate()
+                .map(|(i, &t)| (key(t), self.polygroups[i]))
+                .collect()
+        };
+        for (fi, &[a, b, c]) in self.triangles.iter().enumerate() {
             if polygons.contains(&key([a, b, c])) {
                 continue;
             }
@@ -224,6 +261,9 @@ impl Mesh {
             result
                 .triangles
                 .extend([[a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]]);
+            if !self.polygroups.is_empty() {
+                result.polygroups.extend([self.polygroups[fi]; 4]);
+            }
         }
         for &[a, b, c, d] in &self.quads {
             let ab = midpoint(&mut result, &mut edges, a, b);
@@ -237,6 +277,15 @@ impl Mesh {
             result
                 .mask
                 .push((self.mask[a] + self.mask[b] + self.mask[c] + self.mask[d]) * 0.25);
+            for (group, old) in result.vertex_groups.iter_mut().zip(&self.vertex_groups) {
+                group.weights.push(
+                    (old.weights[a] + old.weights[b] + old.weights[c] + old.weights[d]) * 0.25,
+                );
+            }
+            let id = [[a, b, c], [a, c, d], [a, b, d], [b, c, d]]
+                .into_iter()
+                .find_map(|t| face_ids.get(&key(t)).copied())
+                .unwrap_or(0);
             for q in [
                 [a, ab, center, da],
                 [ab, b, bc, center],
@@ -246,6 +295,9 @@ impl Mesh {
                 result.quads.push(q);
                 let [a, b, c, d] = q;
                 result.triangles.extend([[a, b, c], [a, c, d]]);
+                if !self.polygroups.is_empty() {
+                    result.polygroups.extend([id; 2]);
+                }
             }
         }
         result.validate()?;
@@ -327,6 +379,8 @@ mod tests {
     }
     fn tetrahedron() -> Mesh {
         Mesh {
+            vertex_groups: Vec::new(),
+            polygroups: Vec::new(),
             quads: Vec::new(),
             vertices: vec![
                 Vec3(1., 1., 1.),
