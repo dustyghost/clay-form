@@ -279,18 +279,22 @@ impl Viewport {
                 } else {
                     1.
                 };
-            painter.circle_stroke(
-                pos,
-                radius,
-                egui::Stroke::new(
-                    1.5_f32,
-                    if b.subtract ^ options.reverse.active(modifiers) {
-                        Color32::from_rgb(255, 140, 100)
-                    } else {
-                        Color32::from_rgb(125, 210, 245)
-                    },
-                ),
-            );
+            let color = if b.subtract ^ options.reverse.active(modifiers) {
+                Color32::from_rgb(255, 140, 100)
+            } else {
+                Color32::from_rgb(125, 210, 245)
+            };
+            if !b.surface_cursor || !scene.brush_cursor(&painter, pos, radius, &b, color) {
+                for fraction in [1., b.inner_radius] {
+                    if fraction > 0. {
+                        painter.circle_stroke(
+                            pos,
+                            radius * fraction,
+                            egui::Stroke::new(1.5, color),
+                        );
+                    }
+                }
+            }
             if drawing {
                 let previous = self.last.unwrap_or(pos);
                 let distance = pos.distance(previous);

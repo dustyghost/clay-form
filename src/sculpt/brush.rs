@@ -188,6 +188,12 @@ pub(crate) fn fresh_brush_id() -> String {
     bytes[8] = (bytes[8] & 63) | 0x80;
     guid(bytes)
 }
+fn zero_radius(value: &f32) -> bool {
+    *value == 0.
+}
+fn disabled_cursor(value: &bool) -> bool {
+    !*value
+}
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Brush {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -200,6 +206,10 @@ pub struct Brush {
     pub radius: f32,
     pub strength: f32,
     pub falloff: f32,
+    #[serde(default, skip_serializing_if = "zero_radius")]
+    pub inner_radius: f32,
+    #[serde(default, skip_serializing_if = "disabled_cursor")]
+    pub surface_cursor: bool,
     pub spacing: f32,
     pub rotation: f32,
     pub subtract: bool,
@@ -224,6 +234,8 @@ impl Brush {
                 _ => 0.25,
             },
             falloff: 1.5,
+            inner_radius: 0.,
+            surface_cursor: false,
             spacing: if kind == Kind::Detail { 0.08 } else { 0.15 },
             rotation: 0.,
             subtract: false,
@@ -253,7 +265,7 @@ impl Brush {
         let r = offset.len() / dab.radius;
         // Keep a rigid core: repeatedly attenuating every off-center vertex
         // pinches a long drag down to a single needle, even after remeshing.
-        let t = ((1. - r) / 0.65).clamp(0., 1.);
+        let t = ((1. - r) / (0.65 * (1. - self.inner_radius)).max(0.0001)).clamp(0., 1.);
         let volume = t * t * (3. - 2. * t);
         match &self.alpha {
             Alpha::Soft => volume.powf(self.falloff),
@@ -284,8 +296,11 @@ impl Brush {
         if r >= 1. {
             return 0.;
         }
+        let fade = ((1. - r) / (1. - self.inner_radius).max(0.0001))
+            .clamp(0., 1.)
+            .powf(self.falloff);
         match &self.alpha {
-            Alpha::Soft => (1. - r).powf(self.falloff),
+            Alpha::Soft => fade,
             Alpha::Hard => 1.,
             Alpha::Square => {
                 if x.abs().max(y.abs()) < 0.7 {
@@ -299,9 +314,17 @@ impl Brush {
                 height,
                 pixels,
             } => {
-                let ix = (((x + 1.) * 0.5 * (*width - 1) as f32) as usize).min(*width - 1);
-                let iy = (((1. - y) * 0.5 * (*height - 1) as f32) as usize).min(*height - 1);
-                pixels[iy * width + ix] * (1. - r).powf(self.falloff)
+                let px = (x + 1.) * 0.5 * (*width - 1) as f32;
+                let py = (1. - y) * 0.5 * (*height - 1) as f32;
+                let ix = px.floor() as usize;
+                let iy = py.floor() as usize;
+                let nx = (ix + 1).min(*width - 1);
+                let ny = (iy + 1).min(*height - 1);
+                let tx = px - ix as f32;
+                let ty = py - iy as f32;
+                let top = pixels[iy * width + ix] * (1. - tx) + pixels[iy * width + nx] * tx;
+                let bottom = pixels[ny * width + ix] * (1. - tx) + pixels[ny * width + nx] * tx;
+                (top * (1. - ty) + bottom * ty) * fade
             }
         }
     }
@@ -312,6 +335,8 @@ pub fn validate_brush(b: &Brush) -> Result<(), String> {
         || !(1. ..=500.).contains(&b.radius)
         || !b.strength.is_finite()
         || !(0. ..=1.).contains(&b.strength)
+        || !b.inner_radius.is_finite()
+        || !(0. ..=1.).contains(&b.inner_radius)
         || !b.falloff.is_finite()
         || !(0.1..=8.).contains(&b.falloff)
         || !b.spacing.is_finite()
@@ -354,4 +379,35 @@ pub fn validate_brush(b: &Brush) -> Result<(), String> {
         return Err("Invalid alpha".into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod footprint_tests {
+    use super::*;
+    #[test]
+    fn inner_radius_preserves_alpha_and_fades_outside_core() {
+        let mut brush = Brush::new(Kind::Standard);
+        let old = brush.weight(0.25, 0.);
+        brush.inner_radius = 0.5;
+        assert_eq!(brush.weight(0.25, 0.), 1.);
+        assert!(brush.weight(0.75, 0.) < 1.);
+        assert_eq!(brush.weight(1., 0.), 0.);
+        brush.alpha = Alpha::Image {
+            width: 2,
+            height: 2,
+            pixels: vec![0.2; 4].into(),
+        };
+        assert!((brush.weight(0.25, 0.) - 0.2).abs() < 1e-6);
+        brush.inner_radius = 0.;
+        brush.alpha = Alpha::Soft;
+        assert_eq!(brush.weight(0.25, 0.), old);
+        let mut json = serde_json::to_value(&brush).unwrap();
+        json.as_object_mut().unwrap().remove("inner_radius");
+        json.as_object_mut().unwrap().remove("surface_cursor");
+        let legacy: Brush = serde_json::from_value(json).unwrap();
+        assert_eq!(legacy.inner_radius, 0.);
+        assert!(!legacy.surface_cursor);
+        brush.inner_radius = f32::NAN;
+        assert!(validate_brush(&brush).is_err());
+    }
 }

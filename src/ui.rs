@@ -639,6 +639,8 @@ impl UiState {
                     ui.selectable_value(&mut b.subtract, true, "− Subtract");
                 });
                 ui.add(egui::Slider::new(&mut b.radius, 1. ..=500.).text("Radius (px)"));
+                ui.add(egui::Slider::new(&mut b.inner_radius, 0. ..=1.).text("Inner radius (fraction)")).on_hover_text("Full-strength core; falloff fades from here to the outer radius. Applies to Soft and image alphas.");
+                ui.checkbox(&mut b.surface_cursor, "Surface footprint and normal");
                 ui.add(egui::Slider::new(&mut b.strength, 0. ..=1.).text("Strength"));
                 ui.add(egui::Slider::new(&mut b.spacing, 0.01..=1.).text("Spacing"));
                 ui.add(egui::Slider::new(&mut b.falloff, 0.1..=8.).text("Falloff"));

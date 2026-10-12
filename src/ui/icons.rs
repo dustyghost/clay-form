@@ -11,8 +11,7 @@ use eframe::egui;
 use std::collections::HashMap;
 #[derive(Default)]
 pub(super) struct Icons {
-    defaults: HashMap<usize, egui::TextureHandle>,
-    custom: HashMap<usize, (BrushIcon, egui::TextureHandle)>,
+    custom: HashMap<usize, (Brush, egui::TextureHandle)>,
     pub(super) shot: Option<Shot>,
 }
 pub(super) struct Shot {
@@ -37,36 +36,24 @@ impl UiState {
         index: usize,
         brush: &Brush,
     ) -> egui::TextureId {
-        if let Some(icon) = &brush.icon {
-            let fresh = self.icons.custom.get(&index).is_none_or(|(old, _)| {
-                old.size != icon.size || !std::sync::Arc::ptr_eq(&old.rgba, &icon.rgba)
-            });
-            if fresh {
-                self.icons.custom.insert(
-                    index,
-                    (
-                        icon.clone(),
-                        texture(ctx, format!("brush-icon-{index}"), icon),
-                    ),
-                );
-            }
-            self.icons.custom[&index].1.id()
-        } else {
-            self.icons.custom.remove(&index);
-            let kind = brush.kind as usize;
-            self.icons
-                .defaults
-                .entry(kind)
-                .or_insert_with(|| {
-                    texture(
-                        ctx,
-                        format!("brush-default-{kind}"),
-                        &crate::brush_icon::default_icon(brush.kind),
-                    )
-                })
-                .id()
+        if self
+            .icons
+            .custom
+            .get(&index)
+            .is_none_or(|(old, _)| old != brush)
+        {
+            let icon = crate::brush_icon::projected(brush);
+            self.icons.custom.insert(
+                index,
+                (
+                    brush.clone(),
+                    texture(ctx, format!("brush-icon-{index}"), &icon),
+                ),
+            );
         }
+        self.icons.custom[&index].1.id()
     }
+
     pub(crate) fn set_icon_shot(
         &mut self,
         ctx: &egui::Context,

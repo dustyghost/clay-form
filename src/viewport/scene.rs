@@ -292,6 +292,111 @@ impl Scene {
             self.center.y - point.dot(self.up) * self.scale,
         )
     }
+    pub(super) fn brush_cursor(
+        &self,
+        painter: &egui::Painter,
+        pos: Pos2,
+        radius: f32,
+        brush: &crate::sculpt::Brush,
+        color: Color32,
+    ) -> bool {
+        let Some((center, normal)) = self.pick(pos) else {
+            return false;
+        };
+        let world_radius = radius / self.scale;
+        // Sample visible surface points, using the same camera-plane alpha and
+        // depth/normal limits as sculpting. Missing samples break the overlay.
+        const N: usize = 17;
+        let bounds = egui::Rect::from_center_size(pos, egui::Vec2::splat(radius * 2.));
+        let candidates: Vec<_> = self
+            .all_faces
+            .iter()
+            .copied()
+            .filter(|(fi, _)| {
+                let [a, b, c] = self.triangles[*fi].map(|i| self.positions[i]);
+                let face_bounds = egui::Rect::from_min_max(
+                    Pos2::new(a.x.min(b.x).min(c.x), a.y.min(b.y).min(c.y)),
+                    Pos2::new(a.x.max(b.x).max(c.x), a.y.max(b.y).max(c.y)),
+                );
+                bounds.intersects(face_bounds)
+            })
+            .collect();
+        let mut samples = vec![None; N * N];
+        for y in 0..N {
+            for x in 0..N {
+                let u = x as f32 / (N - 1) as f32 * 2. - 1.;
+                let v = 1. - y as f32 / (N - 1) as f32 * 2.;
+                let point = pos + egui::vec2(u, -v) * radius;
+                if let Some((p, n, face)) = pick_surface(
+                    &self.vertices,
+                    &self.triangles,
+                    &self.positions,
+                    &candidates,
+                    &self.normals,
+                    self.view,
+                    point,
+                ) && self.owners[face] == self.active
+                    && (p - center).len() <= world_radius * 1.5
+                    && n.dot(normal) >= 0.1
+                {
+                    samples[y * N + x] = Some((point, brush.weight(u, v)));
+                }
+            }
+        }
+        let mut overlay = egui::Mesh::default();
+        for y in 0..N - 1 {
+            for x in 0..N - 1 {
+                for ids in [
+                    [y * N + x, y * N + x + 1, (y + 1) * N + x],
+                    [y * N + x + 1, (y + 1) * N + x + 1, (y + 1) * N + x],
+                ] {
+                    if let [Some(a), Some(b), Some(c)] = ids.map(|i| samples[i]) {
+                        let start = overlay.vertices.len() as u32;
+                        for (point, weight) in [a, b, c] {
+                            overlay.colored_vertex(
+                                point,
+                                Color32::from_rgba_unmultiplied(
+                                    color.r(),
+                                    color.g(),
+                                    color.b(),
+                                    (weight * 90.) as u8,
+                                ),
+                            );
+                        }
+                        overlay.add_triangle(start, start + 1, start + 2);
+                    }
+                }
+            }
+        }
+        painter.add(egui::Shape::mesh(overlay));
+        // A tangent ring and normal make surface inclination legible.
+        let tangent = (self.right - normal * self.right.dot(normal)).norm();
+        let tangent = if tangent.len() < 0.01 {
+            self.up.cross(normal).norm()
+        } else {
+            tangent
+        };
+        let bitangent = normal.cross(tangent).norm();
+        for fraction in [1., brush.inner_radius] {
+            if fraction <= 0. {
+                continue;
+            }
+            let points = (0..=64)
+                .map(|i| {
+                    let a = i as f32 / 64. * std::f32::consts::TAU;
+                    self.project(
+                        center
+                            + (tangent * a.cos() + bitangent * a.sin()) * (world_radius * fraction),
+                    )
+                })
+                .collect();
+            painter.add(egui::Shape::line(points, egui::Stroke::new(1.2, color)));
+        }
+        let end = self.project(center + normal * (world_radius * 0.6));
+        painter.line_segment([pos, end], egui::Stroke::new(2., color));
+        painter.circle_filled(end, 3., color);
+        true
+    }
     pub fn pick_model(&self, point: Pos2) -> Option<(usize, Vec3, Vec3)> {
         let (p, normal, face) = pick_surface(
             &self.vertices,
@@ -324,6 +429,15 @@ fn pick_surface(
     for &(fi, _) in faces {
         let t = triangles[fi];
         let a = positions[t[0]];
+        let b = positions[t[1]];
+        let c = positions[t[2]];
+        if point.x < a.x.min(b.x).min(c.x)
+            || point.x > a.x.max(b.x).max(c.x)
+            || point.y < a.y.min(b.y).min(c.y)
+            || point.y > a.y.max(b.y).max(c.y)
+        {
+            continue;
+        }
         let v0 = positions[t[1]] - a;
         let v1 = positions[t[2]] - a;
         let v2 = point - a;
@@ -446,6 +560,37 @@ mod tests {
             ));
         });
         scene.unwrap()
+    }
+    #[test]
+    fn surface_cursor_renders_on_clay_and_falls_back_off_surface() {
+        let document = Document::default();
+        let view = scene(&document);
+        let context = egui::Context::default();
+        let mut brush = crate::sculpt::Brush::new(crate::sculpt::Kind::Standard);
+        brush.inner_radius = 0.5;
+        let output = context.run(egui::RawInput::default(), |ctx| {
+            let painter = ctx.layer_painter(egui::LayerId::background());
+            assert!(view.brush_cursor(&painter, view.center, 60., &brush, Color32::WHITE));
+            assert!(!view.brush_cursor(
+                &painter,
+                Pos2::new(-1000., -1000.),
+                60.,
+                &brush,
+                Color32::WHITE
+            ));
+        });
+        assert!(
+            output
+                .shapes
+                .iter()
+                .any(|s| matches!(s.shape, egui::Shape::Mesh(_)))
+        );
+        assert!(
+            output
+                .shapes
+                .iter()
+                .any(|s| matches!(s.shape, egui::Shape::Path(_)))
+        );
     }
     #[test]
     fn inactive_foreground_occludes_active_picks_and_hidden_models_disappear() {

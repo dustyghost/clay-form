@@ -139,6 +139,31 @@ pub(crate) fn default_icon(kind: Kind) -> BrushIcon {
     }
 }
 
+/// Project the effective alpha onto the thumbnail, retaining the captured base.
+pub(crate) fn projected(brush: &crate::sculpt::Brush) -> BrushIcon {
+    let base = brush
+        .icon
+        .clone()
+        .unwrap_or_else(|| default_icon(brush.kind));
+    let mut rgba = base.rgba.to_vec();
+    for y in 0..base.size {
+        for x in 0..base.size {
+            let u = x as f32 / (base.size - 1) as f32 * 2. - 1.;
+            let v = 1. - y as f32 / (base.size - 1) as f32 * 2.;
+            let weight = brush.weight(u, v);
+            let i = (y * base.size + x) * 4;
+            for (c, tint) in [125., 210., 245.].into_iter().enumerate() {
+                rgba[i + c] =
+                    (rgba[i + c] as f32 * (1. - 0.55 * weight) + tint * 0.55 * weight) as u8;
+            }
+        }
+    }
+    BrushIcon {
+        size: base.size,
+        rgba: rgba.into(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -177,6 +202,25 @@ mod tests {
             )
             .unwrap();
         }
+    }
+    #[test]
+    fn projected_thumbnail_tracks_alpha_rotation_and_preserves_capture() {
+        let mut brush = crate::sculpt::Brush::new(Kind::Clay);
+        brush.alpha = crate::sculpt::Alpha::Image {
+            width: 2,
+            height: 2,
+            pixels: vec![1., 0., 0., 0.].into(),
+        };
+        brush.icon = Some(default_icon(Kind::Clay));
+        let original = brush.icon.clone();
+        let first = projected(&brush);
+        brush.rotation = 90.;
+        assert!(first != projected(&brush));
+        assert!(brush.icon == original);
+        brush.rotation = 0.;
+        brush.inner_radius = 0.8;
+        assert!(first != projected(&brush));
+        projected(&brush).validate().unwrap();
     }
     #[test]
     fn brush_default_icons_are_valid_and_distinct() {
