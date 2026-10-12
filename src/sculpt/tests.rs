@@ -14,6 +14,36 @@ fn sphere_is_closed_and_outward() {
     assert!(edges.values().all(|&n| n == 2));
 }
 #[test]
+fn initial_sphere_is_all_quads_and_preserves_them_through_subdivision() {
+    let sphere = Mesh::sphere();
+    assert_eq!(sphere.vertices.len(), 4706);
+    assert_eq!(sphere.quads.len(), 4704);
+    assert_eq!(sphere.triangles.len(), sphere.quads.len() * 2);
+    assert!(sphere.vertices.iter().all(|v| (v.len() - 1.).abs() < 1e-6));
+    let mut faces = std::collections::HashSet::new();
+    for &[a, b, c, d] in &sphere.quads {
+        for mut triangle in [[a, b, c], [a, c, d]] {
+            triangle.sort_unstable();
+            assert!(faces.insert(triangle));
+        }
+    }
+    for mut triangle in sphere.triangles.clone() {
+        triangle.sort_unstable();
+        assert!(
+            faces.remove(&triangle),
+            "every rendering triangle belongs to a quad"
+        );
+    }
+    assert!(faces.is_empty());
+    let refined = sphere.subdivide().unwrap();
+    assert_eq!(refined.quads.len(), sphere.quads.len() * 4);
+    assert_eq!(refined.triangles.len(), refined.quads.len() * 2);
+    refined.validate_closed().unwrap();
+    let loaded: Mesh = serde_json::from_str(&serde_json::to_string(&sphere).unwrap()).unwrap();
+    assert_eq!(sphere, loaded);
+}
+
+#[test]
 fn add_subtract_and_mask() {
     let mut m = Mesh::sphere();
     let original = m.vertices[0];

@@ -699,6 +699,7 @@ fn snake_drag_extends_beyond_model_with_adaptive_topology_and_one_undo_step() {
 #[test]
 fn multiple_adaptive_dabs_with_symmetry_guides_use_stable_picking() {
     let mut app = App::default();
+    let initial_vertices = app.document.mesh().vertices.len();
     let ctx = egui::Context::default();
     app.dispatch(
         Command::SetAdaptive(crate::sculpt::AdaptiveSettings {
@@ -731,7 +732,7 @@ fn multiple_adaptive_dabs_with_symmetry_guides_use_stable_picking() {
     }
     navigation_frame(&mut app, &ctx, vec![primary_event(center, false)]);
     app.document.mesh().validate_closed().unwrap();
-    assert!(app.document.mesh().vertices.len() > 4514);
+    assert!(app.document.mesh().vertices.len() > initial_vertices);
 }
 
 #[test]
@@ -1219,4 +1220,24 @@ fn brush_icon_capture_preview_cancel_and_assignment() {
     assert!(app.document.is_dirty());
     assert_eq!(app.document.geometry_snapshot(), before);
     assert!(!app.document.can_undo());
+}
+
+#[test]
+fn mask_commands_cut_invert_and_undo_and_empty_models_render_safely() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let original = app.document.geometry_snapshot();
+    app.dispatch(Command::InvertMask, &ctx);
+    assert!(app.document.mesh().mask.iter().all(|m| *m == 1.));
+    app.dispatch(Command::DeleteMasked, &ctx);
+    assert!(app.document.mesh().vertices.is_empty());
+    navigation_frame(&mut app, &ctx, vec![]);
+    app.ui.transform_mode = crate::viewport::TransformMode::World;
+    navigation_frame(&mut app, &ctx, vec![]);
+    app.ui.transform_mode = crate::viewport::TransformMode::ActionLine;
+    navigation_frame(&mut app, &ctx, vec![]);
+    app.dispatch(Command::Undo, &ctx);
+    assert!(!app.document.mesh().vertices.is_empty());
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), original);
 }

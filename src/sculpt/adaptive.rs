@@ -612,6 +612,8 @@ mod tests {
         let mut budget = Budget {
             splits: 23,
             collapses: 0,
+            // Isolate the split budget; quality flips have their own budget.
+            flips: 0,
             ..Default::default()
         };
         assert!(mesh.adapt(

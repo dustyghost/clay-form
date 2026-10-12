@@ -37,6 +37,9 @@ pub(super) struct TransformControls {
     pivot: Option<Vec3>,
 }
 fn bounds_center(document: &Document) -> Vec3 {
+    if document.mesh().vertices.is_empty() {
+        return Vec3::default();
+    }
     let mut min = Vec3(f32::INFINITY, f32::INFINITY, f32::INFINITY);
     let mut max = Vec3(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY);
     for p in &document.mesh().vertices {
@@ -53,7 +56,7 @@ impl TransformControls {
         mode: TransformMode,
         op: TransformOperation,
     ) -> Vec<(Pos2, Handle, Color32, &'static str)> {
-        if !document.active_visible() {
+        if !document.active_visible() || document.mesh().vertices.is_empty() {
             return vec![];
         }
         if mode == TransformMode::World {

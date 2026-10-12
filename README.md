@@ -10,7 +10,7 @@ Install a current stable Rust toolchain, then:
 cargo run --release
 ```
 
-Linux requires a working Wayland or X11 desktop and OpenGL support. The first build downloads Cargo dependencies. `Cargo.lock` is committed for reproducible application builds.
+Linux requires a working Wayland or X11 desktop and desktop OpenGL 3.3 or newer. The model viewport uses cached GPU buffers, depth-tested rendering, shader lighting, and surface alpha/symmetry overlays; egui draws the interface. The first build downloads Cargo dependencies. `Cargo.lock` is committed for reproducible application builds.
 
 ## Sculpting
 
@@ -25,11 +25,13 @@ Linux requires a working Wayland or X11 desktop and OpenGL support. The first bu
 - Duplicate any brush to create a named variation. In **Presets**, use **Export brush / Import brush** for one brush, or **Export library / Import library** for the whole library. Persistent brush IDs let imports update matching brushes without adding copies; duplicate creates a new ID. Importing an unchanged library leaves the document unchanged. Older presets without IDs receive a stable identity from their contents; edited legacy files may be imported as new brushes.
 - Enable **Symmetry** in the toolbar, then open **Symmetry settings**. Mirror across X/Y/Z independently or combine planes. Radial symmetry adds 2–16 repeats around X, Y, or Z; mirrors and radial repeats can be combined.
 - Adjust the symmetry center in object coordinates, or reset it to the origin. Surface lines show the active planes and radial boundaries as you orbit: X pink/red, Y green, Z blue, other radial boundaries gold. Guide visibility and opacity are adjustable.
-- Symmetry settings are saved in projects; older projects open with symmetry disabled. Overlapping symmetry copies use the strongest influence per vertex, preventing stronger strokes at the center seam. Clear mask removes all masking. Undo/Redo keeps up to 24 geometry edits within a 128 MB snapshot budget.
+- Symmetry settings are saved in projects; older projects open with symmetry disabled. Overlapping symmetry copies use the strongest influence per vertex, preventing stronger strokes at the center seam.
+- The **Mask** menu provides **Clear mask**, **Invert mask**, and **Delete masked**. Invert swaps protected and editable regions using `1 − mask`, including soft values and every stored subdivision level. Delete removes faces whose vertices are all at least 50% masked from the active model, compacts unused vertices, and preserves surviving masks and complete quads. Cutting resets the active subdivision stack and turns off adaptive/voxel modes and automatic remeshing because the result may have open boundaries. Deleting a fully masked model leaves an empty model; you can undo, initialize a primitive, or choose New. Other submodels are kept. Each operation can be undone; deletion restores all previous levels and mesh settings on undo.
+- Undo/Redo keeps up to 24 geometry edits within a 128 MB snapshot budget.
 
 ## Mesh management
 
-Use the **Mesh** menu or the **Mesh management** panel. New spheres start at 4,514 vertices, leaving room for subdivision; opening older projects preserves their geometry.
+Use the **Mesh** menu or the **Mesh management** panel. New spheres use an all-quad cube-sphere surface with 4,706 vertices and 4,704 quad faces, leaving room for subdivision and avoiding triangle fans at the poles. Opening older projects preserves their geometry.
 
 **Subdivision:** add a level with Subdivide, then select a level with the slider or Lower/Higher buttons. Each face splits into four triangles with shared edge midpoints, preserving the existing shape. This is linear subdivision rather than a smoothing subdivision surface. Lower-level edits propagate upward while retaining stored fine detail; sculpting higher levels updates their parent vertices when you step down. Mask values interpolate between levels. Subdivide from the highest level. **Delete lower** removes every level below the active level, making it the new level 1 while retaining higher detail. **Delete higher** removes every level above it, allowing a fresh subdivision from the current surface. Both preserve the active geometry and masks and can be undone. The active mesh and all stored levels save in `.clay` projects. OBJ export writes the active level.
 
@@ -146,6 +148,10 @@ The **Detail** brush cuts a narrow groove with raised shoulders and pinches the 
 
 Toolbar actions share 16-pixel line icons and 28-pixel minimum heights. Project actions and modeling/view actions occupy separate rows and wrap on narrower windows. Brush previews use equal-sized responsive tiles, with names beneath the images, full-name tooltips and teal selection outlines.
 
+In **View**, enable **Faint back-facing surfaces** to see the reverse sides of open surfaces translucently. **Back-face opacity** adjusts their visibility (15% by default). Front-facing surfaces remain opaque; backs behind solid foreground surfaces stay hidden. This is a session-only viewing option and does not change normals or sculpting/picking.
+
 Wireframe options beside the Wireframe button select visible surfaces (edges hidden by other surfaces), front-facing edges, or transparent viewing of the whole frame. Triangle diagonals can be shown separately. Primitives use quad faces where possible; enable Triangle topology in the primitive editor to use triangles throughout. Quad faces survive subdivision, project saving, and OBJ export. Poles, caps, icospheres, and adaptive or voxel remeshing still use triangles.
 
 Primitive resolution can also be changed with the violet diamond handles beside the model: drag left or right to change spans, sides, segments, rings or subdivision levels. The live count updates as you drag, and each drag is one Undo step. Teal circles identify radii and anatomical controls, teal squares identify size controls, and the world transform and camera gizmo share labelled X/Y/Z colours. Hovering or dragging adds a white ring while retaining the control colour.
+
+For renderer ownership, validation, and the opt-in load profile, see [GPU rendering](docs/gpu-rendering.md).

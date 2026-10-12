@@ -43,6 +43,11 @@ impl Default for App {
     }
 }
 impl App {
+    pub fn with_gl(gl: &eframe::glow::Context) -> Result<Self, String> {
+        let mut app = Self::new();
+        app.viewport.initialize_renderer(gl)?;
+        Ok(app)
+    }
     pub fn new() -> Self {
         let mut app = Self::default();
         let path = preferences::path();
@@ -284,6 +289,8 @@ impl App {
                     | Command::DuplicateModel
                     | Command::ExtractMasked
                     | Command::ClearMask
+                    | Command::InvertMask
+                    | Command::DeleteMasked
                     | Command::SetMeshLevel(_)
                     | Command::DeleteLowerLevels
                     | Command::DeleteHigherLevels
@@ -441,6 +448,22 @@ impl App {
                     } else {
                         "Model duplicated".into()
                     }
+                })
+            }
+            Command::InvertMask => {
+                self.viewport.cancel(&mut self.document);
+                self.document
+                    .invert_mask()
+                    .map(|()| self.ui.status = "Mask inverted".into())
+            }
+            Command::DeleteMasked => {
+                self.viewport.cancel(&mut self.document);
+                self.document.delete_masked().map(|changed| {
+                    self.ui.status = if changed {
+                        "Masked surface deleted; subdivision levels reset".into()
+                    } else {
+                        "No complete faces are at least 50% masked".into()
+                    };
                 })
             }
             Command::ClearMask => {
@@ -631,6 +654,11 @@ impl App {
                 wire: self.ui.wire,
                 wire_mode: self.ui.wire_mode,
                 wire_triangles: self.ui.wire_triangles,
+                backface_opacity: if self.ui.show_backfaces {
+                    self.ui.backface_opacity
+                } else {
+                    0.
+                },
                 show_guides: self.ui.show_symmetry_guides,
                 guide_opacity: self.ui.guide_opacity,
                 enabled: enabled && !over_toolbar && !over_editor && !over_resolution,
@@ -650,8 +678,11 @@ impl App {
     }
 }
 impl eframe::App for App {
-    fn on_exit(&mut self, _: Option<&eframe::glow::Context>) {
+    fn on_exit(&mut self, gl: Option<&eframe::glow::Context>) {
         self.save_preferences();
+        if let Some(gl) = gl {
+            self.viewport.destroy_renderer(gl);
+        }
     }
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         self.poll_mesh_job();

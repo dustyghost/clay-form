@@ -23,6 +23,7 @@ impl ModelRef<'_> {
 }
 pub struct Document {
     geometry: Geometry,
+    display_revision: u64,
     brushes: Vec<Brush>,
     history: History,
     symmetry: Symmetry,
@@ -38,6 +39,7 @@ impl Default for Document {
     fn default() -> Self {
         Self {
             geometry: Geometry::new(Mesh::sphere()),
+            display_revision: 0,
             brushes: Kind::ALL.into_iter().map(Brush::new).collect(),
             history: History::default(),
             symmetry: Symmetry::default(),
@@ -52,6 +54,13 @@ impl Default for Document {
     }
 }
 impl Document {
+    /// Session-only invalidation token for display geometry, materials, and ownership.
+    pub(crate) fn display_revision(&self) -> u64 {
+        self.display_revision
+    }
+    fn display_changed(&mut self) {
+        self.display_revision = self.display_revision.wrapping_add(1);
+    }
     pub fn primitive(&self) -> Option<&crate::sculpt::Primitive> {
         self.mesh_settings().primitive.as_ref()
     }
@@ -70,7 +79,11 @@ impl Document {
             min = crate::sculpt::Vec3(min.0.min(p.0), min.1.min(p.1), min.2.min(p.2));
             max = crate::sculpt::Vec3(max.0.max(p.0), max.1.max(p.1), max.2.max(p.2));
         }
-        primitive.center = (min + max) * 0.5;
+        primitive.center = if self.mesh().vertices.is_empty() {
+            crate::sculpt::Vec3::default()
+        } else {
+            (min + max) * 0.5
+        };
         let mut geometry = self.geometry.clone();
         geometry.mesh = primitive.mesh()?;
         geometry.settings = MeshSettings {
@@ -101,6 +114,7 @@ impl Document {
             ..Default::default()
         };
         self.dirty = true;
+        self.display_changed();
         Ok(())
     }
     pub fn end_primitive_edit(&mut self) {
@@ -180,6 +194,7 @@ impl Document {
         self.geometry.scene.active_index = active;
         self.geometry.submodels = models;
         self.dirty = true;
+        self.display_changed();
     }
     pub fn select_submodel(&mut self, index: usize) -> Result<(), String> {
         self.end_primitive_edit();
@@ -278,6 +293,7 @@ impl Document {
             self.geometry.submodels[slot].metadata = metadata;
         }
         self.dirty = true;
+        self.display_changed();
         Ok(())
     }
     pub fn reorder_model(&mut self, from: usize, to: usize) -> Result<(), String> {
@@ -377,6 +393,7 @@ impl Document {
             }
         }
         self.dirty = true;
+        self.display_changed();
         Ok(())
     }
     /// Apply each drag increment to every stored level; a drag is one undo entry.
@@ -419,6 +436,7 @@ impl Document {
         }
         self.geometry = geometry;
         self.dirty = true;
+        self.display_changed();
         Ok(true)
     }
     pub fn mesh(&self) -> &Mesh {
@@ -444,6 +462,7 @@ impl Document {
         self.history.record_named(&self.geometry, label);
         self.geometry = geometry;
         self.dirty = true;
+        self.display_changed();
         Ok(())
     }
     pub fn set_mesh_level(&mut self, level: usize) -> Result<(), String> {
@@ -571,6 +590,7 @@ impl Document {
     pub fn new_sphere(&mut self) {
         self.end_primitive_edit();
         self.geometry = Geometry::new(Mesh::sphere());
+        self.display_changed();
         self.history = History::default();
         self.dirty = false;
         self.end_stroke();
@@ -587,6 +607,7 @@ impl Document {
             mesh: project.mesh,
             settings: project.mesh_settings,
         };
+        self.display_changed();
         self.brushes = project.brushes;
         self.symmetry = project.symmetry;
         self.history = History::default();
@@ -665,6 +686,7 @@ impl Document {
                 );
             }
             self.dirty = true;
+            self.display_changed();
         }
         deformed
     }
@@ -673,6 +695,7 @@ impl Document {
         self.end_stroke();
         if self.history.undo(&mut self.geometry) {
             self.dirty = true;
+            self.display_changed();
         }
     }
     pub fn redo(&mut self) {
@@ -680,7 +703,46 @@ impl Document {
         self.end_stroke();
         if self.history.redo(&mut self.geometry) {
             self.dirty = true;
+            self.display_changed();
         }
+    }
+    pub fn invert_mask(&mut self) -> Result<(), String> {
+        self.require_sculpt_mesh()?;
+        if self.mesh().mask.is_empty() {
+            return Ok(());
+        }
+        self.end_stroke();
+        self.history.record_named(&self.geometry, "Invert mask");
+        for mesh in std::iter::once(&mut self.geometry.mesh)
+            .chain(self.geometry.settings.lower.iter_mut())
+            .chain(self.geometry.settings.upper.iter_mut())
+        {
+            for mask in &mut mesh.mask {
+                *mask = 1. - *mask;
+            }
+        }
+        self.dirty = true;
+        self.display_changed();
+        Ok(())
+    }
+    pub fn delete_masked(&mut self) -> Result<bool, String> {
+        self.require_sculpt_mesh()?;
+        if !self.active_visible() {
+            return Err("Show the active model before deleting masked surface".into());
+        }
+        let Some(mesh) = self.mesh().delete_masked()? else {
+            return Ok(false);
+        };
+        let mut geometry = self.geometry.clone();
+        geometry.mesh = mesh;
+        // Stored levels cannot retain correspondence after cutting a hole.
+        // Adaptive and voxel modes require a closed surface.
+        geometry.settings = MeshSettings {
+            resolution: geometry.settings.resolution,
+            ..Default::default()
+        };
+        self.replace_geometry_named(geometry, "Delete masked surface")?;
+        Ok(true)
     }
     pub fn clear_mask(&mut self) {
         if self.primitive().is_some() {
@@ -699,6 +761,7 @@ impl Document {
             level.mask.fill(0.);
         }
         self.dirty = true;
+        self.display_changed();
     }
     pub fn update_brush(&mut self, index: usize, mut brush: Brush) -> Result<(), String> {
         validate_brush(&brush)?;
@@ -1609,5 +1672,164 @@ mod brush_identity_tests {
         assert!(doc.import_brushes(vec![new, bad]).is_err());
         assert_eq!(serde_json::to_value(doc.project()).unwrap(), before);
         assert!(!doc.is_dirty());
+    }
+}
+
+#[cfg(test)]
+mod mask_edit_tests {
+    use super::*;
+    use crate::sculpt::{Primitive, PrimitiveKind};
+    fn cube_geometry() -> Geometry {
+        let mut p = Primitive::for_kind(PrimitiveKind::Cube);
+        p.divisions = [1; 3];
+        Geometry::new(p.mesh().unwrap())
+    }
+    #[test]
+    fn invert_mask_preserves_soft_values_and_all_levels_with_undo() {
+        let mut geometry = cube_geometry();
+        geometry.subdivide().unwrap();
+        geometry.subdivide().unwrap();
+        geometry.set_level(2).unwrap();
+        for mesh in std::iter::once(&mut geometry.mesh)
+            .chain(geometry.settings.lower.iter_mut())
+            .chain(geometry.settings.upper.iter_mut())
+        {
+            for (i, m) in mesh.mask.iter_mut().enumerate() {
+                *m = (i % 5) as f32 * 0.25;
+            }
+        }
+        let mut d = Document::default();
+        d.replace_geometry(geometry).unwrap();
+        d.duplicate_model(false).unwrap();
+        let before = d.geometry_snapshot();
+        let revision = d.display_revision();
+        let count = d.history_counts().0;
+        d.invert_mask().unwrap();
+        let after = d.geometry_snapshot();
+        assert_eq!(before.submodels, after.submodels);
+        for (a, b) in std::iter::once(&before.mesh)
+            .chain(before.settings.lower.iter())
+            .chain(before.settings.upper.iter())
+            .zip(
+                std::iter::once(&after.mesh)
+                    .chain(after.settings.lower.iter())
+                    .chain(after.settings.upper.iter()),
+            )
+        {
+            assert_eq!(a.vertices, b.vertices);
+            assert!(
+                a.mask
+                    .iter()
+                    .zip(&b.mask)
+                    .all(|(a, b)| (*b - (1. - a)).abs() < 1e-6)
+            );
+        }
+        assert_eq!(d.history_counts().0, count + 1);
+        assert!(d.display_revision() > revision);
+        assert_eq!(d.undo_label(), Some("Invert mask"));
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), before);
+        d.redo();
+        assert_eq!(d.geometry_snapshot(), after);
+        d.invert_mask().unwrap();
+        assert_eq!(d.geometry_snapshot(), before);
+    }
+    #[test]
+    fn delete_masked_cuts_and_compacts_preserving_remaining_quads_and_masks() {
+        let mesh = Mesh {
+            vertices: vec![
+                crate::sculpt::Vec3(0., 0., 0.),
+                crate::sculpt::Vec3(1., 0., 0.),
+                crate::sculpt::Vec3(1., 1., 0.),
+                crate::sculpt::Vec3(0., 1., 0.),
+                crate::sculpt::Vec3(2., 0., 0.),
+                crate::sculpt::Vec3(3., 0., 0.),
+                crate::sculpt::Vec3(3., 1., 0.),
+                crate::sculpt::Vec3(2., 1., 0.),
+            ],
+            triangles: vec![[0, 1, 2], [0, 2, 3], [4, 5, 7], [5, 6, 7]],
+            quads: vec![[0, 1, 2, 3], [4, 5, 6, 7]],
+            mask: vec![0.5, 0.6, 0.9, 1., 0.2, 0.49, 0., 0.8],
+        };
+        let cut = mesh.delete_masked().unwrap().unwrap();
+        assert_eq!(cut.vertices, &mesh.vertices[4..]);
+        assert_eq!(cut.mask, &mesh.mask[4..]);
+        assert_eq!(cut.quads, vec![[0, 1, 2, 3]]);
+        assert_eq!(cut.triangles, vec![[0, 1, 3], [1, 2, 3]]);
+        cut.validate().unwrap();
+        let mut mesh = cube_geometry().mesh;
+        let face = mesh.quads[0];
+        for i in [face[0], face[1], face[2]] {
+            mesh.mask[i] = 1.;
+        }
+        let cut = mesh.delete_masked().unwrap().unwrap();
+        assert_eq!(cut.triangles.len(), mesh.triangles.len() - 1);
+        assert_eq!(cut.quads.len(), mesh.quads.len() - 1);
+        cut.validate().unwrap();
+        assert!(cut.validate_closed().is_err());
+    }
+    #[test]
+    fn delete_masked_resets_levels_and_closed_modes_and_undo_restores_everything() {
+        let mut geometry = cube_geometry();
+        geometry.subdivide().unwrap();
+        geometry.subdivide().unwrap();
+        geometry.set_level(2).unwrap();
+        let q = geometry.mesh.quads[0];
+        for i in q {
+            geometry.mesh.mask[i] = 1.;
+        }
+        geometry.settings.auto_remesh = true;
+        let mut d = Document::default();
+        d.replace_geometry(geometry).unwrap();
+        d.duplicate_model(false).unwrap();
+        let before = d.geometry_snapshot();
+        let count = d.history_counts().0;
+        assert!(d.delete_masked().unwrap());
+        let after = d.geometry_snapshot();
+        assert_eq!(after.submodels, before.submodels);
+        assert_eq!(d.mesh_settings().levels(), 1);
+        assert!(
+            !d.mesh_settings().auto_remesh
+                && !d.mesh_settings().adaptive.enabled
+                && !d.mesh_settings().dynamic
+        );
+        assert!(d.mesh().triangles.len() < before.mesh.triangles.len());
+        assert!(d.mesh().validate_closed().is_err());
+        assert_eq!(d.history_counts().0, count + 1);
+        assert_eq!(d.undo_label(), Some("Delete masked surface"));
+        d.project().validate().unwrap();
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), before);
+        d.redo();
+        assert_eq!(d.geometry_snapshot(), after);
+    }
+    #[test]
+    fn deleting_all_masked_surface_leaves_an_empty_model_that_saves_and_undoes() {
+        let mut d = Document::default();
+        d.replace_geometry(cube_geometry()).unwrap();
+        let original = d.geometry_snapshot();
+        let count = d.history_counts();
+        assert!(!d.delete_masked().unwrap());
+        assert_eq!(d.history_counts(), count);
+        d.invert_mask().unwrap();
+        let masked = d.geometry_snapshot();
+        assert!(d.delete_masked().unwrap());
+        assert!(
+            d.mesh().vertices.is_empty()
+                && d.mesh().triangles.is_empty()
+                && d.mesh().quads.is_empty()
+        );
+        let saved = serde_json::to_string(&d.project()).unwrap();
+        let project: Project = serde_json::from_str(&saved).unwrap();
+        project.validate().unwrap();
+        let mut restored = Document::default();
+        restored.replace_project(project, "empty.clay").unwrap();
+        assert!(restored.mesh().vertices.is_empty());
+        restored.initialize_primitive().unwrap();
+        assert!(!restored.mesh().vertices.is_empty());
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), masked);
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), original);
     }
 }

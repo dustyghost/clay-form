@@ -36,6 +36,8 @@ pub(crate) struct UiState {
     pub wire: bool,
     pub wire_mode: crate::viewport::WireMode,
     pub wire_triangles: bool,
+    pub show_backfaces: bool,
+    pub backface_opacity: f32,
     pub show_symmetry_guides: bool,
     pub guide_opacity: f32,
 }
@@ -67,6 +69,8 @@ impl Default for UiState {
             wire: false,
             wire_mode: Default::default(),
             wire_triangles: false,
+            show_backfaces: false,
+            backface_opacity: 0.15,
             show_symmetry_guides: true,
             guide_opacity: 0.85,
         }
@@ -332,13 +336,19 @@ impl UiState {
                 if symmetry != *document.symmetry() {
                     commands.push(Command::SetSymmetry(symmetry));
                 }
-                if ui
-                    .add(design::button(ui, Glyph::Mask, "Clear mask"))
-                    .clicked()
-                {
-                    commands.push(Command::ClearMask);
-                }
+                design::menu(ui, Glyph::Mask, "Mask", |ui| {
+                    ui.add_enabled_ui(!self.mesh_busy && document.primitive().is_none(), |ui| {
+                        if ui.add(design::button(ui, Glyph::Mask, "Clear mask")).clicked() { commands.push(Command::ClearMask); }
+                        if ui.add(design::button(ui, Glyph::Restore, "Invert mask")).on_hover_text("Swap masked and unmasked areas, preserving soft mask values on every subdivision level.").clicked() { commands.push(Command::InvertMask); }
+                        if ui.add(design::button(ui, Glyph::Delete, "Delete masked")).on_hover_text("Remove faces at least 50% masked at every vertex. Creates open boundaries and resets subdivision levels and closed-surface modes. Undo restores everything.").clicked() { commands.push(Command::DeleteMasked); }
+                    });
+                });
                 design::menu(ui, Glyph::View, "View", |ui| {
+                    ui.checkbox(&mut self.show_backfaces, "Faint back-facing surfaces").on_hover_text("Show the reverse side of open surfaces translucently. Front-facing surfaces stay solid.");
+                    if self.show_backfaces {
+                        ui.add(egui::Slider::new(&mut self.backface_opacity, 0.02..=0.5).text("Back-face opacity").custom_formatter(|v,_|format!("{:.0}%",v*100.)).custom_parser(|text|text.trim().trim_end_matches('%').trim().parse::<f64>().ok().map(|v|v/100.)));
+                    }
+                    ui.separator();
                     if ui.add(design::button(ui, Glyph::Plus, "Zoom in")).clicked() {
                         commands.push(Command::ZoomIn);
                     }

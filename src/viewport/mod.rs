@@ -1,6 +1,7 @@
 //! Converts viewport gestures into camera movement and document sculpt dabs.
 mod controls;
 mod gizmo;
+mod gpu;
 mod guides;
 mod primitive;
 mod scene;
@@ -30,6 +31,7 @@ struct SnakeStroke {
 }
 #[derive(Default)]
 pub(crate) struct Viewport {
+    renderer: Option<gpu::Renderer>,
     pub(crate) gesture: Option<Gesture>,
     pub(crate) completed_stroke: bool,
     gizmo_dragged: bool,
@@ -50,6 +52,7 @@ pub(crate) struct ViewportOptions {
     pub wire: bool,
     pub wire_mode: WireMode,
     pub wire_triangles: bool,
+    pub backface_opacity: f32,
     pub show_guides: bool,
     pub guide_opacity: f32,
     pub enabled: bool,
@@ -58,8 +61,21 @@ pub(crate) struct ViewportOptions {
     pub zoom_hold: Hold,
 }
 impl Viewport {
+    pub(crate) fn initialize_renderer(&mut self, gl: &eframe::glow::Context) -> Result<(), String> {
+        self.renderer = Some(gpu::Renderer::new(gl)?);
+        Ok(())
+    }
+    pub(crate) fn destroy_renderer(&self, gl: &eframe::glow::Context) {
+        if let Some(renderer) = &self.renderer {
+            renderer.destroy(gl);
+        }
+    }
     pub(crate) fn cancel(&mut self, document: &mut Document) {
-        *self = Self::default();
+        let renderer = self.renderer.take();
+        *self = Self {
+            renderer,
+            ..Default::default()
+        };
         document.end_stroke();
     }
     pub(crate) fn finish_transform_drag(&mut self, document: &mut Document) {
@@ -99,7 +115,10 @@ impl Viewport {
             Pos2::new(rect.right() - 146., rect.top() + 12.),
             Vec2::splat(134.),
         );
-        let scene = Scene::paint(
+        if let Some(renderer) = &self.renderer {
+            renderer.clear_preview();
+        }
+        let scene = Scene::paint_with_renderer(
             &painter,
             rect,
             document,
@@ -107,15 +126,23 @@ impl Viewport {
             options.wire,
             options.wire_mode,
             options.wire_triangles,
+            self.renderer.as_mut(),
         );
+        if let Some(renderer) = &self.renderer {
+            renderer.set_backfaces(options.backface_opacity);
+        }
         if options.show_guides && document.active_visible() {
-            guides::paint(
-                &scene,
-                &painter,
-                document.mesh(),
-                document.symmetry(),
-                options.guide_opacity,
-            );
+            if let Some(renderer) = &self.renderer {
+                renderer.set_guides(document.symmetry(), options.guide_opacity);
+            } else {
+                guides::paint(
+                    &scene,
+                    &painter,
+                    document.mesh(),
+                    document.symmetry(),
+                    options.guide_opacity,
+                );
+            }
         }
         let (right, up, _) = camera.basis();
         let scale = scene.scale;
@@ -284,7 +311,17 @@ impl Viewport {
             } else {
                 Color32::from_rgb(125, 210, 245)
             };
-            if !b.surface_cursor || !scene.brush_cursor(&painter, pos, radius, &b, color) {
+            let surface = if b.surface_cursor {
+                if let Some(renderer) = &self.renderer {
+                    renderer.set_brush(&scene, pos, radius, &b, color);
+                    scene.brush_cursor_with_footprint(&painter, pos, radius, &b, color, false)
+                } else {
+                    scene.brush_cursor(&painter, pos, radius, &b, color)
+                }
+            } else {
+                false
+            };
+            if !surface {
                 for fraction in [1., b.inner_radius] {
                     if fraction > 0. {
                         painter.circle_stroke(

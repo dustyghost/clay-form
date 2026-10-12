@@ -1,28 +1,24 @@
 //! Orthographic rendering and surface picking. No document edits or input handling.
-use crate::{
-    camera::Camera,
-    document::Document,
-    sculpt::{Mesh, Vec3},
-};
+use super::gpu::{DisplayMesh, Renderer};
+use crate::{camera::Camera, document::Document, sculpt::Vec3};
 use eframe::egui::{self, Color32, Pos2};
+use std::sync::Arc;
 pub(super) struct Scene {
     pub scale: f32,
     pub(super) rect: egui::Rect,
     pub(super) active_bounds: egui::Rect,
     positions: Vec<Pos2>,
-    vertices: Vec<Vec3>,
-    triangles: Vec<[usize; 3]>,
+    pub(super) geometry: Arc<DisplayMesh>,
     pub(super) faces: Vec<(usize, f32)>,
-    normals: Vec<Vec3>,
-    view: Vec3,
+    pub(super) view: Vec3,
     all_faces: Vec<(usize, f32)>,
-    owners: Vec<usize>,
     active: usize,
     pub(super) center: Pos2,
     pub(super) right: Vec3,
     pub(super) up: Vec3,
 }
 impl Scene {
+    #[cfg(test)]
     pub fn paint(
         painter: &egui::Painter,
         rect: egui::Rect,
@@ -32,41 +28,38 @@ impl Scene {
         mode: super::WireMode,
         show_triangles: bool,
     ) -> Self {
-        let active = document.active_model_index();
-        let mut mesh = Mesh {
-            quads: Vec::new(),
-            vertices: Vec::new(),
-            triangles: Vec::new(),
-            mask: Vec::new(),
+        Self::paint_with_renderer(
+            painter,
+            rect,
+            document,
+            camera,
+            wire,
+            mode,
+            show_triangles,
+            None,
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn paint_with_renderer(
+        painter: &egui::Painter,
+        rect: egui::Rect,
+        document: &Document,
+        camera: &Camera,
+        wire: bool,
+        mode: super::WireMode,
+        show_triangles: bool,
+        mut renderer: Option<&mut Renderer>,
+    ) -> Self {
+        let geometry = if let Some(renderer) = renderer.as_mut() {
+            renderer.geometry(document)
+        } else {
+            Arc::new(DisplayMesh::new(document))
         };
-        let mut owners = Vec::new();
-        let mut outlines = Vec::new();
-        let mut active_vertices = 0;
-        for index in
-            std::iter::once(active).chain((0..document.model_count()).filter(|i| *i != active))
-        {
-            let model = document.model(index).unwrap();
-            if !model.metadata.visible {
-                continue;
-            }
-            let surface = model.display_mesh(index == active);
-            let offset = mesh.vertices.len();
-            if surface.triangles.is_empty() && surface.vertices.len() > 1 {
-                for i in 0..surface.vertices.len() {
-                    outlines.push([offset + i, offset + (i + 1) % surface.vertices.len()]);
-                }
-            }
-            mesh.quads
-                .extend(surface.quads.iter().map(|q| q.map(|i| i + offset)));
-            mesh.vertices.extend_from_slice(&surface.vertices);
-            mesh.mask.extend_from_slice(&surface.mask);
-            mesh.triangles
-                .extend(surface.triangles.iter().map(|t| t.map(|i| i + offset)));
-            owners.extend(std::iter::repeat_n(index, surface.triangles.len()));
-            if index == active {
-                active_vertices = surface.vertices.len();
-            }
-        }
+        let mesh = &geometry.mesh;
+        let active = geometry.active;
+        let active_vertices = geometry.active_vertices;
+        let owners = &geometry.owners;
+        let outlines = &geometry.outlines;
         let center = rect.center() + camera.pan;
         let scale = rect.width().min(rect.height()) * 0.35 * camera.zoom;
         let (right, up, view) = camera.basis();
@@ -76,7 +69,7 @@ impl Scene {
                 center.y - v.dot(up) * scale,
             )
         };
-        let normals = mesh.normals();
+        let normals = &geometry.normals;
         let positions: Vec<_> = mesh.vertices.iter().copied().map(project).collect();
         let mut faces: Vec<_> = mesh
             .triangles
@@ -95,168 +88,166 @@ impl Scene {
                 )
             })
             .collect();
-        faces.sort_by(|a, b| a.1.total_cmp(&b.1));
+        if renderer.is_none() {
+            faces.sort_by(|a, b| a.1.total_cmp(&b.1));
+        }
         painter.rect_filled(rect, 0., Color32::from_rgb(23, 26, 31));
-        let light = (view + up * 0.7 + right * (-0.5)).norm();
-        let mut rendered = egui::Mesh::default();
-        for (i, v) in mesh.vertices.iter().enumerate() {
-            let illumination = 0.25 + 0.75 * normals[i].dot(light).max(0.);
-            let mask = if i < active_vertices {
-                1. - mesh.mask[i] * 0.75
-            } else {
-                1.
-            };
-            let base = if i < active_vertices {
-                [190., 155., 125.]
-            } else {
-                [130., 143., 155.]
-            };
-            rendered.colored_vertex(
-                project(*v),
-                Color32::from_rgb(
-                    (base[0] * illumination * mask) as u8,
-                    (base[1] * illumination * mask) as u8,
-                    (base[2] * illumination * mask) as u8,
-                ),
-            );
-        }
-        use super::WireMode;
-        let edge_key = |a: usize, b: usize| if a < b { (a, b) } else { (b, a) };
-        let mut hidden = std::collections::HashSet::new();
-        if !show_triangles {
-            for &[a, b, c, d] in &mesh.quads {
-                hidden.insert(edge_key(a, c));
-                hidden.insert(edge_key(b, d));
+        if renderer.is_none() {
+            let light = (view + up * 0.7 + right * (-0.5)).norm();
+            let mut rendered = egui::Mesh::default();
+            for (i, v) in mesh.vertices.iter().enumerate() {
+                let illumination = 0.25 + 0.75 * normals[i].dot(light).max(0.);
+                let mask = if i < active_vertices {
+                    1. - mesh.mask[i] * 0.75
+                } else {
+                    1.
+                };
+                let base = if i < active_vertices {
+                    [190., 155., 125.]
+                } else {
+                    [130., 143., 155.]
+                };
+                rendered.colored_vertex(
+                    project(*v),
+                    Color32::from_rgb(
+                        (base[0] * illumination * mask) as u8,
+                        (base[1] * illumination * mask) as u8,
+                        (base[2] * illumination * mask) as u8,
+                    ),
+                );
             }
-        }
-        // A viewport-sized depth buffer also handles intersecting submodels and
-        // partial edge occlusion, independently of the surface painter order.
-        let width = rect.width().ceil().max(1.) as usize;
-        let height = rect.height().ceil().max(1.) as usize;
-        let mut depth = Vec::new();
-        if wire && mode == WireMode::Visible {
-            depth.resize(width * height, f32::NEG_INFINITY);
-            for &(i, _) in &faces {
-                let t = mesh.triangles[i];
-                let p = t.map(|v| positions[v] - rect.min);
-                let z = t.map(|v| mesh.vertices[v].dot(view));
-                let det =
-                    (p[1].x - p[0].x) * (p[2].y - p[0].y) - (p[1].y - p[0].y) * (p[2].x - p[0].x);
-                if det.abs() < 1e-7 {
-                    continue;
-                }
-                let min_x = p
-                    .iter()
-                    .map(|p| p.x)
-                    .fold(f32::INFINITY, f32::min)
-                    .floor()
-                    .max(0.) as usize;
-                let max_x = (p
-                    .iter()
-                    .map(|p| p.x)
-                    .fold(f32::NEG_INFINITY, f32::max)
-                    .ceil()
-                    .max(0.) as usize)
-                    .min(width - 1);
-                let min_y = p
-                    .iter()
-                    .map(|p| p.y)
-                    .fold(f32::INFINITY, f32::min)
-                    .floor()
-                    .max(0.) as usize;
-                let max_y = (p
-                    .iter()
-                    .map(|p| p.y)
-                    .fold(f32::NEG_INFINITY, f32::max)
-                    .ceil()
-                    .max(0.) as usize)
-                    .min(height - 1);
-                for y in min_y..=max_y {
-                    for x in min_x..=max_x {
-                        let dx = x as f32 + 0.5 - p[0].x;
-                        let dy = y as f32 + 0.5 - p[0].y;
-                        let u = (dx * (p[2].y - p[0].y) - dy * (p[2].x - p[0].x)) / det;
-                        let v = ((p[1].x - p[0].x) * dy - (p[1].y - p[0].y) * dx) / det;
-                        if u >= 0. && v >= 0. && u + v <= 1. {
-                            let d = z[0] * (1. - u - v) + z[1] * u + z[2] * v;
-                            depth[y * width + x] = depth[y * width + x].max(d);
-                        }
-                    }
+            use super::WireMode;
+            let edge_key = |a: usize, b: usize| if a < b { (a, b) } else { (b, a) };
+            let mut hidden = std::collections::HashSet::new();
+            if !show_triangles {
+                for &[a, b, c, d] in &mesh.quads {
+                    hidden.insert(edge_key(a, c));
+                    hidden.insert(edge_key(b, d));
                 }
             }
-        }
-        let mut seen_edges = std::collections::HashSet::new();
-        let mut draw_edges = |i: usize| {
-            let t = mesh.triangles[i];
-            for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
-                if !hidden.contains(&edge_key(a, b)) && seen_edges.insert(edge_key(a, b)) {
-                    let stroke = egui::Stroke::new(
-                        0.7,
-                        if mode == WireMode::Transparent {
-                            Color32::from_rgb(170, 185, 200)
-                        } else {
-                            Color32::from_black_alpha(110)
-                        },
-                    );
-                    if depth.is_empty() {
-                        painter.line_segment([positions[a], positions[b]], stroke);
-                    } else {
-                        let pa = positions[a];
-                        let pb = positions[b];
-                        let za = mesh.vertices[a].dot(view);
-                        let zb = mesh.vertices[b].dot(view);
-                        let steps = (pb - pa).length().ceil().max(1.) as usize;
-                        let mut start = None;
-                        for step in 0..=steps {
-                            let t = step as f32 / steps as f32;
-                            let p = pa + (pb - pa) * t;
-                            let x = (p.x - rect.min.x).floor() as isize;
-                            let y = (p.y - rect.min.y).floor() as isize;
-                            let visible = x >= 0
-                                && y >= 0
-                                && (x as usize) < width
-                                && (y as usize) < height
-                                && za * (1. - t) + zb * t + 2. / scale
-                                    >= depth[y as usize * width + x as usize];
-                            if visible {
-                                if start.is_none() {
-                                    start = Some(p);
-                                }
-                            } else if let Some(from) = start.take() {
-                                painter.line_segment([from, p], stroke);
-                            }
-                            if step == steps
-                                && let Some(from) = start.take()
-                            {
-                                painter.line_segment([from, p], stroke);
-                            }
-                        }
-                    }
-                }
-            }
-        };
-        if !wire || mode != WireMode::Transparent {
-            for &(i, _) in &faces {
-                rendered.indices.extend(mesh.triangles[i].map(|v| v as u32));
-            }
-            painter.add(egui::Shape::mesh(rendered));
-        }
-        if wire {
-            if mode == WireMode::Transparent {
-                for i in 0..mesh.triangles.len() {
-                    draw_edges(i);
-                }
-            } else {
+            // A viewport-sized depth buffer also handles intersecting submodels and
+            // partial edge occlusion, independently of the surface painter order.
+            let width = rect.width().ceil().max(1.) as usize;
+            let height = rect.height().ceil().max(1.) as usize;
+            let mut depth = Vec::new();
+            if wire && mode == WireMode::Visible {
+                depth.resize(width * height, f32::NEG_INFINITY);
                 for &(i, _) in &faces {
-                    draw_edges(i);
+                    let t = mesh.triangles[i];
+                    let p = t.map(|v| positions[v] - rect.min);
+                    let z = t.map(|v| mesh.vertices[v].dot(view));
+                    let det = (p[1].x - p[0].x) * (p[2].y - p[0].y)
+                        - (p[1].y - p[0].y) * (p[2].x - p[0].x);
+                    if det.abs() < 1e-7 {
+                        continue;
+                    }
+                    let min_x = p
+                        .iter()
+                        .map(|p| p.x)
+                        .fold(f32::INFINITY, f32::min)
+                        .floor()
+                        .max(0.) as usize;
+                    let max_x = (p
+                        .iter()
+                        .map(|p| p.x)
+                        .fold(f32::NEG_INFINITY, f32::max)
+                        .ceil()
+                        .max(0.) as usize)
+                        .min(width - 1);
+                    let min_y = p
+                        .iter()
+                        .map(|p| p.y)
+                        .fold(f32::INFINITY, f32::min)
+                        .floor()
+                        .max(0.) as usize;
+                    let max_y = (p
+                        .iter()
+                        .map(|p| p.y)
+                        .fold(f32::NEG_INFINITY, f32::max)
+                        .ceil()
+                        .max(0.) as usize)
+                        .min(height - 1);
+                    for y in min_y..=max_y {
+                        for x in min_x..=max_x {
+                            let dx = x as f32 + 0.5 - p[0].x;
+                            let dy = y as f32 + 0.5 - p[0].y;
+                            let u = (dx * (p[2].y - p[0].y) - dy * (p[2].x - p[0].x)) / det;
+                            let v = ((p[1].x - p[0].x) * dy - (p[1].y - p[0].y) * dx) / det;
+                            if u >= 0. && v >= 0. && u + v <= 1. {
+                                let d = z[0] * (1. - u - v) + z[1] * u + z[2] * v;
+                                depth[y * width + x] = depth[y * width + x].max(d);
+                            }
+                        }
+                    }
                 }
             }
-        }
-        for edge in outlines {
-            painter.line_segment(
-                edge.map(|i| positions[i]),
-                egui::Stroke::new(2., Color32::from_rgb(190, 155, 125)),
-            );
+            let mut seen_edges = std::collections::HashSet::new();
+            let mut draw_edges = |i: usize| {
+                let t = mesh.triangles[i];
+                for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
+                    if !hidden.contains(&edge_key(a, b)) && seen_edges.insert(edge_key(a, b)) {
+                        let stroke = egui::Stroke::new(
+                            0.7,
+                            if mode == WireMode::Transparent {
+                                Color32::from_rgb(170, 185, 200)
+                            } else {
+                                Color32::from_black_alpha(110)
+                            },
+                        );
+                        if depth.is_empty() {
+                            painter.line_segment([positions[a], positions[b]], stroke);
+                        } else {
+                            let pa = positions[a];
+                            let pb = positions[b];
+                            let za = mesh.vertices[a].dot(view);
+                            let zb = mesh.vertices[b].dot(view);
+                            let steps = (pb - pa).length().ceil().max(1.) as usize;
+                            let mut start = None;
+                            for step in 0..=steps {
+                                let t = step as f32 / steps as f32;
+                                let p = pa + (pb - pa) * t;
+                                let x = (p.x - rect.min.x).floor() as isize;
+                                let y = (p.y - rect.min.y).floor() as isize;
+                                let visible = x >= 0
+                                    && y >= 0
+                                    && (x as usize) < width
+                                    && (y as usize) < height
+                                    && za * (1. - t) + zb * t + 2. / scale
+                                        >= depth[y as usize * width + x as usize];
+                                if visible {
+                                    if start.is_none() {
+                                        start = Some(p);
+                                    }
+                                } else if let Some(from) = start.take() {
+                                    painter.line_segment([from, p], stroke);
+                                }
+                                if step == steps
+                                    && let Some(from) = start.take()
+                                {
+                                    painter.line_segment([from, p], stroke);
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            if !wire || mode != WireMode::Transparent {
+                for &(i, _) in &faces {
+                    rendered.indices.extend(mesh.triangles[i].map(|v| v as u32));
+                }
+                painter.add(egui::Shape::mesh(rendered));
+            }
+            if wire {
+                if mode == WireMode::Transparent {
+                    for i in 0..mesh.triangles.len() {
+                        draw_edges(i);
+                    }
+                } else {
+                    for &(i, _) in &faces {
+                        draw_edges(i);
+                    }
+                }
+            }
         }
         let active_bounds = positions
             .iter()
@@ -264,27 +255,34 @@ impl Scene {
             .fold(egui::Rect::NOTHING, |bounds, &p| {
                 bounds.union(egui::Rect::from_min_max(p, p))
             });
-        Self {
+        let scene = Self {
             rect,
             active_bounds,
             scale,
             positions,
-            vertices: mesh.vertices.clone(),
-            triangles: mesh.triangles.clone(),
+            geometry: geometry.clone(),
             faces: faces
                 .iter()
                 .copied()
                 .filter(|(i, _)| owners[*i] == active)
                 .collect(),
             all_faces: faces,
-            owners,
             active,
-            normals,
             view,
             center,
             right,
             up,
+        };
+        if let Some(renderer) = renderer {
+            renderer.paint(painter, rect, &scene, wire, mode, show_triangles);
         }
+        for edge in outlines {
+            painter.line_segment(
+                edge.map(|i| scene.positions[i]),
+                egui::Stroke::new(2., Color32::from_rgb(190, 155, 125)),
+            );
+        }
+        scene
     }
     pub fn project(&self, point: Vec3) -> Pos2 {
         Pos2::new(
@@ -300,75 +298,89 @@ impl Scene {
         brush: &crate::sculpt::Brush,
         color: Color32,
     ) -> bool {
+        self.brush_cursor_with_footprint(painter, pos, radius, brush, color, true)
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn brush_cursor_with_footprint(
+        &self,
+        painter: &egui::Painter,
+        pos: Pos2,
+        radius: f32,
+        brush: &crate::sculpt::Brush,
+        color: Color32,
+        footprint: bool,
+    ) -> bool {
         let Some((center, normal)) = self.pick(pos) else {
             return false;
         };
         let world_radius = radius / self.scale;
         // Sample visible surface points, using the same camera-plane alpha and
         // depth/normal limits as sculpting. Missing samples break the overlay.
-        const N: usize = 17;
-        let bounds = egui::Rect::from_center_size(pos, egui::Vec2::splat(radius * 2.));
-        let candidates: Vec<_> = self
-            .all_faces
-            .iter()
-            .copied()
-            .filter(|(fi, _)| {
-                let [a, b, c] = self.triangles[*fi].map(|i| self.positions[i]);
-                let face_bounds = egui::Rect::from_min_max(
-                    Pos2::new(a.x.min(b.x).min(c.x), a.y.min(b.y).min(c.y)),
-                    Pos2::new(a.x.max(b.x).max(c.x), a.y.max(b.y).max(c.y)),
-                );
-                bounds.intersects(face_bounds)
-            })
-            .collect();
-        let mut samples = vec![None; N * N];
-        for y in 0..N {
-            for x in 0..N {
-                let u = x as f32 / (N - 1) as f32 * 2. - 1.;
-                let v = 1. - y as f32 / (N - 1) as f32 * 2.;
-                let point = pos + egui::vec2(u, -v) * radius;
-                if let Some((p, n, face)) = pick_surface(
-                    &self.vertices,
-                    &self.triangles,
-                    &self.positions,
-                    &candidates,
-                    &self.normals,
-                    self.view,
-                    point,
-                ) && self.owners[face] == self.active
-                    && (p - center).len() <= world_radius * 1.5
-                    && n.dot(normal) >= 0.1
-                {
-                    samples[y * N + x] = Some((point, brush.weight(u, v)));
-                }
-            }
-        }
-        let mut overlay = egui::Mesh::default();
-        for y in 0..N - 1 {
-            for x in 0..N - 1 {
-                for ids in [
-                    [y * N + x, y * N + x + 1, (y + 1) * N + x],
-                    [y * N + x + 1, (y + 1) * N + x + 1, (y + 1) * N + x],
-                ] {
-                    if let [Some(a), Some(b), Some(c)] = ids.map(|i| samples[i]) {
-                        let start = overlay.vertices.len() as u32;
-                        for (point, weight) in [a, b, c] {
-                            overlay.colored_vertex(
-                                point,
-                                Color32::from_rgba_unmultiplied(
-                                    color.r(),
-                                    color.g(),
-                                    color.b(),
-                                    (weight * 90.) as u8,
-                                ),
-                            );
-                        }
-                        overlay.add_triangle(start, start + 1, start + 2);
+        if footprint {
+            const N: usize = 17;
+            let bounds = egui::Rect::from_center_size(pos, egui::Vec2::splat(radius * 2.));
+            let candidates: Vec<_> = self
+                .all_faces
+                .iter()
+                .copied()
+                .filter(|(fi, _)| {
+                    let [a, b, c] = self.geometry.mesh.triangles[*fi].map(|i| self.positions[i]);
+                    let face_bounds = egui::Rect::from_min_max(
+                        Pos2::new(a.x.min(b.x).min(c.x), a.y.min(b.y).min(c.y)),
+                        Pos2::new(a.x.max(b.x).max(c.x), a.y.max(b.y).max(c.y)),
+                    );
+                    bounds.intersects(face_bounds)
+                })
+                .collect();
+            let mut samples = vec![None; N * N];
+            for y in 0..N {
+                for x in 0..N {
+                    let u = x as f32 / (N - 1) as f32 * 2. - 1.;
+                    let v = 1. - y as f32 / (N - 1) as f32 * 2.;
+                    let point = pos + egui::vec2(u, -v) * radius;
+                    if let Some((p, n, face)) = pick_surface(
+                        &self.geometry.mesh.vertices,
+                        &self.geometry.mesh.triangles,
+                        &self.positions,
+                        &candidates,
+                        &self.geometry.normals,
+                        self.view,
+                        point,
+                    ) && self.geometry.owners[face] == self.active
+                        && (p - center).len() <= world_radius * 1.5
+                        && n.dot(normal) >= 0.1
+                    {
+                        samples[y * N + x] = Some((point, brush.weight(u, v)));
                     }
                 }
             }
+            let mut overlay = egui::Mesh::default();
+            for y in 0..N - 1 {
+                for x in 0..N - 1 {
+                    for ids in [
+                        [y * N + x, y * N + x + 1, (y + 1) * N + x],
+                        [y * N + x + 1, (y + 1) * N + x + 1, (y + 1) * N + x],
+                    ] {
+                        if let [Some(a), Some(b), Some(c)] = ids.map(|i| samples[i]) {
+                            let start = overlay.vertices.len() as u32;
+                            for (point, weight) in [a, b, c] {
+                                overlay.colored_vertex(
+                                    point,
+                                    Color32::from_rgba_unmultiplied(
+                                        color.r(),
+                                        color.g(),
+                                        color.b(),
+                                        (weight * 90.) as u8,
+                                    ),
+                                );
+                            }
+                            overlay.add_triangle(start, start + 1, start + 2);
+                        }
+                    }
+                }
+            }
+            painter.add(egui::Shape::mesh(overlay));
         }
-        painter.add(egui::Shape::mesh(overlay));
         // A tangent ring and normal make surface inclination legible.
         let tangent = (self.right - normal * self.right.dot(normal)).norm();
         let tangent = if tangent.len() < 0.01 {
@@ -399,15 +411,15 @@ impl Scene {
     }
     pub fn pick_model(&self, point: Pos2) -> Option<(usize, Vec3, Vec3)> {
         let (p, normal, face) = pick_surface(
-            &self.vertices,
-            &self.triangles,
+            &self.geometry.mesh.vertices,
+            &self.geometry.mesh.triangles,
             &self.positions,
             &self.all_faces,
-            &self.normals,
+            &self.geometry.normals,
             self.view,
             point,
         )?;
-        Some((self.owners[face], p, normal))
+        Some((self.geometry.owners[face], p, normal))
     }
     pub fn pick(&self, point: Pos2) -> Option<(Vec3, Vec3)> {
         self.pick_model(point)
@@ -616,7 +628,7 @@ mod tests {
         metadata.visible = false;
         document.set_model_metadata(0, name, metadata).unwrap();
         let view = scene(&document);
-        assert_eq!(view.owners.len(), document.mesh().triangles.len());
+        assert_eq!(view.geometry.owners.len(), document.mesh().triangles.len());
         assert!(view.pick(view.center).is_some());
     }
     #[test]
@@ -629,12 +641,12 @@ mod tests {
         document.duplicate_model(false).unwrap();
         let original = document.geometry_snapshot();
         let view = scene(&document);
-        assert_eq!(view.owners.len(), coarse_count * 5);
+        assert_eq!(view.geometry.owners.len(), coarse_count * 5);
         assert_eq!(
             view.faces.len(),
             view.all_faces
                 .iter()
-                .filter(|(i, _)| view.owners[*i] == 0)
+                .filter(|(i, _)| view.geometry.owners[*i] == 0)
                 .count()
         );
         assert_eq!(document.geometry_snapshot(), original);

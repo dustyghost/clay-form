@@ -13,6 +13,8 @@ pub(crate) enum Command {
     Undo,
     Redo,
     ClearMask,
+    InvertMask,
+    DeleteMasked,
     RequestPrimitive,
     ConfirmPrimitive,
     CancelPrimitive,

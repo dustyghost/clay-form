@@ -57,39 +57,94 @@ impl Mesh {
         result.validate()?;
         Ok(result)
     }
+    /// Remove fully masked surface faces and compact surviving vertex indices.
+    /// None means the mask did not cover any complete face.
+    pub fn delete_masked(&self) -> Result<Option<Self>, String> {
+        let kept: Vec<_> = self
+            .triangles
+            .iter()
+            .copied()
+            .filter(|t| !t.iter().all(|&i| self.mask[i] >= 0.5))
+            .collect();
+        if kept.len() == self.triangles.len() {
+            return Ok(None);
+        }
+        let key = |mut t: [usize; 3]| {
+            t.sort_unstable();
+            t
+        };
+        let faces: std::collections::HashSet<_> = kept.iter().copied().map(key).collect();
+        let quads: Vec<_> = self
+            .quads
+            .iter()
+            .copied()
+            .filter(|&[a, b, c, d]| {
+                (faces.contains(&key([a, b, c])) && faces.contains(&key([a, c, d])))
+                    || (faces.contains(&key([a, b, d])) && faces.contains(&key([b, c, d])))
+            })
+            .collect();
+        let mut result = Self {
+            vertices: Vec::new(),
+            triangles: Vec::new(),
+            quads: Vec::new(),
+            mask: Vec::new(),
+        };
+        let mut indices = vec![usize::MAX; self.vertices.len()];
+        for &i in kept.iter().flatten() {
+            indices[i] = 0;
+        }
+        for (i, index) in indices.iter_mut().enumerate() {
+            if *index != usize::MAX {
+                *index = result.vertices.len();
+                result.vertices.push(self.vertices[i]);
+                result.mask.push(self.mask[i]);
+            }
+        }
+        result.triangles = kept.into_iter().map(|t| t.map(|i| indices[i])).collect();
+        result.quads = quads.into_iter().map(|q| q.map(|i| indices[i])).collect();
+        result.validate()?;
+        Ok(Some(result))
+    }
+
+    /// A welded cube sphere has only quad polygons, with no triangle pole fans.
     pub fn sphere() -> Self {
-        let n = 48;
-        let mut v = vec![Vec3(0., 1., 0.)];
-        for j in 1..n {
-            let t = std::f32::consts::PI * j as f32 / n as f32;
-            for i in 0..n * 2 {
-                let p = std::f32::consts::TAU * i as f32 / (n * 2) as f32;
-                v.push(Vec3(t.sin() * p.cos(), t.cos(), t.sin() * p.sin()));
+        let mut cube = super::Primitive::for_kind(super::PrimitiveKind::Cube);
+        cube.divisions = [28; 3];
+        let mut mesh = cube.mesh().expect("fixed cube sphere parameters are valid");
+        for p in &mut mesh.vertices {
+            let Vec3(x, y, z) = *p;
+            let (xx, yy, zz) = (x * x, y * y, z * z);
+            // Spherified-cube mapping avoids the crowding at cube corners
+            // produced by simply normalizing each grid point.
+            *p = Vec3(
+                x * (1. - yy * 0.5 - zz * 0.5 + yy * zz / 3.).sqrt(),
+                y * (1. - zz * 0.5 - xx * 0.5 + zz * xx / 3.).sqrt(),
+                z * (1. - xx * 0.5 - yy * 0.5 + xx * yy / 3.).sqrt(),
+            );
+        }
+        // Preserve the established north-tip seed at vertex zero for strokes.
+        let north = mesh
+            .vertices
+            .iter()
+            .position(|p| *p == Vec3(0., 1., 0.))
+            .unwrap();
+        mesh.vertices.swap(0, north);
+        let remap = |i: usize| {
+            if i == 0 {
+                north
+            } else if i == north {
+                0
+            } else {
+                i
             }
+        };
+        for face in &mut mesh.triangles {
+            *face = face.map(remap);
         }
-        let bottom = v.len();
-        v.push(Vec3(0., -1., 0.));
-        let w = n * 2;
-        let mut f = Vec::new();
-        let mut quads = Vec::new();
-        for i in 0..w {
-            f.push([0, 1 + (i + 1) % w, 1 + i]);
-            for j in 0..n - 2 {
-                let a = 1 + j * w + i;
-                let b = 1 + j * w + (i + 1) % w;
-                quads.push([a, b, b + w, a + w]);
-                f.push([a, b, a + w]);
-                f.push([b, b + w, a + w]);
-            }
-            f.push([bottom, 1 + (n - 2) * w + i, 1 + (n - 2) * w + (i + 1) % w]);
+        for face in &mut mesh.quads {
+            *face = face.map(remap);
         }
-        let mask = vec![0.; v.len()];
-        Self {
-            quads,
-            vertices: v,
-            triangles: f,
-            mask,
-        }
+        mesh
     }
     pub fn normals(&self) -> Vec<Vec3> {
         let mut n = vec![Vec3::default(); self.vertices.len()];
@@ -105,7 +160,6 @@ impl Mesh {
     pub fn validate(&self) -> Result<(), String> {
         if self.vertices.len() > super::subdivision::MAX_VERTICES
             || self.triangles.len() > super::subdivision::MAX_TRIANGLES
-            || self.vertices.is_empty()
             || self
                 .quads
                 .iter()
