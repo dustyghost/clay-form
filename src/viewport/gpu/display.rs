@@ -1,13 +1,13 @@
 //! Cached display geometry and camera-independent wire topology.
 use crate::{
     document::Document,
-    sculpt::{Mesh, Vec3},
+    sculpt::{Mesh, SurfaceShading, Vec3},
 };
 use std::collections::HashMap;
 
 pub(crate) struct DisplayMesh {
     pub mesh: Mesh,
-    pub normals: Vec<Vec3>,
+    pub shading: SurfaceShading,
     pub owners: Vec<usize>,
     pub poly_colors: Vec<[u8; 4]>,
     pub edge_colors: HashMap<(usize, usize), eframe::egui::Color32>,
@@ -37,7 +37,7 @@ impl DisplayMesh {
             mask: Vec::new(),
         };
         let mut edge_colors = HashMap::new();
-        let mut normals = Vec::new();
+        let mut shading = SurfaceShading::default();
         let mut owners = Vec::new();
         let mut poly_colors = Vec::new();
         let mut outlines = Vec::new();
@@ -97,12 +97,22 @@ impl DisplayMesh {
             );
             mesh.vertices.extend_from_slice(&surface.vertices);
             mesh.mask.extend_from_slice(&surface.mask);
-            normals.extend(surface.normals());
+            let surface_shading = surface.surface_shading();
+            let shading_offset = shading.vertices.len();
+            shading.vertices.extend(
+                surface_shading
+                    .vertices
+                    .iter()
+                    .map(|&(i, n)| (i + offset, n)),
+            );
             for (face, &triangle) in surface.triangles.iter().enumerate() {
                 if !surface.face_visible(face) {
                     continue;
                 }
                 mesh.triangles.push(triangle.map(|i| i + offset));
+                shading
+                    .triangles
+                    .push(surface_shading.triangles[face].map(|i| i + shading_offset));
                 if index == active
                     && let Some(primitive) = &model.settings.primitive
                 {
@@ -136,7 +146,7 @@ impl DisplayMesh {
         let depth_extent = mesh.vertices.iter().map(|p| p.len()).fold(1_f32, f32::max) + 1.;
         Self {
             mesh,
-            normals,
+            shading,
             owners,
             poly_colors,
             edge_colors,
@@ -147,12 +157,11 @@ impl DisplayMesh {
         }
     }
     pub(super) fn vertices(&self) -> Vec<f32> {
-        self.mesh
+        self.shading
             .vertices
             .iter()
-            .enumerate()
-            .flat_map(|(i, p)| {
-                let n = self.normals[i];
+            .flat_map(|&(i, n)| {
+                let p = self.mesh.vertices[i];
                 let color = if i < self.active_vertices {
                     [190., 155., 125.]
                 } else {

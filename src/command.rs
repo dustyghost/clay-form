@@ -15,6 +15,7 @@ pub(crate) enum Command {
     ClearMask,
     InvertMask,
     DeleteMasked,
+    SliceTool(bool),
     SetTemporaryThickness(f32),
     ApplyThickness,
     GrowMask(bool),

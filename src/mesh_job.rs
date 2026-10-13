@@ -6,22 +6,26 @@ use std::sync::{
     mpsc::{self, Receiver, TryRecvError},
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) enum Operation {
+    SlicePath(crate::sculpt::SlicePath, crate::sculpt::SliceOptions),
     Subdivide,
     Remesh,
+    Slice(crate::sculpt::SlicePlane, crate::sculpt::SliceOptions),
 }
 impl Operation {
-    pub fn history_label(self) -> &'static str {
+    pub fn history_label(&self) -> &'static str {
         match self {
             Self::Subdivide => "Subdivide mesh",
             Self::Remesh => "Remesh",
+            Self::Slice(_, options) | Self::SlicePath(_, options) => options.mode.history_label(),
         }
     }
-    pub fn label(self) -> &'static str {
+    pub fn label(&self) -> &'static str {
         match self {
             Self::Subdivide => "Subdividing",
             Self::Remesh => "Remeshing",
+            Self::Slice(..) | Self::SlicePath(..) => "Slicing",
         }
     }
 }
@@ -35,11 +39,18 @@ impl MeshJob {
         let (sender, receiver) = mpsc::channel();
         let cancel = Arc::new(AtomicBool::new(false));
         let flag = cancel.clone();
+        let worker_operation = operation.clone();
         std::thread::Builder::new()
             .name("clay-mesh-operation".into())
             .spawn(move || {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    match operation {
+                    match worker_operation {
+                        Operation::SlicePath(path, options) => {
+                            geometry.slice_path(&path, options, &|| flag.load(Ordering::Relaxed))?
+                        }
+                        Operation::Slice(plane, options) => {
+                            geometry.slice(plane, options, &|| flag.load(Ordering::Relaxed))?
+                        }
                         Operation::Subdivide => geometry.subdivide()?,
                         Operation::Remesh => {
                             if !geometry.settings.dynamic {

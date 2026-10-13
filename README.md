@@ -191,3 +191,19 @@ With Adaptive sculpt and Refine enabled, drag stamps refine the surface before a
 Drag stamps rebuild their preview from the original mesh, so holding still does not build up depth. Relief brushes (Standard, Clay, Inflate, Crease and Detail) use four times the depth of one freehand dab; Strength and pressure still control the result. Mask opacity and smoothing weights retain their normal values.
 
 Line and drag modes preview before changing document geometry, create one undo step, and support masks, alphas, symmetry and pen pressure. **Esc** cancels a pending stroke. Hidden faces cannot receive stamps. Grab and Snake keep their continuous Freehand behavior because they depend on pointer displacement.
+
+### Slice
+
+Choose **Slice** in the toolbar, then choose a result:
+
+- **Polygroups** cuts faces along the line while keeping one connected surface. Existing face categories stay on one side; categories spanning the line get new **Slice** counterparts on the other. Existing weighted vertex groups remain available.
+- **Trim** removes one side. The preview labels **Keep** and **Remove**; **Flip kept side** reverses them.
+- **Separate** keeps both sides as independent submodels, placing the new **Slice** model immediately after the active one. Both pieces initially stay in place.
+
+Drag a straight line in the viewport, starting on the model or in empty space. The faint line extension shows the full cut: a plane through all depths of the active model. Hold **Space** while dragging to move the whole line without changing its angle. Release the mouse to apply; **Esc** cancels the gesture. Right drag still orbits between cuts. **Done** returns to sculpting. Slice does not mirror with brush symmetry or use masks to restrict the cut; surviving mask values and existing vertex-group weights are preserved and interpolated at new vertices.
+
+Choose **Path** for a cut with editable bends. Click to add points (up to 24), click an edge to insert a point, and drag a point to change the shape. Select an interior point to reveal corner handles: drag the blue diamond away from the point to soften the corner, or back toward it to sharpen it. Rounded corners also show two linked tangent handles where the curve meets the straight edges; dragging either changes the rounding. **Sharp** removes rounding immediately; **Rounded** adds it. The **Turn** angle and **Round (px)** controls remain available; rounding is limited by the neighboring segment lengths. **Shift-drag** snaps to 15°; **Space-drag** moves the whole path. **Delete point** (or Delete/Backspace) removes the selected point. Choose **Apply cut** or press Enter to commit; **Clear** or Esc discards the draft. The faint end extensions continue through all depths of the model. Paths and their extensions must not cross themselves. The camera stays fixed while editing a path; clear or apply it before orbiting. A failed or cancelled cut keeps the draft available for correction.
+
+For Trim and Separate, **Cap cuts** is on by default. It closes the cut with triangles in a **Cut** polygroup, including concave boundaries and holes; path caps follow the bends and rounded corners. Caps require a closed, consistently oriented source surface. Turn caps off to slice open surfaces, or apply temporary thickness first. Convert primitives before slicing, apply or remove temporary thickness, and show all polygroups of the active model.
+
+A slice uses the active subdivision level and resets that model's subdivision stack, adaptive/voxel modes, and automatic remeshing. Uncut quads are retained; intersected faces and caps use triangles. Other submodels remain unchanged. The operation runs in a cancellable background worker and creates one Undo step; failures and cancellation keep the original model. Slice results save in ordinary `.clay` projects and export through the existing OBJ workflow.

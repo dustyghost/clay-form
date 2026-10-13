@@ -16,6 +16,9 @@ pub(crate) struct UiState {
     pub(crate) primitive_warning: Option<(usize, String)>,
     pub(crate) primitive_controls_requested: bool,
     pub transform_mode: crate::viewport::TransformMode,
+    pub slice_active: bool,
+    pub slice_path_mode: bool,
+    pub slice_options: crate::sculpt::SliceOptions,
     pub transform_operation: crate::viewport::TransformOperation,
     pub respect_transform_mask: bool,
     group_name: String,
@@ -53,6 +56,9 @@ impl Default for UiState {
             primitive_warning: None,
             primitive_controls_requested: false,
             transform_mode: crate::viewport::TransformMode::Sculpt,
+            slice_active: false,
+            slice_path_mode: false,
+            slice_options: Default::default(),
             transform_operation: crate::viewport::TransformOperation::Move,
             respect_transform_mask: true,
             group_name: String::new(),
@@ -214,6 +220,12 @@ impl UiState {
                 design::menu(ui, Glyph::Mesh, "Mesh", |ui| {
                     self.mesh_controls(ui, document, &mut commands)
                 });
+                if ui.add_enabled(!self.mesh_busy && document.primitive().is_none(),
+                    design::button(ui, Glyph::Slice, "Slice").selected(self.slice_active))
+                    .on_hover_text("Draw a line through the active model to group, trim, or separate it")
+                    .clicked() {
+                    commands.push(Command::SliceTool(!self.slice_active));
+                }
                 if ui
                     .add_enabled(
                         !self.mesh_busy,
@@ -429,6 +441,29 @@ impl UiState {
                 }
             });
         });
+        if self.slice_active {
+            egui::TopBottomPanel::top("slice_options").show(ctx, |ui| {
+                ui.add_enabled_ui(!self.mesh_busy && self.pending.is_none(), |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.strong("Slice");
+                        ui.selectable_value(&mut self.slice_path_mode, false, "Line");
+                        ui.selectable_value(&mut self.slice_path_mode, true, "Path");
+                        ui.separator();
+                        for mode in crate::sculpt::SliceMode::ALL {
+                            ui.selectable_value(&mut self.slice_options.mode, mode, mode.label());
+                        }
+                        if self.slice_options.mode != crate::sculpt::SliceMode::Polygroups {
+                            ui.checkbox(&mut self.slice_options.cap, "Cap cuts").on_hover_text("Close the cut with flat faces; requires a closed source surface");
+                        }
+                        if self.slice_options.mode == crate::sculpt::SliceMode::Trim {
+                            ui.checkbox(&mut self.slice_options.flip, "Flip kept side");
+                        }
+                        if ui.button("Done").clicked() { commands.push(Command::SliceTool(false)); }
+                        ui.label("Active model · through all depths · resets subdivision levels");
+                    });
+                });
+            });
+        }
         commands
     }
     pub fn brush_panel(

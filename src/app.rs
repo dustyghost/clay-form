@@ -159,10 +159,14 @@ impl App {
             return Err("A mesh operation is already running".into());
         }
         let was_dragging = self.viewport.gesture.is_some();
-        self.viewport.cancel(&mut self.document);
+        if matches!(operation, Operation::SlicePath(..)) {
+            self.viewport.pause_slice_path(&mut self.document);
+        } else {
+            self.viewport.cancel(&mut self.document);
+        }
         self.mesh_job = Some(MeshJob::start(
             self.document.geometry_snapshot(),
-            operation,
+            operation.clone(),
         )?);
         if was_dragging {
             self.viewport.wait_for_release();
@@ -179,16 +183,20 @@ impl App {
     }
     fn poll_mesh_job(&mut self) {
         if let Some(result) = self.mesh_job.as_ref().and_then(MeshJob::poll) {
-            let label = self
+            let operation = self
                 .mesh_job
                 .take()
                 .expect("completed job")
                 .operation
-                .history_label();
+                .clone();
+            let label = operation.history_label();
             self.ui.mesh_busy = false;
             match result.and_then(|geometry| self.document.replace_geometry_named(geometry, label))
             {
                 Ok(()) => {
+                    if matches!(operation, Operation::Slice(..) | Operation::SlicePath(..)) {
+                        self.ui.show_polygroups = true;
+                    }
                     self.ui.status = format!(
                         "Mesh updated: {} vertices, {} faces",
                         self.document.mesh().vertices.len(),
@@ -197,7 +205,9 @@ impl App {
                 }
                 Err(error) => {
                     self.ui.status = error;
-                    if self.document.mesh_settings().auto_remesh {
+                    if matches!(operation, Operation::Remesh)
+                        && self.document.mesh_settings().auto_remesh
+                    {
                         let resolution = self.document.mesh_settings().resolution;
                         let _ = self.document.set_remesh_settings(resolution, false);
                     }
@@ -291,6 +301,7 @@ impl App {
                     | Command::ClearMask
                     | Command::InvertMask
                     | Command::DeleteMasked
+                    | Command::SliceTool(_)
                     | Command::SetTemporaryThickness(_)
                     | Command::ApplyThickness
                     | Command::GrowMask(_)
@@ -316,6 +327,18 @@ impl App {
             return;
         }
         let result: Result<(), String> = match command {
+            Command::SliceTool(active) => {
+                self.viewport.finish_transform_drag(&mut self.document);
+                self.ui.slice_active = active;
+                self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
+                self.ui.status = if active {
+                    "Slice: draw a line across the active model; release to apply; Esc cancels"
+                } else {
+                    "Sculpt mode"
+                }
+                .into();
+                Ok(())
+            }
             Command::Request(action) => {
                 self.request(action, ctx);
                 Ok(())
@@ -355,6 +378,7 @@ impl App {
                 Ok(())
             }
             Command::RequestPrimitive => {
+                self.ui.slice_active = false;
                 self.viewport.cancel(&mut self.document);
                 if self.document.primitive().is_some() {
                     self.ui.primitive_controls_requested = true;
@@ -401,6 +425,7 @@ impl App {
                 })
             }
             Command::TransformMode(mode) => {
+                self.ui.slice_active = false;
                 self.viewport.finish_transform_drag(&mut self.document);
                 self.ui.transform_mode = mode;
                 self.ui.transform_operation = if mode == crate::viewport::TransformMode::ActionLine
@@ -692,6 +717,8 @@ impl App {
             &mut self.document,
             &mut self.camera,
             ViewportOptions {
+                slice: self.ui.slice_active.then_some(self.ui.slice_options),
+                slice_path_mode: self.ui.slice_path_mode,
                 transform_mode: self.ui.transform_mode,
                 transform_operation: self.ui.transform_operation,
                 respect_mask: self.ui.respect_transform_mask,
@@ -714,6 +741,11 @@ impl App {
                 zoom_hold: self.ui.preferences.zoom_hold,
             },
         );
+        if let Some(operation) = self.viewport.completed_slice.take()
+            && let Err(error) = self.start_mesh_job(operation)
+        {
+            self.ui.status = error;
+        }
         if self.viewport.completed_stroke
             && self.document.mesh_settings().dynamic
             && self.document.mesh_settings().auto_remesh

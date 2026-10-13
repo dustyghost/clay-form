@@ -69,7 +69,38 @@ impl Mesh {
                 "Thickness would exceed the mesh size limit; use a lower resolution".into(),
             );
         }
-        let normals = self.normals();
+        let mut normals = self.angle_weighted_normals();
+        // A cut can leave arbitrarily short edges whose endpoints have very
+        // different one-sided normal estimates. Bound offset-field variation on
+        // those edges before building the shell, so they cannot fold back.
+        let mut normal_edges: Vec<_> = edges
+            .keys()
+            .filter(|(a, b)| boundary_vertices.contains_key(a) || boundary_vertices.contains_key(b))
+            .map(|&(a, b)| ((self.vertices[b] - self.vertices[a]).len(), a, b))
+            .collect();
+        normal_edges.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+        for _ in 0..32 {
+            let mut changed = false;
+            for &(length, a, b) in &normal_edges {
+                let limit = (length / (2. * thickness)).min(2.);
+                let difference = normals[b] - normals[a];
+                if difference.len() > limit * 1.001 {
+                    if (normals[a] + normals[b]).len() < 1e-6 {
+                        return Err("Thickness cannot offset this folded boundary; adjust the surface first".into());
+                    }
+                    let middle = (normals[a] + normals[b]).norm();
+                    let tangent = difference.norm();
+                    let sine = limit * 0.5;
+                    let cosine = (1. - sine * sine).sqrt();
+                    normals[a] = middle * cosine - tangent * sine;
+                    normals[b] = middle * cosine + tangent * sine;
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
         let mut shell = Mesh {
             vertex_groups: self
                 .vertex_groups
@@ -191,6 +222,28 @@ impl Mesh {
             }
         }
         shell.canonicalize_polygroups();
+        for &[a, b, c] in &self.triangles {
+            let source_normal =
+                (self.vertices[b] - self.vertices[a]).cross(self.vertices[c] - self.vertices[a]);
+            for offset in [0, n] {
+                let offset_normal = (shell.vertices[b + offset] - shell.vertices[a + offset])
+                    .cross(shell.vertices[c + offset] - shell.vertices[a + offset]);
+                if offset_normal.dot(source_normal) <= 0. {
+                    return Err("This thickness folds surface faces; reduce thickness or refine the boundary".into());
+                }
+            }
+        }
+        for rim in shell.triangles[self.triangles.len() * 2..].chunks_exact(2) {
+            let face_normal = |[a, b, c]: [usize; 3]| {
+                (shell.vertices[b] - shell.vertices[a]).cross(shell.vertices[c] - shell.vertices[a])
+            };
+            if face_normal(rim[0]).dot(face_normal(rim[1])) <= 0. {
+                return Err(
+                    "This thickness folds a rim face; reduce thickness or refine the boundary"
+                        .into(),
+                );
+            }
+        }
         if shell.triangles.iter().any(|&[a, b, c]| {
             (shell.vertices[b] - shell.vertices[a])
                 .cross(shell.vertices[c] - shell.vertices[a])
@@ -260,5 +313,77 @@ mod tests {
         let mut malformed = cut;
         malformed.triangles.push(malformed.triangles[0]);
         assert!(malformed.solidify(0.05).is_err());
+    }
+}
+
+#[cfg(test)]
+mod slice_rim_tests {
+    use super::*;
+    use crate::sculpt::{SliceMode, SliceOptions, SlicePlane, Vec3};
+    #[test]
+    fn sliced_hemisphere_thickness_keeps_thin_faces_and_rim_quads_unfolded() {
+        for (height, normal) in [
+            (0., Vec3(0., -1., 0.)),
+            (0.017, Vec3(-0.37, -1., -0.21)),
+            (0.23, Vec3(0.2, -1., 0.6)),
+        ] {
+            let (mesh, _) = Mesh::sphere()
+                .slice(
+                    SlicePlane {
+                        origin: Vec3(0., height, 0.),
+                        normal,
+                    },
+                    SliceOptions {
+                        mode: SliceMode::Trim,
+                        cap: false,
+                        flip: false,
+                    },
+                    &|| false,
+                )
+                .unwrap();
+            let original = mesh.clone();
+            for thickness in [0.01, 0.05, 0.18, 0.4] {
+                let shell = mesh.solidify(thickness).unwrap();
+                let n = mesh.vertices.len();
+                assert_eq!(mesh, original);
+                for i in 0..n {
+                    assert!(
+                        ((shell.vertices[i] + shell.vertices[i + n]) * 0.5 - mesh.vertices[i])
+                            .len()
+                            < 1e-6
+                    );
+                    assert!(
+                        ((shell.vertices[i] - shell.vertices[i + n]).len() - thickness).abs()
+                            < 1e-6
+                    );
+                }
+                for &[a, b, c] in &mesh.triangles {
+                    let original = (mesh.vertices[b] - mesh.vertices[a])
+                        .cross(mesh.vertices[c] - mesh.vertices[a]);
+                    for offset in [0, n] {
+                        let generated = (shell.vertices[b + offset] - shell.vertices[a + offset])
+                            .cross(shell.vertices[c + offset] - shell.vertices[a + offset]);
+                        assert!(
+                            generated.dot(original) > 0.,
+                            "shell face folded after slice"
+                        );
+                    }
+                }
+                for pair in shell.triangles[mesh.triangles.len() * 2..].chunks_exact(2) {
+                    let normals: Vec<_> = pair
+                        .iter()
+                        .map(|&[a, b, c]| {
+                            (shell.vertices[b] - shell.vertices[a])
+                                .cross(shell.vertices[c] - shell.vertices[a])
+                        })
+                        .collect();
+                    assert!(
+                        normals[0].dot(normals[1]) > 0.,
+                        "rim quad folded over itself"
+                    );
+                }
+                shell.validate_closed().unwrap();
+            }
+        }
     }
 }

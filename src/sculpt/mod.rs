@@ -31,5 +31,12 @@ pub use groups::{VertexGroup, mask_selected};
 
 mod group_transfer;
 
+mod slice;
+mod slice_path;
+pub use slice::{SliceMode, SliceOptions, SlicePlane};
+pub use slice_path::SlicePath;
+mod shading;
+pub(crate) use shading::SurfaceShading;
+
 #[cfg(test)]
 mod group_tests;

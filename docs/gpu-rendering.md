@@ -45,3 +45,13 @@ Use those measurements to choose the next optimization. Likely candidates to inv
 Polygroup colors are cached per display triangle in a packed RGBA8 texture. The fragment shader fetches by primitive ID, retaining indexed position/normal buffers and sharp category boundaries. Group registry order selects deliberately separated hues from a muted palette, so renaming keeps the color; masks, guides and brush previews still compose over the surface. The View toggle changes uniforms without rebuilding geometry. If the combined scene exceeds the GPU texture capacity, the renderer retains ordinary clay shading.
 
 Visible wireframe uses slope-scaled polygon offset on filled surfaces and unshifted edge positions. This prevents depth fighting on tilted primitive faces while retaining depth occlusion by foreground surfaces. Axis colors are per-edge attributes in the cached line buffers.
+
+Surface lighting uses angle-weighted corner normals with separate smoothing fans at edges of 60 degrees or more. `sculpt/shading.rs` builds display vertices mapped back to the original welded vertices; surface index order still matches polygroup texture entries. This prevents cap triangles and thin clipped faces from producing bright or dark triangular patches around slice rims. GPU rendering, CPU preview, brush-icon captures, and picked surface normals use these same fans. Sculpting, subdivision, wireframe topology, and saved geometry keep the original welded mesh; polygroup color boundaries alone do not introduce hard shading edges.
+
+The focused slice render check uses real GL pixel readback to detect lighting spikes below a trim rim and renders touching separated pieces too:
+
+```sh
+CLAY_SLICE_PREVIEW=/tmp/clay-slice.png CLAY_SLICE_SEPARATE_PREVIEW=/tmp/clay-separate.png cargo test --locked gpu_slice -- --ignored
+```
+
+For an uncapped sliced hemisphere with temporary thickness, `CLAY_SLICE_THICKNESS_PREVIEW=/tmp/clay-slice-thickness.png cargo test --locked gpu_sliced_hemisphere -- --ignored` renders the rim and verifies that the preview and applied shell have identical geometry and shading.

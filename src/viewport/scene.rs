@@ -191,7 +191,6 @@ impl Scene {
         let view = self.view;
         let geometry = &self.geometry;
         let mesh = &geometry.mesh;
-        let normals = &geometry.normals;
         let outlines = &geometry.outlines;
         let active_vertices = geometry.active_vertices;
         let positions = &self.positions;
@@ -201,8 +200,9 @@ impl Scene {
         if renderer.is_none() {
             let light = (view + up * 0.7 + right * (-0.5)).norm();
             let mut rendered = egui::Mesh::default();
-            for (i, v) in mesh.vertices.iter().enumerate() {
-                let illumination = 0.25 + 0.75 * normals[i].dot(light).max(0.);
+            for &(i, normal) in &geometry.shading.vertices {
+                let v = mesh.vertices[i];
+                let illumination = 0.25 + 0.75 * normal.dot(light).max(0.);
                 let mask = if i < active_vertices {
                     1. - mesh.mask[i] * 0.75
                 } else {
@@ -214,7 +214,7 @@ impl Scene {
                     [130., 143., 155.]
                 };
                 rendered.colored_vertex(
-                    project(*v),
+                    project(v),
                     Color32::from_rgb(
                         (base[0] * illumination * mask) as u8,
                         (base[1] * illumination * mask) as u8,
@@ -341,7 +341,9 @@ impl Scene {
             };
             if !wire || mode != WireMode::Transparent {
                 for &(i, _) in faces {
-                    rendered.indices.extend(mesh.triangles[i].map(|v| v as u32));
+                    rendered
+                        .indices
+                        .extend(geometry.shading.triangles[i].map(|v| v as u32));
                 }
                 painter.add(egui::Shape::mesh(rendered));
             }
@@ -430,11 +432,9 @@ impl Scene {
                     let v = 1. - y as f32 / (N - 1) as f32 * 2.;
                     let point = pos + egui::vec2(u, -v) * radius;
                     if let Some((p, n, face)) = pick_surface(
-                        &self.geometry.mesh.vertices,
-                        &self.geometry.mesh.triangles,
+                        &self.geometry,
                         &self.positions,
                         &candidates,
-                        &self.geometry.normals,
                         self.view,
                         point,
                     ) && self.geometry.owners[face] == self.active
@@ -502,11 +502,9 @@ impl Scene {
     }
     pub fn pick_model(&self, point: Pos2) -> Option<(usize, Vec3, Vec3)> {
         let (p, normal, face) = pick_surface(
-            &self.geometry.mesh.vertices,
-            &self.geometry.mesh.triangles,
+            &self.geometry,
             &self.positions,
             &self.all_faces,
-            &self.geometry.normals,
             self.view,
             point,
         )?;
@@ -519,14 +517,14 @@ impl Scene {
     }
 }
 fn pick_surface(
-    vertices: &[Vec3],
-    triangles: &[[usize; 3]],
+    geometry: &DisplayMesh,
     positions: &[Pos2],
     faces: &[(usize, f32)],
-    normals: &[Vec3],
     view: Vec3,
     point: Pos2,
 ) -> Option<(Vec3, Vec3, usize)> {
+    let vertices = &geometry.mesh.vertices;
+    let triangles = &geometry.mesh.triangles;
     let mut hit = None;
     let mut depth = f32::NEG_INFINITY;
     for &(fi, _) in faces {
@@ -555,9 +553,11 @@ fn pick_surface(
             let z = p.dot(view);
             if z > depth {
                 depth = z;
+                let normals =
+                    geometry.shading.triangles[fi].map(|i| geometry.shading.vertices[i].1);
                 hit = Some((
                     p,
-                    (normals[t[0]] * (1. - u - v) + normals[t[1]] * u + normals[t[2]] * v).norm(),
+                    (normals[0] * (1. - u - v) + normals[1] * u + normals[2] * v).norm(),
                     fi,
                 ));
             }

@@ -5,6 +5,7 @@ mod gpu;
 mod guides;
 mod primitive;
 mod scene;
+mod slice;
 mod stroke;
 mod transform;
 use crate::{
@@ -25,6 +26,7 @@ pub(crate) enum Gesture {
     Gizmo,
     Transform,
     Primitive,
+    Slice,
 }
 struct SnakeStroke {
     center: Vec3,
@@ -44,9 +46,14 @@ pub(crate) struct Viewport {
     snake: Option<SnakeStroke>,
     transform: transform::TransformControls,
     primitive: primitive::PrimitiveControls,
+    slice: Option<slice::SliceDrag>,
+    slice_path: Option<slice::SlicePathDraft>,
+    pub(crate) completed_slice: Option<crate::mesh_job::Operation>,
 }
 #[derive(Clone, Copy)]
 pub(crate) struct ViewportOptions {
+    pub slice: Option<crate::sculpt::SliceOptions>,
+    pub slice_path_mode: bool,
     pub transform_mode: TransformMode,
     pub transform_operation: TransformOperation,
     pub respect_mask: bool,
@@ -102,6 +109,7 @@ impl Viewport {
         options: ViewportOptions,
     ) {
         self.completed_stroke = false;
+        self.completed_slice = None;
         document.begin_sculpt_frame();
         if !options.enabled && ui.input(|i| i.pointer.primary_down()) {
             self.blocked_until_release = true;
@@ -204,12 +212,19 @@ impl Viewport {
             target.circle_filled(pos, 1.2, Color32::from_rgb(235, 65, 65));
         }
         let zoom_held = options.zoom_hold.active(modifiers);
-        if options.enabled && self.pending_stroke.is_none() && response.hovered() {
+        if options.enabled
+            && self.pending_stroke.is_none()
+            && self.slice.is_none()
+            && self.slice_path.is_none()
+            && response.hovered()
+        {
             let scroll = ui.input(|i| i.smooth_scroll_delta.y);
             camera.zoom_by(scroll);
         }
         if options.enabled
             && self.pending_stroke.is_none()
+            && self.slice.is_none()
+            && self.slice_path.is_none()
             && response.dragged_by(egui::PointerButton::Secondary)
         {
             let d = ui.input(|i| i.pointer.delta());
@@ -221,6 +236,8 @@ impl Viewport {
         }
         if options.enabled
             && self.pending_stroke.is_none()
+            && self.slice.is_none()
+            && self.slice_path.is_none()
             && response.dragged_by(egui::PointerButton::Middle)
         {
             camera.pan += ui.input(|i| i.pointer.delta());
@@ -232,6 +249,7 @@ impl Viewport {
             && options.enabled
             && !zoom_held
             && options.transform_mode == TransformMode::Sculpt
+            && options.slice.is_none()
             && let Some(point) = pointer.filter(|p| !gizmo_rect.contains(*p))
             && let Some((owner, _, _)) = scene.pick_model(point)
             && owner != document.active_model_index()
@@ -249,6 +267,8 @@ impl Viewport {
                 Gesture::Gizmo
             } else if zoom_held {
                 Gesture::Orbit
+            } else if options.slice.is_some() && document.primitive().is_none() {
+                Gesture::Slice
             } else if options.transform_mode != TransformMode::Sculpt
                 && self.transform.can_drag(
                     document,
@@ -302,6 +322,21 @@ impl Viewport {
                 camera.pitch = axis.pitch;
             }
             self.gesture = None;
+        }
+        if let Some(slice_options) = options.slice {
+            self.update_slice(
+                ui,
+                &scene,
+                &painter,
+                document,
+                pointer,
+                options.enabled,
+                slice_options,
+                options.slice_path_mode,
+                response.clicked_by(egui::PointerButton::Primary),
+            );
+            draw_gizmo(camera, &painter, gizmo_rect, pointer);
+            return;
         }
         if options.transform_mode != TransformMode::Sculpt {
             let dragging = primary && self.gesture == Some(Gesture::Transform) && options.enabled;

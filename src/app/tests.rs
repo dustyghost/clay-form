@@ -1497,3 +1497,453 @@ fn patterned_drag_dot_accepts_a_press_and_release_in_one_frame() {
     );
     assert!(mask_near(&app, 0., 0.) > 0.9);
 }
+
+fn finish_slice_job(app: &mut App) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while app.mesh_job.is_some() && std::time::Instant::now() < deadline {
+        app.poll_mesh_job();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    assert!(app.mesh_job.is_none(), "slice worker timed out");
+}
+
+#[test]
+fn slice_drag_previews_without_edits_and_commits_each_mode_as_one_undo() {
+    use crate::sculpt::{SliceMode, SliceOptions};
+    for mode in SliceMode::ALL {
+        let mut app = App::default();
+        let ctx = egui::Context::default();
+        app.dispatch(Command::SliceTool(true), &ctx);
+        app.ui.slice_options = SliceOptions {
+            mode,
+            ..Default::default()
+        };
+        let before = app.document.geometry_snapshot();
+        let rect = navigation_frame(&mut app, &ctx, vec![]);
+        let start = rect.center() + Vec2::new(33., -320.);
+        let end = rect.center() + Vec2::new(33., 320.);
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+        );
+        assert!(app.viewport.gesture == Some(Gesture::Slice));
+        navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert_eq!(app.document.history_counts(), (0, 0));
+        assert_eq!(app.camera.yaw, 0.);
+        navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+        assert!(app.mesh_job.is_some());
+        finish_slice_job(&mut app);
+        assert_ne!(
+            app.document.geometry_snapshot(),
+            before,
+            "{}",
+            app.ui.status
+        );
+        assert_eq!(app.document.history_counts(), (1, 0));
+        assert_eq!(app.document.undo_label(), Some(mode.history_label()));
+        assert_eq!(
+            app.document.model_count(),
+            if mode == SliceMode::Separate { 2 } else { 1 }
+        );
+        app.document.mesh().validate_closed().unwrap();
+        let after = app.document.geometry_snapshot();
+        let project: crate::sculpt::Project =
+            serde_json::from_slice(&serde_json::to_vec(&app.document.project()).unwrap()).unwrap();
+        project.validate().unwrap();
+        app.dispatch(Command::Undo, &ctx);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        app.dispatch(Command::Redo, &ctx);
+        assert_eq!(app.document.geometry_snapshot(), after);
+    }
+}
+
+#[test]
+fn slice_escape_short_click_miss_and_job_cancel_leave_geometry_and_history_unchanged() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.dispatch(Command::SliceTool(true), &ctx);
+    let before = app.document.geometry_snapshot();
+    let rect = navigation_frame(&mut app, &ctx, vec![]);
+    let start = rect.center() + Vec2::new(20., -300.);
+    let end = rect.center() + Vec2::new(20., 300.);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(end),
+            egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Default::default(),
+            },
+        ],
+    );
+    navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+    assert!(app.mesh_job.is_none());
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    navigation_frame(&mut app, &ctx, vec![primary_event(start, false)]);
+    assert!(app.mesh_job.is_none());
+    let plane = crate::sculpt::SlicePlane {
+        origin: crate::sculpt::Vec3(3., 0., 0.),
+        normal: crate::sculpt::Vec3(1., 0., 0.),
+    };
+    app.start_mesh_job(Operation::Slice(plane, Default::default()))
+        .unwrap();
+    finish_slice_job(&mut app);
+    assert!(app.ui.status.contains("both sides"));
+    let plane = crate::sculpt::SlicePlane {
+        origin: crate::sculpt::Vec3::default(),
+        ..plane
+    };
+    app.start_mesh_job(Operation::Slice(plane, Default::default()))
+        .unwrap();
+    app.cancel_mesh_job();
+    app.poll_mesh_job();
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert_eq!(app.document.history_counts(), (0, 0));
+    assert!(!app.document.is_dirty());
+}
+
+#[test]
+fn slice_separate_resets_only_active_stack_and_keeps_scene_metadata() {
+    let mut app = App::default();
+    app.document.duplicate_model(false).unwrap();
+    app.document.set_mesh_level(1).unwrap();
+    let mut geometry = app.document.geometry_snapshot();
+    geometry.subdivide().unwrap();
+    geometry.scene.groups.push("Parts".into());
+    geometry.scene.active_metadata.group = "Parts".into();
+    geometry.scene.active_metadata.mask_threshold = 0.7;
+    app.document.replace_geometry(geometry.clone()).unwrap();
+    let count = app.document.history_counts().0;
+    app.start_mesh_job(Operation::Slice(
+        crate::sculpt::SlicePlane {
+            origin: crate::sculpt::Vec3(0.1, 0., 0.),
+            normal: crate::sculpt::Vec3(1., 0., 0.),
+        },
+        crate::sculpt::SliceOptions {
+            mode: crate::sculpt::SliceMode::Separate,
+            ..Default::default()
+        },
+    ))
+    .unwrap();
+    finish_slice_job(&mut app);
+    assert_eq!(app.document.model_count(), 3, "{}", app.ui.status);
+    assert_eq!(app.document.mesh_settings().levels(), 1);
+    assert_eq!(app.document.model(1).unwrap().metadata.group, "Parts");
+    assert_eq!(app.document.model(1).unwrap().metadata.mask_threshold, 0.7);
+    assert_eq!(
+        app.document.model(2).unwrap().mesh,
+        &geometry.submodels[0].mesh
+    );
+    assert_eq!(app.document.history_counts().0, count + 1);
+    app.document.undo();
+    assert_eq!(app.document.geometry_snapshot(), geometry);
+}
+
+#[test]
+fn slice_camera_or_option_changes_cancel_a_pending_cut() {
+    for change_camera in [false, true] {
+        let mut app = App::default();
+        let ctx = egui::Context::default();
+        app.dispatch(Command::SliceTool(true), &ctx);
+        let rect = navigation_frame(&mut app, &ctx, vec![]);
+        let start = rect.center() + Vec2::new(0., -250.);
+        let end = rect.center() + Vec2::new(0., 250.);
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+        );
+        navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+        if change_camera {
+            app.camera.zoom_step(true);
+        } else {
+            app.ui.slice_options.mode = crate::sculpt::SliceMode::Trim;
+        }
+        navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+        assert!(app.mesh_job.is_none());
+        assert_eq!(app.document.history_counts(), (0, 0));
+        assert!(!app.document.is_dirty());
+    }
+}
+
+fn slice_key(key: egui::Key, pressed: bool) -> egui::Event {
+    egui::Event::Key {
+        key,
+        physical_key: None,
+        pressed,
+        repeat: false,
+        modifiers: Default::default(),
+    }
+}
+#[test]
+fn slice_space_moves_the_line_without_changing_its_direction() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.dispatch(Command::SliceTool(true), &ctx);
+    let before = app.document.geometry_snapshot();
+    let rect = navigation_frame(&mut app, &ctx, vec![]);
+    let start = rect.center() + Vec2::new(-120., -280.);
+    let end = rect.center() + Vec2::new(-120., 280.);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+    let moved = end + Vec2::new(165., 0.);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            slice_key(egui::Key::Space, true),
+            egui::Event::PointerMoved(moved),
+        ],
+    );
+    assert_eq!(app.document.geometry_snapshot(), before);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            primary_event(moved, false),
+            slice_key(egui::Key::Space, false),
+        ],
+    );
+    finish_slice_job(&mut app);
+    assert_eq!(app.document.history_counts(), (1, 0), "{}", app.ui.status);
+    let mesh = app.document.mesh();
+    let mut boundary = Vec::new();
+    for (i, p) in mesh
+        .vertices
+        .iter()
+        .enumerate()
+        .skip(before.mesh.vertices.len())
+    {
+        boundary.push((i, p.0));
+    }
+    assert!(!boundary.is_empty());
+    let x = boundary[0].1;
+    assert!(x > 0.);
+    assert!(boundary.iter().all(|(_, v)| (*v - x).abs() < 1e-5));
+    assert_eq!(app.camera.yaw, 0.);
+}
+#[test]
+fn slice_path_click_edit_move_and_apply_are_one_undo_in_all_modes() {
+    use crate::sculpt::SliceMode;
+    for mode in SliceMode::ALL {
+        let mut app = App::default();
+        let ctx = egui::Context::default();
+        app.dispatch(Command::SliceTool(true), &ctx);
+        app.ui.slice_path_mode = true;
+        app.ui.slice_options.mode = mode;
+        let before = app.document.geometry_snapshot();
+        let rect = navigation_frame(&mut app, &ctx, vec![]);
+        let points = [
+            rect.center() + Vec2::new(-250., 75.),
+            rect.center() + Vec2::new(0., -45.),
+            rect.center() + Vec2::new(250., 90.),
+        ];
+        for p in points {
+            navigation_frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::PointerMoved(p), primary_event(p, true)],
+            );
+            navigation_frame(&mut app, &ctx, vec![primary_event(p, false)]);
+            assert!(app.mesh_job.is_none());
+        }
+        let edited = points[1] + Vec2::new(15., 30.);
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::PointerMoved(points[1]),
+                primary_event(points[1], true),
+            ],
+        );
+        navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(edited)]);
+        navigation_frame(&mut app, &ctx, vec![primary_event(edited, false)]);
+        // Space on an empty part of the viewport translates without adding a point.
+        let grab = rect.center() + Vec2::new(0., 200.);
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![
+                slice_key(egui::Key::Space, true),
+                egui::Event::PointerMoved(grab),
+                primary_event(grab, true),
+            ],
+        );
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(grab + Vec2::new(0., 15.))],
+        );
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![
+                primary_event(grab + Vec2::new(0., 15.), false),
+                slice_key(egui::Key::Space, false),
+            ],
+        );
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert_eq!(app.document.history_counts(), (0, 0));
+        navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Enter, true)]);
+        assert!(app.mesh_job.is_some(), "{mode:?}");
+        finish_slice_job(&mut app);
+        assert_eq!(app.document.history_counts(), (1, 0), "{}", app.ui.status);
+        app.document.mesh().validate_closed().unwrap();
+        assert_eq!(
+            app.document.model_count(),
+            if mode == SliceMode::Separate { 2 } else { 1 }
+        );
+        app.dispatch(Command::Undo, &ctx);
+        assert_eq!(app.document.geometry_snapshot(), before);
+    }
+}
+
+#[test]
+fn slice_path_fast_clicks_and_failed_cut_keep_an_editable_draft() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.dispatch(Command::SliceTool(true), &ctx);
+    app.ui.slice_path_mode = true;
+    app.ui.slice_options.mode = crate::sculpt::SliceMode::Trim;
+    let before = app.document.geometry_snapshot();
+    let rect = navigation_frame(&mut app, &ctx, vec![]);
+    for delta in [
+        Vec2::new(-200., -100.),
+        Vec2::new(200., 100.),
+        Vec2::new(-200., 100.),
+        Vec2::new(200., -100.),
+    ] {
+        let p = rect.center() + delta;
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::PointerMoved(p),
+                primary_event(p, true),
+                primary_event(p, false),
+            ],
+        );
+    }
+    navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Enter, true)]);
+    assert!(app.mesh_job.is_some());
+    finish_slice_job(&mut app);
+    assert!(app.ui.status.contains("cross"), "{}", app.ui.status);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            slice_key(egui::Key::Enter, false),
+            slice_key(egui::Key::Delete, true),
+        ],
+    );
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            slice_key(egui::Key::Enter, true),
+            slice_key(egui::Key::Delete, false),
+        ],
+    );
+    assert!(app.mesh_job.is_some(), "draft was lost after failure");
+    app.cancel_mesh_job();
+    navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Enter, false)]);
+    navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Enter, true)]);
+    assert!(app.mesh_job.is_some(), "draft was lost after cancellation");
+    finish_slice_job(&mut app);
+    assert_eq!(app.document.history_counts(), (1, 0), "{}", app.ui.status);
+    app.document.mesh().validate_closed().unwrap();
+}
+
+#[test]
+fn slice_corner_handles_round_and_sharpen_without_moving_or_adding_points() {
+    let mut results = Vec::new();
+    for edit in 0..3 {
+        let mut app = App::default();
+        let ctx = egui::Context::default();
+        app.dispatch(Command::SliceTool(true), &ctx);
+        app.ui.slice_path_mode = true;
+        app.ui.slice_options.mode = crate::sculpt::SliceMode::Trim;
+        let before = app.document.geometry_snapshot();
+        let rect = navigation_frame(&mut app, &ctx, vec![]);
+        let points = [
+            rect.center() + Vec2::new(-240., 100.),
+            rect.center() + Vec2::new(0., -100.),
+            rect.center() + Vec2::new(240., 100.),
+        ];
+        for p in points.into_iter().chain([points[1]]) {
+            navigation_frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::PointerMoved(p), primary_event(p, true)],
+            );
+            navigation_frame(&mut app, &ctx, vec![primary_event(p, false)]);
+        }
+        if edit > 0 {
+            let handle = points[1] + Vec2::new(0., 22.);
+            let end = handle + Vec2::new(0., 40.);
+            navigation_frame(
+                &mut app,
+                &ctx,
+                vec![
+                    egui::Event::PointerMoved(handle),
+                    primary_event(handle, true),
+                ],
+            );
+            navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+            navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+            if edit == 2 {
+                // The linked tangent handle now sits 80px along the incoming edge.
+                let handle = points[1] + (points[0] - points[1]).normalized() * 80.;
+                navigation_frame(
+                    &mut app,
+                    &ctx,
+                    vec![
+                        egui::Event::PointerMoved(handle),
+                        primary_event(handle, true),
+                    ],
+                );
+                // Move beyond the corner to exercise clamping to a sharp vertex.
+                let end = points[1] - (points[0] - points[1]).normalized() * 10.;
+                navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+                navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+            }
+        }
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert_eq!(app.document.history_counts(), (0, 0));
+        navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Enter, true)]);
+        finish_slice_job(&mut app);
+        assert_eq!(app.document.history_counts(), (1, 0), "{}", app.ui.status);
+        app.document.mesh().validate_closed().unwrap();
+        results.push(app.document.geometry_snapshot());
+        app.dispatch(Command::Undo, &ctx);
+        assert_eq!(app.document.geometry_snapshot(), before);
+    }
+    assert_ne!(
+        results[0], results[1],
+        "round handle did not change the cut"
+    );
+    assert_eq!(
+        results[0], results[2],
+        "sharpening should restore the exact original path"
+    );
+}

@@ -37,14 +37,16 @@ pub(crate) fn capture(mesh: &Mesh, camera: &Camera) -> Result<BrushIcon, String>
         })
         .collect();
     let light = (view + up * 0.7 - right * 0.5).norm();
-    let shades: Vec<_> = mesh
-        .normals()
+    let shading = mesh.surface_shading();
+    let shades: Vec<_> = shading
+        .vertices
         .iter()
-        .map(|n| 0.25 + 0.75 * n.dot(light).max(0.))
+        .map(|(_, n)| 0.25 + 0.75 * n.dot(light).max(0.))
         .collect();
     let mut rgba = [23, 26, 31, 255].repeat(SIZE * SIZE);
     let mut depth = vec![f32::NEG_INFINITY; SIZE * SIZE];
-    for face in &mesh.triangles {
+    for (fi, face) in mesh.triangles.iter().enumerate() {
+        let shade_indices = shading.triangles[fi];
         let [a, b, c] = face.map(|i| projected[i]);
         let area = (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0);
         if area >= -1e-7 {
@@ -70,7 +72,9 @@ pub(crate) fn capture(mesh: &Mesh, camera: &Camera) -> Result<BrushIcon, String>
                     continue;
                 }
                 depth[i] = z;
-                let shade = wa * shades[face[0]] + wb * shades[face[1]] + wc * shades[face[2]];
+                let shade = wa * shades[shade_indices[0]]
+                    + wb * shades[shade_indices[1]]
+                    + wc * shades[shade_indices[2]];
                 for (channel, base) in [190., 155., 125.].into_iter().enumerate() {
                     rgba[i * 4 + channel] = (base * shade).clamp(0., 255.) as u8;
                 }

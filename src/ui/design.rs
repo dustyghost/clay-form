@@ -12,6 +12,7 @@ pub(super) enum Glyph {
     Edit,
     Mesh,
     Transform,
+    Slice,
     Primitive,
     Layers,
     Camera,
@@ -30,6 +31,17 @@ impl Glyph {
     fn lines(self) -> Vec<Vec<[f32; 2]>> {
         use Glyph::*;
         match self {
+            Slice => vec![
+                vec![
+                    [4., 7.],
+                    [4., 4.],
+                    [20., 4.],
+                    [20., 20.],
+                    [4., 20.],
+                    [4., 17.],
+                ],
+                vec![[2., 16.], [22., 8.]],
+            ],
             Close => vec![vec![[5., 5.], [19., 19.]], vec![[19., 5.], [5., 19.]]],
             Delete => vec![
                 vec![[4., 6.], [20., 6.]],

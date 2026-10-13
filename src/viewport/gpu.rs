@@ -313,7 +313,7 @@ impl Gpu {
             }
             gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.indices));
             let indices: Vec<u8> = data
-                .mesh
+                .shading
                 .triangles
                 .iter()
                 .flatten()
@@ -809,3 +809,6 @@ use shaders::{LINE_FRAGMENT, LINE_VERTEX, SURFACE_FRAGMENT, SURFACE_VERTEX};
 
 #[cfg(all(test, target_os = "linux"))]
 mod backfaces_test;
+
+#[cfg(all(test, target_os = "linux"))]
+mod slice_test;
