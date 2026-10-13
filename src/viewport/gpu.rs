@@ -43,6 +43,7 @@ impl Renderer {
         }
         self.geometry.as_ref().unwrap().clone()
     }
+    #[allow(clippy::too_many_arguments)]
     pub fn paint(
         &self,
         painter: &egui::Painter,
@@ -51,10 +52,11 @@ impl Renderer {
         wire: bool,
         mode: WireMode,
         triangles: bool,
+        geometry: Option<Arc<DisplayMesh>>,
     ) {
         let gpu = self.gpu.clone();
         let preview = self.preview.clone();
-        let geometry = self.render_geometry.as_ref().unwrap().clone();
+        let geometry = geometry.unwrap_or_else(|| self.render_geometry.as_ref().unwrap().clone());
         let params = Params::new(
             rect,
             scene.right,

@@ -18,12 +18,15 @@ pub(crate) struct DisplayMesh {
 }
 impl DisplayMesh {
     pub fn new(document: &Document) -> Self {
-        Self::build(document, false)
+        Self::build(document, false, None)
     }
     pub(super) fn preview(document: &Document) -> Self {
-        Self::build(document, true)
+        Self::build(document, true, None)
     }
-    fn build(document: &Document, preview: bool) -> Self {
+    pub fn with_active_mesh(document: &Document, mesh: &Mesh) -> Self {
+        Self::build(document, true, Some(mesh))
+    }
+    fn build(document: &Document, preview: bool, active_mesh: Option<&Mesh>) -> Self {
         let active = document.active_model_index();
         let mut mesh = Mesh {
             vertex_groups: Vec::new(),
@@ -46,7 +49,11 @@ impl DisplayMesh {
             if !model.metadata.visible {
                 continue;
             }
-            let original = model.display_mesh(index == active);
+            let original = if index == active {
+                active_mesh.unwrap_or_else(|| model.display_mesh(true))
+            } else {
+                model.display_mesh(false)
+            };
             let shell = if preview && model.metadata.temporary_thickness > 0. {
                 original.solidify_with_metadata(model.metadata).ok()
             } else {

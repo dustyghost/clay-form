@@ -328,3 +328,45 @@ fn detail_carves_sharp_center_raised_shoulders_and_inverts_depth() {
     let json = serde_json::to_vec(&brush).unwrap();
     assert!(serde_json::from_slice::<Brush>(&json).unwrap() == brush);
 }
+
+#[test]
+fn drag_relief_has_visible_depth_and_preserves_pressure_and_mask_opacity() {
+    let mut plane = Primitive::for_kind(PrimitiveKind::Plane);
+    plane.divisions = [10, 10, 1];
+    let original = plane.mesh().unwrap();
+    let dab = Dab {
+        center: Vec3::default(),
+        normal: Vec3(0., 0., 1.),
+        right: Vec3(1., 0., 0.),
+        up: Vec3(0., 1., 0.),
+        radius: 0.5,
+        pressure: 1.,
+        delta: Vec3::default(),
+        invert: false,
+    };
+    let peak = |mesh: &Mesh| mesh.vertices.iter().map(|v| v.2).fold(0_f32, f32::max);
+    let mut brush = Brush::new(Kind::Standard);
+    let mut freehand = original.clone();
+    freehand.stamp(&brush, dab);
+    brush.stroke_mode = StrokeMode::DragRect;
+    let mut stamp = original.clone();
+    stamp.stamp(&brush, dab);
+    assert!((peak(&stamp) - peak(&freehand) * 4.).abs() < 1e-6);
+    assert!(
+        peak(&stamp) > 0.05,
+        "default-strength stamp must create clear relief"
+    );
+    let mut pressure = original.clone();
+    pressure.stamp(
+        &brush,
+        Dab {
+            pressure: 0.5,
+            ..dab
+        },
+    );
+    assert!((peak(&pressure) - peak(&stamp) * 0.5).abs() < 1e-6);
+    brush.kind = Kind::Mask;
+    let mut masked = original;
+    masked.stamp(&brush, dab);
+    assert!((masked.mask.iter().copied().fold(0_f32, f32::max) - brush.strength).abs() < 1e-6);
+}

@@ -679,6 +679,23 @@ impl UiState {
                 ui.add(egui::Slider::new(&mut b.inner_radius, 0. ..=1.).text("Inner radius (fraction)")).on_hover_text("Full-strength core; falloff fades from here to the outer radius. Applies to Soft and image alphas.");
                 ui.checkbox(&mut b.surface_cursor, "Surface footprint and normal");
                 ui.add(egui::Slider::new(&mut b.strength, 0. ..=1.).text("Strength"));
+                ui.label("Stroke mode");
+                let supported = !matches!(b.kind, Kind::Grab | Kind::Snake);
+                ui.add_enabled_ui(supported, |ui| {
+                    egui::ComboBox::from_id_salt("brush_stroke_mode")
+                        .selected_text(b.effective_stroke_mode().label())
+                        .show_ui(ui, |ui| {
+                            for mode in crate::sculpt::StrokeMode::ALL {
+                                ui.selectable_value(&mut b.stroke_mode, mode, mode.label())
+                                    .on_hover_text(mode.description());
+                            }
+                        });
+                });
+                if supported {
+                    ui.weak(b.stroke_mode.description());
+                } else {
+                    ui.weak("Grab and Snake use Freehand for continuous displacement.");
+                }
                 ui.add(egui::Slider::new(&mut b.spacing, 0.01..=1.).text("Spacing"));
                 ui.add(egui::Slider::new(&mut b.falloff, 0.1..=8.).text("Falloff"));
                 ui.add(egui::Slider::new(&mut b.rotation, 0. ..=360.).text("Alpha rotation"));
@@ -1090,7 +1107,7 @@ impl UiState {
             self.primitive_controls(ui, document, commands);
             ui.label("Vertex groups / Polygroups");
             ui.add_enabled_ui(document.primitive().is_none(), |ui| {
-                ui.add(egui::TextEdit::singleline(&mut self.vertex_group_name).hint_text("New vertex group"));
+                ui.add(egui::TextEdit::singleline(&mut self.vertex_group_name).hint_text("Group name (optional)"));
                 ui.horizontal(|ui| {
                     if ui.button("Group masked").clicked() { commands.push(Command::CreateVertexGroup(self.vertex_group_name.clone(), false)); }
                     if ui.button("Group all").clicked() { commands.push(Command::CreateVertexGroup(self.vertex_group_name.clone(), true)); }

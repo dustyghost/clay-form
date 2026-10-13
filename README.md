@@ -165,7 +165,7 @@ In **Submodels → Thickness · open meshes**, enable **Temporary thickness** an
 
 ### Vertex groups and polygroups
 
-In **Submodels → Vertex groups / Polygroups**, enter a name and choose **Group masked** or **Group all**. Groups belong to each submodel and store independent soft vertex weights; creating, changing or recalling a group is undoable. Select a group to **Mask group**, **Add masked**, **Remove masked**, rename or delete it. Complete selected faces receive that group's polygroup color. Vertex groups can overlap, while each face has one category; partial face selections retain vertex membership without coloring the entire face. **View → Show polygroup colors** toggles the colors.
+In **Submodels → Vertex groups / Polygroups**, choose **Group masked** or **Group all**. Blank names automatically become **Group 1**, **Group 2**, and so on; enter a name when you want a custom label. Groups belong to each submodel and store independent soft vertex weights; creating, changing or recalling a group is undoable. Select a group to **Mask group**, **Add masked**, **Remove masked**, rename or delete it. Complete selected faces receive that group's polygroup color. Vertex groups can overlap, while each face has one category; partial face selections retain vertex membership without coloring the entire face. **View → Show polygroup colors** toggles the colors.
 
 The **Mask** menu adds **Expand mask** and **Contract mask** (one mesh-edge ring per click), **Mask intensity** (scales soft falloff), and **Selection threshold** (minimum vertex mask for grouping, deletion and extraction). Zero mask values are excluded even at a zero threshold. These adjustments leave saved group weights intact. Reducing intensity to zero clears the mask after the adjustment ends; undo or recall a group to restore it.
 
@@ -176,3 +176,18 @@ Groups survive project save/load, duplication, subdivision, extraction and delet
 New projects start with the sphere assigned to a **Base** vertex group/polygroup. The eye beside each vertex group hides or shows its assigned polygroup faces, including wireframe and picking. Hidden faces and their shared boundary vertices are protected from brush edits. Visibility is saved with the project and supports undo. Groups containing only partial vertex selections have no complete assigned faces to hide. To hide just the colors while keeping the whole surface visible, use **View → Show polygroup colors**.
 
 Primitive span cut lines, span controls, and size controls share **X red, Y green, Z blue** colors. Plane/Grid X spans create red vertical cuts; Y spans create green horizontal cuts. Cube cut loops follow their local controlling axis, including after rotation or scaling. Cylinder/Cone height-span rings are green. The span labels and numeric controls use the same colors in the collapsible Primitive section in Submodels. Enable wireframe to see the colored topology; non-axis topology controls remain violet.
+
+### Stroke modes
+
+Choose a mode under **Brush → Stroke mode**; it is saved per brush in projects, presets and brush libraries. Existing brushes default to **Freehand**.
+
+- **Freehand:** the existing continuous stroke.
+- **Line:** press on the active model and drag a straight guide. Release to apply spaced dabs along that screen-space line, projected onto visible surfaces. Very long lines are limited to 257 dabs.
+- **Drag Rect:** press to anchor one stamp, then drag to set its radius and alpha angle. The sculpted result previews live; release to keep it. Drag size is capped at the existing 500-pixel brush-radius limit; the preset's size and rotation remain unchanged.
+- **Drag Dot:** move a fixed-size stamp with a live sculpt preview, then release to keep it.
+
+With Adaptive sculpt and Refine enabled, drag stamps refine the surface before applying the alpha, with extra detail along sharp alpha boundaries. Very large stamps or very fine edge sizes can reach the bounded refinement limit.
+
+Drag stamps rebuild their preview from the original mesh, so holding still does not build up depth. Relief brushes (Standard, Clay, Inflate, Crease and Detail) use four times the depth of one freehand dab; Strength and pressure still control the result. Mask opacity and smoothing weights retain their normal values.
+
+Line and drag modes preview before changing document geometry, create one undo step, and support masks, alphas, symmetry and pen pressure. **Esc** cancels a pending stroke. Hidden faces cannot receive stamps. Grab and Snake keep their continuous Freehand behavior because they depend on pointer displacement.

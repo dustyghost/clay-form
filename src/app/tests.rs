@@ -1318,3 +1318,182 @@ fn mask_commands_cut_invert_and_undo_and_empty_models_render_safely() {
     app.dispatch(Command::Undo, &ctx);
     assert_eq!(app.document.geometry_snapshot(), original);
 }
+
+fn patterned_mask_app(mode: crate::sculpt::StrokeMode) -> App {
+    let mut app = App::default();
+    let mut plane = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Plane);
+    plane.divisions = [20, 20, 1];
+    app.document
+        .replace_geometry(crate::sculpt::Geometry::new(plane.mesh().unwrap()))
+        .unwrap();
+    let mut brush = crate::sculpt::Brush::new(crate::sculpt::Kind::Mask);
+    brush.stroke_mode = mode;
+    brush.radius = 18.;
+    brush.spacing = 0.2;
+    brush.strength = 1.;
+    brush.pressure = false;
+    brush.alpha = crate::sculpt::Alpha::Hard;
+    app.document.update_brush(0, brush).unwrap();
+    app.document.mark_saved("pattern-test.clay");
+    app
+}
+fn mask_near(app: &App, x: f32, y: f32) -> f32 {
+    let index = app
+        .document
+        .mesh()
+        .vertices
+        .iter()
+        .enumerate()
+        .min_by(|(_, a), (_, b)| {
+            ((a.0 - x).powi(2) + (a.1 - y).powi(2))
+                .total_cmp(&((b.0 - x).powi(2) + (b.1 - y).powi(2)))
+        })
+        .unwrap()
+        .0;
+    app.document.mesh().mask[index]
+}
+#[test]
+fn patterned_line_previews_then_applies_a_straight_path_as_one_undo_step() {
+    let mut app = patterned_mask_app(crate::sculpt::StrokeMode::Line);
+    let ctx = egui::Context::default();
+    let center = navigation_frame(&mut app, &ctx, vec![]).center();
+    let before = app.document.geometry_snapshot();
+    let count = app.document.history_counts().0;
+    let start = center - egui::vec2(80., 0.);
+    let end = center + egui::vec2(80., 0.);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(start + egui::vec2(0., 80.))],
+    );
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+    assert!(app.document.geometry_snapshot() == before);
+    assert_eq!(app.document.history_counts().0, count);
+    navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+    assert!(mask_near(&app, 0., 0.) > 0.9);
+    assert_eq!(mask_near(&app, -0.3, -0.3), 0.);
+    assert_eq!(app.document.history_counts().0, count + 1);
+    app.document.undo();
+    assert!(app.document.geometry_snapshot() == before);
+}
+#[test]
+fn patterned_drag_rect_sets_radius_and_alpha_angle_without_changing_the_preset() {
+    let mut app = patterned_mask_app(crate::sculpt::StrokeMode::DragRect);
+    let mut brush = app.document.brushes()[0].clone();
+    brush.alpha = crate::sculpt::Alpha::Image {
+        width: 2,
+        height: 2,
+        pixels: vec![0., 1., 0., 1.].into(),
+    };
+    app.document.update_brush(0, brush.clone()).unwrap();
+    let ctx = egui::Context::default();
+    let center = navigation_frame(&mut app, &ctx, vec![]).center();
+    let before = app.document.geometry_snapshot();
+    let count = app.document.history_counts().0;
+    let end = center + egui::vec2(0., 80.);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(center),
+            primary_event(center, true),
+        ],
+    );
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+    assert!(app.document.geometry_snapshot() == before);
+    navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+    assert!(
+        mask_near(&app, 0., -0.1) > mask_near(&app, 0., 0.1) + 0.1,
+        "dragging down rotates the image alpha down"
+    );
+    assert!(
+        mask_near(&app, 0., -0.2) > 0.,
+        "drag distance sets stamp size"
+    );
+    assert!(app.document.brushes()[0] == brush);
+    assert_eq!(app.document.history_counts().0, count + 1);
+    app.document.undo();
+    assert!(app.document.geometry_snapshot() == before);
+}
+#[test]
+fn patterned_drag_dot_only_stamps_the_final_position_and_can_cancel() {
+    let mut app = patterned_mask_app(crate::sculpt::StrokeMode::DragDot);
+    let ctx = egui::Context::default();
+    let center = navigation_frame(&mut app, &ctx, vec![]).center();
+    let before = app.document.geometry_snapshot();
+    let start = center - egui::vec2(80., 0.);
+    let end = center + egui::vec2(80., 0.);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+    assert!(app.document.geometry_snapshot() == before);
+    navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+    assert!(mask_near(&app, 0.3, 0.) > 0.9);
+    assert_eq!(mask_near(&app, -0.3, 0.), 0.);
+    app.document.undo();
+    let count = app.document.history_counts();
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::Key {
+            key: egui::Key::Escape,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }],
+    );
+    navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+    assert!(app.document.geometry_snapshot() == before);
+    assert_eq!(app.document.history_counts(), count);
+}
+#[test]
+fn patterned_stamps_keep_last_pen_pressure_when_release_reports_zero() {
+    let mut app = patterned_mask_app(crate::sculpt::StrokeMode::DragDot);
+    let mut brush = app.document.brushes()[0].clone();
+    brush.pressure = true;
+    app.document.update_brush(0, brush).unwrap();
+    app.pressure = 0.5;
+    let ctx = egui::Context::default();
+    let center = navigation_frame(&mut app, &ctx, vec![]).center();
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(center),
+            primary_event(center, true),
+        ],
+    );
+    app.pressure = 0.;
+    navigation_frame(&mut app, &ctx, vec![primary_event(center, false)]);
+    assert!((mask_near(&app, 0., 0.) - 0.5).abs() < 1e-5);
+}
+#[test]
+fn patterned_drag_dot_accepts_a_press_and_release_in_one_frame() {
+    let mut app = patterned_mask_app(crate::sculpt::StrokeMode::DragDot);
+    let ctx = egui::Context::default();
+    let center = navigation_frame(&mut app, &ctx, vec![]).center();
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(center),
+            primary_event(center, true),
+            primary_event(center, false),
+        ],
+    );
+    assert!(mask_near(&app, 0., 0.) > 0.9);
+}

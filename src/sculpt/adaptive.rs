@@ -83,6 +83,43 @@ impl Default for Budget {
 }
 
 impl Mesh {
+    /// A placed stamp has no later dabs to finish refinement. Resolve its footprint
+    /// on the undeformed surface so new vertices sample the alpha, rather than
+    /// merely subdividing an already jagged displacement afterwards.
+    pub(crate) fn prepare_drag_stamp(
+        &mut self,
+        brush: &Brush,
+        dabs: &[Dab],
+        settings: &AdaptiveSettings,
+    ) -> bool {
+        if !settings.enabled
+            || !settings.refine
+            || !matches!(
+                brush.effective_stroke_mode(),
+                super::StrokeMode::DragRect | super::StrokeMode::DragDot
+            )
+            || matches!(brush.kind, Kind::Mask | Kind::Smooth)
+            || brush.strength <= 0.
+            || dabs.is_empty()
+        {
+            return false;
+        }
+        let target = settings.edge_length(brush, dabs[0]);
+        if !target.is_finite() || target <= 1e-7 {
+            return false;
+        }
+        let mut remaining = 8192;
+        let mut changed = false;
+        for _ in 0..32 {
+            let count = self.split_local(brush, dabs, target, remaining.min(512));
+            changed |= count > 0;
+            remaining -= count;
+            if count == 0 || remaining == 0 {
+                break;
+            }
+        }
+        changed
+    }
     pub(crate) fn adapt(
         &mut self,
         brush: &Brush,
@@ -316,8 +353,30 @@ impl Mesh {
             for (x, y) in [(a, b), (b, c), (c, a)] {
                 let length =
                     (self.vertices[x] - self.vertices[y]).dot(self.vertices[x] - self.vertices[y]);
-                if length > target * target {
-                    candidates.insert(edge(x, y), length);
+                // Spend extra resolution where a placed alpha changes sharply.
+                // The midpoint also catches a narrow feature between two endpoints.
+                let stamp = matches!(
+                    brush.effective_stroke_mode(),
+                    super::StrokeMode::DragRect | super::StrokeMode::DragDot
+                );
+                let boundary = stamp
+                    && dabs.iter().any(|dab| {
+                        let weights = [
+                            self.vertices[x],
+                            self.vertices[y],
+                            (self.vertices[x] + self.vertices[y]) * 0.5,
+                        ]
+                        .map(|p| {
+                            let d = p - dab.center;
+                            brush.weight(d.dot(dab.right) / dab.radius, d.dot(dab.up) / dab.radius)
+                        });
+                        let low = weights.into_iter().fold(f32::INFINITY, f32::min);
+                        let high = weights.into_iter().fold(0_f32, f32::max);
+                        high - low > 0.15
+                    });
+                let edge_target = if boundary { target * 0.5 } else { target };
+                if length > edge_target * edge_target {
+                    candidates.insert(edge(x, y), length / (edge_target * edge_target));
                 }
             }
         }
@@ -623,7 +682,17 @@ impl Mesh {
             }
             let p = closest_triangle(dab.center, a, b, c);
             let offset = p - dab.center;
-            if offset.len() > dab.radius {
+            // Drag stamps use the same depth reach as the displacement sampler;
+            // on curved surfaces the projected alpha edge can lie beyond radius.
+            let reach = if matches!(
+                brush.effective_stroke_mode(),
+                super::StrokeMode::DragRect | super::StrokeMode::DragDot
+            ) {
+                1.5
+            } else {
+                1.
+            };
+            if offset.len() > dab.radius * reach {
                 return false;
             }
             [p, a, b, c, (a + b + c) * (1. / 3.)].into_iter().any(|p| {
@@ -652,6 +721,96 @@ mod tests {
             invert: false,
         }
     }
+    #[test]
+    fn drag_stamp_refines_alpha_boundary_before_displacement_and_preserves_protection() {
+        for alpha in [
+            Alpha::Hard,
+            Alpha::Square,
+            Alpha::Image {
+                width: 2,
+                height: 2,
+                pixels: vec![0., 1., 0., 1.].into(),
+            },
+        ] {
+            let mut mesh = Mesh::sphere();
+            let original = mesh.clone();
+            let mut brush = Brush::new(Kind::Standard);
+            brush.stroke_mode = super::super::StrokeMode::DragRect;
+            brush.radius = 180.;
+            brush.alpha = alpha;
+            let settings = AdaptiveSettings {
+                enabled: true,
+                detail: 8.,
+                simplify: false,
+                ..Default::default()
+            };
+            let d = Dab {
+                radius: 0.7,
+                ..dab()
+            };
+            assert!(mesh.prepare_drag_stamp(&brush, &[d], &settings));
+            let added = mesh.vertices.len() - original.vertices.len();
+            assert!(
+                added > 256,
+                "a large stamp needs more than one freehand frame: {added}"
+            );
+            assert!(added <= 8192);
+            assert_eq!(
+                &mesh.vertices[..original.vertices.len()],
+                &original.vertices
+            );
+            mesh.validate_closed().unwrap();
+            assert!(
+                !mesh.prepare_drag_stamp(&brush, &[d], &settings),
+                "this footprint should converge in one stamp budget"
+            );
+            let target = settings.edge_length(&brush, d);
+            let mut boundary_edges = 0;
+            for (fi, &t) in mesh.triangles.iter().enumerate() {
+                if !mesh.in_patch(fi, t, &brush, &[d]) {
+                    continue;
+                }
+                for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
+                    let weights = [
+                        mesh.vertices[a],
+                        mesh.vertices[b],
+                        (mesh.vertices[a] + mesh.vertices[b]) * 0.5,
+                    ]
+                    .map(|p| {
+                        let v = p - d.center;
+                        brush.weight(v.dot(d.right) / d.radius, v.dot(d.up) / d.radius)
+                    });
+                    if weights.into_iter().fold(0_f32, f32::max)
+                        - weights.into_iter().fold(f32::INFINITY, f32::min)
+                        > 0.15
+                    {
+                        boundary_edges += 1;
+                        assert!(
+                            (mesh.vertices[a] - mesh.vertices[b]).len() <= target * 0.501,
+                            "alpha boundary must receive finer edges before deformation"
+                        );
+                    }
+                }
+            }
+            if !matches!(brush.alpha, Alpha::Image { .. }) {
+                assert!(boundary_edges > 0);
+            }
+            let mut protected = original.clone();
+            protected.mask.fill(1.);
+            let before = protected.clone();
+            assert!(!protected.prepare_drag_stamp(&brush, &[d], &settings));
+            assert_eq!(protected, before);
+            brush.alpha = Alpha::Image {
+                width: 1,
+                height: 1,
+                pixels: vec![0.].into(),
+            };
+            let mut black = original.clone();
+            assert!(!black.prepare_drag_stamp(&brush, &[d], &settings));
+            assert_eq!(black, original);
+        }
+    }
+
     #[test]
     fn local_refinement_is_conforming_preserves_masks_and_obeys_work_budget() {
         let mut mesh = Mesh::sphere();

@@ -29,6 +29,42 @@ impl Kind {
         Self::Detail,
     ];
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub enum StrokeMode {
+    #[default]
+    Freehand,
+    Line,
+    DragRect,
+    DragDot,
+}
+impl StrokeMode {
+    pub const ALL: [Self; 4] = [Self::Freehand, Self::Line, Self::DragRect, Self::DragDot];
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Freehand => "Freehand",
+            Self::Line => "Line",
+            Self::DragRect => "Drag Rect",
+            Self::DragDot => "Drag Dot",
+        }
+    }
+    pub fn description(self) -> &'static str {
+        match self {
+            Self::Freehand => "Paint continuously along the pointer path.",
+            Self::Line => {
+                "Drag a straight line; brush spacing controls the dabs. Apply on release."
+            }
+            Self::DragRect => {
+                "Drag to resize and rotate a live stamp preview. Release to keep it; Esc cancels."
+            }
+            Self::DragDot => {
+                "Move a live fixed-size stamp preview. Release to keep it; Esc cancels."
+            }
+        }
+    }
+    fn is_freehand(value: &Self) -> bool {
+        *value == Self::Freehand
+    }
+}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Alpha {
     Soft,
@@ -210,6 +246,8 @@ pub struct Brush {
     pub inner_radius: f32,
     #[serde(default, skip_serializing_if = "disabled_cursor")]
     pub surface_cursor: bool,
+    #[serde(default, skip_serializing_if = "StrokeMode::is_freehand")]
+    pub stroke_mode: StrokeMode,
     pub spacing: f32,
     pub rotation: f32,
     pub subtract: bool,
@@ -236,12 +274,20 @@ impl Brush {
             falloff: 1.5,
             inner_radius: 0.,
             surface_cursor: false,
+            stroke_mode: StrokeMode::Freehand,
             spacing: if kind == Kind::Detail { 0.08 } else { 0.15 },
             rotation: 0.,
             subtract: false,
             pressure: true,
             pressure_radius: false,
             pressure_curve: 1.,
+        }
+    }
+    pub fn effective_stroke_mode(&self) -> StrokeMode {
+        if matches!(self.kind, Kind::Grab | Kind::Snake) {
+            StrokeMode::Freehand
+        } else {
+            self.stroke_mode
         }
     }
     pub fn identity(&self) -> String {
@@ -409,5 +455,34 @@ mod footprint_tests {
         assert!(!legacy.surface_cursor);
         brush.inner_radius = f32::NAN;
         assert!(validate_brush(&brush).is_err());
+    }
+}
+
+#[cfg(test)]
+mod stroke_tests {
+    use super::*;
+    #[test]
+    fn stroke_modes_roundtrip_and_legacy_brushes_remain_freehand() {
+        let base = Brush::new(Kind::Standard);
+        let json = serde_json::to_string(&base).unwrap();
+        assert!(!json.contains("stroke_mode"));
+        assert_eq!(
+            serde_json::from_str::<Brush>(&json).unwrap().stroke_mode,
+            StrokeMode::Freehand
+        );
+        for mode in StrokeMode::ALL {
+            let mut brush = base.clone();
+            brush.stroke_mode = mode;
+            validate_brush(&brush).unwrap();
+            assert!(
+                serde_json::from_str::<Brush>(&serde_json::to_string(&brush).unwrap()).unwrap()
+                    == brush
+            );
+        }
+        for kind in [Kind::Grab, Kind::Snake] {
+            let mut brush = Brush::new(kind);
+            brush.stroke_mode = StrokeMode::DragRect;
+            assert_eq!(brush.effective_stroke_mode(), StrokeMode::Freehand);
+        }
     }
 }

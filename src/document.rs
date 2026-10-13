@@ -675,10 +675,14 @@ impl Document {
         self.begin_stroke();
         let dabs = self.symmetry.dabs(dab);
         let settings = &self.geometry.settings.adaptive;
-        let before_topology =
+        let mut before_topology =
             self.geometry
                 .mesh
                 .adapt(brush, &dabs, settings, &mut self.adaptive_budget, true);
+        before_topology |= self
+            .geometry
+            .mesh
+            .prepare_drag_stamp(brush, &dabs, settings);
         let old_mask = (brush.kind == Kind::Mask).then(|| self.geometry.mesh.mask.clone());
         let deformed = self.geometry.mesh.stamp_many(brush, &dabs);
         let mut after_dabs = dabs.clone();
@@ -708,7 +712,12 @@ impl Document {
                     } else if brush.kind == Kind::Snake {
                         "Snake stroke"
                     } else {
-                        "Brush stroke"
+                        match brush.effective_stroke_mode() {
+                            crate::sculpt::StrokeMode::Freehand => "Brush stroke",
+                            crate::sculpt::StrokeMode::Line => "Line stroke",
+                            crate::sculpt::StrokeMode::DragRect => "Drag Rect stamp",
+                            crate::sculpt::StrokeMode::DragDot => "Drag Dot stamp",
+                        }
                     },
                 );
             }
@@ -765,6 +774,14 @@ impl Document {
         {
             return Err("Mask vertices above the threshold first, or use Group all".into());
         }
+        let name = if name.trim().is_empty() {
+            (1..)
+                .map(|n| format!("Group {n}"))
+                .find(|name| !self.mesh().vertex_groups.iter().any(|g| &g.name == name))
+                .unwrap()
+        } else {
+            name
+        };
         let index = self.mesh().vertex_groups.len();
         self.edit_group_meshes("Create vertex group", |mesh| {
             mesh.create_vertex_group(name.clone(), threshold, all)
@@ -1081,6 +1098,29 @@ impl Document {
 mod tests {
     use super::*;
     use crate::sculpt::Vec3;
+    #[test]
+    fn unnamed_vertex_groups_get_unique_names_and_keep_explicit_names() {
+        let mut d = Document::default();
+        d.create_vertex_group("".into(), true).unwrap();
+        d.create_vertex_group("  ".into(), true).unwrap();
+        d.create_vertex_group(" Group 3 ".into(), true).unwrap();
+        d.create_vertex_group("".into(), true).unwrap();
+        assert_eq!(
+            d.mesh()
+                .vertex_groups
+                .iter()
+                .map(|g| g.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Base", "Group 1", "Group 2", "Group 3", "Group 4"]
+        );
+        let before = d.geometry_snapshot();
+        assert!(d.create_vertex_group("Group 1".into(), true).is_err());
+        assert_eq!(d.geometry_snapshot(), before);
+        d.undo();
+        assert_eq!(d.mesh().vertex_groups.len(), 4);
+        d.redo();
+        assert_eq!(d.geometry_snapshot(), before);
+    }
     #[test]
     fn starting_sphere_has_a_group_and_visibility_is_saved_and_undoable() {
         let mut d = Document::default();

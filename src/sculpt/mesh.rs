@@ -367,7 +367,21 @@ impl Mesh {
                 Kind::Snake => (delta + normal * (delta.len() * 0.12)) * (w * sign),
                 Kind::Mask => Vec3::default(),
             };
-            self.vertices[i] = old[i] + displacement;
+            // Freehand builds depth from many overlapping dabs. A drag stamp gets
+            // one application, so give relief brushes a useful single-stamp depth.
+            // Keep mask opacity and smoothing/flattening/pinching weights unchanged.
+            let stamp_gain = if matches!(
+                b.stroke_mode,
+                super::StrokeMode::DragRect | super::StrokeMode::DragDot
+            ) && matches!(
+                b.kind,
+                Kind::Standard | Kind::Clay | Kind::Inflate | Kind::Crease | Kind::Detail
+            ) {
+                4.
+            } else {
+                1.
+            };
+            self.vertices[i] = old[i] + displacement * stamp_gain;
             deformed |= self.vertices[i] != old[i];
         }
         deformed

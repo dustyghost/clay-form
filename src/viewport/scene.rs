@@ -55,11 +55,71 @@ impl Scene {
         } else {
             Arc::new(DisplayMesh::new(document))
         };
+        let scene = Self::from_geometry(rect, camera, geometry, renderer.is_none());
+        scene.paint_geometry(
+            painter,
+            renderer.as_deref(),
+            wire,
+            mode,
+            show_triangles,
+            None,
+        );
+        scene
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn paint_with_stroke(
+        painter: &egui::Painter,
+        rect: egui::Rect,
+        document: &Document,
+        camera: &Camera,
+        wire: bool,
+        mode: super::WireMode,
+        show_triangles: bool,
+        mut renderer: Option<&mut Renderer>,
+        stroke: Option<&super::stroke::PendingStroke>,
+    ) -> Self {
+        let Some(stroke) = stroke.filter(|s| s.is_stamp()) else {
+            return Self::paint_with_renderer(
+                painter,
+                rect,
+                document,
+                camera,
+                wire,
+                mode,
+                show_triangles,
+                renderer,
+            );
+        };
+        let geometry = if let Some(renderer) = renderer.as_mut() {
+            renderer.geometry(document)
+        } else {
+            Arc::new(DisplayMesh::new(document))
+        };
+        // Pick against the original surface so moving/resizing never builds up a stamp.
+        let scene = Self::from_geometry(rect, camera, geometry, renderer.is_none());
+        let mesh = stroke.preview_mesh(document, &scene);
+        let display = Arc::new(DisplayMesh::with_active_mesh(document, &mesh));
+        let preview = Self::from_geometry(rect, camera, display.clone(), renderer.is_none());
+        preview.paint_geometry(
+            painter,
+            renderer.as_deref(),
+            wire,
+            mode,
+            show_triangles,
+            Some(display),
+        );
+        scene
+    }
+    fn from_geometry(
+        rect: egui::Rect,
+        camera: &Camera,
+        geometry: Arc<DisplayMesh>,
+        sort_faces: bool,
+    ) -> Self {
         let mesh = &geometry.mesh;
         let active = geometry.active;
         let active_vertices = geometry.active_vertices;
         let owners = &geometry.owners;
-        let outlines = &geometry.outlines;
         let center = rect.center() + camera.pan;
         let scale = rect.width().min(rect.height()) * 0.35 * camera.zoom;
         let (right, up, view) = camera.basis();
@@ -69,7 +129,6 @@ impl Scene {
                 center.y - v.dot(up) * scale,
             )
         };
-        let normals = &geometry.normals;
         let positions: Vec<_> = mesh.vertices.iter().copied().map(project).collect();
         let mut faces: Vec<_> = mesh
             .triangles
@@ -88,9 +147,56 @@ impl Scene {
                 )
             })
             .collect();
-        if renderer.is_none() {
+        if sort_faces {
             faces.sort_by(|a, b| a.1.total_cmp(&b.1));
         }
+        let active_bounds = positions
+            .iter()
+            .take(active_vertices)
+            .fold(egui::Rect::NOTHING, |bounds, &p| {
+                bounds.union(egui::Rect::from_min_max(p, p))
+            });
+        Self {
+            rect,
+            active_bounds,
+            scale,
+            positions,
+            geometry: geometry.clone(),
+            faces: faces
+                .iter()
+                .copied()
+                .filter(|(i, _)| owners[*i] == active)
+                .collect(),
+            all_faces: faces,
+            active,
+            view,
+            center,
+            right,
+            up,
+        }
+    }
+    fn paint_geometry(
+        &self,
+        painter: &egui::Painter,
+        renderer: Option<&Renderer>,
+        wire: bool,
+        mode: super::WireMode,
+        show_triangles: bool,
+        render_geometry: Option<Arc<DisplayMesh>>,
+    ) {
+        let rect = self.rect;
+        let scale = self.scale;
+        let right = self.right;
+        let up = self.up;
+        let view = self.view;
+        let geometry = &self.geometry;
+        let mesh = &geometry.mesh;
+        let normals = &geometry.normals;
+        let outlines = &geometry.outlines;
+        let active_vertices = geometry.active_vertices;
+        let positions = &self.positions;
+        let faces = &self.all_faces;
+        let project = |v| self.project(v);
         painter.rect_filled(rect, 0., Color32::from_rgb(23, 26, 31));
         if renderer.is_none() {
             let light = (view + up * 0.7 + right * (-0.5)).norm();
@@ -132,7 +238,7 @@ impl Scene {
             let mut depth = Vec::new();
             if wire && mode == WireMode::Visible {
                 depth.resize(width * height, f32::NEG_INFINITY);
-                for &(i, _) in &faces {
+                for &(i, _) in faces {
                     let t = mesh.triangles[i];
                     let p = t.map(|v| positions[v] - rect.min);
                     let z = t.map(|v| mesh.vertices[v].dot(view));
@@ -234,7 +340,7 @@ impl Scene {
                 }
             };
             if !wire || mode != WireMode::Transparent {
-                for &(i, _) in &faces {
+                for &(i, _) in faces {
                     rendered.indices.extend(mesh.triangles[i].map(|v| v as u32));
                 }
                 painter.add(egui::Shape::mesh(rendered));
@@ -245,46 +351,29 @@ impl Scene {
                         draw_edges(i);
                     }
                 } else {
-                    for &(i, _) in &faces {
+                    for &(i, _) in faces {
                         draw_edges(i);
                     }
                 }
             }
         }
-        let active_bounds = positions
-            .iter()
-            .take(active_vertices)
-            .fold(egui::Rect::NOTHING, |bounds, &p| {
-                bounds.union(egui::Rect::from_min_max(p, p))
-            });
-        let scene = Self {
-            rect,
-            active_bounds,
-            scale,
-            positions,
-            geometry: geometry.clone(),
-            faces: faces
-                .iter()
-                .copied()
-                .filter(|(i, _)| owners[*i] == active)
-                .collect(),
-            all_faces: faces,
-            active,
-            view,
-            center,
-            right,
-            up,
-        };
         if let Some(renderer) = renderer {
-            renderer.paint(painter, rect, &scene, wire, mode, show_triangles);
+            renderer.paint(
+                painter,
+                rect,
+                self,
+                wire,
+                mode,
+                show_triangles,
+                render_geometry,
+            );
         }
         for edge in outlines {
             painter.line_segment(
-                edge.map(|i| scene.positions[i]),
+                edge.map(|i| self.positions[i]),
                 egui::Stroke::new(2., Color32::from_rgb(190, 155, 125)),
             );
         }
-        scene
     }
     pub fn project(&self, point: Vec3) -> Pos2 {
         Pos2::new(

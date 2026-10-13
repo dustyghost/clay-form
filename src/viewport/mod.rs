@@ -5,12 +5,13 @@ mod gpu;
 mod guides;
 mod primitive;
 mod scene;
+mod stroke;
 mod transform;
 use crate::{
     camera::Camera,
     document::Document,
     preferences::Hold,
-    sculpt::{Dab, Kind, Vec3},
+    sculpt::{Dab, Kind, StrokeMode, Vec3},
 };
 use eframe::egui::{self, Color32, Pos2, Sense, Vec2};
 use gizmo::draw_gizmo;
@@ -38,6 +39,7 @@ pub(crate) struct Viewport {
     gizmo_dragged: bool,
     blocked_until_release: bool,
     stroke: bool,
+    pending_stroke: Option<stroke::PendingStroke>,
     last: Option<Pos2>,
     snake: Option<SnakeStroke>,
     transform: transform::TransformControls,
@@ -104,14 +106,15 @@ impl Viewport {
         if !options.enabled && ui.input(|i| i.pointer.primary_down()) {
             self.blocked_until_release = true;
         }
+        let blocked_this_frame = self.blocked_until_release;
         if !ui.input(|i| i.pointer.primary_down()) {
             self.blocked_until_release = false;
         }
         let options = ViewportOptions {
-            enabled: options.enabled && !self.blocked_until_release,
+            enabled: options.enabled && !blocked_this_frame,
             ..options
         };
-        let (response, painter) = ui.allocate_painter(ui.available_size(), Sense::drag());
+        let (response, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
         let rect = response.rect;
         let gizmo_rect = egui::Rect::from_min_size(
             Pos2::new(rect.right() - 146., rect.top() + 12.),
@@ -120,7 +123,22 @@ impl Viewport {
         if let Some(renderer) = &self.renderer {
             renderer.clear_preview();
         }
-        let scene = Scene::paint_with_renderer(
+        let modifiers = ui.input(|i| i.modifiers);
+        let previewing = options.enabled
+            && ui.input(|i| i.pointer.primary_down() && !i.key_pressed(egui::Key::Escape));
+        if previewing && let Some(pending) = self.pending_stroke.as_mut() {
+            if let Some(end) = response.interact_pointer_pos() {
+                pending.end = end;
+            }
+            pending.brush.kind = if options.smooth.active(modifiers) {
+                Kind::Smooth
+            } else {
+                pending.source_kind
+            };
+            pending.pressure = options.pressure;
+            pending.invert = options.reverse.active(modifiers);
+        }
+        let scene = Scene::paint_with_stroke(
             &painter,
             rect,
             document,
@@ -129,6 +147,7 @@ impl Viewport {
             options.wire_mode,
             options.wire_triangles,
             self.renderer.as_mut(),
+            self.pending_stroke.as_ref().filter(|_| previewing),
         );
         if let Some(renderer) = &self.renderer {
             renderer.set_backfaces(options.backface_opacity);
@@ -184,13 +203,15 @@ impl Viewport {
             }
             target.circle_filled(pos, 1.2, Color32::from_rgb(235, 65, 65));
         }
-        let modifiers = ui.input(|i| i.modifiers);
         let zoom_held = options.zoom_hold.active(modifiers);
-        if options.enabled && response.hovered() {
+        if options.enabled && self.pending_stroke.is_none() && response.hovered() {
             let scroll = ui.input(|i| i.smooth_scroll_delta.y);
             camera.zoom_by(scroll);
         }
-        if options.enabled && response.dragged_by(egui::PointerButton::Secondary) {
+        if options.enabled
+            && self.pending_stroke.is_none()
+            && response.dragged_by(egui::PointerButton::Secondary)
+        {
             let d = ui.input(|i| i.pointer.delta());
             if zoom_held {
                 camera.zoom_drag(d);
@@ -198,12 +219,15 @@ impl Viewport {
                 camera.orbit(d);
             }
         }
-        if options.enabled && response.dragged_by(egui::PointerButton::Middle) {
+        if options.enabled
+            && self.pending_stroke.is_none()
+            && response.dragged_by(egui::PointerButton::Middle)
+        {
             camera.pan += ui.input(|i| i.pointer.delta());
         }
         let primary =
             response.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_down());
-        if primary
+        if (primary || response.clicked_by(egui::PointerButton::Primary))
             && self.gesture.is_none()
             && options.enabled
             && !zoom_held
@@ -264,6 +288,7 @@ impl Viewport {
                 self.gizmo_dragged |= delta.length_sq() > 0. || zoom_held;
             }
         }
+        let previous_gesture = self.gesture;
         if !ui.input(|i| i.pointer.primary_down()) {
             if self.gesture == Some(Gesture::Gizmo)
                 && !self.gizmo_dragged
@@ -317,11 +342,69 @@ impl Viewport {
             return;
         }
         let drawing = primary && self.gesture == Some(Gesture::Sculpt) && options.enabled;
-        if drawing && !self.stroke {
-            document.begin_stroke();
+        let patterned_click = options.enabled
+            && !zoom_held
+            && !matches!(previous_gesture, Some(Gesture::Orbit | Gesture::Gizmo))
+            && response.clicked_by(egui::PointerButton::Primary)
+            && document.brushes()[options.selected].effective_stroke_mode() != StrokeMode::Freehand
+            && pointer.is_some_and(|pos| !gizmo_rect.contains(pos) && scene.pick(pos).is_some());
+        if (drawing || patterned_click) && !self.stroke {
+            let mut brush = document.brushes()[options.selected].clone();
+            if brush.effective_stroke_mode() == StrokeMode::Freehand {
+                document.begin_stroke();
+            } else if let Some(start) = pointer
+                && let Some(anchor) = scene.pick(start)
+            {
+                let source_kind = brush.kind;
+                if options.smooth.active(modifiers) {
+                    brush.kind = Kind::Smooth;
+                }
+                self.pending_stroke = Some(stroke::PendingStroke {
+                    start,
+                    end: start,
+                    brush,
+                    source_kind,
+                    pressure: options.pressure,
+                    invert: options.reverse.active(modifiers),
+                    anchor,
+                });
+            }
             self.stroke = true;
             self.last = None;
             self.snake = None;
+        }
+        if self.pending_stroke.is_some() {
+            if !options.enabled || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.cancel(document);
+                self.wait_for_release();
+                draw_gizmo(camera, &painter, gizmo_rect, pointer);
+                return;
+            }
+            if drawing {
+                let pending = self.pending_stroke.as_mut().unwrap();
+                if let Some(end) = pointer {
+                    pending.end = end;
+                }
+                pending.brush.kind = if options.smooth.active(modifiers) {
+                    Kind::Smooth
+                } else {
+                    pending.source_kind
+                };
+                pending.pressure = options.pressure;
+                pending.invert = options.reverse.active(modifiers);
+                pending.paint(&painter, &scene, self.renderer.as_ref());
+                draw_gizmo(camera, &painter, gizmo_rect, pointer);
+                return;
+            }
+            if ui.input(|i| i.pointer.button_released(egui::PointerButton::Primary)) {
+                let mut pending = self.pending_stroke.take().unwrap();
+                if let Some(end) = ui.input(|i| i.pointer.interact_pos()) {
+                    pending.end = end;
+                }
+                pending.commit(document, &scene);
+            } else {
+                self.pending_stroke = None;
+            }
         }
         if !drawing {
             self.completed_stroke = document.end_stroke() && self.stroke;
