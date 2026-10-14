@@ -22,6 +22,17 @@ OBJ `g` names become vertex groups with full weights on their member vertices. I
 
 Limits: 128 MB per file, 500,000 vertices, 1,000,000 triangles after triangulation, 64 groups, and 64 scene submodels. Ordinary exported Clay Form surfaces can be imported with their coordinates, quad topology, and face groups; exported group names use their existing safe OBJ spelling. Projects and recovery copies include the imported geometry normally.
 
+### Example: import the sample pyramid
+
+1. Download [pyramid.obj](../examples/pyramid.obj), or use `docs/examples/pyramid.obj` from a local checkout.
+2. Start a practice project, open **Submodels**, and put the file's path in **OBJ path**. Click **Import OBJ** and wait for it to finish.
+3. Inspect the new active submodel. The starting sphere remains in the scene; the pyramid has one quad base and four triangular sides, with **Base** and **Sides** vertex groups.
+4. Toggle the sphere's eye icon to inspect the pyramid alone. Save as a new `.clay` project to retain both models, or undo the import to remove the pyramid.
+
+![Imported pyramid in front of the original sphere with the new submodel selected in the Submodels sidebar](../images/obj-import.png)
+
+*The capture imports the same pyramid geometry from a temporary test file, so its filename differs from `pyramid.obj`. Import preserves source coordinates; the overlap with the sphere is expected.*
+
 ## Recovery saves
 
 **Settings → Recovery saves** controls automatic recovery (enabled by default, every **2 minutes**, keeping the newest **5 copies across projects**). Choose an interval from 1–60 minutes and retain 1–20 versions. Copies include the entire project, including never-saved work, submodels, masks, groups, subdivision levels, primitives, brushes, and symmetry. Snapshots wait for strokes, parameter drags, transforms, and background mesh operations to finish. Serialization and disk writing run in a background worker; unchanged content does not consume another version.
@@ -29,6 +40,17 @@ Limits: 128 MB per file, 500,000 vertices, 1,000,000 triangles after triangulati
 Recovery files live beside preferences in `~/.config/clay-form/recovery/` (or `$XDG_CONFIG_HOME/clay-form/recovery/`). They never change the manual project path or clear its modified state. Writes use flushed temporary files and atomic replacement; incomplete temporary files are ignored. A failed write leaves earlier copies available and shows a persistent error with access to recovery settings. Automatic retries use the configured interval.
 
 After an interrupted session, startup offers retained copies, newest first. **Recover** restores a modified project with the save path `recovered.clay`; choose your desired path before saving. Existing work gets the normal Save/Discard/Cancel prompt. **Continue without restoring** keeps the copies available under Settings. Successfully saving a project, or deliberately discarding it on New/Open/Quit, clears that session's copies. Recovery preferences are global, independent of workspaces. **Recovery saves** and **Save recovery now** are also available in custom menus and configurable shortcuts.
+
+### Example: make a recovery checkpoint
+
+1. Start a practice project, make a short sculpt stroke, and release the pointer.
+2. Open **Settings → Recovery saves**. Leave automatic recovery enabled at **2 minutes**, keeping **5** versions, or choose your preferred interval and count.
+3. Click **Save recovery now** and wait for a copy to appear in the list. This does not change your normal save path or clear the modified marker.
+4. To try restoration, select that copy's **Recover** button and handle the usual unsaved-changes prompt. Save the restored project under a new filename, such as `practice-recovered.clay`.
+
+![Recovery settings showing the interval, retention count, Save recovery now, and a retained copy with a Recover button](../images/recovery-dialog.png)
+
+*A retained checkpoint is available without simulating a crash. This test capture uses a temporary recovery folder; normal sessions use the configuration folder described above.*
 
 ## Related guides
 

@@ -180,17 +180,21 @@ fn obj_import_offscreen_preview() {
                 ..Default::default()
             },
             |ctx| {
-                let _ = app.ui.toolbar(ctx, &app.document, app.camera.zoom);
+                let _ = app.ui.toolbar(ctx, &app.document, &app.camera);
                 let _ = app
                     .ui
-                    .brush_panel(ctx, &app.document, "Preview", 1., app.camera.zoom);
+                    .brush_panel(ctx, &app.document, "Preview", 1., &app.camera);
                 app.ui.status_bar(ctx);
                 egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
             },
         );
         let rgba = capture.render(&ctx, output);
         if step == 2 {
-            capture.save("/tmp/clay-obj-import.png", &rgba);
+            capture.save(
+                std::env::var("CLAY_OBJ_PREVIEW")
+                    .unwrap_or_else(|_| "/tmp/clay-obj-import.png".into()),
+                &rgba,
+            );
         }
     }
     assert_eq!(app.document.geometry_snapshot(), before);

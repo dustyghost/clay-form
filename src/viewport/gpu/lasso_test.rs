@@ -61,7 +61,7 @@ fn gpu_lasso_preview_and_commit() {
                     ..Default::default()
                 },
                 |ctx| {
-                    controls.toolbar(ctx, &app.document, app.camera.zoom);
+                    controls.toolbar(ctx, &app.document, &app.camera);
                     egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
                 },
             );

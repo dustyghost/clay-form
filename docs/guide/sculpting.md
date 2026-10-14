@@ -23,9 +23,31 @@
 - Symmetry settings are saved in projects; older projects open with symmetry disabled. Overlapping symmetry copies use the strongest influence per vertex, preventing stronger strokes at the center seam.
 - Undo/Redo keeps up to 24 geometry edits within a 128 MB snapshot budget.
 
+### Example: reset an experimental brush
+
+1. Select **Standard** in the brush library and duplicate it to make a named variation.
+2. In **Brush settings**, change its radius, strength, and alpha. Try a short stroke on a practice sphere.
+3. Choose **Reset settings** in the same panel. The variation returns to Standard defaults while keeping its name and icon.
+4. Use **Undo** separately if you also want to remove the trial stroke: resetting settings does not undo sculpting.
+
+![Brush library on the left and Brush settings with the Reset settings button on the right](../images/brush-settings.png)
+
+*The Reset settings button belongs to the selected preset. This capture shows Standard; your named variation uses the same controls.*
+
 ## Detail brush
 
 The **Detail** brush cuts a narrow groove with raised shoulders and pinches the surface toward the crease, for wrinkles and fine folds. Choose Subtract (or use your configured reverse modifier during a stroke) to raise a sharp ridge instead. Adjust radius and strength as usual; masks, alpha, pressure and symmetry are supported. New projects include it; in existing projects use **Add brush → Detail**. For crisp features use sufficient subdivision or adaptive detail. Detail samples a broader surface normal so it follows the surface without chasing individual valley walls. Adaptive refinement prioritises the narrow incision and raised shoulders, simplification preserves that extra resolution, and local relaxation reduces small ridges between triangles.
+
+### Example: cut a fine fold
+
+1. Start with a fresh sphere and select **Detail** from the brush library.
+2. Enable **Mesh → Adaptive sculpt** so the groove can gain local resolution. Keep the default Detail settings and use **Freehand** with stabilisation off for this example.
+3. Draw one slow, gently curved stroke down the front of the sphere, then release.
+4. Zoom in to inspect the narrow incision and raised shoulders. Use **Ctrl+Z** to compare with the original surface; **Ctrl+Shift+Z** restores the stroke with the default shortcuts.
+
+![Close view of a sphere with one continuous Detail groove and raised shoulders](../images/detail-groove.png)
+
+*One Detail stroke, inspected at 200% zoom with wireframe hidden. Pressure, stroke speed, and brush radius change the result.*
 
 ## Stroke modes
 

@@ -1,10 +1,11 @@
-//! Orthographic rendering and surface picking. No document edits or input handling.
+//! Camera projection, rendering and surface picking. No document edits or input handling.
 use super::gpu::{DisplayMesh, Renderer};
 use crate::{camera::Camera, document::Document, sculpt::Vec3};
 use eframe::egui::{self, Color32, Pos2};
 use std::sync::Arc;
 pub(super) struct Scene {
     pub scale: f32,
+    pub(super) eye_distance: f32,
     pub(super) rect: egui::Rect,
     pub(super) active_bounds: egui::Rect,
     positions: Vec<Pos2>,
@@ -110,7 +111,7 @@ impl Scene {
         );
         scene
     }
-    fn from_geometry(
+    pub(super) fn from_geometry(
         rect: egui::Rect,
         camera: &Camera,
         geometry: Arc<DisplayMesh>,
@@ -123,7 +124,13 @@ impl Scene {
         let center = rect.center() + camera.pan;
         let scale = rect.width().min(rect.height()) * 0.35 * camera.zoom;
         let (right, up, view) = camera.basis();
+        let eye_distance = camera.eye_distance();
         let project = |v: Vec3| {
+            let scale = if eye_distance == 0. {
+                scale
+            } else {
+                scale * eye_distance / (eye_distance - v.dot(view)).max(eye_distance * 0.001)
+            };
             Pos2::new(
                 center.x + v.dot(right) * scale,
                 center.y - v.dot(up) * scale,
@@ -138,7 +145,11 @@ impl Scene {
                 let a = mesh.vertices[t[0]];
                 let b = mesh.vertices[t[1]];
                 let c = mesh.vertices[t[2]];
-                (b - a).cross(c - a).dot(view) > 0.
+                (b - a).cross(c - a).dot(if eye_distance == 0. {
+                    view
+                } else {
+                    view * eye_distance - a
+                }) > 0.
             })
             .map(|(i, t)| {
                 (
@@ -160,6 +171,7 @@ impl Scene {
             rect,
             active_bounds,
             scale,
+            eye_distance,
             positions,
             geometry: geometry.clone(),
             faces: faces
@@ -194,7 +206,17 @@ impl Scene {
         let outlines = &geometry.outlines;
         let active_vertices = geometry.active_vertices;
         let positions = &self.positions;
-        let faces = &self.all_faces;
+        let faces: Vec<_> = self
+            .all_faces
+            .iter()
+            .copied()
+            .filter(|(i, _)| {
+                mesh.triangles[*i]
+                    .iter()
+                    .all(|&v| self.visible_depth(mesh.vertices[v]))
+            })
+            .collect();
+        let faces = &faces;
         let project = |v| self.project(v);
         painter.rect_filled(
             rect,
@@ -245,7 +267,7 @@ impl Scene {
                 for &(i, _) in faces {
                     let t = mesh.triangles[i];
                     let p = t.map(|v| positions[v] - rect.min);
-                    let z = t.map(|v| mesh.vertices[v].dot(view));
+                    let z = t.map(|v| self.screen_depth(mesh.vertices[v]));
                     let det = (p[1].x - p[0].x) * (p[2].y - p[0].y)
                         - (p[1].y - p[0].y) * (p[2].x - p[0].x);
                     if det.abs() < 1e-7 {
@@ -311,8 +333,8 @@ impl Scene {
                         } else {
                             let pa = positions[a];
                             let pb = positions[b];
-                            let za = mesh.vertices[a].dot(view);
-                            let zb = mesh.vertices[b].dot(view);
+                            let za = self.screen_depth(mesh.vertices[a]);
+                            let zb = self.screen_depth(mesh.vertices[b]);
                             let steps = (pb - pa).length().ceil().max(1.) as usize;
                             let mut start = None;
                             for step in 0..=steps {
@@ -324,7 +346,9 @@ impl Scene {
                                     && y >= 0
                                     && (x as usize) < width
                                     && (y as usize) < height
-                                    && za * (1. - t) + zb * t + 2. / scale
+                                    && za * (1. - t)
+                                        + zb * t
+                                        + 2. / scale / self.eye_distance.max(1.).powi(2)
                                         >= depth[y as usize * width + x as usize];
                                 if visible {
                                     if start.is_none() {
@@ -375,17 +399,13 @@ impl Scene {
             );
         }
         for edge in outlines {
-            painter.line_segment(
-                edge.map(|i| self.positions[i]),
-                egui::Stroke::new(2_f32, Color32::from_rgb(190, 155, 125)),
-            );
+            if let Some(line) = self.clip_segment(edge.map(|i| mesh.vertices[i])) {
+                painter.line_segment(
+                    line,
+                    egui::Stroke::new(2_f32, Color32::from_rgb(190, 155, 125)),
+                );
+            }
         }
-    }
-    pub fn project(&self, point: Vec3) -> Pos2 {
-        Pos2::new(
-            self.center.x + point.dot(self.right) * self.scale,
-            self.center.y - point.dot(self.up) * self.scale,
-        )
     }
     pub(super) fn brush_cursor(
         &self,
@@ -410,7 +430,7 @@ impl Scene {
         let Some((center, normal)) = self.pick(pos) else {
             return false;
         };
-        let world_radius = radius / self.scale;
+        let world_radius = radius / self.scale_at(center);
         // Sample visible surface points, using the same camera-plane alpha and
         // depth/normal limits as sculpting. Missing samples break the overlay.
         if footprint {
@@ -435,17 +455,19 @@ impl Scene {
                     let u = x as f32 / (N - 1) as f32 * 2. - 1.;
                     let v = 1. - y as f32 / (N - 1) as f32 * 2.;
                     let point = pos + egui::vec2(u, -v) * radius;
-                    if let Some((p, n, face)) = pick_surface(
-                        &self.geometry,
-                        &self.positions,
-                        &candidates,
-                        self.view,
-                        point,
-                    ) && self.geometry.owners[face] == self.active
+                    if let Some((p, n, face)) = pick_surface(self, &candidates, point)
+                        && self.geometry.owners[face] == self.active
                         && (p - center).len() <= world_radius * 1.5
                         && n.dot(normal) >= 0.1
                     {
-                        samples[y * N + x] = Some((point, brush.weight(u, v)));
+                        let offset = p - center;
+                        samples[y * N + x] = Some((
+                            point,
+                            brush.weight(
+                                offset.dot(self.right) / world_radius,
+                                offset.dot(self.up) / world_radius,
+                            ),
+                        ));
                     }
                 }
             }
@@ -505,23 +527,11 @@ impl Scene {
         true
     }
     pub fn pick_model(&self, point: Pos2) -> Option<(usize, Vec3, Vec3)> {
-        let (p, normal, face) = pick_surface(
-            &self.geometry,
-            &self.positions,
-            &self.all_faces,
-            self.view,
-            point,
-        )?;
+        let (p, normal, face) = pick_surface(self, &self.all_faces, point)?;
         Some((self.geometry.owners[face], p, normal))
     }
     pub fn pick_polygroup(&self, point: Pos2, document: &Document) -> Option<usize> {
-        let (_, _, face) = pick_surface(
-            &self.geometry,
-            &self.positions,
-            &self.all_faces,
-            self.view,
-            point,
-        )?;
+        let (_, _, face) = pick_surface(self, &self.all_faces, point)?;
         if self.geometry.owners[face] != self.active {
             return None;
         }
@@ -540,19 +550,50 @@ impl Scene {
             .map(|(_, p, n)| (p, n))
     }
 }
-fn pick_surface(
-    geometry: &DisplayMesh,
-    positions: &[Pos2],
-    faces: &[(usize, f32)],
-    view: Vec3,
-    point: Pos2,
-) -> Option<(Vec3, Vec3, usize)> {
+fn pick_surface(scene: &Scene, faces: &[(usize, f32)], point: Pos2) -> Option<(Vec3, Vec3, usize)> {
+    let geometry = &scene.geometry;
+    let positions = &scene.positions;
+    let view = scene.view;
+    let ray = scene.ray(point);
     let vertices = &geometry.mesh.vertices;
     let triangles = &geometry.mesh.triangles;
     let mut hit = None;
     let mut depth = f32::NEG_INFINITY;
     for &(fi, _) in faces {
         let t = triangles[fi];
+        if scene.eye_distance > 0. {
+            let [a, b, c] = t.map(|i| vertices[i]);
+            let e1 = b - a;
+            let e2 = c - a;
+            let h = ray.1.cross(e2);
+            let det = e1.dot(h);
+            if det <= 1e-10 {
+                continue;
+            }
+            let offset = ray.0 - a;
+            let u = offset.dot(h) / det;
+            let q = offset.cross(e1);
+            let v = ray.1.dot(q) / det;
+            if u < 0. || v < 0. || u + v > 1. {
+                continue;
+            }
+            let p = a * (1. - u - v) + b * u + c * v;
+            if !scene.visible_depth(p) {
+                continue;
+            }
+            let z = p.dot(view);
+            if z > depth {
+                depth = z;
+                let normals =
+                    geometry.shading.triangles[fi].map(|i| geometry.shading.vertices[i].1);
+                hit = Some((
+                    p,
+                    (normals[0] * (1. - u - v) + normals[1] * u + normals[2] * v).norm(),
+                    fi,
+                ));
+            }
+            continue;
+        }
         let a = positions[t[0]];
         let b = positions[t[1]];
         let c = positions[t[2]];

@@ -21,11 +21,24 @@ Use **Built-in panels and toolbar** to move, hide, or reorder the existing panel
 
 Open **Settings → Key settings** to rebind or clear shortcuts. Click a binding and press its replacement; Escape cancels. Conflicting shortcuts are rejected. Smooth, reverse, zoom and pan hold modifiers are configurable too. Shortcuts pause during text entry and settings editing.
 
+**Toggle perspective view** and **Reset brush settings** are available in the action catalog and start without key bindings. See [Perspective view](navigation.md#perspective-view) and [Brush settings](sculpting.md) for their behavior. Docking the View menu also keeps the field-of-view slider available beside the sculpt.
+
 Defaults: Ctrl+S saves, Ctrl+O opens the project path, Ctrl+N creates a sphere, Ctrl+Z undoes, Ctrl+Shift+Z redoes, F resets the view, X toggles symmetry, W toggles wireframe, G toggles symmetry guides, brackets change brush radius, and comma/period select brushes. Ctrl+D subdivides, Shift+D selects a lower level, D selects a higher level, and Ctrl+R remeshes in dynamic mode. Existing preferences upgrade without losing custom bindings; new shortcuts that conflict with yours start unbound.
 
 Open **Settings → Customize workspace** to place brush library, brush settings, alpha, presets, tablet/navigation, and mesh management groups on the left, right, in floating windows, or hidden. Arrows reorder groups, headers collapse them, panel edges resize them, and floating titles move them. Closing a floating tool hides it; restore it in the workspace editor. Reset buttons restore key or layout defaults independently.
 
 Preferences save automatically after a short delay and on exit, separately from sculpt projects, to `$XDG_CONFIG_HOME/clay-form/preferences.json` or `~/.config/clay-form/preferences.json`. Invalid preferences fall back to defaults with a status message. Tool groups can be rearranged, and reusable action buttons can also be copied into your custom menus.
+
+### Example: keep frequently used controls open
+
+1. Open **Transform** and click **Make collapsible on left** to dock its controls.
+2. Open **Mask** and click **Pin menu open**. Drag its title bar toward the upper right.
+3. Pin **Slice** too, and move it beside the model. Several menu windows can remain open together.
+4. Collapse the Transform section when you need more room. These placements save automatically with the workspace; use the crossed-pin icon to return a floating menu to its toolbar drop-down.
+
+![Transform controls docked on the left with Mask and Slice floating windows over the viewport](../images/menu-placement.png)
+
+*One possible layout: a docked Transform section and two pinned menus. Panel positions are workspace preferences, independent of the sculpt geometry.*
 
 ## Toolbar and brush previews
 

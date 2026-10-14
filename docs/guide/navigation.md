@@ -4,6 +4,7 @@
 
 - [Orbit and pan](#orbit-and-pan)
 - [Zoom](#zoom)
+- [Perspective view](#perspective-view)
 - [Surface display](#surface-display)
 - [Huion tablets](#huion-tablets)
 
@@ -21,6 +22,29 @@ Vertical orbit continues over the poles and through full turns; there is no top/
 Use the toolbar **− / +** buttons, **View → Zoom in / Zoom out**, or the mouse wheel over the viewport. Default keys are **=** to zoom in and **−** to zoom out, configurable in Key settings. The View menu also has a zoom slider (20–800%). Click the toolbar percentage or View → Reset zoom to return to 100% while keeping rotation and pan; Reset view resets all camera navigation. Zoom is session-only and does not affect geometry or undo history.
 
 Hold **Ctrl** during an orbit drag to zoom instead of rotating: drag up to zoom in, down to zoom out. This works with right drag, empty-space left/pen drag, and gizmo dragging, including switching the modifier mid-drag. Starting a left/pen drag with Ctrl held also zooms over the clay without sculpting. Change the modifier (or disable it) under **Settings → Key settings → Hold to zoom while dragging**. Existing settings gain Ctrl as the default. **Alt-drag starting off the model pans** horizontally and vertically without changing rotation, zoom, or geometry; starting on the model sculpts with the reverse modifier. The gesture stays sculpting or navigation until release, even when crossing the model edge. Set or disable it under **Hold to pan off the model**; existing preferences gain Alt as the default. Zoom takes priority if pan and zoom share a modifier. Inside the navigation frame, Ctrl+Shift visibility selection retains priority, so Alt can still switch that gesture to Hide. The border strip always remains available for navigation.
+
+## Perspective view
+
+Enable **View → Perspective view** to judge depth and foreshortening. Turn it off for orthographic comparisons against drawings. **Field of view** ranges from 20° to 75° (45° initially): wider angles emphasize depth, while narrower angles flatten proportions. Switching projection or changing the angle adjusts zoom to keep the visible models at approximately the same apparent size, within the normal zoom limits. Orbit and pan stay in place. The eye distance is fitted to the visible scene when changing projection, including larger imported models.
+
+Wheel, toolbar and drag zoom enlarge the image without moving the eye through the model, so close sculpting views remain usable. Brush size follows the depth of the surface under the cursor. Picking, symmetry guides, selections, transform controls and cuts use the displayed projection. Geometry behind the camera is clipped; a path cut through geometry crossing the eye reports an error instead of applying an ambiguous cut.
+
+The perspective toggle supports custom menus and shortcuts as **Toggle perspective view**; it has no default key binding. Assign one in **Settings → Key settings**, or right-click the checkbox to add it to a custom menu. Projection and field of view are session-only: they do not modify the project or undo history. Changing them ends the current drag and discards unapplied stamp, selection and cut previews. **Reset view** restores orthographic viewing and the default angle along with rotation, pan and zoom.
+
+### Example: compare orthographic and perspective views
+
+1. In a practice project, use **Primitive → Create primitive…** to replace the starting sphere with a **Cube**.
+2. Enable **Wireframe** and right-drag until three faces are visible. Open **View** and use its left-sidebar icon to keep the controls visible.
+3. Leave **Perspective view** off and inspect the parallel edges.
+4. Enable it and set **Field of view** to **65°**. The nearer face appears larger and parallel edges recede toward one another. Toggle the checkbox to compare without changing the cube.
+
+![Orthographic cube with parallel edges and Perspective view unchecked in the View sidebar](../images/view-orthographic.png)
+
+*Orthographic: parallel edges remain parallel. The cube's orientation matches the next image.*
+
+![The same cube in perspective with the View sidebar showing a 65 degree field of view](../images/view-perspective.png)
+
+*Perspective at 65°: depth changes the apparent size of faces. The zoom percentage adjusts to preserve approximate framing; the geometry stays unchanged.*
 
 ## Surface display
 

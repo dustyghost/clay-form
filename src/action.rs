@@ -9,6 +9,7 @@ pub(crate) enum Action {
     Undo,
     Redo,
     ResetView,
+    Perspective,
     Symmetry,
     Wireframe,
     Guides,
@@ -210,6 +211,7 @@ impl Action {
         Self::KeySettings,
         Self::CustomizeWorkspace,
         Self::CancelMeshOperation,
+        Self::Perspective,
     ];
     pub fn label(&self) -> &'static str {
         match self {
@@ -219,6 +221,7 @@ impl Action {
             Self::Undo => "Undo",
             Self::Redo => "Redo",
             Self::ResetView => "Reset view",
+            Self::Perspective => "Toggle perspective view",
             Self::Symmetry => "Toggle symmetry",
             Self::Wireframe => "Toggle wireframe",
             Self::Guides => "Toggle symmetry guides",

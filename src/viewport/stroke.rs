@@ -119,7 +119,7 @@ impl PendingStroke {
             normal,
             right: scene.right,
             up: scene.up,
-            radius: radius / scene.scale,
+            radius: radius / scene.scale_at(center),
             pressure: self.pressure,
             delta: Vec3::default(),
             invert: self.invert,

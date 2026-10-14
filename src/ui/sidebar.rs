@@ -26,7 +26,7 @@ impl UiState {
         ui: &mut egui::Ui,
         menu: BuiltinMenu,
         document: &Document,
-        zoom: f32,
+        camera: &crate::camera::Camera,
         commands: &mut Vec<Command>,
     ) {
         let open = self
@@ -40,7 +40,7 @@ impl UiState {
             .id_salt(("builtin_section", menu))
             .open(Some(open))
             .show(ui, |ui| {
-                self.builtin_menu_contents(menu, ui, document, zoom, commands)
+                self.builtin_menu_contents(menu, ui, document, camera, commands)
             });
         if header.header_response.clicked() {
             self.preferences

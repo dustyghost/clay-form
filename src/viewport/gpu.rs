@@ -66,6 +66,7 @@ impl Renderer {
             scene.center,
             geometry.depth_extent,
         );
+        params.set_perspective(scene.eye_distance, geometry.depth_extent);
         params.background = crate::preferences::viewport_background(painter.ctx()).to_array()[..3]
             .try_into()
             .unwrap();
@@ -116,7 +117,7 @@ impl Renderer {
             self.preview.lock().unwrap().brush = Some(BrushPreview {
                 center,
                 normal,
-                radius: radius / scene.scale,
+                radius: radius / scene.scale_at(center),
                 brush: brush.clone(),
                 color: [
                     color.r() as f32 / 255.,
@@ -155,6 +156,7 @@ struct Params {
     view: Vec3,
     projection: [f32; 4],
     depth: f32,
+    perspective: [f32; 3],
 }
 impl Params {
     fn new(
@@ -177,7 +179,21 @@ impl Params {
                 -(center.y - rect.center().y) * 2. / rect.height(),
             ],
             depth: 1. / extent,
+            perspective: [0.; 3],
             background: [23, 26, 31],
+        }
+    }
+    fn set_perspective(&mut self, distance: f32, extent: f32) {
+        if distance > 0. {
+            let near = distance * 0.001;
+            let far = distance + extent;
+            self.perspective = [
+                1. / distance,
+                (far + near) / (far - near),
+                -2. * far * near / ((far - near) * distance),
+            ];
+        } else {
+            self.perspective = [0.; 3];
         }
     }
 }
@@ -416,6 +432,10 @@ impl Gpu {
             gl.uniform_1_f32(
                 gl.get_uniform_location(program, "u_depth").as_ref(),
                 p.depth,
+            );
+            gl.uniform_3_f32_slice(
+                gl.get_uniform_location(program, "u_perspective").as_ref(),
+                &p.perspective,
             );
         }
     }
@@ -834,3 +854,6 @@ mod visibility_test;
 
 #[cfg(all(test, target_os = "linux"))]
 mod custom_ui_test;
+
+#[cfg(all(test, target_os = "linux"))]
+mod perspective_test;

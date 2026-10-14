@@ -142,9 +142,15 @@ fn custom_interface_offscreen_preview() {
                         ..Default::default()
                     },
                     |ctx| {
-                        ui.toolbar(ctx, &document, 1.);
+                        ui.toolbar(ctx, &document, &crate::camera::Camera::default());
                         ui.custom_surfaces(ctx, &document);
-                        ui.brush_panel(ctx, &document, "Tablet", 1., 1.);
+                        ui.brush_panel(
+                            ctx,
+                            &document,
+                            "Tablet",
+                            1.,
+                            &crate::camera::Camera::default(),
+                        );
                         ui.settings(ctx, &document);
                         egui::CentralPanel::default().show(ctx, |panel| {
                             panel.painter().rect_filled(

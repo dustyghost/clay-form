@@ -29,7 +29,7 @@ impl Ring {
                 let (s, c) = (i as f32 * TAU / SEGMENTS as f32).sin_cos();
                 let radial = u * c + v * s;
                 (
-                    scene.project(self.pivot + radial * (RADIUS / scene.scale)),
+                    scene.project(self.pivot + radial * (RADIUS / scene.scale_at(self.pivot))),
                     radial,
                 )
             })
@@ -67,7 +67,7 @@ impl Ring {
         } else {
             u
         };
-        let point = scene.project(self.pivot + radial * (RADIUS / scene.scale));
+        let point = scene.project(self.pivot + radial * (RADIUS / scene.scale_at(self.pivot)));
         controls::label(
             painter,
             point + Vec2::new(10., -18.),
@@ -77,14 +77,14 @@ impl Ring {
     }
     pub fn begin(&self, scene: &Scene, pointer: Pos2) -> RotationDrag {
         let radial = self.nearest(scene, pointer).1;
-        let tangent = (self.axis.dot(scene.view).abs() < 0.18).then(|| {
+        let toward_eye = scene.ray(scene.project(self.pivot)).1 * -1.;
+        let tangent = (self.axis.dot(toward_eye).abs() < 0.18).then(|| {
             let t = self.axis.cross(radial);
-            let projected = Vec2::new(t.dot(scene.right), -t.dot(scene.up));
+            let projected = scene.axis_direction(self.pivot, t);
             if projected.length_sq() > 0.01 {
                 projected.normalized()
             } else {
-                let projected_axis =
-                    Vec2::new(self.axis.dot(scene.right), -self.axis.dot(scene.up));
+                let projected_axis = scene.axis_direction(self.pivot, self.axis);
                 Vec2::new(-projected_axis.y, projected_axis.x).normalized()
             }
         });
@@ -118,8 +118,13 @@ impl RotationDrag {
         if delta.length_sq() < 16. {
             return None;
         }
-        let p = scene.right * (delta.x / scene.scale) + scene.up * (-delta.y / scene.scale);
-        let p = p - scene.view * (p.dot(self.axis) / scene.view.dot(self.axis));
+        let (origin, direction) = scene.ray(pointer);
+        let denominator = direction.dot(self.axis);
+        if denominator.abs() < 1e-6 {
+            return None;
+        }
+        let p =
+            origin + direction * ((self.pivot - origin).dot(self.axis) / denominator) - self.pivot;
         (p.len() > 1e-6).then(|| p.norm())
     }
     pub fn advance(&mut self, scene: &Scene, pointer: Pos2) -> f32 {
@@ -180,6 +185,8 @@ mod tests {
                 pitch: -0.7,
                 zoom: 1.7,
                 pan: Vec2::new(25., -17.),
+                perspective: true,
+                ..Default::default()
             },
         ] {
             let scene = scene(camera);
@@ -193,7 +200,9 @@ mod tests {
                 let (u, v) = ring.basis();
                 let point = |angle: f32| {
                     scene.project(
-                        ring.pivot + (u * angle.cos() + v * angle.sin()) * (RADIUS / scene.scale),
+                        ring.pivot
+                            + (u * angle.cos() + v * angle.sin())
+                                * (RADIUS / scene.scale_at(ring.pivot)),
                     )
                 };
                 let mut drag = ring.begin(&scene, point(0.3));

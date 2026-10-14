@@ -2,6 +2,48 @@
 use super::*;
 
 impl App {
+    fn set_camera_projection(&mut self, perspective: bool, field_of_view: f32) {
+        if self.camera.perspective == perspective
+            && self.camera.field_of_view == field_of_view.clamp(20., 75.)
+        {
+            return;
+        }
+        let before = self.camera;
+        self.camera.perspective = perspective;
+        self.camera.set_field_of_view(field_of_view);
+        // Set the eye outside the visible scene when changing projection. Keep
+        // this distance fixed during strokes, so deformation cannot move the view.
+        let mut radius = 1_f32;
+        for index in 0..self.document.model_count() {
+            let model = self.document.model(index).unwrap();
+            if model.metadata.visible {
+                for point in &model
+                    .display_mesh(index == self.document.active_model_index())
+                    .vertices
+                {
+                    radius = radius.max(point.len());
+                }
+            }
+        }
+        self.camera.perspective_radius = radius;
+        let (mut old_extent, mut new_extent) = (0_f32, 0_f32);
+        for index in 0..self.document.model_count() {
+            let model = self.document.model(index).unwrap();
+            if !model.metadata.visible {
+                continue;
+            }
+            let points = model
+                .display_mesh(index == self.document.active_model_index())
+                .vertices
+                .iter()
+                .copied();
+            old_extent = old_extent.max(before.projected_extent(points.clone()));
+            new_extent = new_extent.max(self.camera.projected_extent(points));
+        }
+        if old_extent > 1e-6 && new_extent > 1e-6 {
+            self.camera.set_zoom(before.zoom * old_extent / new_extent);
+        }
+    }
     fn activate_transform(&mut self, mode: crate::viewport::TransformMode) {
         use crate::viewport::{TransformMode as Mode, TransformOperation as Op};
         self.ui.selection_tool = None;
@@ -111,6 +153,17 @@ impl App {
         {
             self.ui.status = "Wait for the mesh operation, or cancel it first".into();
             return;
+        }
+        let projection_changed = match command {
+            Command::ResetView => true,
+            Command::SetPerspective(value) => value != self.camera.perspective,
+            Command::SetFieldOfView(value) => {
+                value.is_finite() && value.clamp(20., 75.) != self.camera.field_of_view
+            }
+            _ => false,
+        };
+        if projection_changed {
+            self.viewport.finish_transform_drag(&mut self.document);
         }
         // A new view must not change the projection underneath a latched
         // transform ring/axis. Keep the edit so far and require a fresh press.
@@ -476,6 +529,16 @@ impl App {
             }
             Command::ResetView => {
                 self.camera.reset();
+                Ok(())
+            }
+            Command::SetPerspective(enabled) => {
+                self.set_camera_projection(enabled, self.camera.field_of_view);
+                Ok(())
+            }
+            Command::SetFieldOfView(degrees) => {
+                if degrees.is_finite() {
+                    self.set_camera_projection(self.camera.perspective, degrees);
+                }
                 Ok(())
             }
             Command::SetSymmetry(symmetry) => {

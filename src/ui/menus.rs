@@ -7,7 +7,7 @@ impl UiState {
         ui: &mut egui::Ui,
         menu: BuiltinMenu,
         document: &Document,
-        zoom: f32,
+        camera: &crate::camera::Camera,
         commands: &mut Vec<Command>,
     ) {
         let glyph = match menu {
@@ -55,7 +55,7 @@ impl UiState {
         let clicked = design::menu(ui, glyph, menu.label(), |ui| {
             self.menu_placement_controls(ui, menu, false);
             ui.separator();
-            self.builtin_menu_contents(menu, ui, document, zoom, commands);
+            self.builtin_menu_contents(menu, ui, document, camera, commands);
         });
         if clicked && !self.mesh_busy {
             if menu == BuiltinMenu::Transform
@@ -107,7 +107,7 @@ impl UiState {
         &mut self,
         ctx: &egui::Context,
         document: &Document,
-        zoom: f32,
+        camera: &crate::camera::Camera,
         commands: &mut Vec<Command>,
     ) {
         self.pinned_menu_rects.clear();
@@ -134,7 +134,7 @@ impl UiState {
                 .show(ctx, |ui| {
                     unpin = self.menu_placement_controls(ui, pinned.menu, true);
                     ui.separator();
-                    self.builtin_menu_contents(pinned.menu, ui, document, zoom, commands);
+                    self.builtin_menu_contents(pinned.menu, ui, document, camera, commands);
                 });
             if let Some(response) = response {
                 // Include the closing frame so its click cannot edit the model underneath.
@@ -167,7 +167,7 @@ impl UiState {
         menu: BuiltinMenu,
         ui: &mut egui::Ui,
         document: &Document,
-        zoom: f32,
+        camera: &crate::camera::Camera,
         commands: &mut Vec<Command>,
     ) {
         let popup = ui
@@ -437,6 +437,22 @@ impl UiState {
                     });
             }
             BuiltinMenu::View => {
+                let mut perspective = camera.perspective;
+                if ui.checkbox(&mut perspective, "Perspective view")
+                    .customize(Action::Perspective)
+                    .on_hover_text("Show depth and foreshortening. Turn off for orthographic comparisons against drawings.")
+                    .changed() {
+                    commands.push(Command::SetPerspective(perspective));
+                }
+                if perspective {
+                    let mut degrees = camera.field_of_view;
+                    if ui.add(egui::Slider::new(&mut degrees, 20. ..=75.).text("Field of view").suffix("°"))
+                        .on_hover_text("Wider angles emphasize depth; narrower angles flatten proportions. Preserves the apparent size of the visible models.")
+                        .changed() {
+                        commands.push(Command::SetFieldOfView(degrees));
+                    }
+                }
+                ui.separator();
                 ui.checkbox(&mut self.show_polygroups, "Show vertex group colors")
                     .customize(Action::PolygroupColors);
                 ui.checkbox(&mut self.show_backfaces, "Faint back-facing surfaces").customize(Action::Backfaces).on_hover_text("Show the reverse side of open surfaces translucently. Front-facing surfaces stay solid.");
@@ -470,7 +486,7 @@ impl UiState {
                 {
                     commands.push(Command::ZoomOut);
                 }
-                let mut value = zoom;
+                let mut value = camera.zoom;
                 ui.add(
                     egui::Slider::new(&mut value, 0.2..=8.)
                         .logarithmic(true)
@@ -485,7 +501,7 @@ impl UiState {
                                 .map(|percent| percent / 100.)
                         }),
                 );
-                if value != zoom {
+                if value != camera.zoom {
                     commands.push(Command::SetZoom(value));
                 }
                 if ui

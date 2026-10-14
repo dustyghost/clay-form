@@ -176,7 +176,12 @@ impl UiState {
         }
         self.selected = index;
     }
-    pub fn toolbar(&mut self, ctx: &egui::Context, document: &Document, zoom: f32) -> Vec<Command> {
+    pub fn toolbar(
+        &mut self,
+        ctx: &egui::Context,
+        document: &Document,
+        camera: &crate::camera::Camera,
+    ) -> Vec<Command> {
         design::theme(ctx);
         design::appearance(ctx, &self.preferences.appearance);
         let mut commands = Vec::new();
@@ -186,8 +191,8 @@ impl UiState {
                 ui.strong("CLAY FORM");
                 self.workspace_selector(ui);
                 ui.separator();
-                self.builtin_menu(ui, BuiltinMenu::Edit, document, zoom, &mut commands);
-                self.builtin_menu(ui, BuiltinMenu::Settings, document, zoom, &mut commands);
+                self.builtin_menu(ui, BuiltinMenu::Edit, document, camera, &mut commands);
+                self.builtin_menu(ui, BuiltinMenu::Settings, document, camera, &mut commands);
                 self.custom_menu_bar(ui, document, &mut commands);
                 if self.preferences.compact_toolbar {
                     if self.mesh_busy {
@@ -274,12 +279,12 @@ impl UiState {
                         commands.push(Command::Redo);
                     }
                     ui.separator();
-                    self.builtin_menu(ui, BuiltinMenu::Visibility, document, zoom, &mut commands);
-                    self.builtin_menu(ui, BuiltinMenu::Mesh, document, zoom, &mut commands);
-                    self.builtin_menu(ui, BuiltinMenu::Slice, document, zoom, &mut commands);
-                    self.builtin_menu(ui, BuiltinMenu::Transform, document, zoom, &mut commands);
-                    self.builtin_menu(ui, BuiltinMenu::Primitive, document, zoom, &mut commands);
-                    self.builtin_menu(ui, BuiltinMenu::Submodels, document, zoom, &mut commands);
+                    self.builtin_menu(ui, BuiltinMenu::Visibility, document, camera, &mut commands);
+                    self.builtin_menu(ui, BuiltinMenu::Mesh, document, camera, &mut commands);
+                    self.builtin_menu(ui, BuiltinMenu::Slice, document, camera, &mut commands);
+                    self.builtin_menu(ui, BuiltinMenu::Transform, document, camera, &mut commands);
+                    self.builtin_menu(ui, BuiltinMenu::Primitive, document, camera, &mut commands);
+                    self.builtin_menu(ui, BuiltinMenu::Submodels, document, camera, &mut commands);
                     ui.separator();
                     if ui
                         .add(design::button(ui, Glyph::Wire, "Wireframe").selected(self.wire))
@@ -288,7 +293,7 @@ impl UiState {
                     {
                         self.wire = !self.wire;
                     }
-                    self.builtin_menu(ui, BuiltinMenu::Wireframe, document, zoom, &mut commands);
+                    self.builtin_menu(ui, BuiltinMenu::Wireframe, document, camera, &mut commands);
                     let mut symmetry = document.symmetry().clone();
                     if ui
                         .add(
@@ -303,12 +308,12 @@ impl UiState {
                     if symmetry != *document.symmetry() {
                         commands.push(Command::SetSymmetry(symmetry));
                     }
-                    self.builtin_menu(ui, BuiltinMenu::Symmetry, document, zoom, &mut commands);
-                    self.builtin_menu(ui, BuiltinMenu::Mask, document, zoom, &mut commands);
-                    self.builtin_menu(ui, BuiltinMenu::View, document, zoom, &mut commands);
-                    self.builtin_menu(ui, BuiltinMenu::References, document, zoom, &mut commands);
+                    self.builtin_menu(ui, BuiltinMenu::Symmetry, document, camera, &mut commands);
+                    self.builtin_menu(ui, BuiltinMenu::Mask, document, camera, &mut commands);
+                    self.builtin_menu(ui, BuiltinMenu::View, document, camera, &mut commands);
+                    self.builtin_menu(ui, BuiltinMenu::References, document, camera, &mut commands);
                     if ui
-                        .add_enabled(zoom > 0.2, design::button(ui, Glyph::Minus, ""))
+                        .add_enabled(camera.zoom > 0.2, design::button(ui, Glyph::Minus, ""))
                         .on_hover_text("Zoom out")
                         .customize(Action::ZoomOut)
                         .clicked()
@@ -316,7 +321,7 @@ impl UiState {
                         commands.push(Command::ZoomOut);
                     }
                     if ui
-                        .button(format!("{:.0}%", zoom * 100.))
+                        .button(format!("{:.0}%", camera.zoom * 100.))
                         .on_hover_text("Reset zoom to 100% (keep rotation and pan)")
                         .customize(Action::ResetZoom)
                         .clicked()
@@ -324,7 +329,7 @@ impl UiState {
                         commands.push(Command::SetZoom(1.));
                     }
                     if ui
-                        .add_enabled(zoom < 8., design::button(ui, Glyph::Plus, ""))
+                        .add_enabled(camera.zoom < 8., design::button(ui, Glyph::Plus, ""))
                         .on_hover_text("Zoom in")
                         .customize(Action::ZoomIn)
                         .clicked()
@@ -334,7 +339,7 @@ impl UiState {
                 });
             }
         });
-        self.pinned_menus(ctx, document, zoom, &mut commands);
+        self.pinned_menus(ctx, document, camera, &mut commands);
         if self.arrange_references {
             egui::TopBottomPanel::top("reference_arrangement").show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
@@ -374,7 +379,7 @@ impl UiState {
         document: &Document,
         tablet_status: &str,
         pressure: f32,
-        zoom: f32,
+        camera: &crate::camera::Camera,
     ) -> Vec<Command> {
         let mut commands = Vec::new();
         if self.primitive_controls_requested && document.primitive().is_some() {
@@ -436,7 +441,7 @@ impl UiState {
                                             ui,
                                             menu,
                                             document,
-                                            zoom,
+                                            camera,
                                             &mut commands,
                                         );
                                     }
@@ -587,7 +592,13 @@ impl UiState {
         let b = &mut edited;
         match tool {
             Tool::Library => {
-                self.builtin_menu(ui, BuiltinMenu::Brushes, document, 1., commands);
+                self.builtin_menu(
+                    ui,
+                    BuiltinMenu::Brushes,
+                    document,
+                    &crate::camera::Camera::default(),
+                    commands,
+                );
                 let columns = (ui.available_width() / 76.).floor().clamp(1., 4.) as usize;
                 let width =
                     ((ui.available_width() - 6. * (columns - 1) as f32) / columns as f32).max(32.);

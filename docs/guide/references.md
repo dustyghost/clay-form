@@ -16,6 +16,17 @@ In **References**, select an image from the list to adjust its **Opacity** and *
 
 Images stay within the model view and fit smaller viewports. Their stored positions and widths are proportions of the viewport; their aspect ratios stay intact. Later images appear over earlier ones. Use the list to hide overlapping images or select their controls.
 
+## Example: keep two studies beside the sculpt
+
+1. Drop two PNG or JPEG study images onto the viewport, one at a time.
+2. In **Arrange images**, move one toward the upper left and the other toward the lower right. Drag each lower-right corner to size it without covering the working area.
+3. Select the second image in **References**, reduce **Opacity** to **70%**, and enable **Lock position and size**.
+4. Choose **Done**, then orbit the sphere. The studies stay fixed on screen while the model turns. Save a `.clay` project to keep the embedded images and their placements.
+
+![Two sample reference images beside a sphere with the References panel open on the right](../images/reference-images.png)
+
+*Two synthetic sample images demonstrate placement. Front study is selected; Side study at the lower right is locked and uses 70% opacity. Use your own drawings or photographs for sculpting.*
+
 ## Save and customize
 
 Image data, placement, opacity, individual visibility, and locks save with `.clay` projects and recovery copies. Reference edits mark the project modified but leave sculpt geometry, mesh Undo/Redo, and the camera unchanged. Reference edits are separate from sculpt Undo/Redo; Escape cancels a placement before release. Arrange mode and the overall Show references switch are session-only. Older projects load with no references.

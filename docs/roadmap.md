@@ -4,7 +4,7 @@
 
 Updated 14 October 2026.
 
-The next priority is perspective viewing. Stroke stabilisation, mask blur/sharpen, lasso selection, transform rotation/pivot controls, automatic recovery saves, OBJ import, and viewport reference images are implemented. The hands-on tablet check for stroke stabilisation passed on 14 October 2026. Perspective viewing is the remaining priority. This is the proposed implementation order; dates are not assigned.
+The seven priorities below are implemented. Perspective viewing is ready for hands-on mouse/pen feedback. The hands-on tablet check for stroke stabilisation passed on 14 October 2026. The longer-term candidates remain separate possibilities; the next feature has not been selected.
 
 ## Current foundation
 
@@ -23,7 +23,7 @@ Recent fixes address stale groups after Group all, Alt-drag panning when startin
 
 ## Implementation priorities
 
-The first six priorities are implemented. Perspective viewing is next.
+All seven priorities are implemented; interaction refinements can follow hands-on feedback.
 
 | Order | Feature | Main benefit |
 | --- | --- | --- |
@@ -33,7 +33,7 @@ The first six priorities are implemented. Perspective viewing is next.
 | 4 | Automatic recovery saves — implemented | Recover recent work after a crash or interrupted session |
 | 5 | OBJ import — implemented | Sculpt base meshes made in other software |
 | 6 | Viewport reference images — implemented | Keep photographs and drawings beside or behind the sculpt |
-| 7 | Perspective view — next | Judge proportions with an adjustable perspective camera |
+| 7 | Perspective view — implemented | Judge proportions with an adjustable perspective camera |
 
 ### 1 Stroke stabilisation
 
@@ -119,7 +119,9 @@ Completion criteria:
 
 ### 7 Perspective view
 
-Add an orthographic/perspective toggle and adjustable field of view. Keep orthographic mode available for precise comparisons against drawings.
+Implemented 14 October 2026: **View → Perspective view** switches projection, with a 20–75° field-of-view control and a reusable toggle for custom menus and shortcuts. Projection changes fit the eye distance to the visible scene and adjust zoom to preserve apparent size within the normal zoom limits. Zoom enlarges the projection without moving the eye through the surface. Camera state remains session-only; changing projection ends active gestures and discards unapplied previews without adding a geometry undo step.
+
+GPU surfaces, wireframe and surface overlays share the perspective projection. CPU picking casts rays against the same mesh snapshot; brush radii, drag movement, rotation rings, primitive controls, selections, symmetry guides and cuts account for depth. Perspective path cuts converge at the eye and preserve closed caps. Geometry crossing the eye is clipped for viewing; a path cut through it reports an explicit error. Tests cover surface/pixel agreement, clipping, field-of-view limits, framing, shortcut migration, stamp cancellation, undo, rotation and path-cap volume. The View-panel preview has been visually checked; hands-on pen feedback remains welcome. See the [navigation guide](guide/navigation.md#perspective-view).
 
 Completion criteria:
 

@@ -5,11 +5,14 @@ use super::{Mesh, SliceMode, SliceOptions, SlicePlane, Vec3};
 pub struct SlicePath {
     pub points: Vec<Vec3>,
     pub depth: Vec3,
+    /// Perspective paths converge at the eye instead of extruding in parallel.
+    pub eye: Option<Vec3>,
 }
 struct Path {
     points: Vec<Vec3>,
     lengths: Vec<f32>,
     depth: Vec3,
+    eye: Option<Vec3>,
 }
 impl Path {
     fn new(source: &SlicePath, mesh: &Mesh) -> Result<Self, String> {
@@ -24,6 +27,21 @@ impl Path {
         }
         let depth = source.depth.norm();
         let mut points = source.points.clone();
+        if let Some(eye) = source.eye {
+            let distance = (eye - points[0]).dot(depth);
+            if !finite(eye)
+                || distance <= 1e-5
+                || mesh
+                    .vertices
+                    .iter()
+                    .any(|&p| (eye - p).dot(depth) <= distance * 0.001)
+            {
+                return Err(
+                    "Move the model in front of the camera before cutting a perspective path"
+                        .into(),
+                );
+            }
+        }
         if points.windows(2).any(|p| (p[1] - p[0]).len() < 1e-6)
             || points
                 .iter()
@@ -83,13 +101,19 @@ impl Path {
             points,
             lengths,
             depth,
+            eye: source.eye,
         })
     }
     // Nearest point on a simple oriented path determines its side. All supporting
     // planes have already split the surface, so a face cannot cross that path.
     fn coordinates(&self, p: Vec3) -> (f32, f32, f32) {
         let z = (p - self.points[0]).dot(self.depth);
-        let flat = p - self.depth * z;
+        let flat = if let Some(eye) = self.eye {
+            let distance = (eye - self.points[0]).dot(self.depth);
+            eye + (p - eye) * (distance / (distance - z))
+        } else {
+            p - self.depth * z
+        };
         let mut best = (f32::INFINITY, 0., 0.);
         for (i, pair) in self.points.windows(2).enumerate() {
             let delta = pair[1] - pair[0];
@@ -131,7 +155,13 @@ impl Path {
             .saturating_sub(1)
             .min(self.points.len() - 2);
         let t = (s - self.lengths[i]) / (self.lengths[i + 1] - self.lengths[i]);
-        self.points[i] + (self.points[i + 1] - self.points[i]) * t + self.depth * z
+        let flat = self.points[i] + (self.points[i + 1] - self.points[i]) * t;
+        if let Some(eye) = self.eye {
+            let distance = (eye - self.points[0]).dot(self.depth);
+            eye + (flat - eye) * (1. - z / distance)
+        } else {
+            flat + self.depth * z
+        }
     }
     fn cap(
         &self,
@@ -231,7 +261,9 @@ impl Mesh {
                 .split_plane(
                     SlicePlane {
                         origin: pair[0],
-                        normal: (pair[1] - pair[0]).norm().cross(path.depth),
+                        normal: (pair[1] - pair[0])
+                            .norm()
+                            .cross(path.eye.map_or(path.depth, |eye| (eye - pair[0]).norm())),
                     },
                     cancel,
                 )?
@@ -293,6 +325,7 @@ mod tests {
         SlicePath {
             points: points.iter().map(|&(x, y)| Vec3(x, y, 0.)).collect(),
             depth: Vec3(0., 0., 1.),
+            eye: None,
         }
     }
     fn volume(mesh: &Mesh) -> f32 {
@@ -377,5 +410,47 @@ mod tests {
                 .contains("cancelled")
         );
         assert_eq!(source, before);
+    }
+}
+
+#[cfg(test)]
+mod perspective_tests {
+    use super::*;
+    use crate::sculpt::{Primitive, PrimitiveKind};
+    #[test]
+    fn perspective_path_caps_follow_converging_planes_and_preserve_volume() {
+        let source = Primitive::for_kind(PrimitiveKind::UvSphere).mesh().unwrap();
+        let path = SlicePath {
+            points: vec![Vec3(-2., 0.2, 0.), Vec3(0., -0.2, 0.), Vec3(2., 0.3, 0.)],
+            depth: Vec3(0., 0., 1.),
+            eye: Some(Vec3(0., 0., 3.)),
+        };
+        let prepared = Path::new(&path, &source).unwrap();
+        for &p in &source.vertices {
+            let (s, z, _) = prepared.coordinates(p);
+            let on_cut = prepared.position(s, z);
+            assert!(prepared.coordinates(on_cut).2.abs() < 1e-5);
+        }
+        let (a, b) = source
+            .slice_path(
+                &path,
+                SliceOptions {
+                    mode: SliceMode::Separate,
+                    cap: true,
+                    flip: false,
+                },
+                &|| false,
+            )
+            .unwrap();
+        let b = b.unwrap();
+        a.validate_closed().unwrap();
+        b.validate_closed().unwrap();
+        let volume = |m: &Mesh| {
+            m.triangles
+                .iter()
+                .map(|&[a, b, c]| m.vertices[a].dot(m.vertices[b].cross(m.vertices[c])) / 6.)
+                .sum::<f32>()
+        };
+        assert!((volume(&a) + volume(&b) - volume(&source)).abs() < 1e-4);
     }
 }

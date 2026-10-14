@@ -204,7 +204,7 @@ impl TransformControls {
                 (Vec3(0., 1., 0.), controls::AXES[1], "Y"),
                 (Vec3(0., 0., 1.), controls::AXES[2], "Z"),
             ] {
-                let projected = Vec2::new(axis.dot(scene.right), -axis.dot(scene.up));
+                let projected = scene.axis_direction(pivot, axis);
                 if projected.length() > 0.1 {
                     handles.push((
                         origin + projected * 85.,
@@ -219,7 +219,7 @@ impl TransformControls {
             let start = scene.project(a);
             let end = scene.project(b);
             let direction = (b - a).norm();
-            let projected = Vec2::new(direction.dot(scene.right), -direction.dot(scene.up));
+            let projected = scene.axis_direction(b, direction);
             match op {
                 TransformOperation::PlaceLine => vec![
                     (start, Handle::LineStart, controls::ACTION, "START"),
@@ -328,15 +328,9 @@ impl TransformControls {
                 )
             {
                 let pivot = self.drag_pivot.unwrap();
-                let start = scene.pick(pointer).map_or_else(
-                    || {
-                        let delta = pointer - scene.project(pivot);
-                        pivot
-                            + scene.right * (delta.x / scene.scale)
-                            + scene.up * (-delta.y / scene.scale)
-                    },
-                    |(p, _)| p,
-                );
+                let start = scene
+                    .pick(pointer)
+                    .map_or_else(|| scene.at_depth(pointer, pivot), |(p, _)| p);
                 if op == TransformOperation::PlaceLine {
                     self.line = Some([start, start]);
                     self.drag = Some(Handle::LineEnd);
@@ -354,8 +348,14 @@ impl TransformControls {
         if delta.length_sq() == 0. {
             return Ok(());
         }
-        let movement = scene.right * (delta.x / scene.scale) + scene.up * (-delta.y / scene.scale);
         let pivot = self.drag_pivot.unwrap();
+        let anchor = match self.drag {
+            Some(Handle::LineStart) => self.line.map_or(pivot, |line| line[0]),
+            Some(Handle::LineEnd) => self.line.map_or(pivot, |line| line[1]),
+            _ => pivot,
+        };
+        let scale = scene.scale_at(anchor);
+        let movement = scene.right * (delta.x / scale) + scene.up * (-delta.y / scale);
         let mut transform = Transform {
             pivot,
             ..Default::default()
@@ -394,7 +394,11 @@ impl TransformControls {
                         1. + axis.2 * (factor - 1.),
                     );
                 } else {
-                    transform.translation = axis * (amount / scene.scale);
+                    let motion = scene
+                        .axis_parameter(pointer, pivot, axis)
+                        .zip(scene.axis_parameter(pointer - delta, pivot, axis))
+                        .map_or(amount / scale, |(end, start)| end - start);
+                    transform.translation = axis * motion;
                 }
             }
             Handle::Uniform => {

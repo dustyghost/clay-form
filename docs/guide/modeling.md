@@ -48,6 +48,17 @@ Click **Transform** to open the existing World axes controls. Pin the menu or do
 
 Pivot and line placement do not change geometry, dirty the project, or consume undo steps. They are temporary viewport controls retained across transform operation changes, but reset when the viewport is cleared by actions such as model switching, project opening, undo/redo, or mesh/mask operations. They are not stored in projects. Focus loss, a tool switch, or a camera command finishes the current drag and prevents further changes until release. Rotate, Place pivot, and Reset pivot are available in custom menus and Key settings; they have no new default shortcuts.
 
+### Example: rotate a cube and keep its recipe
+
+1. In a practice project, create a **Cube** primitive. Set its X/Y/Z sizes to **1.4 / 0.8 / 1.0** and its spans to **2** on each axis.
+2. Right-drag to view the top and sides, then choose **Transform → Rotate**.
+3. Drag the blue **Z** ring. Watch the signed angle while dragging, then release to keep the rotation.
+4. Choose **Done** and adjust a cube dimension in its Primitive controls. The cube regenerates in its rotated placement. Undo the dimension edit and rotation separately to compare.
+
+![Cube during a World axes rotation with colored rings and a live signed angle](../images/rotation-controls.png)
+
+*The colored rings rotate the model around the pivot. The live angle measures the current drag; it is not a camera orbit.*
+
 ## Mesh management
 
 Use the **Mesh** menu or the **Mesh management** panel. New spheres use an all-quad cube-sphere surface with 4,706 vertices and 4,704 quad faces, leaving room for subdivision and avoiding triangle fans at the poles. Opening older projects preserves their geometry.
@@ -75,6 +86,8 @@ Choose **Slice** in the toolbar, then choose a result:
 Drag a straight line in the viewport, starting on the model or in empty space. The faint line extension shows the full cut: a plane through all depths of the active model. Hold **Space** while dragging to move the whole line without changing its angle. Release the mouse to apply; **Esc** cancels the gesture and exits Slice mode. Right drag still orbits between cuts. **Done slicing** returns to sculpting. Slice does not mirror with brush symmetry or use masks to restrict the cut; surviving mask values and existing vertex-group weights are preserved and interpolated at new vertices.
 
 Choose **Path** for a cut with editable bends. Click to add points (up to 24), click an edge to insert a point, and drag a point to change the shape. Select an interior point to reveal corner handles: drag the blue diamond away from the point to soften the corner, or back toward it to sharpen it. Rounded corners also show two linked tangent handles where the curve meets the straight edges; dragging either changes the rounding. **Sharp** removes rounding immediately; **Rounded** adds it. The **Turn** angle and **Round (px)** controls remain available; rounding is limited by the neighboring segment lengths. **Shift-drag** snaps to 15°; **Space-drag** moves the whole path. **Delete point** (or Delete/Backspace) removes the selected point. Choose **Apply cut** or press Enter to commit; **Clear** discards the draft; **Esc** discards it and exits Slice mode. The faint end extensions continue through all depths of the model. Paths and their extensions must not cross themselves. The camera stays fixed while editing a path; clear or apply it before orbiting. A failed or cancelled cut keeps the draft available for correction.
+
+Cuts follow the current [view projection](navigation.md#perspective-view). Orthographic cuts extend in parallel through the model; perspective cut planes converge at the camera eye so they match the line or path on screen. Changing projection or field of view discards the draft. A perspective path cut rejects a model crossing the camera eye; move the model fully in front of the camera or switch to orthographic view and redraw the path.
 
 For Trim and Separate, **Cap cuts** is on by default. It closes the cut with triangles in a **Cut** vertex group, including concave boundaries and holes; path caps follow the bends and rounded corners. Caps require a closed, consistently oriented source surface. Turn caps off to slice open surfaces, or apply temporary thickness first. Convert primitives before slicing, apply or remove temporary thickness, and show all vertex group faces of the active model.
 

@@ -24,10 +24,12 @@ Linux requires a working Wayland or X11 desktop and desktop OpenGL 3.3 or newer.
 | [Reference images](docs/guide/references.md) | Embedded photographs/drawings, placement, opacity, locking, visibility |
 | [Workspace and shortcuts](docs/guide/workspace.md) | Pinned menus, collapsible panels, custom shelves, workspaces, key bindings |
 
+The guides include worked examples and app screenshots. Try [comparing view projections](docs/guide/navigation.md#example-compare-orthographic-and-perspective-views), [sculpting a fine fold](docs/guide/sculpting.md#example-cut-a-fine-fold), or [importing the sample pyramid](docs/guide/files.md#example-import-the-sample-pyramid).
+
 For contributors: [development checks](docs/development.md), [architecture](docs/architecture.md), [GPU rendering and profiling](docs/gpu-rendering.md), and [UI design rules](docs/ui-design.md).
 
 See the [roadmap](docs/roadmap.md) for completed work, upcoming phases, and delivery checks. Keep detailed feature instructions in the relevant guide above when adding functionality.
 
 ## Scope
 
-This is a desktop sculpting prototype. Meshes retain quad topology where available and use triangles for rendering and picking. The orthographic viewport uses OpenGL rendering; sculpting, picking, and topology operations run on the CPU. Subdivision, voxel remeshing, and local adaptive topology are implemented; quad retopology, sculpt layers, materials, and texture painting are future work. Meshes are limited to 500,000 vertices and 1,000,000 triangles; large scenes can still be limited by CPU editing and picking work. Mesh/alpha file sizes are bounded on load.
+This is a desktop sculpting prototype. Meshes retain quad topology where available and use triangles for rendering and picking. The viewport supports orthographic and perspective viewing with OpenGL rendering; sculpting, picking, and topology operations run on the CPU. Subdivision, voxel remeshing, and local adaptive topology are implemented; quad retopology, sculpt layers, materials, and texture painting are future work. Meshes are limited to 500,000 vertices and 1,000,000 triangles; large scenes can still be limited by CPU editing and picking work. Mesh/alpha file sizes are bounded on load.

@@ -28,6 +28,7 @@ impl App {
             Action::Undo => Some(Command::Undo),
             Action::Redo => Some(Command::Redo),
             Action::ResetView => Some(Command::ResetView),
+            Action::Perspective => Some(Command::SetPerspective(!self.camera.perspective)),
             Action::ZoomIn => Some(Command::ZoomIn),
             Action::ZoomOut => Some(Command::ZoomOut),
             Action::Symmetry => {

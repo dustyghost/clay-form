@@ -249,7 +249,7 @@ impl eframe::App for App {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.request(PendingAction::Quit, ctx);
         }
-        for command in self.ui.toolbar(ctx, &self.document, self.camera.zoom) {
+        for command in self.ui.toolbar(ctx, &self.document, &self.camera) {
             self.dispatch(command, ctx);
         }
         for command in self.ui.custom_surfaces(ctx, &self.document) {
@@ -260,7 +260,7 @@ impl eframe::App for App {
             &self.document,
             &self.tablet.status(),
             self.pressure,
-            self.camera.zoom,
+            &self.camera,
         ) {
             self.dispatch(command, ctx);
         }

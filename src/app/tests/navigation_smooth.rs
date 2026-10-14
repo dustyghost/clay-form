@@ -350,7 +350,15 @@ fn navigation_and_smooth_offscreen_preview() {
     brush.radius = 125.;
     app.document.update_brush(smooth, brush).unwrap();
     let before = app.document.geometry_snapshot();
-    for held in [false, true] {
+    for (preview, (held, zoom, name)) in [
+        (false, 8., "standard"),
+        (true, 8., "smooth"),
+        (false, 1., "brush-settings"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        app.camera.set_zoom(zoom);
         for step in 0..3 {
             let output = ctx.run(
                 egui::RawInput {
@@ -363,14 +371,14 @@ fn navigation_and_smooth_offscreen_preview() {
                     } else {
                         egui::Modifiers::NONE
                     },
-                    time: Some((step + if held { 3 } else { 0 }) as f64),
+                    time: Some((step + preview * 3) as f64),
                     ..Default::default()
                 },
                 |ctx| {
-                    let _ = app.ui.toolbar(ctx, &app.document, app.camera.zoom);
+                    let _ = app.ui.toolbar(ctx, &app.document, &app.camera);
                     let _ = app
                         .ui
-                        .brush_panel(ctx, &app.document, "Preview", 1., app.camera.zoom);
+                        .brush_panel(ctx, &app.document, "Preview", 1., &app.camera);
                     app.ui.status_bar(ctx);
                     egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
                 },
@@ -379,10 +387,7 @@ fn navigation_and_smooth_offscreen_preview() {
             if step == 2
                 && let Ok(path) = std::env::var("CLAY_NAVIGATION_PREVIEW")
             {
-                capture.save(
-                    format!("{path}-{}.png", if held { "smooth" } else { "standard" }),
-                    &rgba,
-                );
+                capture.save(format!("{path}-{name}.png"), &rgba);
             }
             assert_eq!(
                 app.ui

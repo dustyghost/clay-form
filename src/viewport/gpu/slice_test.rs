@@ -260,6 +260,7 @@ fn gpu_rounded_slice_path_preview() {
                 &crate::sculpt::SlicePath {
                     points,
                     depth: Vec3(0., 0., 1.),
+                    eye: None,
                 },
                 SliceOptions {
                     mode: SliceMode::Trim,

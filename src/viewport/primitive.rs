@@ -444,13 +444,13 @@ impl PrimitiveControls {
         };
         let length = h.axis.len().max(0.001);
         let axis = h.axis.norm();
-        let projected = Vec2::new(axis.dot(scene.right), -axis.dot(scene.up));
+        let projected = scene.axis_direction(h.point, axis);
         let amount = if projected.length_sq() > 0.04 {
             delta.dot(projected) / projected.length_sq()
         } else {
             delta.x
         };
-        let world = amount / scene.scale / length;
+        let world = amount / scene.scale_at(h.point) / length;
         match h.control {
             Control::Resolution(control) => {
                 self.span_remainder += delta.x / 12.;
@@ -565,7 +565,7 @@ impl PrimitiveControls {
                 let projected = if matches!(h.control, Control::Resolution(_)) {
                     Vec2::X
                 } else {
-                    Vec2::new(axis.dot(scene.right), -axis.dot(scene.up))
+                    scene.axis_direction(h.point, axis)
                 };
                 let direction = if projected.length_sq() > 0.04 {
                     projected.normalized()

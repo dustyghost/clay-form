@@ -17,9 +17,15 @@ fn frame(
             ..Default::default()
         },
         |ctx| {
-            commands.extend(state.toolbar(ctx, doc, 1.));
+            commands.extend(state.toolbar(ctx, doc, &crate::camera::Camera::default()));
             commands.extend(state.custom_surfaces(ctx, doc));
-            commands.extend(state.brush_panel(ctx, doc, "Test", 1., 1.));
+            commands.extend(state.brush_panel(
+                ctx,
+                doc,
+                "Test",
+                1.,
+                &crate::camera::Camera::default(),
+            ));
             egui::CentralPanel::default().show(ctx, |ui| {
                 // Same response hook used by the ordinary toolbar and tool panels.
                 ui.button("Source mask button").customize(Action::ClearMask);

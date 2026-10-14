@@ -34,7 +34,7 @@ pub(super) struct SelectionDrag {
     tool: SelectionTool,
     group: Option<usize>,
     revision: u64,
-    projection: (f32, Pos2, crate::sculpt::Vec3, crate::sculpt::Vec3),
+    projection: (f32, Pos2, crate::sculpt::Vec3, crate::sculpt::Vec3, f32),
     hide: bool,
 }
 impl SelectionDrag {
@@ -181,7 +181,13 @@ impl Viewport {
                 tool: select.unwrap_or(SelectionTool::Rectangle),
                 group: scene.pick_polygroup(pos, document),
                 revision: document.display_revision(),
-                projection: (scene.scale, scene.center, scene.right, scene.up),
+                projection: (
+                    scene.scale,
+                    scene.center,
+                    scene.right,
+                    scene.up,
+                    scene.eye_distance,
+                ),
                 hide: modifiers.alt,
             });
             self.gesture = Some(Gesture::Select);
@@ -199,7 +205,14 @@ impl Viewport {
                         .any(|e| matches!(e, egui::Event::PointerGone))
             })
             || document.display_revision() != drag.revision
-            || drag.projection != (scene.scale, scene.center, scene.right, scene.up)
+            || drag.projection
+                != (
+                    scene.scale,
+                    scene.center,
+                    scene.right,
+                    scene.up,
+                    scene.eye_distance,
+                )
         {
             self.selection = None;
             self.gesture = None;
@@ -294,7 +307,7 @@ impl Viewport {
                     self.status = Some("Draw a lasso enclosing an area".into());
                     return true;
                 };
-                let contains = |p| region.contains(scene.project(p));
+                let contains = |p| scene.visible_depth(p) && region.contains(scene.project(p));
                 let result = if drag.tool == SelectionTool::MaskLasso {
                     document.mask_region(contains, drag.hide)
                 } else {
@@ -319,6 +332,8 @@ impl Viewport {
             } else {
                 let intersects = document.mesh().triangles.iter().enumerate().any(|(i, t)| {
                     document.mesh().face_visible(i)
+                        && t.iter()
+                            .any(|&v| scene.visible_depth(document.mesh().vertices[v]))
                         && triangle_intersects_rect(
                             t.map(|v| scene.project(document.mesh().vertices[v])),
                             rect,
@@ -328,7 +343,10 @@ impl Viewport {
                     (document.invert_visibility(), "Visibility inverted")
                 } else {
                     (
-                        document.select_face_region(|p| rect.contains(scene.project(p)), drag.hide),
+                        document.select_face_region(
+                            |p| scene.visible_depth(p) && rect.contains(scene.project(p)),
+                            drag.hide,
+                        ),
                         if drag.hide {
                             "Selection hidden"
                         } else {

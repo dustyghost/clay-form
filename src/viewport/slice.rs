@@ -12,7 +12,7 @@ pub(super) struct SliceDrag {
     end: Pos2,
     revision: u64,
     options: SliceOptions,
-    projection: (Vec3, Vec3, Pos2, f32),
+    projection: (Vec3, Vec3, Pos2, f32, f32),
 }
 impl SliceDrag {
     fn plane(&self, scene: &Scene) -> Option<SlicePlane> {
@@ -20,11 +20,16 @@ impl SliceDrag {
         if delta.length() < 6. {
             return None;
         }
-        let perpendicular = Vec2::new(-delta.y, delta.x).normalized();
+        let origin = scene.at_depth(self.start, Vec3::default());
+        let end = scene.at_depth(self.end, Vec3::default());
+        let depth = if scene.eye_distance > 0. {
+            scene.view * scene.eye_distance - origin
+        } else {
+            scene.view
+        };
         Some(SlicePlane {
-            origin: scene.right * ((self.start.x - scene.center.x) / scene.scale)
-                + scene.up * ((scene.center.y - self.start.y) / scene.scale),
-            normal: scene.right * perpendicular.x - scene.up * perpendicular.y,
+            origin,
+            normal: (end - origin).cross(depth).norm(),
         })
     }
     fn paint(&self, painter: &egui::Painter, scene: &Scene) {
@@ -90,7 +95,14 @@ impl Viewport {
             || self.slice.as_ref().is_some_and(|s| {
                 s.revision != document.display_revision()
                     || s.options != options
-                    || s.projection != (scene.right, scene.up, scene.center, scene.scale)
+                    || s.projection
+                        != (
+                            scene.right,
+                            scene.up,
+                            scene.center,
+                            scene.scale,
+                            scene.eye_distance,
+                        )
             })
         {
             self.slice = None;
@@ -109,7 +121,13 @@ impl Viewport {
                 end: point,
                 revision: document.display_revision(),
                 options,
-                projection: (scene.right, scene.up, scene.center, scene.scale),
+                projection: (
+                    scene.right,
+                    scene.up,
+                    scene.center,
+                    scene.scale,
+                    scene.eye_distance,
+                ),
             });
             let delta = point - drag.last;
             if ui.input(|i| i.key_down(egui::Key::Space)) {
@@ -167,7 +185,7 @@ pub(super) struct SlicePathDraft {
     corner_drag: Option<CornerHandle>,
     last: Pos2,
     revision: u64,
-    projection: (Vec3, Vec3, Pos2, f32),
+    projection: (Vec3, Vec3, Pos2, f32, f32),
 }
 impl SlicePathDraft {
     fn corner_limit(&self, i: usize) -> f32 {
@@ -283,6 +301,7 @@ impl SlicePathDraft {
                 })
                 .collect(),
             depth: scene.right.cross(scene.up).norm(),
+            eye: (scene.eye_distance > 0.).then_some(scene.view * scene.eye_distance),
         })
     }
     fn paint(&self, painter: &egui::Painter, scene: &Scene, options: SliceOptions) {
@@ -385,7 +404,14 @@ impl Viewport {
         if ui.input(|i| i.key_pressed(egui::Key::Escape))
             || self.slice_path.as_ref().is_some_and(|s| {
                 s.revision != document.display_revision()
-                    || s.projection != (scene.right, scene.up, scene.center, scene.scale)
+                    || s.projection
+                        != (
+                            scene.right,
+                            scene.up,
+                            scene.center,
+                            scene.scale,
+                            scene.eye_distance,
+                        )
             })
         {
             self.slice_path = None;
@@ -501,7 +527,13 @@ impl Viewport {
                 corner_drag: None,
                 last: point,
                 revision: document.display_revision(),
-                projection: (scene.right, scene.up, scene.center, scene.scale),
+                projection: (
+                    scene.right,
+                    scene.up,
+                    scene.center,
+                    scene.scale,
+                    scene.eye_distance,
+                ),
             });
             path.last = point;
             path.dragging = true;
@@ -633,7 +665,7 @@ mod tests {
             corner_drag: None,
             last: Pos2::ZERO,
             revision: 0,
-            projection: (Vec3::default(), Vec3::default(), Pos2::ZERO, 1.),
+            projection: (Vec3::default(), Vec3::default(), Pos2::ZERO, 1., 0.),
         };
         // The editor stores pixels; scale up for its subpixel rounding threshold.
         let mut draft = draft;
@@ -650,6 +682,7 @@ mod tests {
                 .map(|p| Vec3(p.x / 100., p.y / 100., 0.))
                 .collect(),
             depth: Vec3(0., 0., 1.),
+            eye: None,
         };
         let mut source = crate::sculpt::Mesh::starting_sphere();
         for (weight, p) in source.mask.iter_mut().zip(&source.vertices) {

@@ -3,6 +3,7 @@
 *.clay
 *.brush.json
 *.obj
+!/docs/examples/pyramid.obj
 *.tmp
 *.log
 .DS_Store

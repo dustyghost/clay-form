@@ -1,11 +1,15 @@
 //! Session-only camera state. Camera changes never modify the sculpt document.
 use crate::sculpt::Vec3;
 use eframe::egui::Vec2;
+#[derive(Clone, Copy)]
 pub struct Camera {
     pub yaw: f32,
     pub pitch: f32,
     pub zoom: f32,
     pub pan: Vec2,
+    pub perspective: bool,
+    pub field_of_view: f32,
+    pub perspective_radius: f32,
 }
 impl Default for Camera {
     fn default() -> Self {
@@ -14,10 +18,41 @@ impl Default for Camera {
             pitch: 0.,
             zoom: 1.,
             pan: Vec2::ZERO,
+            perspective: false,
+            field_of_view: 45.,
+            perspective_radius: 1.,
         }
     }
 }
 impl Camera {
+    pub fn projected_extent(&self, points: impl Iterator<Item = Vec3>) -> f32 {
+        let (right, up, view) = self.basis();
+        let distance = self.eye_distance();
+        points
+            .map(|point| {
+                let factor = if distance == 0. {
+                    1.
+                } else {
+                    distance / (distance - point.dot(view)).max(distance * 0.001)
+                };
+                point.dot(right).abs().max(point.dot(up).abs()) * factor
+            })
+            .fold(0_f32, f32::max)
+    }
+    pub fn set_field_of_view(&mut self, degrees: f32) {
+        if degrees.is_finite() {
+            self.field_of_view = degrees.clamp(20., 75.);
+        }
+    }
+    /// Match the orthographic scale at the orbit centre. Zoom enlarges the
+    /// image without moving the eye through the sculpt during close-up work.
+    pub fn eye_distance(&self) -> f32 {
+        if self.perspective {
+            self.perspective_radius / (0.7 * (self.field_of_view.to_radians() * 0.5).tan())
+        } else {
+            0.
+        }
+    }
     pub fn zoom_by(&mut self, scroll: f32) {
         if scroll.is_finite() {
             self.set_zoom(self.zoom * (scroll * 0.002).clamp(-20., 20.).exp());

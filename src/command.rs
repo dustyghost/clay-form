@@ -61,6 +61,8 @@ pub(crate) enum Command {
     MergeDown,
     ExtractMasked,
     ResetView,
+    SetPerspective(bool),
+    SetFieldOfView(f32),
     ZoomIn,
     ZoomOut,
     SetZoom(f32),

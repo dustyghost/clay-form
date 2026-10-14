@@ -247,14 +247,10 @@ fn customized_tool_groups_render_in_all_docks_and_settings() {
                 ..Default::default()
             },
             |ctx| {
+                assert!(app.ui.toolbar(ctx, &app.document, &app.camera).is_empty());
                 assert!(
                     app.ui
-                        .toolbar(ctx, &app.document, app.camera.zoom)
-                        .is_empty()
-                );
-                assert!(
-                    app.ui
-                        .brush_panel(ctx, &app.document, "Test tablet", 1., app.camera.zoom)
+                        .brush_panel(ctx, &app.document, "Test tablet", 1., &app.camera)
                         .is_empty()
                 );
                 app.ui.settings(ctx, &app.document);
@@ -933,7 +929,7 @@ fn transform_button_activates_floating_controls_with_one_click() {
                 ..Default::default()
             },
             |ctx| {
-                for command in app.ui.toolbar(ctx, &app.document, app.camera.zoom) {
+                for command in app.ui.toolbar(ctx, &app.document, &app.camera) {
                     app.dispatch(command, ctx);
                 }
                 egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
@@ -1060,8 +1056,7 @@ fn requesting_primitive_controls_reveals_the_submodels_section() {
             ..Default::default()
         },
         |ctx| {
-            app.ui
-                .brush_panel(ctx, &app.document, "", 1., app.camera.zoom);
+            app.ui.brush_panel(ctx, &app.document, "", 1., &app.camera);
         },
     );
     let panel = app
@@ -2564,7 +2559,11 @@ fn custom_menu_shortcut_and_all_shelf_placements_render_without_document_edits()
                 ..Default::default()
             },
             |ctx| {
-                assert!(app.ui.toolbar(ctx, &app.document, 1.).is_empty());
+                assert!(
+                    app.ui
+                        .toolbar(ctx, &app.document, &crate::camera::Camera::default())
+                        .is_empty()
+                );
                 assert!(app.ui.custom_surfaces(ctx, &app.document).is_empty());
                 app.ui.layout_open = true;
                 app.ui.settings(ctx, &app.document);
@@ -2907,7 +2906,7 @@ mod pinned_menus {
                 ..Default::default()
             },
             |ctx| {
-                for command in app.ui.toolbar(ctx, &app.document, app.camera.zoom) {
+                for command in app.ui.toolbar(ctx, &app.document, &app.camera) {
                     app.dispatch(command, ctx);
                 }
                 egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
@@ -3513,3 +3512,5 @@ mod references;
 mod navigation_smooth;
 
 mod detail;
+
+mod perspective;

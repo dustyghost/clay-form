@@ -10,7 +10,7 @@ An offscreen color/depth framebuffer gives intersecting and overlapping submodel
 
 Lighting runs per fragment. The alpha footprint and symmetry guides run in the solid surface shader and stay on active visible surfaces. Tangent rings, the normal indicator, gizmos, and ordinary controls remain egui overlays.
 
-Mesh deformation, subdivision, remeshing, undo, and surface picking remain CPU operations. Picking still projects and scans triangles; moving rendering to the GPU does not remove that cost. The renderer uses the same immutable mesh snapshot for display and picking throughout each frame, including frames containing adaptive topology edits.
+Mesh deformation, subdivision, remeshing, undo, and surface picking remain CPU operations. Picking scans triangles, using projected barycentrics in orthographic view and ray intersections in perspective view; moving rendering to the GPU does not remove that cost. The renderer uses the same immutable mesh snapshot for display and picking throughout each frame, including frames containing adaptive topology edits.
 
 ## Validation
 
@@ -21,6 +21,9 @@ EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib viewp
 EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib recovery_and_menu_placement_offscreen_preview -- --ignored
 EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib obj_import_offscreen_preview -- --ignored
 EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib reference_images_offscreen_preview -- --ignored
+EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib navigation_and_smooth_offscreen_preview -- --ignored
+EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib detail_groove_offscreen_preview -- --ignored
+EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib perspective_view_offscreen_preview -- --ignored
 ```
 
 Only the manual load profile is excluded. Software rendering checks shader, framebuffer, picking/display, and UI composition correctness; it is not a hardware performance measurement.
@@ -38,6 +41,12 @@ The main offscreen test checks depth occlusion, wireframe modes, quad topology, 
 ```sh
 CLAY_GPU_PREVIEW=/tmp/clay-gpu-preview.png cargo test --locked gpu_offscreen -- --ignored --nocapture
 ```
+
+The perspective regression compares real framebuffer coverage against CPU picking, checks brush-alpha agreement, wireframe, symmetry guides and camera-only cache reuse, and exercises near-plane crossings and distant geometry. `perspective_view_offscreen_preview` renders the View controls in both projections, exporting `/tmp/clay-perspective-orthographic.png` and `/tmp/clay-perspective-ui.png` for visual inspection. Set `CLAY_PERSPECTIVE_PREVIEW` to change the output prefix.
+
+For the recent brush previews, set `CLAY_DETAIL_PREVIEW=/tmp/clay-detail` when running `detail_groove_offscreen_preview` to save `-solid.png` and `-wire.png` images. Set `CLAY_NAVIGATION_PREVIEW=/tmp/clay-navigation` when running `navigation_and_smooth_offscreen_preview` to save `-standard.png` and `-smooth.png` images at 800% zoom, plus `-brush-settings.png` at 100%. These tests still run without the variables; only the image export is optional.
+
+To regenerate all checked-in guide images, use `bash scripts/update-doc-screenshots.sh`; see the [screenshot inventory](images/README.md). The OBJ and recovery/menu previews also accept full output paths through `CLAY_OBJ_PREVIEW`, `CLAY_RECOVERY_PREVIEW`, and `CLAY_MENU_PREVIEW`, retaining their existing `/tmp/clay-*.png` defaults when unset.
 
 ## Load profile
 

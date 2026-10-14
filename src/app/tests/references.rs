@@ -350,10 +350,10 @@ fn reference_images_offscreen_preview() {
                     ..Default::default()
                 },
                 |ctx| {
-                    let _ = app.ui.toolbar(ctx, &app.document, app.camera.zoom);
+                    let _ = app.ui.toolbar(ctx, &app.document, &app.camera);
                     let _ = app
                         .ui
-                        .brush_panel(ctx, &app.document, "Preview", 1., app.camera.zoom);
+                        .brush_panel(ctx, &app.document, "Preview", 1., &app.camera);
                     app.ui.status_bar(ctx);
                     egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
                 },

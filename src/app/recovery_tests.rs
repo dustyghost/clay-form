@@ -142,20 +142,28 @@ fn recovery_and_menu_placement_offscreen_preview() {
                 ..Default::default()
             },
             |ctx| {
-                let _ = app.ui.toolbar(ctx, &app.document, app.camera.zoom);
+                let _ = app.ui.toolbar(ctx, &app.document, &app.camera);
                 let _ = app
                     .ui
-                    .brush_panel(ctx, &app.document, "Preview", 1., app.camera.zoom);
+                    .brush_panel(ctx, &app.document, "Preview", 1., &app.camera);
                 egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
                 app.show_recovery(ctx);
             },
         );
         let rgba = capture.render(&ctx, output);
         if step == 2 {
-            capture.save("/tmp/clay-menu-placement.png", &rgba);
+            capture.save(
+                std::env::var("CLAY_MENU_PREVIEW")
+                    .unwrap_or_else(|_| "/tmp/clay-menu-placement.png".into()),
+                &rgba,
+            );
         }
         if step == 5 {
-            capture.save("/tmp/clay-recovery-dialog.png", &rgba);
+            capture.save(
+                std::env::var("CLAY_RECOVERY_PREVIEW")
+                    .unwrap_or_else(|_| "/tmp/clay-recovery-dialog.png".into()),
+                &rgba,
+            );
         }
     }
     app.viewport.destroy_renderer(&capture.gl);

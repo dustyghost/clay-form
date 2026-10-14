@@ -46,6 +46,21 @@ Both lassos select **through all depths**, including the back of the model, on t
 
 **Visibility → Split hidden** moves hidden faces into a new, visible submodel immediately after the active one, following external sculpting application's Split Hidden behavior. Both pieces stay in place, retaining masks, vertex groups, and complete quads. Boundaries stay open. Both visible and hidden faces are required. Splitting uses the current subdivision level and resets the resulting pieces' subdivision stacks and adaptive/voxel settings; other submodels stay intact. One Undo restores the complete pre-split state.
 
+### Example: protect a region with a lasso
+
+1. On the starting sphere, choose **Mask → Mask lasso**.
+2. Drag an L-shaped outline over the right side of the sphere. Before releasing, check the green region; the closing edge joins your pointer to the start.
+3. Release to apply the mask, then choose **Done** to return to sculpting. The dark region is protected, including vertices behind it: lasso masking selects through all depths.
+4. Try a Standard stroke across the boundary. For a softer transition, undo the trial stroke and choose **Mask → Blur mask** before trying again.
+
+![Green concave lasso preview over the right side of the sphere before release](../images/mask-lasso-preview.png)
+
+*Before release: the green preview includes the concave corner of the outline.*
+
+![Dark L-shaped masked region on the sphere after releasing the lasso](../images/mask-lasso-result.png)
+
+*After release: the masked region is protected. Blur mask would soften this sharp boundary.*
+
 ## Related guides
 
 [Models and mesh tools](modeling.md) · [Undo and redo](sculpting.md#undo-and-redo)

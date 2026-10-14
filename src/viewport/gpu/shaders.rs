@@ -7,11 +7,15 @@ layout(location=3) in float a_mask;
 uniform vec3 u_right, u_up, u_view;
 uniform vec4 u_projection;
 uniform float u_depth;
+uniform vec3 u_perspective;
 out vec3 v_normal, v_color, v_position;
 out float v_mask, v_active;
 void main() {
- gl_Position = vec4(dot(a_position,u_right)*u_projection.x+u_projection.z,
- dot(a_position,u_up)*u_projection.y+u_projection.w,-dot(a_position,u_view)*u_depth,1.0);
+ float z=dot(a_position,u_view);
+ float w=1.0-z*u_perspective.x;
+ float depth=u_perspective.x>0.0 ? u_perspective.y*w+u_perspective.z : -z*u_depth;
+ gl_Position = vec4(dot(a_position,u_right)*u_projection.x+u_projection.z*w,
+ dot(a_position,u_up)*u_projection.y+u_projection.w*w,depth,w);
  v_normal=a_normal; v_color=a_color; v_mask=max(a_mask,0.0); v_active=step(0.0,a_mask); v_position=a_position;
 }"#;
 pub(super) const SURFACE_FRAGMENT: &str = r#"#version 330 core
@@ -77,12 +81,17 @@ layout(location=3) in vec3 a_edge_color;
 uniform vec3 u_right, u_up, u_view;
 uniform vec4 u_projection;
 uniform float u_depth;
+uniform vec3 u_perspective;
 out float v_front;
 out vec3 v_edge_color;
 void main() {
- gl_Position=vec4(dot(a_position,u_right)*u_projection.x+u_projection.z,
- dot(a_position,u_up)*u_projection.y+u_projection.w,-dot(a_position,u_view)*u_depth,1.0);
- v_front=max(dot(a_normal,u_view),dot(a_other_normal,u_view));
+ float z=dot(a_position,u_view);
+ float w=1.0-z*u_perspective.x;
+ float depth=u_perspective.x>0.0 ? u_perspective.y*w+u_perspective.z : -z*u_depth;
+ gl_Position=vec4(dot(a_position,u_right)*u_projection.x+u_projection.z*w,
+ dot(a_position,u_up)*u_projection.y+u_projection.w*w,depth,w);
+ vec3 toward_eye=u_view-a_position*u_perspective.x;
+ v_front=max(dot(a_normal,toward_eye),dot(a_other_normal,toward_eye));
  v_edge_color=a_edge_color;
 }"#;
 pub(super) const LINE_FRAGMENT: &str = r#"#version 330 core

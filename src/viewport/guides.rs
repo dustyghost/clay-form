@@ -1,7 +1,7 @@
 //! Surface symmetry guides, independent of sculpt edits and gesture handling.
 use super::scene::Scene;
 use crate::sculpt::{Mesh, Symmetry, Vec3};
-use eframe::egui::{self, Color32, Pos2};
+use eframe::egui::{self, Color32};
 pub(super) fn paint(
     scene: &Scene,
     painter: &egui::Painter,
@@ -9,12 +9,6 @@ pub(super) fn paint(
     symmetry: &Symmetry,
     opacity: f32,
 ) {
-    let project = |v: Vec3| {
-        Pos2::new(
-            scene.center.x + v.dot(scene.right) * scene.scale,
-            scene.center.y - v.dot(scene.up) * scene.scale,
-        )
-    };
     for guide in symmetry.guides() {
         let normal = guide.normal;
         let color = if guide.side.is_some() {
@@ -34,7 +28,9 @@ pub(super) fn paint(
                 let Some([a, b]) = clip_guide(segment, guide.side, symmetry.center) else {
                     continue;
                 };
-                let line = [project(a), project(b)];
+                let Some(line) = scene.clip_segment([a, b]) else {
+                    continue;
+                };
                 painter.line_segment(
                     line,
                     egui::Stroke::new(3_f32, Color32::from_black_alpha((opacity * 150.) as u8)),

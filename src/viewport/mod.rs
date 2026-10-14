@@ -2,6 +2,7 @@
 mod controls;
 mod gizmo;
 mod gpu;
+mod projection;
 #[cfg(all(test, target_os = "linux"))]
 pub(crate) use gpu::ui_capture::UiCapture;
 mod guides;
@@ -281,7 +282,6 @@ impl Viewport {
             return;
         }
         let (right, up, _) = camera.basis();
-        let scale = scene.scale;
         let pointer = response
             .hover_pos()
             .or_else(|| response.interact_pointer_pos());
@@ -808,9 +808,9 @@ impl Viewport {
                                     .min_by(|(_, a), (_, b)| {
                                         (**a - center).len().total_cmp(&(**b - center).len())
                                     });
-                                if let Some((index, &tip)) =
-                                    seed.filter(|(_, v)| (**v - center).len() < radius / scale)
-                                {
+                                if let Some((index, &tip)) = seed.filter(|(_, v)| {
+                                    (**v - center).len() < radius / scene.scale_at(center)
+                                }) {
                                     self.snake = Some(SnakeStroke {
                                         center: tip,
                                         normal,
@@ -825,6 +825,7 @@ impl Viewport {
                             scene.pick(point)
                         };
                         if let Some((p, n)) = hit {
+                            let scale = scene.scale_at(p);
                             let d = (right * ((pos.x - previous.x) / scale)
                                 + up * ((previous.y - pos.y) / scale))
                                 * (1. / steps as f32);
