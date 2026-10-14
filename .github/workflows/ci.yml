@@ -77,3 +77,4 @@ jobs:
         run: |
           cargo test --locked --lib viewport::gpu:: -- --ignored --skip gpu_load_profile --test-threads=1
           cargo test --locked --lib recovery_and_menu_placement_offscreen_preview -- --ignored
+          cargo test --locked --lib obj_import_offscreen_preview -- --ignored

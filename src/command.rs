@@ -12,6 +12,7 @@ pub(crate) enum Command {
     Request(PendingAction),
     Save,
     Export,
+    ImportObj,
     Undo,
     Redo,
     ClearMask,

@@ -59,6 +59,7 @@ impl App {
             }
 
             Action::CancelMeshOperation => Some(Command::CancelMeshJob),
+            Action::ImportObj => Some(Command::ImportObj),
             Action::Export => Some(Command::Export),
             Action::ClearMask => Some(Command::ClearMask),
             Action::InvertMask => Some(Command::InvertMask),

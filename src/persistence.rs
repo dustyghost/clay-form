@@ -1,4 +1,8 @@
-//! Filesystem adapter: versioned projects, presets, image alphas, and OBJ export.
+//! Filesystem adapter: versioned projects, presets, image alphas, and OBJ import/export.
+mod obj;
+pub use obj::load_obj;
+pub(crate) use obj::load_obj_cancellable;
+
 use crate::sculpt::{Alpha, Brush, Mesh, Project, validate_brush};
 pub(crate) fn read_json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, String> {
     let meta = std::fs::metadata(path).map_err(|e| e.to_string())?;

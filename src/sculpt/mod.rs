@@ -15,6 +15,8 @@ pub use math::Vec3;
 pub use mesh::{Dab, Mesh};
 pub use project::{ModelMetadata, Project, SceneSettings, Submodel};
 pub use subdivision::{Geometry, MeshSettings};
+pub(crate) use subdivision::{MAX_TRIANGLES, MAX_VERTICES};
+mod import;
 pub use symmetry::{Axis, GuidePlane, Symmetry};
 #[cfg(test)]
 mod tests;

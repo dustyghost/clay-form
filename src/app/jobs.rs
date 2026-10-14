@@ -3,7 +3,13 @@ use super::*;
 
 impl App {
     pub(super) fn start_mesh_job(&mut self, operation: Operation) -> Result<(), String> {
-        self.document.require_sculpt_mesh()?;
+        if matches!(operation, Operation::ImportObj(_)) {
+            if self.document.model_count() >= 64 {
+                return Err("Submodels are limited to 64".into());
+            }
+        } else {
+            self.document.require_sculpt_mesh()?;
+        }
         if self.mesh_job.is_some() {
             return Err("A mesh operation is already running".into());
         }
@@ -43,11 +49,20 @@ impl App {
             match result.and_then(|geometry| self.document.replace_geometry_named(geometry, label))
             {
                 Ok(()) => {
-                    if matches!(operation, Operation::Slice(..) | Operation::SlicePath(..)) {
+                    if matches!(
+                        operation,
+                        Operation::ImportObj(_) | Operation::Slice(..) | Operation::SlicePath(..)
+                    ) {
                         self.ui.show_polygroups = true;
                     }
+                    if matches!(operation, Operation::ImportObj(_)) {
+                        self.ui.selected_vertex_group = None;
+                        self.viewport
+                            .reset_transform_pivot(&self.document, self.ui.transform_mode);
+                    }
                     self.ui.status = format!(
-                        "Mesh updated: {} vertices, {} faces",
+                        "{} complete: {} vertices, {} triangles",
+                        operation.history_label(),
                         self.document.mesh().vertices.len(),
                         self.document.mesh().triangles.len()
                     )

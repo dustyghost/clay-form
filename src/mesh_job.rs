@@ -8,6 +8,7 @@ use std::sync::{
 
 #[derive(Clone)]
 pub(crate) enum Operation {
+    ImportObj(String),
     SlicePath(crate::sculpt::SlicePath, crate::sculpt::SliceOptions),
     Subdivide,
     Remesh,
@@ -16,6 +17,7 @@ pub(crate) enum Operation {
 impl Operation {
     pub fn history_label(&self) -> &'static str {
         match self {
+            Self::ImportObj(_) => "Import OBJ",
             Self::Subdivide => "Subdivide mesh",
             Self::Remesh => "Remesh",
             Self::Slice(_, options) | Self::SlicePath(_, options) => options.mode.history_label(),
@@ -23,6 +25,7 @@ impl Operation {
     }
     pub fn label(&self) -> &'static str {
         match self {
+            Self::ImportObj(_) => "Importing OBJ",
             Self::Subdivide => "Subdividing",
             Self::Remesh => "Remeshing",
             Self::Slice(..) | Self::SlicePath(..) => "Slicing",
@@ -45,6 +48,16 @@ impl MeshJob {
             .spawn(move || {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     match worker_operation {
+                        Operation::ImportObj(path) => {
+                            let mesh = crate::persistence::load_obj_cancellable(&path, &|| {
+                                flag.load(Ordering::Relaxed)
+                            })?;
+                            let name = std::path::Path::new(&path)
+                                .file_stem()
+                                .and_then(|s| s.to_str())
+                                .unwrap_or("Imported OBJ");
+                            geometry.import_mesh(mesh, name)?;
+                        }
                         Operation::SlicePath(path, options) => {
                             geometry.slice_path(&path, options, &|| flag.load(Ordering::Relaxed))?
                         }

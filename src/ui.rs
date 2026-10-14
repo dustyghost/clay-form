@@ -43,6 +43,7 @@ pub(crate) struct UiState {
     pub mesh_busy: bool,
     pub selected: usize,
     pub path: String,
+    pub obj_path: String,
     pub preset_path: String,
     pub alpha_path: String,
     pub status: String,
@@ -87,6 +88,7 @@ impl Default for UiState {
             mesh_busy: false,
             selected: 0,
             path: "sculpt.clay".into(),
+            obj_path: "model.obj".into(),
             preset_path: "brush.brush.json".into(),
             alpha_path: String::new(),
             status: "Ready • Drag clay to sculpt; Alt-drag empty space to pan; Shift smooths"
@@ -718,6 +720,14 @@ impl UiState {
         commands: &mut Vec<Command>,
     ) {
         ui.label("Click a model row to select it. The eye toggles visibility.");
+        ui.add_enabled_ui(!self.mesh_busy, |ui| {
+            ui.label("OBJ path");
+            ui.add(egui::TextEdit::singleline(&mut self.obj_path).hint_text("/path/to/model.obj"));
+            if ui.add_enabled(document.model_count() < 64, design::button(ui, Glyph::Open, "Import OBJ"))
+                .on_hover_text("Add a new submodel at its original position and scale. Keeps this project; one undo step. Geometry and face groups only.")
+                .customize(Action::ImportObj).clicked() { commands.push(Command::ImportObj); }
+        });
+        ui.separator();
         ui.add_enabled_ui(!self.mesh_busy, |ui| {
             ui.horizontal_wrapped(|ui| {
                 if document.primitive().is_none() && ui.add(design::button(ui, Glyph::Primitive, "Primitive")).customize(Action::Primitive).clicked() { commands.push(Command::RequestPrimitive); }

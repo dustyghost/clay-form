@@ -88,6 +88,7 @@ impl App {
                     | Command::SetRemeshSettings(..)
                     | Command::Subdivide
                     | Command::Remesh
+                    | Command::ImportObj
             )
         {
             self.ui.status = "Wait for the mesh operation, or cancel it first".into();
@@ -148,6 +149,9 @@ impl App {
                 let path = self.ui.path.clone();
                 self.save_to(&path);
                 Ok(())
+            }
+            Command::ImportObj => {
+                self.start_mesh_job(Operation::ImportObj(self.ui.obj_path.clone()))
             }
             Command::Export => {
                 let path = std::path::Path::new(&self.ui.path).with_extension("obj");

@@ -3505,3 +3505,5 @@ fn lasso_actions_toggle_from_shortcuts_and_obey_busy_guard() {
 }
 
 mod rotation;
+
+mod obj;

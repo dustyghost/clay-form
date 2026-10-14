@@ -2,7 +2,7 @@
 
 Updated 14 October 2026.
 
-The next priority is OBJ import. Stroke stabilisation, mask blur/sharpen, lasso selection, transform rotation/pivot controls, and automatic recovery saves are implemented. The hands-on tablet check for stroke stabilisation passed on 14 October 2026. Importing models, using reference images, and checking perspective follow. This is the proposed implementation order; dates are not assigned.
+The next priority is viewport reference images. Stroke stabilisation, mask blur/sharpen, lasso selection, transform rotation/pivot controls, automatic recovery saves, and OBJ import are implemented. The hands-on tablet check for stroke stabilisation passed on 14 October 2026. Reference images and perspective viewing are the remaining priorities. This is the proposed implementation order; dates are not assigned.
 
 ## Current foundation
 
@@ -15,13 +15,13 @@ These features are already implemented and should be preserved as the app grows:
 - Vertex groups and group colours, masking, mask expand/contract and blur/sharpen, hide/isolate, extraction, split hidden, and merge down.
 - Parametric primitives, slicing/trimming, and thickness for open meshes.
 - Custom menus in either sidebar, removable custom buttons and menus, configurable shortcuts, and saved workspaces with colour settings.
-- Undo/redo, project saving, and OBJ export.
+- Undo/redo, project saving/recovery, and OBJ import/export.
 
 Recent fixes address stale groups after Group all, Alt-drag panning when starting off the model, Standard brush overlap at symmetry seams, and the vertical orbit angle limit. Continue checking these during normal sculpting, particularly seam behaviour on curved surfaces and navigation with a pen.
 
 ## Implementation priorities
 
-Stroke stabilisation, mask blur/sharpen, lasso selection, transform rotation/pivot controls, and automatic recovery saves are implemented. OBJ import is next; the remaining items are planned.
+Stroke stabilisation, mask blur/sharpen, lasso selection, transform rotation/pivot controls, automatic recovery saves, and OBJ import are implemented. Viewport reference images are next; the remaining items are planned.
 
 | Order | Feature | Main benefit |
 | --- | --- | --- |
@@ -29,8 +29,8 @@ Stroke stabilisation, mask blur/sharpen, lasso selection, transform rotation/piv
 | 2 | Mask blur/sharpen and lasso selection — implemented | Faster selection and smoother transitions when sculpting or posing |
 | 3 | Transform rotation and pivot controls — implemented | Rotate models or unmasked regions directly |
 | 4 | Automatic recovery saves — implemented | Recover recent work after a crash or interrupted session |
-| 5 | OBJ import — next | Sculpt base meshes made in other software |
-| 6 | Viewport reference images | Keep photographs and drawings beside or behind the sculpt |
+| 5 | OBJ import — implemented | Sculpt base meshes made in other software |
+| 6 | Viewport reference images — next | Keep photographs and drawings beside or behind the sculpt |
 | 7 | Perspective view | Judge proportions with an adjustable perspective camera |
 
 ### 1 Stroke stabilisation
@@ -91,7 +91,9 @@ Completion criteria:
 
 ### 5 OBJ import
 
-Import an OBJ as a new submodel, preserving its placement and usable face groups. Keep existing project content intact.
+Implemented 14 October 2026: Submodels → OBJ path → Import OBJ loads a new submodel through the existing cancellable mesh worker and commits one undo step. The rest of the scene, project save path, and brush settings remain intact. Position, scale, winding, and quads are preserved; simple planar n-gons are triangulated with the existing triangulation library. OBJ groups become vertex groups, with the first membership determining each face's category. Multiple objects form one imported submodel. UVs, supplied normals, materials, and vertex colors are outside this phase; unsupported geometry and malformed files fail explicitly.
+
+Checks cover relative/absolute and UV/normal indices, concave and reversed polygons, overlapping group membership, size limits, invalid/interrupted/cancelled imports, primitive preservation, undo/redo, project persistence, and export/import round trips. The importer uses the existing scene/history/action paths and requires no new project format or dependency.
 
 Completion criteria:
 

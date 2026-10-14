@@ -222,6 +222,7 @@ impl UiState {
                     && document.active_visible()
                     && !document.mesh().vertices.is_empty()
             }
+            Action::ImportObj => document.model_count() < 64,
             Action::Undo => document.can_undo(),
             Action::StrokeStabilisation => {
                 document.brushes()[self.selected].supports_stabilization()
