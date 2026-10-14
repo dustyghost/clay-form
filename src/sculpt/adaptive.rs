@@ -46,6 +46,13 @@ impl AdaptiveSettings {
         }
         Ok(())
     }
+    pub(crate) fn collapse_fraction(&self, kind: Kind) -> f32 {
+        if kind == Kind::Smooth {
+            (self.collapse_ratio * 2.).min(0.95)
+        } else {
+            self.collapse_ratio
+        }
+    }
     pub fn edge_length(&self, brush: &Brush, dab: Dab) -> f32 {
         if self.relative {
             dab.radius * self.detail / 100.
@@ -73,7 +80,7 @@ impl Default for Budget {
     fn default() -> Self {
         Self {
             splits: 256,
-            collapses: 32,
+            collapses: 256,
             passes: 8,
             flips: 128,
             flip_passes: 2,
@@ -146,13 +153,10 @@ impl Mesh {
             let count = self.collapse_local(
                 brush,
                 dabs,
-                target
-                    * if cleanup {
-                        (settings.collapse_ratio * 2.).min(0.95)
-                    } else {
-                        settings.collapse_ratio
-                    },
-                budget.collapses.min(32),
+                target * settings.collapse_fraction(brush.kind),
+                // Cleanup can remove more independent edges in the same mesh
+                // scan. Deformation brushes retain their smaller allowance.
+                budget.collapses.min(if cleanup { 256 } else { 32 }),
             );
             budget.collapses = 0;
             changed |= count > 0;
@@ -865,6 +869,36 @@ mod tests {
             false
         ));
     }
+    #[test]
+    fn dense_smooth_cleanup_has_a_useful_bounded_frame_budget() {
+        let mut mesh = Mesh::sphere().subdivide().unwrap();
+        let before = mesh.vertices.len();
+        let brush = Brush::new(Kind::Smooth);
+        let settings = AdaptiveSettings {
+            enabled: true,
+            detail: 16.,
+            refine: false,
+            ..Default::default()
+        };
+        let dab = Dab {
+            radius: 0.8,
+            ..dab()
+        };
+        let mut budget = Budget::default();
+        let start = std::time::Instant::now();
+        mesh.adapt(&brush, &[dab], &settings, &mut budget, true);
+        let removed = before - mesh.vertices.len();
+        eprintln!(
+            "Dense cleanup: {before} vertices, {removed} removed in {:?}",
+            start.elapsed()
+        );
+        assert!((33..=256).contains(&removed));
+        mesh.validate_closed().unwrap();
+        let once = mesh.clone();
+        mesh.adapt(&brush, &[dab], &settings, &mut budget, true);
+        assert_eq!(mesh, once, "interpolated dabs must share the frame budget");
+    }
+
     #[test]
     fn dense_patch_simplification_preserves_closed_manifold_and_distant_surface() {
         let mut mesh = Mesh::sphere();

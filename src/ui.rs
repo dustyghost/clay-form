@@ -12,6 +12,7 @@ mod customization;
 mod icons;
 mod menus;
 mod primitive;
+mod references;
 mod sidebar;
 mod transform;
 use customization::ActionResponse;
@@ -42,8 +43,14 @@ pub(crate) struct UiState {
     pub settings_message: String,
     pub mesh_busy: bool,
     pub selected: usize,
+    smooth_brush: Option<String>,
+    brush_editor_focus: Option<(egui::Id, String)>,
     pub path: String,
     pub obj_path: String,
+    pub reference_path: String,
+    pub arrange_references: bool,
+    pub references_visible: bool,
+    pub selected_reference: usize,
     pub preset_path: String,
     pub alpha_path: String,
     pub status: String,
@@ -87,8 +94,14 @@ impl Default for UiState {
             settings_message: String::new(),
             mesh_busy: false,
             selected: 0,
+            smooth_brush: None,
+            brush_editor_focus: None,
             path: "sculpt.clay".into(),
             obj_path: "model.obj".into(),
+            reference_path: String::new(),
+            arrange_references: false,
+            references_visible: true,
+            selected_reference: 0,
             preset_path: "brush.brush.json".into(),
             alpha_path: String::new(),
             status: "Ready • Drag clay to sculpt; Alt-drag empty space to pan; Shift smooths"
@@ -107,6 +120,62 @@ impl Default for UiState {
     }
 }
 impl UiState {
+    /// Keep the ordinary selection intact while a modifier borrows a Smooth preset.
+    pub(crate) fn active_brush_index(
+        &self,
+        document: &Document,
+        modifiers: egui::Modifiers,
+    ) -> Option<usize> {
+        if !self.preferences.smooth.active(modifiers)
+            || document.brushes()[self.selected].kind == Kind::Smooth
+        {
+            return Some(self.selected);
+        }
+        self.smooth_brush
+            .as_ref()
+            .and_then(|id| {
+                document
+                    .brushes()
+                    .iter()
+                    .position(|b| b.kind == Kind::Smooth && b.identity() == *id)
+            })
+            .or_else(|| {
+                document
+                    .brushes()
+                    .iter()
+                    .position(|b| b.kind == Kind::Smooth)
+            })
+    }
+
+    pub(crate) fn brush_index_for_context(
+        &self,
+        document: &Document,
+        ctx: &egui::Context,
+    ) -> Option<usize> {
+        if ctx.wants_keyboard_input() {
+            // Text entry must stay attached to the preset whose field took focus.
+            if let Some((field, id)) = &self.brush_editor_focus
+                && ctx.memory(|m| m.focused()) == Some(*field)
+                && let Some(index) = document.brushes().iter().position(|b| b.identity() == *id)
+            {
+                return Some(index);
+            }
+            return Some(self.selected);
+        }
+        self.active_brush_index(document, ctx.input(|i| i.modifiers))
+    }
+
+    pub(crate) fn select_brush(&mut self, index: usize, document: &Document) {
+        // Remember both the preset being left and a newly chosen Smooth variation.
+        for i in [self.selected, index] {
+            if let Some(brush) = document.brushes().get(i)
+                && brush.kind == Kind::Smooth
+            {
+                self.smooth_brush = Some(brush.identity());
+            }
+        }
+        self.selected = index;
+    }
     pub fn toolbar(&mut self, ctx: &egui::Context, document: &Document, zoom: f32) -> Vec<Command> {
         design::theme(ctx);
         design::appearance(ctx, &self.preferences.appearance);
@@ -237,6 +306,7 @@ impl UiState {
                     self.builtin_menu(ui, BuiltinMenu::Symmetry, document, zoom, &mut commands);
                     self.builtin_menu(ui, BuiltinMenu::Mask, document, zoom, &mut commands);
                     self.builtin_menu(ui, BuiltinMenu::View, document, zoom, &mut commands);
+                    self.builtin_menu(ui, BuiltinMenu::References, document, zoom, &mut commands);
                     if ui
                         .add_enabled(zoom > 0.2, design::button(ui, Glyph::Minus, ""))
                         .on_hover_text("Zoom out")
@@ -265,6 +335,15 @@ impl UiState {
             }
         });
         self.pinned_menus(ctx, document, zoom, &mut commands);
+        if self.arrange_references {
+            egui::TopBottomPanel::top("reference_arrangement").show(ctx, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.strong("Arrange reference images");
+                    ui.label("Drag an unlocked image to move · drag its lower-right corner to resize · Esc to cancel / finish");
+                    if ui.button("Done").clicked() { commands.push(Command::ArrangeReferences(false)); }
+                });
+            });
+        }
         if let Some(tool) = self.selection_tool {
             egui::TopBottomPanel::top("visibility_selection_controls").show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
@@ -490,7 +569,20 @@ impl UiState {
         pressure: f32,
         commands: &mut Vec<Command>,
     ) {
-        let original = &document.brushes()[self.selected];
+        let focus_before = ui.ctx().memory(|m| m.focused());
+        let active = self.brush_index_for_context(document, ui.ctx());
+        let fallback = crate::sculpt::Brush::new(Kind::Smooth);
+        let original = active.map_or(&fallback, |index| &document.brushes()[index]);
+        let selected = active.unwrap_or(self.selected);
+        if active.is_none() && matches!(tool, Tool::Brush | Tool::Alpha | Tool::Presets) {
+            ui.label(
+                "Temporary Smooth uses default settings. Add a Smooth preset to customize it.",
+            );
+            if ui.button("Add Smooth preset").clicked() {
+                commands.push(Command::AddBrush(Kind::Smooth));
+            }
+            return;
+        }
         let mut edited = original.clone();
         let b = &mut edited;
         match tool {
@@ -505,11 +597,11 @@ impl UiState {
                     .show(ui, |ui| {
                         for (i, b) in document.brushes().iter().enumerate() {
                             let id = self.brush_texture(ui.ctx(), i, b);
-                            if design::brush_tile(ui, id, &b.name, self.selected == i, width)
+                            if design::brush_tile(ui, id, &b.name, active == Some(i), width)
                                 .customize(Action::SelectBrush(b.identity()))
                                 .clicked()
                             {
-                                self.selected = i;
+                                self.select_brush(i, document);
                             }
                             if (i + 1) % columns == 0 {
                                 ui.end_row();
@@ -517,6 +609,10 @@ impl UiState {
                         }
                     });
                 ui.add_space(4.);
+                if active.is_none() {
+                    ui.weak("Temporary Smooth · default settings");
+                    return;
+                }
                 if ui
                     .add(design::button(
                         ui,
@@ -526,18 +622,18 @@ impl UiState {
                     .customize(Action::CaptureBrushIcon)
                     .clicked()
                 {
-                    commands.push(Command::CaptureBrushIcon(self.selected));
+                    commands.push(Command::CaptureBrushIcon(selected));
                 }
                 if ui
                     .add(design::button(ui, Glyph::Copy, "Duplicate brush"))
                     .customize(Action::DuplicateBrush)
                     .clicked()
                 {
-                    commands.push(Command::DuplicateBrush(self.selected));
+                    commands.push(Command::DuplicateBrush(selected));
                 }
             }
             Tool::Brush => {
-                let id = self.brush_texture(ui.ctx(), self.selected, b);
+                let id = self.brush_texture(ui.ctx(), selected, b);
                 ui.horizontal(|ui| {
                     ui.image((id, Vec2::splat(64.)));
                     ui.vertical(|ui| {
@@ -546,7 +642,7 @@ impl UiState {
                             .customize(Action::CaptureBrushIcon)
                             .clicked()
                         {
-                            commands.push(Command::CaptureBrushIcon(self.selected));
+                            commands.push(Command::CaptureBrushIcon(selected));
                         }
                         if ui
                             .add_enabled(
@@ -654,7 +750,7 @@ impl UiState {
                     .customize(Action::LoadAlpha)
                     .clicked()
                 {
-                    commands.push(Command::LoadAlpha(self.selected));
+                    commands.push(Command::LoadAlpha(selected));
                 }
             }
             Tool::Presets => {
@@ -666,7 +762,7 @@ impl UiState {
                         .customize(Action::SavePreset)
                         .clicked()
                     {
-                        commands.push(Command::SavePreset(self.selected));
+                        commands.push(Command::SavePreset(selected));
                     }
                     if ui
                         .add(design::button(ui, Glyph::Open, "Import brush"))
@@ -706,8 +802,16 @@ impl UiState {
                 ui.label(format!("Left / pen: sculpt; empty space: orbit\nCorner gizmo: drag or click axis\n{:?}: reverse brush\n{:?}: smooth\nRight drag: orbit\nMiddle drag: pan\nWheel: zoom\n{:?} + drag: zoom (up=in, down=out)\n{:?} + drag: pan (sideways / up / down)", self.preferences.reverse, self.preferences.smooth, self.preferences.zoom_hold, self.preferences.pan_hold));
             }
         }
-        if &edited != original {
-            commands.push(Command::UpdateBrush(self.selected, edited));
+        if matches!(tool, Tool::Brush | Tool::Alpha | Tool::Presets)
+            && let Some(focus) = ui.ctx().memory(|m| m.focused())
+            && Some(focus) != focus_before
+        {
+            self.brush_editor_focus = Some((focus, original.identity()));
+        }
+        if &edited != original
+            && let Some(selected) = active
+        {
+            commands.push(Command::UpdateBrush(selected, edited));
         }
     }
 }
@@ -911,7 +1015,7 @@ impl UiState {
                 if ui.selectable_label(settings.adaptive.enabled,"Adaptive sculpt").customize(Action::AdaptiveMode).clicked() { let mut adaptive=settings.adaptive.clone(); adaptive.enabled=true; commands.push(Command::SetAdaptive(adaptive)); }
             });
             if settings.adaptive.enabled {
-                ui.label("Local triangle refinement while sculpting.");
+                ui.label("Add detail or simplify locally as you sculpt.");
                 let mut adaptive=settings.adaptive.clone();
                 ui.checkbox(&mut adaptive.relative,"Detail relative to brush size");
                 let label=if adaptive.relative { "Edge size (% of radius)" } else { "Edge size (px)" };
@@ -919,9 +1023,13 @@ impl UiState {
                 ui.checkbox(&mut adaptive.refine,"Refine stretched edges");
                 ui.checkbox(&mut adaptive.simplify,"Simplify dense areas");
                 ui.add_enabled(adaptive.simplify,egui::Slider::new(&mut adaptive.collapse_ratio,0.1..=0.8).text("Simplify ratio"));
-                if adaptive!=settings.adaptive { commands.push(Command::SetAdaptive(adaptive)); }
+                if adaptive!=settings.adaptive { commands.push(Command::SetAdaptive(adaptive.clone())); }
                 ui.label("Smaller edge sizes add detail. Masks are preserved; Mask brush keeps topology fixed.");
-                ui.label("Smooth + Simplify cleans up without adding vertices. Larger edge sizes and simplify ratios remove more density.");
+                if adaptive.simplify {
+                    let unit = if adaptive.relative { "% of brush radius" } else { "px" };
+                    ui.label(format!("Smooth removes safe edges shorter than {:.1} {unit} without adding vertices.", adaptive.detail * adaptive.collapse_fraction(Kind::Smooth)));
+                    ui.weak("Increase Edge size for more reduction. Masks, sharp features, and mesh boundaries are protected.");
+                }
                 ui.label("Local adaptation preserves separate parts; use voxel remeshing to fuse them.");
             } else if settings.dynamic {
                 ui.label("Voxel remeshing replaces topology and clears masks. Small details below the voxel size may be lost.");

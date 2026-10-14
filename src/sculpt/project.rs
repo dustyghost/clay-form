@@ -92,6 +92,12 @@ fn default_model_name() -> String {
 }
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Project {
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "crate::reference::deserialize_list"
+    )]
+    pub references: Vec<crate::reference::ReferenceImage>,
     pub version: u32,
     #[serde(default, skip_serializing_if = "SceneSettings::is_default")]
     pub scene: SceneSettings,
@@ -112,6 +118,7 @@ pub struct Project {
 impl Project {
     pub const VERSION: u32 = 1;
     pub fn validate(&self) -> Result<(), String> {
+        crate::reference::validate(&self.references)?;
         if self.version != Self::VERSION {
             return Err("Unsupported project version".into());
         }

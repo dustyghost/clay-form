@@ -41,6 +41,8 @@ UI commands are executed between panels so the viewport sees the latest document
 
 ## Compatibility and storage
 
+Screen reference images belong to `Document` and the optional project `references` collection, separately from geometry snapshots. `reference.rs` bounds and decodes PNG/JPEG input, applies photo orientation, and shares decoded pixels and embedded PNG bytes through `Arc`. Saving and recovery reuse those bytes; legacy projects omit the empty collection. Reference edits mark the document modified without changing sculpt history or display geometry revisions. `viewport/references.rs` caches egui textures and previews move/resize gestures until release; cancellation leaves the document intact. The shared References menu and action catalog route file access and document updates through the controller.
+
 The version 1 `.clay` and `.brush.json` formats remain compatible. Projects support optional `mesh_settings` (inactive levels and dynamic settings) and `symmetry` fields; defaults are omitted when saving, and old files load at one subdivision level with symmetry disabled. Vector positions remain JSON triples, and image-alpha pixels remain JSON arrays. Pixels are shared immutable `Arc<[f32]>` buffers in memory, making brush copies inexpensive without changing serialization. Mesh history is session-only, as before. The saved project does not include camera or undo state.
 
 `tests/fixtures/v1-project.json` is an explicit version 1 compatibility fixture. Tests cover format preservation, brush/mask behavior, disk persistence, bounded history, stroke undo/redo, failed opens, save/open protection, and navigation gestures.

@@ -131,6 +131,7 @@ fn black_alpha_protects_from_every_brush() {
 #[test]
 fn project_roundtrip() {
     let p = Project {
+        references: Vec::new(),
         scene: Default::default(),
         model_name: "Model".into(),
         submodels: Vec::new(),

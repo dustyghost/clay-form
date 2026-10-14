@@ -21,6 +21,9 @@ fn recovery_waits_for_edits_restores_dirty_and_requires_unsaved_decision() {
     assert!(recovery::entries(&directory.0).unwrap().is_empty());
     assert!(!app.recovery_ready(&ctx));
     app.document = document();
+    app.document
+        .add_reference(crate::reference::tests::image())
+        .unwrap();
     app.document.begin_stroke();
     assert!(!app.recovery_ready(&ctx));
     app.document.end_stroke();

@@ -12,6 +12,7 @@ mod edit;
 mod mask;
 mod mesh;
 mod primitive;
+mod references;
 mod scene;
 mod stroke;
 #[cfg(test)]
@@ -37,6 +38,7 @@ impl ModelRef<'_> {
     }
 }
 pub struct Document {
+    references: Vec<crate::reference::ReferenceImage>,
     geometry: Geometry,
     display_revision: u64,
     brushes: Vec<Brush>,
@@ -53,6 +55,7 @@ pub struct Document {
 impl Default for Document {
     fn default() -> Self {
         Self {
+            references: Vec::new(),
             geometry: Geometry::new(Mesh::starting_sphere()),
             display_revision: 0,
             brushes: Kind::ALL.into_iter().map(Brush::new).collect(),
@@ -110,6 +113,7 @@ impl Document {
     }
     pub fn project(&self) -> Project {
         Project {
+            references: self.references.clone(),
             version: Project::VERSION,
             scene: self.geometry.scene.clone(),
             model_name: self.geometry.name.clone(),
@@ -126,6 +130,7 @@ impl Document {
     }
     pub fn new_sphere(&mut self) {
         self.end_edit();
+        self.references.clear();
         self.geometry = Geometry::new(Mesh::starting_sphere());
         self.display_changed();
         self.history = History::default();
@@ -145,6 +150,7 @@ impl Document {
             settings: project.mesh_settings,
         };
         self.display_changed();
+        self.references = project.references;
         self.brushes = project.brushes;
         self.symmetry = project.symmetry;
         self.history = History::default();

@@ -2,14 +2,13 @@
 use super::{gpu::Renderer, scene::Scene};
 use crate::{
     document::Document,
-    sculpt::{AdaptiveBudget, Brush, Dab, Kind, Mesh, StrokeMode, Vec3},
+    sculpt::{AdaptiveBudget, Brush, Dab, Mesh, StrokeMode, Vec3},
 };
 use eframe::egui::{self, Color32, Pos2};
 pub(super) struct PendingStroke {
     pub start: Pos2,
     pub end: Pos2,
     pub brush: Brush,
-    pub source_kind: Kind,
     pub pressure: f32,
     pub invert: bool,
     pub anchor: (Vec3, Vec3),
@@ -159,7 +158,7 @@ mod tests {
     use super::*;
     use crate::{
         camera::Camera,
-        sculpt::{Geometry, Primitive, PrimitiveKind},
+        sculpt::{Geometry, Kind, Primitive, PrimitiveKind},
     };
 
     #[test]
@@ -177,7 +176,6 @@ mod tests {
         let stroke = PendingStroke {
             start: rect.center(),
             end: rect.center() + egui::vec2(80., 0.),
-            source_kind: brush.kind,
             brush,
             pressure: 1.,
             invert: false,
@@ -278,7 +276,6 @@ mod tests {
                     start: rect.center(),
                     end: rect.center() + egui::vec2(60., 0.),
                     anchor: scene.pick(rect.center()).unwrap(),
-                    source_kind: brush.kind,
                     brush,
                     pressure: 0.75,
                     invert: false,

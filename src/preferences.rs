@@ -259,6 +259,7 @@ pub(crate) fn viewport_background(ctx: &egui::Context) -> egui::Color32 {
 /// Stable identities for built-in menus displayed as popups, windows or sections.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) enum BuiltinMenu {
+    References,
     Brushes,
     Transform,
     Slice,
@@ -276,6 +277,7 @@ pub(crate) enum BuiltinMenu {
 impl BuiltinMenu {
     pub fn label(self) -> &'static str {
         match self {
+            Self::References => "References",
             Self::Brushes => "Add brush",
             Self::Transform => "Transform",
             Self::Slice => "Slice",

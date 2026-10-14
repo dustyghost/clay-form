@@ -20,6 +20,7 @@ The ordinary test suite retains a CPU paint path for headless UI and picking tes
 EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib viewport::gpu:: -- --ignored --skip gpu_load_profile --test-threads=1
 EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib recovery_and_menu_placement_offscreen_preview -- --ignored
 EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib obj_import_offscreen_preview -- --ignored
+EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib reference_images_offscreen_preview -- --ignored
 ```
 
 Only the manual load profile is excluded. Software rendering checks shader, framebuffer, picking/display, and UI composition correctness; it is not a hardware performance measurement.

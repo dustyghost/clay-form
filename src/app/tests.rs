@@ -1466,7 +1466,7 @@ fn stabilized_freehand_preserves_pressure_modifiers_masks_symmetry_and_subdivisi
                 egui::Modifiers::NONE,
                 egui::Modifiers::NONE,
                 egui::Modifiers::ALT,
-                egui::Modifiers::SHIFT,
+                egui::Modifiers::ALT,
                 egui::Modifiers::NONE,
             ]
             .into_iter()
@@ -3507,3 +3507,7 @@ fn lasso_actions_toggle_from_shortcuts_and_obey_busy_guard() {
 mod rotation;
 
 mod obj;
+
+mod references;
+
+mod navigation_smooth;

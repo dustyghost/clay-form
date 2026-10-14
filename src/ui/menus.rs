@@ -21,7 +21,7 @@ impl UiState {
             BuiltinMenu::Mesh => Glyph::Mesh,
             BuiltinMenu::Wireframe => Glyph::Wire,
             BuiltinMenu::Mask => Glyph::Mask,
-            BuiltinMenu::View => Glyph::View,
+            BuiltinMenu::View | BuiltinMenu::References => Glyph::View,
         };
         if self
             .preferences
@@ -175,6 +175,7 @@ impl UiState {
             .iter()
             .any(|stack| stack.info.kind == Some(egui::UiKind::Menu));
         match menu {
+            BuiltinMenu::References => self.reference_controls(ui, document, commands),
             BuiltinMenu::Brushes => {
                 for kind in Kind::ALL {
                     if ui

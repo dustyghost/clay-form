@@ -552,3 +552,69 @@ fn custom_menu_converts_as_one_section_and_moves_past_builtin_tools() {
     );
     state.preferences.validate().unwrap();
 }
+
+#[test]
+fn typing_in_brush_settings_keeps_the_preset_that_received_focus() {
+    for temporary in [false, true] {
+        let mut state = UiState::default();
+        let doc = Document::default();
+        let ctx = egui::Context::default();
+        let render = |state: &mut UiState, modifiers, events| {
+            let mut commands = Vec::new();
+            let output = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(500., 1000.),
+                    )),
+                    modifiers,
+                    events,
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        state.tool_controls(Tool::Brush, ui, &doc, "Test", 1., &mut commands);
+                    });
+                },
+            );
+            (output, commands)
+        };
+        let held = if temporary {
+            egui::Modifiers::SHIFT
+        } else {
+            egui::Modifiers::NONE
+        };
+        let (output, _) = render(&mut state, held, vec![]);
+        let name = if temporary { "Smooth" } else { "Standard" };
+        let pos = text_center(&output, name);
+        render(
+            &mut state,
+            held,
+            vec![
+                egui::Event::PointerMoved(pos),
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: held,
+                },
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: held,
+                },
+            ],
+        );
+        assert!(ctx.wants_keyboard_input());
+        let changed = if temporary {
+            egui::Modifiers::NONE
+        } else {
+            egui::Modifiers::SHIFT
+        };
+        let (_, commands) = render(&mut state, changed, vec![egui::Event::Text("X".into())]);
+        let expected = doc.brushes().iter().position(|b| b.name == name).unwrap();
+        assert!(commands.iter().any(|command| matches!(command, Command::UpdateBrush(index, brush) if *index == expected && brush.name.contains('X'))));
+        assert_eq!(state.selected, 0);
+    }
+}

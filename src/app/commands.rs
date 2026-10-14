@@ -27,6 +27,20 @@ impl App {
             self.execute_action(action, ctx);
             return;
         }
+        if matches!(
+            command,
+            Command::AddReference(_)
+                | Command::PlaceReference(..)
+                | Command::RemoveReference(_)
+                | Command::ArrangeReferences(_)
+        ) && (self.ui.pending.is_some()
+            || self.ui.recovery_open
+            || self.ui.settings_open
+            || self.ui.layout_open
+            || self.ui.icon_capture_open())
+        {
+            return;
+        }
         if self.ui.primitive_warning.is_some()
             && !matches!(
                 command,
@@ -39,7 +53,11 @@ impl App {
         if self.mesh_job.is_some()
             && matches!(
                 command,
-                Command::RequestPrimitive
+                Command::AddReference(_)
+                    | Command::PlaceReference(..)
+                    | Command::RemoveReference(_)
+                    | Command::ArrangeReferences(_)
+                    | Command::RequestPrimitive
                     | Command::ConfirmPrimitive
                     | Command::UpdatePrimitive(_)
                     | Command::ConvertPrimitive
@@ -103,9 +121,39 @@ impl App {
         {
             self.viewport.finish_transform_drag(&mut self.document);
         }
+        if matches!(
+            command,
+            Command::SliceTool(_)
+                | Command::SelectTool(_)
+                | Command::TransformMode(_)
+                | Command::TransformOperation(_)
+                | Command::RequestPrimitive
+                | Command::Undo
+                | Command::Redo
+        ) {
+            self.ui.arrange_references = false;
+            self.viewport.cancel_reference_drag();
+        }
         self.document.prepare_edit(command.edit_kind());
         let result: Result<(), String> = match command {
             Command::Action(_) => unreachable!(),
+            Command::AddReference(file) => self.add_reference(file),
+            Command::ArrangeReferences(active) => {
+                self.arrange_references(active);
+                Ok(())
+            }
+            Command::PlaceReference(index, placement) => {
+                self.viewport.cancel_reference_drag();
+                self.document.place_reference(index, placement)
+            }
+            Command::RemoveReference(index) => {
+                self.viewport.cancel_reference_drag();
+                let result = self.document.remove_reference(index);
+                if self.document.references().is_empty() {
+                    self.arrange_references(false);
+                }
+                result
+            }
             Command::SelectTool(active) => {
                 self.viewport.finish_transform_drag(&mut self.document);
                 self.ui.selection_tool = active;
@@ -437,11 +485,11 @@ impl App {
             Command::AddBrush(kind) => self
                 .document
                 .append_brush(crate::sculpt::Brush::new(kind))
-                .map(|index| self.ui.selected = index),
+                .map(|index| self.ui.select_brush(index, &self.document)),
             Command::DuplicateBrush(index) => self
                 .document
                 .duplicate_brush(index)
-                .map(|index| self.ui.selected = index),
+                .map(|index| self.ui.select_brush(index, &self.document)),
             Command::UpdateBrush(index, brush) => self.document.update_brush(index, brush),
             Command::LoadAlpha(index) => persistence::load_alpha(&self.ui.alpha_path)
                 .and_then(|alpha| self.document.set_alpha(index, alpha))
@@ -454,7 +502,7 @@ impl App {
                 .and_then(|brush| self.document.import_brushes(vec![brush]))
                 .map(|(added, updated, index)| {
                     if let Some(index) = index {
-                        self.ui.selected = index;
+                        self.ui.select_brush(index, &self.document);
                     }
                     self.ui.status = format!("Imported brush: {added} added, {updated} updated");
                 }),

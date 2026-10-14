@@ -27,6 +27,8 @@ impl App {
         }
     }
     pub(super) fn execute_pending(&mut self, action: PendingAction, ctx: &egui::Context) {
+        self.ui.arrange_references = false;
+        self.ui.selected_reference = 0;
         match action {
             PendingAction::New => {
                 self.document.new_sphere();

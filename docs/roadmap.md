@@ -4,7 +4,7 @@
 
 Updated 14 October 2026.
 
-The next priority is viewport reference images. Stroke stabilisation, mask blur/sharpen, lasso selection, transform rotation/pivot controls, automatic recovery saves, and OBJ import are implemented. The hands-on tablet check for stroke stabilisation passed on 14 October 2026. Reference images and perspective viewing are the remaining priorities. This is the proposed implementation order; dates are not assigned.
+The next priority is perspective viewing. Stroke stabilisation, mask blur/sharpen, lasso selection, transform rotation/pivot controls, automatic recovery saves, OBJ import, and viewport reference images are implemented. The hands-on tablet check for stroke stabilisation passed on 14 October 2026. Perspective viewing is the remaining priority. This is the proposed implementation order; dates are not assigned.
 
 ## Current foundation
 
@@ -23,7 +23,7 @@ Recent fixes address stale groups after Group all, Alt-drag panning when startin
 
 ## Implementation priorities
 
-Stroke stabilisation, mask blur/sharpen, lasso selection, transform rotation/pivot controls, automatic recovery saves, and OBJ import are implemented. Viewport reference images are next; the remaining items are planned.
+The first six priorities are implemented. Perspective viewing is next.
 
 | Order | Feature | Main benefit |
 | --- | --- | --- |
@@ -32,8 +32,8 @@ Stroke stabilisation, mask blur/sharpen, lasso selection, transform rotation/piv
 | 3 | Transform rotation and pivot controls — implemented | Rotate models or unmasked regions directly |
 | 4 | Automatic recovery saves — implemented | Recover recent work after a crash or interrupted session |
 | 5 | OBJ import — implemented | Sculpt base meshes made in other software |
-| 6 | Viewport reference images — next | Keep photographs and drawings beside or behind the sculpt |
-| 7 | Perspective view | Judge proportions with an adjustable perspective camera |
+| 6 | Viewport reference images — implemented | Keep photographs and drawings beside or behind the sculpt |
+| 7 | Perspective view — next | Judge proportions with an adjustable perspective camera |
 
 ### 1 Stroke stabilisation
 
@@ -106,7 +106,9 @@ Completion criteria:
 
 ### 6 Viewport reference images
 
-Load photographs or drawings as movable reference images, with scale, opacity, visibility, and position locking. Start with images fixed to the screen; references attached to front/side view planes can follow.
+Implemented 14 October 2026: screen-fixed PNG/JPEG references, added by dropping files onto the viewport or through the shared References menu. Arrange images provides explicit move/resize controls and a visible Done/Escape exit; all references are passive while sculpting. Per-image opacity, visibility, and position/size locking, plus a session-only show/hide-all action, keep references manageable. The menu can be pinned or docked through the existing placement controls; its actions support custom menus and shortcuts.
+
+Images and placement are embedded in projects and recovery copies, independently of sculpt geometry/history. Loading applies photo orientation and bounds image dimensions, file size, count, and aggregate memory. Checks cover file removal after import, legacy projects, recovery, invalid files and placements, drag release/cancellation/focus loss, undo during a drag, locked-image navigation, and normal/small viewport OpenGL composition. See the [reference image guide](guide/references.md) for controls and limits. Front/side view-plane references remain a possible extension; hands-on pen feedback will guide interaction refinements.
 
 Completion criteria:
 

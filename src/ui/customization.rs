@@ -223,10 +223,12 @@ impl UiState {
                     && !document.mesh().vertices.is_empty()
             }
             Action::ImportObj => document.model_count() < 64,
-            Action::Undo => document.can_undo(),
-            Action::StrokeStabilisation => {
-                document.brushes()[self.selected].supports_stabilization()
+            Action::AddReference => {
+                document.references().len() < crate::reference::MAX_REFERENCES
+                    && !self.reference_path.trim().is_empty()
             }
+            Action::ArrangeReferences => !document.references().is_empty(),
+            Action::Undo => document.can_undo(),
             Action::Redo => document.can_redo(),
             Action::SelectBrush(id) => document.brushes().iter().any(|b| b.identity() == *id),
             Action::NewBrush(name) => Kind::ALL.iter().any(|k| format!("{k:?}") == *name),
@@ -300,17 +302,18 @@ impl UiState {
             _ => true,
         }
     }
-    fn action_selected(&self, action: &Action, document: &Document) -> bool {
+    fn action_selected(&self, action: &Action, document: &Document, ctx: &egui::Context) -> bool {
+        let active = self.brush_index_for_context(document, ctx);
+        let brush = active.map(|index| &document.brushes()[index]);
         match action {
-            Action::SelectBrush(id) => document
-                .brushes()
-                .get(self.selected)
-                .is_some_and(|b| b.identity() == *id),
+            Action::SelectBrush(id) => brush.is_some_and(|b| b.identity() == *id),
             Action::Wireframe => self.wire,
             Action::Symmetry => document.symmetry().enabled,
             Action::Guides => self.show_symmetry_guides,
             Action::PolygroupColors => self.show_polygroups,
             Action::Backfaces => self.show_backfaces,
+            Action::ArrangeReferences => self.arrange_references,
+            Action::ShowReferences => self.references_visible,
             Action::WireTriangles => self.wire_triangles,
             Action::SelectRectangle => {
                 self.selection_tool == Some(crate::viewport::SelectionTool::Rectangle)
@@ -336,9 +339,9 @@ impl UiState {
                     && Action::from(self.transform_operation) == *action
             }
             Action::RespectMask => self.respect_transform_mask,
-            Action::BrushAdd => !document.brushes()[self.selected].subtract,
-            Action::BrushSubtract => document.brushes()[self.selected].subtract,
-            Action::StrokeStabilisation => document.brushes()[self.selected].stabilize,
+            Action::BrushAdd => brush.is_some_and(|b| !b.subtract),
+            Action::BrushSubtract => brush.is_some_and(|b| b.subtract),
+            Action::StrokeStabilisation => brush.is_some_and(|b| b.stabilize),
             _ => false,
         }
     }
@@ -378,9 +381,15 @@ impl UiState {
                                 .map_or(String::new(), |s| s.label());
                             let button = egui::Button::new(label)
                                 .wrap()
-                                .selected(self.action_selected(action, document))
+                                .selected(self.action_selected(action, document, ui.ctx()))
                                 .shortcut_text(shortcut);
-                            let available = self.action_enabled(action, document);
+                            let available = self.action_enabled(action, document)
+                                && (*action != Action::StrokeStabilisation
+                                    || self
+                                        .brush_index_for_context(document, ui.ctx())
+                                        .is_some_and(|index| {
+                                            document.brushes()[index].supports_stabilization()
+                                        }));
                             let response = ui.add_enabled(available, button);
                             // Disabled operations can still be removed from a custom menu.
                             let response = if available {

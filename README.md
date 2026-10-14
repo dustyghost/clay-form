@@ -21,6 +21,7 @@ Linux requires a working Wayland or X11 desktop and desktop OpenGL 3.3 or newer.
 | [Masks and selection](docs/guide/selection.md) | Mask editing, vertex groups, rectangle/lasso selection, visibility, split hidden |
 | [Files and recovery](docs/guide/files.md) | Projects, brush files, OBJ import/export, automatic recovery |
 | [Navigation and tablet input](docs/guide/navigation.md) | Orbit, pan, zoom, display options, Huion setup |
+| [Reference images](docs/guide/references.md) | Embedded photographs/drawings, placement, opacity, locking, visibility |
 | [Workspace and shortcuts](docs/guide/workspace.md) | Pinned menus, collapsible panels, custom shelves, workspaces, key bindings |
 
 For contributors: [development checks](docs/development.md), [architecture](docs/architecture.md), [GPU rendering and profiling](docs/gpu-rendering.md), and [UI design rules](docs/ui-design.md).

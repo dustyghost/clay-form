@@ -6,6 +6,7 @@ impl App {
         if !self.ui.action_enabled(&action, &self.document) {
             return;
         }
+        let active_brush = self.ui.brush_index_for_context(&self.document, ctx);
         let command = match action {
             Action::Subdivide => Some(Command::Subdivide),
             Action::Remesh => Some(Command::Remesh),
@@ -43,23 +44,43 @@ impl App {
                 None
             }
             Action::Smaller | Action::Larger => {
-                let mut brush = self.document.brushes()[self.ui.selected].clone();
+                let Some(index) = active_brush else { return };
+                let mut brush = self.document.brushes()[index].clone();
                 brush.radius = (brush.radius * if action == Action::Smaller { 0.9 } else { 1.1 })
                     .clamp(1., 500.);
-                Some(Command::UpdateBrush(self.ui.selected, brush))
+                Some(Command::UpdateBrush(index, brush))
             }
             Action::PreviousBrush => {
-                self.ui.selected = (self.ui.selected + self.document.brushes().len() - 1)
+                let index = (self.ui.selected + self.document.brushes().len() - 1)
                     % self.document.brushes().len();
+                self.ui.select_brush(index, &self.document);
                 None
             }
             Action::NextBrush => {
-                self.ui.selected = (self.ui.selected + 1) % self.document.brushes().len();
+                let index = (self.ui.selected + 1) % self.document.brushes().len();
+                self.ui.select_brush(index, &self.document);
                 None
             }
 
             Action::CancelMeshOperation => Some(Command::CancelMeshJob),
             Action::ImportObj => Some(Command::ImportObj),
+            Action::AddReference => Some(Command::AddReference(egui::DroppedFile {
+                path: Some(self.ui.reference_path.clone().into()),
+                ..Default::default()
+            })),
+            Action::ArrangeReferences => {
+                Some(Command::ArrangeReferences(!self.ui.arrange_references))
+            }
+            Action::ShowReferences => {
+                self.ui.references_visible = !self.ui.references_visible;
+                Some(Command::ArrangeReferences(false))
+            }
+            Action::ReferenceSettings => {
+                self.ui
+                    .preferences
+                    .pin_menu(crate::preferences::BuiltinMenu::References, [200., 100.]);
+                None
+            }
             Action::Export => Some(Command::Export),
             Action::ClearMask => Some(Command::ClearMask),
             Action::InvertMask => Some(Command::InvertMask),
@@ -193,10 +214,10 @@ impl App {
                 symmetry.center = Default::default();
                 Some(Command::SetSymmetry(symmetry))
             }
-            Action::DuplicateBrush => Some(Command::DuplicateBrush(self.ui.selected)),
-            Action::CaptureBrushIcon => Some(Command::CaptureBrushIcon(self.ui.selected)),
-            Action::LoadAlpha => Some(Command::LoadAlpha(self.ui.selected)),
-            Action::SavePreset => Some(Command::SavePreset(self.ui.selected)),
+            Action::DuplicateBrush => active_brush.map(Command::DuplicateBrush),
+            Action::CaptureBrushIcon => active_brush.map(Command::CaptureBrushIcon),
+            Action::LoadAlpha => active_brush.map(Command::LoadAlpha),
+            Action::SavePreset => active_brush.map(Command::SavePreset),
             Action::LoadPreset => Some(Command::LoadPreset),
             Action::ExportLibrary => Some(Command::ExportBrushLibrary),
             Action::ImportLibrary => Some(Command::ImportBrushLibrary),
@@ -211,7 +232,8 @@ impl App {
             | Action::AlphaSoft
             | Action::AlphaHard
             | Action::AlphaSquare => {
-                let mut brush = self.document.brushes()[self.ui.selected].clone();
+                let Some(index) = active_brush else { return };
+                let mut brush = self.document.brushes()[index].clone();
                 use crate::sculpt::{Alpha, StrokeMode};
                 match action {
                     Action::RestoreBrushIcon => brush.icon = None,
@@ -221,13 +243,18 @@ impl App {
                     Action::StrokeLine => brush.stroke_mode = StrokeMode::Line,
                     Action::StrokeDragRect => brush.stroke_mode = StrokeMode::DragRect,
                     Action::StrokeDragDot => brush.stroke_mode = StrokeMode::DragDot,
-                    Action::StrokeStabilisation => brush.stabilize = !brush.stabilize,
+                    Action::StrokeStabilisation => {
+                        if !brush.supports_stabilization() {
+                            return;
+                        }
+                        brush.stabilize = !brush.stabilize;
+                    }
                     Action::AlphaSoft => brush.alpha = Alpha::Soft,
                     Action::AlphaHard => brush.alpha = Alpha::Hard,
                     Action::AlphaSquare => brush.alpha = Alpha::Square,
                     _ => unreachable!(),
                 }
-                Some(Command::UpdateBrush(self.ui.selected, brush))
+                Some(Command::UpdateBrush(index, brush))
             }
             Action::RecoverySettings => {
                 self.open_recovery();
@@ -252,7 +279,7 @@ impl App {
                     .iter()
                     .position(|b| b.identity() == id)
                 {
-                    self.ui.selected = index;
+                    self.ui.select_brush(index, &self.document);
                 }
                 None
             }

@@ -17,6 +17,7 @@ mod commands;
 mod files;
 mod jobs;
 mod recovery;
+mod references;
 
 pub struct App {
     pub(crate) document: Document,
@@ -131,6 +132,18 @@ impl App {
             && !self.ui.layout_open
             && self.mesh_job.is_none();
         if enabled
+            && self.ui.arrange_references
+            && !ui.ctx().wants_keyboard_input()
+            && ui.input(|i| i.key_pressed(egui::Key::Escape))
+        {
+            self.arrange_references(false);
+        }
+        if enabled && ui.rect_contains_pointer(ui.available_rect_before_wrap()) {
+            for file in ui.input(|i| i.raw.dropped_files.clone()) {
+                self.dispatch(Command::AddReference(file), ui.ctx());
+            }
+        }
+        if enabled
             && self.ui.slice_active
             && !ui.ctx().wants_keyboard_input()
             && ui.input(|i| i.key_pressed(egui::Key::Escape))
@@ -152,18 +165,21 @@ impl App {
         let over_toolbar = toolbar_rect.is_some_and(|rect| {
             ui.input(|i| i.pointer.hover_pos().is_some_and(|p| rect.contains(p)))
         });
+        let selected = self.ui.brush_index_for_context(&self.document, ui.ctx());
         self.viewport.show(
             ui,
             &mut self.document,
             &mut self.camera,
             ViewportOptions {
+                arrange_references: self.ui.arrange_references,
+                references_visible: self.ui.references_visible,
                 slice: self.ui.slice_active.then_some(self.ui.slice_options),
                 select: self.ui.selection_tool,
                 slice_path_mode: self.ui.slice_path_mode,
                 transform_mode: self.ui.transform_mode,
                 transform_operation: self.ui.transform_operation,
                 respect_mask: self.ui.respect_transform_mask,
-                selected: self.ui.selected,
+                selected,
                 pressure: self.pressure,
                 wire: self.ui.wire,
                 wire_mode: self.ui.wire_mode,
@@ -180,12 +196,14 @@ impl App {
                     && !over_toolbar
                     && !over_editor
                     && !self.ui.pointer_over_pinned_menu(ui.ctx()),
-                smooth: self.ui.preferences.smooth,
                 reverse: self.ui.preferences.reverse,
                 zoom_hold: self.ui.preferences.zoom_hold,
                 pan_hold: self.ui.preferences.pan_hold,
             },
         );
+        if let Some(index) = self.viewport.reference_selection() {
+            self.ui.selected_reference = index;
+        }
         if let Some(operation) = self.viewport.completed_slice.take()
             && let Err(error) = self.start_mesh_job(operation)
         {
