@@ -2,6 +2,17 @@
 
 [Documentation home](../README.md#documentation)
 
+## Interaction principles
+
+Prioritise a clear, comfortable sculpting experience. external sculpting application and other applications provide workflow references, not interaction specifications; matching their gestures, terminology, or quirks is not a goal. Choose the interaction that makes the task easiest to understand and perform in Clay Form.
+
+- Make common actions discoverable through visible controls; shortcuts and modifier gestures should accelerate them rather than be required knowledge.
+- Keep gestures predictable, show the active mode and likely result, and provide a clear way to cancel or finish an operation.
+- Reuse existing controls and actions before adding another way to do the same job. Keep mouse and pen use comfortable and minimise unnecessary steps and interruptions.
+- Judge completion by the end-to-end workflow and hands-on feedback, as well as automated correctness checks. Revisit awkward interactions even when they match a reference application.
+
+## Shared interface controls
+
 Use `src/ui/design.rs` for shared action buttons, menus, icons, brush tiles and palette changes.
 
 - Keep names on primary actions. Icons accompany labels; icon-only controls need a tooltip.

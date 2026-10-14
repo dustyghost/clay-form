@@ -140,9 +140,11 @@ These are separate possibilities, outside the seven priorities above. Each needs
 
 ## Delivery checks
 
+Prioritise the user experience over feature-for-feature or gesture-for-gesture parity with external sculpting application. Reference workflows explain the intended task; they do not require copying awkward interactions. Follow the [interaction principles](ui-design.md#interaction-principles), reuse existing functionality, and assess discoverability, predictable mouse/pen behaviour, and ease of cancelling or finishing each workflow.
+
 New actions should be available through custom menus and configurable shortcuts where appropriate. Preserve existing projects, brush presets, and saved workspaces. Geometry changes need coherent undo behaviour; camera and interface changes must not dirty sculpt geometry.
 
-For each feature, run focused regression tests and check its interaction with masks, symmetry, subdivision, and pen input where relevant. Mark it complete only after its completion criteria have been checked, then update the user instructions in the README.
+For each feature, run focused regression tests and check its interaction with masks, symmetry, subdivision, and pen input where relevant. Mark it complete only after its completion criteria have been checked, then update the relevant user guide linked from the README.
 
 ## external sculpting application workflow references
 
