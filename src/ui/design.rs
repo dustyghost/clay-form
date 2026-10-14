@@ -364,10 +364,10 @@ pub(super) fn theme(ctx: &egui::Context) {
         v.window_fill = v.panel_fill;
         v.extreme_bg_color = Color32::from_rgb(18, 21, 26);
         v.selection.bg_fill = Color32::from_rgb(29, 78, 94);
-        v.selection.stroke = egui::Stroke::new(1., Color32::from_rgb(88, 195, 215));
+        v.selection.stroke = egui::Stroke::new(1_f32, Color32::from_rgb(88, 195, 215));
         v.widgets.inactive.weak_bg_fill = Color32::from_rgb(35, 40, 47);
         v.widgets.inactive.bg_fill = Color32::from_rgb(35, 40, 47);
-        v.widgets.inactive.bg_stroke = egui::Stroke::new(1., Color32::from_rgb(50, 57, 65));
+        v.widgets.inactive.bg_stroke = egui::Stroke::new(1_f32, Color32::from_rgb(50, 57, 65));
         v.widgets.hovered.weak_bg_fill = Color32::from_rgb(48, 57, 66);
         v.widgets.hovered.bg_fill = v.widgets.hovered.weak_bg_fill;
         for state in [
@@ -467,8 +467,8 @@ pub(super) fn appearance(ctx: &egui::Context, appearance: &crate::preferences::A
         v.override_text_color = Some(text);
         v.hyperlink_color = accent;
         v.selection.bg_fill = mix(panel, accent, 0.35);
-        v.selection.stroke = egui::Stroke::new(1., text);
-        v.window_stroke = egui::Stroke::new(1., mix(panel, text, 0.25));
+        v.selection.stroke = egui::Stroke::new(1_f32, text);
+        v.window_stroke = egui::Stroke::new(1_f32, mix(panel, text, 0.25));
         v.window_corner_radius = egui::CornerRadius::same(appearance.rounding);
         for (state, fill) in [
             (&mut v.widgets.noninteractive, panel),
@@ -479,8 +479,8 @@ pub(super) fn appearance(ctx: &egui::Context, appearance: &crate::preferences::A
         ] {
             state.bg_fill = fill;
             state.weak_bg_fill = fill;
-            state.bg_stroke = egui::Stroke::new(1., mix(fill, text, 0.2));
-            state.fg_stroke = egui::Stroke::new(1., text);
+            state.bg_stroke = egui::Stroke::new(1_f32, mix(fill, text, 0.2));
+            state.fg_stroke = egui::Stroke::new(1_f32, text);
             state.corner_radius = egui::CornerRadius::same(appearance.rounding);
         }
     });

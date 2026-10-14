@@ -119,7 +119,9 @@ fn gpu_slice_cap_shading_preview() {
                 "CLAY_SLICE_PREVIEW"
             }) {
                 let flipped: Vec<_> = pixels
-                    .chunks_exact(1000 * 4)
+                    .as_chunks::<{ 1000 * 4 }>()
+                    .0
+                    .iter()
                     .rev()
                     .flatten()
                     .copied()
@@ -214,7 +216,9 @@ fn gpu_sliced_hemisphere_thickness_preview_matches_applied_shell() {
             assert_eq!(gl.get_error(), glow::NO_ERROR);
             if let Ok(path) = std::env::var("CLAY_SLICE_THICKNESS_PREVIEW") {
                 let flipped: Vec<_> = pixels
-                    .chunks_exact(1000 * 4)
+                    .as_chunks::<{ 1000 * 4 }>()
+                    .0
+                    .iter()
                     .rev()
                     .flatten()
                     .copied()
@@ -317,7 +321,9 @@ fn gpu_rounded_slice_path_preview() {
         assert_eq!(gl.get_error(), glow::NO_ERROR);
         if let Ok(path) = std::env::var("CLAY_SLICE_PATH_PREVIEW") {
             let flipped: Vec<_> = pixels
-                .chunks_exact(1000 * 4)
+                .as_chunks::<{ 1000 * 4 }>()
+                .0
+                .iter()
                 .rev()
                 .flatten()
                 .copied()

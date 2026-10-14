@@ -182,12 +182,14 @@ mod tests {
         assert_eq!(&icon.rgba[..4], &[23, 26, 31, 255]);
         assert!(
             icon.rgba
-                .chunks_exact(4)
-                .filter(|p| *p != [23, 26, 31, 255])
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .filter(|p| **p != [23, 26, 31, 255])
                 .count()
                 > 10000
         );
-        assert!(icon.rgba.chunks_exact(4).all(|p| p[3] == 255));
+        assert!(icon.rgba.as_chunks::<4>().0.iter().all(|p| p[3] == 255));
         camera.zoom = 8.;
         camera.pan = eframe::egui::vec2(300., -200.);
         assert!(capture(&original, &camera).unwrap() == icon);

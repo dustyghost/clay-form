@@ -254,15 +254,15 @@ impl Viewport {
         let rect = if drag.tool == SelectionTool::Rectangle {
             let rect = Rect::from_two_pos(drag.start, drag.end);
             painter.rect_filled(rect, 0., color.gamma_multiply(0.13));
-            painter.rect_stroke(rect, 0., Stroke::new(1.5, color), StrokeKind::Inside);
+            painter.rect_stroke(rect, 0., Stroke::new(1.5_f32, color), StrokeKind::Inside);
             rect
         } else {
             let points = drag.polygon();
             let rect = Rect::from_points(&points);
-            painter.add(egui::Shape::line(points, Stroke::new(2., color)));
+            painter.add(egui::Shape::line(points, Stroke::new(2_f32, color)));
             painter.line_segment(
                 [drag.end, drag.start],
-                Stroke::new(1., color.gamma_multiply(0.6)),
+                Stroke::new(1_f32, color.gamma_multiply(0.6)),
             );
             rect
         };

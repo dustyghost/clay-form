@@ -581,7 +581,7 @@ impl Mesh {
             let points: Vec<_> = ids.iter().flat_map(|&id| project(id)).collect();
             let triangles = earcutr::earcut(&points, &starts, 2)
                 .map_err(|_| "Could not triangulate slice cap")?;
-            for t in triangles.chunks_exact(3) {
+            for t in triangles.as_chunks::<3>().0 {
                 let mut face = [ids[t[0]], ids[t[1]], ids[t[2]]];
                 let [a, b, c] = face.map(project);
                 if (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) < 0. {

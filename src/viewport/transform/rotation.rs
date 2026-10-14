@@ -59,7 +59,7 @@ impl Ring {
     pub fn paint(&self, scene: &Scene, painter: &egui::Painter, highlighted: bool) {
         painter.add(egui::Shape::line(
             self.samples(scene).into_iter().map(|(p, _)| p).collect(),
-            egui::Stroke::new(if highlighted { 3.5 } else { 2. }, self.color),
+            egui::Stroke::new(if highlighted { 3.5 } else { 2_f32 }, self.color),
         ));
         let (u, v) = self.basis();
         let radial = if self.axis.2.abs() > 0.9 {

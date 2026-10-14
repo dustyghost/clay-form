@@ -18,9 +18,9 @@ impl Stabilizer {
         self.position
     }
     pub fn paint(&self, painter: &Painter, pointer: Pos2, color: Color32) {
-        painter.line_segment([self.position, pointer], egui::Stroke::new(1., color));
+        painter.line_segment([self.position, pointer], egui::Stroke::new(1_f32, color));
         painter.circle_filled(self.position, 2.5, color);
-        painter.circle_stroke(pointer, 3., egui::Stroke::new(1., color));
+        painter.circle_stroke(pointer, 3., egui::Stroke::new(1_f32, color));
     }
 }
 

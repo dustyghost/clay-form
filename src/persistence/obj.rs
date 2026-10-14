@@ -370,7 +370,9 @@ fn triangulate(
         );
     }
     indices
-        .chunks_exact(3)
+        .as_chunks::<3>()
+        .0
+        .iter()
         .map(|t| {
             let mut t = [t[0], t[1], t[2]];
             let area = cross(points[t[0]], points[t[1]], points[t[2]]);

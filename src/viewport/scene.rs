@@ -297,7 +297,7 @@ impl Scene {
                 for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
                     if !hidden.contains(&edge_key(a, b)) && seen_edges.insert(edge_key(a, b)) {
                         let stroke = egui::Stroke::new(
-                            0.7,
+                            0.7_f32,
                             if let Some(&color) = geometry.edge_colors.get(&edge_key(a, b)) {
                                 color
                             } else if mode == WireMode::Transparent {
@@ -377,7 +377,7 @@ impl Scene {
         for edge in outlines {
             painter.line_segment(
                 edge.map(|i| self.positions[i]),
-                egui::Stroke::new(2., Color32::from_rgb(190, 155, 125)),
+                egui::Stroke::new(2_f32, Color32::from_rgb(190, 155, 125)),
             );
         }
     }
@@ -497,10 +497,10 @@ impl Scene {
                     )
                 })
                 .collect();
-            painter.add(egui::Shape::line(points, egui::Stroke::new(1.2, color)));
+            painter.add(egui::Shape::line(points, egui::Stroke::new(1.2_f32, color)));
         }
         let end = self.project(center + normal * (world_radius * 0.6));
-        painter.line_segment([pos, end], egui::Stroke::new(2., color));
+        painter.line_segment([pos, end], egui::Stroke::new(2_f32, color));
         painter.circle_filled(end, 3., color);
         true
     }

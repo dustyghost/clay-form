@@ -548,7 +548,7 @@ impl PrimitiveControls {
             if h.offset != Vec2::ZERO && !matches!(h.control, Control::Resolution(_)) {
                 painter.line_segment(
                     [anchor, point],
-                    egui::Stroke::new(1., color.gamma_multiply(0.6)),
+                    egui::Stroke::new(1_f32, color.gamma_multiply(0.6)),
                 );
             }
             controls::marker(painter, point, marker, color, hot || active);
@@ -574,12 +574,12 @@ impl PrimitiveControls {
                 };
                 painter.line_segment(
                     [point - direction * 28., point - direction * 12.],
-                    egui::Stroke::new(1., color),
+                    egui::Stroke::new(1_f32, color),
                 );
                 if !matches!(h.control, Control::Resolution(_)) {
                     painter.line_segment(
                         [point + direction * 12., point + direction * 28.],
-                        egui::Stroke::new(1., color),
+                        egui::Stroke::new(1_f32, color),
                     );
                 }
                 let caption = if matches!(h.control, Control::Resolution(_)) {

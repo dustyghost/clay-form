@@ -218,7 +218,13 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             &[23, 26, 31, 255],
             "transparent wireframe has no surface fill"
         );
-        assert!(transparent.chunks_exact(4).any(|p| p != [23, 26, 31, 255]));
+        assert!(
+            transparent
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .any(|p| *p != [23, 26, 31, 255])
+        );
         let make_preview = |alpha: Alpha| Preview {
             show_polygroups: false,
             backface_opacity: 0.,
@@ -472,7 +478,7 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         for axis in [0, 1] {
             let color = super::super::controls::AXES[axis];
             assert!(
-                wire.chunks_exact(4).any(|p| p[..3]
+                wire.as_chunks::<4>().0.iter().any(|p| p[..3]
                     .iter()
                     .zip([color.r(), color.g(), color.b()])
                     .all(|(&a, b)| a.abs_diff(b) <= 1)),
@@ -602,7 +608,7 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         assert_eq!(gl.get_error(), glow::NO_ERROR);
         if let Ok(path) = std::env::var("CLAY_GPU_PREVIEW") {
             let mut flipped = Vec::with_capacity(rgba.len());
-            for row in rgba.chunks_exact(256 * 4).rev() {
+            for row in rgba.as_chunks::<{ 256 * 4 }>().0.iter().rev() {
                 flipped.extend_from_slice(row);
             }
             image::save_buffer(path, &flipped, 256, 256, image::ColorType::Rgba8).unwrap();
@@ -652,7 +658,7 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             glow::PixelPackData::Slice(Some(&mut rgba)),
         );
         assert!(
-            rgba.chunks_exact(4).filter(|p| p[0] > 80).count() > 100,
+            rgba.as_chunks::<4>().0.iter().filter(|p| p[0] > 80).count() > 100,
             "unfilled circle outline must remain visible"
         );
         assert_eq!(gl.get_error(), glow::NO_ERROR);
@@ -711,7 +717,10 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             );
             gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
             assert!(
-                rgba.chunks_exact(4).all(|p| p == [23, 26, 31, 255]),
+                rgba.as_chunks::<4>()
+                    .0
+                    .iter()
+                    .all(|p| *p == [23, 26, 31, 255]),
                 "an empty model must render a clean background"
             );
             assert_eq!(gl.get_error(), glow::NO_ERROR);
@@ -784,7 +793,7 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             );
             gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
             let mut flipped = Vec::with_capacity(pixels.len());
-            for row in pixels.chunks_exact(256 * 4).rev() {
+            for row in pixels.as_chunks::<{ 256 * 4 }>().0.iter().rev() {
                 flipped.extend_from_slice(row);
             }
             image::save_buffer(path, &flipped, 256, 256, image::ColorType::Rgba8).unwrap();

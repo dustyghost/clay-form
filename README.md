@@ -4,7 +4,7 @@ A Rust desktop sculpting prototype built with eframe/egui. Start from a sphere a
 
 ## Run
 
-Install a current stable Rust toolchain, then:
+Install Rust through rustup, then run from the repository root (rustup selects the version pinned in `rust-toolchain.toml`):
 
 ```sh
 cargo run --release

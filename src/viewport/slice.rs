@@ -33,9 +33,9 @@ impl SliceDrag {
         let reach = scene.rect.width() + scene.rect.height();
         painter.line_segment(
             [self.start - direction * reach, self.end + direction * reach],
-            egui::Stroke::new(1., color.gamma_multiply(0.45)),
+            egui::Stroke::new(1_f32, color.gamma_multiply(0.45)),
         );
-        painter.line_segment([self.start, self.end], egui::Stroke::new(2., color));
+        painter.line_segment([self.start, self.end], egui::Stroke::new(2_f32, color));
         for p in [self.start, self.end] {
             painter.circle_filled(p, 4., color);
         }
@@ -49,7 +49,7 @@ impl SliceDrag {
             painter.arrow(
                 center,
                 keep * 32.,
-                egui::Stroke::new(2., Color32::LIGHT_GREEN),
+                egui::Stroke::new(2_f32, Color32::LIGHT_GREEN),
             );
             controls::label(painter, center + keep * 42., "Keep", Color32::LIGHT_GREEN);
             controls::label(painter, center - keep * 42., "Remove", Color32::LIGHT_RED);
@@ -287,7 +287,7 @@ impl SlicePathDraft {
     }
     fn paint(&self, painter: &egui::Painter, scene: &Scene, options: SliceOptions) {
         let sampled = self.sampled();
-        let stroke = egui::Stroke::new(2., controls::ACTION);
+        let stroke = egui::Stroke::new(2_f32, controls::ACTION);
         for pair in sampled.windows(2) {
             painter.line_segment([pair[0], pair[1]], stroke);
         }
@@ -297,7 +297,7 @@ impl SlicePathDraft {
             for (end, neighbor) in [(sampled[0], sampled[1]), (sampled[n - 1], sampled[n - 2])] {
                 painter.line_segment(
                     [end, end + (end - neighbor).normalized() * reach],
-                    egui::Stroke::new(1., controls::ACTION.gamma_multiply(0.45)),
+                    egui::Stroke::new(1_f32, controls::ACTION.gamma_multiply(0.45)),
                 );
             }
             if options.mode == SliceMode::Trim {
@@ -309,7 +309,7 @@ impl SlicePathDraft {
                 painter.arrow(
                     center,
                     keep * 28.,
-                    egui::Stroke::new(2., Color32::LIGHT_GREEN),
+                    egui::Stroke::new(2_f32, Color32::LIGHT_GREEN),
                 );
                 controls::label(painter, center + keep * 40., "Keep", Color32::LIGHT_GREEN);
                 controls::label(painter, center - keep * 40., "Remove", Color32::LIGHT_RED);
@@ -319,11 +319,11 @@ impl SlicePathDraft {
             if p.rounding > 0. && i > 0 && i + 1 < self.points.len() {
                 painter.line_segment(
                     [self.points[i - 1].position, p.position],
-                    egui::Stroke::new(1., controls::ACTION.gamma_multiply(0.25)),
+                    egui::Stroke::new(1_f32, controls::ACTION.gamma_multiply(0.25)),
                 );
                 painter.line_segment(
                     [p.position, self.points[i + 1].position],
-                    egui::Stroke::new(1., controls::ACTION.gamma_multiply(0.25)),
+                    egui::Stroke::new(1_f32, controls::ACTION.gamma_multiply(0.25)),
                 );
             }
             painter.circle_filled(
@@ -332,14 +332,14 @@ impl SlicePathDraft {
                 controls::ACTION,
             );
             if self.selected == Some(i) {
-                painter.circle_stroke(p.position, 9., egui::Stroke::new(1., Color32::WHITE));
+                painter.circle_stroke(p.position, 9., egui::Stroke::new(1_f32, Color32::WHITE));
             }
         }
         for handle in self.corner_handles() {
             let color = Color32::from_rgb(130, 215, 255);
             painter.line_segment(
                 [self.points[handle.point].position, handle.position],
-                egui::Stroke::new(1., color.gamma_multiply(0.7)),
+                egui::Stroke::new(1_f32, color.gamma_multiply(0.7)),
             );
             if handle.diamond {
                 let p = handle.position;
@@ -351,11 +351,11 @@ impl SlicePathDraft {
                         p + Vec2::new(-6., 0.),
                     ],
                     color,
-                    egui::Stroke::new(1., Color32::BLACK),
+                    egui::Stroke::new(1_f32, Color32::BLACK),
                 ));
             } else {
                 painter.circle_filled(handle.position, 5., Color32::from_rgb(25, 30, 36));
-                painter.circle_stroke(handle.position, 5., egui::Stroke::new(2., color));
+                painter.circle_stroke(handle.position, 5., egui::Stroke::new(2_f32, color));
             }
         }
     }

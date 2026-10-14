@@ -26,9 +26,9 @@ pub(super) fn marker(
 ) {
     let radius = if highlighted { 8. } else { 6. };
     if highlighted {
-        painter.circle_stroke(point, 11., egui::Stroke::new(1.5, Color32::WHITE));
+        painter.circle_stroke(point, 11., egui::Stroke::new(1.5_f32, Color32::WHITE));
     }
-    let stroke = egui::Stroke::new(2., color);
+    let stroke = egui::Stroke::new(2_f32, color);
     match kind {
         Marker::Circle => {
             painter.circle_filled(point, radius, BACKGROUND);

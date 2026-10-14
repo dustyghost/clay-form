@@ -4,6 +4,8 @@
 
 Run these commands from the repository root.
 
+`rust-toolchain.toml` pins the compiler, Clippy, and rustfmt used locally and by CI/release builds. Rustup installs the specified toolchain when needed. Upgrade the version in that file deliberately, then run the checks below and the GPU validation before committing the upgrade.
+
 ## Checks and profiling
 
 ```sh

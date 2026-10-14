@@ -237,7 +237,7 @@ impl Viewport {
             // A dark outline keeps the small red target readable on light groups.
             for (color, width) in [
                 (Color32::from_black_alpha(210), 3.),
-                (Color32::from_rgb(235, 65, 65), 1.3),
+                (Color32::from_rgb(235, 65, 65), 1.3_f32),
             ] {
                 let stroke = egui::Stroke::new(width, color);
                 target.circle_stroke(pos, 5., stroke);
@@ -646,7 +646,7 @@ impl Viewport {
                         painter.circle_stroke(
                             pos,
                             radius * fraction,
-                            egui::Stroke::new(1.5, color),
+                            egui::Stroke::new(1.5_f32, color),
                         );
                     }
                 }

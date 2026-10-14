@@ -441,7 +441,7 @@ impl TransformControls {
         {
             painter.line_segment(
                 line.map(|p| scene.project(p)),
-                egui::Stroke::new(3., controls::ACTION),
+                egui::Stroke::new(3_f32, controls::ACTION),
             );
         }
         let pointer = painter.ctx().pointer_hover_pos();
@@ -481,7 +481,7 @@ impl TransformControls {
         }
         for (point, handle, color, label) in self.handles(document, scene, mode, op) {
             if mode == TransformMode::World {
-                painter.line_segment([origin, point], egui::Stroke::new(2., color));
+                painter.line_segment([origin, point], egui::Stroke::new(2_f32, color));
             }
             let highlighted =
                 self.drag.is_some_and(|h| h == handle) || hovered.is_some_and(|h| h == handle);

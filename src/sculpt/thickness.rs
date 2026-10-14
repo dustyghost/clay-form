@@ -252,7 +252,10 @@ impl Mesh {
                 }
             }
         }
-        for rim in shell.triangles[self.triangles.len() * 2..].chunks_exact(2) {
+        for rim in shell.triangles[self.triangles.len() * 2..]
+            .as_chunks::<2>()
+            .0
+        {
             let face_normal = |[a, b, c]: [usize; 3]| {
                 (shell.vertices[b] - shell.vertices[a]).cross(shell.vertices[c] - shell.vertices[a])
             };
@@ -388,7 +391,10 @@ mod slice_rim_tests {
                         );
                     }
                 }
-                for pair in shell.triangles[mesh.triangles.len() * 2..].chunks_exact(2) {
+                for pair in shell.triangles[mesh.triangles.len() * 2..]
+                    .as_chunks::<2>()
+                    .0
+                {
                     let normals: Vec<_> = pair
                         .iter()
                         .map(|&[a, b, c]| {

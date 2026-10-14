@@ -40,7 +40,7 @@ pub(super) fn draw_gizmo(
         let hovered = pointer.is_some_and(|p| p.distance(pos) < 13.);
         painter.circle_filled(pos, 12., color);
         if hovered {
-            painter.circle_stroke(pos, 15., egui::Stroke::new(1.5, Color32::WHITE));
+            painter.circle_stroke(pos, 15., egui::Stroke::new(1.5_f32, Color32::WHITE));
         }
         painter.text(
             pos,

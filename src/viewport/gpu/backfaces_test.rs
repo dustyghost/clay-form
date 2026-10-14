@@ -181,7 +181,7 @@ fn gpu_backfaces_are_faint_depth_tested_and_do_not_modify_geometry() {
             );
             gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
             let mut flipped = Vec::with_capacity(pixels.len());
-            for row in pixels.chunks_exact(256 * 4).rev() {
+            for row in pixels.as_chunks::<{ 256 * 4 }>().0.iter().rev() {
                 flipped.extend_from_slice(row);
             }
             image::save_buffer(path, &flipped, 256, 256, image::ColorType::Rgba8).unwrap();

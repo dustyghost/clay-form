@@ -65,17 +65,17 @@ impl PendingStroke {
                 renderer.is_none(),
             );
         if !surface {
-            painter.circle_stroke(target, radius, egui::Stroke::new(1.5, color));
+            painter.circle_stroke(target, radius, egui::Stroke::new(1.5_f32, color));
             if brush.inner_radius > 0. {
                 painter.circle_stroke(
                     target,
                     radius * brush.inner_radius,
-                    egui::Stroke::new(1., color),
+                    egui::Stroke::new(1_f32, color),
                 );
             }
         }
         if matches!(brush.stroke_mode, StrokeMode::Line | StrokeMode::DragRect) {
-            painter.line_segment([self.start, self.end], egui::Stroke::new(1.5, color));
+            painter.line_segment([self.start, self.end], egui::Stroke::new(1.5_f32, color));
             painter.circle_filled(self.start, 3., color);
         }
         painter.text(
