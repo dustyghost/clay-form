@@ -823,6 +823,8 @@ mod backfaces_test;
 #[cfg(all(test, target_os = "linux"))]
 mod slice_test;
 
+#[cfg(test)]
+mod lasso_test;
 #[cfg(all(test, target_os = "linux"))]
 mod visibility_test;
 

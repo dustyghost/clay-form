@@ -18,6 +18,7 @@ use crate::{
 };
 use eframe::egui::{self, Color32, Pos2, Sense, Vec2};
 use gizmo::draw_gizmo;
+pub(crate) use visibility::SelectionTool;
 pub(crate) const AXIS_COLORS: [Color32; 3] = controls::AXES;
 use scene::Scene;
 pub(crate) use transform::{TransformMode, TransformOperation};
@@ -61,7 +62,7 @@ pub(crate) struct Viewport {
 #[derive(Clone, Copy)]
 pub(crate) struct ViewportOptions {
     pub slice: Option<crate::sculpt::SliceOptions>,
-    pub select: bool,
+    pub select: Option<SelectionTool>,
     pub slice_path_mode: bool,
     pub transform_mode: TransformMode,
     pub transform_operation: TransformOperation,
@@ -205,6 +206,14 @@ impl Viewport {
             .hover_pos()
             .or_else(|| response.interact_pointer_pos());
         if options.enabled
+            && options.select.is_some()
+            && response.hovered()
+            && pointer.is_some_and(|pos| !gizmo_rect.contains(pos))
+        {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+        }
+        if options.enabled
+            && options.select.is_none()
             && response.hovered()
             && let Some(pos) = pointer
             && !gizmo_rect.contains(pos)
@@ -278,6 +287,7 @@ impl Viewport {
             && !zoom_held
             && options.transform_mode == TransformMode::Sculpt
             && options.slice.is_none()
+            && options.select.is_none()
             && let Some(point) = pointer.filter(|p| !gizmo_rect.contains(*p))
             && let Some((owner, _, _)) = scene.pick_model(point)
             && owner != document.active_model_index()
@@ -290,6 +300,7 @@ impl Viewport {
             && self.gesture.is_none()
             && options.enabled
             && let Some(pos) = pointer
+            && (options.select.is_none() || gizmo_rect.contains(pos))
         {
             self.gesture = Some(if gizmo_rect.contains(pos) {
                 Gesture::Gizmo
@@ -454,6 +465,7 @@ impl Viewport {
         }
         let drawing = primary && self.gesture == Some(Gesture::Sculpt) && options.enabled;
         let patterned_click = options.enabled
+            && options.select.is_none()
             && !zoom_held
             && !matches!(previous_gesture, Some(Gesture::Orbit | Gesture::Gizmo))
             && response.clicked_by(egui::PointerButton::Primary)
@@ -529,7 +541,8 @@ impl Viewport {
             self.stabilizer = None;
         }
         if let Some(pos) = pointer.filter(|p| {
-            !gizmo_rect.contains(*p)
+            options.select.is_none()
+                && !gizmo_rect.contains(*p)
                 && self.gesture != Some(Gesture::Orbit)
                 && self.gesture != Some(Gesture::Gizmo)
         }) {

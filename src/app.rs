@@ -164,7 +164,17 @@ impl App {
             Action::ContractMask => Some(Command::GrowMask(false)),
             Action::BlurMask => Some(Command::BlurMask),
             Action::SharpenMask => Some(Command::SharpenMask),
-            Action::SelectRectangle => Some(Command::SelectTool(!self.ui.select_active)),
+            Action::SelectRectangle | Action::SelectLasso | Action::MaskLasso => {
+                use crate::viewport::SelectionTool;
+                let tool = match action {
+                    Action::SelectRectangle => SelectionTool::Rectangle,
+                    Action::SelectLasso => SelectionTool::Lasso,
+                    _ => SelectionTool::MaskLasso,
+                };
+                Some(Command::SelectTool(
+                    (self.ui.selection_tool != Some(tool)).then_some(tool),
+                ))
+            }
             Action::ShowAllFaces => Some(Command::ShowAllFaces),
             Action::InvertVisibility => Some(Command::InvertVisibility),
             Action::SplitHidden => Some(Command::SplitHidden),
@@ -545,7 +555,7 @@ impl App {
             Command::Action(_) => unreachable!(),
             Command::SelectTool(active) => {
                 self.viewport.finish_transform_drag(&mut self.document);
-                self.ui.select_active = active;
+                self.ui.selection_tool = active;
                 self.ui.slice_active = false;
                 self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
                 Ok(())
@@ -566,7 +576,7 @@ impl App {
                 })
             }
             Command::SliceTool(active) => {
-                self.ui.select_active = false;
+                self.ui.selection_tool = None;
                 self.viewport.finish_transform_drag(&mut self.document);
                 self.ui.slice_active = active;
                 self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
@@ -617,7 +627,7 @@ impl App {
                 Ok(())
             }
             Command::RequestPrimitive => {
-                self.ui.select_active = false;
+                self.ui.selection_tool = None;
                 self.ui.slice_active = false;
                 self.viewport.cancel(&mut self.document);
                 if self.document.primitive().is_some() {
@@ -665,7 +675,7 @@ impl App {
                 })
             }
             Command::TransformMode(mode) => {
-                self.ui.select_active = false;
+                self.ui.selection_tool = None;
                 self.ui.slice_active = false;
                 self.viewport.finish_transform_drag(&mut self.document);
                 self.ui.transform_mode = mode;
@@ -985,7 +995,7 @@ impl App {
             &mut self.camera,
             ViewportOptions {
                 slice: self.ui.slice_active.then_some(self.ui.slice_options),
-                select: self.ui.select_active,
+                select: self.ui.selection_tool,
                 slice_path_mode: self.ui.slice_path_mode,
                 transform_mode: self.ui.transform_mode,
                 transform_operation: self.ui.transform_operation,

@@ -3127,3 +3127,307 @@ fn gizmo_deliberate_drag_latches_and_fast_tap_snaps() {
     assert_ne!(yaw, 0.);
     assert!(!app.document.is_dirty());
 }
+
+fn lasso_points() -> [Pos2; 7] {
+    [
+        Pos2::new(490., 160.),
+        Pos2::new(770., 160.),
+        Pos2::new(770., 400.),
+        Pos2::new(620., 400.),
+        Pos2::new(620., 670.),
+        Pos2::new(490., 670.),
+        Pos2::new(490., 160.),
+    ]
+}
+
+#[test]
+fn lasso_previews_then_commits_once_at_multiple_angles_and_keeps_other_models() {
+    use crate::viewport::SelectionTool;
+    for tool in [SelectionTool::MaskLasso, SelectionTool::Lasso] {
+        for yaw in [0., 1.2, 3.1] {
+            for alt in [false, true] {
+                let mut app = App::default();
+                app.camera.yaw = yaw;
+                app.camera.pitch = 0.4;
+                if tool == SelectionTool::MaskLasso && alt {
+                    app.document.invert_mask().unwrap();
+                }
+                app.document.duplicate_model(false).unwrap();
+                let before = app.document.geometry_snapshot();
+                let count = app.document.history_counts().0;
+                let ctx = egui::Context::default();
+                app.dispatch(Command::SelectTool(Some(tool)), &ctx);
+                navigation_frame(&mut app, &ctx, vec![]);
+                let points = lasso_points();
+                visibility_frame(
+                    &mut app,
+                    &ctx,
+                    egui::Modifiers::NONE,
+                    vec![
+                        egui::Event::PointerMoved(points[0]),
+                        primary_event(points[0], true),
+                    ],
+                );
+                let modifiers = if alt {
+                    egui::Modifiers::ALT
+                } else {
+                    egui::Modifiers::NONE
+                };
+                // A batch of pen samples, returning exactly to the first point,
+                // must still form a lasso, not a click or a zero-size rectangle.
+                visibility_frame(
+                    &mut app,
+                    &ctx,
+                    modifiers,
+                    points[1..]
+                        .iter()
+                        .copied()
+                        .map(egui::Event::PointerMoved)
+                        .collect(),
+                );
+                assert_eq!(
+                    app.document.geometry_snapshot(),
+                    before,
+                    "preview must not edit"
+                );
+                assert!(app.viewport.gesture == Some(Gesture::Select));
+                visibility_frame(
+                    &mut app,
+                    &ctx,
+                    modifiers,
+                    vec![primary_event(points[0], false)],
+                );
+                let after = app.document.geometry_snapshot();
+                assert_ne!(after, before);
+                assert_eq!(after.submodels, before.submodels);
+                assert_eq!(after.mesh.vertices, before.mesh.vertices);
+                assert_eq!(after.mesh.vertex_groups, before.mesh.vertex_groups);
+                assert_eq!(app.document.history_counts().0, count + 1);
+                assert_eq!(app.camera.yaw, yaw);
+                assert_eq!(app.camera.zoom, 1.);
+                if tool == SelectionTool::MaskLasso {
+                    let changed = after
+                        .mesh
+                        .mask
+                        .iter()
+                        .zip(&before.mesh.mask)
+                        .filter(|(a, b)| a != b)
+                        .count();
+                    assert!(changed > 0 && changed < after.mesh.vertices.len());
+                    let view = app.camera.basis().2;
+                    // Through-depth selection must hit both sides of the sphere.
+                    for sign in [-1., 1.] {
+                        assert!(
+                            after
+                                .mesh
+                                .vertices
+                                .iter()
+                                .enumerate()
+                                .any(|(i, p)| p.dot(view) * sign > 0.3
+                                    && after.mesh.mask[i] != before.mesh.mask[i])
+                        );
+                    }
+                } else {
+                    assert!(after.mesh.hidden_face_count() > 0);
+                    assert!(after.mesh.hidden_face_count() < after.mesh.triangles.len());
+                    assert_eq!(after.mesh.mask, before.mesh.mask);
+                }
+                app.dispatch(Command::Undo, &ctx);
+                assert_eq!(app.document.geometry_snapshot(), before);
+                app.dispatch(Command::Redo, &ctx);
+                assert_eq!(app.document.geometry_snapshot(), after);
+            }
+        }
+    }
+}
+
+#[test]
+fn lasso_cancellation_degenerate_paths_and_tool_switches_preserve_redo() {
+    use crate::viewport::SelectionTool;
+    for interruption in [
+        "escape",
+        "tool",
+        "camera",
+        "focus",
+        "degenerate",
+        "click",
+        "lost_release",
+        "command",
+    ] {
+        let mut app = App::default();
+        let ctx = egui::Context::default();
+        app.document.invert_mask().unwrap();
+        app.document.undo();
+        app.document.mark_saved("lasso.clay");
+        let before = app.document.geometry_snapshot();
+        app.dispatch(Command::SelectTool(Some(SelectionTool::Lasso)), &ctx);
+        navigation_frame(&mut app, &ctx, vec![]);
+        let points = lasso_points();
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::PointerMoved(points[0]),
+                primary_event(points[0], true),
+            ],
+        );
+        if !matches!(interruption, "degenerate" | "click") {
+            navigation_frame(
+                &mut app,
+                &ctx,
+                points[1..]
+                    .iter()
+                    .copied()
+                    .map(egui::Event::PointerMoved)
+                    .collect(),
+            );
+        }
+        match interruption {
+            "escape" => navigation_frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::Key {
+                    key: egui::Key::Escape,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            ),
+            "tool" => {
+                app.dispatch(Command::SelectTool(Some(SelectionTool::MaskLasso)), &ctx);
+                navigation_frame(&mut app, &ctx, vec![])
+            }
+            "command" => {
+                app.dispatch(Command::ShowAllFaces, &ctx);
+                navigation_frame(&mut app, &ctx, vec![]);
+                navigation_frame(
+                    &mut app,
+                    &ctx,
+                    points[1..]
+                        .iter()
+                        .copied()
+                        .map(egui::Event::PointerMoved)
+                        .collect(),
+                )
+            }
+            "camera" => {
+                app.dispatch(Command::ZoomIn, &ctx);
+                navigation_frame(&mut app, &ctx, vec![])
+            }
+            "focus" => {
+                let _ = ctx.run(
+                    egui::RawInput {
+                        focused: false,
+                        ..Default::default()
+                    },
+                    |ctx| {
+                        egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+                    },
+                );
+                egui::Rect::NOTHING
+            }
+            "degenerate" => {
+                navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(points[1])])
+            }
+            "lost_release" => navigation_frame(&mut app, &ctx, vec![egui::Event::PointerGone]),
+            _ => egui::Rect::NOTHING,
+        };
+        navigation_frame(&mut app, &ctx, vec![primary_event(points[0], false)]);
+        assert_eq!(app.document.geometry_snapshot(), before, "{interruption}");
+        assert_eq!(app.document.history_counts(), (0, 1), "{interruption}");
+        assert!(!app.document.is_dirty(), "{interruption}");
+        if interruption != "camera" {
+            assert_eq!(app.camera.yaw, 0., "{interruption}");
+            assert_eq!(app.camera.zoom, 1., "{interruption}");
+        }
+    }
+}
+
+#[test]
+fn lasso_space_translation_matches_drawing_at_destination_and_fast_drag() {
+    use crate::viewport::SelectionTool;
+    let mut results = Vec::new();
+    for translate in [false, true] {
+        let mut app = App::default();
+        let ctx = egui::Context::default();
+        app.dispatch(Command::SelectTool(Some(SelectionTool::MaskLasso)), &ctx);
+        navigation_frame(&mut app, &ctx, vec![]);
+        let points = lasso_points();
+        let shift = Vec2::new(-180., -40.);
+        let offset = if translate { Vec2::ZERO } else { shift };
+        let start = points[0] + offset;
+        let mut events = vec![egui::Event::PointerMoved(start), primary_event(start, true)];
+        events.extend(
+            points[1..]
+                .iter()
+                .map(|p| egui::Event::PointerMoved(*p + offset)),
+        );
+        if translate {
+            navigation_frame(&mut app, &ctx, events);
+            navigation_frame(
+                &mut app,
+                &ctx,
+                vec![
+                    egui::Event::Key {
+                        key: egui::Key::Space,
+                        physical_key: None,
+                        pressed: true,
+                        repeat: false,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                    egui::Event::PointerMoved(points[0] + shift),
+                    primary_event(points[0] + shift, false),
+                ],
+            );
+        } else {
+            events.push(primary_event(start, false));
+            navigation_frame(&mut app, &ctx, events);
+        }
+        assert_eq!(app.document.history_counts(), (1, 0));
+        results.push(app.document.geometry_snapshot());
+    }
+    assert_eq!(results[0], results[1]);
+}
+
+#[test]
+fn lasso_actions_toggle_from_shortcuts_and_obey_busy_guard() {
+    use crate::viewport::SelectionTool;
+    for (action, tool) in [
+        (Action::SelectLasso, SelectionTool::Lasso),
+        (Action::MaskLasso, SelectionTool::MaskLasso),
+    ] {
+        let mut app = App::default();
+        let ctx = egui::Context::default();
+        app.ui
+            .preferences
+            .bind(
+                action.clone(),
+                crate::preferences::Shortcut::new(egui::Key::F8, egui::Modifiers::NONE),
+            )
+            .unwrap();
+        let json = serde_json::to_string(&app.ui.preferences).unwrap();
+        app.ui.preferences = serde_json::from_str(&json).unwrap();
+        let _ = ctx.run(
+            egui::RawInput {
+                events: vec![egui::Event::Key {
+                    key: egui::Key::F8,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+                ..Default::default()
+            },
+            |ctx| app.shortcuts(ctx),
+        );
+        assert_eq!(app.ui.selection_tool, Some(tool));
+        app.dispatch(Command::Action(action.clone()), &ctx);
+        assert_eq!(app.ui.selection_tool, None);
+        app.dispatch(Command::Subdivide, &ctx);
+        app.dispatch(Command::Action(action), &ctx);
+        assert_eq!(app.ui.selection_tool, None);
+        app.dispatch(Command::CancelMeshJob, &ctx);
+        app.poll_mesh_job();
+    }
+}

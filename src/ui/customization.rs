@@ -244,6 +244,8 @@ impl UiState {
             | Action::ContractMask
             | Action::BlurMask
             | Action::SharpenMask
+            | Action::SelectLasso
+            | Action::MaskLasso
             | Action::SelectRectangle
             | Action::ShowAllFaces
             | Action::InvertVisibility
@@ -269,7 +271,15 @@ impl UiState {
             Action::PolygroupColors => self.show_polygroups,
             Action::Backfaces => self.show_backfaces,
             Action::WireTriangles => self.wire_triangles,
-            Action::SelectRectangle => self.select_active,
+            Action::SelectRectangle => {
+                self.selection_tool == Some(crate::viewport::SelectionTool::Rectangle)
+            }
+            Action::SelectLasso => {
+                self.selection_tool == Some(crate::viewport::SelectionTool::Lasso)
+            }
+            Action::MaskLasso => {
+                self.selection_tool == Some(crate::viewport::SelectionTool::MaskLasso)
+            }
             Action::Slice => self.slice_active,
             Action::Sculpt => self.transform_mode == crate::viewport::TransformMode::Sculpt,
             Action::Transform => self.transform_mode == crate::viewport::TransformMode::World,

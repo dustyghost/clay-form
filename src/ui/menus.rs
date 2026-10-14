@@ -222,9 +222,14 @@ impl UiState {
                     document.mesh().triangles.len()
                 ));
                 ui.add_enabled_ui(!self.mesh_busy && document.primitive().is_none(), |ui| {
-                        if ui.selectable_label(self.select_active, "Select rectangle").customize(Action::SelectRectangle).clicked() {
-                            commands.push(Command::SelectTool(!self.select_active));
-                            if popup { ui.close_kind(egui::UiKind::Menu); }
+                        for (tool, action) in [
+                            (crate::viewport::SelectionTool::Rectangle, Action::SelectRectangle),
+                            (crate::viewport::SelectionTool::Lasso, Action::SelectLasso),
+                        ] {
+                            if ui.selectable_label(self.selection_tool == Some(tool), tool.label()).on_hover_text("Drag to isolate; Alt to hide. Selects face centers through all depths, keeping quads whole.").customize(action.clone()).clicked() {
+                                commands.push(Command::Action(action));
+                                if popup { ui.close_kind(egui::UiKind::Menu); }
+                            }
                         }
                         if ui.button("Show all").customize(Action::ShowAllFaces).clicked() { commands.push(Command::ShowAllFaces); }
                         if ui.button("Invert visibility").customize(Action::InvertVisibility).clicked() { commands.push(Command::InvertVisibility); }
@@ -340,6 +345,10 @@ impl UiState {
                     .mask_threshold;
                 if ui.add_enabled(!self.mesh_busy, egui::Slider::new(&mut threshold, 0. ..=1.).text("Selection threshold").custom_formatter(|v,_| format!("{:.0}%",v*100.)).custom_parser(|text| text.trim().trim_end_matches('%').trim().parse::<f64>().ok().map(|v|v/100.))).on_hover_text("Minimum vertex mask value for grouping, deletion and extraction. Zero-valued vertices are always excluded. Complete faces must meet the threshold at every corner.").changed() { commands.push(Command::MaskThreshold(threshold)); }
                 ui.add_enabled_ui(!self.mesh_busy && document.primitive().is_none(), |ui| {
+                        if ui.add_enabled(document.active_visible(), egui::Button::new("Mask lasso").selected(self.selection_tool == Some(crate::viewport::SelectionTool::MaskLasso))).on_hover_text("Drag to add masking; Alt to erase. Selects vertices through all depths. Hidden faces and their boundary vertices are protected.").customize(Action::MaskLasso).clicked() {
+                            commands.push(Command::Action(Action::MaskLasso));
+                            if popup { ui.close_kind(egui::UiKind::Menu); }
+                        }
                         if ui.add(design::button(ui, Glyph::Mask, "Clear mask")).customize(Action::ClearMask).clicked() { commands.push(Command::ClearMask); }
                         if ui.add(design::button(ui, Glyph::Restore, "Invert mask")).on_hover_text("Swap masked and unmasked areas, preserving soft mask values on every subdivision level.").customize(Action::InvertMask).clicked() { commands.push(Command::InvertMask); }
                         ui.horizontal(|ui| {

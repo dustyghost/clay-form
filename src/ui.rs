@@ -22,7 +22,7 @@ pub(crate) struct UiState {
     pub(crate) primitive_controls_requested: bool,
     pub transform_mode: crate::viewport::TransformMode,
     pub slice_active: bool,
-    pub select_active: bool,
+    pub selection_tool: Option<crate::viewport::SelectionTool>,
     pub slice_path_mode: bool,
     pub slice_options: crate::sculpt::SliceOptions,
     pub transform_operation: crate::viewport::TransformOperation,
@@ -65,7 +65,7 @@ impl Default for UiState {
             primitive_controls_requested: false,
             transform_mode: crate::viewport::TransformMode::Sculpt,
             slice_active: false,
-            select_active: false,
+            selection_tool: None,
             slice_path_mode: false,
             slice_options: Default::default(),
             transform_operation: crate::viewport::TransformOperation::Move,
@@ -304,11 +304,17 @@ impl UiState {
             }
         });
         self.pinned_menus(ctx, document, zoom, &mut commands);
-        if self.select_active {
+        if let Some(tool) = self.selection_tool {
             egui::TopBottomPanel::top("visibility_selection_controls").show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
-                    ui.label("Select rectangle · drag to isolate · Alt to hide · Space to move · Esc to cancel");
-                    if ui.button("Done").clicked() { commands.push(Command::SelectTool(false)); }
+                    ui.strong(tool.label());
+                    ui.separator();
+                    ui.label(tool.instructions());
+                    ui.separator();
+                    ui.label("Through all depths · Space to move · Esc to cancel");
+                    if ui.button("Done").clicked() {
+                        commands.push(Command::SelectTool(None));
+                    }
                 });
             });
         }

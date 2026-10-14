@@ -1061,6 +1061,33 @@ impl Document {
             Ok(())
         })
     }
+    /// Projected lasso masking affects all stored levels and protects hidden
+    /// faces and their boundary vertices, just like the Mask brush.
+    pub fn mask_region(
+        &mut self,
+        contains: impl Fn(crate::sculpt::Vec3) -> bool,
+        erase: bool,
+    ) -> Result<(), String> {
+        if !self.active_visible() {
+            return Err("Show the active model before masking".into());
+        }
+        self.edit_group_meshes(
+            if erase {
+                "Erase mask lasso"
+            } else {
+                "Mask lasso"
+            },
+            |mesh| {
+                let editable = mesh.sculptable_vertices();
+                for (i, &point) in mesh.vertices.iter().enumerate() {
+                    if editable[i] && contains(point) {
+                        mesh.mask[i] = if erase { 0. } else { 1. };
+                    }
+                }
+                Ok(())
+            },
+        )
+    }
     pub fn mask_peak(&self) -> f32 {
         std::iter::once(&self.geometry.mesh)
             .chain(self.geometry.settings.lower.iter())
@@ -3074,5 +3101,114 @@ mod mask_filter_tests {
         assert!(!doc.is_dirty());
         doc.redo();
         assert!(doc.mesh().mask.iter().all(|m| *m == 1.));
+    }
+}
+
+#[cfg(test)]
+mod lasso_mask_tests {
+    use super::*;
+
+    #[test]
+    fn mask_lasso_preserves_attributes_hidden_vertices_and_every_subdivision_level() {
+        let mut primitive = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Plane);
+        primitive.divisions = [4, 4, 1];
+        let mut mesh = primitive.mesh().unwrap();
+        mesh.mask = mesh
+            .vertices
+            .iter()
+            .map(|p| if p.0 < 0. { 0.2 } else { 0.8 })
+            .collect();
+        mesh.create_vertex_group("Soft weights".into(), 0.1, false)
+            .unwrap();
+        let mut geometry = Geometry::new(mesh);
+        geometry.subdivide().unwrap();
+        geometry.subdivide().unwrap();
+        geometry.set_level(2).unwrap();
+        let mut doc = Document::default();
+        doc.replace_geometry(geometry).unwrap();
+        doc.select_face_region(|p| p.1 > 0.4, true).unwrap();
+        doc.duplicate_model(false).unwrap();
+        for erase in [false, true] {
+            let before = doc.geometry_snapshot();
+            let counts = doc.history_counts();
+            doc.mask_region(|p| p.0 > 0., erase).unwrap();
+            let after = doc.geometry_snapshot();
+            let mut restored_masks = after.clone();
+            for (edited, old) in std::iter::once(&mut restored_masks.mesh)
+                .chain(restored_masks.settings.lower.iter_mut())
+                .chain(restored_masks.settings.upper.iter_mut())
+                .zip(
+                    std::iter::once(&before.mesh)
+                        .chain(before.settings.lower.iter())
+                        .chain(before.settings.upper.iter()),
+                )
+            {
+                let editable = old.sculptable_vertices();
+                let mut changed = 0;
+                for (i, p) in old.vertices.iter().enumerate() {
+                    let expected = if editable[i] && p.0 > 0. {
+                        if erase { 0. } else { 1. }
+                    } else {
+                        old.mask[i]
+                    };
+                    assert_eq!(edited.mask[i], expected);
+                    changed += usize::from(edited.mask[i] != old.mask[i]);
+                }
+                assert!(changed > 0);
+                edited.mask.clone_from(&old.mask);
+            }
+            assert_eq!(
+                restored_masks, before,
+                "no geometry, groups, visibility or inactive models may change"
+            );
+            assert_eq!(doc.history_counts().0, counts.0 + 1);
+            assert_eq!(
+                doc.undo_label(),
+                Some(if erase {
+                    "Erase mask lasso"
+                } else {
+                    "Mask lasso"
+                })
+            );
+            let json = serde_json::to_string(&doc.project()).unwrap();
+            let mut loaded = Document::default();
+            loaded
+                .replace_project(serde_json::from_str(&json).unwrap(), "lasso.clay")
+                .unwrap();
+            assert_eq!(loaded.geometry_snapshot(), after);
+            doc.undo();
+            assert_eq!(doc.geometry_snapshot(), before);
+            doc.redo();
+            assert_eq!(doc.geometry_snapshot(), after);
+            for level in [1, 3] {
+                doc.set_mesh_level(level).unwrap();
+                doc.set_mesh_level(2).unwrap();
+                assert_eq!(doc.mesh().vertices, after.mesh.vertices);
+                assert_eq!(doc.mesh().vertex_groups, after.mesh.vertex_groups);
+                assert_eq!(doc.mesh().hidden_faces, after.mesh.hidden_faces);
+                for (i, (&actual, &expected)) in
+                    doc.mesh().mask.iter().zip(&after.mesh.mask).enumerate()
+                {
+                    assert!(
+                        (actual - expected).abs() < 1e-6,
+                        "mask at vertex {i}: {actual} vs {expected}, level {level}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn mask_lasso_no_hit_or_unchanged_mask_preserves_redo_and_clean_state() {
+        let mut doc = Document::default();
+        doc.invert_mask().unwrap();
+        doc.undo();
+        doc.mark_saved("lasso.clay");
+        let before = doc.geometry_snapshot();
+        doc.mask_region(|_| false, false).unwrap();
+        doc.mask_region(|_| true, true).unwrap();
+        assert_eq!(doc.geometry_snapshot(), before);
+        assert_eq!(doc.history_counts(), (0, 1));
+        assert!(!doc.is_dirty());
     }
 }

@@ -17,7 +17,7 @@ pub(crate) enum Command {
     InvertMask,
     DeleteMasked,
     SliceTool(bool),
-    SelectTool(bool),
+    SelectTool(Option<crate::viewport::SelectionTool>),
     ShowAllFaces,
     InvertVisibility,
     SplitHidden,

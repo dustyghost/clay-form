@@ -2,7 +2,7 @@
 
 Updated 14 October 2026.
 
-The next priority is to make everyday sculpting more controlled and dependable: better masking, complete model transforms, and recovery saves. Stroke stabilisation is implemented, with physical pen feel still to be checked. Importing models, using reference images, and checking perspective follow. This is the proposed implementation order; dates are not assigned.
+The next priority is to complete model transforms, followed by recovery saves. Stroke stabilisation, mask blur/sharpen, and lasso selection are implemented. The hands-on tablet check for stroke stabilisation passed on 14 October 2026. Importing models, using reference images, and checking perspective follow. This is the proposed implementation order; dates are not assigned.
 
 ## Current foundation
 
@@ -21,13 +21,13 @@ Recent fixes address stale groups after Group all, Alt-drag panning when startin
 
 ## Implementation priorities
 
-Stroke stabilisation and mask blur/sharpen are implemented. Lasso selection is next; the remaining items are planned.
+Stroke stabilisation, mask blur/sharpen, and lasso selection are implemented. Transform rotation and pivot controls are next; the remaining items are planned.
 
 | Order | Feature | Main benefit |
 | --- | --- | --- |
 | 1 | Stroke stabilisation — implemented | More controlled wrinkles, eyelids, seams, and detail strokes |
-| 2 | Mask blur/sharpen — implemented; lasso selection — next | Faster selection and smoother transitions when sculpting or posing |
-| 3 | Transform rotation and pivot controls | Rotate models or unmasked regions directly |
+| 2 | Mask blur/sharpen and lasso selection — implemented | Faster selection and smoother transitions when sculpting or posing |
+| 3 | Transform rotation and pivot controls — next | Rotate models or unmasked regions directly |
 | 4 | Automatic recovery saves | Recover recent work after a crash or interrupted session |
 | 5 | OBJ import | Sculpt base meshes made in other software |
 | 6 | Viewport reference images | Keep photographs and drawings beside or behind the sculpt |
@@ -37,7 +37,7 @@ Stroke stabilisation and mask blur/sharpen are implemented. Lasso selection is n
 
 Implemented 14 October 2026: optional trailing stabilisation for Freehand strokes, with a 1–200 px distance and visible guide. Settings are saved per brush in projects, presets, and libraries; the toggle is available through custom menus and shortcuts. Existing brushes default to disabled. Grab and Snake retain their current behaviour.
 
-Automated checks cover jitter, spacing, changing pen pressure, masks, symmetry, temporary Smooth/reverse, subdivision, release without a jump, one-step undo, interrupted strokes, and file compatibility. Physical tablet feel still needs a hands-on check.
+Automated checks cover jitter, spacing, changing pen pressure, masks, symmetry, temporary Smooth/reverse, subdivision, release without a jump, one-step undo, interrupted strokes, and file compatibility. The user completed the hands-on tablet check on 14 October 2026 and reported that the feel works well.
 
 Completion criteria:
 
@@ -50,7 +50,9 @@ Completion criteria:
 
 Implemented 14 October 2026: Blur mask and Sharpen mask alongside expand/contract, with custom-menu and shortcut support. Blur averages along polygon edges; Sharpen increases contrast around 50%. Both apply to the active submodel's stored subdivision levels, including hidden faces, without changing geometry or saved vertex group weights. Each changed operation has one undo step, and unchanged masks preserve redo history.
 
-Still planned: lasso tools for both masking and face visibility, with clear add/remove behaviour and a preview before committing.
+Implemented 14 October 2026: Mask lasso and visibility Select lasso, with a live outline, Alt to erase/hide, Space to move, and Escape to cancel. Both explicitly select through all depths on the active submodel; face visibility selects whole quads by their centers, while masking selects vertices and protects hidden faces and shared boundary vertices. Each changed gesture has one undo step and applies to all stored subdivision levels. Both tools support custom menus and configurable shortcuts. Front-surface-only selection is outside this phase.
+
+Regression checks cover closed and concave outlines, crossings, multiple samples in one frame, multiple view angles, through-depth selection, cancellation and interrupted input, translation, undo/redo, hidden-face protection, subdivision levels, and project persistence. GPU preview and commit checks cover the rendered outline and resulting mask/visibility. Hands-on lasso pen feel remains available for user feedback.
 
 Completion criteria:
 
