@@ -222,6 +222,7 @@ impl App {
             Action::ExportLibrary => Some(Command::ExportBrushLibrary),
             Action::ImportLibrary => Some(Command::ImportBrushLibrary),
             Action::RestoreBrushIcon
+            | Action::ResetBrushSettings
             | Action::BrushAdd
             | Action::BrushSubtract
             | Action::StrokeFreehand
@@ -237,6 +238,7 @@ impl App {
                 use crate::sculpt::{Alpha, StrokeMode};
                 match action {
                     Action::RestoreBrushIcon => brush.icon = None,
+                    Action::ResetBrushSettings => brush.reset_settings(),
                     Action::BrushAdd => brush.subtract = false,
                     Action::BrushSubtract => brush.subtract = true,
                     Action::StrokeFreehand => brush.stroke_mode = StrokeMode::Freehand,

@@ -3511,3 +3511,5 @@ mod obj;
 mod references;
 
 mod navigation_smooth;
+
+mod detail;

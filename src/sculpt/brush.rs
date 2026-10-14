@@ -298,6 +298,15 @@ impl Brush {
             pressure_curve: 1.,
         }
     }
+    /// Reset behavior for this operation without replacing the user's preset identity.
+    pub fn reset_settings(&mut self) {
+        let mut defaults = Self::new(self.kind);
+        defaults.id = self.id.take();
+        defaults.name = std::mem::take(&mut self.name);
+        defaults.icon = self.icon.take();
+        *self = defaults;
+    }
+
     pub fn effective_stroke_mode(&self) -> StrokeMode {
         if matches!(self.kind, Kind::Grab | Kind::Snake) {
             StrokeMode::Freehand

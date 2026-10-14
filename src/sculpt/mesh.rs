@@ -278,6 +278,8 @@ impl Mesh {
     /// Blend symmetry copies against the same geometry without doubling strength.
     /// Soft Standard footprints join near the seam, bounded by the normal brush peak.
     pub fn stamp_many(&mut self, b: &Brush, dabs: &[Dab]) -> bool {
+        let stable_dabs = (b.kind == Kind::Detail).then(|| self.detail_dabs(dabs));
+        let dabs = stable_dabs.as_deref().unwrap_or(dabs);
         let mut deformed = false;
         let old = self.vertices.clone();
         let normals = self.normals();

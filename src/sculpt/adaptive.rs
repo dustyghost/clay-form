@@ -153,7 +153,11 @@ impl Mesh {
             let count = self.collapse_local(
                 brush,
                 dabs,
-                target * settings.collapse_fraction(brush.kind),
+                (if brush.kind == Kind::Detail {
+                    target.min(dabs[0].radius * super::detail::CORE_EDGE_FRACTION)
+                } else {
+                    target
+                }) * settings.collapse_fraction(brush.kind),
                 // Cleanup can remove more independent edges in the same mesh
                 // scan. Deformation brushes retain their smaller allowance.
                 budget.collapses.min(if cleanup { 256 } else { 32 }),
@@ -181,15 +185,19 @@ impl Mesh {
             budget.flips -= count;
             changed |= count > 0;
         }
-        if brush.kind == Kind::Snake && !collapse && settings.refine && budget.relax {
+        if matches!(brush.kind, Kind::Snake | Kind::Detail)
+            && !collapse
+            && settings.refine
+            && budget.relax
+        {
             budget.relax = false;
-            changed |= self.relax_tip(brush, dabs, target);
+            changed |= self.relax_surface(brush, dabs, target);
         }
         changed
     }
-    // Redistribute vertices along the surface without Laplacian shrinkage.
-    // Splits and flips alone cannot undo the compression behind a moving tip.
-    fn relax_tip(&mut self, brush: &Brush, dabs: &[Dab], target: f32) -> bool {
+    // Redistribute vertices compressed by dragging or pinching. Snake retains
+    // its depth; Detail also damps small normal ripples between fresh triangles.
+    fn relax_surface(&mut self, brush: &Brush, dabs: &[Dab], target: f32) -> bool {
         let mut changed = false;
         let sculptable = self.sculptable_vertices();
         for _ in 0..2 {
@@ -214,9 +222,10 @@ impl Mesh {
                     || !active[i]
                     || self.mask[i] >= 0.999
                     || counts[i] == 0.
-                    || dabs
-                        .iter()
-                        .any(|dab| (self.vertices[i] - dab.center).len() < dab.radius * 0.35)
+                    || (brush.kind == Kind::Snake
+                        && dabs
+                            .iter()
+                            .any(|dab| (self.vertices[i] - dab.center).len() < dab.radius * 0.35))
                 {
                     continue;
                 }
@@ -224,9 +233,26 @@ impl Mesh {
                 let tangent = offset - normals[i] * offset.dot(normals[i]);
                 let influence = dabs
                     .iter()
-                    .map(|dab| brush.snake_weight(*dab, self.vertices[i] - dab.center))
+                    .map(|dab| {
+                        let offset = self.vertices[i] - dab.center;
+                        if brush.kind == Kind::Snake {
+                            brush.snake_weight(*dab, offset)
+                        } else {
+                            brush.weight(
+                                offset.dot(dab.right) / dab.radius,
+                                offset.dot(dab.up) / dab.radius,
+                            )
+                        }
+                    })
                     .fold(0f32, f32::max);
-                moves[i] = tangent * (0.5 * influence * (1. - self.mask[i]));
+                let motion = if brush.kind == Kind::Detail {
+                    // Regularize triangle-scale ridges left by refinement while
+                    // keeping most of the incision's normal displacement.
+                    tangent + normals[i] * (offset.dot(normals[i]) * 0.3)
+                } else {
+                    tangent
+                };
+                moves[i] = motion * (0.5 * influence * (1. - self.mask[i]));
                 let length = moves[i].len();
                 if length > target * 0.5 {
                     moves[i] = moves[i] * (target * 0.5 / length);
@@ -378,7 +404,22 @@ impl Mesh {
                         let high = weights.into_iter().fold(0_f32, f32::max);
                         high - low > 0.15
                     });
-                let edge_target = if boundary { target * 0.5 } else { target };
+                let mut edge_target = if boundary { target * 0.5 } else { target };
+                if brush.kind == Kind::Detail {
+                    for dab in dabs {
+                        let a = self.vertices[x] - dab.center;
+                        let edge = self.vertices[y] - self.vertices[x];
+                        let t = (-a.dot(edge) / edge.dot(edge).max(1e-20)).clamp(0., 1.);
+                        // Resolve the narrow incision and shoulders before they
+                        // move. Prioritize these edges over the broad outer falloff.
+                        if (a + edge * t).len()
+                            < dab.radius * super::detail::FEATURE_RADIUS_FRACTION
+                        {
+                            edge_target =
+                                edge_target.min(dab.radius * super::detail::CORE_EDGE_FRACTION);
+                        }
+                    }
+                }
                 if length > edge_target * edge_target {
                     candidates.insert(edge(x, y), length / (edge_target * edge_target));
                 }

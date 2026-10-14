@@ -654,6 +654,14 @@ impl UiState {
                         {
                             b.icon = None;
                         }
+                        if ui
+                            .add(design::button(ui, Glyph::Restore, "Reset settings"))
+                            .customize(Action::ResetBrushSettings)
+                            .on_hover_text(format!("Restore the default {:?} brush settings, including alpha, stroke mode, and pressure. Keeps this preset's name and icon.", b.kind))
+                            .clicked()
+                        {
+                            b.reset_settings();
+                        }
                     });
                 });
                 ui.text_edit_singleline(&mut b.name);
