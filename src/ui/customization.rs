@@ -182,6 +182,18 @@ impl UiState {
         }
         let sculpt = document.primitive().is_none() && document.active_visible();
         match action {
+            Action::Move
+            | Action::Scale
+            | Action::Rotate
+            | Action::PlaceLine
+            | Action::PlacePivot => {
+                document.active_visible() && !document.mesh().vertices.is_empty()
+            }
+            Action::ResetPivot => {
+                self.transform_mode != crate::viewport::TransformMode::Sculpt
+                    && document.active_visible()
+                    && !document.mesh().vertices.is_empty()
+            }
             Action::Undo => document.can_undo(),
             Action::StrokeStabilisation => {
                 document.brushes()[self.selected].supports_stabilization()
@@ -285,6 +297,14 @@ impl UiState {
             Action::Transform => self.transform_mode == crate::viewport::TransformMode::World,
             Action::LineTransform => {
                 self.transform_mode == crate::viewport::TransformMode::ActionLine
+            }
+            Action::Move
+            | Action::Scale
+            | Action::Rotate
+            | Action::PlaceLine
+            | Action::PlacePivot => {
+                self.transform_mode != crate::viewport::TransformMode::Sculpt
+                    && Action::from(self.transform_operation) == *action
             }
             Action::RespectMask => self.respect_transform_mask,
             Action::BrushAdd => !document.brushes()[self.selected].subtract,

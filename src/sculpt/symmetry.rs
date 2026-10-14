@@ -17,9 +17,7 @@ impl Axis {
         }
     }
     pub fn rotate(self, v: Vec3, angle: f32) -> Vec3 {
-        let axis = self.vector();
-        let (s, c) = angle.sin_cos();
-        v * c + axis.cross(v) * s + axis * (axis.dot(v) * (1. - c))
+        v.rotated(self.vector(), angle)
     }
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

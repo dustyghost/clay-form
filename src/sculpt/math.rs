@@ -37,6 +37,11 @@ impl Vec3 {
     pub fn norm(self) -> Self {
         self * (1. / self.len().max(1e-8))
     }
+    /// Right-handed rotation in radians about a unit axis.
+    pub fn rotated(self, axis: Self, angle: f32) -> Self {
+        let (sin, cos) = angle.sin_cos();
+        self * cos + axis.cross(self) * sin + axis * (axis.dot(self) * (1. - cos))
+    }
 }
 
 // Closest point via projected barycentric coordinates, then boundary segments.

@@ -935,6 +935,7 @@ mod primitive_tests {
             translation: Vec3(0.4, 0., 0.),
             scale: Vec3(0.8, 1.2, 1.1),
             stretch: Some((Vec3(1., 1., 0.).norm(), 0.7)),
+            rotation: Some((Vec3(1., 0., 1.).norm(), 0.7)),
         };
         d.apply_transform(transform, false).unwrap();
         d.end_stroke();
@@ -943,10 +944,21 @@ mod primitive_tests {
         let center = p.center;
         let basis = p.basis;
         p.divisions = [3, 4, 5];
+        p.size = Vec3(1.3, 2.1, 0.8);
+        let canonical = Primitive {
+            center: Vec3::default(),
+            basis: Primitive::default().basis,
+            ..p.clone()
+        }
+        .mesh()
+        .unwrap();
         d.update_primitive(p).unwrap();
         d.end_primitive_edit();
         assert_eq!(d.primitive().unwrap().center, center);
         assert_eq!(d.primitive().unwrap().basis, basis);
+        for (&point, &local) in d.mesh().vertices.iter().zip(&canonical.vertices) {
+            assert!((point - transform.point(local)).len() < 1e-5);
+        }
         d.duplicate_model(false).unwrap();
         d.select_submodel(1).unwrap();
         let json = serde_json::to_vec(&d.project()).unwrap();

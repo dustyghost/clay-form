@@ -245,9 +245,7 @@ impl Primitive {
         transform.validate()?;
         let mut result = self.clone();
         result.center = transform.point(self.center);
-        result.basis = self
-            .basis
-            .map(|v| transform.point(self.center + v) - result.center);
+        result.basis = self.basis.map(|v| transform.vector(v));
         result.validate()?;
         Ok(result)
     }

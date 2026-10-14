@@ -13,6 +13,7 @@ mod icons;
 mod menus;
 mod primitive;
 mod sidebar;
+mod transform;
 use customization::ActionResponse;
 pub(crate) struct UiState {
     icons: icons::Icons,
@@ -778,84 +779,6 @@ impl UiState {
 }
 
 impl UiState {
-    pub(crate) fn transform_toolbar(
-        &mut self,
-        ctx: &egui::Context,
-        viewport: egui::Rect,
-        enabled: bool,
-    ) -> (Vec<Command>, Option<egui::Rect>) {
-        use crate::viewport::{TransformMode as Mode, TransformOperation as Operation};
-        if self.transform_mode == Mode::Sculpt {
-            return (Vec::new(), None);
-        }
-        let mut commands = Vec::new();
-        let response = egui::Area::new(egui::Id::new("viewport_transform_toolbar"))
-            .order(egui::Order::Foreground)
-            .fixed_pos(viewport.left_top() + Vec2::splat(12.))
-            .constrain_to(viewport)
-            .show(ctx, |ui| {
-                egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.set_max_width((viewport.width() - 32.).clamp(160., 300.));
-                    ui.add_enabled_ui(enabled, |ui| {
-                        ui.horizontal_wrapped(|ui| {
-                            ui.strong("Transform");
-                            for (mode, label) in [(Mode::World, "World axes"), (Mode::ActionLine, "Action Line")] {
-                                if ui.selectable_label(self.transform_mode == mode, label).customize(mode.into()).clicked() {
-                                    commands.push(Command::TransformMode(mode));
-                                }
-                            }
-                            if ui.small_button("Done").on_hover_text("Return to sculpting").clicked() {
-                                commands.push(Command::TransformMode(Mode::Sculpt));
-                            }
-                        });
-                        ui.separator();
-                        ui.horizontal_wrapped(|ui| {
-                            for (operation, label, hint) in [
-                                (Operation::PlaceLine, "Set line", "Drag to place the pivot and direction; drag either endpoint to adjust"),
-                                (Operation::Move, "Move", "Drag an axis or the middle handle to move the model"),
-                                (Operation::Scale, "Scale", "Drag an axis/end to stretch, or the middle to scale uniformly"),
-                            ] {
-                                if operation == Operation::PlaceLine && self.transform_mode != Mode::ActionLine { continue; }
-                                if ui.selectable_label(self.transform_operation == operation, label).on_hover_text(hint).customize(operation.into()).clicked() {
-                                    commands.push(Command::TransformOperation(operation));
-                                }
-                            }
-                        });
-                        let mut respect = self.respect_transform_mask;
-                        if ui.checkbox(&mut respect, "Respect mask").customize(Action::RespectMask).on_hover_text("Protect masked vertices; turn off to transform the whole model").changed() {
-                            commands.push(Command::RespectTransformMask(respect));
-                        }
-                    });
-                });
-            });
-        (commands, Some(response.response.rect))
-    }
-    fn transform_controls(&mut self, ui: &mut egui::Ui, commands: &mut Vec<Command>) {
-        use crate::viewport::{TransformMode as Mode, TransformOperation as Operation};
-        ui.add_enabled_ui(!self.mesh_busy, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                for (mode, label) in [(Mode::Sculpt, "Sculpt"), (Mode::World, "World axes"), (Mode::ActionLine, "Action Line")] {
-                    if ui.selectable_label(self.transform_mode == mode, label).customize(mode.into()).clicked() { commands.push(Command::TransformMode(mode)); }
-                }
-            });
-            if self.transform_mode != Mode::Sculpt {
-                ui.horizontal_wrapped(|ui| {
-                    for (op, label) in [(Operation::Move, "Move"), (Operation::Scale, "Scale"), (Operation::PlaceLine, "Set line")] {
-                        if op == Operation::PlaceLine && self.transform_mode != Mode::ActionLine { continue; }
-                        if ui.selectable_label(self.transform_operation == op, label).customize(op.into()).clicked() { commands.push(Command::TransformOperation(op)); }
-                    }
-                });
-                let mut respect = self.respect_transform_mask;
-                if ui.checkbox(&mut respect, "Respect mask").customize(Action::RespectMask).changed() { commands.push(Command::RespectTransformMask(respect)); }
-                if self.transform_mode == Mode::World {
-                    ui.label("Drag X/Y/Z handles. Center moves in the view plane or scales uniformly. Orbit to expose an axis facing the camera.");
-                } else {
-                    ui.label("Set line: drag to place the pivot and direction; adjust either endpoint. Move: drag the middle. Scale: drag the end to stretch, or the middle to scale uniformly.");
-                }
-                ui.label("Each drag is one undo step; all subdivision levels follow.");
-            }
-        });
-    }
     fn submodel_controls(
         &mut self,
         ui: &mut egui::Ui,

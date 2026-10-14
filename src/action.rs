@@ -62,6 +62,9 @@ pub(crate) enum Action {
     Move,
     Scale,
     PlaceLine,
+    Rotate,
+    PlacePivot,
+    ResetPivot,
     RespectMask,
     PolygroupColors,
     Backfaces,
@@ -158,6 +161,9 @@ impl Action {
         Self::Move,
         Self::Scale,
         Self::PlaceLine,
+        Self::Rotate,
+        Self::PlacePivot,
+        Self::ResetPivot,
         Self::RespectMask,
         Self::PolygroupColors,
         Self::Backfaces,
@@ -250,6 +256,9 @@ impl Action {
             Self::Move => "Move transform",
             Self::Scale => "Scale transform",
             Self::PlaceLine => "Set action line",
+            Self::Rotate => "Rotate transform",
+            Self::PlacePivot => "Place transform pivot",
+            Self::ResetPivot => "Reset transform pivot",
             Self::RespectMask => "Toggle transform mask protection",
             Self::PolygroupColors => "Toggle vertex group colors",
             Self::Backfaces => "Toggle back-facing surfaces",
@@ -305,6 +314,8 @@ impl From<crate::viewport::TransformOperation> for Action {
             TransformOperation::Move => Self::Move,
             TransformOperation::Scale => Self::Scale,
             TransformOperation::PlaceLine => Self::PlaceLine,
+            TransformOperation::Rotate => Self::Rotate,
+            TransformOperation::PlacePivot => Self::PlacePivot,
         }
     }
 }

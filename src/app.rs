@@ -181,7 +181,7 @@ impl App {
         {
             self.ui.status = error;
         }
-        if let Some(status) = self.viewport.visibility_status.take() {
+        if let Some(status) = self.viewport.status.take() {
             self.ui.status = status;
         }
         if self.viewport.completed_stroke

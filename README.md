@@ -140,9 +140,17 @@ With **Adaptive sculpt → Simplify dense areas** enabled, Smooth (including Shi
 
 ### Model transforms
 
-Click **Transform** once to activate World axes and show the floating controls immediately. Use those controls to switch to Action Line or choose Move/Scale. A compact toolbar appears in the viewport while transforming, with direct mode, Move/Scale, mask, and Done controls; Action Line also offers Set line. Drag a colored X/Y/Z handle for one axis, or the center handle for movement in the view plane / uniform scale. An axis pointing directly into the camera has no usable screen direction; orbit to expose it. **Respect mask** protects masked vertices and can be disabled to transform the whole model. Every stored subdivision level follows, and each drag is one undo step.
+Click **Transform** to open the existing World axes controls. The floating toolbar and Submodels panel share **Move**, **Scale**, **Rotate**, and pivot controls. **Done** returns to sculpting.
 
-**Action Line** is a line-based alternative. Choose **Set line**, then drag in the viewport to place a start pivot and an end direction; either endpoint can be adjusted. Choose **Move** and drag the middle handle to reposition the model. Choose **Scale** and drag the end to stretch along the line, or the middle to uniformly shrink/enlarge around the start pivot. The line is a temporary viewport control and resets when changing models, opening a project, or undoing.
+- **Move / Scale:** drag a colored X/Y/Z handle for one axis, or the center for view-plane movement / uniform scale. Orbit to expose a Move/Scale axis facing the camera.
+- **Rotate:** drag a colored ring around its axis. The live signed angle shows the amount of rotation. Rings viewed edge-on use a straight drag along the projected ring, so snapped front/side views remain usable. Drag outside the handles to orbit the camera.
+- **Place pivot:** click the active surface to set the World pivot; clicking empty space uses the current pivot depth. Drag to adjust it in the view plane. The pivot stays placed across operation changes and follows Move. **Reset pivot** returns it to the active model's bounding-box center.
+
+**Action Line** reuses its start endpoint as the pivot and its direction as the transform axis. Choose **Set line** and drag to place it; either endpoint can be adjusted. **Move** uses the middle handle. **Scale** uses the end to stretch along the line, or the middle for uniform scale. **Rotate** turns around the line using its amber ring. **Reset pivot** moves the line's start to the model center while retaining the line's direction and length. A zero-length line must be extended before rotation.
+
+**Respect mask** protects fully masked vertices; soft masks reduce the rotation angle without shrinking their radius around the axis. Disable it to transform the whole model. Every stored subdivision level follows, and each changed geometry drag is one undo step. Parametric primitives keep their rotated placement when dimensions or resolution are edited, and when saved/reopened.
+
+Pivot and line placement do not change geometry, dirty the project, or consume undo steps. They are temporary viewport controls retained across transform operation changes, but reset when the viewport is cleared by actions such as model switching, project opening, undo/redo, or mesh/mask operations. They are not stored in projects. Focus loss, a tool switch, or a camera command finishes the current drag and prevents further changes until release. Rotate, Place pivot, and Reset pivot are available in custom menus and Key settings; they have no new default shortcuts.
 
 ### Submodels
 

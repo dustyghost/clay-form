@@ -239,7 +239,7 @@ impl Viewport {
             self.selection = None;
             self.gesture = None;
             self.wait_for_release();
-            self.visibility_status = Some(
+            self.status = Some(
                 "Selection cancelled: outline too long or invalid; draw a shorter lasso".into(),
             );
             return true;
@@ -291,7 +291,7 @@ impl Viewport {
             self.gesture = None;
             if drag.tool != SelectionTool::Rectangle {
                 let Some(region) = LassoRegion::new(drag.polygon()) else {
-                    self.visibility_status = Some("Draw a lasso enclosing an area".into());
+                    self.status = Some("Draw a lasso enclosing an area".into());
                     return true;
                 };
                 let contains = |p| region.contains(scene.project(p));
@@ -300,7 +300,7 @@ impl Viewport {
                 } else {
                     document.select_face_region(contains, drag.hide)
                 };
-                self.visibility_status = Some(
+                self.status = Some(
                     result
                         .err()
                         .unwrap_or_else(|| format!("{operation} lasso applied")),
@@ -337,7 +337,7 @@ impl Viewport {
                     )
                 }
             };
-            self.visibility_status = Some(result.err().unwrap_or_else(|| message.into()));
+            self.status = Some(result.err().unwrap_or_else(|| message.into()));
         } else if !ui.input(|i| i.pointer.primary_down()) {
             self.selection = None;
             self.gesture = None;

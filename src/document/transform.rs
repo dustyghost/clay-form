@@ -40,11 +40,7 @@ impl Document {
                 let mut vertices = Vec::with_capacity(mesh.vertices.len());
                 for (&point, &mask) in mesh.vertices.iter().zip(&mesh.mask) {
                     let mobility = if respect_mask { 1. - mask } else { 1. };
-                    let next = if mobility == 0. {
-                        point
-                    } else {
-                        point + (transform.point(point) - point) * mobility
-                    };
+                    let next = transform.weighted_point(point, mobility);
                     if !next.0.is_finite() || !next.1.is_finite() || !next.2.is_finite() {
                         return Err("Transform would produce invalid vertex coordinates".into());
                     }
@@ -147,6 +143,118 @@ mod tests {
             doc.apply_transform(
                 Transform {
                     scale: Vec3(2., 1., 1.),
+                    ..Default::default()
+                },
+                false
+            )
+            .is_err()
+        );
+        assert_eq!(doc.geometry_snapshot(), before);
+        assert_eq!(doc.history_counts(), history);
+        assert!(!doc.is_dirty());
+    }
+}
+
+#[cfg(test)]
+mod rotation_tests {
+    use super::*;
+    use crate::sculpt::PrimitiveKind;
+    use std::f32::consts::FRAC_PI_4;
+    #[test]
+    fn rotation_keeps_all_levels_masks_groups_visibility_and_inactive_models_with_one_undo() {
+        let mut mesh = Primitive::for_kind(PrimitiveKind::Plane).mesh().unwrap();
+        mesh.mask = (0..mesh.vertices.len())
+            .map(|i| [0., 0.5, 1.][i % 3])
+            .collect();
+        mesh.create_vertex_group("weights".into(), 0.1, false)
+            .unwrap();
+        mesh.hidden_faces = vec![true; mesh.triangles.len()];
+        let mut geometry = Geometry::new(mesh);
+        geometry.subdivide().unwrap();
+        geometry.subdivide().unwrap();
+        geometry.set_level(2).unwrap();
+        let mut doc = Document::default();
+        doc.replace_geometry(geometry).unwrap();
+        doc.duplicate_model(false).unwrap();
+        let before = doc.geometry_snapshot();
+        let count = doc.history_counts().0;
+        for _ in 0..2 {
+            doc.apply_transform(
+                Transform {
+                    rotation: Some((Vec3(0., 0., 1.), FRAC_PI_4)),
+                    ..Default::default()
+                },
+                true,
+            )
+            .unwrap();
+        }
+        doc.end_stroke();
+        assert_eq!(doc.history_counts().0, count + 1);
+        let after = doc.geometry_snapshot();
+        let mut attributes = after.clone();
+        for (mesh, original) in std::iter::once(&mut attributes.mesh)
+            .chain(attributes.settings.lower.iter_mut())
+            .chain(attributes.settings.upper.iter_mut())
+            .zip(
+                std::iter::once(&before.mesh)
+                    .chain(before.settings.lower.iter())
+                    .chain(before.settings.upper.iter()),
+            )
+        {
+            for ((&p, &q), &mask) in mesh
+                .vertices
+                .iter()
+                .zip(&original.vertices)
+                .zip(&original.mask)
+            {
+                let angle = 2. * FRAC_PI_4 * (1. - mask);
+                let expected = Vec3(
+                    q.0 * angle.cos() - q.1 * angle.sin(),
+                    q.0 * angle.sin() + q.1 * angle.cos(),
+                    q.2,
+                );
+                assert!((p - expected).len() < 1e-5);
+            }
+            mesh.vertices.clone_from(&original.vertices);
+        }
+        assert_eq!(attributes, before);
+        doc.mesh_settings().validate(doc.mesh()).unwrap();
+        let mut loaded = Document::default();
+        loaded
+            .replace_project(
+                serde_json::from_slice(&serde_json::to_vec(&doc.project()).unwrap()).unwrap(),
+                "rotation.clay",
+            )
+            .unwrap();
+        assert_eq!(loaded.geometry_snapshot(), after);
+        doc.undo();
+        assert_eq!(doc.geometry_snapshot(), before);
+        doc.redo();
+        assert_eq!(doc.geometry_snapshot(), after);
+    }
+    #[test]
+    fn fully_masked_and_invalid_rotations_preserve_redo_and_clean_state() {
+        let mut doc = Document::default();
+        doc.invert_mask().unwrap();
+        doc.clear_mask();
+        doc.undo();
+        doc.mark_saved("rotation.clay");
+        let before = doc.geometry_snapshot();
+        let history = doc.history_counts();
+        assert!(
+            !doc.apply_transform(
+                Transform {
+                    rotation: Some((Vec3(0., 1., 0.), 1.)),
+                    ..Default::default()
+                },
+                true
+            )
+            .unwrap()
+        );
+        assert!(
+            doc.apply_transform(
+                Transform {
+                    rotation: Some((Vec3::default(), 1.)),
                     ..Default::default()
                 },
                 false

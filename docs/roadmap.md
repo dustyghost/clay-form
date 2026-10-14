@@ -2,7 +2,7 @@
 
 Updated 14 October 2026.
 
-The next priority is to complete model transforms, followed by recovery saves. Stroke stabilisation, mask blur/sharpen, and lasso selection are implemented. The hands-on tablet check for stroke stabilisation passed on 14 October 2026. Importing models, using reference images, and checking perspective follow. This is the proposed implementation order; dates are not assigned.
+The next priority is automatic recovery saves. Stroke stabilisation, mask blur/sharpen, lasso selection, and transform rotation/pivot controls are implemented. The hands-on tablet check for stroke stabilisation passed on 14 October 2026. Importing models, using reference images, and checking perspective follow. This is the proposed implementation order; dates are not assigned.
 
 ## Current foundation
 
@@ -21,14 +21,14 @@ Recent fixes address stale groups after Group all, Alt-drag panning when startin
 
 ## Implementation priorities
 
-Stroke stabilisation, mask blur/sharpen, and lasso selection are implemented. Transform rotation and pivot controls are next; the remaining items are planned.
+Stroke stabilisation, mask blur/sharpen, lasso selection, and transform rotation/pivot controls are implemented. Automatic recovery saves are next; the remaining items are planned.
 
 | Order | Feature | Main benefit |
 | --- | --- | --- |
 | 1 | Stroke stabilisation — implemented | More controlled wrinkles, eyelids, seams, and detail strokes |
 | 2 | Mask blur/sharpen and lasso selection — implemented | Faster selection and smoother transitions when sculpting or posing |
-| 3 | Transform rotation and pivot controls — next | Rotate models or unmasked regions directly |
-| 4 | Automatic recovery saves | Recover recent work after a crash or interrupted session |
+| 3 | Transform rotation and pivot controls — implemented | Rotate models or unmasked regions directly |
+| 4 | Automatic recovery saves — next | Recover recent work after a crash or interrupted session |
 | 5 | OBJ import | Sculpt base meshes made in other software |
 | 6 | Viewport reference images | Keep photographs and drawings beside or behind the sculpt |
 | 7 | Perspective view | Judge proportions with an adjustable perspective camera |
@@ -63,7 +63,9 @@ Completion criteria:
 
 ### 3 Transform rotation and pivot controls
 
-Extend World axes and Action Line transforms with Rotate. Allow the pivot to be placed and reset so a user can turn an entire submodel or pose an unmasked region around a useful centre.
+Implemented 14 October 2026: Rotate extends the existing World axes and Action Line transform controls. World mode offers X/Y/Z rings and a placeable/resettable pivot; Action Line reuses its start and direction for rotation around the line. The same operation controls serve the floating toolbar and sidebar, including custom-menu/shortcut actions. No parallel transform subsystem or project-format change is introduced.
+
+Soft masks reduce rotation angles, stored subdivision levels follow, and primitives retain their existing affine placement when regenerated. Each changed drag has one undo step. Pivot/line placement is session-only and preserves clean state and redo. Automated checks cover angle direction and wraparound, edge-on views, pivot reset, focus loss and tool switching, final release movement, masks, stored levels, primitive dimension edits and persistence, and real OpenGL control rendering. Hands-on pen feedback remains welcome before refining ring feel.
 
 Completion criteria:
 

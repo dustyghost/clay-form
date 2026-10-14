@@ -55,7 +55,7 @@ pub(crate) struct Viewport {
     primitive: primitive::PrimitiveControls,
     slice: Option<slice::SliceDrag>,
     selection: Option<visibility::SelectionDrag>,
-    pub(crate) visibility_status: Option<String>,
+    pub(crate) status: Option<String>,
     slice_path: Option<slice::SlicePathDraft>,
     pub(crate) completed_slice: Option<crate::mesh_job::Operation>,
 }
@@ -101,13 +101,17 @@ impl Viewport {
         document.end_stroke();
     }
     pub(crate) fn finish_transform_drag(&mut self, document: &mut Document) {
-        let line = self.transform.line;
+        let mut transform = std::mem::take(&mut self.transform);
+        transform.finish_drag();
         let dragging = self.gesture.is_some();
         self.cancel(document);
-        self.transform.line = line;
+        self.transform = transform;
         if dragging {
             self.wait_for_release();
         }
+    }
+    pub(crate) fn reset_transform_pivot(&mut self, document: &Document, mode: TransformMode) {
+        self.transform.reset_pivot(document, mode);
     }
     pub(crate) fn wait_for_release(&mut self) {
         self.blocked_until_release = true;
@@ -122,7 +126,8 @@ impl Viewport {
         self.completed_stroke = false;
         self.completed_slice = None;
         document.begin_sculpt_frame();
-        if !options.enabled && ui.input(|i| i.pointer.primary_down()) {
+        if (!options.enabled || !ui.input(|i| i.focused)) && ui.input(|i| i.pointer.primary_down())
+        {
             self.blocked_until_release = true;
         }
         let blocked_this_frame = self.blocked_until_release;
@@ -130,7 +135,7 @@ impl Viewport {
             self.blocked_until_release = false;
         }
         let options = ViewportOptions {
-            enabled: options.enabled && !blocked_this_frame,
+            enabled: options.enabled && !blocked_this_frame && ui.input(|i| i.focused),
             ..options
         };
         let (response, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
@@ -248,6 +253,7 @@ impl Viewport {
         let zoom_held = options.zoom_hold.active(modifiers);
         let pan_held = options.pan_hold.active(modifiers);
         if options.enabled
+            && self.gesture != Some(Gesture::Transform)
             && self.pending_stroke.is_none()
             && self.slice.is_none()
             && self.slice_path.is_none()
@@ -257,6 +263,7 @@ impl Viewport {
             camera.zoom_by(scroll);
         }
         if options.enabled
+            && self.gesture != Some(Gesture::Transform)
             && self.pending_stroke.is_none()
             && self.slice.is_none()
             && self.slice_path.is_none()
@@ -272,6 +279,7 @@ impl Viewport {
             }
         }
         if options.enabled
+            && self.gesture != Some(Gesture::Transform)
             && self.pending_stroke.is_none()
             && self.slice.is_none()
             && self.slice_path.is_none()
@@ -427,17 +435,72 @@ impl Viewport {
         }
         if options.transform_mode != TransformMode::Sculpt {
             let dragging = primary && self.gesture == Some(Gesture::Transform) && options.enabled;
-            self.transform.update(
-                document,
-                &scene,
-                options.transform_mode,
-                options.transform_operation,
-                pointer,
-                dragging,
-                options.respect_mask,
-            );
+            // A complete tap may arrive in one frame. Placement and release
+            // coordinates follow the same update path as ordinary drags.
+            let fast_press = (options.enabled
+                && response.clicked_by(egui::PointerButton::Primary)
+                && previous_gesture.is_none()
+                && !zoom_held
+                && !pan_held)
+                .then(|| {
+                    ui.input(|i| {
+                        i.events.iter().find_map(|event| match event {
+                            egui::Event::PointerButton {
+                                pos,
+                                button: egui::PointerButton::Primary,
+                                pressed: true,
+                                ..
+                            } => Some(*pos),
+                            _ => None,
+                        })
+                    })
+                })
+                .flatten()
+                .filter(|p| {
+                    !gizmo_rect.contains(*p)
+                        && self.transform.can_drag(
+                            document,
+                            &scene,
+                            options.transform_mode,
+                            options.transform_operation,
+                            *p,
+                        )
+                });
+            let result = (|| {
+                if let Some(start) = fast_press {
+                    self.transform.update(
+                        document,
+                        &scene,
+                        options.transform_mode,
+                        options.transform_operation,
+                        Some(start),
+                        true,
+                        options.respect_mask,
+                    )?;
+                }
+                let releasing = options.enabled
+                    && previous_gesture == Some(Gesture::Transform)
+                    && ui.input(|i| i.pointer.button_released(egui::PointerButton::Primary));
+                if dragging || releasing || fast_press.is_some() {
+                    self.transform.update(
+                        document,
+                        &scene,
+                        options.transform_mode,
+                        options.transform_operation,
+                        pointer,
+                        true,
+                        options.respect_mask,
+                    )?;
+                }
+                Ok::<_, String>(())
+            })();
             if !dragging {
+                self.transform.finish_drag();
                 document.end_stroke();
+            }
+            if let Err(error) = result {
+                self.finish_transform_drag(document);
+                self.status = Some(error);
             }
             self.transform.paint(
                 document,

@@ -156,6 +156,13 @@ impl App {
             Action::PlaceLine => Some(Command::TransformOperation(
                 crate::viewport::TransformOperation::PlaceLine,
             )),
+            Action::Rotate => Some(Command::TransformOperation(
+                crate::viewport::TransformOperation::Rotate,
+            )),
+            Action::PlacePivot => Some(Command::TransformOperation(
+                crate::viewport::TransformOperation::PlacePivot,
+            )),
+            Action::ResetPivot => Some(Command::ResetTransformPivot),
             Action::RespectMask => Some(Command::RespectTransformMask(
                 !self.ui.respect_transform_mask,
             )),

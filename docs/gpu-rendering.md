@@ -83,3 +83,11 @@ The visibility regression renders a full mesh, a hidden half, the two split subm
 ```sh
 CLAY_VISIBILITY_PREVIEW=/tmp/clay-visibility-preview.png cargo test gpu_visibility -- --ignored --nocapture
 ```
+
+The transform-control regression renders colored World rotation rings, the shared floating toolbar, live angle feedback, and a rotated primitive after a dimension edit. It shares its offscreen capture fixture with the lasso test:
+
+```sh
+EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 CLAY_ROTATION_PREVIEW=/tmp/clay-rotation cargo test --release --locked gpu_rotation_controls -- --ignored
+```
+
+This writes `-1.png` (ready), `-4.png` (rotation drag), and `-6.png` (regenerated dimensions) at the requested prefix.

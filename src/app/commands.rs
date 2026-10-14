@@ -2,6 +2,26 @@
 use super::*;
 
 impl App {
+    fn activate_transform(&mut self, mode: crate::viewport::TransformMode) {
+        use crate::viewport::{TransformMode as Mode, TransformOperation as Op};
+        self.ui.selection_tool = None;
+        self.ui.slice_active = false;
+        self.viewport.finish_transform_drag(&mut self.document);
+        self.ui.transform_mode = mode;
+        self.ui.transform_operation = if mode == Mode::ActionLine {
+            Op::PlaceLine
+        } else {
+            Op::Move
+        };
+        self.ui.status = match mode {
+            Mode::Sculpt => "Sculpt mode",
+            Mode::World => "World axes: choose Move, Scale, Rotate, or Place pivot",
+            Mode::ActionLine => {
+                "Action Line: place a pivot and direction, then choose Move, Scale, or Rotate"
+            }
+        }
+        .into();
+    }
     pub(crate) fn dispatch(&mut self, command: Command, ctx: &egui::Context) {
         if let Command::Action(action) = command {
             self.execute_action(action, ctx);
@@ -34,6 +54,7 @@ impl App {
                     | Command::TransformMode(_)
                     | Command::TransformOperation(_)
                     | Command::RespectTransformMask(_)
+                    | Command::ResetTransformPivot
                     | Command::SelectSubmodel(_)
                     | Command::DuplicateModel
                     | Command::MergeDown
@@ -71,6 +92,15 @@ impl App {
         {
             self.ui.status = "Wait for the mesh operation, or cancel it first".into();
             return;
+        }
+        // A new view must not change the projection underneath a latched
+        // transform ring/axis. Keep the edit so far and require a fresh press.
+        if matches!(
+            command,
+            Command::ZoomIn | Command::ZoomOut | Command::SetZoom(_) | Command::ResetView
+        ) && self.viewport.gesture == Some(crate::viewport::Gesture::Transform)
+        {
+            self.viewport.finish_transform_drag(&mut self.document);
         }
         self.document.prepare_edit(command.edit_kind());
         let result: Result<(), String> = match command {
@@ -197,22 +227,27 @@ impl App {
                 })
             }
             Command::TransformMode(mode) => {
-                self.ui.selection_tool = None;
-                self.ui.slice_active = false;
-                self.viewport.finish_transform_drag(&mut self.document);
-                self.ui.transform_mode = mode;
-                self.ui.transform_operation = if mode == crate::viewport::TransformMode::ActionLine
-                {
-                    crate::viewport::TransformOperation::PlaceLine
-                } else {
-                    crate::viewport::TransformOperation::Move
-                };
-                self.ui.status = match mode { crate::viewport::TransformMode::Sculpt => "Sculpt mode", crate::viewport::TransformMode::World => "World axes: drag an axis or the center handle", crate::viewport::TransformMode::ActionLine => "Action Line: drag to place a pivot and direction, then choose Move or Scale" }.into();
+                self.activate_transform(mode);
                 Ok(())
             }
             Command::TransformOperation(operation) => {
-                self.viewport.finish_transform_drag(&mut self.document);
+                use crate::viewport::{TransformMode as Mode, TransformOperation as Op};
+                let mode = match operation {
+                    Op::PlaceLine => Mode::ActionLine,
+                    Op::PlacePivot => Mode::World,
+                    _ if self.ui.transform_mode == Mode::Sculpt => Mode::World,
+                    _ => self.ui.transform_mode,
+                };
+                self.activate_transform(mode);
                 self.ui.transform_operation = operation;
+                self.ui.status = operation.hint().into();
+                Ok(())
+            }
+            Command::ResetTransformPivot => {
+                self.viewport.finish_transform_drag(&mut self.document);
+                self.viewport
+                    .reset_transform_pivot(&self.document, self.ui.transform_mode);
+                self.ui.status = "Pivot reset to active model center".into();
                 Ok(())
             }
             Command::RespectTransformMask(respect) => {

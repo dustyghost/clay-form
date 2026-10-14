@@ -50,6 +50,7 @@ pub(crate) enum Command {
     TransformMode(crate::viewport::TransformMode),
     TransformOperation(crate::viewport::TransformOperation),
     RespectTransformMask(bool),
+    ResetTransformPivot,
     DuplicateModel,
     MergeDown,
     ExtractMasked,
