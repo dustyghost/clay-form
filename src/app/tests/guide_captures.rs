@@ -353,3 +353,43 @@ fn guide_workflows_offscreen_preview() {
         g.save("reference-images");
     }
 }
+
+#[test]
+#[ignore = "renders mirror documentation screenshots; requires EGL and CLAY_GUIDE_PREVIEW directory"]
+fn mirror_guide_offscreen_preview() {
+    let Ok(directory) = std::env::var("CLAY_GUIDE_PREVIEW") else {
+        return;
+    };
+    let directory = std::path::Path::new(&directory);
+    std::fs::create_dir_all(directory).unwrap();
+    let mut g = Guide::new(directory, [1100, 850]);
+    g.app
+        .ui
+        .preferences
+        .dock_menu(BuiltinMenu::Symmetry, Dock::Left);
+    let mut brush = g.app.document.brushes()[0].clone();
+    brush.radius = 80.;
+    brush.strength = 0.65;
+    g.app.document.update_brush(0, brush).unwrap();
+    let (rect, _) = g.frame(vec![]);
+    let start = rect.center() + Vec2::new(-110., -110.);
+    g.stroke(start, start + Vec2::new(15., 200.));
+    g.save("mirror-before");
+    let before = g.app.document.geometry_snapshot();
+    g.app.dispatch(
+        Command::Action(Action::Mirror(crate::sculpt::Axis::X, false)),
+        &g.ctx,
+    );
+    finish_mesh_job(&mut g.app);
+    assert_ne!(
+        g.app.document.geometry_snapshot(),
+        before,
+        "{}",
+        g.app.ui.status
+    );
+    g.app.document.mesh().validate_closed().unwrap();
+    assert_eq!(g.app.document.undo_label(), Some("Mirror one side"));
+    g.save("mirror-after");
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+}

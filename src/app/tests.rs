@@ -3516,3 +3516,5 @@ mod detail;
 #[cfg(target_os = "linux")]
 mod guide_captures;
 mod perspective;
+
+mod mirror;

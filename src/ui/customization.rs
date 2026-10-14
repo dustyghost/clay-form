@@ -233,6 +233,7 @@ impl UiState {
             Action::SelectBrush(id) => document.brushes().iter().any(|b| b.identity() == *id),
             Action::NewBrush(name) => Kind::ALL.iter().any(|k| format!("{k:?}") == *name),
             Action::OpenMenu(id) => self.preferences.menus.iter().any(|m| m.id == *id),
+            Action::Mirror(..) => self.mirror_unavailable(document).is_none(),
             Action::MergeDown => document.merge_down_target().is_some(),
             Action::ConvertPrimitive => {
                 document.primitive().is_some() && !document.mesh().triangles.is_empty()

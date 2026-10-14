@@ -113,6 +113,8 @@ Each completed stroke is one undo step. Switching tool or view cancels an unappl
 
 ## Symmetry
 
+To copy an existing half and replace the other, use [Mirror one side](modeling.md#mirror-one-side). The controls below repeat new brush strokes.
+
 1. Enable **Symmetry** in the toolbar.
 2. Open **Symmetry settings** and choose X, Y, or Z mirrors.
 3. Draw on one side of the model. The stroke repeats across the selected planes.

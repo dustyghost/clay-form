@@ -9,6 +9,7 @@ use std::sync::{
 #[derive(Clone)]
 pub(crate) enum Operation {
     ImportObj(String),
+    Mirror(crate::sculpt::MirrorOptions),
     SlicePath(crate::sculpt::SlicePath, crate::sculpt::SliceOptions),
     Subdivide,
     Remesh,
@@ -18,6 +19,7 @@ impl Operation {
     pub fn history_label(&self) -> &'static str {
         match self {
             Self::ImportObj(_) => "Import OBJ",
+            Self::Mirror(_) => "Mirror one side",
             Self::Subdivide => "Subdivide mesh",
             Self::Remesh => "Remesh",
             Self::Slice(_, options) | Self::SlicePath(_, options) => options.mode.history_label(),
@@ -26,6 +28,7 @@ impl Operation {
     pub fn label(&self) -> &'static str {
         match self {
             Self::ImportObj(_) => "Importing OBJ",
+            Self::Mirror(_) => "Mirroring",
             Self::Subdivide => "Subdividing",
             Self::Remesh => "Remeshing",
             Self::Slice(..) | Self::SlicePath(..) => "Slicing",
@@ -48,6 +51,9 @@ impl MeshJob {
             .spawn(move || {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     match worker_operation {
+                        Operation::Mirror(options) => {
+                            geometry.mirror(options, &|| flag.load(Ordering::Relaxed))?;
+                        }
                         Operation::ImportObj(path) => {
                             let mesh = crate::persistence::load_obj_cancellable(&path, &|| {
                                 flag.load(Ordering::Relaxed)

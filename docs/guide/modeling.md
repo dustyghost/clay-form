@@ -7,6 +7,7 @@ Build a base shape, position it, and choose how to add detail.
 - [Manage submodels](#submodels)
 - [Create a primitive](#parametric-primitives)
 - [Move, scale, and rotate](#model-transforms)
+- [Mirror one side onto the other](#mirror-one-side)
 - [Add mesh detail](#mesh-management)
 - [Thicken an open surface](#temporary-thickness)
 - [Cut the model](#slice)
@@ -111,6 +112,34 @@ Move with the middle handle. Scale with the end for axial stretch or the middle 
 Enable **Respect mask**. Full masks stay fixed; soft masks reduce the transformation. All stored subdivision levels follow.
 
 Pivot/line placement does not change geometry or consume undo. These controls are session-only and reset after actions such as changing models, opening projects, and undo/redo.
+
+## Mirror one side
+
+### Replace the opposite half
+
+1. Open **Symmetry settings → Mirror one side**.
+2. Choose **X**, **Y**, or **Z**. The displayed plane uses that axis of the symmetry center below.
+3. Choose the source direction: **-X to +X**, for example, keeps the negative-X half and replaces the positive-X half.
+
+This works with brush symmetry turned off. Directions use object coordinates; rotating the camera does not change them.
+
+The active submodel becomes symmetric across the plane. Source masks, vertex-group weights, and face colors are copied too; masks do **not** protect the destination. Crossing faces are cut and joined at a shared center seam. Open surfaces can remain open.
+
+### Example: repeat an existing sculpted fold
+
+![A sphere with a fold only on its negative-X side and the Mirror one side controls open](../images/mirror-before.png)
+
+*Before: the left half contains the fold we want to keep.*
+
+![The same sphere after negative X was mirrored to positive X, with matching folds on both halves](../images/mirror-after.png)
+
+*After **-X to +X**: the opposite half matches, including the fold. The camera has not moved.*
+
+### Mesh levels and undo
+
+Mirror keeps the current mesh level and discards its other subdivision levels. It also turns off dynamic/adaptive mesh modes. Other submodels are unchanged. **Undo** restores the previous geometry, masks, groups, and levels in one step.
+
+Convert parametric primitives first, show all faces of the active model, and apply or remove temporary thickness. A source half with no surface produces an error and leaves the model unchanged. Large operations can be cancelled from the status controls.
 
 ## Mesh management
 

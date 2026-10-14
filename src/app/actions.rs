@@ -31,6 +31,7 @@ impl App {
             Action::Perspective => Some(Command::SetPerspective(!self.camera.perspective)),
             Action::ZoomIn => Some(Command::ZoomIn),
             Action::ZoomOut => Some(Command::ZoomOut),
+            Action::Mirror(axis, positive) => Some(Command::Mirror(axis, positive)),
             Action::Symmetry => {
                 let mut symmetry = self.document.symmetry().clone();
                 symmetry.enabled = !symmetry.enabled;

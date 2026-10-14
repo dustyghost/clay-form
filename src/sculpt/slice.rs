@@ -381,7 +381,7 @@ impl Mesh {
                 })
         });
     }
-    fn slice_subset(&self, sides: &[bool], side: bool) -> Self {
+    pub(super) fn slice_subset(&self, sides: &[bool], side: bool) -> Self {
         let mut out = self.clone();
         out.triangles = self
             .triangles

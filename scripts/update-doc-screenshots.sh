@@ -32,7 +32,7 @@ cp "$capture_dir/lasso-mask-5.png" docs/images/mask-lasso-result.png
 cp "$capture_dir/lasso-hide-3.png" docs/images/hide-lasso-preview.png
 cp "$capture_dir/lasso-hide-5.png" docs/images/hide-lasso-result.png
 cp "$capture_dir/rotation-4.png" docs/images/rotation-controls.png
-for name in brush-reset-before brush-reset-after first-sculpt-before first-sculpt-after symmetry-stroke adaptive-settings primitive-cube slice-trim-preview slice-trim-result reference-images obj-import menu-placement recovery-dialog; do
+for name in mirror-before mirror-after brush-reset-before brush-reset-after first-sculpt-before first-sculpt-after symmetry-stroke adaptive-settings primitive-cube slice-trim-preview slice-trim-result reference-images obj-import menu-placement recovery-dialog; do
     cp "$capture_dir/guides/$name.png" "docs/images/$name.png"
 done
 cp "$capture_dir/guides/front-study.png" docs/examples/front-study.png

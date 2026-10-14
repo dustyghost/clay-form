@@ -346,6 +346,9 @@ impl UiState {
                     .customize(Action::WireTriangles);
             }
             BuiltinMenu::Symmetry => {
+                self.mirror_controls(ui, document, commands);
+                ui.separator();
+                ui.strong("Brush symmetry");
                 let mut symmetry = document.symmetry().clone();
                 ui.checkbox(&mut symmetry.enabled, "Enable symmetry")
                     .customize(Action::Symmetry);

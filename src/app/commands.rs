@@ -75,6 +75,7 @@ impl App {
                 | Command::PlaceReference(..)
                 | Command::RemoveReference(_)
                 | Command::ArrangeReferences(_)
+                | Command::Mirror(..)
         ) && (self.ui.pending.is_some()
             || self.ui.recovery_open
             || self.ui.settings_open
@@ -149,6 +150,7 @@ impl App {
                     | Command::Subdivide
                     | Command::Remesh
                     | Command::ImportObj
+                    | Command::Mirror(..)
             )
         {
             self.ui.status = "Wait for the mesh operation, or cancel it first".into();
@@ -189,6 +191,13 @@ impl App {
         }
         self.document.prepare_edit(command.edit_kind());
         let result: Result<(), String> = match command {
+            Command::Mirror(axis, source_positive) => {
+                self.start_mesh_job(Operation::Mirror(crate::sculpt::MirrorOptions {
+                    axis,
+                    source_positive,
+                    offset: self.document.symmetry().center.dot(axis.vector()),
+                }))
+            }
             Command::Action(_) => unreachable!(),
             Command::AddReference(file) => self.add_reference(file),
             Command::ArrangeReferences(active) => {

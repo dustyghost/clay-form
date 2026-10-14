@@ -11,6 +11,7 @@ use design::Glyph;
 mod customization;
 mod icons;
 mod menus;
+mod mirror;
 mod primitive;
 mod references;
 mod sidebar;
@@ -23,6 +24,7 @@ pub(crate) struct UiState {
     pub(crate) primitive_warning: Option<(usize, String)>,
     pub(crate) primitive_controls_requested: bool,
     pub transform_mode: crate::viewport::TransformMode,
+    pub mirror_axis: Axis,
     pub slice_active: bool,
     pub selection_tool: Option<crate::viewport::SelectionTool>,
     pub slice_path_mode: bool,
@@ -74,6 +76,7 @@ impl Default for UiState {
             primitive_warning: None,
             primitive_controls_requested: false,
             transform_mode: crate::viewport::TransformMode::Sculpt,
+            mirror_axis: Axis::X,
             slice_active: false,
             selection_tool: None,
             slice_path_mode: false,

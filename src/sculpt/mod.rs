@@ -48,3 +48,8 @@ mod group_tests;
 mod visibility;
 
 mod merge;
+mod mirror;
+pub use mirror::MirrorOptions;
+
+#[cfg(test)]
+mod mirror_tests;

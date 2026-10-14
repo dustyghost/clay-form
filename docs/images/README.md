@@ -20,6 +20,7 @@ See [Development](../development.md#update-guide-screenshots) for prerequisites 
 | --- | --- | --- |
 | `first-sculpt-before.png`, `first-sculpt-after.png` | [First stroke](../guide/getting-started.md) with a consistent camera | `guide_workflows_offscreen_preview` |
 | `brush-reset-before.png`, `brush-reset-after.png` | [Reset](../guide/sculpting.md#example-reset-an-experimental-brush) changes settings but keeps the name | `guide_workflows_offscreen_preview` |
+| `mirror-before.png`, `mirror-after.png` | [Replace one half from the other](../guide/modeling.md#mirror-one-side) with a consistent camera | `mirror_guide_offscreen_preview` |
 | `symmetry-stroke.png` | [One input stroke, two mirrored marks](../guide/sculpting.md#symmetry) | `guide_workflows_offscreen_preview` |
 | `adaptive-settings.png` | [Adaptive detail settings](../guide/sculpting.md#snake-brush-and-adaptive-sculpting) | `guide_workflows_offscreen_preview` |
 | `primitive-cube.png` | [Dimensions versus spans](../guide/modeling.md#parametric-primitives) | `guide_workflows_offscreen_preview` |

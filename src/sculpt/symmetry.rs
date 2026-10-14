@@ -1,7 +1,7 @@
 //! Symmetry transforms operate in object coordinates around a configurable origin.
 use super::{Dab, Vec3};
 use serde::{Deserialize, Serialize};
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Axis {
     X,
     Y,

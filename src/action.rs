@@ -1,5 +1,5 @@
 //! Stable, shared identities for shortcuts and user-created controls.
-use crate::preferences::Tool;
+use crate::{preferences::Tool, sculpt::Axis};
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum Action {
@@ -11,6 +11,7 @@ pub(crate) enum Action {
     ResetView,
     Perspective,
     Symmetry,
+    Mirror(Axis, bool),
     Wireframe,
     Guides,
     Smaller,
@@ -212,6 +213,12 @@ impl Action {
         Self::CustomizeWorkspace,
         Self::CancelMeshOperation,
         Self::Perspective,
+        Self::Mirror(Axis::X, true),
+        Self::Mirror(Axis::X, false),
+        Self::Mirror(Axis::Y, true),
+        Self::Mirror(Axis::Y, false),
+        Self::Mirror(Axis::Z, true),
+        Self::Mirror(Axis::Z, false),
     ];
     pub fn label(&self) -> &'static str {
         match self {
@@ -222,6 +229,12 @@ impl Action {
             Self::Redo => "Redo",
             Self::ResetView => "Reset view",
             Self::Perspective => "Toggle perspective view",
+            Self::Mirror(Axis::X, true) => "Mirror +X to -X",
+            Self::Mirror(Axis::X, false) => "Mirror -X to +X",
+            Self::Mirror(Axis::Y, true) => "Mirror +Y to -Y",
+            Self::Mirror(Axis::Y, false) => "Mirror -Y to +Y",
+            Self::Mirror(Axis::Z, true) => "Mirror +Z to -Z",
+            Self::Mirror(Axis::Z, false) => "Mirror -Z to +Z",
             Self::Symmetry => "Toggle symmetry",
             Self::Wireframe => "Toggle wireframe",
             Self::Guides => "Toggle symmetry guides",

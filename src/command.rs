@@ -76,6 +76,7 @@ pub(crate) enum Command {
     Remesh,
     CancelMeshJob,
     SetSymmetry(Symmetry),
+    Mirror(crate::sculpt::Axis, bool),
     AddBrush(Kind),
     DuplicateBrush(usize),
     UpdateBrush(usize, Brush),
