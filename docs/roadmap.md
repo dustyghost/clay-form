@@ -1,5 +1,7 @@
 # Clay Form roadmap
 
+[Documentation home](../README.md#documentation)
+
 Updated 14 October 2026.
 
 The next priority is viewport reference images. Stroke stabilisation, mask blur/sharpen, lasso selection, transform rotation/pivot controls, automatic recovery saves, and OBJ import are implemented. The hands-on tablet check for stroke stabilisation passed on 14 October 2026. Reference images and perspective viewing are the remaining priorities. This is the proposed implementation order; dates are not assigned.

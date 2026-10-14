@@ -1,5 +1,7 @@
 # GPU model rendering
 
+[Documentation home](../README.md#documentation)
+
 Clay Form retains egui for the interface and uses its existing glow/OpenGL backend for a dedicated 3D viewport. Desktop OpenGL 3.3 or newer is required. No new rendering dependency or file-format change is introduced.
 
 The renderer caches positions, normals, masks, materials, triangle indices, and model ownership. Camera changes update shader uniforms. Geometry/mask edits and model visibility/selection changes invalidate the cache; undo, redo, New, Open, and completed topology jobs do the same. Wireframe edge buffers are generated only when wireframe is requested after an edit. Quad diagonals remain optional.
@@ -16,6 +18,8 @@ The ordinary test suite retains a CPU paint path for headless UI and picking tes
 
 ```sh
 EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib viewport::gpu:: -- --ignored --skip gpu_load_profile --test-threads=1
+EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib recovery_and_menu_placement_offscreen_preview -- --ignored
+EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib obj_import_offscreen_preview -- --ignored
 ```
 
 Only the manual load profile is excluded. Software rendering checks shader, framebuffer, picking/display, and UI composition correctness; it is not a hardware performance measurement.

@@ -1,5 +1,7 @@
 # Architecture
 
+[Documentation home](../README.md#documentation)
+
 Clay Form uses a small application controller, a single document owner, explicit UI commands, and separate desktop adapters. It keeps immediate-mode egui rather than adding an MVC framework, ECS, event bus, or plugin infrastructure.
 
 ```mermaid

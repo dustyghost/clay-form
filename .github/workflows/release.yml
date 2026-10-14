@@ -105,6 +105,8 @@ jobs:
           mkdir -p "$stage"
           install -m 0755 target/release/clay-form "$stage/clay-form"
           install -m 0644 README.md "$stage/README.md"
+          cp -R docs "$stage/docs"
+          install -D -m 0644 packaging/linux/72-clay-form-huion.rules "$stage/packaging/linux/72-clay-form-huion.rules"
           tar -C dist -czf "dist/$ARCHIVE_NAME.tar.gz" "$ARCHIVE_NAME"
           (cd dist && sha256sum "$ARCHIVE_NAME.tar.gz" > SHA256SUMS)
 

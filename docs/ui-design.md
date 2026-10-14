@@ -1,5 +1,7 @@
 # UI design rules
 
+[Documentation home](../README.md#documentation)
+
 Use `src/ui/design.rs` for shared action buttons, menus, icons, brush tiles and palette changes.
 
 - Keep names on primary actions. Icons accompany labels; icon-only controls need a tooltip.
