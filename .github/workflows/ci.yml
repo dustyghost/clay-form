@@ -48,3 +48,31 @@ jobs:
 
       - name: Run Clippy
         run: cargo clippy --locked --all-targets -- -D warnings
+
+  graphics:
+    name: Headless OpenGL regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      EGL_PLATFORM: surfaceless
+      LIBGL_ALWAYS_SOFTWARE: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build files
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install build and Mesa runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libwayland-dev libxkbcommon-dev libegl1 libgl1-mesa-dri
+
+      - name: Run all GPU correctness checks
+        # The manual load profile is diagnostic, not a correctness test.
+        run: |
+          cargo test --locked --lib viewport::gpu:: -- --ignored --skip gpu_load_profile --test-threads=1

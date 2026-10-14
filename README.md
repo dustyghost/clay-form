@@ -62,7 +62,7 @@ Your normal user needs read access to the tablet event device. If the sidebar re
 
 ## Scope
 
-This is a first functional prototype, not a replacement for a production sculpting package. It uses triangle meshes and an orthographic viewport with CPU projection and egui rendering. Subdivision, voxel remeshing, and local adaptive topology are implemented; quad retopology, sculpt layers, materials, and texture painting are future work. Meshes are limited to 500,000 vertices and 1,000,000 triangles; very large meshes are slower in this CPU renderer. Mesh/alpha file sizes are bounded on load.
+This is a desktop sculpting prototype. Meshes retain quad topology where available and use triangles for rendering and picking. The orthographic viewport uses OpenGL rendering; sculpting, picking, and topology operations run on the CPU. Subdivision, voxel remeshing, and local adaptive topology are implemented; quad retopology, sculpt layers, materials, and texture painting are future work. Meshes are limited to 500,000 vertices and 1,000,000 triangles; large scenes can still be limited by CPU editing and picking work. Mesh/alpha file sizes are bounded on load.
 
 ## Architecture
 
@@ -74,19 +74,19 @@ The app separates document ownership, sculpting algorithms, UI commands, camera/
 
 ```sh
 cargo fmt --check
-cargo test
-cargo clippy --all-targets -- -D warnings
+cargo test --locked
+cargo clippy --locked --all-targets -- -D warnings
 ```
 
 Tests cover brush and mask behavior, legacy JSON compatibility, project/preset disk saves, stroke and bounded undo/redo, failed loads, save/open protection, and simulated viewport/gizmo gestures.
 
-Initialize the repository if it has not already been initialized:
+CI runs formatting, the ordinary test suite, and Clippy, plus a separate Mesa/EGL job for the GPU correctness tests. On Linux with EGL installed, run the same graphics checks locally:
 
 ```sh
-git init -b main
-git add Cargo.toml Cargo.lock .gitignore README.md src
-git commit -m "Create Clay Form sculpting prototype"
+EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib viewport::gpu:: -- --ignored --skip gpu_load_profile --test-threads=1
 ```
+
+For manual performance measurements, see [GPU rendering and profiling](docs/gpu-rendering.md). `cargo run --release --locked --example edit_profile` measures document transform and mask-edit costs without opening a window.
 
 ## Key settings and workspace
 
@@ -113,6 +113,8 @@ Preferences save automatically after a short delay and on exit, separately from 
 Vertical orbit continues over the poles and through full turns; there is no top/bottom angle stop.
 
 ## Undo and redo
+
+Mask intensity, selection threshold, temporary thickness, and primitive parameter drags each create one undo step. Releasing the pointer, losing focus, or switching operations ends that edit. During a mask-intensity drag, passing through zero and back up restores the original soft proportions. Clearing an already-empty mask preserves redo history and does not mark the project modified.
 
 Use the toolbar buttons or **Edit → Undo / Redo**. The Edit menu shows the action that will be restored, your configured shortcuts, and available step counts. Defaults are **Ctrl+Z** and **Ctrl+Shift+Z**, adjustable in Key settings. Button tooltips name the action; the status bar confirms each undo/redo.
 

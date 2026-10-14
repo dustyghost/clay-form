@@ -81,3 +81,17 @@ pub(crate) enum Command {
     DiscardAndContinue,
     CancelPending,
 }
+
+impl Command {
+    /// Only consecutive updates of the same continuous control share history.
+    pub(crate) fn edit_kind(&self) -> Option<crate::document::EditKind> {
+        use crate::document::EditKind;
+        match self {
+            Self::UpdatePrimitive(_) => Some(EditKind::Primitive),
+            Self::SetTemporaryThickness(_) => Some(EditKind::Thickness),
+            Self::MaskIntensity(_) => Some(EditKind::MaskIntensity),
+            Self::MaskThreshold(_) => Some(EditKind::MaskThreshold),
+            _ => None,
+        }
+    }
+}

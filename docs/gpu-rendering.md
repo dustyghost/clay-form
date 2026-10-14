@@ -12,7 +12,15 @@ Mesh deformation, subdivision, remeshing, undo, and surface picking remain CPU o
 
 ## Validation
 
-The ordinary test suite retains a CPU paint path for headless UI and picking tests. On a Linux host with EGL installed, the opt-in OpenGL test compiles the real shaders and reads back rendered pixels:
+The ordinary test suite retains a CPU paint path for headless UI and picking tests. CI also runs every ignored GPU correctness test in a separate Linux job using surfaceless Mesa software rendering:
+
+```sh
+EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib viewport::gpu:: -- --ignored --skip gpu_load_profile --test-threads=1
+```
+
+Only the manual load profile is excluded. Software rendering checks shader, framebuffer, picking/display, and UI composition correctness; it is not a hardware performance measurement.
+
+The focused checks remain available for local debugging. On a Linux host with EGL installed, the opt-in OpenGL test compiles the real shaders and reads back rendered pixels:
 
 ```sh
 cargo test --locked gpu_offscreen -- --ignored --nocapture
@@ -41,6 +49,20 @@ The CSV records display-mesh preparation, initial buffer upload, CPU view prepar
 The output identifies the GL driver. A `llvmpipe` result measures software rendering on the CPU and cannot establish hardware GPU performance. Compare runs on the same driver, hardware, resolution, and workload. Native application profiling at normal window size should also cover sustained strokes, adaptive topology, masks, symmetry, high-DPI screens, and repeated New/Open/undo/redo to check memory stability.
 
 Use those measurements to choose the next optimization. Likely candidates to investigate are a spatial index for picking, limiting uploads and normal updates to changed mesh regions, and spatial brush-neighborhood queries. Higher-density sculpting may need CPU geometry work even when drawing is fast.
+
+### Document edit profile
+
+`cargo run --release --locked --example edit_profile` measures the document layer without a window. It times the first translation (including its undo snapshot), the median of five further translations in that stroke, and one half-space mask operation. The larger cases retain two additional subdivision levels. Each inactive model retains the same stored geometry as the active model.
+
+A local sample on 2026-10-14, using an Intel Core i7-7500U with other validation work finished, compared the same harness linked against the pre-cleanup release library and the rebuilt library. All values are milliseconds:
+
+| Active vertices | Models | First transform before → after | Subsequent transform before → after | Mask operation after |
+| ---: | ---: | ---: | ---: | ---: |
+| 4,706 | 1 | 4.447 → 0.196 | 3.081 → 0.036 | 4.730 |
+| 75,266 | 1 | 104.101 → 4.439 | 97.703 → 0.769 | 264.345 |
+| 75,266 | 4 | 137.445 → 11.345 | 107.092 → 0.852 | 268.960 |
+
+Transforms now prepare and check coordinates without cloning inactive models or validating unchanged topology on every update. The first update still snapshots the scene for undo. These samples measure document work, not complete viewport latency: display preparation and GPU uploads still follow an edit. Bulk mask operations still clone and validate the mesh stack, and CPU picking still scans triangles. Those remain separate scaling work; this change adds no spatial index or hardware-rendering performance claim.
 
 Polygroup colors are cached per display triangle in a packed RGBA8 texture. The fragment shader fetches by primitive ID, retaining indexed position/normal buffers and sharp category boundaries. Group registry order selects deliberately separated hues from a muted palette, so renaming keeps the color; masks, guides and brush previews still compose over the surface. The View toggle changes uniforms without rebuilding geometry. If the combined scene exceeds the GPU texture capacity, the renderer retains ordinary clay shading.
 

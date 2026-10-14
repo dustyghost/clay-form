@@ -19,8 +19,8 @@ flowchart LR
 | Module | Responsibility |
 | --- | --- |
 | `main.rs` | Create the desktop window and application. |
-| `app.rs`, `command.rs` | Execute UI intent, coordinate files and document changes, and handle unsaved-change decisions. |
-| `document.rs` | Own mesh, brushes, dirty state, current saved path, stroke boundaries, and edit operations. Expose read-only content to views. |
+| `app.rs`, `app/`, `command.rs` | Own the application frame; resolve actions, dispatch commands, coordinate files and background jobs in separate modules. |
+| `document.rs`, `document/` | Own persistent state and history; implement scene, mesh, masks, attributes, brushes, strokes, primitives, thickness, and transforms in focused modules. Expose read-only content to views. |
 | `history.rs` | Keep geometry snapshots within 24 entries and a 128 MB budget, undo/redo, and invalidate redo on a new mesh edit. |
 | `sculpt/` | Geometry math, brush/alpha data, mesh deformation, project schema and validation. No egui, files, or tablet dependencies. |
 | `persistence.rs` | Read/write version 1 JSON, import image alphas, and export OBJ. |
@@ -28,12 +28,12 @@ flowchart LR
 | `camera.rs` | Session-only orbit, pan, zoom and camera basis. |
 | `viewport/` | Lock a drag into sculpt/orbit/gizmo mode; translate pointer movement into camera changes or dabs. Rendering/picking, the gizmo, and symmetry surface guides each have their own module. |
 | `preferences.rs` | Validate shortcut assignments and tool layout; load/save independent user preferences. |
-| `ui.rs` | Render toolbar, brush controls and confirmation dialog; emit commands without file or mesh operations. |
+| `ui/` | Render toolbar, brush controls and confirmation dialog; emit commands without file or mesh operations. |
 | `tablet.rs`, `tablet/linux.rs` | Publish normalized pressure and diagnostics; discover/read Linux devices in a worker that stops and joins when dropped. |
 
 The application owns the document, camera, UI state, viewport gesture state and tablet service. Document content stays private. Mesh edits go through document methods; camera changes never dirty the document or create undo entries. Each stroke records one geometry snapshot regardless of its number of dabs. Symmetry belongs to document editing rather than the renderer. `sculpt/symmetry.rs` transforms dabs across mirror planes and radial sectors around an object-space center. The mesh evaluates all copies against one geometry snapshot and blends their displacement directions by influence, normalized to the strongest per-vertex influence. Opposing mirrored motion cancels at the symmetry seam, avoiding sideways drift and folds without multiplying brush strength. Standard blends the direction separately from depth, retaining the strongest pressure/mask-weighted displacement length so diverging normals do not weaken the seam. For soft Standard alphas, `sculpt/overlap.rs` joins closely overlapping footprints along short segments through their influence-weighted centre, bounded by the contributing centres and tapering the correction by footprint spread and contribution. It fills the central falloff valley up to the usual pressure/mask-weighted peak without accumulating depth; coincident and separated copies keep their profiles, and image/hard/square alphas are unchanged. Other tools retain displacement averaging (including intentional cancellation for mirrored Grab motion). Mask opacity retains the strongest influence. The renderer independently intersects those symmetry planes with visible surface triangles for guides.
 
-The viewport is an input adapter. It emits domain `Dab` values to the document, independent of mesh rendering details. The scene renderer reads mesh data and prepares projected triangles for display and surface picking. A future GPU renderer can replace this adapter without moving sculpt algorithms into UI code.
+The viewport is an input adapter. It emits domain `Dab` values to the document, independent of mesh rendering details. The scene renderer reads mesh data and prepares projected triangles for display and surface picking. The OpenGL renderer uses cached GPU geometry; sculpt algorithms remain in the document and geometry modules. CPU projection and picking share the cached surface with the renderer.
 
 UI commands are executed between panels so the viewport sees the latest document. Destructive operations capture their target when requested. An Open confirmation therefore retains its target even if the toolbar path changes. Save-and-continue uses a separate path and refuses to overwrite that target. Failed loads leave content, dirty state and history intact.
 
@@ -45,13 +45,19 @@ The version 1 `.clay` and `.brush.json` formats remain compatible. Projects supp
 
 ## Extending the app
 
-Add brush data and algorithms in `sculpt/`, then expose their settings in `ui.rs`. Add user operations as commands handled by `App`; put their document effects in `Document` methods. Keep device-specific logic under `tablet/`, and keep render or picking changes under `viewport/`. Introduce a trait or a new subsystem when a second implementation needs it; the existing concrete modules are sufficient for the current app.
+Add brush data and algorithms in `sculpt/`, then expose their settings in `ui/`. Add user operations as commands handled by `App`; put their document effects in `Document` methods. Keep device-specific logic under `tablet/`, and keep render or picking changes under `viewport/`. Introduce a trait or a new subsystem when a second implementation needs it; the existing concrete modules are sufficient for the current app.
 
 User preferences use their own versioned JSON file in the user configuration directory. UI edits bindings and layout without touching the document. The controller loads preferences at desktop startup, saves after a debounce and on exit, and translates keyboard actions into existing commands. Viewport options carry the chosen hold modifiers. Tests use explicit temporary paths and do not read or write the user configuration.
 
+## Continuous edit sessions
+
+`document/edit.rs` stores one typed session for primitive parameters, temporary thickness, mask intensity, or mask threshold. The mask-intensity session owns its original peak and masks, so dragging through zero retains the information needed to restore soft values. `Command::edit_kind` identifies which commands can continue a session. The dispatcher closes a session when the command changes kind; commands blocked by modal or background-job guards do not interrupt it. The first changed update records history. Repeated updates reuse that entry; unchanged controls do not create one.
+
+Pointer release and focus loss finish parameter sessions at the application frame boundary. Switching models or applying a discrete document edit also finishes them. `end_primitive_edit` is specific to primitive gestures; it no longer resets unrelated mask or thickness state. Controller tests in `app/parameter_tests.rs` exercise dispatch plus these input boundaries, including switching controls, undo/redo, hidden masks on stored levels, and clearing an already-empty mask.
+
 ## Mesh workflows
 
-`Geometry` owns the active `Mesh` and `MeshSettings`: lower levels in ascending order, higher levels in reverse order, and dynamic remesh settings. `sculpt/subdivision.rs` shares edge midpoints and retains original vertex indices. Going down samples that original-vertex prefix; going up interpolates the difference from the saved parent's vertices and adds it to the stored high mesh. This preserves high-level residual detail rather than replacing the level with a fresh subdivision. The approach uses linear triangle refinement, with no Loop smoothing or tangent-frame displacement transport. Mesh-stack topology is validated against deterministic refinement at load and before commits.
+`Geometry` owns the active `Mesh` and `MeshSettings`: lower levels in ascending order, higher levels in reverse order, and dynamic remesh settings. `sculpt/subdivision.rs` shares edge midpoints and retains original vertex indices. Going down samples that original-vertex prefix; going up interpolates the difference from the saved parent's vertices and adds it to the stored high mesh. This preserves high-level residual detail rather than replacing the level with a fresh subdivision. The approach uses linear triangle refinement, with no Loop smoothing or tangent-frame displacement transport. Mesh-stack topology is validated against deterministic refinement at load and before topology commits.
 
 `sculpt/remesh.rs` rasterizes oriented triangles onto yz scanlines, fills their nonzero winding intervals along x, and extracts the voxel boundary using six consistently arranged tetrahedra per grid cube. A global grid-edge cache shares surface vertices; each triangle is oriented toward the outside. Winding occupancy supplies the sign for a narrow-band distance field measured against the input triangles. Surface crossings interpolate these distances instead of using grid-edge midpoints, avoiding quantized voxel bands. Two mild relaxation passes regularize the triangulation. Subvoxel details and masks are still lost. For background on tetrahedral isosurface extraction, see [Paul Bourke's polygonisation reference](https://www.paulbourke.net/geometry/polygonise/); for multiresolution editing concepts, see [Zorin, Schröder, and Sweldens](https://graphics.stanford.edu/~dzorin/multires/meshed/). The implementation here is a simpler linear refinement and world-space detail scheme.
 
@@ -72,6 +78,8 @@ For the requested behavior, see external software vendor's adaptive sculpting co
 Adaptive Smooth with simplification enabled skips edge splits and doubles the ordinary collapse ratio, capped at 95% of the target edge length. Smooth collapses also check resulting triangle quality (a 0.2–0.35 quality floor based on the original face). Quality flips remain available. This prevents cleanup strokes from replacing removed vertices with newly split ones, while preserving the shared work budget and conservative manifold/mask checks. Shift smoothing uses the same path.
 
 ## Model scenes and transforms
+
+Transforms prepare new vertex coordinates for the active surface and its stored levels without cloning inactive submodels or rebuilding unchanged topology. Every resulting coordinate is checked before any mutation. The first changed update captures a complete scene snapshot for undo; later updates in the same drag retain the existing face, mask, and group buffers. Parametric primitives still regenerate and validate their recipe before commit. Invalid updates leave geometry, dirty state, and history intact.
 
 `Geometry` snapshots contain the active surface and its subdivision stack plus inactive `Submodel` records and `SceneSettings`. Inactive records retain full geometry; display uses the lowest existing level. The active index describes its position among the ordered inactive records, so selection preserves scene order. Per-model metadata owns visibility and group membership; scene settings own group order. Optional default-omitted project fields preserve the legacy single-model JSON fixture. Model organization and transforms use the same bounded scene history as sculpting.
 

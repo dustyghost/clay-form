@@ -147,7 +147,7 @@ fn viewport_pen_drag_sculpts_and_records_undo() {
 fn saving_before_open_cannot_overwrite_the_pending_target() {
     let mut app = App::default();
     let ctx = egui::Context::default();
-    app.document.clear_mask();
+    app.document.invert_mask().unwrap();
     app.dispatch(
         Command::Request(PendingAction::Open("./sculpt.clay".into())),
         &ctx,
@@ -162,7 +162,7 @@ fn saving_before_open_cannot_overwrite_the_pending_target() {
 fn failed_open_after_discard_keeps_existing_unsaved_content() {
     let mut app = App::default();
     let ctx = egui::Context::default();
-    app.document.clear_mask();
+    app.document.invert_mask().unwrap();
     let before = serde_json::to_value(app.document.project()).unwrap();
     let missing = std::env::temp_dir().join(format!(
         "clay-missing-{}-{}.clay",
@@ -372,8 +372,8 @@ fn undo_redo_shortcuts_restore_geometry_and_report_the_action() {
     let mut app = App::default();
     let ctx = egui::Context::default();
     let before = app.document.geometry_snapshot();
-    app.document.clear_mask();
-    assert_eq!(app.document.undo_label(), Some("Clear mask"));
+    app.document.invert_mask().unwrap();
+    assert_eq!(app.document.undo_label(), Some("Invert mask"));
     let press = |modifiers| egui::RawInput {
         events: vec![egui::Event::Key {
             key: egui::Key::Z,
@@ -387,13 +387,13 @@ fn undo_redo_shortcuts_restore_geometry_and_report_the_action() {
     let _ = ctx.run(press(egui::Modifiers::CTRL), |ctx| app.shortcuts(ctx));
     assert_eq!(app.document.geometry_snapshot(), before);
     assert_eq!(app.document.history_counts(), (0, 1));
-    assert_eq!(app.ui.status, "Undid: Clear mask");
+    assert_eq!(app.ui.status, "Undid: Invert mask");
     let _ = ctx.run(
         press(egui::Modifiers::CTRL | egui::Modifiers::SHIFT),
         |ctx| app.shortcuts(ctx),
     );
     assert_eq!(app.document.history_counts(), (1, 0));
-    assert_eq!(app.ui.status, "Redid: Clear mask");
+    assert_eq!(app.ui.status, "Redid: Invert mask");
     app.dispatch(Command::Redo, &ctx);
     assert_eq!(app.ui.status, "Nothing to redo");
 }
