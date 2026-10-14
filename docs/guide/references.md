@@ -2,39 +2,69 @@
 
 [Documentation home](../../README.md#documentation)
 
+Keep drawings or photographs beside the sculpt. Images stay fixed on screen while you orbit the model.
+
+- [Add an image](#add-a-reference)
+- [Place two studies](#example-keep-two-studies-beside-the-sculpt)
+- [Lock, fade, or hide images](#sculpt-with-references)
+- [Save and customize](#save-and-customize)
+
 ## Add a reference
 
-Drop a PNG or JPEG file onto the model view, or open **References**, enter its path, and choose **Add image**. Each image is embedded in the project; moving or deleting the source file afterward does not break it. JPEG orientation metadata is applied when loading photographs. PNG transparency is preserved.
+Drop a PNG/JPEG onto the viewport, or enter its path under **References** and choose **Add image**.
 
-Adding an image enters **Arrange images**. Drag an unlocked image to move it; drag its lower-right corner to resize it while retaining its aspect ratio. Choose **Done** in the strip above the viewport to return to sculpting. **Escape** discards an unfinished drag and finishes arranging. Losing focus, switching tools, or resizing the viewport cancels an unfinished drag. Completed placements remain saved in the document.
-
-## Sculpt with references
-
-Images remain fixed to the screen as the camera orbits, pans, and zooms. Outside Arrange mode, all images are passive: the pen and mouse sculpt or navigate through them normally. Right-drag orbiting, middle-drag panning, and wheel zoom also work while arranging. Primary drags in Arrange mode only place images; they never sculpt.
-
-In **References**, select an image from the list to adjust its **Opacity** and **Size**, **Center image**, or **Remove image**. **Lock position and size** protects its placement while arranging. Each row has a visibility checkbox. **Show references** temporarily hides or shows the whole collection without changing the saved individual visibility settings.
-
-Images stay within the model view and fit smaller viewports. Their stored positions and widths are proportions of the viewport; their aspect ratios stay intact. Later images appear over earlier ones. Use the list to hide overlapping images or select their controls.
+Adding enters **Arrange images**. The file is embedded in the project, so moving/deleting its source later will not break it. PNG transparency and JPEG orientation metadata are supported.
 
 ## Example: keep two studies beside the sculpt
 
-1. Drop two PNG or JPEG study images onto the viewport, one at a time.
-2. In **Arrange images**, move one toward the upper left and the other toward the lower right. Drag each lower-right corner to size it without covering the working area.
-3. Select the second image in **References**, reduce **Opacity** to **70%**, and enable **Lock position and size**.
-4. Choose **Done**, then orbit the sphere. The studies stay fixed on screen while the model turns. Save a `.clay` project to keep the embedded images and their placements.
+1. Add a front and a side study. Try the supplied [front](../examples/front-study.png) and [side](../examples/side-study.png) images of the Human head base.
+2. In **Arrange images**, drag them to the upper-left and lower-left corners. Resize with each image's lower-right handle.
+3. Select the side image, set **Opacity** to **70%**, and enable **Lock position and size**.
+4. Choose **Done**. Orbit the model; the images stay in place.
 
-![Two sample reference images beside a sphere with the References panel open on the right](../images/reference-images.png)
+![Front and side head references beside the sculpt with Side study selected and locked at 70 percent opacity](../images/reference-images.png)
 
-*Two synthetic sample images demonstrate placement. Front study is selected; Side study at the lower right is locked and uses 70% opacity. Use your own drawings or photographs for sculpting.*
+*The supplied images show two views of the same built-in base. Replace them with your own drawings or photos for a project.*
+
+## Sculpt with references
+
+### Move and resize
+
+Choose **Arrange images** to edit placements. Primary drags move images; they do not sculpt. Right-drag orbit, middle-drag pan, and wheel zoom still work.
+
+**Done** returns to sculpting. **Escape** cancels an unfinished placement and exits Arrange mode. Completed placements stay. Focus loss, tool changes, or viewport resizing cancel an unfinished drag.
+
+### Lock, fade, or hide
+
+| References control | Use |
+| --- | --- |
+| Image row | Select that image's controls |
+| Opacity | Fade it to reveal clay underneath |
+| Size | Set width as a proportion of the viewport |
+| Center image | Move it to the viewport center |
+| Lock position and size | Prevent accidental movement while arranging |
+| Row visibility checkbox | Hide/show one image |
+| Show references | Temporarily hide/show the collection |
+| Remove image | Remove it from the project |
+
+Outside Arrange mode, images do not intercept sculpting or navigation. Later images appear on top; use the list to select overlapping ones.
 
 ## Save and customize
 
-Image data, placement, opacity, individual visibility, and locks save with `.clay` projects and recovery copies. Reference edits mark the project modified but leave sculpt geometry, mesh Undo/Redo, and the camera unchanged. Reference edits are separate from sculpt Undo/Redo; Escape cancels a placement before release. Arrange mode and the overall Show references switch are session-only. Older projects load with no references.
+Images, placements, individual visibility, opacity, and locks save in `.clay` projects and recovery copies. Positions/widths are relative to the viewport, so images fit when the window changes size.
 
-The References menu uses the same compact pin and left/right sidebar icons as other menus. Keep it floating or dock it as a collapsible sidebar section. **Reference image controls**, **Add reference image at path**, **Arrange reference images**, and **Toggle reference images** are available in custom menus and configurable shortcuts; no new default keys are assigned.
+**Reference edits are outside sculpt Undo/Redo.** Escape cancels an unfinished drag; after release, reposition the image to change it. Arrange mode and the overall Show references toggle are session-only.
 
-Limits: 8 references per project, 2048 × 2048 pixels and 16 MB per source file, with a combined budget of 8 megapixels and 16 MB of embedded PNG data. Unsupported, malformed, or oversized images report an error without adding an image. References are screen overlays in this phase; attaching images to front/side planes is future work.
+Pin/dock the References menu like other menus. Reference controls and actions can be added to custom menus or shortcuts; they have no default keys.
+
+### Image limits
+
+- Up to **8 images** per project.
+- Up to **2048 × 2048** and **16 MB** per source image.
+- Up to **8 megapixels** and **16 MB** of embedded PNG data combined.
+
+Invalid/oversized images report an error without being added. These are screen overlays; attaching images to 3D front/side planes is not implemented.
 
 ## Related guides
 
-[Navigation and tablet input](navigation.md) · [Workspace and shortcuts](workspace.md) · [Files and recovery](files.md)
+[Navigation](navigation.md) · [Workspace](workspace.md) · [Files and recovery](files.md)

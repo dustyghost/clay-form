@@ -2,48 +2,121 @@
 
 [Documentation home](../../README.md#documentation)
 
-- [Key settings and workspace](#key-settings-and-workspace)
-- [Toolbar and brush previews](#toolbar-and-brush-previews)
+Keep your most-used tools close to the sculpt.
+
+- [Pin or dock a menu](#key-settings-and-workspace)
+- [Create a custom shelf](#create-a-custom-menu-or-shelf)
+- [Save a workspace](#save-and-switch-workspaces)
+- [Change shortcuts](#shortcuts)
+- [Find default keys](#default-shortcuts)
 
 ## Key settings and workspace
 
-**Keep menus open:** open a built-in or custom menu, then click its **pushpin icon** (tooltip: **Pin menu open**). Transform, Slice, Primitive, and Add brush use the same placement controls as Mask and Symmetry settings. Its controls stay available in a floating window while you sculpt or use other menus. Drag the title bar to move it. The **crossed-pin icon** (Unpin menu) returns it to a normal drop-down. Built-in windows also return to their toolbar menu when closed with **×** or by clicking their highlighted toolbar button; closing a custom floating menu hides it. Multiple menus can stay open together, including with the compact toolbar. Pin state and positions save automatically with your workspace and are restored when you reopen the app.
+### Pin a menu open
 
-**Turn a whole menu into a collapsible section:** open a built-in or custom menu and click its **left-sidebar** or **right-sidebar icon** (tooltips: **Make collapsible on left/right**). Pinned menu windows offer the same choices. The whole menu, including sliders and numeric controls, becomes a sidebar section; click its header to collapse or expand it. Right-click any sidebar section header and choose **Move section up / down** to reorder it among built-in tools, custom sections, and converted menus. The same order is editable under **Customize workspace → Built-in panels and toolbar**. Header options also move sections to the other sidebar, return menus to the toolbar, or float a converted built-in menu. Placement, order, and expanded state save with the workspace.
+1. Open a menu, such as **Mask**.
+2. Click its pushpin icon, **Pin menu open**.
+3. Drag the floating window's title bar to place it.
 
-**Custom menus and button shelves:** right-click an action button (including a brush tile) and choose **Add to custom menu / shelf…**, or open **Settings → Customize workspace**. Create a menu, choose actions from the searchable catalog, and give it a name. Placement can be either sidebar, the menu bar, a top/bottom/left/right shelf, floating, or hidden. Right-click empty space or a section header in either sidebar and choose **New collapsible menu here…** to create a section in that sidebar. Click its header to collapse or expand it; right-click its header to edit or delete it. Right-click a copied button and choose **Remove item from this menu**, or use the editor to remove buttons and separators. Removing custom controls leaves their underlying actions available. Set the shelf's column count; narrow shelves wrap to fewer columns. Rename individual buttons, add separators, and drag the `::` grip or use **Up / Down** to reorder them. Floating shelves move by their title bar; closing one hides it until restored in the editor.
+The crossed-pin icon returns it to a drop-down. Closing a built-in window also returns it to the toolbar; closing a custom window hides it.
 
-The catalog includes project commands, undo/redo, masking, visibility, mesh operations, transforms, brush settings, individual brushes, panel visibility, and opening your custom menus. Actions operate on the current model/brush and keep the usual availability checks and undo behavior. Buttons requiring a dialog decision and per-object numeric editors remain in their original panels. Brush selections use persistent brush IDs; a missing brush is disabled until that brush is available again.
+### Dock a menu in a sidebar
 
-Use **Built-in panels and toolbar** to move, hide, or reorder the existing panels. **Compact toolbar** leaves Settings, Edit, custom menus, and mesh-job cancellation accessible while freeing space for your shelves. Use **Save as workspace** in the workspace editor to name the current arrangement, then switch with the toolbar’s **Workspace** selector. Named workspaces automatically remember later edits, including collapsed menus, panel sizes, and colours. **Workspace colours and style** offers Dark, Light, and Warm presets plus panel, button, accent, text, and model-view colours, spacing, and corner rounding. **Manage saved workspaces** lets you delete workspaces or start from defaults; starting from defaults preserves saved workspaces. Key bindings are shared across all workspaces.
+Click **Make collapsible on left/right** in an open or pinned menu. Click the resulting section header to collapse or expand it.
 
-**Number keys:** right-click a button and choose **Assign shortcut…**, then press **1–0** or **Shift+1–0**. These are 20 distinct combinations and are initially unbound. For example, assign `1` to a brush, `Shift+1` to Invert mask, and `0` to **Open [your menu]** in Key settings. Shifted number-row keys are normalized using the physical key, so punctuation such as `!` still binds as `Shift+1`. Other keys continue to follow the keyboard layout. Modifier holds still apply when you use pointer gestures.
-
-Open **Settings → Key settings** to rebind or clear shortcuts. Click a binding and press its replacement; Escape cancels. Conflicting shortcuts are rejected. Smooth, reverse, zoom and pan hold modifiers are configurable too. Shortcuts pause during text entry and settings editing.
-
-**Toggle perspective view** and **Reset brush settings** are available in the action catalog and start without key bindings. See [Perspective view](navigation.md#perspective-view) and [Brush settings](sculpting.md) for their behavior. Docking the View menu also keeps the field-of-view slider available beside the sculpt.
-
-Defaults: Ctrl+S saves, Ctrl+O opens the project path, Ctrl+N creates a sphere, Ctrl+Z undoes, Ctrl+Shift+Z redoes, F resets the view, X toggles symmetry, W toggles wireframe, G toggles symmetry guides, brackets change brush radius, and comma/period select brushes. Ctrl+D subdivides, Shift+D selects a lower level, D selects a higher level, and Ctrl+R remeshes in dynamic mode. Existing preferences upgrade without losing custom bindings; new shortcuts that conflict with yours start unbound.
-
-Open **Settings → Customize workspace** to place brush library, brush settings, alpha, presets, tablet/navigation, and mesh management groups on the left, right, in floating windows, or hidden. Arrows reorder groups, headers collapse them, panel edges resize them, and floating titles move them. Closing a floating tool hides it; restore it in the workspace editor. Reset buttons restore key or layout defaults independently.
-
-Preferences save automatically after a short delay and on exit, separately from sculpt projects, to `$XDG_CONFIG_HOME/clay-form/preferences.json` or `~/.config/clay-form/preferences.json`. Invalid preferences fall back to defaults with a status message. Tool groups can be rearranged, and reusable action buttons can also be copied into your custom menus.
+Right-click a header to move it up/down, switch sides, or return the menu to the toolbar. Drag the sidebar edge to resize it. Placement and expanded state save automatically.
 
 ### Example: keep frequently used controls open
 
-1. Open **Transform** and click **Make collapsible on left** to dock its controls.
-2. Open **Mask** and click **Pin menu open**. Drag its title bar toward the upper right.
-3. Pin **Slice** too, and move it beside the model. Several menu windows can remain open together.
-4. Collapse the Transform section when you need more room. These placements save automatically with the workspace; use the crossed-pin icon to return a floating menu to its toolbar drop-down.
+1. Dock **Transform** on the left.
+2. Pin **Mask** and move it to the upper right.
+3. Collapse Transform when you need more room; expand it to resume adjusting the model.
 
-![Transform controls docked on the left with Mask and Slice floating windows over the viewport](../images/menu-placement.png)
+![Transform docked on the left and Mask pinned in a floating window on the right](../images/menu-placement.png)
 
-*One possible layout: a docked Transform section and two pinned menus. Panel positions are workspace preferences, independent of the sculpt geometry.*
+*Docking keeps controls at the edge; pinning makes a movable window. Several menus can stay open together.*
+
+## Create a custom menu or shelf
+
+1. Right-click an action or brush tile and choose **Add to custom menu / shelf…**.
+2. Create a menu, name it, and add actions from the searchable catalog.
+3. Choose a location in **Settings → Customize workspace**.
+
+| Location | Best for |
+| --- | --- |
+| Left/right sidebar | Collapsible groups of controls |
+| Top/bottom/left/right shelf | Frequently used buttons |
+| Menu bar | Commands used occasionally |
+| Floating | A movable tool group |
+| Hidden | Keeping a menu for later |
+
+Right-click an empty sidebar area and choose **New collapsible menu here…** to start directly in that sidebar.
+
+### Edit the contents
+
+Rename buttons, add separators, and reorder with the `::` grip or **Up / Down**. Set the shelf's column count; narrow shelves wrap automatically. **Remove item from this menu** removes the copy, not the underlying command.
+
+Actions use the current model or brush and retain normal undo/availability rules. A brush button is disabled if its brush is missing. Dialog decisions and per-object numeric editors remain in their original panels.
+
+## Save and switch workspaces
+
+Open **Settings → Customize workspace**.
+
+| Control | Use |
+| --- | --- |
+| Built-in panels and toolbar | Move, hide, or reorder tool panels |
+| Compact toolbar | Leave more room for custom shelves |
+| Save as workspace | Name the current arrangement |
+| Workspace selector in the toolbar | Switch saved arrangements |
+| Workspace colours and style | Choose Dark/Light/Warm or customize colors, spacing, and rounding |
+| Manage saved workspaces | Delete arrangements or start from defaults |
+
+Named workspaces remember later layout/style edits automatically. Starting from defaults preserves saved workspaces. Keyboard bindings are shared across workspaces.
+
+### Where preferences are stored
+
+Preferences save separately from projects, after a short delay and on exit:
+
+- `$XDG_CONFIG_HOME/clay-form/preferences.json`, if set.
+- Otherwise `~/.config/clay-form/preferences.json`.
+
+Invalid preferences fall back to defaults with a status message. Key and layout reset controls are independent.
+
+## Shortcuts
+
+1. Open **Settings → Key settings**, or right-click a button and choose **Assign shortcut…**.
+2. Select a binding and press its replacement. Press **Escape** to cancel.
+3. Clear a binding if you want to leave that action unassigned.
+
+Conflicting shortcuts are rejected. Shortcuts pause during text entry and settings editing. Smooth, reverse, pan, and zoom hold modifiers can also be changed.
+
+### Use number keys for favorites
+
+**1–0** and **Shift+1–0** give 20 initially unbound combinations. For example, bind `1` to Detail, `Shift+1` to Invert mask, and `0` to **Open [your menu]**.
+
+Shifted numbers use the physical number-row key, so `!` can bind as Shift+1. Other keys follow your keyboard layout.
+
+**Toggle perspective view**, **Reset brush settings**, **Rotate**, and pivot actions are available without default keys. New actions that conflict with your existing bindings start unbound.
+
+### Default shortcuts
+
+| Action | Key |
+| --- | --- |
+| Save / Open / New sphere | Ctrl+S / Ctrl+O / Ctrl+N |
+| Undo / Redo | Ctrl+Z / Ctrl+Shift+Z |
+| Reset view | F |
+| Toggle symmetry / guides | X / G |
+| Toggle wireframe | W |
+| Smaller / larger brush | [ / ] |
+| Previous / next brush | , / . |
+| Subdivide | Ctrl+D |
+| Lower / higher subdivision level | Shift+D / D |
+| Remesh in dynamic mode | Ctrl+R |
 
 ## Toolbar and brush previews
 
-Toolbar actions share 16-pixel line icons and 28-pixel minimum heights. Project actions and modeling/view actions occupy separate rows and wrap on narrower windows. Brush previews use equal-sized responsive tiles, with names beneath the images, full-name tooltips and teal selection outlines.
+The toolbar wraps as the window narrows. Brush tiles show the selected brush with a teal outline; hover for its full name. Restore hidden panels in **Customize workspace**.
 
 ## Related guides
 
-[Navigation and tablet input](navigation.md) · [Undo and redo](sculpting.md#undo-and-redo) · [Recovery saves](files.md#recovery-saves)
+[Navigation](navigation.md) · [Brush settings](sculpting.md) · [Recovery saves](files.md#recovery-saves)

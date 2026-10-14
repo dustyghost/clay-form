@@ -14,6 +14,8 @@ Linux requires a working Wayland or X11 desktop and desktop OpenGL 3.3 or newer.
 
 ## Documentation
 
+**Start here:** [Make your first sculpt](docs/guide/getting-started.md) — make a mark, smooth it, navigate, undo, and save.
+
 | Guide | Topics |
 | --- | --- |
 | [Sculpting and brushes](docs/guide/sculpting.md) | Brushes, alphas, symmetry, stroke modes, adaptive sculpting, undo/redo |
@@ -26,7 +28,7 @@ Linux requires a working Wayland or X11 desktop and desktop OpenGL 3.3 or newer.
 
 The guides include worked examples and app screenshots. Try [comparing view projections](docs/guide/navigation.md#example-compare-orthographic-and-perspective-views), [sculpting a fine fold](docs/guide/sculpting.md#example-cut-a-fine-fold), or [importing the sample pyramid](docs/guide/files.md#example-import-the-sample-pyramid).
 
-For contributors: [development checks](docs/development.md), [architecture](docs/architecture.md), [GPU rendering and profiling](docs/gpu-rendering.md), and [UI design rules](docs/ui-design.md).
+For contributors: [development checks](docs/development.md), [architecture](docs/architecture.md), [GPU rendering and profiling](docs/gpu-rendering.md), [UI design rules](docs/ui-design.md), and [documentation style](docs/documentation-style.md).
 
 See the [roadmap](docs/roadmap.md) for completed work, upcoming phases, and delivery checks. Keep detailed feature instructions in the relevant guide above when adding functionality.
 

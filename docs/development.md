@@ -30,7 +30,7 @@ bash scripts/update-doc-screenshots.sh
 
 The script runs the real application UI and OpenGL renderer offscreen with synthetic scenes, then copies the selected PNGs into `docs/images/` only after every capture test passes. It uses software rendering and defaults to two Mesa worker threads; no desktop window is needed. The temporary capture directory is printed at the end and retains extra frames for inspection.
 
-Review the resulting images before committing them, and update the guide's steps and captions whenever controls or behavior change. See the [screenshot inventory](images/README.md) for capture sources and the [GPU validation prerequisites](gpu-rendering.md#validation) for graphics setup. These captures check appearance and behavior; they are not performance measurements.
+Review the resulting images before committing them, and update the guide's steps and captions whenever controls or behavior change. Follow the [documentation style](documentation-style.md): short tasks, searchable headings, and images that show the relevant control or result. See the [screenshot inventory](images/README.md) for capture sources and the [GPU validation prerequisites](gpu-rendering.md#validation) for graphics setup. These captures check appearance and behavior; they are not performance measurements.
 
 ## Architecture and roadmap
 

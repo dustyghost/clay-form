@@ -16,6 +16,7 @@ export CLAY_OBJ_PREVIEW="$capture_dir/obj-import.png"
 export CLAY_MENU_PREVIEW="$capture_dir/menu-placement.png"
 export CLAY_RECOVERY_PREVIEW="$capture_dir/recovery.png"
 export CLAY_ROTATION_PREVIEW="$capture_dir/rotation"
+export CLAY_GUIDE_PREVIEW="$capture_dir/guides"
 
 cargo test --locked --lib offscreen_preview -- --ignored --test-threads=1
 cargo test --locked --lib gpu_lasso_preview_and_commit -- --ignored
@@ -26,12 +27,14 @@ mkdir -p docs/images
 cp "$capture_dir/perspective-orthographic.png" docs/images/view-orthographic.png
 cp "$capture_dir/perspective-ui.png" docs/images/view-perspective.png
 cp "$capture_dir/detail-solid.png" docs/images/detail-groove.png
-cp "$capture_dir/navigation-brush-settings.png" docs/images/brush-settings.png
 cp "$capture_dir/lasso-mask-3.png" docs/images/mask-lasso-preview.png
 cp "$capture_dir/lasso-mask-5.png" docs/images/mask-lasso-result.png
-cp "$capture_dir/references.png" docs/images/reference-images.png
-cp "$capture_dir/obj-import.png" docs/images/obj-import.png
-cp "$capture_dir/menu-placement.png" docs/images/menu-placement.png
-cp "$capture_dir/recovery.png" docs/images/recovery-dialog.png
+cp "$capture_dir/lasso-hide-3.png" docs/images/hide-lasso-preview.png
+cp "$capture_dir/lasso-hide-5.png" docs/images/hide-lasso-result.png
 cp "$capture_dir/rotation-4.png" docs/images/rotation-controls.png
+for name in brush-reset-before brush-reset-after first-sculpt-before first-sculpt-after symmetry-stroke adaptive-settings primitive-cube slice-trim-preview slice-trim-result reference-images obj-import menu-placement recovery-dialog; do
+    cp "$capture_dir/guides/$name.png" "docs/images/$name.png"
+done
+cp "$capture_dir/guides/front-study.png" docs/examples/front-study.png
+cp "$capture_dir/guides/side-study.png" docs/examples/side-study.png
 printf 'Documentation screenshots updated. Extra captures remain in %s\n' "$capture_dir"

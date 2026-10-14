@@ -1,93 +1,169 @@
 # Sculpting and brushes
 
-[Documentation home](../../README.md#documentation)
+[Documentation home](../../README.md#documentation) · New here? [Make your first sculpt](getting-started.md).
 
-- [Brushes, alphas, and symmetry](#brushes-alphas-and-symmetry)
-- [Detail brush](#detail-brush)
-- [Stroke modes](#stroke-modes)
-- [Snake brush and adaptive sculpting](#snake-brush-and-adaptive-sculpting)
-- [Undo and redo](#undo-and-redo)
+Choose a brush, drag on the clay, and use **Shift** to smooth. Start with the task you need:
+
+- [Choose and adjust a brush](#brushes-alphas-and-symmetry)
+- [Reset a brush](#example-reset-an-experimental-brush)
+- [Cut a fine fold](#detail-brush)
+- [Choose a stroke mode](#stroke-modes)
+- [Mirror a stroke](#symmetry)
+- [Add local detail](#snake-brush-and-adaptive-sculpting)
+- [Undo an edit](#undo-and-redo)
 
 ## Brushes, alphas, and symmetry
 
-- Standard, Clay, Inflate, Smooth, Flatten, Pinch, Crease, Grab, Mask, and Snake are included.
-- Hold **Shift** (or your configured Smooth modifier) to temporarily use the most recently selected Smooth preset. The brush selector highlights it and its own radius, strength, alpha, pressure, spacing, stroke mode, and stabilisation settings all apply. Release Shift to return to your previous brush. Radius shortcuts and brush controls edit the highlighted preset. Select a Smooth variation once to make it your temporary smoothing brush for the session. Projects without any Smooth preset use independent default Smooth settings until you add one.
-- Every brush uses an alpha, including Grab, smoothing and masking. Add/Subtract reverses its operation; subtracting Smooth sharpens, subtracting Flatten exaggerates surface relief, and subtracting Mask erases masking.
-- Adjust radius, inner radius, strength, alpha falloff, spacing, rotation, pressure strength/radius mapping, and pressure response curve. Inner radius is a fraction of the outer radius: Soft and image alphas keep full influence inside this core, then fade toward the edge; image pixels still modulate the core. Hard and Square retain their hard edges. Brush thumbnails project the effective alpha in blue over the illustration or captured model, updating with rotation and falloff. Enable **Surface footprint and normal** in Brush settings to preview alpha on the visible surface, with tangent outer/inner rings and a surface-normal indicator showing inclination. The tangent rings indicate the local surface plane; the shaded footprint follows curvature and the brush’s camera-plane projection. Grab moves the surface with the cursor; spacing does not affect Grab.
-- Choose Soft, Hard or Square alpha, or load a PNG/JPEG up to 2048 × 2048 pixels. White affects the surface, black protects it, and transparency reduces influence. Custom alpha pixels are embedded in presets and projects.
-- Every brush has an icon. In Brush settings or the Brush library, choose **Capture model icon** to preview a square capture of the active model at its current viewing angle. The capture fits the whole model and excludes controls and overlays. Choose **Use as brush icon**, optionally **Save PNG**, or cancel. **Restore default icon** returns to the built-in illustration. Custom icons are embedded in projects and exported brushes.
-- Use **Brush settings → Reset settings** to restore the defaults for that brush’s current operation, including alpha, radius, strength, stroke mode, stabilisation, and pressure mapping. Its name and captured icon stay intact. This affects only the selected preset (the Smooth preset while Shift is held); exported preset files stay unchanged. The reset action can also be added to a custom menu or shortcut.
-- Duplicate any brush to create a named variation. In **Presets**, use **Export brush / Import brush** for one brush, or **Export library / Import library** for the whole library. Persistent brush IDs let imports update matching brushes without adding copies; duplicate creates a new ID. Importing an unchanged library leaves the document unchanged. Older presets without IDs receive a stable identity from their contents; edited legacy files may be imported as new brushes.
-- Enable **Symmetry** in the toolbar, then open **Symmetry settings**. Mirror across X/Y/Z independently or combine planes. Radial symmetry adds 2–16 repeats around X, Y, or Z; mirrors and radial repeats can be combined.
-- Adjust the symmetry center in object coordinates, or reset it to the origin. Surface lines show the active planes and radial boundaries as you orbit: X pink/red, Y green, Z blue, other radial boundaries gold. Guide visibility and opacity are adjustable.
-- Symmetry settings are saved in projects; older projects open with symmetry disabled. Overlapping symmetry copies use the strongest influence per vertex, preventing stronger strokes at the center seam.
-- Undo/Redo keeps up to 24 geometry edits within a 128 MB snapshot budget.
+### Choose a brush
+
+| Goal | Brushes to try |
+| --- | --- |
+| Build up or remove clay | Standard, Clay, Inflate |
+| Even out a surface | Smooth, Flatten |
+| Tighten a fold | Pinch, Crease, Detail |
+| Move or pull a form | Grab, Snake |
+| Protect part of a surface | Mask |
+
+Select a tile in **Brush library**. Use **Add brush** if a brush is missing from an older project.
+
+**Shift** temporarily uses your most recently selected Smooth preset, including its size and stroke settings. Release Shift to return to your previous brush. **Alt** reverses the operation by default; you can also choose **Add / Subtract** in Brush settings.
+
+### Adjust the feel
+
+| Brush setting | Effect |
+| --- | --- |
+| Radius | Size of the affected area, in screen pixels |
+| Inner radius | Full-strength core, as a fraction of the radius |
+| Strength | Amount applied by each dab |
+| Spacing | Distance between dabs in a continuous stroke |
+| Falloff | How quickly influence fades toward the edge |
+| Pressure strength / radius | Whether pen pressure controls strength or size |
+| Pressure curve | Response to lighter and heavier pressure |
+| Surface footprint and normal | Preview the alpha on the clay, with a tangent ring and normal indicator |
+
+Grab follows pointer movement; spacing does not affect it. Subtracting Smooth sharpens, subtracting Flatten exaggerates relief, and subtracting Mask erases protection.
+
+### Choose an alpha
+
+An alpha shapes each dab. Choose **Soft**, **Hard**, or **Square**, or load a PNG/JPEG up to **2048 × 2048**.
+
+White affects the surface; black protects it. Transparency reduces influence. Rotation turns the pattern, and inner radius gives Soft/image alphas a stronger core. Custom images are embedded in brushes and projects.
 
 ### Example: reset an experimental brush
 
-1. Select **Standard** in the brush library and duplicate it to make a named variation.
-2. In **Brush settings**, change its radius, strength, and alpha. Try a short stroke on a practice sphere.
-3. Choose **Reset settings** in the same panel. The variation returns to Standard defaults while keeping its name and icon.
-4. Use **Undo** separately if you also want to remove the trial stroke: resetting settings does not undo sculpting.
+1. Select **Standard**, choose **Duplicate brush**, and name it **Fold study**.
+2. Change **Radius** to **95**, **Strength** to **0.65**, **Spacing** to **0.30**, and enable **Stroke stabilisation**.
+3. Choose **Reset settings**. The operation's defaults return; your name and icon stay.
 
-![Brush library on the left and Brush settings with the Reset settings button on the right](../images/brush-settings.png)
+| Before reset | After reset |
+| --- | --- |
+| ![Fold study with radius 95, strength 0.65, spacing 0.30 and stabilisation enabled](../images/brush-reset-before.png) | ![Fold study keeps its name while radius returns to 60, strength to 0.25, spacing to 0.15 and stabilisation turns off](../images/brush-reset-after.png) |
 
-*The Reset settings button belongs to the selected preset. This capture shows Standard; your named variation uses the same controls.*
+*Reset affects the selected preset. While Shift is held, it affects the temporary Smooth preset.*
+
+Resetting brush settings does not undo a sculpt stroke. Use **Undo** for geometry changes.
+
+### Save presets and brush icons
+
+In **Presets**, export/import a single brush or the whole library. Imports update brushes with matching IDs; **Duplicate brush** creates an independent variation. Importing an unchanged library does not modify the project.
+
+Choose **Capture model icon** in Brush settings or the library to preview the active model as a thumbnail. Select **Use as brush icon**, optionally **Save PNG**, or cancel. **Restore default icon** brings back the built-in illustration. Icons are embedded in projects and exported presets.
 
 ## Detail brush
 
-The **Detail** brush cuts a narrow groove with raised shoulders and pinches the surface toward the crease, for wrinkles and fine folds. Choose Subtract (or use your configured reverse modifier during a stroke) to raise a sharp ridge instead. Adjust radius and strength as usual; masks, alpha, pressure and symmetry are supported. New projects include it; in existing projects use **Add brush → Detail**. For crisp features use sufficient subdivision or adaptive detail. Detail samples a broader surface normal so it follows the surface without chasing individual valley walls. Adaptive refinement prioritises the narrow incision and raised shoulders, simplification preserves that extra resolution, and local relaxation reduces small ridges between triangles.
+Detail cuts a narrow groove with raised shoulders. Use Subtract for a sharp ridge. It supports alpha, pressure, masking, and symmetry.
 
 ### Example: cut a fine fold
 
-1. Start with a fresh sphere and select **Detail** from the brush library.
-2. Enable **Mesh → Adaptive sculpt** so the groove can gain local resolution. Keep the default Detail settings and use **Freehand** with stabilisation off for this example.
-3. Draw one slow, gently curved stroke down the front of the sphere, then release.
-4. Zoom in to inspect the narrow incision and raised shoulders. Use **Ctrl+Z** to compare with the original surface; **Ctrl+Shift+Z** restores the stroke with the default shortcuts.
+1. Start with a fresh sphere and select **Detail**.
+2. Enable **Mesh → Adaptive sculpt**. Use default Detail settings, **Freehand**, and stabilisation off.
+3. Draw one slow, slightly curved stroke down the front.
+4. Zoom in to inspect the fold. Use **Ctrl+Z** to undo and **Ctrl+Shift+Z** to restore it.
 
-![Close view of a sphere with one continuous Detail groove and raised shoulders](../images/detail-groove.png)
+![A continuous narrow Detail groove with raised shoulders, viewed at 200 percent zoom](../images/detail-groove.png)
 
-*One Detail stroke, inspected at 200% zoom with wireframe hidden. Pressure, stroke speed, and brush radius change the result.*
+*One stroke at 200% zoom. Pressure, speed, and radius change its depth and width.*
+
+Use subdivision or adaptive sculpting if a fine crease looks faceted. Detail's adaptive refinement concentrates resolution around the groove and shoulders.
 
 ## Stroke modes
 
-Choose a mode under **Brush → Stroke mode**; it is saved per brush in projects, presets and brush libraries. Existing brushes default to **Freehand**.
+Choose **Brush settings → Stroke mode**. Each preset remembers its own mode.
 
-- **Freehand:** the existing continuous stroke.
-- **Line:** press on the active model and drag a straight guide. Release to apply spaced dabs along that screen-space line, projected onto visible surfaces. Very long lines are limited to 257 dabs.
-- **Drag Rect:** press to anchor one stamp, then drag to set its radius and alpha angle. The sculpted result previews live; release to keep it. Drag size is capped at the existing 500-pixel brush-radius limit; the preset's size and rotation remain unchanged.
-- **Drag Dot:** move a fixed-size stamp with a live sculpt preview, then release to keep it.
+| Mode | Gesture | Useful for |
+| --- | --- | --- |
+| Freehand | Drag a continuous stroke | Building and smoothing forms |
+| Line | Drag a guide; release to apply spaced dabs | Straight creases or repeated marks |
+| Drag Rect | Drag from an anchor to size and rotate one stamp | Placing a relief at a chosen scale |
+| Drag Dot | Drag a fixed-size stamp into place | Repositioning a detail before release |
 
-**Stroke stabilisation:** in Brush settings, enable this for Freehand strokes and adjust **Trailing distance (px)** from 1–200 (default 30). The brush tip trails the pointer, absorbing small movements; a line connects the tip to the pointer, and the brush footprint follows the tip. A stroke starts with a dab at the press position. Pause or reverse within the trailing distance without adding more dabs. Release ends at the trailing tip, without jumping to the pointer. Pressure, spacing, masks, symmetry, and temporary Smooth/reverse still apply, and the whole stroke is one undo step.
+**Esc** cancels an unapplied line or stamp. Holding a drag stamp still does not deepen it; the preview is rebuilt from the original surface. Grab and Snake always use continuous Freehand movement.
 
-Settings are saved per brush in projects, presets, and libraries and take effect on the next stroke. Switching presets with the Smooth modifier starts a fresh stroke segment at the pointer using that preset’s mode and trailing distance; an uncommitted line or stamp preview is discarded, and already applied dabs remain in the same undo step. Disable it to restore direct Freehand input; Grab, Snake, and the other stroke modes are unaffected. **Toggle stroke stabilisation** is available for custom menus and shortcuts.
+### Steady a freehand stroke
 
-With Adaptive sculpt and Refine enabled, drag stamps refine the surface before applying the alpha, with extra detail along sharp alpha boundaries. Very large stamps or very fine edge sizes can reach the bounded refinement limit.
+Enable **Stroke stabilisation** and adjust **Trailing distance (px)**, from 1–200. The brush tip trails your pointer; a line shows the gap. Larger distances filter more hand movement.
 
-Drag stamps rebuild their preview from the original mesh, so holding still does not build up depth. Relief brushes (Standard, Clay, Inflate, Crease and Detail) use four times the depth of one freehand dab; Strength and pressure still control the result. Mask opacity and smoothing weights retain their normal values.
+The stroke ends at the trailing tip when you release. Stabilisation does not affect Grab, Snake, or the other stroke modes. Changes take effect on the next stroke.
 
-Line and drag modes preview before changing document geometry, create one undo step, and support masks, alphas, symmetry and pen pressure. **Esc** cancels a pending stroke. Hidden faces cannot receive stamps. Grab and Snake keep their continuous Freehand behavior because they depend on pointer displacement.
+### Stroke limits
+
+Lines are limited to 257 dabs; drag stamps are limited to a 500-pixel radius. Relief stamps use four times one freehand dab's depth. Adaptive stamp refinement can reach its work limit at very fine detail settings.
+
+Each completed stroke is one undo step. Switching tool or view cancels an unapplied preview; already applied dabs stay in history.
+
+## Symmetry
+
+1. Enable **Symmetry** in the toolbar.
+2. Open **Symmetry settings** and choose X, Y, or Z mirrors.
+3. Draw on one side of the model. The stroke repeats across the selected planes.
+
+![Symmetry settings with X enabled and matching strokes on the left and right of a sphere](../images/symmetry-stroke.png)
+
+*One input stroke produces two marks across the X mirror plane.*
+
+Enable **Radial symmetry** for 2–16 repeats around an axis. Mirrors and radial repeats can be combined. Set the center in object coordinates or reset it to the origin.
+
+Guides show X in red, Y in green, Z in blue, and other radial boundaries in gold. Adjust guide visibility/opacity in the same controls. Symmetry saves with the project; overlapping copies do not multiply stroke strength at the seam.
 
 ## Snake brush and adaptive sculpting
 
-Choose **Snake** in the brush library, or use **Add brush → Snake** when working in an older project. Start on the clay and drag outward to pull a tapered form. Snake follows a continuous tip handle after the cursor leaves the original surface. Its smooth volumetric influence pulls both sides of a bent tip; adaptive mode also improves triangle shape and redistributes nearby vertices along the surface. It uses the same editable alpha, strength, radius, pressure, Add/Subtract, copy, and preset controls as other brushes. Shift temporarily smooths. Pair it with adaptive sculpting for stretched forms; without adaptation, it deforms the existing mesh.
+### Pull a tapered form
 
-Select **Mesh → Adaptive sculpt**, or use the Mesh management panel. This is a adaptive sculpting-style local topology workflow, separate from whole-surface voxel remeshing. It splits long edges near each brush dab, shares new vertices across adjacent faces, and optionally collapses short edges in dense areas. It keeps separate parts separate and preserves masks. The Mask brush leaves topology unchanged, and fully protected or all-black-alpha strokes do not adapt it.
+Select **Snake**, start on the clay, and drag outward. The tip continues to follow you after leaving the original surface. Use **Shift** to smooth the result. Enable adaptive sculpting for stretched forms that need more geometry.
 
-**Edge size** sets the desired triangle edge length in screen pixels; lower values add detail. Enable **Detail relative to brush size** to interpret it as a percentage of the brush radius instead. Refinement and simplification can be enabled independently; **Simplify ratio** sets how short an edge must be relative to the target before it can collapse. Sharp edges, normal flips, and invalid manifold collapses are rejected conservatively. Density approaches the requested target over successive dabs with bounded per-frame work, rather than guaranteeing an exact edge length immediately. Existing mesh limits apply.
+### Add detail where you sculpt
 
-Enabling adaptive mode keeps the active surface and discards stored subdivision levels; Undo restores them. It requires a closed, consistently oriented surface. Each complete adaptive brush stroke is one undo step, including its topology changes. Adaptive settings and geometry save with the project, and old files remain compatible. This first implementation uses CPU local splits/collapses; it does not use external sculpting application's proprietary algorithm or provide automatic fusion of intersecting parts. Use voxel remeshing when you want fusion. Voxel extraction interpolates distances to the source surface, so smooth shapes stay smooth rather than snapping to voxel steps. Resolution still limits the smallest retained details.
+Enable **Mesh → Adaptive sculpt**. It adds or removes local triangles as you brush, keeping separate parts separate and preserving masks.
 
-With **Adaptive sculpt → Simplify dense areas** enabled, Smooth (including Shift smoothing) cleans up dense topology without adding vertices. It uses a larger collapse threshold than deformation brushes, capped below the target edge size, and rejects collapses that create thin triangles. This removes excess density while keeping a tidy surface rather than pursuing a minimum vertex count. Increase **Edge size** or **Simplify ratio** for more reduction; reduction remains local and conservative around masks and sharp features. Turn Simplify off to allow ordinary adaptive refinement with Smooth. The Mesh panel shows the current edge threshold, and the status bar reports vertices and faces removed after each cleanup stroke. Cleanup can collapse up to 256 safe edges per input frame, sharing that allowance across interpolated dabs; ordinary deformation brushes retain their smaller allowance. A cleanup stroke remains one undo step.
+![Mesh management beside a wireframe sphere with Adaptive sculpt and its refinement controls enabled](../images/adaptive-settings.png)
+
+*Edge size controls local density; smaller values add detail.*
+
+| Setting | Use |
+| --- | --- |
+| Edge size | Target edge length in screen pixels |
+| Detail relative to brush size | Interpret size as a percentage of brush radius |
+| Refine | Split long edges near the brush |
+| Simplify dense areas | Collapse short edges where safe |
+| Simplify ratio | Threshold for collapsing edges relative to the target |
+
+**Enabling adaptive sculpt discards stored subdivision levels.** Undo restores them. It requires a closed, consistently oriented surface; Mask strokes do not change topology.
+
+With Simplify enabled, Smooth removes local excess density without adding vertices. Increase Edge size or Simplify ratio for more cleanup. The status bar reports removed vertices/faces; sharp features and masks can limit reduction.
+
+Adaptive sculpting does not fuse overlapping parts. Use [voxel remeshing](modeling.md#mesh-management) for fusion.
 
 ## Undo and redo
 
-Mask intensity, selection threshold, temporary thickness, and primitive parameter drags each create one undo step. Releasing the pointer, losing focus, or switching operations ends that edit. During a mask-intensity drag, passing through zero and back up restores the original soft proportions. Clearing an already-empty mask preserves redo history and does not mark the project modified.
+Use **Edit → Undo / Redo** or **Ctrl+Z / Ctrl+Shift+Z**. Tooltips and the Edit menu name the next action and show available steps.
 
-Use the toolbar buttons or **Edit → Undo / Redo**. The Edit menu shows the action that will be restored, your configured shortcuts, and available step counts. Defaults are **Ctrl+Z** and **Ctrl+Shift+Z**, adjustable in Key settings. Button tooltips name the action; the status bar confirms each undo/redo.
+| Recorded in geometry history | Outside geometry history |
+| --- | --- |
+| Sculpt/mask strokes, transforms, cuts, topology edits | Brush settings, symmetry settings, camera navigation, workspace preferences |
+| Completed parameter drags as one step | Reference-image placement and settings |
 
-History includes complete brush strokes (including masks), clear mask, subdivision, remeshing, switching mesh modes, changing levels, and deleting levels. A stroke creates one entry only when geometry or masking actually changes. Empty/protected strokes preserve redo; a new geometry edit starts a new history branch. History resets on New/Open and is session-only. Brush settings, symmetry settings, camera movement, and workspace preferences are outside this geometry history. Undo/Redo pause during a mesh operation or an unsaved-changes prompt.
+History holds up to **24 edits** within **128 MB**. New/Open clears it; it is not saved in projects. A new geometry edit clears redo. Cancelled or unchanged operations preserve it.
 
 ## Related guides
 
-[Navigation and tablet input](navigation.md) · [Masks and selection](selection.md) · [Mesh management](modeling.md#mesh-management)
+[Navigation](navigation.md) · [Masks and selection](selection.md) · [Mesh management](modeling.md#mesh-management) · [Files and presets](files.md)
