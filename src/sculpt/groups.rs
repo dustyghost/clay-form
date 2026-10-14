@@ -20,12 +20,13 @@ pub fn mask_selected(value: f32, threshold: f32) -> bool {
 impl Mesh {
     pub fn face_visible(&self, face: usize) -> bool {
         let id = self.polygroups.get(face).copied().unwrap_or(0);
-        id == 0 || self.vertex_groups[id - 1].visible
+        !self.hidden_faces.get(face).copied().unwrap_or(false)
+            && (id == 0 || self.vertex_groups[id - 1].visible)
     }
     /// Shared boundary vertices remain fixed while either adjoining face is hidden.
     pub(crate) fn sculptable_vertices(&self) -> Vec<bool> {
         let mut visible = vec![true; self.vertices.len()];
-        if self.vertex_groups.iter().all(|g| g.visible) {
+        if !self.has_hidden_faces() {
             return visible;
         }
         for (i, t) in self.triangles.iter().enumerate() {
@@ -44,7 +45,8 @@ impl Mesh {
         mesh
     }
     pub fn validate_groups(&self) -> Result<(), String> {
-        if self.vertex_groups.len() > 64
+        if (!self.hidden_faces.is_empty() && self.hidden_faces.len() != self.triangles.len())
+            || self.vertex_groups.len() > 64
             || (!self.polygroups.is_empty() && self.polygroups.len() != self.triangles.len())
         {
             return Err("Invalid group data size".into());
@@ -67,7 +69,7 @@ impl Mesh {
             .iter()
             .any(|&id| id > self.vertex_groups.len())
         {
-            return Err("Invalid polygroup reference".into());
+            return Err("Invalid vertex group face reference".into());
         }
         Ok(())
     }
@@ -252,6 +254,43 @@ impl Mesh {
             .name = name;
         Ok(())
     }
+    /// Half a step toward the mean of unique polygon-edge neighbours.
+    /// Read the original mask throughout, so face order cannot bias the blur.
+    pub fn blur_mask(&mut self) {
+        let key = |a, b| if a < b { (a, b) } else { (b, a) };
+        let diagonals: std::collections::HashSet<_> = self
+            .quads
+            .iter()
+            .flat_map(|&[a, b, c, d]| [key(a, c), key(b, d)])
+            .collect();
+        let mut edges: Vec<_> = self
+            .triangles
+            .iter()
+            .flat_map(|&[a, b, c]| [key(a, b), key(b, c), key(c, a)])
+            .filter(|edge| !diagonals.contains(edge))
+            .collect();
+        edges.sort_unstable();
+        edges.dedup();
+        let mut changes = vec![(0_f64, 0_usize); self.mask.len()];
+        for (a, b) in edges {
+            let delta = self.mask[b] as f64 - self.mask[a] as f64;
+            changes[a].0 += delta;
+            changes[a].1 += 1;
+            changes[b].0 -= delta;
+            changes[b].1 += 1;
+        }
+        for (value, (delta, count)) in self.mask.iter_mut().zip(changes) {
+            if count > 0 {
+                *value = (*value as f64 + 0.5 * delta / count as f64).clamp(0., 1.) as f32;
+            }
+        }
+    }
+    /// Double contrast around 50%, keeping fully clear/protected vertices fixed.
+    pub fn sharpen_mask(&mut self) {
+        for value in &mut self.mask {
+            *value = (2. * *value - 0.5).clamp(0., 1.);
+        }
+    }
     /// One topological ring per click; soft weights propagate by local extrema.
     pub fn grow_mask(&mut self, grow: bool) {
         let old = self.mask.clone();
@@ -295,6 +334,11 @@ impl Mesh {
             Vec::new()
         } else {
             old_faces.iter().map(|&i| self.polygroups[i]).collect()
+        };
+        result.hidden_faces = if self.hidden_faces.is_empty() {
+            Vec::new()
+        } else {
+            old_faces.iter().map(|&i| self.hidden_faces[i]).collect()
         };
         result.canonicalize_polygroups();
     }

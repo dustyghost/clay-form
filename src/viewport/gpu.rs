@@ -57,7 +57,7 @@ impl Renderer {
         let gpu = self.gpu.clone();
         let preview = self.preview.clone();
         let geometry = geometry.unwrap_or_else(|| self.render_geometry.as_ref().unwrap().clone());
-        let params = Params::new(
+        let mut params = Params::new(
             rect,
             scene.right,
             scene.up,
@@ -66,6 +66,9 @@ impl Renderer {
             scene.center,
             geometry.depth_extent,
         );
+        params.background = crate::preferences::viewport_background(painter.ctx()).to_array()[..3]
+            .try_into()
+            .unwrap();
         painter.add(egui::PaintCallback {
             rect,
             callback: Arc::new(eframe::egui_glow::CallbackFn::new(move |info, painter| {
@@ -146,6 +149,7 @@ struct BrushPreview {
 }
 
 struct Params {
+    background: [u8; 3],
     right: Vec3,
     up: Vec3,
     view: Vec3,
@@ -173,6 +177,7 @@ impl Params {
                 -(center.y - rect.center().y) * 2. / rect.height(),
             ],
             depth: 1. / extent,
+            background: [23, 26, 31],
         }
     }
 }
@@ -639,7 +644,12 @@ impl Gpu {
             gl.depth_mask(true);
             gl.depth_func(glow::LESS);
             gl.clear_depth_f32(1.);
-            gl.clear_color(23. / 255., 26. / 255., 31. / 255., 1.);
+            gl.clear_color(
+                params.background[0] as f32 / 255.,
+                params.background[1] as f32 / 255.,
+                params.background[2] as f32 / 255.,
+                1.,
+            );
             gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
             if wire && mode == WireMode::Visible {
                 // Offset filled faces by their depth slope so coplanar lines
@@ -812,3 +822,9 @@ mod backfaces_test;
 
 #[cfg(all(test, target_os = "linux"))]
 mod slice_test;
+
+#[cfg(all(test, target_os = "linux"))]
+mod visibility_test;
+
+#[cfg(all(test, target_os = "linux"))]
+mod custom_ui_test;

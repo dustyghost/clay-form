@@ -205,6 +205,8 @@ mod tests {
         std::fs::create_dir(&dir).unwrap();
         let mut brush = Brush::new(crate::sculpt::Kind::Clay);
         brush.name = "My textured clay".into();
+        brush.stabilize = true;
+        brush.stabilizer_distance = 45.;
         brush.subtract = true;
         brush.pressure_radius = true;
         brush.rotation = 37.;
@@ -379,6 +381,8 @@ mod brush_library_tests {
         let dir = std::env::temp_dir().join(format!("clay-brush-library-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let mut brush = Brush::new(crate::sculpt::Kind::Standard);
+        brush.stabilize = true;
+        brush.stabilizer_distance = 75.;
         brush.icon = Some(
             crate::brush_icon::capture(
                 crate::document::Document::default().mesh(),

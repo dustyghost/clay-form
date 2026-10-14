@@ -271,6 +271,52 @@ impl Document {
         self.install_models(models, index);
         Ok(())
     }
+    /// Match the grouped order displayed by the Submodels panel, even when
+    /// folder order differs from the underlying scene indices.
+    pub fn merge_down_target(&self) -> Option<usize> {
+        let order: Vec<_> = std::iter::once("")
+            .chain(self.groups().iter().map(String::as_str))
+            .flat_map(|group| {
+                (0..self.model_count())
+                    .filter(move |&i| self.model(i).unwrap().metadata.group == group)
+            })
+            .collect();
+        let position = order.iter().position(|&i| i == self.active_model_index())?;
+        order.get(position + 1).copied()
+    }
+    pub fn merge_down(&mut self) -> Result<(), String> {
+        let target = self
+            .merge_down_target()
+            .ok_or("There is no submodel below the active one")?;
+        let active = self.active_model_index();
+        let surface = |model: ModelRef<'_>| -> Result<Mesh, String> {
+            if model.settings.primitive.is_some() && model.mesh.triangles.is_empty() {
+                return Err("Fill the primitive before merging it into a sculpting mesh".into());
+            }
+            let mut mesh = if model.metadata.temporary_thickness > 0. {
+                model.mesh.solidify_with_metadata(model.metadata)?
+            } else {
+                model.mesh.clone()
+            };
+            if !model.metadata.visible {
+                mesh.set_face_visibility(vec![false; mesh.triangles.len()]);
+            }
+            Ok(mesh)
+        };
+        let mesh = surface(self.model(active).unwrap())?
+            .merged_with(&surface(self.model(target).unwrap())?)?;
+        let mut models = self.ordered_models();
+        models[active].mesh = mesh;
+        models[active].mesh_settings = MeshSettings::default();
+        models[active].metadata.temporary_thickness = 0.;
+        models[active].metadata.visible |= models[target].metadata.visible;
+        models.remove(target);
+        self.end_primitive_edit();
+        self.end_stroke();
+        self.history.record_named(&self.geometry, "Merge down");
+        self.install_models(models, active - usize::from(target < active));
+        Ok(())
+    }
     pub fn set_model_metadata(
         &mut self,
         index: usize,
@@ -782,11 +828,32 @@ impl Document {
         } else {
             name
         };
-        let index = self.mesh().vertex_groups.len();
-        self.edit_group_meshes("Create vertex group", |mesh| {
-            mesh.create_vertex_group(name.clone(), threshold, all)
-                .map(|_| ())
-        })?;
+        let index = if all {
+            0
+        } else {
+            self.mesh().vertex_groups.len()
+        };
+        self.edit_group_meshes(
+            if all {
+                "Group all vertices"
+            } else {
+                "Create vertex group"
+            },
+            |mesh| {
+                if all {
+                    // Collapse memberships on every subdivision level, keeping the effective
+                    // visibility independent of the group registry that is about to go away.
+                    let visible = (0..mesh.triangles.len())
+                        .map(|i| mesh.face_visible(i))
+                        .collect();
+                    mesh.set_face_visibility(visible);
+                    mesh.vertex_groups.clear();
+                    mesh.polygroups.clear();
+                }
+                mesh.create_vertex_group(name.clone(), threshold, all)
+                    .map(|_| ())
+            },
+        )?;
         Ok(index)
     }
     pub fn assign_mask_to_group(&mut self, index: usize, remove: bool) -> Result<(), String> {
@@ -809,13 +876,179 @@ impl Document {
         })
     }
     pub fn set_vertex_group_visible(&mut self, index: usize, visible: bool) -> Result<(), String> {
-        self.edit_group_meshes("Polygroup visibility", |mesh| {
+        self.edit_group_meshes("Vertex group visibility", |mesh| {
             mesh.vertex_groups
                 .get_mut(index)
                 .ok_or("Vertex group no longer exists")?
                 .visible = visible;
+            if visible && !mesh.hidden_faces.is_empty() {
+                for (i, hidden) in mesh.hidden_faces.iter_mut().enumerate() {
+                    if mesh.polygroups.get(i).copied().unwrap_or(0) == index + 1 {
+                        *hidden = false;
+                    }
+                }
+                if mesh.hidden_faces.iter().all(|&h| !h) {
+                    mesh.hidden_faces.clear();
+                }
+            }
             Ok(())
         })
+    }
+    // Normalize group visibility consistently across all levels, but preserve
+    // history/redo when the operation leaves every effective face set unchanged.
+    fn edit_visibility_meshes(
+        &mut self,
+        label: &'static str,
+        mut edit: impl FnMut(&mut Mesh) -> Result<(), String>,
+    ) -> Result<(), String> {
+        self.require_sculpt_mesh()?;
+        self.end_primitive_edit();
+        self.end_stroke();
+        let mut geometry = self.geometry.clone();
+        let old = std::iter::once(&self.geometry.mesh)
+            .chain(self.geometry.settings.lower.iter())
+            .chain(self.geometry.settings.upper.iter());
+        let new = std::iter::once(&mut geometry.mesh)
+            .chain(geometry.settings.lower.iter_mut())
+            .chain(geometry.settings.upper.iter_mut());
+        let mut changed = false;
+        for (before, after) in old.zip(new) {
+            edit(after)?;
+            changed |= (0..before.triangles.len())
+                .any(|i| before.face_visible(i) != after.face_visible(i));
+        }
+        if changed {
+            self.replace_geometry_named(geometry, label)?;
+        }
+        Ok(())
+    }
+    pub fn show_all_faces(&mut self) -> Result<(), String> {
+        self.edit_group_meshes("Show all faces", |mesh| {
+            mesh.show_all_faces();
+            Ok(())
+        })
+    }
+    pub fn invert_visibility(&mut self) -> Result<(), String> {
+        self.edit_visibility_meshes("Invert visibility", |mesh| {
+            mesh.invert_visibility();
+            Ok(())
+        })
+    }
+    pub fn select_polygroup(&mut self, id: usize) -> Result<(), String> {
+        let other_visible_group = (0..self.mesh().triangles.len()).any(|i| {
+            self.mesh().face_visible(i) && self.mesh().polygroups.get(i).copied().unwrap_or(0) != id
+        });
+        // Hide the clicked group. At the last visible group, swap the visible
+        // and hidden face sets so that the clicked group still disappears.
+        if !other_visible_group {
+            return self.invert_visibility();
+        }
+        self.edit_visibility_meshes("Hide vertex group faces", |mesh| {
+            let visible = (0..mesh.triangles.len())
+                .map(|i| mesh.face_visible(i) && mesh.polygroups.get(i).copied().unwrap_or(0) != id)
+                .collect();
+            mesh.set_face_visibility(visible);
+            Ok(())
+        })
+    }
+    /// The same view-space region is applied to every stored subdivision level.
+    /// Quads are selected as a whole, using their center, through all depths.
+    pub fn select_face_region(
+        &mut self,
+        contains: impl Fn(crate::sculpt::Vec3) -> bool,
+        hide: bool,
+    ) -> Result<(), String> {
+        self.edit_visibility_meshes(
+            if hide {
+                "Hide selection"
+            } else {
+                "Isolate selection"
+            },
+            |mesh| {
+                let mut selected: Vec<_> = mesh
+                    .triangles
+                    .iter()
+                    .map(|t| {
+                        contains(
+                            (mesh.vertices[t[0]] + mesh.vertices[t[1]] + mesh.vertices[t[2]])
+                                * (1. / 3.),
+                        )
+                    })
+                    .collect();
+                let key = |mut t: [usize; 3]| {
+                    t.sort_unstable();
+                    t
+                };
+                let faces: std::collections::HashMap<_, _> = mesh
+                    .triangles
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &t)| (key(t), i))
+                    .collect();
+                for &[a, b, c, d] in &mesh.quads {
+                    let inside = contains(
+                        (mesh.vertices[a] + mesh.vertices[b] + mesh.vertices[c] + mesh.vertices[d])
+                            * 0.25,
+                    );
+                    for t in [[a, b, c], [a, c, d], [a, b, d], [b, c, d]] {
+                        if let Some(&i) = faces.get(&key(t)) {
+                            selected[i] = inside;
+                        }
+                    }
+                }
+                let visible = selected
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &selected)| {
+                        mesh.face_visible(i) && if hide { !selected } else { selected }
+                    })
+                    .collect();
+                mesh.set_face_visibility(visible);
+                Ok(())
+            },
+        )
+    }
+    pub fn split_hidden(&mut self) -> Result<(), String> {
+        self.require_sculpt_mesh()?;
+        if !self.active_visible() {
+            return Err("Show the active model before splitting hidden faces".into());
+        }
+        if self.model_count() >= 64 {
+            return Err("Submodels are limited to 64".into());
+        }
+        if self.geometry.scene.active_metadata.temporary_thickness > 0. {
+            return Err("Apply or remove temporary thickness before splitting hidden faces".into());
+        }
+        let hidden = self.mesh().hidden_face_count();
+        if hidden == 0 || hidden == self.mesh().triangles.len() {
+            return Err("Keep some faces visible and some hidden before splitting".into());
+        }
+        let visible_mesh = self.mesh().visibility_part(true)?;
+        let hidden_mesh = self.mesh().visibility_part(false)?;
+        let name = (1..)
+            .map(|i| format!("Hidden {i}"))
+            .find(|name| !self.submodel_names().any(|n| n == name))
+            .unwrap();
+        let mut models = self.ordered_models();
+        let active = self.active_model_index();
+        models[active].mesh = visible_mesh;
+        models[active].mesh_settings = MeshSettings::default();
+        let mut metadata = models[active].metadata.clone();
+        metadata.visible = true;
+        models.insert(
+            active + 1,
+            crate::sculpt::Submodel {
+                name,
+                metadata,
+                mesh: hidden_mesh,
+                mesh_settings: MeshSettings::default(),
+            },
+        );
+        self.end_primitive_edit();
+        self.end_stroke();
+        self.history.record_named(&self.geometry, "Split hidden");
+        self.install_models(models, active);
+        Ok(())
     }
     pub fn rename_vertex_group(&mut self, index: usize, name: String) -> Result<(), String> {
         self.edit_group_meshes("Rename vertex group", |mesh| {
@@ -835,6 +1068,18 @@ impl Document {
             .flat_map(|m| m.mask.iter())
             .copied()
             .fold(0., f32::max)
+    }
+    pub fn blur_mask(&mut self) -> Result<(), String> {
+        self.edit_group_meshes("Blur mask", |mesh| {
+            mesh.blur_mask();
+            Ok(())
+        })
+    }
+    pub fn sharpen_mask(&mut self) -> Result<(), String> {
+        self.edit_group_meshes("Sharpen mask", |mesh| {
+            mesh.sharpen_mask();
+            Ok(())
+        })
     }
     pub fn set_mask_intensity(&mut self, amount: f32) -> Result<(), String> {
         self.require_sculpt_mesh()?;
@@ -1101,10 +1346,11 @@ mod tests {
     #[test]
     fn unnamed_vertex_groups_get_unique_names_and_keep_explicit_names() {
         let mut d = Document::default();
-        d.create_vertex_group("".into(), true).unwrap();
-        d.create_vertex_group("  ".into(), true).unwrap();
-        d.create_vertex_group(" Group 3 ".into(), true).unwrap();
-        d.create_vertex_group("".into(), true).unwrap();
+        d.geometry.mesh.mask.fill(1.);
+        d.create_vertex_group("".into(), false).unwrap();
+        d.create_vertex_group("  ".into(), false).unwrap();
+        d.create_vertex_group(" Group 3 ".into(), false).unwrap();
+        d.create_vertex_group("".into(), false).unwrap();
         assert_eq!(
             d.mesh()
                 .vertex_groups
@@ -1114,7 +1360,7 @@ mod tests {
             ["Base", "Group 1", "Group 2", "Group 3", "Group 4"]
         );
         let before = d.geometry_snapshot();
-        assert!(d.create_vertex_group("Group 1".into(), true).is_err());
+        assert!(d.create_vertex_group("Group 1".into(), false).is_err());
         assert_eq!(d.geometry_snapshot(), before);
         d.undo();
         assert_eq!(d.mesh().vertex_groups.len(), 4);
@@ -2170,6 +2416,7 @@ mod mask_edit_tests {
     fn delete_masked_cuts_and_compacts_preserving_remaining_quads_and_masks() {
         let mesh = Mesh {
             vertex_groups: Vec::new(),
+            hidden_faces: Vec::new(),
             polygroups: Vec::new(),
             vertices: vec![
                 crate::sculpt::Vec3(0., 0., 0.),
@@ -2334,5 +2581,498 @@ mod thickness_edit_tests {
         let mut invalid = d.project();
         invalid.scene.active_metadata.temporary_thickness = -1.;
         assert!(invalid.validate().is_err());
+    }
+}
+
+#[cfg(test)]
+mod visibility_tests {
+    use super::*;
+    fn plane() -> Document {
+        let mut primitive = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Plane);
+        primitive.divisions = [2, 1, 1];
+        let mut mesh = primitive.mesh().unwrap();
+        mesh.mask = mesh
+            .vertices
+            .iter()
+            .map(|p| if p.0 >= 0. { 0.8 } else { 0.2 })
+            .collect();
+        mesh.create_vertex_group("Base".into(), 0.5, true).unwrap();
+        mesh.create_vertex_group("Right".into(), 0.5, false)
+            .unwrap();
+        let mut d = Document::default();
+        d.replace_geometry(Geometry::new(mesh)).unwrap();
+        d
+    }
+    #[test]
+    fn visibility_region_split_roundtrip_and_undo_preserve_attributes_and_levels() {
+        let mut d = plane();
+        let mut g = d.geometry_snapshot();
+        g.subdivide().unwrap();
+        d.replace_geometry(g).unwrap();
+        let initial = d.geometry_snapshot();
+        d.select_face_region(|p| p.0 > 0., true).unwrap();
+        assert_eq!(d.mesh().hidden_face_count(), d.mesh().triangles.len() / 2);
+        assert_eq!(d.mesh().mask, initial.mesh.mask);
+        assert_eq!(d.mesh().polygroups, initial.mesh.polygroups);
+        assert!(d.mesh_settings().lower[0].has_hidden_faces());
+        let saved = serde_json::to_string(&d.project()).unwrap();
+        let mut restored = Document::default();
+        restored
+            .replace_project(serde_json::from_str(&saved).unwrap(), "visibility.clay")
+            .unwrap();
+        assert_eq!(restored.geometry_snapshot(), d.geometry_snapshot());
+        d.set_mesh_level(1).unwrap();
+        assert_eq!(d.mesh().hidden_face_count(), 2);
+        d.set_mesh_level(2).unwrap();
+        let before_split = d.geometry_snapshot();
+        d.split_hidden().unwrap();
+        assert_eq!(d.model_count(), 2);
+        assert_eq!(d.active_model_index(), 0);
+        assert_eq!(
+            d.mesh().triangles.len() + d.model(1).unwrap().mesh.triangles.len(),
+            initial.mesh.triangles.len()
+        );
+        for i in 0..2 {
+            let model = d.model(i).unwrap();
+            assert!(!model.mesh.has_hidden_faces());
+            assert_eq!(model.settings.levels(), 1);
+            assert_eq!(model.mesh.quads.len() * 2, model.mesh.triangles.len());
+            assert_eq!(model.mesh.vertex_groups.len(), 2);
+            for (v, p) in model.mesh.vertices.iter().enumerate() {
+                let old = initial.mesh.vertices.iter().position(|q| q == p).unwrap();
+                assert_eq!(model.mesh.mask[v], initial.mesh.mask[old]);
+                assert_eq!(
+                    model.mesh.vertex_groups[1].weights[v],
+                    initial.mesh.vertex_groups[1].weights[old]
+                );
+            }
+            model.mesh.validate().unwrap();
+        }
+        let split = d.geometry_snapshot();
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), before_split);
+        d.redo();
+        assert_eq!(d.geometry_snapshot(), split);
+    }
+    #[test]
+    fn polygroup_clicks_eye_and_background_actions_work_with_region_hiding() {
+        let mut d = plane();
+        d.select_polygroup(2).unwrap();
+        assert_eq!(d.mesh().hidden_face_count(), 2);
+        assert!(
+            (0..d.mesh().triangles.len())
+                .all(|i| d.mesh().face_visible(i) == (d.mesh().polygroups[i] == 1))
+        );
+        d.select_polygroup(1).unwrap();
+        assert_eq!(d.mesh().hidden_face_count(), 2);
+        assert!(
+            (0..d.mesh().triangles.len())
+                .all(|i| d.mesh().face_visible(i) == (d.mesh().polygroups[i] == 2))
+        );
+        d.show_all_faces().unwrap();
+        d.invert_visibility().unwrap();
+        assert_eq!(d.mesh().hidden_face_count(), 4);
+        let before = d.geometry_snapshot();
+        assert!(d.split_hidden().is_err());
+        assert_eq!(d.geometry_snapshot(), before);
+        d.show_all_faces().unwrap();
+        d.select_face_region(|p| p.0 > 0., true).unwrap();
+        d.set_vertex_group_visible(1, true).unwrap();
+        assert_eq!(d.mesh().hidden_face_count(), 0);
+        d.set_vertex_group_visible(0, false).unwrap();
+        d.invert_visibility().unwrap();
+        assert_eq!(d.mesh().hidden_face_count(), 2);
+        assert!(
+            d.mesh()
+                .triangles
+                .iter()
+                .enumerate()
+                .all(|(i, _)| d.mesh().face_visible(i) == (d.mesh().polygroups[i] == 1))
+        );
+        d.show_all_faces().unwrap();
+        let counts = d.history_counts();
+        d.show_all_faces().unwrap();
+        assert_eq!(d.history_counts(), counts);
+        d.undo();
+        let counts = d.history_counts();
+        d.select_face_region(|_| false, true).unwrap();
+        assert_eq!(d.history_counts(), counts, "empty hide must preserve redo");
+    }
+    #[test]
+    fn polygroup_click_hides_each_group_until_last_click_flips_with_undo() {
+        let mut primitive = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Plane);
+        primitive.divisions = [3, 1, 1];
+        let mut mesh = primitive.mesh().unwrap();
+        mesh.create_vertex_group("Middle".into(), 0.5, true)
+            .unwrap();
+        mesh.mask = mesh
+            .vertices
+            .iter()
+            .map(|p| if p.0 < 0. { 1. } else { 0. })
+            .collect();
+        mesh.create_vertex_group("Left".into(), 0.5, false).unwrap();
+        mesh.mask = mesh
+            .vertices
+            .iter()
+            .map(|p| if p.0 > 0. { 1. } else { 0. })
+            .collect();
+        mesh.create_vertex_group("Right".into(), 0.5, false)
+            .unwrap();
+        let mut d = Document::default();
+        d.replace_geometry(Geometry::new(mesh)).unwrap();
+        d.select_polygroup(2).unwrap();
+        assert_eq!(d.mesh().hidden_face_count(), 2);
+        d.select_polygroup(3).unwrap();
+        assert_eq!(d.mesh().hidden_face_count(), 4);
+        let before = d.geometry_snapshot();
+        d.select_polygroup(1).unwrap();
+        assert_eq!(d.mesh().hidden_face_count(), 2);
+        for (i, &id) in d.mesh().polygroups.iter().enumerate() {
+            assert_eq!(d.mesh().face_visible(i), id != 1);
+        }
+        let after = d.geometry_snapshot();
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), before);
+        d.redo();
+        assert_eq!(d.geometry_snapshot(), after);
+    }
+    #[test]
+    fn visibility_region_normalizes_groups_even_when_only_higher_level_changes() {
+        let mut d = plane();
+        let mut geometry = d.geometry_snapshot();
+        geometry.subdivide().unwrap();
+        d.replace_geometry(geometry).unwrap();
+        d.set_vertex_group_visible(0, false).unwrap();
+        let before = d.geometry_snapshot();
+        let history = d.history_counts();
+        d.select_face_region(|_| false, true).unwrap();
+        assert_eq!(d.geometry_snapshot(), before);
+        assert_eq!(d.history_counts(), history);
+        d.select_face_region(|p| p.0 > 0. && p.0 < 0.4, true)
+            .unwrap();
+        assert!(d.mesh().hidden_face_count() > before.mesh.hidden_face_count());
+        assert_eq!(
+            d.mesh_settings().lower[0].hidden_face_count(),
+            before.settings.lower[0].hidden_face_count()
+        );
+        d.mesh_settings().validate(d.mesh()).unwrap();
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), before);
+    }
+    #[test]
+    fn hidden_faces_and_boundary_vertices_are_protected_from_sculpting() {
+        let mut d = plane();
+        d.select_face_region(|p| p.0 > 0., true).unwrap();
+        let before = d.mesh().clone();
+        let brush = Brush::new(Kind::Inflate);
+        d.apply_dab(
+            &brush,
+            Dab {
+                center: crate::sculpt::Vec3::default(),
+                normal: crate::sculpt::Vec3(0., 0., 1.),
+                right: crate::sculpt::Vec3(1., 0., 0.),
+                up: crate::sculpt::Vec3(0., 1., 0.),
+                radius: 10.,
+                pressure: 1.,
+                delta: crate::sculpt::Vec3::default(),
+                invert: false,
+            },
+        );
+        d.end_stroke();
+        for (i, t) in before.triangles.iter().enumerate() {
+            if !before.face_visible(i) {
+                for &v in t {
+                    assert_eq!(before.vertices[v], d.mesh().vertices[v]);
+                }
+            }
+        }
+        assert_ne!(before.vertices, d.mesh().vertices);
+        let mut invalid = before.clone();
+        invalid.hidden_faces.pop();
+        assert!(invalid.validate().is_err());
+        assert!(before.remesh(16).is_err());
+        let refined = before.subdivide().unwrap();
+        assert_eq!(refined.hidden_face_count(), before.hidden_face_count() * 4);
+        let shell = before.solidify(0.1).unwrap();
+        shell.validate_closed().unwrap();
+        assert_eq!(shell.hidden_faces.len(), shell.triangles.len());
+        assert!(shell.hidden_face_count() >= before.hidden_face_count() * 2);
+    }
+}
+
+#[cfg(test)]
+mod merge_tests {
+    use super::*;
+    #[test]
+    fn merge_down_keeps_active_name_and_other_models_with_complete_undo() {
+        let mut d = Document::default();
+        d.duplicate_model(false).unwrap();
+        d.duplicate_model(false).unwrap();
+        d.select_submodel(1).unwrap();
+        let mut geometry = d.geometry_snapshot();
+        geometry.subdivide().unwrap();
+        d.replace_geometry(geometry).unwrap();
+        let before = d.geometry_snapshot();
+        let untouched = d.model(0).unwrap().mesh.clone();
+        let name = d.model(1).unwrap().name.to_string();
+        let faces = d.mesh().triangles.len() + d.model(2).unwrap().mesh.triangles.len();
+        let counts = d.history_counts();
+        assert_eq!(d.merge_down_target(), Some(2));
+        d.merge_down().unwrap();
+        assert_eq!(d.history_counts(), (counts.0 + 1, 0));
+        assert_eq!(d.undo_label(), Some("Merge down"));
+        assert_eq!(d.active_model_index(), 1);
+        assert_eq!(d.model_count(), 2);
+        assert_eq!(d.model(1).unwrap().name, name);
+        assert_eq!(d.mesh().triangles.len(), faces);
+        assert_eq!(d.mesh_settings().levels(), 1);
+        assert_eq!(d.model(0).unwrap().mesh, &untouched);
+        d.project().validate().unwrap();
+        let after = d.geometry_snapshot();
+        let serialized = serde_json::to_string(&d.project()).unwrap();
+        let mut loaded = Document::default();
+        loaded
+            .replace_project(serde_json::from_str(&serialized).unwrap(), "merged.clay")
+            .unwrap();
+        assert_eq!(loaded.geometry_snapshot(), after);
+        let counts = d.history_counts();
+        assert!(d.merge_down().is_err());
+        assert_eq!(d.geometry_snapshot(), after);
+        assert_eq!(d.history_counts(), counts);
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), before);
+        d.redo();
+        assert_eq!(d.geometry_snapshot(), after);
+    }
+    #[test]
+    fn merge_down_follows_grouped_panel_order_and_preserves_hidden_models() {
+        let mut d = Document::default();
+        d.duplicate_model(false).unwrap();
+        d.add_group("Folder".into()).unwrap();
+        let mut metadata = d.model(0).unwrap().metadata.clone();
+        metadata.group = "Folder".into();
+        metadata.visible = false;
+        d.set_model_metadata(0, "Below in panel".into(), metadata)
+            .unwrap();
+        d.select_submodel(1).unwrap();
+        // Ungrouped model 1 is shown above foldered model 0.
+        assert_eq!(d.merge_down_target(), Some(0));
+        let before = d.geometry_snapshot();
+        let visible_faces = d.mesh().triangles.len();
+        d.merge_down().unwrap();
+        assert_eq!(d.active_model_index(), 0);
+        assert_eq!(d.model_count(), 1);
+        assert_eq!(d.mesh().triangles.len(), visible_faces * 2);
+        assert_eq!(d.mesh().hidden_face_count(), visible_faces);
+        assert_eq!(d.model(0).unwrap().metadata.group, "");
+        assert!(d.active_visible());
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), before);
+    }
+    #[test]
+    fn merge_down_bakes_primitives_and_temporary_thickness() {
+        let mut d = Document::default();
+        d.initialize_primitive().unwrap();
+        let mut plane = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Plane);
+        plane.divisions = [1; 3];
+        d.update_primitive(plane).unwrap();
+        d.end_primitive_edit();
+        d.set_temporary_thickness(0.1).unwrap();
+        d.end_thickness_edit();
+        d.duplicate_model(false).unwrap();
+        let before = d.geometry_snapshot();
+        let shell = d.mesh().solidify(0.1).unwrap();
+        d.merge_down().unwrap();
+        assert!(d.primitive().is_none());
+        assert_eq!(d.model(0).unwrap().metadata.temporary_thickness, 0.);
+        assert_eq!(d.mesh().triangles.len(), shell.triangles.len() * 2);
+        d.mesh().validate_closed().unwrap();
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), before);
+    }
+}
+
+#[cfg(test)]
+mod merge_failure_tests {
+    use super::*;
+    #[test]
+    fn merge_down_rejects_unfilled_primitive_without_changing_scene_or_history() {
+        let mut d = Document::default();
+        d.initialize_primitive().unwrap();
+        let mut circle = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Circle);
+        circle.filled = false;
+        d.update_primitive(circle).unwrap();
+        d.end_primitive_edit();
+        d.duplicate_model(false).unwrap();
+        let before = d.geometry_snapshot();
+        let history = d.history_counts();
+        assert!(d.merge_down().unwrap_err().contains("Fill the primitive"));
+        assert_eq!(d.geometry_snapshot(), before);
+        assert_eq!(d.history_counts(), history);
+    }
+}
+
+#[cfg(test)]
+mod group_all_tests {
+    use super::*;
+    #[test]
+    fn group_all_replaces_groups_on_every_level_and_undo_restores_them() {
+        let mut mesh = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Plane)
+            .mesh()
+            .unwrap();
+        mesh.mask.fill(0.7);
+        mesh.create_vertex_group("Old".into(), 0.5, true).unwrap();
+        mesh.create_vertex_group("Detail".into(), 0.5, false)
+            .unwrap();
+        mesh.vertex_groups[1].visible = false;
+        let mut geometry = Geometry::new(mesh);
+        geometry.subdivide().unwrap();
+        geometry.subdivide().unwrap();
+        let mut doc = Document::default();
+        doc.replace_geometry(geometry).unwrap();
+        doc.set_mesh_level(2).unwrap();
+        doc.duplicate_model(false).unwrap();
+        let before = doc.geometry_snapshot();
+        assert_eq!(
+            doc.create_vertex_group("Detail".into(), true).unwrap(),
+            0,
+            "replacement may reuse an old name"
+        );
+        let after = doc.geometry_snapshot();
+        assert_eq!(after.submodels, before.submodels);
+        let levels = |g: &Geometry| {
+            std::iter::once(&g.mesh)
+                .chain(g.settings.lower.iter())
+                .chain(g.settings.upper.iter())
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+        for (new, old) in levels(&after).iter().zip(levels(&before)) {
+            assert_eq!(new.vertex_groups.len(), 1);
+            assert_eq!(new.vertex_groups[0].name, "Detail");
+            assert!(new.vertex_groups[0].weights.iter().all(|&w| w == 1.));
+            assert!(new.polygroups.iter().all(|&id| id == 1));
+            assert_eq!(new.mask, old.mask);
+            assert_eq!(new.vertices, old.vertices);
+            assert_eq!(new.hidden_face_count(), old.hidden_face_count());
+        }
+        doc.project().validate().unwrap();
+        doc.undo();
+        assert_eq!(doc.geometry_snapshot(), before);
+        doc.redo();
+        assert_eq!(doc.geometry_snapshot(), after);
+        assert!(doc.create_vertex_group("x".repeat(129), true).is_err());
+        assert_eq!(
+            doc.geometry_snapshot(),
+            after,
+            "invalid replacement must not clear old data"
+        );
+    }
+}
+
+#[cfg(test)]
+mod mask_filter_tests {
+    use super::*;
+
+    #[test]
+    fn mask_filters_preserve_scene_attributes_and_all_levels_with_undo_and_save() {
+        for sharpen in [false, true] {
+            let mut primitive =
+                crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Plane);
+            primitive.divisions = [2, 2, 1];
+            let mut mesh = primitive.mesh().unwrap();
+            mesh.mask = mesh
+                .vertices
+                .iter()
+                .map(|p| if p.0 < 0. { 0.2 } else { 0.8 })
+                .collect();
+            mesh.create_vertex_group("Saved weights".into(), 0., false)
+                .unwrap();
+            mesh.hidden_faces = vec![true; mesh.triangles.len()];
+            let mut geometry = Geometry::new(mesh);
+            geometry.subdivide().unwrap();
+            geometry.subdivide().unwrap();
+            geometry.set_level(2).unwrap();
+            let mut doc = Document::default();
+            doc.replace_geometry(geometry).unwrap();
+            doc.duplicate_model(false).unwrap();
+            let before = doc.geometry_snapshot();
+            let count = doc.history_counts().0;
+            if sharpen {
+                doc.sharpen_mask().unwrap();
+            } else {
+                doc.blur_mask().unwrap();
+            }
+            let after = doc.geometry_snapshot();
+            let mut masks_restored = after.clone();
+            for (edited, original) in std::iter::once(&mut masks_restored.mesh)
+                .chain(masks_restored.settings.lower.iter_mut())
+                .chain(masks_restored.settings.upper.iter_mut())
+                .zip(
+                    std::iter::once(&before.mesh)
+                        .chain(before.settings.lower.iter())
+                        .chain(before.settings.upper.iter()),
+                )
+            {
+                assert_ne!(
+                    edited.mask, original.mask,
+                    "every stored level must be filtered"
+                );
+                assert!(
+                    edited
+                        .mask
+                        .iter()
+                        .all(|m| m.is_finite() && (0. ..=1.).contains(m))
+                );
+                edited.mask.clone_from(&original.mask);
+            }
+            assert_eq!(
+                masks_restored, before,
+                "only active model masks may change, including hidden faces"
+            );
+            assert_eq!(doc.history_counts().0, count + 1);
+            assert_eq!(
+                doc.undo_label(),
+                Some(if sharpen { "Sharpen mask" } else { "Blur mask" })
+            );
+            doc.undo();
+            assert_eq!(doc.geometry_snapshot(), before);
+            doc.redo();
+            assert_eq!(doc.geometry_snapshot(), after);
+            let json = serde_json::to_string(&doc.project()).unwrap();
+            let mut restored = Document::default();
+            restored
+                .replace_project(serde_json::from_str(&json).unwrap(), "mask-filter.clay")
+                .unwrap();
+            assert_eq!(restored.geometry_snapshot(), after);
+            // Ordinary level propagation must preserve the edited mask when returning.
+            for level in [1, 3] {
+                let active = doc.mesh().clone();
+                doc.set_mesh_level(level).unwrap();
+                doc.set_mesh_level(2).unwrap();
+                assert_eq!(doc.mesh().vertices, active.vertices);
+                assert_eq!(doc.mesh().vertex_groups, active.vertex_groups);
+                for (&a, &b) in doc.mesh().mask.iter().zip(&active.mask) {
+                    assert!((a - b).abs() < 1e-6);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn unchanged_mask_filters_preserve_clean_state_and_redo() {
+        let mut doc = Document::default();
+        doc.invert_mask().unwrap();
+        doc.undo();
+        doc.mark_saved("mask-filter.clay");
+        let before = doc.geometry_snapshot();
+        let counts = doc.history_counts();
+        doc.blur_mask().unwrap();
+        doc.sharpen_mask().unwrap();
+        assert_eq!(doc.geometry_snapshot(), before);
+        assert_eq!(doc.history_counts(), counts);
+        assert!(!doc.is_dirty());
+        doc.redo();
+        assert!(doc.mesh().mask.iter().all(|m| *m == 1.));
     }
 }

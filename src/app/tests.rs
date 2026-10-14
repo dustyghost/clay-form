@@ -254,10 +254,10 @@ fn customized_tool_groups_render_in_all_docks_and_settings() {
                 );
                 assert!(
                     app.ui
-                        .brush_panel(ctx, &app.document, "Test tablet", 1.)
+                        .brush_panel(ctx, &app.document, "Test tablet", 1., app.camera.zoom)
                         .is_empty()
                 );
-                app.ui.settings(ctx);
+                app.ui.settings(ctx, &app.document);
                 egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
             },
         );
@@ -1060,7 +1060,8 @@ fn requesting_primitive_controls_reveals_the_submodels_section() {
             ..Default::default()
         },
         |ctx| {
-            app.ui.brush_panel(ctx, &app.document, "", 1.);
+            app.ui
+                .brush_panel(ctx, &app.document, "", 1., app.camera.zoom);
         },
     );
     let panel = app
@@ -1352,6 +1353,229 @@ fn mask_near(app: &App, x: f32, y: f32) -> f32 {
         .0;
     app.document.mesh().mask[index]
 }
+
+#[test]
+fn stabilized_freehand_respects_spacing_release_and_stroke_boundaries() {
+    let mut app = patterned_mask_app(crate::sculpt::StrokeMode::Freehand);
+    let mut brush = app.document.brushes()[0].clone();
+    brush.stabilize = true;
+    brush.stabilizer_distance = 30.;
+    brush.spacing = 1.;
+    app.document.update_brush(0, brush).unwrap();
+    let ctx = egui::Context::default();
+    let center = navigation_frame(&mut app, &ctx, vec![]).center();
+    let before = app.document.geometry_snapshot();
+    let count = app.document.history_counts().0;
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(center),
+            primary_event(center, true),
+        ],
+    );
+    let first_dab = app.document.geometry_snapshot();
+    assert_ne!(first_dab, before);
+    for delta in [10., -12., 40.] {
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(center + egui::vec2(delta, 0.))],
+        );
+        assert_eq!(
+            app.document.geometry_snapshot(),
+            first_dab,
+            "jitter or movement below dab spacing must not build up"
+        );
+    }
+    let end = center + egui::vec2(90., 0.);
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+    let painted = app.document.geometry_snapshot();
+    assert_ne!(painted, first_dab);
+    for _ in 0..3 {
+        navigation_frame(&mut app, &ctx, vec![]);
+        assert_eq!(app.document.geometry_snapshot(), painted);
+    }
+    // The release position and zero pen pressure must never flush the tail.
+    app.pressure = 0.;
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![primary_event(end + egui::vec2(100., 0.), false)],
+    );
+    assert_eq!(app.document.geometry_snapshot(), painted);
+    assert_eq!(app.document.history_counts().0, count + 1);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    app.pressure = 1.;
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(center),
+            primary_event(center, true),
+        ],
+    );
+    assert_eq!(
+        app.document.geometry_snapshot(),
+        first_dab,
+        "a new stroke starts with a fresh trailing tip"
+    );
+    app.dispatch(Command::Undo, &ctx);
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+    navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+    assert_eq!(
+        app.document.geometry_snapshot(),
+        before,
+        "undo during a drag blocks further dabs until release"
+    );
+}
+
+#[test]
+fn stabilized_freehand_preserves_pressure_modifiers_masks_symmetry_and_subdivision() {
+    use crate::sculpt::{Kind, StrokeMode};
+    for kind in [Kind::Standard, Kind::Mask] {
+        let run = |stabilize| {
+            let mut app = patterned_mask_app(StrokeMode::Freehand);
+            let mut geometry = app.document.geometry_snapshot();
+            for (i, vertex) in geometry.mesh.vertices.iter_mut().enumerate() {
+                vertex.2 = (vertex.0 * 20.).sin() * 0.03;
+                geometry.mesh.mask[i] = if vertex.1 > 0. { 1. } else { 0.25 };
+            }
+            geometry.subdivide().unwrap();
+            app.document.replace_geometry(geometry.clone()).unwrap();
+            let mut brush = app.document.brushes()[0].clone();
+            brush.kind = kind;
+            brush.stabilize = stabilize;
+            brush.stabilizer_distance = 30.;
+            brush.radius = 40.;
+            brush.pressure = true;
+            brush.pressure_radius = true;
+            brush.pressure_curve = 1.5;
+            app.document.update_brush(0, brush).unwrap();
+            app.document
+                .set_symmetry(crate::sculpt::Symmetry {
+                    enabled: true,
+                    ..Default::default()
+                })
+                .unwrap();
+            let count = app.document.history_counts().0;
+            let ctx = egui::Context::default();
+            let center = navigation_frame(&mut app, &ctx, vec![]).center() + egui::vec2(0., 10.);
+            for (step, modifiers) in [
+                egui::Modifiers::NONE,
+                egui::Modifiers::NONE,
+                egui::Modifiers::ALT,
+                egui::Modifiers::SHIFT,
+                egui::Modifiers::NONE,
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let offset = step as f32 * 25. + if stabilize && step > 0 { 30. } else { 0. };
+                let pos = center + egui::vec2(offset, 0.);
+                app.pressure = [0.4, 0.8, 0.6, 1., 0.5][step];
+                let mut events = vec![egui::Event::PointerMoved(pos)];
+                if step == 0 {
+                    events.push(primary_event(pos, true));
+                }
+                visibility_frame(&mut app, &ctx, modifiers, events);
+            }
+            let after = app.document.geometry_snapshot();
+            assert_ne!(after, geometry);
+            if kind == Kind::Standard {
+                for (i, vertex) in geometry.mesh.vertices.iter().enumerate() {
+                    if geometry.mesh.mask[i] == 1. {
+                        assert_eq!(after.mesh.vertices[i], *vertex);
+                    }
+                }
+            }
+            app.pressure = 0.;
+            navigation_frame(
+                &mut app,
+                &ctx,
+                vec![primary_event(center + egui::vec2(200., 0.), false)],
+            );
+            assert_eq!(app.document.geometry_snapshot(), after);
+            assert_eq!(app.document.history_counts().0, count + 1);
+            app.document.set_mesh_level(1).unwrap();
+            app.document.set_mesh_level(2).unwrap();
+            let propagated = app.document.geometry_snapshot();
+            app.document.undo();
+            app.document.undo();
+            app.document.undo();
+            assert_eq!(app.document.geometry_snapshot(), geometry);
+            propagated
+        };
+        assert_eq!(
+            run(true),
+            run(false),
+            "stabilized input must use the same dab pipeline as direct input"
+        );
+    }
+}
+
+#[test]
+fn stabilization_toggle_is_per_brush_and_available_to_custom_actions() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let before = app.document.geometry_snapshot();
+    app.dispatch(Command::Action(Action::StrokeStabilisation), &ctx);
+    assert!(app.document.brushes()[0].stabilize);
+    app.ui.selected = 1;
+    assert!(!app.document.brushes()[1].stabilize);
+    app.ui.selected = 0;
+    app.dispatch(Command::Action(Action::StrokeStabilisation), &ctx);
+    assert!(!app.document.brushes()[0].stabilize);
+    for kind in [crate::sculpt::Kind::Grab, crate::sculpt::Kind::Snake] {
+        app.document
+            .update_brush(0, crate::sculpt::Brush::new(kind))
+            .unwrap();
+        app.dispatch(Command::Action(Action::StrokeStabilisation), &ctx);
+        assert!(!app.document.brushes()[0].stabilize);
+    }
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert!(!app.document.can_undo());
+}
+
+#[test]
+fn stabilization_leaves_displacement_brushes_and_patterned_strokes_unchanged() {
+    use crate::sculpt::{Kind, StrokeMode};
+    for (kind, mode) in [
+        (Kind::Grab, StrokeMode::Freehand),
+        (Kind::Snake, StrokeMode::Freehand),
+        (Kind::Mask, StrokeMode::Line),
+        (Kind::Mask, StrokeMode::DragRect),
+        (Kind::Mask, StrokeMode::DragDot),
+    ] {
+        let run = |stabilize| {
+            let mut app = patterned_mask_app(mode);
+            let mut brush = app.document.brushes()[0].clone();
+            brush.kind = kind;
+            brush.stabilize = stabilize;
+            app.document.update_brush(0, brush).unwrap();
+            let ctx = egui::Context::default();
+            let center = navigation_frame(&mut app, &ctx, vec![]).center();
+            navigation_frame(
+                &mut app,
+                &ctx,
+                vec![
+                    egui::Event::PointerMoved(center),
+                    primary_event(center, true),
+                ],
+            );
+            let end = center + egui::vec2(50., 20.);
+            navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+            navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+            app.document.geometry_snapshot()
+        };
+        assert_eq!(
+            run(true),
+            run(false),
+            "stabilization must not affect {kind:?} in {mode:?}"
+        );
+    }
+}
 #[test]
 fn patterned_line_previews_then_applies_a_straight_path_as_one_undo_step() {
     let mut app = patterned_mask_app(crate::sculpt::StrokeMode::Line);
@@ -1589,6 +1813,8 @@ fn slice_escape_short_click_miss_and_job_cancel_leave_geometry_and_history_uncha
     );
     navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
     assert!(app.mesh_job.is_none());
+    assert!(!app.ui.slice_active);
+    app.dispatch(Command::SliceTool(true), &ctx);
     navigation_frame(
         &mut app,
         &ctx,
@@ -1946,4 +2172,958 @@ fn slice_corner_handles_round_and_sharpen_without_moving_or_adding_points() {
         results[0], results[2],
         "sharpening should restore the exact original path"
     );
+}
+
+fn visibility_frame(
+    app: &mut App,
+    ctx: &egui::Context,
+    modifiers: egui::Modifiers,
+    events: Vec<egui::Event>,
+) {
+    let _ = ctx.run(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                Pos2::ZERO,
+                Vec2::new(1000., 800.),
+            )),
+            modifiers,
+            events,
+            ..Default::default()
+        },
+        |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+        },
+    );
+}
+#[test]
+fn visibility_rectangle_latches_modifiers_without_zoom_or_sculpt_and_esc_cancels() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    navigation_frame(&mut app, &ctx, vec![]);
+    let before = app.document.geometry_snapshot();
+    let start = Pos2::new(490., 160.);
+    let end = Pos2::new(760., 670.);
+    let modifiers = egui::Modifiers {
+        ctrl: true,
+        shift: true,
+        ..Default::default()
+    };
+    visibility_frame(
+        &mut app,
+        &ctx,
+        modifiers,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    assert!(app.viewport.gesture == Some(Gesture::Select));
+    visibility_frame(
+        &mut app,
+        &ctx,
+        egui::Modifiers::ALT,
+        vec![egui::Event::PointerMoved(end)],
+    );
+    assert_eq!(
+        app.document.geometry_snapshot(),
+        before,
+        "preview does not mutate geometry"
+    );
+    visibility_frame(
+        &mut app,
+        &ctx,
+        egui::Modifiers::ALT,
+        vec![primary_event(end, false)],
+    );
+    let hidden = app.document.mesh().hidden_face_count();
+    assert!(hidden > 0 && hidden < app.document.mesh().triangles.len());
+    assert_eq!(app.document.mesh().vertices, before.mesh.vertices);
+    assert_eq!(app.camera.zoom, 1.);
+    assert_eq!(app.camera.yaw, 0.);
+    assert_eq!(app.document.history_counts(), (1, 0));
+    app.document.undo();
+    assert_eq!(app.document.geometry_snapshot(), before);
+    visibility_frame(
+        &mut app,
+        &ctx,
+        modifiers,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    visibility_frame(
+        &mut app,
+        &ctx,
+        egui::Modifiers::NONE,
+        vec![
+            egui::Event::PointerMoved(end),
+            egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            },
+        ],
+    );
+    visibility_frame(
+        &mut app,
+        &ctx,
+        egui::Modifiers::NONE,
+        vec![primary_event(end, false)],
+    );
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert_eq!(app.document.history_counts(), (0, 1));
+}
+#[test]
+fn visibility_background_click_reveals_and_empty_drag_inverts() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.document.select_face_region(|p| p.0 > 0., true).unwrap();
+    navigation_frame(&mut app, &ctx, vec![]);
+    let before: Vec<_> = (0..app.document.mesh().triangles.len())
+        .map(|i| app.document.mesh().face_visible(i))
+        .collect();
+    let modifiers = egui::Modifiers {
+        ctrl: true,
+        shift: true,
+        ..Default::default()
+    };
+    let start = Pos2::new(30., 50.);
+    let end = Pos2::new(60., 90.);
+    visibility_frame(
+        &mut app,
+        &ctx,
+        modifiers,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    visibility_frame(
+        &mut app,
+        &ctx,
+        modifiers,
+        vec![egui::Event::PointerMoved(end)],
+    );
+    visibility_frame(&mut app, &ctx, modifiers, vec![primary_event(end, false)]);
+    for (i, &visible) in before.iter().enumerate() {
+        assert_eq!(app.document.mesh().face_visible(i), !visible);
+    }
+    visibility_frame(
+        &mut app,
+        &ctx,
+        modifiers,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    visibility_frame(&mut app, &ctx, modifiers, vec![primary_event(start, false)]);
+    assert_eq!(app.document.mesh().hidden_face_count(), 0);
+    assert_eq!(app.camera.zoom, 1.);
+}
+
+#[test]
+fn visibility_single_group_click_flips_faces_and_background_click_recovers() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let center = navigation_frame(&mut app, &ctx, vec![]).center();
+    let modifiers = egui::Modifiers {
+        ctrl: true,
+        shift: true,
+        ..Default::default()
+    };
+    // A one-group mesh flips to hidden; the next click hits background and
+    // restores it. Rapid clicks must still follow the same visibility rule.
+    let total = app.document.mesh().triangles.len();
+    for hidden in [total, 0] {
+        visibility_frame(
+            &mut app,
+            &ctx,
+            modifiers,
+            vec![
+                egui::Event::PointerMoved(center),
+                primary_event(center, true),
+            ],
+        );
+        visibility_frame(
+            &mut app,
+            &ctx,
+            modifiers,
+            vec![primary_event(center, false)],
+        );
+        assert_eq!(app.document.mesh().hidden_face_count(), hidden);
+    }
+    app.document.select_face_region(|p| p.0 > 0., true).unwrap();
+    let visible: Vec<_> = (0..total)
+        .map(|i| app.document.mesh().face_visible(i))
+        .collect();
+    let left = center - egui::vec2(60., 0.);
+    visibility_frame(
+        &mut app,
+        &ctx,
+        modifiers,
+        vec![egui::Event::PointerMoved(left), primary_event(left, true)],
+    );
+    visibility_frame(&mut app, &ctx, modifiers, vec![primary_event(left, false)]);
+    for (i, before) in visible.into_iter().enumerate() {
+        assert_eq!(app.document.mesh().face_visible(i), !before);
+    }
+}
+
+#[test]
+fn visibility_polygroup_click_hides_clicked_faces_then_flips_the_last_group() {
+    let mut app = App::default();
+    let mut plane = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Plane);
+    plane.divisions = [2, 1, 1];
+    let mut mesh = plane.mesh().unwrap();
+    mesh.create_vertex_group("Left".into(), 0.5, true).unwrap();
+    mesh.mask = mesh
+        .vertices
+        .iter()
+        .map(|p| if p.0 >= 0. { 1. } else { 0. })
+        .collect();
+    mesh.create_vertex_group("Right".into(), 0.5, false)
+        .unwrap();
+    app.document
+        .replace_geometry(crate::sculpt::Geometry::new(mesh))
+        .unwrap();
+    let ctx = egui::Context::default();
+    let right = navigation_frame(&mut app, &ctx, vec![]).center() + egui::vec2(80., 0.);
+    let modifiers = egui::Modifiers {
+        ctrl: true,
+        shift: true,
+        ..Default::default()
+    };
+    let left = right - egui::vec2(160., 0.);
+    for (point, hidden_id) in [(right, 2), (left, 1), (right, 2)] {
+        visibility_frame(
+            &mut app,
+            &ctx,
+            modifiers,
+            vec![egui::Event::PointerMoved(point), primary_event(point, true)],
+        );
+        visibility_frame(&mut app, &ctx, modifiers, vec![primary_event(point, false)]);
+        assert_eq!(app.document.mesh().hidden_face_count(), 2);
+        for (i, &id) in app.document.mesh().polygroups.iter().enumerate() {
+            assert_eq!(app.document.mesh().face_visible(i), id != hidden_id);
+        }
+    }
+}
+
+#[test]
+fn escape_exits_line_and_path_slice_with_or_without_a_draft() {
+    for path in [false, true] {
+        for draft in [false, true] {
+            let mut app = App::default();
+            let ctx = egui::Context::default();
+            app.ui.slice_path_mode = path;
+            app.dispatch(Command::SliceTool(true), &ctx);
+            let center = navigation_frame(&mut app, &ctx, vec![]).center();
+            let before = app.document.geometry_snapshot();
+            if draft {
+                navigation_frame(
+                    &mut app,
+                    &ctx,
+                    vec![
+                        egui::Event::PointerMoved(center),
+                        primary_event(center, true),
+                    ],
+                );
+                if path {
+                    navigation_frame(&mut app, &ctx, vec![primary_event(center, false)]);
+                } else {
+                    navigation_frame(
+                        &mut app,
+                        &ctx,
+                        vec![egui::Event::PointerMoved(center + egui::vec2(0., 80.))],
+                    );
+                }
+            }
+            navigation_frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::Key {
+                    key: egui::Key::Escape,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            );
+            assert!(!app.ui.slice_active);
+            assert!(app.viewport.gesture.is_none());
+            navigation_frame(&mut app, &ctx, vec![primary_event(center, false)]);
+            navigation_frame(&mut app, &ctx, vec![]);
+            assert!(app.mesh_job.is_none());
+            assert_eq!(app.document.geometry_snapshot(), before);
+            assert_eq!(app.document.history_counts(), (0, 0));
+            navigation_frame(
+                &mut app,
+                &ctx,
+                vec![
+                    egui::Event::PointerMoved(center),
+                    primary_event(center, true),
+                ],
+            );
+            assert!(app.viewport.gesture == Some(Gesture::Sculpt));
+        }
+    }
+}
+
+#[test]
+fn custom_buttons_and_number_keys_use_current_brush_identity_and_command_guards() {
+    use crate::preferences::{Action, Shortcut};
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let id = app.document.brushes()[1].identity();
+    app.ui
+        .preferences
+        .bind(
+            Action::SelectBrush(id.clone()),
+            Shortcut::new(egui::Key::Num1, egui::Modifiers::NONE),
+        )
+        .unwrap();
+    app.ui
+        .preferences
+        .bind(
+            Action::InvertMask,
+            Shortcut::new(egui::Key::Num1, egui::Modifiers::SHIFT),
+        )
+        .unwrap();
+    let press = |key, physical, modifiers| egui::RawInput {
+        events: vec![
+            egui::Event::Key {
+                key,
+                physical_key: Some(physical),
+                pressed: true,
+                repeat: false,
+                modifiers,
+            },
+            egui::Event::Key {
+                key,
+                physical_key: Some(physical),
+                pressed: false,
+                repeat: false,
+                modifiers,
+            },
+        ],
+        ..Default::default()
+    };
+    let _ = ctx.run(
+        press(egui::Key::Num1, egui::Key::Num1, egui::Modifiers::NONE),
+        |ctx| app.shortcuts(ctx),
+    );
+    assert_eq!(app.document.brushes()[app.ui.selected].identity(), id);
+    let before = app.document.mesh().mask.clone();
+    let _ = ctx.run(
+        press(
+            egui::Key::Exclamationmark,
+            egui::Key::Num1,
+            egui::Modifiers::SHIFT,
+        ),
+        |ctx| app.shortcuts(ctx),
+    );
+    for (a, b) in app.document.mesh().mask.iter().zip(&before) {
+        assert!((a - (1. - b)).abs() < 1e-6);
+    }
+    app.dispatch(Command::Action(Action::Undo), &ctx);
+    assert_eq!(app.document.mesh().mask, before);
+    let selected = app.ui.selected;
+    app.dispatch(
+        Command::Action(Action::SelectBrush("missing-brush".into())),
+        &ctx,
+    );
+    assert_eq!(app.ui.selected, selected);
+    app.ui.pending = Some(PendingAction::New);
+    app.dispatch(Command::Action(Action::InvertMask), &ctx);
+    assert_eq!(app.document.mesh().mask, before);
+    app.ui.pending = None;
+    app.ui.mesh_busy = true;
+    app.dispatch(Command::Action(Action::InvertMask), &ctx);
+    assert_eq!(app.document.mesh().mask, before);
+}
+
+#[test]
+fn custom_menu_shortcut_and_all_shelf_placements_render_without_document_edits() {
+    use crate::preferences::{Action, CustomItem, Placement, Shortcut};
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let id = app.ui.preferences.add_menu();
+    app.ui.preferences.menus[0].items = vec![
+        CustomItem::action(Action::Wireframe),
+        CustomItem::action(Action::ClearMask),
+    ];
+    app.ui
+        .preferences
+        .bind(
+            Action::OpenMenu(id),
+            Shortcut::new(egui::Key::Num0, egui::Modifiers::SHIFT),
+        )
+        .unwrap();
+    app.dispatch(Command::Action(Action::OpenMenu(id)), &ctx);
+    assert_eq!(app.ui.customization.popup_menu, Some(id));
+    for placement in Placement::ALL {
+        app.ui.preferences.menus[0].placement = placement;
+        let _ = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    Pos2::ZERO,
+                    Vec2::new(1440., 1000.),
+                )),
+                ..Default::default()
+            },
+            |ctx| {
+                assert!(app.ui.toolbar(ctx, &app.document, 1.).is_empty());
+                assert!(app.ui.custom_surfaces(ctx, &app.document).is_empty());
+                app.ui.layout_open = true;
+                app.ui.settings(ctx, &app.document);
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    assert!(ui.available_width() > 0.);
+                });
+            },
+        );
+    }
+    app.ui.preferences.validate().unwrap();
+    assert!(!app.document.is_dirty());
+}
+
+#[test]
+fn alt_pan_drag_moves_only_the_camera_on_background_gizmo_and_secondary_drag() {
+    for (button, location) in [
+        (egui::PointerButton::Primary, 1),
+        (egui::PointerButton::Primary, 2),
+        (egui::PointerButton::Secondary, 0),
+    ] {
+        let mut app = App::default();
+        let ctx = egui::Context::default();
+        let rect = navigation_frame(&mut app, &ctx, vec![]);
+        let start = match location {
+            1 => rect.min + Vec2::splat(35.),
+            2 => Pos2::new(rect.right() - 79., rect.top() + 79.),
+            _ => rect.center(),
+        };
+        let before = app.document.geometry_snapshot();
+        let frame =
+            |app: &mut App, pos: Pos2, modifiers: egui::Modifiers, pressed: Option<bool>| {
+                let mut events = vec![egui::Event::PointerMoved(pos)];
+                if let Some(pressed) = pressed {
+                    events.push(egui::Event::PointerButton {
+                        pos,
+                        button,
+                        pressed,
+                        modifiers,
+                    });
+                }
+                let _ = ctx.run(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            Pos2::ZERO,
+                            Vec2::new(1000., 800.),
+                        )),
+                        modifiers,
+                        events,
+                        ..Default::default()
+                    },
+                    |ctx| {
+                        egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+                    },
+                );
+            };
+        frame(&mut app, start, egui::Modifiers::ALT, Some(true));
+        assert_eq!(
+            app.camera.pan,
+            Vec2::ZERO,
+            "press-frame motion must not jump the view"
+        );
+        frame(
+            &mut app,
+            start + Vec2::new(45., 15.),
+            egui::Modifiers::ALT,
+            None,
+        );
+        assert_eq!(app.camera.pan, Vec2::new(45., 15.));
+        assert_eq!(app.camera.yaw, 0.);
+        assert_eq!(app.camera.pitch, 0.);
+        assert_eq!(app.camera.zoom, 1.);
+        frame(
+            &mut app,
+            start + Vec2::new(55., 20.),
+            egui::Modifiers::NONE,
+            None,
+        );
+        assert_eq!(app.camera.pan, Vec2::new(45., 15.));
+        assert_ne!(app.camera.yaw, 0.);
+        frame(
+            &mut app,
+            start + Vec2::new(55., 20.),
+            egui::Modifiers::NONE,
+            Some(false),
+        );
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert!(!app.document.is_dirty());
+        assert!(!app.document.can_undo());
+    }
+}
+
+#[test]
+fn pan_hold_can_be_rebound_or_disabled() {
+    for (hold, expect_pan) in [
+        (crate::preferences::Hold::Shift, true),
+        (crate::preferences::Hold::Disabled, false),
+    ] {
+        let mut app = App::default();
+        app.ui.preferences.pan_hold = hold;
+        let ctx = egui::Context::default();
+        let start = navigation_frame(&mut app, &ctx, vec![]).min + Vec2::splat(35.);
+        for (pos, pressed) in [
+            (start, Some(true)),
+            (start + Vec2::new(-30., 20.), None),
+            (start + Vec2::new(-30., 20.), Some(false)),
+        ] {
+            let mut events = vec![egui::Event::PointerMoved(pos)];
+            if let Some(pressed) = pressed {
+                events.push(egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::SHIFT,
+                });
+            }
+            let _ = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        Pos2::ZERO,
+                        Vec2::new(1000., 800.),
+                    )),
+                    modifiers: egui::Modifiers::SHIFT,
+                    events,
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+                },
+            );
+        }
+        assert_eq!(app.camera.pan != Vec2::ZERO, expect_pan);
+        assert_eq!(app.camera.yaw == 0., expect_pan);
+        assert!(!app.document.is_dirty());
+    }
+}
+
+#[test]
+fn group_all_command_replaces_menu_entries_and_selects_the_new_group() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.dispatch(Command::CreateVertexGroup("Unified".into(), true), &ctx);
+    assert_eq!(app.document.mesh().vertex_groups.len(), 1);
+    assert_eq!(app.document.mesh().vertex_groups[0].name, "Unified");
+    assert_eq!(app.ui.selected_vertex_group, Some((0, 0)));
+    assert_eq!(app.ui.vertex_group_rename, "Unified");
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.mesh().vertex_groups[0].name, "Base");
+}
+
+#[test]
+fn alt_primary_on_clay_sculpts_and_reverses_without_panning() {
+    use crate::sculpt::{Brush, Kind, StrokeMode};
+    for mode in [StrokeMode::Freehand, StrokeMode::DragDot] {
+        for click_only in [false, true] {
+            let mut app = App::default();
+            let mut brush = Brush::new(Kind::Clay);
+            brush.stroke_mode = mode;
+            brush.pressure = false;
+            app.document.update_brush(0, brush).unwrap();
+            app.document.mark_saved("alt-sculpt-test.clay");
+            let original = app.document.mesh().clone();
+            let ctx = egui::Context::default();
+            let center = navigation_frame(&mut app, &ctx, vec![]).center();
+            let end = center
+                + if click_only {
+                    Vec2::ZERO
+                } else {
+                    Vec2::new(24., 12.)
+                };
+            for (pos, pressed) in [(center, Some(true)), (end, None), (end, Some(false))] {
+                let mut events = vec![egui::Event::PointerMoved(pos)];
+                if let Some(pressed) = pressed {
+                    events.push(egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::ALT,
+                    });
+                }
+                let _ = ctx.run(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            Pos2::ZERO,
+                            Vec2::new(1000., 800.),
+                        )),
+                        events,
+                        modifiers: egui::Modifiers::ALT,
+                        ..Default::default()
+                    },
+                    |ctx| {
+                        egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+                    },
+                );
+                if pressed == Some(true) {
+                    assert!(app.viewport.gesture == Some(Gesture::Sculpt));
+                }
+            }
+            assert_eq!(app.camera.pan, Vec2::ZERO);
+            assert_eq!(app.camera.yaw, 0.);
+            assert_eq!(app.camera.pitch, 0.);
+            assert_eq!(app.camera.zoom, 1.);
+            assert_ne!(*app.document.mesh(), original);
+            assert!(app.document.can_undo());
+            // Visible front faces point toward +Z; Alt should carve inward.
+            assert!(
+                app.document
+                    .mesh()
+                    .vertices
+                    .iter()
+                    .zip(&original.vertices)
+                    .any(|(after, before)| before.2 > 0.5 && after.2 < before.2 - 1e-5)
+            );
+            app.dispatch(Command::Undo, &ctx);
+            assert_eq!(*app.document.mesh(), original);
+        }
+    }
+}
+
+#[test]
+fn primary_and_secondary_navigation_continue_past_vertical_poles() {
+    for button in [egui::PointerButton::Primary, egui::PointerButton::Secondary] {
+        let mut app = App::default();
+        let ctx = egui::Context::default();
+        let start = navigation_frame(&mut app, &ctx, vec![]).min + Vec2::splat(30.);
+        let original = app.document.geometry_snapshot();
+        let event = |pos, pressed| egui::Event::PointerButton {
+            pos,
+            button,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(start), event(start, true)],
+        );
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(start + Vec2::new(0., 250.))],
+        );
+        assert!(app.camera.pitch < -std::f32::consts::FRAC_PI_2);
+        let at_pole = app.camera.basis().2;
+        let end = start + Vec2::new(0., 500.);
+        navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+        assert!((app.camera.basis().2 - at_pole).len() > 0.5);
+        navigation_frame(&mut app, &ctx, vec![event(end, false)]);
+        assert_eq!(app.document.geometry_snapshot(), original);
+        assert!(!app.document.is_dirty());
+        assert!(!app.document.can_undo());
+    }
+}
+
+#[test]
+fn mask_filter_actions_support_shortcuts_guard_jobs_and_end_drag_input() {
+    for (action, key) in [
+        (Action::BlurMask, egui::Key::F6),
+        (Action::SharpenMask, egui::Key::F7),
+    ] {
+        let mut app = patterned_mask_app(crate::sculpt::StrokeMode::Freehand);
+        let mut geometry = app.document.geometry_snapshot();
+        geometry.mesh.mask = geometry
+            .mesh
+            .vertices
+            .iter()
+            .map(|p| if p.0 < 0. { 0.2 } else { 0.8 })
+            .collect();
+        app.document.replace_geometry(geometry).unwrap();
+        let ctx = egui::Context::default();
+        app.ui
+            .preferences
+            .bind(
+                action.clone(),
+                crate::preferences::Shortcut::new(key, egui::Modifiers::NONE),
+            )
+            .unwrap();
+        let before = app.document.geometry_snapshot();
+        let _ = ctx.run(
+            egui::RawInput {
+                events: vec![egui::Event::Key {
+                    key,
+                    physical_key: Some(key),
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+                ..Default::default()
+            },
+            |ctx| app.shortcuts(ctx),
+        );
+        assert_ne!(app.document.geometry_snapshot(), before);
+        app.dispatch(Command::Undo, &ctx);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        app.dispatch(Command::Subdivide, &ctx);
+        app.dispatch(
+            if action == Action::BlurMask {
+                Command::BlurMask
+            } else {
+                Command::SharpenMask
+            },
+            &ctx,
+        );
+        assert_eq!(app.document.geometry_snapshot(), before);
+        app.dispatch(Command::CancelMeshJob, &ctx);
+        app.poll_mesh_job();
+        let center = navigation_frame(&mut app, &ctx, vec![]).center();
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::PointerMoved(center),
+                primary_event(center, true),
+            ],
+        );
+        app.dispatch(Command::Action(action), &ctx);
+        let filtered = app.document.geometry_snapshot();
+        let end = center + egui::vec2(60., 0.);
+        navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+        navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+        assert_eq!(
+            app.document.geometry_snapshot(),
+            filtered,
+            "filter shortcuts must not restart a held sculpt stroke"
+        );
+    }
+}
+
+mod pinned_menus {
+    use super::*;
+    use crate::preferences::{BuiltinMenu, PinnedMenu};
+
+    fn frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) -> egui::FullOutput {
+        ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    Pos2::ZERO,
+                    Vec2::new(1400., 900.),
+                )),
+                events,
+                ..Default::default()
+            },
+            |ctx| {
+                for command in app.ui.toolbar(ctx, &app.document, app.camera.zoom) {
+                    app.dispatch(command, ctx);
+                }
+                egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+            },
+        )
+    }
+    fn text_point(output: &egui::FullOutput, label: &str) -> Pos2 {
+        output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.text() == label => {
+                    Some(text.pos + text.galley.size() * 0.5)
+                }
+                _ => None,
+            })
+            .min_by(|a, b| a.y.total_cmp(&b.y))
+            .unwrap_or_else(|| panic!("Missing control: {label}"))
+    }
+    fn click(app: &mut App, ctx: &egui::Context, point: Pos2) -> egui::FullOutput {
+        frame(
+            app,
+            ctx,
+            vec![egui::Event::PointerMoved(point), primary_event(point, true)],
+        );
+        frame(app, ctx, vec![primary_event(point, false)])
+    }
+
+    #[test]
+    fn pinned_menu_can_pin_move_use_and_unpin_without_sculpting() {
+        let mut app = App::default();
+        let ctx = egui::Context::default();
+        ctx.style_mut(|style| style.animation_time = 0.);
+        let before = app.document.geometry_snapshot();
+        frame(&mut app, &ctx, vec![]);
+        let output = frame(&mut app, &ctx, vec![]);
+        click(&mut app, &ctx, text_point(&output, "Mask"));
+        let output = frame(&mut app, &ctx, vec![]);
+        click(&mut app, &ctx, text_point(&output, "Pin menu open"));
+        frame(&mut app, &ctx, vec![]);
+        assert_eq!(app.ui.preferences.pinned_menus.len(), 1);
+        assert_eq!(app.ui.preferences.pinned_menus[0].menu, BuiltinMenu::Mask);
+        let position = app.ui.preferences.pinned_menus[0].position;
+        let title = Pos2::new(position[0] + 100., position[1] + 16.);
+        let end = title + Vec2::new(-250., 180.);
+        frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(title), primary_event(title, true)],
+        );
+        frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+        frame(&mut app, &ctx, vec![primary_event(end, false)]);
+        let moved = app.ui.preferences.pinned_menus[0].position;
+        assert!(
+            moved[1] > position[1] + 100.,
+            "title drag must move the window"
+        );
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert!(!app.document.is_dirty());
+        let output = frame(&mut app, &ctx, vec![]);
+        click(&mut app, &ctx, text_point(&output, "Invert mask"));
+        assert!(app.document.mesh().mask.iter().all(|m| *m == 1.));
+        assert_eq!(
+            app.document.history_counts().0,
+            1,
+            "window control must not also sculpt"
+        );
+        assert_eq!(app.ui.preferences.pinned_menus.len(), 1);
+        app.ui.preferences.compact_toolbar = true;
+        let output = frame(&mut app, &ctx, vec![]);
+        click(&mut app, &ctx, text_point(&output, "Clear mask"));
+        assert!(app.document.mesh().mask.iter().all(|m| *m == 0.));
+        assert_eq!(app.ui.preferences.pinned_menus[0].position, moved);
+        let output = frame(&mut app, &ctx, vec![]);
+        let before_close = app.document.geometry_snapshot();
+        click(&mut app, &ctx, text_point(&output, "Unpin menu"));
+        assert!(app.ui.preferences.pinned_menus.is_empty());
+        assert_eq!(app.document.geometry_snapshot(), before_close);
+    }
+
+    #[test]
+    fn pinned_menus_restore_workspace_positions_and_keep_symmetry_controls_live() {
+        let mut app = App::default();
+        app.ui.preferences.pinned_menus = vec![
+            PinnedMenu {
+                menu: BuiltinMenu::Mask,
+                position: [320., 180.],
+            },
+            PinnedMenu {
+                menu: BuiltinMenu::Symmetry,
+                position: [780., 180.],
+            },
+        ];
+        app.ui.preferences.save_workspace_as("Sculpt").unwrap();
+        app.ui.preferences.save_workspace_as("Detail").unwrap();
+        app.ui.preferences.pinned_menus[0].position = [80., 200.];
+        app.ui.preferences.pinned_menus[1].position = [500., 200.];
+        let ctx = egui::Context::default();
+        frame(&mut app, &ctx, vec![]);
+        let output = frame(&mut app, &ctx, vec![]);
+        let before = app.document.geometry_snapshot();
+        click(&mut app, &ctx, text_point(&output, "Enable symmetry"));
+        assert!(app.document.symmetry().enabled);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert_eq!(app.ui.preferences.pinned_menus.len(), 2);
+        app.ui.preferences.switch_workspace(0);
+        frame(&mut app, &ctx, vec![]);
+        assert_eq!(app.ui.preferences.pinned_menus[0].position, [320., 180.]);
+        assert_eq!(app.ui.preferences.pinned_menus[1].position, [780., 180.]);
+        // Loading into a fresh UI context restores both pin state and position.
+        let saved = serde_json::to_string(&app.ui.preferences).unwrap();
+        app.ui.preferences = serde_json::from_str(&saved).unwrap();
+        let fresh = egui::Context::default();
+        frame(&mut app, &fresh, vec![]);
+        frame(&mut app, &fresh, vec![]);
+        assert_eq!(app.ui.preferences.pinned_menus[0].position, [320., 180.]);
+        assert_eq!(app.ui.preferences.pinned_menus[1].position, [780., 180.]);
+    }
+}
+
+#[test]
+fn gizmo_axis_taps_tolerate_jitter_and_keep_the_pressed_target() {
+    use crate::sculpt::Vec3;
+    for (axis, yaw, pitch) in [
+        (Vec3(1., 0., 0.), std::f32::consts::FRAC_PI_2, 0.),
+        (Vec3(0., 1., 0.), 0., -std::f32::consts::FRAC_PI_2),
+        (Vec3(0., 0., 1.), 0., 0.),
+    ] {
+        let mut app = App::default();
+        app.camera.yaw = 0.65;
+        app.camera.pitch = -0.35;
+        let ctx = egui::Context::default();
+        let rect = navigation_frame(&mut app, &ctx, vec![]);
+        let center = Pos2::new(rect.right() - 79., rect.top() + 79.);
+        let (right, up, _) = app.camera.basis();
+        let start = center + Vec2::new(axis.dot(right), -axis.dot(up)) * 42. + Vec2::new(10., 0.);
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+        );
+        for delta in [Vec2::new(3., 2.), Vec2::new(-3., -2.), Vec2::new(4., 1.)] {
+            navigation_frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::PointerMoved(start + delta)],
+            );
+            assert_eq!(
+                (app.camera.yaw, app.camera.pitch),
+                (0.65, -0.35),
+                "tap jitter must not rotate the view"
+            );
+        }
+        // Release beyond the original hit circle, but still within tap tolerance.
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![primary_event(start + Vec2::new(4., 1.), false)],
+        );
+        assert_eq!((app.camera.yaw, app.camera.pitch), (yaw, pitch));
+        assert!(!app.document.is_dirty());
+        assert!(!app.document.can_undo());
+    }
+}
+
+#[test]
+fn gizmo_deliberate_drag_latches_and_fast_tap_snaps() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let rect = navigation_frame(&mut app, &ctx, vec![]);
+    let center = Pos2::new(rect.right() - 79., rect.top() + 79.);
+    let x = center + Vec2::new(42., 0.);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(x + Vec2::new(10., 0.)),
+            primary_event(x + Vec2::new(10., 0.), true),
+            egui::Event::PointerMoved(x + Vec2::new(15., 0.)),
+            primary_event(x + Vec2::new(15., 0.), false),
+        ],
+    );
+    assert_eq!(app.camera.yaw, std::f32::consts::FRAC_PI_2);
+    app.camera.reset();
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(center),
+            primary_event(center, true),
+        ],
+    );
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(center + Vec2::new(8., 0.))],
+    );
+    assert!(
+        (app.camera.yaw + 0.064).abs() < 1e-6,
+        "first deliberate drag includes accumulated movement"
+    );
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(center + Vec2::new(2., 0.))],
+    );
+    let yaw = app.camera.yaw;
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![primary_event(center + Vec2::new(2., 0.), false)],
+    );
+    assert_eq!(
+        app.camera.yaw, yaw,
+        "a drag returning near its start must not snap"
+    );
+    assert_ne!(yaw, 0.);
+    assert!(!app.document.is_dirty());
 }

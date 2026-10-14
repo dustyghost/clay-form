@@ -2,21 +2,27 @@
 use crate::{
     command::{Command, PendingAction},
     document::Document,
-    preferences::{Action, Dock, Hold, Preferences, Shortcut, Tool},
+    preferences::{Action, BuiltinMenu, Dock, Hold, Preferences, Shortcut, SidebarSection, Tool},
     sculpt::{Alpha, Axis, Kind},
 };
 use eframe::egui::{self, Color32, Sense, Vec2};
 mod design;
 use design::Glyph;
+mod customization;
 mod icons;
+mod menus;
 mod primitive;
+mod sidebar;
+use customization::ActionResponse;
 pub(crate) struct UiState {
     icons: icons::Icons,
+    pinned_menu_rects: Vec<egui::Rect>,
     pub library_path: String,
     pub(crate) primitive_warning: Option<(usize, String)>,
     pub(crate) primitive_controls_requested: bool,
     pub transform_mode: crate::viewport::TransformMode,
     pub slice_active: bool,
+    pub select_active: bool,
     pub slice_path_mode: bool,
     pub slice_options: crate::sculpt::SliceOptions,
     pub transform_operation: crate::viewport::TransformOperation,
@@ -27,6 +33,7 @@ pub(crate) struct UiState {
     pub vertex_group_rename: String,
     rename_model: Option<(usize, String, String)>,
     pub preferences: Preferences,
+    pub(super) customization: customization::Customization,
     pub settings_open: bool,
     pub layout_open: bool,
     pub capturing: Option<Action>,
@@ -52,11 +59,13 @@ impl Default for UiState {
     fn default() -> Self {
         Self {
             icons: Default::default(),
+            pinned_menu_rects: Vec::new(),
             library_path: "brush-library.brushes.json".into(),
             primitive_warning: None,
             primitive_controls_requested: false,
             transform_mode: crate::viewport::TransformMode::Sculpt,
             slice_active: false,
+            select_active: false,
             slice_path_mode: false,
             slice_options: Default::default(),
             transform_operation: crate::viewport::TransformOperation::Move,
@@ -67,6 +76,7 @@ impl Default for UiState {
             vertex_group_rename: String::new(),
             rename_model: None,
             preferences: Preferences::default(),
+            customization: Default::default(),
             settings_open: false,
             layout_open: false,
             capturing: None,
@@ -76,7 +86,8 @@ impl Default for UiState {
             path: "sculpt.clay".into(),
             preset_path: "brush.brush.json".into(),
             alpha_path: String::new(),
-            status: "Ready • Sculpt with left drag; Alt reverses; Shift smooths".into(),
+            status: "Ready • Drag clay to sculpt; Alt-drag empty space to pan; Shift smooths"
+                .into(),
             pending: None,
             pending_save_path: "sculpt.clay".into(),
             wire: false,
@@ -93,73 +104,33 @@ impl Default for UiState {
 impl UiState {
     pub fn toolbar(&mut self, ctx: &egui::Context, document: &Document, zoom: f32) -> Vec<Command> {
         design::theme(ctx);
+        design::appearance(ctx, &self.preferences.appearance);
         let mut commands = Vec::new();
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
             ui.spacing_mut().item_spacing = Vec2::new(6., 5.);
             ui.horizontal_wrapped(|ui| {
                 ui.strong("CLAY FORM");
+                self.workspace_selector(ui);
                 ui.separator();
-                design::menu(ui, Glyph::Edit, "Edit", |ui| {
-                    for (action, command, label, available) in [
-                        (
-                            Action::Undo,
-                            Command::Undo,
-                            document.undo_label(),
-                            document.can_undo(),
-                        ),
-                        (
-                            Action::Redo,
-                            Command::Redo,
-                            document.redo_label(),
-                            document.can_redo(),
-                        ),
-                    ] {
-                        let shortcut = self
-                            .preferences
-                            .bindings
-                            .iter()
-                            .find(|(a, _)| *a == action)
-                            .and_then(|(_, binding)| binding.as_ref())
-                            .map_or(String::new(), |b| b.label());
-                        let text = format!(
-                            "{}{}",
-                            action.label(),
-                            label.map_or(String::new(), |s| format!(" {s}"))
-                        );
+                self.builtin_menu(ui, BuiltinMenu::Edit, document, zoom, &mut commands);
+                self.builtin_menu(ui, BuiltinMenu::Settings, document, zoom, &mut commands);
+                self.custom_menu_bar(ui, document, &mut commands);
+                if self.preferences.compact_toolbar {
+                    if self.mesh_busy {
+                        ui.spinner();
                         if ui
-                            .add_enabled(
-                                available && !self.mesh_busy && self.pending.is_none(),
-                                egui::Button::new(text).shortcut_text(shortcut),
-                            )
+                            .button("Cancel mesh operation")
+                            .customize(Action::CancelMeshOperation)
                             .clicked()
                         {
-                            commands.push(command);
-                            ui.close();
+                            commands.push(Command::CancelMeshJob);
                         }
                     }
-                    ui.separator();
-                    let (undo, redo) = document.history_counts();
-                    ui.label(format!("{undo} undo steps • {redo} redo steps"));
-                    ui.label("Geometry and masks • history resets on New/Open");
-                });
-                design::menu(ui, Glyph::Settings, "Settings", |ui| {
-                    if ui
-                        .add(design::button(ui, Glyph::Settings, "Key settings…"))
-                        .clicked()
-                    {
-                        self.settings_open = true;
-                        ui.close();
-                    }
-                    if ui
-                        .add(design::button(ui, Glyph::Layers, "Customize workspace…"))
-                        .clicked()
-                    {
-                        self.layout_open = true;
-                        ui.close();
-                    }
-                });
+                    return;
+                }
                 if ui
                     .add(design::button(ui, Glyph::New, "New sphere"))
+                    .customize(Action::New)
                     .clicked()
                 {
                     commands.push(Command::Request(PendingAction::New));
@@ -170,14 +141,23 @@ impl UiState {
                         .desired_width((ui.available_width() - 340.).clamp(120., 280.))
                         .hint_text("Project path"),
                 );
-                if ui.add(design::button(ui, Glyph::Open, "Open")).clicked() {
+                if ui
+                    .add(design::button(ui, Glyph::Open, "Open"))
+                    .customize(Action::Open)
+                    .clicked()
+                {
                     commands.push(Command::Request(PendingAction::Open(self.path.clone())));
                 }
-                if ui.add(design::button(ui, Glyph::Save, "Save")).clicked() {
+                if ui
+                    .add(design::button(ui, Glyph::Save, "Save"))
+                    .customize(Action::Save)
+                    .clicked()
+                {
                     commands.push(Command::Save);
                 }
                 if ui
                     .add(design::button(ui, Glyph::Export, "Export OBJ"))
+                    .customize(Action::Export)
                     .clicked()
                 {
                     commands.push(Command::Export);
@@ -195,252 +175,143 @@ impl UiState {
                     ui.label("• Modified");
                 }
             });
-            ui.horizontal_wrapped(|ui| {
-                if ui
-                    .add_enabled(
-                        document.can_undo() && !self.mesh_busy && self.pending.is_none(),
-                        design::button(ui, Glyph::Undo, "Undo"),
-                    )
-                    .on_hover_text(document.undo_label().unwrap_or("Nothing to undo"))
-                    .clicked()
-                {
-                    commands.push(Command::Undo);
-                }
-                if ui
-                    .add_enabled(
-                        document.can_redo() && !self.mesh_busy && self.pending.is_none(),
-                        design::button(ui, Glyph::Redo, "Redo"),
-                    )
-                    .on_hover_text(document.redo_label().unwrap_or("Nothing to redo"))
-                    .clicked()
-                {
-                    commands.push(Command::Redo);
-                }
-                ui.separator();
-                design::menu(ui, Glyph::Mesh, "Mesh", |ui| {
-                    self.mesh_controls(ui, document, &mut commands)
-                });
-                if ui.add_enabled(!self.mesh_busy && document.primitive().is_none(),
-                    design::button(ui, Glyph::Slice, "Slice").selected(self.slice_active))
-                    .on_hover_text("Draw a line through the active model to group, trim, or separate it")
-                    .clicked() {
-                    commands.push(Command::SliceTool(!self.slice_active));
-                }
-                if ui
-                    .add_enabled(
-                        !self.mesh_busy,
-                        design::button(ui, Glyph::Transform, "Transform").selected(
-                            self.transform_mode != crate::viewport::TransformMode::Sculpt,
-                        ),
-                    )
-                    .on_hover_text("Activate transforms and show the viewport controls")
-                    .clicked()
-                    && self.transform_mode == crate::viewport::TransformMode::Sculpt
-                {
-                    commands.push(Command::TransformMode(
-                        crate::viewport::TransformMode::World,
-                    ));
-                }
-                if ui
-                    .add_enabled(
-                        !self.mesh_busy,
-                        design::button(
-                            ui,
-                            Glyph::Primitive,
-                            if document.primitive().is_some() {
-                                "Edit primitive"
-                            } else {
-                                "Primitive"
-                            },
-                        ),
-                    )
-                    .clicked()
-                {
-                    commands.push(Command::RequestPrimitive);
-                }
-                design::menu(ui, Glyph::Layers, "Submodels", |ui| {
-                    self.submodel_controls(ui, document, &mut commands)
-                });
-                ui.separator();
-                if ui
-                    .add(design::button(ui, Glyph::Wire, "Wireframe").selected(self.wire))
-                    .clicked()
-                {
-                    self.wire = !self.wire;
-                }
-                design::menu(ui, Glyph::Wire, "Wireframe options", |ui| {
-                    use crate::viewport::WireMode;
-                    ui.checkbox(&mut self.wire, "Show wireframe");
-                    ui.radio_value(
-                        &mut self.wire_mode,
-                        WireMode::Visible,
-                        "Visible surface (hide occluded edges)",
-                    );
-                    ui.radio_value(
-                        &mut self.wire_mode,
-                        WireMode::Front,
-                        "Front facing (show through submodels)",
-                    );
-                    ui.radio_value(
-                        &mut self.wire_mode,
-                        WireMode::Transparent,
-                        "Transparent (all edges)",
-                    );
-                    ui.checkbox(&mut self.wire_triangles, "Show triangle diagonals");
-                });
-                let mut symmetry = document.symmetry().clone();
-                if ui
-                    .add(design::button(ui, Glyph::Symmetry, "Symmetry").selected(symmetry.enabled))
-                    .clicked()
-                {
-                    symmetry.enabled = !symmetry.enabled;
-                }
-                design::menu(ui, Glyph::Settings, "Symmetry settings", |ui| {
-                    ui.label("Mirror planes");
-                    ui.horizontal(|ui| {
-                        for (i, label) in ["X", "Y", "Z"].iter().enumerate() {
-                            ui.checkbox(&mut symmetry.mirror[i], *label);
-                        }
-                    });
-                    ui.checkbox(&mut symmetry.radial, "Radial symmetry");
-                    ui.add_enabled_ui(symmetry.radial, |ui| {
-                        egui::ComboBox::from_label("Radial axis")
-                            .selected_text(format!("{:?}", symmetry.radial_axis))
-                            .show_ui(ui, |ui| {
-                                for axis in Axis::ALL {
-                                    ui.selectable_value(
-                                        &mut symmetry.radial_axis,
-                                        axis,
-                                        format!("{axis:?}"),
-                                    );
-                                }
-                            });
-                        ui.add(
-                            egui::Slider::new(&mut symmetry.radial_count, 2..=16).text("Repeats"),
-                        );
-                    });
-                    ui.separator();
-                    ui.label("Symmetry center (object coordinates)");
-                    ui.horizontal(|ui| {
-                        ui.add(
-                            egui::DragValue::new(&mut symmetry.center.0)
-                                .speed(0.01)
-                                .range(-1_000_000. ..=1_000_000.)
-                                .prefix("X "),
-                        );
-                        ui.add(
-                            egui::DragValue::new(&mut symmetry.center.1)
-                                .speed(0.01)
-                                .range(-1_000_000. ..=1_000_000.)
-                                .prefix("Y "),
-                        );
-                        ui.add(
-                            egui::DragValue::new(&mut symmetry.center.2)
-                                .speed(0.01)
-                                .range(-1_000_000. ..=1_000_000.)
-                                .prefix("Z "),
-                        );
-                    });
+            if !self.preferences.compact_toolbar {
+                ui.horizontal_wrapped(|ui| {
                     if ui
-                        .add(design::button(ui, Glyph::Transform, "Center on origin"))
+                        .add_enabled(
+                            document.can_undo() && !self.mesh_busy && self.pending.is_none(),
+                            design::button(ui, Glyph::Undo, "Undo"),
+                        )
+                        .on_hover_text(document.undo_label().unwrap_or("Nothing to undo"))
+                        .customize(Action::Undo)
                         .clicked()
                     {
-                        symmetry.center = crate::sculpt::Vec3::default();
-                    }
-                    ui.checkbox(&mut self.show_symmetry_guides, "Show symmetry lines");
-                    ui.add(
-                        egui::Slider::new(&mut self.guide_opacity, 0.1..=1.).text("Guide opacity"),
-                    );
-                    ui.label("Mirror planes and radial repeats can be combined.");
-                });
-                if symmetry != *document.symmetry() {
-                    commands.push(Command::SetSymmetry(symmetry));
-                }
-                design::menu(ui, Glyph::Mask, "Mask", |ui| {
-                        let mut threshold = document.model(document.active_model_index()).unwrap().metadata.mask_threshold;
-                        if ui.add_enabled(!self.mesh_busy, egui::Slider::new(&mut threshold, 0. ..=1.).text("Selection threshold").custom_formatter(|v,_| format!("{:.0}%",v*100.)).custom_parser(|text| text.trim().trim_end_matches('%').trim().parse::<f64>().ok().map(|v|v/100.))).on_hover_text("Minimum vertex mask value for grouping, deletion and extraction. Zero-valued vertices are always excluded. Complete faces must meet the threshold at every corner.").changed() { commands.push(Command::MaskThreshold(threshold)); }
-                    ui.add_enabled_ui(!self.mesh_busy && document.primitive().is_none(), |ui| {
-                        if ui.add(design::button(ui, Glyph::Mask, "Clear mask")).clicked() { commands.push(Command::ClearMask); }
-                        if ui.add(design::button(ui, Glyph::Restore, "Invert mask")).on_hover_text("Swap masked and unmasked areas, preserving soft mask values on every subdivision level.").clicked() { commands.push(Command::InvertMask); }
-                        ui.horizontal(|ui| {
-                            if ui.button("Expand mask").on_hover_text("Spread soft mask values by one mesh edge per click.").clicked() { commands.push(Command::GrowMask(true)); }
-                            if ui.button("Contract mask").on_hover_text("Tighten the mask by one mesh edge per click.").clicked() { commands.push(Command::GrowMask(false)); }
-                        });
-                        let mut intensity = document.mask_peak();
-                        if ui.add(egui::Slider::new(&mut intensity, 0. ..=1.).text("Mask intensity").custom_formatter(|v,_| format!("{:.0}%",v*100.)).custom_parser(|text| text.trim().trim_end_matches('%').trim().parse::<f64>().ok().map(|v|v/100.))).on_hover_text("Scale the mask on every subdivision level while preserving its soft falloff. Stored group weights stay unchanged.").changed() { commands.push(Command::MaskIntensity(intensity)); }
-                        if ui.add(design::button(ui, Glyph::Delete, "Delete masked")).on_hover_text("Remove faces meeting the mask threshold at every vertex. Creates open boundaries and resets subdivision levels and closed-surface modes. Undo restores everything.").clicked() { commands.push(Command::DeleteMasked); }
-                    });
-                });
-                design::menu(ui, Glyph::View, "View", |ui| {
-                    ui.checkbox(&mut self.show_polygroups, "Show polygroup colors");
-                    ui.checkbox(&mut self.show_backfaces, "Faint back-facing surfaces").on_hover_text("Show the reverse side of open surfaces translucently. Front-facing surfaces stay solid.");
-                    if self.show_backfaces {
-                        ui.add(egui::Slider::new(&mut self.backface_opacity, 0.02..=0.5).text("Back-face opacity").custom_formatter(|v,_|format!("{:.0}%",v*100.)).custom_parser(|text|text.trim().trim_end_matches('%').trim().parse::<f64>().ok().map(|v|v/100.)));
-                    }
-                    ui.separator();
-                    if ui.add(design::button(ui, Glyph::Plus, "Zoom in")).clicked() {
-                        commands.push(Command::ZoomIn);
+                        commands.push(Command::Undo);
                     }
                     if ui
-                        .add(design::button(ui, Glyph::Minus, "Zoom out"))
+                        .add_enabled(
+                            document.can_redo() && !self.mesh_busy && self.pending.is_none(),
+                            design::button(ui, Glyph::Redo, "Redo"),
+                        )
+                        .on_hover_text(document.redo_label().unwrap_or("Nothing to redo"))
+                        .customize(Action::Redo)
+                        .clicked()
+                    {
+                        commands.push(Command::Redo);
+                    }
+                    ui.separator();
+                    self.builtin_menu(ui, BuiltinMenu::Visibility, document, zoom, &mut commands);
+                    self.builtin_menu(ui, BuiltinMenu::Mesh, document, zoom, &mut commands);
+                    if ui
+                        .add_enabled(
+                            !self.mesh_busy && document.primitive().is_none(),
+                            design::button(ui, Glyph::Slice, "Slice").selected(self.slice_active),
+                        )
+                        .on_hover_text(
+                            "Draw a line through the active model to group, trim, or separate it",
+                        )
+                        .customize(Action::Slice)
+                        .clicked()
+                    {
+                        commands.push(Command::SliceTool(!self.slice_active));
+                    }
+                    if ui
+                        .add_enabled(
+                            !self.mesh_busy,
+                            design::button(ui, Glyph::Transform, "Transform").selected(
+                                self.transform_mode != crate::viewport::TransformMode::Sculpt,
+                            ),
+                        )
+                        .on_hover_text("Activate transforms and show the viewport controls")
+                        .customize(Action::Transform)
+                        .clicked()
+                        && self.transform_mode == crate::viewport::TransformMode::Sculpt
+                    {
+                        commands.push(Command::TransformMode(
+                            crate::viewport::TransformMode::World,
+                        ));
+                    }
+                    if ui
+                        .add_enabled(
+                            !self.mesh_busy,
+                            design::button(
+                                ui,
+                                Glyph::Primitive,
+                                if document.primitive().is_some() {
+                                    "Edit primitive"
+                                } else {
+                                    "Primitive"
+                                },
+                            ),
+                        )
+                        .customize(Action::Primitive)
+                        .clicked()
+                    {
+                        commands.push(Command::RequestPrimitive);
+                    }
+                    self.builtin_menu(ui, BuiltinMenu::Submodels, document, zoom, &mut commands);
+                    ui.separator();
+                    if ui
+                        .add(design::button(ui, Glyph::Wire, "Wireframe").selected(self.wire))
+                        .customize(Action::Wireframe)
+                        .clicked()
+                    {
+                        self.wire = !self.wire;
+                    }
+                    self.builtin_menu(ui, BuiltinMenu::Wireframe, document, zoom, &mut commands);
+                    let mut symmetry = document.symmetry().clone();
+                    if ui
+                        .add(
+                            design::button(ui, Glyph::Symmetry, "Symmetry")
+                                .selected(symmetry.enabled),
+                        )
+                        .customize(Action::Symmetry)
+                        .clicked()
+                    {
+                        symmetry.enabled = !symmetry.enabled;
+                    }
+                    if symmetry != *document.symmetry() {
+                        commands.push(Command::SetSymmetry(symmetry));
+                    }
+                    self.builtin_menu(ui, BuiltinMenu::Symmetry, document, zoom, &mut commands);
+                    self.builtin_menu(ui, BuiltinMenu::Mask, document, zoom, &mut commands);
+                    self.builtin_menu(ui, BuiltinMenu::View, document, zoom, &mut commands);
+                    if ui
+                        .add_enabled(zoom > 0.2, design::button(ui, Glyph::Minus, ""))
+                        .on_hover_text("Zoom out")
+                        .customize(Action::ZoomOut)
                         .clicked()
                     {
                         commands.push(Command::ZoomOut);
                     }
-                    let mut value = zoom;
-                    ui.add(
-                        egui::Slider::new(&mut value, 0.2..=8.)
-                            .logarithmic(true)
-                            .text("Zoom")
-                            .custom_formatter(|value, _| format!("{:.0}%", value * 100.))
-                            .custom_parser(|text| {
-                                text.trim()
-                                    .trim_end_matches('%')
-                                    .trim()
-                                    .parse::<f64>()
-                                    .ok()
-                                    .map(|percent| percent / 100.)
-                            }),
-                    );
-                    if value != zoom {
-                        commands.push(Command::SetZoom(value));
-                    }
                     if ui
-                        .add(design::button(ui, Glyph::Restore, "Reset zoom to 100%"))
+                        .button(format!("{:.0}%", zoom * 100.))
+                        .on_hover_text("Reset zoom to 100% (keep rotation and pan)")
+                        .customize(Action::ResetZoom)
                         .clicked()
                     {
                         commands.push(Command::SetZoom(1.));
                     }
                     if ui
-                        .add(design::button(ui, Glyph::Restore, "Reset view"))
+                        .add_enabled(zoom < 8., design::button(ui, Glyph::Plus, ""))
+                        .on_hover_text("Zoom in")
+                        .customize(Action::ZoomIn)
                         .clicked()
                     {
-                        commands.push(Command::ResetView);
+                        commands.push(Command::ZoomIn);
                     }
                 });
-                if ui
-                    .add_enabled(zoom > 0.2, design::button(ui, Glyph::Minus, ""))
-                    .on_hover_text("Zoom out")
-                    .clicked()
-                {
-                    commands.push(Command::ZoomOut);
-                }
-                if ui
-                    .button(format!("{:.0}%", zoom * 100.))
-                    .on_hover_text("Reset zoom to 100% (keep rotation and pan)")
-                    .clicked()
-                {
-                    commands.push(Command::SetZoom(1.));
-                }
-                if ui
-                    .add_enabled(zoom < 8., design::button(ui, Glyph::Plus, ""))
-                    .on_hover_text("Zoom in")
-                    .clicked()
-                {
-                    commands.push(Command::ZoomIn);
-                }
-            });
+            }
         });
+        self.pinned_menus(ctx, document, zoom, &mut commands);
+        if self.select_active {
+            egui::TopBottomPanel::top("visibility_selection_controls").show(ctx, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Select rectangle · drag to isolate · Alt to hide · Space to move · Esc to cancel");
+                    if ui.button("Done").clicked() { commands.push(Command::SelectTool(false)); }
+                });
+            });
+        }
         if self.slice_active {
             egui::TopBottomPanel::top("slice_options").show(ctx, |ui| {
                 ui.add_enabled_ui(!self.mesh_busy && self.pending.is_none(), |ui| {
@@ -472,6 +343,7 @@ impl UiState {
         document: &Document,
         tablet_status: &str,
         pressure: f32,
+        zoom: f32,
     ) -> Vec<Command> {
         let mut commands = Vec::new();
         if self.primitive_controls_requested && document.primitive().is_some() {
@@ -485,7 +357,13 @@ impl UiState {
             }
         }
         for dock in [Dock::Left, Dock::Right] {
-            if !self.preferences.panels.iter().any(|p| p.dock == dock) {
+            let placement = if dock == Dock::Left {
+                crate::preferences::Placement::LeftPanel
+            } else {
+                crate::preferences::Placement::RightPanel
+            };
+            let sections = self.preferences.sidebar_sections(dock);
+            if sections.is_empty() {
                 continue;
             }
             let panel = if dock == Dock::Left {
@@ -502,43 +380,77 @@ impl UiState {
                 .default_width(width)
                 .width_range(180. ..=600.)
                 .show(ctx, |ui| {
+                    let background = ui.interact(
+                        ui.max_rect(),
+                        ui.id().with("workspace_background"),
+                        egui::Sense::click(),
+                    );
                     egui::ScrollArea::vertical()
                         .id_salt(format!("{dock:?}"))
                         .show(ui, |ui| {
-                            for index in 0..self.preferences.panels.len() {
-                                if self.preferences.panels[index].dock != dock {
-                                    continue;
-                                }
-                                let tool = self.preferences.panels[index].tool;
-                                let header = egui::CollapsingHeader::new(tool.label())
-                                    .id_salt(tool.label())
-                                    .open(Some(self.preferences.panels[index].open))
-                                    .show(ui, |ui| {
-                                        self.tool_controls(
-                                            tool,
+                            for section in sections {
+                                match section {
+                                    SidebarSection::Custom(id) => {
+                                        let menu = self
+                                            .preferences
+                                            .menus
+                                            .iter()
+                                            .find(|m| m.id == id)
+                                            .unwrap()
+                                            .clone();
+                                        self.custom_section(ui, &menu, document, &mut commands);
+                                    }
+                                    SidebarSection::Builtin(menu) => {
+                                        self.builtin_section(
                                             ui,
+                                            menu,
                                             document,
-                                            tablet_status,
-                                            pressure,
+                                            zoom,
                                             &mut commands,
                                         );
-                                    });
-                                if header.header_response.clicked() {
-                                    self.preferences.panels[index].open =
-                                        !self.preferences.panels[index].open;
-                                    if tool == Tool::Transform
-                                        && self.preferences.panels[index].open
-                                        && !self.mesh_busy
-                                        && self.transform_mode
-                                            == crate::viewport::TransformMode::Sculpt
-                                    {
-                                        commands.push(Command::TransformMode(
-                                            crate::viewport::TransformMode::World,
-                                        ));
+                                    }
+                                    SidebarSection::Tool(tool) => {
+                                        let index = self
+                                            .preferences
+                                            .panels
+                                            .iter()
+                                            .position(|p| p.tool == tool)
+                                            .unwrap();
+                                        let tool = self.preferences.panels[index].tool;
+                                        let header = egui::CollapsingHeader::new(tool.label())
+                                            .id_salt(tool.label())
+                                            .open(Some(self.preferences.panels[index].open))
+                                            .show(ui, |ui| {
+                                                self.tool_controls(
+                                                    tool,
+                                                    ui,
+                                                    document,
+                                                    tablet_status,
+                                                    pressure,
+                                                    &mut commands,
+                                                );
+                                            });
+                                        let clicked = header.header_response.clicked();
+                                        self.section_context(header.header_response, section);
+                                        if clicked {
+                                            self.preferences.panels[index].open =
+                                                !self.preferences.panels[index].open;
+                                            if tool == Tool::Transform
+                                                && self.preferences.panels[index].open
+                                                && !self.mesh_busy
+                                                && self.transform_mode
+                                                    == crate::viewport::TransformMode::Sculpt
+                                            {
+                                                commands.push(Command::TransformMode(
+                                                    crate::viewport::TransformMode::World,
+                                                ));
+                                            }
+                                        }
                                     }
                                 }
                             }
                         });
+                    customization::sidebar_context(background, placement);
                 });
             if dock == Dock::Left {
                 self.preferences.left_width = response.response.rect.width();
@@ -633,7 +545,11 @@ impl UiState {
             Tool::Library => {
                 design::menu(ui, Glyph::Plus, "Add brush", |ui| {
                     for kind in Kind::ALL {
-                        if ui.button(format!("{kind:?}")).clicked() {
+                        if ui
+                            .button(format!("{kind:?}"))
+                            .customize(Action::NewBrush(format!("{kind:?}")))
+                            .clicked()
+                        {
                             commands.push(Command::AddBrush(kind));
                             ui.close();
                         }
@@ -649,6 +565,7 @@ impl UiState {
                         for (i, b) in document.brushes().iter().enumerate() {
                             let id = self.brush_texture(ui.ctx(), i, b);
                             if design::brush_tile(ui, id, &b.name, self.selected == i, width)
+                                .customize(Action::SelectBrush(b.identity()))
                                 .clicked()
                             {
                                 self.selected = i;
@@ -665,12 +582,14 @@ impl UiState {
                         Glyph::Camera,
                         "Capture model for brush icon",
                     ))
+                    .customize(Action::CaptureBrushIcon)
                     .clicked()
                 {
                     commands.push(Command::CaptureBrushIcon(self.selected));
                 }
                 if ui
                     .add(design::button(ui, Glyph::Copy, "Duplicate brush"))
+                    .customize(Action::DuplicateBrush)
                     .clicked()
                 {
                     commands.push(Command::DuplicateBrush(self.selected));
@@ -683,6 +602,7 @@ impl UiState {
                     ui.vertical(|ui| {
                         if ui
                             .add(design::button(ui, Glyph::Camera, "Capture model icon"))
+                            .customize(Action::CaptureBrushIcon)
                             .clicked()
                         {
                             commands.push(Command::CaptureBrushIcon(self.selected));
@@ -692,6 +612,7 @@ impl UiState {
                                 b.icon.is_some(),
                                 design::button(ui, Glyph::Restore, "Restore default icon"),
                             )
+                            .customize(Action::RestoreBrushIcon)
                             .clicked()
                         {
                             b.icon = None;
@@ -707,8 +628,10 @@ impl UiState {
                         }
                     });
                 ui.horizontal(|ui| {
-                    ui.selectable_value(&mut b.subtract, false, "+ Add");
-                    ui.selectable_value(&mut b.subtract, true, "− Subtract");
+                    ui.selectable_value(&mut b.subtract, false, "+ Add")
+                        .customize(Action::BrushAdd);
+                    ui.selectable_value(&mut b.subtract, true, "− Subtract")
+                        .customize(Action::BrushSubtract);
                 });
                 ui.add(egui::Slider::new(&mut b.radius, 1. ..=500.).text("Radius (px)"));
                 ui.add(egui::Slider::new(&mut b.inner_radius, 0. ..=1.).text("Inner radius (fraction)")).on_hover_text("Full-strength core; falloff fades from here to the outer radius. Applies to Soft and image alphas.");
@@ -722,6 +645,16 @@ impl UiState {
                         .show_ui(ui, |ui| {
                             for mode in crate::sculpt::StrokeMode::ALL {
                                 ui.selectable_value(&mut b.stroke_mode, mode, mode.label())
+                                    .customize(match mode {
+                                        crate::sculpt::StrokeMode::Freehand => {
+                                            Action::StrokeFreehand
+                                        }
+                                        crate::sculpt::StrokeMode::Line => Action::StrokeLine,
+                                        crate::sculpt::StrokeMode::DragRect => {
+                                            Action::StrokeDragRect
+                                        }
+                                        crate::sculpt::StrokeMode::DragDot => Action::StrokeDragDot,
+                                    })
                                     .on_hover_text(mode.description());
                             }
                         });
@@ -732,6 +665,12 @@ impl UiState {
                     ui.weak("Grab and Snake use Freehand for continuous displacement.");
                 }
                 ui.add(egui::Slider::new(&mut b.spacing, 0.01..=1.).text("Spacing"));
+                ui.add_enabled_ui(b.supports_stabilization(), |ui| {
+                    ui.checkbox(&mut b.stabilize, "Stroke stabilisation")
+                        .customize(Action::StrokeStabilisation)
+                        .on_hover_text("Freehand brush trails the pointer to smooth small movements. Settings apply to the next stroke. Grab and Snake are unaffected.");
+                    ui.add_enabled(b.stabilize, egui::Slider::new(&mut b.stabilizer_distance, 1. ..=200.).text("Trailing distance (px)"));
+                });
                 ui.add(egui::Slider::new(&mut b.falloff, 0.1..=8.).text("Falloff"));
                 ui.add(egui::Slider::new(&mut b.rotation, 0. ..=360.).text("Alpha rotation"));
                 ui.checkbox(&mut b.pressure, "Pressure → strength");
@@ -741,9 +680,12 @@ impl UiState {
             Tool::Alpha => {
                 ui.label("Alpha");
                 ui.horizontal(|ui| {
-                    ui.selectable_value(&mut b.alpha, Alpha::Soft, "Soft");
-                    ui.selectable_value(&mut b.alpha, Alpha::Hard, "Hard");
-                    ui.selectable_value(&mut b.alpha, Alpha::Square, "Square");
+                    ui.selectable_value(&mut b.alpha, Alpha::Soft, "Soft")
+                        .customize(Action::AlphaSoft);
+                    ui.selectable_value(&mut b.alpha, Alpha::Hard, "Hard")
+                        .customize(Action::AlphaHard);
+                    ui.selectable_value(&mut b.alpha, Alpha::Square, "Square")
+                        .customize(Action::AlphaSquare);
                 });
                 if matches!(b.alpha, Alpha::Image { .. }) {
                     ui.label("Custom image alpha loaded");
@@ -768,6 +710,7 @@ impl UiState {
                 ui.text_edit_singleline(&mut self.alpha_path);
                 if ui
                     .add(design::button(ui, Glyph::Open, "Load alpha"))
+                    .customize(Action::LoadAlpha)
                     .clicked()
                 {
                     commands.push(Command::LoadAlpha(self.selected));
@@ -779,12 +722,14 @@ impl UiState {
                 ui.horizontal(|ui| {
                     if ui
                         .add(design::button(ui, Glyph::Export, "Export brush"))
+                        .customize(Action::SavePreset)
                         .clicked()
                     {
                         commands.push(Command::SavePreset(self.selected));
                     }
                     if ui
                         .add(design::button(ui, Glyph::Open, "Import brush"))
+                        .customize(Action::LoadPreset)
                         .clicked()
                     {
                         commands.push(Command::LoadPreset);
@@ -796,12 +741,14 @@ impl UiState {
                 ui.horizontal(|ui| {
                     if ui
                         .add(design::button(ui, Glyph::Export, "Export library"))
+                        .customize(Action::ExportLibrary)
                         .clicked()
                     {
                         commands.push(Command::ExportBrushLibrary);
                     }
                     if ui
                         .add(design::button(ui, Glyph::Open, "Import library"))
+                        .customize(Action::ImportLibrary)
                         .clicked()
                     {
                         commands.push(Command::ImportBrushLibrary);
@@ -815,151 +762,12 @@ impl UiState {
             Tool::Tablet => {
                 ui.label(tablet_status);
                 ui.label(format!("Pressure: {:.0}%", pressure * 100.));
-                ui.label(format!("Left / pen: sculpt; empty space: orbit\nCorner gizmo: drag or click axis\n{:?}: reverse brush\n{:?}: smooth\nRight drag: orbit\nMiddle drag: pan\nWheel: zoom\n{:?} + drag: zoom (up=in, down=out)", self.preferences.reverse, self.preferences.smooth, self.preferences.zoom_hold));
+                ui.label(format!("Left / pen: sculpt; empty space: orbit\nCorner gizmo: drag or click axis\n{:?}: reverse brush\n{:?}: smooth\nRight drag: orbit\nMiddle drag: pan\nWheel: zoom\n{:?} + drag: zoom (up=in, down=out)\n{:?} + drag: pan (sideways / up / down)", self.preferences.reverse, self.preferences.smooth, self.preferences.zoom_hold, self.preferences.pan_hold));
             }
         }
         if &edited != original {
             commands.push(Command::UpdateBrush(self.selected, edited));
         }
-    }
-}
-
-impl UiState {
-    pub fn settings(&mut self, ctx: &egui::Context) {
-        if !self.settings_open {
-            self.capturing = None;
-        }
-        if let Some(action) = self.capturing {
-            let event = ctx.input(|i| {
-                i.events.iter().find_map(|e| match e {
-                    egui::Event::Key {
-                        key,
-                        pressed: true,
-                        repeat: false,
-                        modifiers,
-                        ..
-                    } => Some((*key, *modifiers)),
-                    _ => None,
-                })
-            });
-            if let Some((key, modifiers)) = event {
-                if key == egui::Key::Escape {
-                    self.capturing = None;
-                } else {
-                    match self.preferences.bind(action, Shortcut::new(key, modifiers)) {
-                        Ok(()) => {
-                            self.settings_message = format!("Updated {}", action.label());
-                            self.capturing = None;
-                        }
-                        Err(error) => self.settings_message = error,
-                    }
-                }
-                ctx.input_mut(|i| {
-                    i.events
-                        .retain(|e| !matches!(e, egui::Event::Key { .. } | egui::Event::Text(_)))
-                });
-            }
-        }
-        egui::Window::new("Key settings")
-            .open(&mut self.settings_open)
-            .default_width(460.)
-            .show(ctx, |ui| {
-                ui.label("Click a shortcut, then press the new combination. Escape cancels.");
-                ui.label(
-                    "Shortcuts pause while typing or editing settings. Changes save automatically.",
-                );
-                egui::Grid::new("bindings").striped(true).show(ui, |ui| {
-                    for (action, binding) in &mut self.preferences.bindings {
-                        ui.label(action.label());
-                        let label = if self.capturing == Some(*action) {
-                            "Press keys…".into()
-                        } else {
-                            binding.as_ref().map_or("Unbound".into(), |b| b.label())
-                        };
-                        if ui.button(label).clicked() {
-                            self.capturing = Some(*action);
-                            self.settings_message.clear();
-                        }
-                        if ui.small_button("Clear").clicked() {
-                            *binding = None;
-                            if self.capturing == Some(*action) {
-                                self.capturing = None;
-                            }
-                        }
-                        ui.end_row();
-                    }
-                });
-                ui.separator();
-                for (label, hold) in [
-                    ("Hold to smooth", &mut self.preferences.smooth),
-                    ("Hold to reverse", &mut self.preferences.reverse),
-                    (
-                        "Hold to zoom while dragging",
-                        &mut self.preferences.zoom_hold,
-                    ),
-                ] {
-                    egui::ComboBox::from_label(label)
-                        .selected_text(format!("{hold:?}"))
-                        .show_ui(ui, |ui| {
-                            for value in Hold::ALL {
-                                ui.selectable_value(hold, value, format!("{value:?}"));
-                            }
-                        });
-                }
-                if self.preferences.zoom_hold != Hold::Disabled
-                    && (self.preferences.zoom_hold == self.preferences.smooth
-                        || self.preferences.zoom_hold == self.preferences.reverse)
-                {
-                    ui.label(
-                        "Zoom takes priority when starting a pen drag with a shared modifier.",
-                    );
-                }
-                if self.preferences.smooth == self.preferences.reverse
-                    && self.preferences.smooth != Hold::Disabled
-                {
-                    ui.label("Both effects will apply with this modifier.");
-                }
-                if ui
-                    .add(design::button(ui, Glyph::Restore, "Reset keys to defaults"))
-                    .clicked()
-                {
-                    let defaults = Preferences::default();
-                    self.preferences.bindings = defaults.bindings;
-                    self.preferences.smooth = defaults.smooth;
-                    self.preferences.reverse = defaults.reverse;
-                    self.preferences.zoom_hold = defaults.zoom_hold;
-                    self.capturing = None;
-                }
-                ui.label(&self.settings_message);
-            });
-        egui::Window::new("Customize workspace").open(&mut self.layout_open).default_width(520.).show(ctx, |ui| {
-            ui.label("Choose where each tool group lives. Use arrows to change its order.");
-            ui.label("Side panels resize by dragging their edge. Floating windows drag by their title.");
-            ui.label("Changes save automatically; hidden groups can be restored here.");
-            let mut reorder = None;
-            for index in 0..self.preferences.panels.len() {
-                ui.push_id(index, |ui| {
-                    ui.horizontal(|ui| {
-                        let panel = &mut self.preferences.panels[index];
-                        ui.label(panel.tool.label());
-                        egui::ComboBox::from_id_salt("dock").selected_text(format!("{:?}",panel.dock)).show_ui(ui, |ui| {
-                            for dock in Dock::ALL { ui.selectable_value(&mut panel.dock, dock, format!("{dock:?}")); }
-                        });
-                        ui.add_enabled(matches!(panel.dock,Dock::Left | Dock::Right), egui::Checkbox::new(&mut panel.open, "Expanded"));
-                        if ui.add_enabled(index > 0, egui::Button::new("↑")).clicked() { reorder = Some((index,index-1)); }
-                        if ui.add_enabled(index < Tool::ALL.len()-1, egui::Button::new("↓")).clicked() { reorder = Some((index,index+1)); }
-                    });
-                });
-            }
-            if let Some((a,b)) = reorder { self.preferences.panels.swap(a,b); }
-            if ui.add(egui::Slider::new(&mut self.preferences.left_width,180. ..=600.).text("Left width")).changed() { ctx.memory_mut(|m| m.data.remove::<egui::containers::panel::PanelState>(egui::Id::new("tools_left"))); }
-            if ui.add(egui::Slider::new(&mut self.preferences.right_width,180. ..=600.).text("Right width")).changed() { ctx.memory_mut(|m| m.data.remove::<egui::containers::panel::PanelState>(egui::Id::new("tools_right"))); }
-            if ui.add(design::button(ui, Glyph::Restore, "Reset workspace to defaults")).clicked() {
-                let defaults = Preferences::default(); self.preferences.panels = defaults.panels; self.preferences.left_width = defaults.left_width; self.preferences.right_width = defaults.right_width;
-                // Remove remembered panel sizes/positions so reset takes effect immediately.
-                ctx.memory_mut(|m| { m.reset_areas(); for id in ["tools_left","tools_right"] { m.data.remove::<egui::containers::panel::PanelState>(egui::Id::new(id)); } });
-            }
-        });
     }
 }
 
@@ -986,7 +794,7 @@ impl UiState {
                         ui.horizontal_wrapped(|ui| {
                             ui.strong("Transform");
                             for (mode, label) in [(Mode::World, "World axes"), (Mode::ActionLine, "Action Line")] {
-                                if ui.selectable_label(self.transform_mode == mode, label).clicked() {
+                                if ui.selectable_label(self.transform_mode == mode, label).customize(mode.into()).clicked() {
                                     commands.push(Command::TransformMode(mode));
                                 }
                             }
@@ -1002,13 +810,13 @@ impl UiState {
                                 (Operation::Scale, "Scale", "Drag an axis/end to stretch, or the middle to scale uniformly"),
                             ] {
                                 if operation == Operation::PlaceLine && self.transform_mode != Mode::ActionLine { continue; }
-                                if ui.selectable_label(self.transform_operation == operation, label).on_hover_text(hint).clicked() {
+                                if ui.selectable_label(self.transform_operation == operation, label).on_hover_text(hint).customize(operation.into()).clicked() {
                                     commands.push(Command::TransformOperation(operation));
                                 }
                             }
                         });
                         let mut respect = self.respect_transform_mask;
-                        if ui.checkbox(&mut respect, "Respect mask").on_hover_text("Protect masked vertices; turn off to transform the whole model").changed() {
+                        if ui.checkbox(&mut respect, "Respect mask").customize(Action::RespectMask).on_hover_text("Protect masked vertices; turn off to transform the whole model").changed() {
                             commands.push(Command::RespectTransformMask(respect));
                         }
                     });
@@ -1021,18 +829,18 @@ impl UiState {
         ui.add_enabled_ui(!self.mesh_busy, |ui| {
             ui.horizontal_wrapped(|ui| {
                 for (mode, label) in [(Mode::Sculpt, "Sculpt"), (Mode::World, "World axes"), (Mode::ActionLine, "Action Line")] {
-                    if ui.selectable_label(self.transform_mode == mode, label).clicked() { commands.push(Command::TransformMode(mode)); }
+                    if ui.selectable_label(self.transform_mode == mode, label).customize(mode.into()).clicked() { commands.push(Command::TransformMode(mode)); }
                 }
             });
             if self.transform_mode != Mode::Sculpt {
                 ui.horizontal_wrapped(|ui| {
                     for (op, label) in [(Operation::Move, "Move"), (Operation::Scale, "Scale"), (Operation::PlaceLine, "Set line")] {
                         if op == Operation::PlaceLine && self.transform_mode != Mode::ActionLine { continue; }
-                        if ui.selectable_label(self.transform_operation == op, label).clicked() { commands.push(Command::TransformOperation(op)); }
+                        if ui.selectable_label(self.transform_operation == op, label).customize(op.into()).clicked() { commands.push(Command::TransformOperation(op)); }
                     }
                 });
                 let mut respect = self.respect_transform_mask;
-                if ui.checkbox(&mut respect, "Respect mask").changed() { commands.push(Command::RespectTransformMask(respect)); }
+                if ui.checkbox(&mut respect, "Respect mask").customize(Action::RespectMask).changed() { commands.push(Command::RespectTransformMask(respect)); }
                 if self.transform_mode == Mode::World {
                     ui.label("Drag X/Y/Z handles. Center moves in the view plane or scales uniformly. Orbit to expose an axis facing the camera.");
                 } else {
@@ -1051,9 +859,12 @@ impl UiState {
         ui.label("Click a model row to select it. The eye toggles visibility.");
         ui.add_enabled_ui(!self.mesh_busy, |ui| {
             ui.horizontal_wrapped(|ui| {
-                if document.primitive().is_none() && ui.add(design::button(ui, Glyph::Primitive, "Primitive")).clicked() { commands.push(Command::RequestPrimitive); }
-                if ui.add(design::button(ui, Glyph::Copy, "Duplicate")).clicked() { commands.push(Command::DuplicateModel); }
-                if ui.add(design::button(ui, Glyph::Mask, "Extract masked")).on_hover_text("Copy faces meeting the mask threshold at every vertex; keep the source. Boundaries remain open.").clicked() { commands.push(Command::ExtractMasked); }
+                if document.primitive().is_none() && ui.add(design::button(ui, Glyph::Primitive, "Primitive")).customize(Action::Primitive).clicked() { commands.push(Command::RequestPrimitive); }
+                if ui.add(design::button(ui, Glyph::Copy, "Duplicate")).customize(Action::DuplicateModel).clicked() { commands.push(Command::DuplicateModel); }
+                let merge_target = document.merge_down_target();
+                let merge_hint = merge_target.map_or_else(|| "No submodel below the active one".into(), |i| format!("Combine with {} below. Keeps positions, masks and groups without welding. Bakes primitives and thickness; resets subdivision levels. Undo restores both models.", document.model(i).unwrap().name));
+                if ui.add_enabled(merge_target.is_some(), design::button(ui, Glyph::Layers, "Merge down")).on_hover_text(merge_hint).customize(Action::MergeDown).clicked() { commands.push(Command::MergeDown); }
+                if ui.add(design::button(ui, Glyph::Mask, "Extract masked")).on_hover_text("Copy faces meeting the mask threshold at every vertex; keep the source. Boundaries remain open.").customize(Action::ExtractMasked).clicked() { commands.push(Command::ExtractMasked); }
             });
             ui.horizontal(|ui| {
                 ui.add(egui::TextEdit::singleline(&mut self.group_name).desired_width(120.).hint_text("New submodel group"));
@@ -1084,7 +895,7 @@ impl UiState {
                                 let mut select_clicked = false;
                                 let mut frame = egui::Frame::group(ui.style());
                                 if active {
-                                    frame = frame.fill(Color32::from_rgb(37, 58, 68)).stroke(egui::Stroke::new(1.5_f32, Color32::from_rgb(125, 210, 245)));
+                                    frame = frame.fill(ui.visuals().selection.bg_fill).stroke(ui.visuals().selection.stroke);
                                 }
                                 let row = frame.show(ui, |ui| {
                                     ui.set_min_width(ui.available_width());
@@ -1140,17 +951,25 @@ impl UiState {
             if group != model.metadata.group { let mut metadata = model.metadata.clone(); metadata.group = group; commands.push(Command::EditSubmodel(index, model.name.into(), metadata)); }
             ui.separator();
             self.primitive_controls(ui, document, commands);
-            ui.label("Vertex groups / Polygroups");
+            ui.label("Vertex groups");
             ui.add_enabled_ui(document.primitive().is_none(), |ui| {
                 ui.add(egui::TextEdit::singleline(&mut self.vertex_group_name).hint_text("Group name (optional)"));
                 ui.horizontal(|ui| {
-                    if ui.button("Group masked").clicked() { commands.push(Command::CreateVertexGroup(self.vertex_group_name.clone(), false)); }
-                    if ui.button("Group all").clicked() { commands.push(Command::CreateVertexGroup(self.vertex_group_name.clone(), true)); }
+                    if ui.button("Group masked").customize(Action::GroupMasked).clicked() { commands.push(Command::CreateVertexGroup(self.vertex_group_name.clone(), false)); }
+                    if ui.button("Group all").on_hover_text("Replace all vertex groups on the active model with one group. Includes every subdivision level; Undo restores the previous groups.").customize(Action::GroupAll).clicked() { commands.push(Command::CreateVertexGroup(self.vertex_group_name.clone(), true)); }
                 });
+                if ui.add(design::button(ui, Glyph::Restore, "Flip visibility")).on_hover_text("Swap visible and hidden faces on the active submodel. Includes partially hidden groups; supports Undo.").customize(Action::InvertVisibility).clicked() {
+                    commands.push(Command::InvertVisibility);
+                }
+                let mut group_visibility = vec![None; model.mesh.vertex_groups.len()];
+                for (face, &id) in model.mesh.polygroups.iter().enumerate() {
+                    if id != 0 { *group_visibility[id - 1].get_or_insert(false) |= model.mesh.face_visible(face); }
+                }
                 for (g, group) in model.mesh.vertex_groups.iter().enumerate() {
                     let color = crate::sculpt::Mesh::group_color(g).map(|c| (c * 255.) as u8);
+                    let visible = group_visibility[g].unwrap_or(group.visible);
                     ui.horizontal(|ui| {
-                        if visibility_button(ui, group.visible).on_hover_text("Show/hide this polygroup’s faces. Hidden faces cannot be picked or sculpted.").clicked() { commands.push(Command::VertexGroupVisible(g, !group.visible)); }
+                        if visibility_button(ui, visible).on_hover_text("Show/hide faces assigned to this vertex group. Hidden faces cannot be picked or sculpted.").clicked() { commands.push(Command::VertexGroupVisible(g, !visible)); }
                         ui.colored_label(Color32::from_rgb(color[0], color[1], color[2]), "●");
                         if ui.selectable_label(self.selected_vertex_group == Some((index, g)), &group.name).on_hover_text(format!("{} weighted vertices", group.weights.iter().filter(|&&w| w > 0.).count())).clicked() {
                             self.selected_vertex_group = Some((index, g));
@@ -1161,17 +980,17 @@ impl UiState {
                 if let Some((target, g)) = self.selected_vertex_group
                     && target == index && g < model.mesh.vertex_groups.len() {
                         ui.horizontal_wrapped(|ui| {
-                            if ui.button("Mask group").clicked() { commands.push(Command::MaskVertexGroup(g)); }
-                            if ui.button("Add masked").clicked() { commands.push(Command::AssignMaskToGroup(g, false)); }
-                            if ui.button("Remove masked").clicked() { commands.push(Command::AssignMaskToGroup(g, true)); }
+                            if ui.button("Mask group").customize(Action::MaskGroup).clicked() { commands.push(Command::MaskVertexGroup(g)); }
+                            if ui.button("Add masked").customize(Action::AddMaskedToGroup).clicked() { commands.push(Command::AssignMaskToGroup(g, false)); }
+                            if ui.button("Remove masked").customize(Action::RemoveMaskedFromGroup).clicked() { commands.push(Command::AssignMaskToGroup(g, true)); }
                         });
                         ui.add(egui::TextEdit::singleline(&mut self.vertex_group_rename).hint_text("Rename group"));
                         ui.horizontal(|ui| {
-                            if ui.button("Rename").clicked() { commands.push(Command::RenameVertexGroup(g, self.vertex_group_rename.clone())); }
-                            if ui.button("Delete group").clicked() { commands.push(Command::DeleteVertexGroup(g)); }
+                            if ui.button("Rename").customize(Action::RenameGroup).clicked() { commands.push(Command::RenameVertexGroup(g, self.vertex_group_rename.clone())); }
+                            if ui.button("Delete group").customize(Action::DeleteGroup).clicked() { commands.push(Command::DeleteVertexGroup(g)); }
                         });
                 }
-                ui.weak("Groups store soft vertex weights independently of the mask. Complete selected faces become polygroups.");
+                ui.weak("Vertex groups store soft weights independently of the mask. Complete selected faces receive the group’s color and visibility; each face is assigned to at most one group.");
             });
             ui.separator();
             ui.label("Thickness · open meshes");
@@ -1190,7 +1009,7 @@ impl UiState {
                     ui.checkbox(&mut metadata.thickness_mask_rim, "Mask rim vertices");
                     ui.checkbox(&mut metadata.thickness_group_mask, "Group masked vertices");
                     if metadata != *model.metadata { commands.push(Command::EditSubmodel(index, model.name.into(), metadata)); }
-                    if ui.add_enabled(model.metadata.visible,design::button(ui,Glyph::Mesh,"Apply thickness")).on_hover_text("Bake the preview into a closed mesh. Resets subdivision levels and converts primitives to a sculpting mesh. Undo restores the original.").clicked() {
+                    if ui.add_enabled(model.metadata.visible,design::button(ui,Glyph::Mesh,"Apply thickness")).on_hover_text("Bake the preview into a closed mesh. Resets subdivision levels and converts primitives to a sculpting mesh. Undo restores the original.").customize(Action::ApplyThickness).clicked() {
                         commands.push(Command::ApplyThickness);
                     }
                 }
@@ -1216,9 +1035,9 @@ impl UiState {
         ));
         ui.add_enabled_ui(!self.mesh_busy, |ui| {
             ui.horizontal_wrapped(|ui| {
-                if ui.selectable_label(!settings.dynamic && !settings.adaptive.enabled,"Subdivision").clicked() { commands.push(Command::SetDynamicMesh(false)); }
-                if ui.selectable_label(settings.dynamic,"Dynamic mesh").clicked() { commands.push(Command::SetDynamicMesh(true)); }
-                if ui.selectable_label(settings.adaptive.enabled,"Adaptive sculpt").clicked() { let mut adaptive=settings.adaptive.clone(); adaptive.enabled=true; commands.push(Command::SetAdaptive(adaptive)); }
+                if ui.selectable_label(!settings.dynamic && !settings.adaptive.enabled,"Subdivision").customize(Action::SubdivisionMode).clicked() { commands.push(Command::SetDynamicMesh(false)); }
+                if ui.selectable_label(settings.dynamic,"Dynamic mesh").customize(Action::DynamicMode).clicked() { commands.push(Command::SetDynamicMesh(true)); }
+                if ui.selectable_label(settings.adaptive.enabled,"Adaptive sculpt").customize(Action::AdaptiveMode).clicked() { let mut adaptive=settings.adaptive.clone(); adaptive.enabled=true; commands.push(Command::SetAdaptive(adaptive)); }
             });
             if settings.adaptive.enabled {
                 ui.label("Local triangle refinement while sculpting.");
@@ -1241,21 +1060,21 @@ impl UiState {
                 ui.label("Voxels along the longest bounding-box axis.");
                 ui.checkbox(&mut auto,"Remesh after each stroke");
                 if resolution!=settings.resolution || auto!=settings.auto_remesh { commands.push(Command::SetRemeshSettings(resolution,auto)); }
-                if ui.add(design::button(ui, Glyph::Restore, "Remesh now")).clicked() { commands.push(Command::Remesh); }
+                if ui.add(design::button(ui, Glyph::Restore, "Remesh now")).customize(Action::Remesh).clicked() { commands.push(Command::Remesh); }
             } else {
                 ui.label(format!("Level {} of {}",settings.level(),settings.levels()));
                 let mut level=settings.level();
                 ui.add(egui::Slider::new(&mut level,1..=settings.levels()).text("Active level"));
                 if level!=settings.level() { commands.push(Command::SetMeshLevel(level)); }
                 ui.horizontal(|ui| {
-                    if ui.add_enabled(settings.level()>1,design::button(ui, Glyph::Minus, "Lower")).clicked() { commands.push(Command::SetMeshLevel(settings.level()-1)); }
-                    if ui.add_enabled(settings.level()<settings.levels(),design::button(ui, Glyph::Plus, "Higher")).clicked() { commands.push(Command::SetMeshLevel(settings.level()+1)); }
+                    if ui.add_enabled(settings.level()>1,design::button(ui, Glyph::Minus, "Lower")).customize(Action::LowerLevel).clicked() { commands.push(Command::SetMeshLevel(settings.level()-1)); }
+                    if ui.add_enabled(settings.level()<settings.levels(),design::button(ui, Glyph::Plus, "Higher")).customize(Action::HigherLevel).clicked() { commands.push(Command::SetMeshLevel(settings.level()+1)); }
                 });
                 ui.horizontal(|ui| {
-                    if ui.add_enabled(!settings.lower.is_empty(),design::button(ui, Glyph::Delete, "Delete lower")).on_hover_text("Remove all levels below the active level; keep the active surface and higher detail. Undo restores them.").clicked() { commands.push(Command::DeleteLowerLevels); }
-                    if ui.add_enabled(!settings.upper.is_empty(),design::button(ui, Glyph::Delete, "Delete higher")).on_hover_text("Remove all levels above the active level; keep the active surface and lower levels. Undo restores them.").clicked() { commands.push(Command::DeleteHigherLevels); }
+                    if ui.add_enabled(!settings.lower.is_empty(),design::button(ui, Glyph::Delete, "Delete lower")).on_hover_text("Remove all levels below the active level; keep the active surface and higher detail. Undo restores them.").customize(Action::DeleteLowerLevels).clicked() { commands.push(Command::DeleteLowerLevels); }
+                    if ui.add_enabled(!settings.upper.is_empty(),design::button(ui, Glyph::Delete, "Delete higher")).on_hover_text("Remove all levels above the active level; keep the active surface and lower levels. Undo restores them.").customize(Action::DeleteHigherLevels).clicked() { commands.push(Command::DeleteHigherLevels); }
                 });
-                if ui.add_enabled(settings.upper.is_empty() && document.mesh().triangles.len() <= 250_000,design::button(ui, Glyph::Plus, "Subdivide (+ level)")).clicked() { commands.push(Command::Subdivide); }
+                if ui.add_enabled(settings.upper.is_empty() && document.mesh().triangles.len() <= 250_000,design::button(ui, Glyph::Plus, "Subdivide (+ level)")).customize(Action::Subdivide).clicked() { commands.push(Command::Subdivide); }
                 ui.label("Each division creates four quads or triangles per face. Edit broad forms low and detail high.");
                 ui.label("Switching to dynamic or adaptive keeps the active surface and discards stored levels. Undo restores them.");
             }

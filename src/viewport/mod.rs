@@ -6,8 +6,10 @@ mod guides;
 mod primitive;
 mod scene;
 mod slice;
+mod stabilizer;
 mod stroke;
 mod transform;
+mod visibility;
 use crate::{
     camera::Camera,
     document::Document,
@@ -27,6 +29,7 @@ pub(crate) enum Gesture {
     Transform,
     Primitive,
     Slice,
+    Select,
 }
 struct SnakeStroke {
     center: Vec3,
@@ -39,20 +42,26 @@ pub(crate) struct Viewport {
     pub(crate) gesture: Option<Gesture>,
     pub(crate) completed_stroke: bool,
     gizmo_dragged: bool,
+    gizmo_start: Option<Pos2>,
+    gizmo_snap: Option<(f32, f32)>,
     blocked_until_release: bool,
     stroke: bool,
     pending_stroke: Option<stroke::PendingStroke>,
+    stabilizer: Option<stabilizer::Stabilizer>,
     last: Option<Pos2>,
     snake: Option<SnakeStroke>,
     transform: transform::TransformControls,
     primitive: primitive::PrimitiveControls,
     slice: Option<slice::SliceDrag>,
+    selection: Option<visibility::SelectionDrag>,
+    pub(crate) visibility_status: Option<String>,
     slice_path: Option<slice::SlicePathDraft>,
     pub(crate) completed_slice: Option<crate::mesh_job::Operation>,
 }
 #[derive(Clone, Copy)]
 pub(crate) struct ViewportOptions {
     pub slice: Option<crate::sculpt::SliceOptions>,
+    pub select: bool,
     pub slice_path_mode: bool,
     pub transform_mode: TransformMode,
     pub transform_operation: TransformOperation,
@@ -70,6 +79,7 @@ pub(crate) struct ViewportOptions {
     pub smooth: Hold,
     pub reverse: Hold,
     pub zoom_hold: Hold,
+    pub pan_hold: Hold,
 }
 impl Viewport {
     pub(crate) fn initialize_renderer(&mut self, gl: &eframe::glow::Context) -> Result<(), String> {
@@ -174,6 +184,21 @@ impl Viewport {
                 );
             }
         }
+        if self.update_visibility(
+            ui,
+            &response,
+            &painter,
+            &scene,
+            document,
+            gizmo_rect,
+            options.enabled
+                && options.slice.is_none()
+                && options.transform_mode == TransformMode::Sculpt,
+            options.select,
+        ) {
+            draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
+            return;
+        }
         let (right, up, _) = camera.basis();
         let scale = scene.scale;
         let pointer = response
@@ -212,6 +237,7 @@ impl Viewport {
             target.circle_filled(pos, 1.2, Color32::from_rgb(235, 65, 65));
         }
         let zoom_held = options.zoom_hold.active(modifiers);
+        let pan_held = options.pan_hold.active(modifiers);
         if options.enabled
             && self.pending_stroke.is_none()
             && self.slice.is_none()
@@ -230,6 +256,8 @@ impl Viewport {
             let d = ui.input(|i| i.pointer.delta());
             if zoom_held {
                 camera.zoom_drag(d);
+            } else if pan_held {
+                camera.pan += d;
             } else {
                 camera.orbit(d);
             }
@@ -265,7 +293,7 @@ impl Viewport {
         {
             self.gesture = Some(if gizmo_rect.contains(pos) {
                 Gesture::Gizmo
-            } else if zoom_held {
+            } else if zoom_held || (pan_held && scene.pick_model(pos).is_none()) {
                 Gesture::Orbit
             } else if options.slice.is_some() && document.primitive().is_none() {
                 Gesture::Slice
@@ -291,37 +319,85 @@ impl Viewport {
             } else {
                 Gesture::Orbit
             });
-            self.gizmo_dragged = zoom_held;
+            self.gizmo_dragged = zoom_held || pan_held;
+            if self.gesture == Some(Gesture::Gizmo) {
+                self.gizmo_start = Some(pos);
+                self.gizmo_snap = gizmo::snap_target(camera, gizmo_rect.center(), pos);
+            }
         }
         if primary
             && matches!(self.gesture, Some(Gesture::Orbit | Gesture::Gizmo))
             && options.enabled
         {
-            let delta = ui.input(|i| i.pointer.delta());
+            let mut delta = ui.input(|i| i.pointer.delta());
             // The press frame's pointer movement is not part of the drag.
             if !ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Primary)) {
+                if self.gesture == Some(Gesture::Gizmo) && !self.gizmo_dragged {
+                    let travel = self
+                        .gizmo_start
+                        .zip(pointer)
+                        .map_or(Vec2::ZERO, |(start, pos)| pos - start);
+                    if zoom_held || pan_held || travel.length() > gizmo::DRAG_THRESHOLD {
+                        self.gizmo_dragged = true;
+                        // Apply accumulated movement once the tap becomes a deliberate drag.
+                        if !zoom_held && !pan_held {
+                            delta = travel;
+                        }
+                    } else {
+                        delta = Vec2::ZERO;
+                    }
+                }
                 if zoom_held {
                     camera.zoom_drag(delta);
+                } else if pan_held {
+                    camera.pan += delta;
                 } else {
                     camera.orbit(delta);
                 }
-                self.gizmo_dragged |= delta.length_sq() > 0. || zoom_held;
+                self.gizmo_dragged |= delta.length_sq() > 0. || zoom_held || pan_held;
             }
         }
         let previous_gesture = self.gesture;
         if !ui.input(|i| i.pointer.primary_down()) {
-            if self.gesture == Some(Gesture::Gizmo)
-                && !self.gizmo_dragged
-                && let Some(pos) = ui.input(|i| i.pointer.hover_pos())
-                && let Some(axis) = gizmo::axes(camera, gizmo_rect.center())
-                    .into_iter()
-                    .rev()
-                    .find(|axis| axis.position.distance(pos) < 14.)
+            // A fast tap can contain both press and release in the same frame.
+            if self.gesture.is_none()
+                && options.enabled
+                && !zoom_held
+                && !pan_held
+                && response.clicked_by(egui::PointerButton::Primary)
+                && let Some(start) = ui.input(|i| {
+                    i.events.iter().rev().find_map(|event| match event {
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed: true,
+                            ..
+                        } => Some(*pos),
+                        _ => None,
+                    })
+                })
+                && gizmo_rect.contains(start)
             {
-                camera.yaw = axis.yaw;
-                camera.pitch = axis.pitch;
+                self.gesture = Some(Gesture::Gizmo);
+                self.gizmo_start = Some(start);
+                self.gizmo_snap = gizmo::snap_target(camera, gizmo_rect.center(), start);
+                self.gizmo_dragged = false;
+            }
+            if self.gesture == Some(Gesture::Gizmo)
+                && options.enabled
+                && !self.gizmo_dragged
+                && self
+                    .gizmo_start
+                    .zip(ui.input(|i| i.pointer.interact_pos()))
+                    .is_some_and(|(start, end)| start.distance(end) <= gizmo::DRAG_THRESHOLD)
+                && let Some((yaw, pitch)) = self.gizmo_snap
+            {
+                camera.yaw = yaw;
+                camera.pitch = pitch;
             }
             self.gesture = None;
+            self.gizmo_start = None;
+            self.gizmo_snap = None;
         }
         if let Some(slice_options) = options.slice {
             self.update_slice(
@@ -387,6 +463,9 @@ impl Viewport {
             let mut brush = document.brushes()[options.selected].clone();
             if brush.effective_stroke_mode() == StrokeMode::Freehand {
                 document.begin_stroke();
+                self.stabilizer = pointer
+                    .filter(|_| brush.stabilize && brush.supports_stabilization())
+                    .map(|start| stabilizer::Stabilizer::new(start, brush.stabilizer_distance));
             } else if let Some(start) = pointer
                 && let Some(anchor) = scene.pick(start)
             {
@@ -446,6 +525,8 @@ impl Viewport {
             self.stroke = false;
             self.last = None;
             self.snake = None;
+            // Never pull the trailing brush to the pointer on release.
+            self.stabilizer = None;
         }
         if let Some(pos) = pointer.filter(|p| {
             !gizmo_rect.contains(*p)
@@ -463,6 +544,13 @@ impl Viewport {
                 Color32::from_rgb(255, 140, 100)
             } else {
                 Color32::from_rgb(125, 210, 245)
+            };
+            let pos = if let Some(stabilizer) = self.stabilizer.as_mut() {
+                let trailing = stabilizer.follow(pos);
+                stabilizer.paint(&painter, pos, color);
+                trailing
+            } else {
+                pos
             };
             let surface = if b.surface_cursor {
                 if let Some(renderer) = &self.renderer {
@@ -576,9 +664,10 @@ impl Viewport {
             rect.left_top() + Vec2::splat(16.),
             egui::Align2::LEFT_TOP,
             format!(
-                "{} vertices • {} faces",
+                "{} vertices • {} faces • {} hidden",
                 document.mesh().vertices.len(),
-                document.mesh().triangles.len()
+                document.mesh().triangles.len(),
+                document.mesh().hidden_face_count()
             ),
             egui::FontId::monospace(12.),
             Color32::GRAY,

@@ -9,6 +9,7 @@ pub(crate) struct DisplayMesh {
     pub mesh: Mesh,
     pub shading: SurfaceShading,
     pub owners: Vec<usize>,
+    pub source_faces: Vec<usize>,
     pub poly_colors: Vec<[u8; 4]>,
     pub edge_colors: HashMap<(usize, usize), eframe::egui::Color32>,
     pub outlines: Vec<[usize; 2]>,
@@ -30,6 +31,7 @@ impl DisplayMesh {
         let active = document.active_model_index();
         let mut mesh = Mesh {
             vertex_groups: Vec::new(),
+            hidden_faces: Vec::new(),
             polygroups: Vec::new(),
             vertices: Vec::new(),
             triangles: Vec::new(),
@@ -39,6 +41,7 @@ impl DisplayMesh {
         let mut edge_colors = HashMap::new();
         let mut shading = SurfaceShading::default();
         let mut owners = Vec::new();
+        let mut source_faces = Vec::new();
         let mut poly_colors = Vec::new();
         let mut outlines = Vec::new();
         let mut active_vertices = 0;
@@ -70,7 +73,7 @@ impl DisplayMesh {
                 t.sort_unstable();
                 t
             };
-            let has_hidden = surface.vertex_groups.iter().any(|g| !g.visible);
+            let has_hidden = surface.has_hidden_faces();
             let visible_faces: std::collections::HashSet<_> = if has_hidden {
                 surface
                     .triangles
@@ -131,6 +134,7 @@ impl DisplayMesh {
                     }
                 }
                 owners.push(index);
+                source_faces.push(face);
                 let id = surface.polygroups.get(face).copied().unwrap_or(0);
                 poly_colors.push(if id == 0 {
                     [0; 4]
@@ -148,6 +152,7 @@ impl DisplayMesh {
             mesh,
             shading,
             owners,
+            source_faces,
             poly_colors,
             edge_colors,
             outlines,

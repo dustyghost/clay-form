@@ -24,6 +24,9 @@ pub struct Mesh {
     pub vertex_groups: Vec<super::VertexGroup>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub polygroups: Vec<usize>,
+    /// Independent face visibility; empty means no faces hidden by selection.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hidden_faces: Vec<bool>,
 }
 impl Mesh {
     /// Copy fully masked faces and compact their vertices; the boundary stays open.
@@ -33,6 +36,7 @@ impl Mesh {
     pub fn extract_masked_threshold(&self, threshold: f32) -> Result<Self, String> {
         let mut result = Self {
             vertex_groups: Vec::new(),
+            hidden_faces: Vec::new(),
             polygroups: Vec::new(),
             quads: Vec::new(),
             vertices: Vec::new(),
@@ -120,6 +124,7 @@ impl Mesh {
             .collect();
         let mut result = Self {
             vertex_groups: Vec::new(),
+            hidden_faces: Vec::new(),
             polygroups: Vec::new(),
             vertices: Vec::new(),
             triangles: Vec::new(),
@@ -258,7 +263,7 @@ impl Mesh {
                     return Err("Quad does not match surface triangulation".into());
                 };
                 if !self.polygroups.is_empty() && group_ids[&pair[0]] != group_ids[&pair[1]] {
-                    return Err("Quad has inconsistent polygroup assignment".into());
+                    return Err("Quad has inconsistent vertex group face assignment".into());
                 }
                 if !used.insert(pair[0]) || !used.insert(pair[1]) {
                     return Err("Overlapping quad faces".into());
@@ -270,8 +275,8 @@ impl Mesh {
     pub fn stamp(&mut self, b: &Brush, dab: Dab) {
         self.stamp_many(b, &[dab]);
     }
-    /// Evaluate all symmetry copies against the same geometry, taking the strongest
-    /// influence per vertex so overlapping copies cannot multiply brush strength.
+    /// Blend symmetry copies against the same geometry without doubling strength.
+    /// Soft Standard footprints join near the seam, bounded by the normal brush peak.
     pub fn stamp_many(&mut self, b: &Brush, dabs: &[Dab]) -> bool {
         let mut deformed = false;
         let old = self.vertices.clone();
@@ -287,12 +292,20 @@ impl Mesh {
             }
         }
         let sculptable = self.sculptable_vertices();
+        let join_soft =
+            b.kind == Kind::Standard && matches!(b.alpha, super::Alpha::Soft) && dabs.len() > 1;
+        let origin = dabs.first().map_or(Vec3::default(), |dab| dab.center);
         for i in 0..old.len() {
             if !sculptable[i] {
                 continue;
             }
+            let mut overlap = super::overlap::SoftOverlap::new(origin);
             let mut strongest = 0.;
-            let mut selected = None;
+            let mut influence_sum = 0.;
+            let mut blended = Vec3::default();
+            let mut strongest_motion_squared = 0_f32;
+            let mut contributions = 0;
+            let mut mask_sign = 1.;
             for dab in dabs {
                 let offset = old[i] - dab.center;
                 if offset.len() > dab.radius * 1.5
@@ -315,57 +328,81 @@ impl Mesh {
                         1.
                     };
                 let influence = weight * strength;
+                if influence <= 0. {
+                    continue;
+                }
+                let sign = if b.subtract ^ dab.invert { -1. } else { 1. };
                 if influence > strongest {
                     strongest = influence;
-                    selected = Some((*dab, offset));
+                    mask_sign = sign;
                 }
-            }
-            let Some((
-                Dab {
+                if join_soft {
+                    overlap.add(dab, influence);
+                }
+                influence_sum += influence;
+                contributions += 1;
+                let Dab {
                     center,
                     normal,
                     radius,
                     delta,
-                    invert,
                     ..
-                },
-                offset,
-            )) = selected
-            else {
-                continue;
-            };
-            let sign = if b.subtract ^ invert { -1. } else { 1. };
-            let w = strongest;
-            if b.kind == Kind::Mask {
-                self.mask[i] = (self.mask[i] + w * sign).clamp(0., 1.);
+                } = *dab;
+                let w = influence * (1. - self.mask[i]);
+                let displacement = match b.kind {
+                    Kind::Standard => normal * (radius * 0.15 * w * sign),
+                    Kind::Clay => normal * ((radius * 0.1 - offset.dot(normal)).max(0.) * w * sign),
+                    Kind::Inflate => normals[i] * (radius * 0.15 * w * sign),
+                    Kind::Smooth => (avg[i] * (1. / count[i].max(1.)) - old[i]) * (w * sign),
+                    Kind::Flatten => normal * (-offset.dot(normal) * w * sign),
+                    Kind::Pinch => {
+                        (center - old[i] - normal * (-offset.dot(normal))) * (w * 0.2 * sign)
+                    }
+                    Kind::Crease => {
+                        (center - old[i]) * (w * 0.12 * sign) - normal * (radius * w * 0.08 * sign)
+                    }
+                    Kind::Detail => {
+                        // A narrow incision with raised shoulders, plus tangent-only
+                        // pinching. Pinching stays inward when the depth is inverted.
+                        let tangent = offset - normal * offset.dot(normal);
+                        let r = tangent.len() / radius;
+                        let core = (-(r / 0.20).powi(2)).exp();
+                        let shoulder = (-((r - 0.38) / 0.13).powi(2)).exp();
+                        let depth = radius * (-0.18 * core + 0.045 * shoulder);
+                        normal * (depth * w * sign)
+                            - tangent * (0.12 * (-(r / 0.45).powi(2)).exp() * w)
+                    }
+                    Kind::Grab => delta * (w * sign),
+                    Kind::Snake => (delta + normal * (delta.len() * 0.12)) * (w * sign),
+                    Kind::Mask => Vec3::default(),
+                };
+                blended = blended + displacement;
+                if b.kind == Kind::Standard {
+                    strongest_motion_squared =
+                        strongest_motion_squared.max(displacement.dot(displacement));
+                }
+            }
+            if influence_sum <= 0. {
                 continue;
             }
-            let w = w * (1. - self.mask[i]);
-            let displacement = match b.kind {
-                Kind::Standard => normal * (radius * 0.15 * w * sign),
-                Kind::Clay => normal * ((radius * 0.1 - offset.dot(normal)).max(0.) * w * sign),
-                Kind::Inflate => normals[i] * (radius * 0.15 * w * sign),
-                Kind::Smooth => (avg[i] * (1. / count[i].max(1.)) - old[i]) * (w * sign),
-                Kind::Flatten => normal * (-offset.dot(normal) * w * sign),
-                Kind::Pinch => {
-                    (center - old[i] - normal * (-offset.dot(normal))) * (w * 0.2 * sign)
+            if b.kind == Kind::Mask {
+                self.mask[i] = (self.mask[i] + strongest * mask_sign).clamp(0., 1.);
+                continue;
+            }
+            // Average directions smoothly across overlaps, but retain the strongest
+            // falloff rather than accumulating the strength of the mirrored copies.
+            let displacement = if b.kind == Kind::Standard && contributions > 1 {
+                // Standard lays down a depth along a brush normal. Blend the
+                // direction separately from depth: averaging diverging normals
+                // otherwise weakens the seam and leaves a trough between copies.
+                // Keep the strongest masked/pressure-weighted depth, never the sum.
+                let mut depth = strongest_motion_squared.sqrt();
+                if join_soft {
+                    depth = overlap.depth(b, dabs, old[i], normals[i], 1. - self.mask[i], depth);
                 }
-                Kind::Crease => {
-                    (center - old[i]) * (w * 0.12 * sign) - normal * (radius * w * 0.08 * sign)
-                }
-                Kind::Detail => {
-                    // A narrow incision with raised shoulders, plus tangent-only
-                    // pinching. Pinching stays inward when the depth is inverted.
-                    let tangent = offset - normal * offset.dot(normal);
-                    let r = tangent.len() / radius;
-                    let core = (-(r / 0.20).powi(2)).exp();
-                    let shoulder = (-((r - 0.38) / 0.13).powi(2)).exp();
-                    let depth = radius * (-0.18 * core + 0.045 * shoulder);
-                    normal * (depth * w * sign) - tangent * (0.12 * (-(r / 0.45).powi(2)).exp() * w)
-                }
-                Kind::Grab => delta * (w * sign),
-                Kind::Snake => (delta + normal * (delta.len() * 0.12)) * (w * sign),
-                Kind::Mask => Vec3::default(),
+                blended.norm() * depth
+            } else {
+                blended * (strongest / influence_sum)
             };
             // Freehand builds depth from many overlapping dabs. A drag stamp gets
             // one application, so give relief brushes a useful single-stamp depth.

@@ -116,6 +116,12 @@ impl Mesh {
                         .collect(),
                 })
                 .collect(),
+            hidden_faces: self
+                .hidden_faces
+                .iter()
+                .copied()
+                .chain(self.hidden_faces.iter().copied())
+                .collect(),
             polygroups: if self.polygroups.is_empty() {
                 Vec::new()
             } else {
@@ -158,7 +164,20 @@ impl Mesh {
         );
         let boundary_vertices: std::collections::HashSet<_> =
             boundary.iter().flat_map(|&(a, b)| [a, b]).collect();
+        let edge_key = |a, b| if a < b { (a, b) } else { (b, a) };
+        let hidden_edges: std::collections::HashSet<_> = self
+            .triangles
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| self.hidden_faces.get(*i).copied().unwrap_or(false))
+            .flat_map(|(_, &[a, b, c])| [edge_key(a, b), edge_key(b, c), edge_key(c, a)])
+            .collect();
         for (a, b) in boundary {
+            if !self.hidden_faces.is_empty() {
+                shell
+                    .hidden_faces
+                    .extend([hidden_edges.contains(&edge_key(a, b)); 2]);
+            }
             shell.quads.push([b, a, a + n, b + n]);
             shell.triangles.extend([[b, a, a + n], [b, a + n, b + n]]);
             if !self.polygroups.is_empty() {

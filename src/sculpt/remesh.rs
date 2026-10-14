@@ -42,6 +42,9 @@ impl Mesh {
         resolution: u32,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Self, String> {
+        if self.has_hidden_faces() {
+            return Err("Show all faces before remeshing".into());
+        }
         if !(16..=96).contains(&resolution) {
             return Err("Remesh resolution must be between 16 and 96".into());
         }
@@ -171,6 +174,7 @@ impl Mesh {
             .collect();
         let mut mesh = Mesh {
             vertex_groups: Vec::new(),
+            hidden_faces: Vec::new(),
             polygroups: Vec::new(),
             quads: Vec::new(),
             vertices: Vec::new(),
@@ -298,6 +302,7 @@ mod tests {
     fn cube(offset: Vec3) -> Mesh {
         Mesh {
             vertex_groups: Vec::new(),
+            hidden_faces: Vec::new(),
             polygroups: Vec::new(),
             quads: Vec::new(),
             vertices: vec![

@@ -196,7 +196,11 @@ impl Scene {
         let positions = &self.positions;
         let faces = &self.all_faces;
         let project = |v| self.project(v);
-        painter.rect_filled(rect, 0., Color32::from_rgb(23, 26, 31));
+        painter.rect_filled(
+            rect,
+            0.,
+            crate::preferences::viewport_background(painter.ctx()),
+        );
         if renderer.is_none() {
             let light = (view + up * 0.7 + right * (-0.5)).norm();
             let mut rendered = egui::Mesh::default();
@@ -510,6 +514,26 @@ impl Scene {
         )?;
         Some((self.geometry.owners[face], p, normal))
     }
+    pub fn pick_polygroup(&self, point: Pos2, document: &Document) -> Option<usize> {
+        let (_, _, face) = pick_surface(
+            &self.geometry,
+            &self.positions,
+            &self.all_faces,
+            self.view,
+            point,
+        )?;
+        if self.geometry.owners[face] != self.active {
+            return None;
+        }
+        Some(
+            document
+                .mesh()
+                .polygroups
+                .get(self.geometry.source_faces[face])
+                .copied()
+                .unwrap_or(0),
+        )
+    }
     pub fn pick(&self, point: Pos2) -> Option<(Vec3, Vec3)> {
         self.pick_model(point)
             .filter(|(owner, _, _)| *owner == self.active)
@@ -665,6 +689,29 @@ mod tests {
         assert_eq!(d.mesh().triangles, original.triangles);
         d.set_vertex_group_visible(0, true).unwrap();
         assert!(scene(&d).pick(egui::pos2(400., 400.)).is_some());
+    }
+    #[test]
+    fn rectangle_visibility_filters_faces_picking_and_quad_wire_edges() {
+        let mut plane = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Plane);
+        plane.divisions = [2, 1, 1];
+        let mut d = Document::default();
+        d.replace_geometry(crate::sculpt::Geometry::new(plane.mesh().unwrap()))
+            .unwrap();
+        d.select_face_region(|p| p.0 > 0., true).unwrap();
+        let view = scene(&d);
+        assert_eq!(view.geometry.mesh.triangles.len(), 2);
+        assert_eq!(view.geometry.mesh.quads.len(), 1);
+        let left = view.project(Vec3(-0.25, 0., 0.));
+        let right = view.project(Vec3(0.25, 0., 0.));
+        assert!(view.pick(left).is_some());
+        assert!(view.pick(right).is_none());
+        assert_eq!(view.pick_polygroup(left, &d), Some(0));
+        assert_eq!(
+            line_count(&wire_shapes(&d, super::super::WireMode::Transparent, false)),
+            4
+        );
+        d.show_all_faces().unwrap();
+        assert!(scene(&d).pick(right).is_some());
     }
     fn scene(document: &Document) -> Scene {
         let context = egui::Context::default();

@@ -3,74 +3,7 @@ use eframe::egui::{self, Key, Modifiers};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) enum Action {
-    Save,
-    Open,
-    New,
-    Undo,
-    Redo,
-    ResetView,
-    Symmetry,
-    Wireframe,
-    Guides,
-    Smaller,
-    Larger,
-    PreviousBrush,
-    NextBrush,
-    Subdivide,
-    LowerLevel,
-    HigherLevel,
-    Remesh,
-    ZoomIn,
-    ZoomOut,
-}
-impl Action {
-    pub const ALL: [Self; 19] = [
-        Self::Save,
-        Self::Open,
-        Self::New,
-        Self::Undo,
-        Self::Redo,
-        Self::ResetView,
-        Self::Symmetry,
-        Self::Wireframe,
-        Self::Guides,
-        Self::Smaller,
-        Self::Larger,
-        Self::PreviousBrush,
-        Self::NextBrush,
-        Self::Subdivide,
-        Self::LowerLevel,
-        Self::HigherLevel,
-        Self::Remesh,
-        Self::ZoomIn,
-        Self::ZoomOut,
-    ];
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Save => "Save project",
-            Self::Open => "Open project at path",
-            Self::New => "New sphere",
-            Self::Undo => "Undo",
-            Self::Redo => "Redo",
-            Self::ResetView => "Reset view",
-            Self::Symmetry => "Toggle symmetry",
-            Self::Wireframe => "Toggle wireframe",
-            Self::Guides => "Toggle symmetry guides",
-            Self::Smaller => "Smaller brush",
-            Self::Larger => "Larger brush",
-            Self::PreviousBrush => "Previous brush",
-            Self::NextBrush => "Next brush",
-            Self::Subdivide => "Subdivide mesh",
-            Self::LowerLevel => "Lower subdivision level",
-            Self::HigherLevel => "Higher subdivision level",
-            Self::Remesh => "Remesh dynamic mesh",
-            Self::ZoomIn => "Zoom in",
-            Self::ZoomOut => "Zoom out",
-        }
-    }
-}
+pub(crate) use crate::action::Action;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Shortcut {
     pub key: String,
@@ -89,8 +22,33 @@ impl Shortcut {
             command: modifiers.mac_cmd,
         }
     }
-    pub fn matches(&self, key: Key, modifiers: Modifiers) -> bool {
-        *self == Self::new(key, modifiers)
+    pub fn from_event(event: &egui::Event) -> Option<Self> {
+        let egui::Event::Key {
+            key,
+            physical_key,
+            pressed: true,
+            modifiers,
+            ..
+        } = event
+        else {
+            return None;
+        };
+        let key = match physical_key {
+            Some(
+                k @ (Key::Num0
+                | Key::Num1
+                | Key::Num2
+                | Key::Num3
+                | Key::Num4
+                | Key::Num5
+                | Key::Num6
+                | Key::Num7
+                | Key::Num8
+                | Key::Num9),
+            ) => *k,
+            _ => *key,
+        };
+        Some(Self::new(key, *modifiers))
     }
     pub fn label(&self) -> String {
         format!(
@@ -173,6 +131,197 @@ pub(crate) struct Panel {
     pub open: bool,
     pub position: [f32; 2],
 }
+/// A menu in the menu bar or a shelf docked around the viewport.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum Placement {
+    LeftPanel,
+    RightPanel,
+    Menu,
+    Top,
+    Bottom,
+    Left,
+    Right,
+    Floating,
+    Hidden,
+}
+impl Placement {
+    pub const ALL: [Self; 9] = [
+        Self::LeftPanel,
+        Self::RightPanel,
+        Self::Menu,
+        Self::Top,
+        Self::Bottom,
+        Self::Left,
+        Self::Right,
+        Self::Floating,
+        Self::Hidden,
+    ];
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::LeftPanel => "Left sidebar",
+            Self::RightPanel => "Right sidebar",
+            Self::Menu => "Menu bar",
+            Self::Top => "Top shelf",
+            Self::Bottom => "Bottom shelf",
+            Self::Left => "Left shelf",
+            Self::Right => "Right shelf",
+            Self::Floating => "Floating",
+            Self::Hidden => "Hidden",
+        }
+    }
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct CustomItem {
+    /// None is a separator. Actions resolve against the current document.
+    pub action: Option<Action>,
+    pub label: String,
+}
+impl CustomItem {
+    pub fn action(action: Action) -> Self {
+        Self {
+            action: Some(action),
+            label: String::new(),
+        }
+    }
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct CustomMenu {
+    pub id: u64,
+    pub name: String,
+    pub placement: Placement,
+    pub columns: usize,
+    pub position: [f32; 2],
+    pub items: Vec<CustomItem>,
+    #[serde(default)]
+    pub collapsible: bool,
+    #[serde(default = "expanded_default")]
+    pub expanded: bool,
+}
+fn expanded_default() -> bool {
+    true
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub(crate) struct Appearance {
+    pub panels: [u8; 3],
+    pub buttons: [u8; 3],
+    pub accent: [u8; 3],
+    pub text: [u8; 3],
+    pub viewport: [u8; 3],
+    pub spacing: u8,
+    pub rounding: u8,
+}
+impl Default for Appearance {
+    fn default() -> Self {
+        Self {
+            panels: [26, 29, 34],
+            buttons: [35, 40, 47],
+            accent: [88, 195, 215],
+            text: [190, 190, 190],
+            viewport: [23, 26, 31],
+            spacing: 6,
+            rounding: 4,
+        }
+    }
+}
+impl Appearance {
+    pub fn light() -> Self {
+        Self {
+            panels: [228, 231, 235],
+            buttons: [205, 211, 219],
+            accent: [25, 100, 155],
+            text: [30, 35, 42],
+            viewport: [190, 197, 205],
+            ..Self::default()
+        }
+    }
+    pub fn warm() -> Self {
+        Self {
+            panels: [42, 34, 30],
+            buttons: [59, 47, 40],
+            accent: [220, 158, 92],
+            text: [220, 210, 195],
+            viewport: [35, 29, 25],
+            ..Self::default()
+        }
+    }
+    fn validate(&self) -> Result<(), String> {
+        if !(2..=16).contains(&self.spacing) || self.rounding > 16 {
+            return Err("Invalid workspace appearance".into());
+        }
+        Ok(())
+    }
+}
+pub(crate) fn viewport_background(ctx: &egui::Context) -> egui::Color32 {
+    ctx.data(|d| d.get_temp::<egui::Color32>(egui::Id::new("workspace_viewport_background")))
+        .unwrap_or(egui::Color32::from_rgb(23, 26, 31))
+}
+/// Stable identities for built-in menus displayed as popups, windows or sections.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub(crate) enum BuiltinMenu {
+    Edit,
+    Settings,
+    Visibility,
+    Mesh,
+    Submodels,
+    Wireframe,
+    Symmetry,
+    Mask,
+    View,
+}
+impl BuiltinMenu {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Edit => "Edit",
+            Self::Settings => "Settings",
+            Self::Visibility => "Visibility",
+            Self::Mesh => "Mesh",
+            Self::Submodels => "Submodels",
+            Self::Wireframe => "Wireframe options",
+            Self::Symmetry => "Symmetry settings",
+            Self::Mask => "Mask",
+            Self::View => "View",
+        }
+    }
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct PinnedMenu {
+    pub menu: BuiltinMenu,
+    pub position: [f32; 2],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum SidebarSection {
+    Tool(Tool),
+    Custom(u64),
+    Builtin(BuiltinMenu),
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct MenuSection {
+    pub menu: BuiltinMenu,
+    pub dock: Dock,
+    pub open: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct Workspace {
+    pub name: String,
+    pub panels: Vec<Panel>,
+    pub menus: Vec<CustomMenu>,
+    #[serde(default)]
+    pub pinned_menus: Vec<PinnedMenu>,
+    #[serde(default)]
+    pub menu_sections: Vec<MenuSection>,
+    #[serde(default)]
+    pub sidebar_order: Vec<SidebarSection>,
+    pub left_width: f32,
+    pub right_width: f32,
+    pub compact_toolbar: bool,
+    #[serde(default = "default_shelf_sizes")]
+    pub shelf_sizes: [f32; 4],
+    #[serde(default)]
+    pub appearance: Appearance,
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct Preferences {
@@ -181,9 +330,24 @@ pub(crate) struct Preferences {
     pub smooth: Hold,
     pub reverse: Hold,
     pub zoom_hold: Hold,
+    pub pan_hold: Hold,
     pub panels: Vec<Panel>,
     pub left_width: f32,
     pub right_width: f32,
+    pub menus: Vec<CustomMenu>,
+    pub pinned_menus: Vec<PinnedMenu>,
+    #[serde(default)]
+    pub menu_sections: Vec<MenuSection>,
+    #[serde(default)]
+    pub sidebar_order: Vec<SidebarSection>,
+    pub workspaces: Vec<Workspace>,
+    pub next_menu_id: u64,
+    pub active_workspace: Option<usize>,
+    pub compact_toolbar: bool,
+    #[serde(default = "default_shelf_sizes")]
+    pub shelf_sizes: [f32; 4],
+    #[serde(default)]
+    pub appearance: Appearance,
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -213,13 +377,16 @@ impl Default for Preferences {
         Self {
             version: 1,
             bindings: Action::ALL
-                .into_iter()
-                .zip(keys)
-                .map(|(a, (k, m))| (a, Some(Shortcut::new(k, m))))
+                .iter()
+                .cloned()
+                .enumerate()
+                .map(|(i, a)| (a, keys.get(i).copied()))
+                .map(|(a, key)| (a, key.map(|(k, m)| Shortcut::new(k, m))))
                 .collect(),
             smooth: Hold::Shift,
             reverse: Hold::Alt,
             zoom_hold: Hold::Ctrl,
+            pan_hold: Hold::Alt,
             panels: Tool::ALL
                 .into_iter()
                 .enumerate()
@@ -236,6 +403,16 @@ impl Default for Preferences {
                 .collect(),
             left_width: 260.,
             right_width: 260.,
+            menus: Vec::new(),
+            pinned_menus: Vec::new(),
+            menu_sections: Vec::new(),
+            sidebar_order: Vec::new(),
+            workspaces: Vec::new(),
+            next_menu_id: 1,
+            active_workspace: None,
+            appearance: Appearance::default(),
+            compact_toolbar: false,
+            shelf_sizes: default_shelf_sizes(),
         }
     }
 }
@@ -244,11 +421,11 @@ impl Preferences {
         if self.version != 1 {
             return Err("Unsupported preferences version".into());
         }
-        if self.bindings.len() != Action::ALL.len() || self.panels.len() != Tool::ALL.len() {
+        if self.bindings.len() < Action::ALL.len() || self.panels.len() != Tool::ALL.len() {
             return Err("Incomplete preferences".into());
         }
         for action in Action::ALL {
-            if self.bindings.iter().filter(|(a, _)| *a == action).count() != 1 {
+            if self.bindings.iter().filter(|(a, _)| a == action).count() != 1 {
                 return Err("Duplicate or missing key action".into());
             }
         }
@@ -257,9 +434,62 @@ impl Preferences {
                 return Err("Duplicate or missing tool panel".into());
             }
         }
-        for (i, (_, binding)) in self.bindings.iter().enumerate() {
+        self.appearance.validate()?;
+        if self
+            .active_workspace
+            .is_some_and(|index| index >= self.workspaces.len())
+        {
+            return Err("Unknown active workspace".into());
+        }
+        validate_menus(&self.menus)?;
+        for (index, pinned) in self.pinned_menus.iter().enumerate() {
+            if self.pinned_menus[..index]
+                .iter()
+                .any(|p| p.menu == pinned.menu)
+                || pinned
+                    .position
+                    .iter()
+                    .any(|p| !p.is_finite() || p.abs() > 100_000.)
+            {
+                return Err("Invalid pinned menu position or duplicate menu".into());
+            }
+        }
+        for (index, section) in self.menu_sections.iter().enumerate() {
+            if !matches!(section.dock, Dock::Left | Dock::Right)
+                || self.menu_sections[..index]
+                    .iter()
+                    .any(|s| s.menu == section.menu)
+                || self.pinned_menus.iter().any(|p| p.menu == section.menu)
+            {
+                return Err("Invalid or duplicate sidebar menu".into());
+            }
+        }
+        for (index, section) in self.sidebar_order.iter().enumerate() {
+            if self.sidebar_order[..index].contains(section) {
+                return Err("Duplicate sidebar section order".into());
+            }
+        }
+        for workspace in &self.workspaces {
+            let prefs = Self {
+                panels: workspace.panels.clone(),
+                menus: workspace.menus.clone(),
+                pinned_menus: workspace.pinned_menus.clone(),
+                menu_sections: workspace.menu_sections.clone(),
+                sidebar_order: workspace.sidebar_order.clone(),
+                left_width: workspace.left_width,
+                right_width: workspace.right_width,
+                shelf_sizes: workspace.shelf_sizes,
+                appearance: workspace.appearance.clone(),
+                ..Self::default()
+            };
+            prefs.validate()?;
+        }
+        for (i, (action, binding)) in self.bindings.iter().enumerate() {
+            if self.bindings[..i].iter().any(|(a, _)| a == action) {
+                return Err("Duplicate key action".into());
+            }
             if let Some(b) = binding {
-                if Key::from_name(&b.key).is_none() {
+                if Key::from_name(&b.key).is_none() || b.key == "Escape" {
                     return Err("Unknown key".into());
                 }
                 if self.bindings[..i]
@@ -269,6 +499,13 @@ impl Preferences {
                     return Err("Duplicate keyboard shortcut".into());
                 }
             }
+        }
+        if self
+            .shelf_sizes
+            .iter()
+            .any(|v| !v.is_finite() || !(24. ..=800.).contains(v))
+        {
+            return Err("Invalid shelf size".into());
         }
         if !self.left_width.is_finite()
             || !self.right_width.is_finite()
@@ -284,7 +521,101 @@ impl Preferences {
         }
         Ok(())
     }
+    /// Preserve the original custom-menu-first layout until the user reorders it.
+    fn ordered_sections(&self) -> Vec<SidebarSection> {
+        let available: Vec<_> = self
+            .menu_sections
+            .iter()
+            .map(|s| SidebarSection::Builtin(s.menu))
+            .chain(self.menus.iter().map(|m| SidebarSection::Custom(m.id)))
+            .chain(self.panels.iter().map(|p| SidebarSection::Tool(p.tool)))
+            .collect();
+        let mut order = Vec::new();
+        for section in self.sidebar_order.iter().chain(&available) {
+            if available.contains(section) && !order.contains(section) {
+                order.push(*section);
+            }
+        }
+        order
+    }
+    pub fn section_dock(&self, section: SidebarSection) -> Option<Dock> {
+        match section {
+            SidebarSection::Tool(tool) => {
+                self.panels.iter().find(|p| p.tool == tool).map(|p| p.dock)
+            }
+            SidebarSection::Builtin(menu) => self
+                .menu_sections
+                .iter()
+                .find(|s| s.menu == menu)
+                .map(|s| s.dock),
+            SidebarSection::Custom(id) => {
+                self.menus
+                    .iter()
+                    .find(|m| m.id == id)
+                    .and_then(|m| match m.placement {
+                        Placement::LeftPanel => Some(Dock::Left),
+                        Placement::RightPanel => Some(Dock::Right),
+                        _ => None,
+                    })
+            }
+        }
+    }
+    pub fn sidebar_sections(&self, dock: Dock) -> Vec<SidebarSection> {
+        self.ordered_sections()
+            .into_iter()
+            .filter(|s| self.section_dock(*s) == Some(dock))
+            .collect()
+    }
+    pub fn move_section(&mut self, section: SidebarSection, down: bool) {
+        let Some(dock @ (Dock::Left | Dock::Right)) = self.section_dock(section) else {
+            return;
+        };
+        let visible = self.sidebar_sections(dock);
+        let Some(index) = visible.iter().position(|s| *s == section) else {
+            return;
+        };
+        let target = if down {
+            index.checked_add(1)
+        } else {
+            index.checked_sub(1)
+        };
+        let Some(other) = target.and_then(|i| visible.get(i)) else {
+            return;
+        };
+        let mut order = self.ordered_sections();
+        let a = order.iter().position(|s| *s == section).unwrap();
+        let b = order.iter().position(|s| s == other).unwrap();
+        order.swap(a, b);
+        self.sidebar_order = order;
+    }
+    pub fn dock_menu(&mut self, menu: BuiltinMenu, dock: Dock) {
+        if !matches!(dock, Dock::Left | Dock::Right) {
+            return;
+        }
+        self.pinned_menus.retain(|p| p.menu != menu);
+        if let Some(section) = self.menu_sections.iter_mut().find(|s| s.menu == menu) {
+            section.dock = dock;
+        } else {
+            self.menu_sections.push(MenuSection {
+                menu,
+                dock,
+                open: true,
+            });
+        }
+        let section = SidebarSection::Builtin(menu);
+        self.sidebar_order = self.ordered_sections();
+        self.sidebar_order.retain(|s| *s != section);
+        self.sidebar_order.insert(0, section);
+    }
+    pub fn undock_menu(&mut self, menu: BuiltinMenu) {
+        self.menu_sections.retain(|s| s.menu != menu);
+        self.sidebar_order
+            .retain(|s| *s != SidebarSection::Builtin(menu));
+    }
     pub fn bind(&mut self, action: Action, shortcut: Shortcut) -> Result<(), String> {
+        if Key::from_name(&shortcut.key).is_none() || shortcut.key == "Escape" {
+            return Err("Choose a valid key; Escape is reserved for cancelling gestures.".into());
+        }
         if let Some((other, _)) = self
             .bindings
             .iter()
@@ -297,17 +628,158 @@ impl Preferences {
         }
         if let Some((_, b)) = self.bindings.iter_mut().find(|(a, _)| *a == action) {
             *b = Some(shortcut);
+        } else {
+            self.bindings.push((action, Some(shortcut)));
         }
         Ok(())
     }
-    pub fn actions(&self, ctx: &egui::Context) -> Vec<Action> {
-        ctx.input_mut(|input| self.bindings.iter().filter_map(|(a,b)| {
-            let b = b.as_ref()?;
-            let key = Key::from_name(&b.key)?;
-            let found = input.events.iter().any(|e| matches!(e, egui::Event::Key { key: k, pressed: true, modifiers, .. } if b.matches(*k,*modifiers)));
-            if found { input.events.retain(|e| !matches!(e,egui::Event::Key { key:k,pressed:true,modifiers,.. } if b.matches(*k,*modifiers))); input.consume_key(Modifiers { ctrl:b.ctrl, shift:b.shift,alt:b.alt,mac_cmd:b.command,command:b.ctrl || b.command },key); Some(*a) } else { None }
-        }).collect())
+    pub fn shortcut(&self, action: &Action) -> Option<&Shortcut> {
+        self.bindings
+            .iter()
+            .find(|(a, _)| a == action)
+            .and_then(|(_, b)| b.as_ref())
     }
+    pub fn clear_binding(&mut self, action: &Action) {
+        if let Some((_, binding)) = self.bindings.iter_mut().find(|(a, _)| a == action) {
+            *binding = None;
+        }
+    }
+    pub fn actions(&self, ctx: &egui::Context) -> Vec<Action> {
+        ctx.input_mut(|input| {
+            let mut actions = Vec::new();
+            input.events.retain(|event| {
+                let Some(shortcut) = Shortcut::from_event(event) else {
+                    return true;
+                };
+                if let Some((action, _)) = self
+                    .bindings
+                    .iter()
+                    .find(|(_, b)| b.as_ref() == Some(&shortcut))
+                {
+                    if !actions.contains(action) {
+                        actions.push(action.clone());
+                    }
+                    false
+                } else {
+                    true
+                }
+            });
+            actions
+        })
+    }
+    pub fn add_menu(&mut self) -> u64 {
+        let id = self
+            .menus
+            .iter()
+            .chain(self.workspaces.iter().flat_map(|w| &w.menus))
+            .map(|m| m.id)
+            .max()
+            .unwrap_or(0)
+            .saturating_add(1)
+            .max(self.next_menu_id);
+        self.next_menu_id = id.saturating_add(1);
+        self.menus.push(CustomMenu {
+            id,
+            name: format!("Custom {id}"),
+            placement: Placement::Menu,
+            columns: 2,
+            position: [350., 160.],
+            items: Vec::new(),
+            collapsible: true,
+            expanded: true,
+        });
+        id
+    }
+    pub fn workspace(&self, name: String) -> Workspace {
+        Workspace {
+            name,
+            panels: self.panels.clone(),
+            menus: self.menus.clone(),
+            pinned_menus: self.pinned_menus.clone(),
+            menu_sections: self.menu_sections.clone(),
+            sidebar_order: self.sidebar_order.clone(),
+            left_width: self.left_width,
+            right_width: self.right_width,
+            compact_toolbar: self.compact_toolbar,
+            shelf_sizes: self.shelf_sizes,
+            appearance: self.appearance.clone(),
+        }
+    }
+    pub fn apply_workspace(&mut self, workspace: &Workspace) {
+        self.panels = workspace.panels.clone();
+        self.menus = workspace.menus.clone();
+        self.pinned_menus = workspace.pinned_menus.clone();
+        self.menu_sections = workspace.menu_sections.clone();
+        self.sidebar_order = workspace.sidebar_order.clone();
+        self.left_width = workspace.left_width;
+        self.right_width = workspace.right_width;
+        self.compact_toolbar = workspace.compact_toolbar;
+        self.shelf_sizes = workspace.shelf_sizes;
+        self.appearance = workspace.appearance.clone();
+    }
+    pub fn sync_active_workspace(&mut self) {
+        if let Some(index) = self.active_workspace
+            && let Some(saved) = self.workspaces.get(index)
+        {
+            let current = self.workspace(saved.name.clone());
+            if self.workspaces[index] != current {
+                self.workspaces[index] = current;
+            }
+        }
+    }
+    pub fn save_workspace_as(&mut self, name: &str) -> Result<(), String> {
+        let name = name.trim();
+        if name.is_empty() || name.len() > 128 {
+            return Err("Enter a workspace name (up to 128 bytes).".into());
+        }
+        if self.workspaces.iter().any(|w| w.name == name) {
+            return Err("That workspace name already exists. Choose another name.".into());
+        }
+        self.sync_active_workspace();
+        self.workspaces.push(self.workspace(name.into()));
+        self.active_workspace = Some(self.workspaces.len() - 1);
+        Ok(())
+    }
+    pub fn switch_workspace(&mut self, index: usize) {
+        if index >= self.workspaces.len() {
+            return;
+        }
+        self.sync_active_workspace();
+        let workspace = self.workspaces[index].clone();
+        self.apply_workspace(&workspace);
+        self.active_workspace = Some(index);
+    }
+    pub fn delete_workspace(&mut self, index: usize) {
+        if index >= self.workspaces.len() {
+            return;
+        }
+        self.workspaces.remove(index);
+        self.active_workspace = self.active_workspace.and_then(|active| {
+            if active == index {
+                None
+            } else {
+                Some(if active > index { active - 1 } else { active })
+            }
+        });
+    }
+}
+fn default_shelf_sizes() -> [f32; 4] {
+    [84., 84., 220., 220.]
+}
+fn validate_menus(menus: &[CustomMenu]) -> Result<(), String> {
+    for (i, menu) in menus.iter().enumerate() {
+        if menu.id == 0
+            || menus[..i].iter().any(|m| m.id == menu.id)
+            || !(1..=8).contains(&menu.columns)
+            || menu
+                .position
+                .iter()
+                .any(|v| !v.is_finite() || v.abs() > 100_000.)
+        {
+            return Err("Invalid custom menu layout".into());
+        }
+    }
+    Ok(())
 }
 pub(crate) fn path() -> PathBuf {
     std::env::var_os("XDG_CONFIG_HOME")
@@ -326,40 +798,10 @@ pub(crate) fn save(path: &std::path::Path, prefs: &Preferences) -> Result<(), St
 }
 pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
     let mut prefs: Preferences = crate::persistence::read_json(&path.to_string_lossy())?;
-    if prefs.bindings.len() == 13
-        && [
-            Action::Subdivide,
-            Action::LowerLevel,
-            Action::HigherLevel,
-            Action::Remesh,
-        ]
-        .iter()
-        .all(|new| !prefs.bindings.iter().any(|(a, _)| a == new))
-    {
-        for (action, mut shortcut) in Preferences::default().bindings.into_iter().skip(13) {
-            if shortcut.is_some()
-                && prefs
-                    .bindings
-                    .iter()
-                    .any(|(_, existing)| existing == &shortcut)
-            {
-                shortcut = None;
-            }
-            prefs.bindings.push((action, shortcut));
-        }
-    }
-    if prefs.bindings.len() == 17
-        && [Action::ZoomIn, Action::ZoomOut]
-            .iter()
-            .all(|new| !prefs.bindings.iter().any(|(a, _)| a == new))
-    {
-        for (action, mut shortcut) in Preferences::default().bindings.into_iter().skip(17) {
-            if shortcut.is_some()
-                && prefs
-                    .bindings
-                    .iter()
-                    .any(|(_, existing)| existing == &shortcut)
-            {
+    // Add newly introduced actions without stealing existing shortcuts or clearing explicit unbindings.
+    for (action, mut shortcut) in Preferences::default().bindings {
+        if !prefs.bindings.iter().any(|(a, _)| *a == action) {
+            if shortcut.is_some() && prefs.bindings.iter().any(|(_, b)| *b == shortcut) {
                 shortcut = None;
             }
             prefs.bindings.push((action, shortcut));
@@ -467,7 +909,7 @@ mod migration_tests {
         assert_eq!(upgraded.panels[5].tool, Tool::Mesh);
         assert_eq!(upgraded.panels[5].dock, Dock::Right);
         assert_eq!(&upgraded.bindings[..13], &old.bindings);
-        assert_eq!(upgraded.bindings.len(), 19);
+        assert_eq!(upgraded.bindings.len(), Action::ALL.len());
         std::fs::remove_file(path).unwrap();
     }
 }
@@ -525,5 +967,355 @@ mod zoom_hold_tests {
         save(&path, &upgraded).unwrap();
         assert_eq!(load(&path).unwrap().zoom_hold, Hold::Alt);
         std::fs::remove_file(path).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod customization_tests {
+    use super::*;
+    #[test]
+    fn all_twenty_number_row_bindings_are_distinct_and_consumed() {
+        let digits = [
+            Key::Num1,
+            Key::Num2,
+            Key::Num3,
+            Key::Num4,
+            Key::Num5,
+            Key::Num6,
+            Key::Num7,
+            Key::Num8,
+            Key::Num9,
+            Key::Num0,
+        ];
+        let mut prefs = Preferences::default();
+        for (_, binding) in &mut prefs.bindings {
+            *binding = None;
+        }
+        let mut events = Vec::new();
+        for (i, modifiers) in [Modifiers::NONE, Modifiers::SHIFT].into_iter().enumerate() {
+            for (j, key) in digits.into_iter().enumerate() {
+                prefs
+                    .bind(
+                        Action::ALL[i * 10 + j].clone(),
+                        Shortcut::new(key, modifiers),
+                    )
+                    .unwrap();
+                events.push(egui::Event::Key {
+                    key,
+                    physical_key: Some(key),
+                    pressed: true,
+                    repeat: false,
+                    modifiers,
+                });
+                events.push(egui::Event::Key {
+                    key,
+                    physical_key: Some(key),
+                    pressed: false,
+                    repeat: false,
+                    modifiers,
+                });
+            }
+        }
+        prefs.validate().unwrap();
+        let ctx = egui::Context::default();
+        let _ = ctx.run(
+            egui::RawInput {
+                events,
+                ..Default::default()
+            },
+            |ctx| {
+                assert_eq!(prefs.actions(ctx), Action::ALL[..20]);
+                assert!(prefs.actions(ctx).is_empty());
+            },
+        );
+        let shifted = egui::Event::Key {
+            key: Key::Exclamationmark,
+            physical_key: Some(Key::Num1),
+            pressed: true,
+            repeat: false,
+            modifiers: Modifiers::SHIFT,
+        };
+        assert_eq!(
+            Shortcut::from_event(&shifted),
+            Some(Shortcut::new(Key::Num1, Modifiers::SHIFT))
+        );
+    }
+    #[test]
+    fn custom_layouts_brush_bindings_and_old_preferences_round_trip() {
+        let path =
+            std::env::temp_dir().join(format!("clay-custom-interface-{}.json", std::process::id()));
+        let mut prefs = Preferences::default();
+        let id = prefs.add_menu();
+        prefs.pan_hold = Hold::Shift;
+        prefs.menus[0].name = "My sculpt tools".into();
+        prefs.menus[0].placement = Placement::Floating;
+        prefs.menus[0].items = vec![
+            CustomItem::action(Action::ClearMask),
+            CustomItem {
+                action: None,
+                label: String::new(),
+            },
+            CustomItem::action(Action::SelectBrush("stable-brush-id".into())),
+        ];
+        prefs
+            .bind(
+                Action::SelectBrush("stable-brush-id".into()),
+                Shortcut::new(Key::Num1, Modifiers::NONE),
+            )
+            .unwrap();
+        prefs
+            .bind(
+                Action::OpenMenu(id),
+                Shortcut::new(Key::Num1, Modifiers::SHIFT),
+            )
+            .unwrap();
+        prefs.workspaces.push(prefs.workspace("Sculpting".into()));
+        save(&path, &prefs).unwrap();
+        assert_eq!(load(&path).unwrap(), prefs);
+        prefs.menus.clear();
+        let next = prefs.add_menu();
+        assert_ne!(
+            id, next,
+            "deleted menu shortcuts must never target a new menu"
+        );
+        prefs.apply_workspace(&prefs.workspaces[0].clone());
+        assert_eq!(prefs.menus[0].id, id);
+        let mut old = serde_json::to_value(Preferences::default()).unwrap();
+        let object = old.as_object_mut().unwrap();
+        for key in [
+            "menus",
+            "workspaces",
+            "compact_toolbar",
+            "next_menu_id",
+            "pan_hold",
+            "shelf_sizes",
+            "appearance",
+            "active_workspace",
+        ] {
+            object.remove(key);
+        }
+        object
+            .get_mut("bindings")
+            .unwrap()
+            .as_array_mut()
+            .unwrap()
+            .truncate(19);
+        crate::persistence::write_json(&path.to_string_lossy(), &old).unwrap();
+        let migrated = load(&path).unwrap();
+        assert_eq!(migrated, Preferences::default());
+        std::fs::remove_file(path).unwrap();
+    }
+    #[test]
+    fn workspace_switching_remembers_live_edits_and_colours() {
+        let mut prefs = Preferences::default();
+        prefs.add_menu();
+        prefs.menus[0].placement = Placement::LeftPanel;
+        prefs.menus[0]
+            .items
+            .push(CustomItem::action(Action::ClearMask));
+        prefs.save_workspace_as(" Sculpt ").unwrap();
+        assert_eq!(prefs.workspaces[0].name, "Sculpt");
+        prefs.save_workspace_as("Detail").unwrap();
+        prefs.appearance = Appearance::light();
+        prefs.menus[0].expanded = false;
+        prefs.menus[0].placement = Placement::RightPanel;
+        prefs.left_width = 310.;
+        prefs.switch_workspace(0);
+        assert_eq!(prefs.appearance, Appearance::default());
+        assert!(prefs.menus[0].expanded);
+        assert_eq!(prefs.menus[0].placement, Placement::LeftPanel);
+        prefs.appearance = Appearance::warm();
+        prefs.switch_workspace(1);
+        assert_eq!(prefs.appearance, Appearance::light());
+        assert!(!prefs.menus[0].expanded);
+        assert_eq!(prefs.menus[0].placement, Placement::RightPanel);
+        assert_eq!(prefs.left_width, 310.);
+        let path =
+            std::env::temp_dir().join(format!("clay-workspaces-{}.json", std::process::id()));
+        save(&path, &prefs).unwrap();
+        let mut restored = load(&path).unwrap();
+        assert_eq!(prefs, restored);
+        restored.switch_workspace(0);
+        assert_eq!(restored.appearance, Appearance::warm());
+        assert!(restored.save_workspace_as("Detail").is_err());
+        restored.delete_workspace(1);
+        assert_eq!(restored.active_workspace, Some(0));
+        restored.delete_workspace(0);
+        assert_eq!(restored.active_workspace, None);
+        assert_eq!(restored.appearance, Appearance::warm());
+        std::fs::remove_file(path).unwrap();
+    }
+    #[test]
+    fn old_menus_and_saved_workspaces_gain_safe_defaults() {
+        let mut prefs = Preferences::default();
+        prefs.add_menu();
+        prefs.save_workspace_as("Legacy").unwrap();
+        let mut value = serde_json::to_value(prefs).unwrap();
+        value["workspaces"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("appearance");
+        {
+            let menu = &mut value["menus"][0];
+            menu.as_object_mut().unwrap().remove("collapsible");
+            menu.as_object_mut().unwrap().remove("expanded");
+        }
+        let restored: Preferences = serde_json::from_value(value).unwrap();
+        restored.validate().unwrap();
+        assert_eq!(restored.workspaces[0].appearance, Appearance::default());
+        assert!(!restored.menus[0].collapsible);
+        assert!(restored.menus[0].expanded);
+    }
+    #[test]
+    fn duplicate_custom_bindings_and_invalid_layouts_are_rejected() {
+        let mut prefs = Preferences::default();
+        let id = prefs.add_menu();
+        prefs
+            .bind(
+                Action::OpenMenu(id),
+                Shortcut::new(Key::Num0, Modifiers::SHIFT),
+            )
+            .unwrap();
+        assert!(
+            prefs
+                .bind(
+                    Action::ClearMask,
+                    Shortcut::new(Key::Num0, Modifiers::SHIFT)
+                )
+                .is_err()
+        );
+        prefs.menus[0].columns = 0;
+        assert!(prefs.validate().is_err());
+        prefs.menus[0].columns = 2;
+        prefs.menus.push(prefs.menus[0].clone());
+        assert!(prefs.validate().is_err());
+    }
+}
+
+#[cfg(test)]
+mod pinned_menu_tests {
+    use super::*;
+    #[test]
+    fn pinned_menus_roundtrip_migrate_and_validate_saved_workspaces() {
+        let mut prefs = Preferences::default();
+        prefs.pinned_menus.push(PinnedMenu {
+            menu: BuiltinMenu::Mask,
+            position: [300., 200.],
+        });
+        prefs.save_workspace_as("Sculpt").unwrap();
+        prefs.save_workspace_as("Detail").unwrap();
+        prefs.pinned_menus[0].position = [500., 100.];
+        prefs.switch_workspace(0);
+        assert_eq!(prefs.pinned_menus[0].position, [300., 200.]);
+        prefs.switch_workspace(1);
+        assert_eq!(prefs.pinned_menus[0].position, [500., 100.]);
+        prefs.validate().unwrap();
+        let json = serde_json::to_string(&prefs).unwrap();
+        assert_eq!(serde_json::from_str::<Preferences>(&json).unwrap(), prefs);
+        let mut old = serde_json::to_value(&prefs).unwrap();
+        old.as_object_mut().unwrap().remove("pinned_menus");
+        for workspace in old["workspaces"].as_array_mut().unwrap() {
+            workspace.as_object_mut().unwrap().remove("pinned_menus");
+        }
+        let migrated: Preferences = serde_json::from_value(old).unwrap();
+        migrated.validate().unwrap();
+        assert!(migrated.pinned_menus.is_empty());
+        assert!(
+            migrated
+                .workspaces
+                .iter()
+                .all(|w| w.pinned_menus.is_empty())
+        );
+        prefs.workspaces[0].pinned_menus[0].position[0] = f32::NAN;
+        assert!(prefs.validate().is_err());
+        prefs.workspaces.clear();
+        prefs.active_workspace = None;
+        prefs.pinned_menus.push(prefs.pinned_menus[0].clone());
+        assert!(prefs.validate().is_err());
+    }
+}
+
+#[cfg(test)]
+mod sidebar_tests {
+    use super::*;
+
+    #[test]
+    fn mixed_sidebar_order_and_collapsed_menus_survive_workspace_switch_and_reload() {
+        let mut prefs = Preferences::default();
+        let id = prefs.add_menu();
+        prefs.menus[0].placement = Placement::LeftPanel;
+        prefs.save_workspace_as("Original").unwrap();
+        prefs.save_workspace_as("Docked").unwrap();
+        prefs.pinned_menus.push(PinnedMenu {
+            menu: BuiltinMenu::Mask,
+            position: [300., 200.],
+        });
+        prefs.dock_menu(BuiltinMenu::Mask, Dock::Left);
+        assert!(prefs.pinned_menus.is_empty());
+        prefs.move_section(SidebarSection::Builtin(BuiltinMenu::Mask), true);
+        prefs.move_section(SidebarSection::Builtin(BuiltinMenu::Mask), true);
+        prefs.menu_sections[0].open = false;
+        let order = prefs.sidebar_sections(Dock::Left);
+        assert_eq!(
+            &order[..4],
+            &[
+                SidebarSection::Custom(id),
+                SidebarSection::Tool(Tool::Library),
+                SidebarSection::Builtin(BuiltinMenu::Mask),
+                SidebarSection::Tool(Tool::Brush),
+            ]
+        );
+        let right = prefs.sidebar_sections(Dock::Right);
+        prefs.move_section(SidebarSection::Custom(id), false);
+        assert_eq!(prefs.sidebar_sections(Dock::Left), order);
+        assert_eq!(prefs.sidebar_sections(Dock::Right), right);
+        prefs.switch_workspace(0);
+        assert!(prefs.menu_sections.is_empty());
+        prefs.switch_workspace(1);
+        assert!(!prefs.menu_sections[0].open);
+        assert_eq!(prefs.sidebar_sections(Dock::Left), order);
+        prefs.validate().unwrap();
+        let restored: Preferences =
+            serde_json::from_str(&serde_json::to_string(&prefs).unwrap()).unwrap();
+        assert_eq!(restored, prefs);
+        prefs.dock_menu(BuiltinMenu::Mask, Dock::Right);
+        assert!(
+            !prefs
+                .sidebar_sections(Dock::Left)
+                .contains(&SidebarSection::Builtin(BuiltinMenu::Mask))
+        );
+        prefs.undock_menu(BuiltinMenu::Mask);
+        assert!(prefs.menu_sections.is_empty());
+        prefs.validate().unwrap();
+    }
+
+    #[test]
+    fn old_layouts_keep_their_order_and_invalid_menu_layouts_are_rejected() {
+        let mut prefs = Preferences::default();
+        prefs.panels.swap(0, 1);
+        prefs.add_menu();
+        prefs.menus[0].placement = Placement::LeftPanel;
+        prefs.save_workspace_as("Legacy").unwrap();
+        let expected = prefs.sidebar_sections(Dock::Left);
+        let mut old = serde_json::to_value(&prefs).unwrap();
+        for key in ["menu_sections", "sidebar_order"] {
+            old.as_object_mut().unwrap().remove(key);
+            old["workspaces"][0].as_object_mut().unwrap().remove(key);
+        }
+        let mut restored: Preferences = serde_json::from_value(old).unwrap();
+        restored.validate().unwrap();
+        assert_eq!(restored.sidebar_sections(Dock::Left), expected);
+        restored.dock_menu(BuiltinMenu::Symmetry, Dock::Left);
+        restored.menu_sections[0].dock = Dock::Hidden;
+        assert!(restored.validate().is_err());
+        restored.menu_sections[0].dock = Dock::Left;
+        restored.pinned_menus.push(PinnedMenu {
+            menu: BuiltinMenu::Symmetry,
+            position: [0., 0.],
+        });
+        assert!(restored.validate().is_err());
+        restored.pinned_menus.clear();
+        restored.sidebar_order.push(restored.sidebar_order[0]);
+        assert!(restored.validate().is_err());
     }
 }

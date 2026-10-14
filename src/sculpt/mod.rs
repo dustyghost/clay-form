@@ -3,6 +3,7 @@ mod adaptive;
 mod brush;
 mod math;
 mod mesh;
+mod overlap;
 mod project;
 mod remesh;
 mod subdivision;
@@ -40,3 +41,7 @@ pub(crate) use shading::SurfaceShading;
 
 #[cfg(test)]
 mod group_tests;
+
+mod visibility;
+
+mod merge;

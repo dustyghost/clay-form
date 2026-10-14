@@ -375,3 +375,61 @@ pub(super) fn brush_tile(
     }
     response.on_hover_text(name)
 }
+
+/// Apply workspace colours only when changed, preserving runtime style settings.
+pub(super) fn appearance(ctx: &egui::Context, appearance: &crate::preferences::Appearance) {
+    use crate::preferences::Appearance;
+    let key = egui::Id::new("workspace_appearance");
+    if ctx.data(|d| d.get_temp::<Appearance>(key)).as_ref() == Some(appearance) {
+        return;
+    }
+    let colour = |rgb: [u8; 3]| Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+    let panel = colour(appearance.panels);
+    let button = colour(appearance.buttons);
+    let accent = colour(appearance.accent);
+    let text = colour(appearance.text);
+    let mix = |a: Color32, b: Color32, amount: f32| {
+        let a = a.to_array();
+        let b = b.to_array();
+        Color32::from_rgb(
+            (a[0] as f32 * (1. - amount) + b[0] as f32 * amount) as u8,
+            (a[1] as f32 * (1. - amount) + b[1] as f32 * amount) as u8,
+            (a[2] as f32 * (1. - amount) + b[2] as f32 * amount) as u8,
+        )
+    };
+    ctx.style_mut(|style| {
+        style.spacing.item_spacing = Vec2::splat(appearance.spacing as f32);
+        let v = &mut style.visuals;
+        v.dark_mode = appearance.panels.iter().map(|c| *c as u32).sum::<u32>() < 384;
+        v.panel_fill = panel;
+        v.window_fill = panel;
+        v.extreme_bg_color = mix(panel, button, 0.4);
+        v.faint_bg_color = mix(panel, button, 0.3);
+        v.override_text_color = Some(text);
+        v.hyperlink_color = accent;
+        v.selection.bg_fill = mix(panel, accent, 0.35);
+        v.selection.stroke = egui::Stroke::new(1., text);
+        v.window_stroke = egui::Stroke::new(1., mix(panel, text, 0.25));
+        v.window_corner_radius = egui::CornerRadius::same(appearance.rounding);
+        for (state, fill) in [
+            (&mut v.widgets.noninteractive, panel),
+            (&mut v.widgets.inactive, button),
+            (&mut v.widgets.hovered, mix(button, accent, 0.25)),
+            (&mut v.widgets.active, mix(button, accent, 0.45)),
+            (&mut v.widgets.open, mix(button, accent, 0.25)),
+        ] {
+            state.bg_fill = fill;
+            state.weak_bg_fill = fill;
+            state.bg_stroke = egui::Stroke::new(1., mix(fill, text, 0.2));
+            state.fg_stroke = egui::Stroke::new(1., text);
+            state.corner_radius = egui::CornerRadius::same(appearance.rounding);
+        }
+    });
+    ctx.data_mut(|d| {
+        d.insert_temp(key, appearance.clone());
+        d.insert_temp(
+            egui::Id::new("workspace_viewport_background"),
+            colour(appearance.viewport),
+        );
+    });
+}

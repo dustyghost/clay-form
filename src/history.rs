@@ -91,6 +91,7 @@ fn geometry_bytes(geometry: &Geometry) -> usize {
                 + mesh.mask.len() * std::mem::size_of::<f32>()
                 + mesh.triangles.len() * std::mem::size_of::<[usize; 3]>()
                 + mesh.quads.len() * std::mem::size_of::<[usize; 4]>()
+                + mesh.hidden_faces.len()
                 + mesh.polygroups.len() * std::mem::size_of::<usize>()
                 + mesh
                     .vertex_groups
@@ -110,6 +111,7 @@ mod tests {
         let mut history = History::default();
         let mut mesh = Geometry::new(Mesh {
             vertex_groups: Vec::new(),
+            hidden_faces: Vec::new(),
             polygroups: Vec::new(),
             quads: Vec::new(),
             vertices: vec![Vec3::default()],

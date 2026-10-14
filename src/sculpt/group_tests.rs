@@ -46,6 +46,67 @@ fn mask_ring_expansion_ignores_quad_diagonal_and_preserves_softness() {
     assert!(!mask_selected(0.4, 0.5));
 }
 #[test]
+fn mask_blur_softens_one_ring_without_quad_diagonal_or_face_order_bias() {
+    let mut mesh = plane();
+    let [a, b, c, d] = mesh.quads[0];
+    mesh.mask[a] = 1.;
+    let mut reversed = mesh.clone();
+    reversed.triangles.reverse();
+    reversed.blur_mask();
+    mesh.blur_mask();
+    assert_eq!(mesh.mask, reversed.mask);
+    assert_eq!(mesh.mask[a], 0.5);
+    assert_eq!(mesh.mask[b], 0.25);
+    assert_eq!(mesh.mask[c], 0.);
+    assert_eq!(mesh.mask[d], 0.25);
+
+    // In a triangle-only mesh the shared diagonal is a real edge, counted once.
+    mesh.quads.clear();
+    mesh.mask.fill(0.);
+    let [a, _, c] = mesh.triangles[0];
+    mesh.mask[a] = 1.;
+    mesh.blur_mask();
+    assert!((mesh.mask[c] - 1. / 6.).abs() < 1e-6);
+    assert_eq!(mesh.mask[a], 0.5);
+}
+
+#[test]
+fn mask_filters_handle_uniform_empty_isolated_and_repeated_values() {
+    let mut mesh = plane();
+    for value in [0., 0.3, 0.5, 1.] {
+        mesh.mask.fill(value);
+        let before = mesh.mask.clone();
+        mesh.blur_mask();
+        assert_eq!(mesh.mask, before);
+    }
+    mesh.mask = vec![0.1, 0.4, 0.6, 0.9];
+    mesh.sharpen_mask();
+    for (&actual, expected) in mesh.mask.iter().zip([0., 0.3, 0.7, 1.]) {
+        assert!((actual - expected).abs() < 1e-6);
+    }
+    for _ in 0..10 {
+        mesh.sharpen_mask();
+    }
+    assert_eq!(mesh.mask, vec![0., 0., 1., 1.]);
+    mesh.mask.fill(0.5);
+    mesh.sharpen_mask();
+    assert_eq!(mesh.mask, vec![0.5; 4]);
+    mesh.triangles.clear();
+    mesh.quads.clear();
+    mesh.mask[0] = 0.3;
+    let before = mesh.mask.clone();
+    mesh.blur_mask();
+    assert_eq!(
+        mesh.mask, before,
+        "isolated vertices have no neighbours to average"
+    );
+    mesh.vertices.clear();
+    mesh.mask.clear();
+    mesh.blur_mask();
+    mesh.sharpen_mask();
+    assert!(mesh.mask.is_empty());
+}
+#[test]
 fn subdivision_cut_and_extraction_keep_group_membership() {
     let mut m = plane();
     m.mask.fill(0.75);

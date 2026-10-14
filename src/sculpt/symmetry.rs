@@ -270,3 +270,238 @@ mod tests {
         assert!(symmetry.validate().is_err());
     }
 }
+
+#[cfg(test)]
+mod seam_tests {
+    use super::*;
+    use crate::sculpt::{Brush, Kind, Mesh};
+
+    #[test]
+    fn tilted_standard_dabs_keep_the_mirror_seam_fixed_and_ignore_copy_order() {
+        let symmetry = Symmetry {
+            enabled: true,
+            ..Default::default()
+        };
+        let original = Mesh::sphere();
+        let brush = Brush::new(Kind::Standard);
+        let dab = Dab {
+            center: Vec3(0.04, 0., 1.),
+            normal: Vec3(0.6, 0., 0.8),
+            right: Vec3(0.8, 0., -0.6),
+            up: Vec3(0., 1., 0.),
+            radius: 0.35,
+            pressure: 1.,
+            delta: Vec3::default(),
+            invert: false,
+        };
+        for invert in [false, true] {
+            let copies = symmetry.dabs(Dab { invert, ..dab });
+            let mut reverse = copies.clone();
+            reverse.reverse();
+            let mut forward_mesh = original.clone();
+            let mut reverse_mesh = original.clone();
+            for _ in 0..12 {
+                forward_mesh.stamp_many(&brush, &copies);
+                reverse_mesh.stamp_many(&brush, &reverse);
+            }
+            let mut affected_seam = 0;
+            for (i, before) in original.vertices.iter().enumerate() {
+                let after = forward_mesh.vertices[i];
+                assert!(
+                    (after - reverse_mesh.vertices[i]).len() < 1e-6,
+                    "copy order changed vertex {i}"
+                );
+                if before.0.abs() < 1e-6 && before.2 > 0.95 && before.1.abs() < 0.15 {
+                    affected_seam += 1;
+                    assert!(
+                        after.0.abs() < 1e-6,
+                        "symmetry seam drifted sideways: {before:?} -> {after:?}"
+                    );
+                    assert!(
+                        (after.2 - before.2) * if invert { -1. } else { 1. } > 0.001,
+                        "seam must still receive the brush stroke"
+                    );
+                }
+            }
+            assert!(affected_seam > 0);
+        }
+    }
+    #[test]
+    fn mirrored_blending_respects_offset_planes_masks_and_single_copy_strength() {
+        let symmetry = Symmetry {
+            enabled: true,
+            center: Vec3(0.3, -0.2, 0.1),
+            ..Default::default()
+        };
+        let mut original = Mesh::sphere();
+        for vertex in &mut original.vertices {
+            *vertex = *vertex + symmetry.center;
+        }
+        let dab = Dab {
+            center: symmetry.center + Vec3(0.04, 0., 1.),
+            normal: Vec3(0.6, 0., 0.8),
+            right: Vec3(0.8, 0., -0.6),
+            up: Vec3(0., 1., 0.),
+            radius: 0.35,
+            pressure: 1.,
+            delta: Vec3(0.1, 0., 0.),
+            invert: false,
+        };
+        let seam = original
+            .vertices
+            .iter()
+            .position(|v| (v.0 - 0.3).abs() < 1e-6 && (v.1 + 0.2).abs() < 1e-6 && v.2 > 1.)
+            .unwrap();
+        let brush = Brush::new(Kind::Standard);
+        let mut masked = original.clone();
+        masked.mask[seam] = 1.;
+        let mask = masked.mask.clone();
+        masked.stamp_many(&brush, &symmetry.dabs(dab));
+        assert_eq!(masked.vertices[seam], original.vertices[seam]);
+        assert_eq!(masked.mask, mask);
+        let mut mirrored = original.clone();
+        mirrored.stamp_many(&brush, &symmetry.dabs(dab));
+        assert!((mirrored.vertices[seam].0 - 0.3).abs() < 1e-6);
+        assert!(mirrored.vertices[seam].2 > original.vertices[seam].2);
+        for (before, after) in original.vertices.iter().zip(&mirrored.vertices) {
+            assert!(
+                (*after - *before).len() <= dab.radius * 0.15 * brush.strength + 1e-6,
+                "overlap multiplied brush strength"
+            );
+        }
+        let mask_brush = Brush::new(Kind::Mask);
+        let mut once = original.clone();
+        let mut duplicates = original.clone();
+        once.stamp(&mask_brush, dab);
+        duplicates.stamp_many(&mask_brush, &[dab, dab]);
+        assert_eq!(once.mask, duplicates.mask);
+    }
+}
+
+#[cfg(test)]
+mod seam_depth_tests {
+    use super::*;
+    use crate::sculpt::{Alpha, Brush, Kind, Mesh};
+
+    #[test]
+    fn standard_overlap_keeps_full_depth_when_mirrored_normals_diverge() {
+        let symmetry = Symmetry {
+            enabled: true,
+            ..Default::default()
+        };
+        for (alpha, mask, pressure) in [
+            (Alpha::Hard, 0., 1.),
+            (Alpha::Soft, 0.4, 0.6),
+            (Alpha::Soft, 1., 0.8),
+        ] {
+            for invert in [false, true] {
+                let mut mesh = Mesh::sphere();
+                let seam = mesh
+                    .vertices
+                    .iter()
+                    .position(|v| v.0.abs() < 1e-6 && v.1.abs() < 1e-6 && v.2 > 0.99)
+                    .unwrap();
+                let before = mesh.vertices[seam];
+                let mut brush = Brush::new(Kind::Standard);
+                brush.alpha = alpha.clone();
+                brush.pressure = true;
+                mesh.mask[seam] = mask;
+                // Two steep mirrored normals have equal brush coverage at the seam.
+                // Cancelling their lateral components must not also weaken brush depth.
+                let dab = Dab {
+                    center: Vec3(0.04, 0., 1.),
+                    normal: Vec3(0.8, 0., 0.6),
+                    right: Vec3(0.6, 0., -0.8),
+                    up: Vec3(0., 1., 0.),
+                    radius: 0.3,
+                    pressure,
+                    delta: Vec3::default(),
+                    invert,
+                };
+                mesh.stamp_many(&brush, &symmetry.dabs(dab));
+                let change = mesh.vertices[seam] - before;
+                let offset = before - dab.center;
+                let expected = dab.radius
+                    * 0.15
+                    * brush.strength
+                    * pressure.powf(brush.pressure_curve)
+                    * brush.weight(
+                        offset.dot(dab.right) / dab.radius,
+                        offset.dot(dab.up) / dab.radius,
+                    )
+                    * (1. - mask);
+                let peak = dab.radius
+                    * 0.15
+                    * brush.strength
+                    * pressure.powf(brush.pressure_curve)
+                    * (1. - mask);
+                assert!(
+                    change.2.abs() + 1e-6 >= expected && change.2.abs() <= peak + 1e-6,
+                    "seam depth {} should retain falloff depth {expected} without exceeding peak {peak}",
+                    change.2.abs()
+                );
+                if matches!(alpha, Alpha::Hard) {
+                    assert!((change.2.abs() - expected).abs() < 1e-6);
+                }
+                assert!(change.0.abs() < 1e-6);
+                if mask < 1. {
+                    assert_eq!(change.2 < 0., invert);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod soft_join_tests {
+    use super::*;
+    use crate::sculpt::{Brush, Kind, Mesh};
+    #[test]
+    fn close_soft_standard_footprints_join_without_a_central_dip() {
+        let symmetry = Symmetry {
+            enabled: true,
+            ..Default::default()
+        };
+        let original = Mesh::sphere();
+        let mut brush = Brush::new(Kind::Standard);
+        brush.pressure = false;
+        let dab = Dab {
+            center: Vec3(0.035, 0., 1.),
+            normal: Vec3(0., 0., 1.),
+            right: Vec3(1., 0., 0.),
+            up: Vec3(0., 1., 0.),
+            radius: 0.3,
+            pressure: 1.,
+            delta: Vec3::default(),
+            invert: false,
+        };
+        let sample = |x: f32| {
+            original
+                .vertices
+                .iter()
+                .enumerate()
+                .min_by(|(_, a), (_, b)| {
+                    (**a - Vec3(x, 0., 1.))
+                        .len()
+                        .total_cmp(&(**b - Vec3(x, 0., 1.)).len())
+                })
+                .unwrap()
+                .0
+        };
+        let center = sample(0.);
+        for invert in [false, true] {
+            let mut mesh = original.clone();
+            mesh.stamp_many(&brush, &symmetry.dabs(Dab { invert, ..dab }));
+            let depth = |i: usize| (mesh.vertices[i].2 - original.vertices[i].2).abs();
+            for side in [-1., 1.] {
+                assert!(
+                    depth(center) + 1e-6 >= depth(sample(side * 0.06)),
+                    "centre stroke is weaker than its flanks: {} < {}",
+                    depth(center),
+                    depth(sample(side * 0.06))
+                );
+            }
+            assert!(depth(center) <= dab.radius * 0.15 * brush.strength + 1e-6);
+        }
+    }
+}

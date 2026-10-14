@@ -307,6 +307,7 @@ impl Primitive {
 fn empty() -> Mesh {
     Mesh {
         vertex_groups: Vec::new(),
+        hidden_faces: Vec::new(),
         polygroups: Vec::new(),
         quads: Vec::new(),
         vertices: vec![],

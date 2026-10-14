@@ -111,7 +111,7 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         let camera = Camera::default();
         let (right, up, view) = camera.basis();
         let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(256.));
-        let params = Params::new(
+        let mut params = Params::new(
             rect,
             right,
             up,
@@ -158,6 +158,24 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             "inactive foreground must occlude clay behind it"
         );
         assert_eq!(&solid[..4], &[23, 26, 31, 255]);
+        params.background = [190, 197, 205];
+        gpu.paint(
+            &gl,
+            &params,
+            [256, 256],
+            false,
+            WireMode::Visible,
+            false,
+            &Preview::default(),
+        );
+        let light_background = read(&gpu);
+        assert_eq!(&light_background[..4], &[190, 197, 205, 255]);
+        assert_eq!(
+            &light_background[center..center + 4],
+            &solid[center..center + 4],
+            "workspace background must not change mesh shading"
+        );
+        params.background = [23, 26, 31];
         let uploaded = gpu.uploaded.clone().unwrap();
         gpu.upload(&gl, &display);
         assert!(Arc::ptr_eq(&uploaded, gpu.uploaded.as_ref().unwrap()));

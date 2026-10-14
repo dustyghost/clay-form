@@ -2,6 +2,14 @@
 use super::controls;
 use crate::{camera::Camera, sculpt::Vec3};
 use eframe::egui::{self, Color32, Pos2, Vec2};
+pub(super) const DRAG_THRESHOLD: f32 = 6.;
+pub(super) fn snap_target(camera: &Camera, center: Pos2, pointer: Pos2) -> Option<(f32, f32)> {
+    axes(camera, center)
+        .into_iter()
+        .rev()
+        .find(|axis| axis.position.distance(pointer) < 14.)
+        .map(|axis| (axis.yaw, axis.pitch))
+}
 pub(super) fn draw_gizmo(
     camera: &Camera,
     painter: &egui::Painter,

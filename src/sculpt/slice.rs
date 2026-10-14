@@ -13,14 +13,14 @@ impl SliceMode {
     pub const ALL: [Self; 3] = [Self::Polygroups, Self::Trim, Self::Separate];
     pub fn label(self) -> &'static str {
         match self {
-            Self::Polygroups => "Polygroups",
+            Self::Polygroups => "Vertex groups",
             Self::Trim => "Trim",
             Self::Separate => "Separate",
         }
     }
     pub fn history_label(self) -> &'static str {
         match self {
-            Self::Polygroups => "Slice polygroups",
+            Self::Polygroups => "Slice vertex groups",
             Self::Trim => "Trim surface",
             Self::Separate => "Separate sliced submodels",
         }
@@ -85,9 +85,10 @@ impl Geometry {
         if self.settings.primitive.is_some() {
             return Err("Convert the primitive to a sculpting mesh before slicing".into());
         }
-        if !self.scene.active_metadata.visible || self.mesh.vertex_groups.iter().any(|g| !g.visible)
-        {
-            return Err("Show the active model and all of its polygroups before slicing".into());
+        if !self.scene.active_metadata.visible || self.mesh.has_hidden_faces() {
+            return Err(
+                "Show the active model and all of its vertex group faces before slicing".into(),
+            );
         }
         if self.scene.active_metadata.temporary_thickness > 0. {
             return Err("Apply or remove temporary thickness before slicing".into());

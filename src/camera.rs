@@ -47,8 +47,42 @@ impl Camera {
         )
     }
     pub fn orbit(&mut self, delta: Vec2) {
-        self.yaw -= delta.x * 0.008;
-        self.pitch = (self.pitch - delta.y * 0.008)
-            .clamp(-std::f32::consts::FRAC_PI_2, std::f32::consts::FRAC_PI_2);
+        if !delta.is_finite() {
+            return;
+        }
+        // Wrap complete turns for precision, without imposing a pole limit.
+        let wrap = |angle: f32| angle % std::f32::consts::TAU;
+        self.yaw = wrap(self.yaw - delta.x * 0.008);
+        self.pitch = wrap(self.pitch - delta.y * 0.008);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn vertical_orbit_continues_over_poles_and_through_full_turns() {
+        let mut camera = Camera::default();
+        camera.orbit(Vec2::new(0., 250.));
+        assert!(camera.pitch.abs() > std::f32::consts::FRAC_PI_2);
+        let before = camera.basis().2;
+        camera.orbit(Vec2::new(0., 100.));
+        assert!((camera.basis().2 - before).len() > 0.5);
+        let basis = camera.basis();
+        for _ in 0..20 {
+            camera.orbit(Vec2::new(
+                std::f32::consts::TAU / 0.008,
+                std::f32::consts::TAU / 0.008,
+            ));
+        }
+        for (a, b) in [
+            (basis.0, camera.basis().0),
+            (basis.1, camera.basis().1),
+            (basis.2, camera.basis().2),
+        ] {
+            assert!((a - b).len() < 1e-4);
+        }
+        assert!(camera.pitch.abs() <= std::f32::consts::TAU);
+        assert!(camera.yaw.abs() <= std::f32::consts::TAU);
     }
 }

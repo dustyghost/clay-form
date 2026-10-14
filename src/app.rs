@@ -64,6 +64,7 @@ impl App {
         app
     }
     fn save_preferences(&mut self) {
+        self.ui.preferences.sync_active_workspace();
         if self.ui.preferences == self.saved_preferences {
             return;
         }
@@ -91,65 +92,267 @@ impl App {
             return;
         }
         for action in self.ui.preferences.actions(ctx) {
-            let command = match action {
-                Action::Subdivide => Some(Command::Subdivide),
-                Action::Remesh => Some(Command::Remesh),
-                Action::LowerLevel => self
-                    .document
-                    .mesh_settings()
-                    .level()
-                    .checked_sub(1)
-                    .filter(|&n| n > 0)
-                    .map(Command::SetMeshLevel),
-                Action::HigherLevel => {
-                    let settings = self.document.mesh_settings();
-                    (settings.level() < settings.levels())
-                        .then(|| Command::SetMeshLevel(settings.level() + 1))
-                }
-                Action::Save => Some(Command::Save),
-                Action::Open => Some(Command::Request(PendingAction::Open(self.ui.path.clone()))),
-                Action::New => Some(Command::Request(PendingAction::New)),
-                Action::Undo => Some(Command::Undo),
-                Action::Redo => Some(Command::Redo),
-                Action::ResetView => Some(Command::ResetView),
-                Action::ZoomIn => Some(Command::ZoomIn),
-                Action::ZoomOut => Some(Command::ZoomOut),
-                Action::Symmetry => {
-                    let mut symmetry = self.document.symmetry().clone();
-                    symmetry.enabled = !symmetry.enabled;
-                    Some(Command::SetSymmetry(symmetry))
-                }
-                Action::Wireframe => {
-                    self.ui.wire = !self.ui.wire;
-                    None
-                }
-                Action::Guides => {
-                    self.ui.show_symmetry_guides = !self.ui.show_symmetry_guides;
-                    None
-                }
-                Action::Smaller | Action::Larger => {
-                    let mut brush = self.document.brushes()[self.ui.selected].clone();
-                    brush.radius = (brush.radius
-                        * if action == Action::Smaller { 0.9 } else { 1.1 })
-                    .clamp(1., 500.);
-                    Some(Command::UpdateBrush(self.ui.selected, brush))
-                }
-                Action::PreviousBrush => {
-                    self.ui.selected = (self.ui.selected + self.document.brushes().len() - 1)
-                        % self.document.brushes().len();
-                    None
-                }
-                Action::NextBrush => {
-                    self.ui.selected = (self.ui.selected + 1) % self.document.brushes().len();
-                    None
-                }
-            };
-            if let Some(command) = command {
-                self.dispatch(command, ctx);
-            }
+            self.execute_action(action, ctx);
             if self.ui.pending.is_some() {
                 break;
             }
+        }
+    }
+
+    fn execute_action(&mut self, action: Action, ctx: &egui::Context) {
+        if !self.ui.action_enabled(&action, &self.document) {
+            return;
+        }
+        let command = match action {
+            Action::Subdivide => Some(Command::Subdivide),
+            Action::Remesh => Some(Command::Remesh),
+            Action::LowerLevel => self
+                .document
+                .mesh_settings()
+                .level()
+                .checked_sub(1)
+                .filter(|&n| n > 0)
+                .map(Command::SetMeshLevel),
+            Action::HigherLevel => {
+                let settings = self.document.mesh_settings();
+                (settings.level() < settings.levels())
+                    .then(|| Command::SetMeshLevel(settings.level() + 1))
+            }
+            Action::Save => Some(Command::Save),
+            Action::Open => Some(Command::Request(PendingAction::Open(self.ui.path.clone()))),
+            Action::New => Some(Command::Request(PendingAction::New)),
+            Action::Undo => Some(Command::Undo),
+            Action::Redo => Some(Command::Redo),
+            Action::ResetView => Some(Command::ResetView),
+            Action::ZoomIn => Some(Command::ZoomIn),
+            Action::ZoomOut => Some(Command::ZoomOut),
+            Action::Symmetry => {
+                let mut symmetry = self.document.symmetry().clone();
+                symmetry.enabled = !symmetry.enabled;
+                Some(Command::SetSymmetry(symmetry))
+            }
+            Action::Wireframe => {
+                self.ui.wire = !self.ui.wire;
+                None
+            }
+            Action::Guides => {
+                self.ui.show_symmetry_guides = !self.ui.show_symmetry_guides;
+                None
+            }
+            Action::Smaller | Action::Larger => {
+                let mut brush = self.document.brushes()[self.ui.selected].clone();
+                brush.radius = (brush.radius * if action == Action::Smaller { 0.9 } else { 1.1 })
+                    .clamp(1., 500.);
+                Some(Command::UpdateBrush(self.ui.selected, brush))
+            }
+            Action::PreviousBrush => {
+                self.ui.selected = (self.ui.selected + self.document.brushes().len() - 1)
+                    % self.document.brushes().len();
+                None
+            }
+            Action::NextBrush => {
+                self.ui.selected = (self.ui.selected + 1) % self.document.brushes().len();
+                None
+            }
+
+            Action::CancelMeshOperation => Some(Command::CancelMeshJob),
+            Action::Export => Some(Command::Export),
+            Action::ClearMask => Some(Command::ClearMask),
+            Action::InvertMask => Some(Command::InvertMask),
+            Action::DeleteMasked => Some(Command::DeleteMasked),
+            Action::ExpandMask => Some(Command::GrowMask(true)),
+            Action::ContractMask => Some(Command::GrowMask(false)),
+            Action::BlurMask => Some(Command::BlurMask),
+            Action::SharpenMask => Some(Command::SharpenMask),
+            Action::SelectRectangle => Some(Command::SelectTool(!self.ui.select_active)),
+            Action::ShowAllFaces => Some(Command::ShowAllFaces),
+            Action::InvertVisibility => Some(Command::InvertVisibility),
+            Action::SplitHidden => Some(Command::SplitHidden),
+            Action::Slice => Some(Command::SliceTool(!self.ui.slice_active)),
+            Action::Primitive => Some(Command::RequestPrimitive),
+            Action::ConvertPrimitive => Some(Command::ConvertPrimitive),
+            Action::DuplicateModel => Some(Command::DuplicateModel),
+            Action::MergeDown => Some(Command::MergeDown),
+            Action::ExtractMasked => Some(Command::ExtractMasked),
+            Action::ApplyThickness => Some(Command::ApplyThickness),
+            Action::TemporaryThickness => {
+                let model = self
+                    .document
+                    .model(self.document.active_model_index())
+                    .unwrap();
+                Some(Command::SetTemporaryThickness(
+                    if model.metadata.temporary_thickness > 0. {
+                        0.
+                    } else {
+                        0.05
+                    },
+                ))
+            }
+            Action::GroupMasked => Some(Command::CreateVertexGroup(
+                self.ui.vertex_group_name.clone(),
+                false,
+            )),
+            Action::GroupAll => Some(Command::CreateVertexGroup(
+                self.ui.vertex_group_name.clone(),
+                true,
+            )),
+            Action::MaskGroup
+            | Action::AddMaskedToGroup
+            | Action::RemoveMaskedFromGroup
+            | Action::DeleteGroup
+            | Action::RenameGroup => self
+                .ui
+                .selected_vertex_group
+                .filter(|(m, g)| {
+                    *m == self.document.active_model_index()
+                        && *g < self.document.mesh().vertex_groups.len()
+                })
+                .map(|(_, g)| match action {
+                    Action::MaskGroup => Command::MaskVertexGroup(g),
+                    Action::AddMaskedToGroup => Command::AssignMaskToGroup(g, false),
+                    Action::RemoveMaskedFromGroup => Command::AssignMaskToGroup(g, true),
+                    Action::RenameGroup => {
+                        Command::RenameVertexGroup(g, self.ui.vertex_group_rename.clone())
+                    }
+                    _ => Command::DeleteVertexGroup(g),
+                }),
+            Action::DeleteLowerLevels => Some(Command::DeleteLowerLevels),
+            Action::DeleteHigherLevels => Some(Command::DeleteHigherLevels),
+            Action::SubdivisionMode => Some(Command::SetDynamicMesh(false)),
+            Action::DynamicMode => Some(Command::SetDynamicMesh(true)),
+            Action::AdaptiveMode => {
+                let mut settings = self.document.mesh_settings().adaptive.clone();
+                settings.enabled = true;
+                Some(Command::SetAdaptive(settings))
+            }
+            Action::Sculpt => Some(Command::TransformMode(
+                crate::viewport::TransformMode::Sculpt,
+            )),
+            Action::Transform => Some(Command::TransformMode(
+                crate::viewport::TransformMode::World,
+            )),
+            Action::LineTransform => Some(Command::TransformMode(
+                crate::viewport::TransformMode::ActionLine,
+            )),
+            Action::Move => Some(Command::TransformOperation(
+                crate::viewport::TransformOperation::Move,
+            )),
+            Action::Scale => Some(Command::TransformOperation(
+                crate::viewport::TransformOperation::Scale,
+            )),
+            Action::PlaceLine => Some(Command::TransformOperation(
+                crate::viewport::TransformOperation::PlaceLine,
+            )),
+            Action::RespectMask => Some(Command::RespectTransformMask(
+                !self.ui.respect_transform_mask,
+            )),
+            Action::PolygroupColors => {
+                self.ui.show_polygroups = !self.ui.show_polygroups;
+                None
+            }
+            Action::Backfaces => {
+                self.ui.show_backfaces = !self.ui.show_backfaces;
+                None
+            }
+            Action::WireTriangles => {
+                self.ui.wire_triangles = !self.ui.wire_triangles;
+                None
+            }
+            Action::WireVisible | Action::WireFront | Action::WireTransparent => {
+                self.ui.wire_mode = match action {
+                    Action::WireVisible => crate::viewport::WireMode::Visible,
+                    Action::WireFront => crate::viewport::WireMode::Front,
+                    _ => crate::viewport::WireMode::Transparent,
+                };
+                None
+            }
+            Action::ResetZoom => Some(Command::SetZoom(1.)),
+            Action::CenterSymmetry => {
+                let mut symmetry = self.document.symmetry().clone();
+                symmetry.center = Default::default();
+                Some(Command::SetSymmetry(symmetry))
+            }
+            Action::DuplicateBrush => Some(Command::DuplicateBrush(self.ui.selected)),
+            Action::CaptureBrushIcon => Some(Command::CaptureBrushIcon(self.ui.selected)),
+            Action::LoadAlpha => Some(Command::LoadAlpha(self.ui.selected)),
+            Action::SavePreset => Some(Command::SavePreset(self.ui.selected)),
+            Action::LoadPreset => Some(Command::LoadPreset),
+            Action::ExportLibrary => Some(Command::ExportBrushLibrary),
+            Action::ImportLibrary => Some(Command::ImportBrushLibrary),
+            Action::RestoreBrushIcon
+            | Action::BrushAdd
+            | Action::BrushSubtract
+            | Action::StrokeFreehand
+            | Action::StrokeLine
+            | Action::StrokeDragRect
+            | Action::StrokeDragDot
+            | Action::StrokeStabilisation
+            | Action::AlphaSoft
+            | Action::AlphaHard
+            | Action::AlphaSquare => {
+                let mut brush = self.document.brushes()[self.ui.selected].clone();
+                use crate::sculpt::{Alpha, StrokeMode};
+                match action {
+                    Action::RestoreBrushIcon => brush.icon = None,
+                    Action::BrushAdd => brush.subtract = false,
+                    Action::BrushSubtract => brush.subtract = true,
+                    Action::StrokeFreehand => brush.stroke_mode = StrokeMode::Freehand,
+                    Action::StrokeLine => brush.stroke_mode = StrokeMode::Line,
+                    Action::StrokeDragRect => brush.stroke_mode = StrokeMode::DragRect,
+                    Action::StrokeDragDot => brush.stroke_mode = StrokeMode::DragDot,
+                    Action::StrokeStabilisation => brush.stabilize = !brush.stabilize,
+                    Action::AlphaSoft => brush.alpha = Alpha::Soft,
+                    Action::AlphaHard => brush.alpha = Alpha::Hard,
+                    Action::AlphaSquare => brush.alpha = Alpha::Square,
+                    _ => unreachable!(),
+                }
+                Some(Command::UpdateBrush(self.ui.selected, brush))
+            }
+            Action::KeySettings => {
+                self.ui.settings_open = true;
+                None
+            }
+            Action::CustomizeWorkspace => {
+                self.ui.layout_open = true;
+                None
+            }
+            Action::SelectBrush(id) => {
+                if let Some(index) = self
+                    .document
+                    .brushes()
+                    .iter()
+                    .position(|b| b.identity() == id)
+                {
+                    self.ui.selected = index;
+                }
+                None
+            }
+            Action::ShowPanel(tool) => {
+                if let Some(panel) = self
+                    .ui
+                    .preferences
+                    .panels
+                    .iter_mut()
+                    .find(|p| p.tool == tool)
+                {
+                    panel.open = true;
+                    if panel.dock == crate::preferences::Dock::Hidden {
+                        panel.dock = crate::preferences::Dock::Floating;
+                    }
+                }
+                None
+            }
+            Action::OpenMenu(id) => {
+                self.ui.customization.popup_menu = Some(id);
+                None
+            }
+            Action::NewBrush(name) => crate::sculpt::Kind::ALL
+                .into_iter()
+                .find(|k| format!("{k:?}") == name)
+                .map(Command::AddBrush),
+        };
+        if let Some(command) = command {
+            self.dispatch(command, ctx);
         }
     }
 
@@ -207,6 +410,7 @@ impl App {
                     self.ui.status = error;
                     if matches!(operation, Operation::Remesh)
                         && self.document.mesh_settings().auto_remesh
+                        && !self.document.mesh().has_hidden_faces()
                     {
                         let resolution = self.document.mesh_settings().resolution;
                         let _ = self.document.set_remesh_settings(resolution, false);
@@ -262,6 +466,10 @@ impl App {
         }
     }
     pub(crate) fn dispatch(&mut self, command: Command, ctx: &egui::Context) {
+        if let Command::Action(action) = command {
+            self.execute_action(action, ctx);
+            return;
+        }
         if self.ui.primitive_warning.is_some()
             && !matches!(
                 command,
@@ -297,14 +505,21 @@ impl App {
                     | Command::RespectTransformMask(_)
                     | Command::SelectSubmodel(_)
                     | Command::DuplicateModel
+                    | Command::MergeDown
                     | Command::ExtractMasked
                     | Command::ClearMask
                     | Command::InvertMask
                     | Command::DeleteMasked
                     | Command::SliceTool(_)
+                    | Command::SelectTool(_)
+                    | Command::ShowAllFaces
+                    | Command::InvertVisibility
+                    | Command::SplitHidden
                     | Command::SetTemporaryThickness(_)
                     | Command::ApplyThickness
                     | Command::GrowMask(_)
+                    | Command::BlurMask
+                    | Command::SharpenMask
                     | Command::MaskIntensity(_)
                     | Command::MaskThreshold(_)
                     | Command::CreateVertexGroup(..)
@@ -327,12 +542,36 @@ impl App {
             return;
         }
         let result: Result<(), String> = match command {
+            Command::Action(_) => unreachable!(),
+            Command::SelectTool(active) => {
+                self.viewport.finish_transform_drag(&mut self.document);
+                self.ui.select_active = active;
+                self.ui.slice_active = false;
+                self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
+                Ok(())
+            }
+            Command::ShowAllFaces => {
+                self.viewport.cancel(&mut self.document);
+                self.document.show_all_faces()
+            }
+            Command::InvertVisibility => {
+                self.viewport.cancel(&mut self.document);
+                self.document.invert_visibility()
+            }
+            Command::SplitHidden => {
+                self.viewport.cancel(&mut self.document);
+                self.document.split_hidden().map(|()| {
+                    self.ui.status =
+                        "Hidden faces moved into a new submodel; subdivision levels reset".into()
+                })
+            }
             Command::SliceTool(active) => {
+                self.ui.select_active = false;
                 self.viewport.finish_transform_drag(&mut self.document);
                 self.ui.slice_active = active;
                 self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
                 self.ui.status = if active {
-                    "Slice: draw a line across the active model; release to apply; Esc cancels"
+                    "Slice: draw a line across the active model; release to apply; Esc exits Slice"
                 } else {
                     "Sculpt mode"
                 }
@@ -378,6 +617,7 @@ impl App {
                 Ok(())
             }
             Command::RequestPrimitive => {
+                self.ui.select_active = false;
                 self.ui.slice_active = false;
                 self.viewport.cancel(&mut self.document);
                 if self.document.primitive().is_some() {
@@ -425,6 +665,7 @@ impl App {
                 })
             }
             Command::TransformMode(mode) => {
+                self.ui.select_active = false;
                 self.ui.slice_active = false;
                 self.viewport.finish_transform_drag(&mut self.document);
                 self.ui.transform_mode = mode;
@@ -475,6 +716,14 @@ impl App {
                 self.viewport.cancel(&mut self.document);
                 self.document.select_submodel(index)
             }
+            Command::MergeDown => {
+                self.viewport.cancel(&mut self.document);
+                self.document.merge_down().map(|()| {
+                    self.ui.selected_vertex_group = None;
+                    self.ui.status =
+                        "Submodels merged; current surfaces kept, subdivision levels reset".into();
+                })
+            }
             Command::DuplicateModel | Command::ExtractMasked => {
                 self.viewport.cancel(&mut self.document);
                 let extract = matches!(command, Command::ExtractMasked);
@@ -493,6 +742,15 @@ impl App {
             Command::MaskIntensity(amount) => {
                 self.viewport.cancel(&mut self.document);
                 self.document.set_mask_intensity(amount)
+            }
+            Command::BlurMask | Command::SharpenMask => {
+                self.viewport.cancel(&mut self.document);
+                self.viewport.wait_for_release();
+                if matches!(command, Command::BlurMask) {
+                    self.document.blur_mask()
+                } else {
+                    self.document.sharpen_mask()
+                }
             }
             Command::MaskThreshold(amount) => self.document.set_mask_threshold(amount),
             Command::CreateVertexGroup(name, all) => {
@@ -699,6 +957,15 @@ impl App {
             && !self.ui.settings_open
             && !self.ui.layout_open
             && self.mesh_job.is_none();
+        if enabled
+            && self.ui.slice_active
+            && !ui.ctx().wants_keyboard_input()
+            && ui.input(|i| i.key_pressed(egui::Key::Escape))
+        {
+            self.dispatch(Command::SliceTool(false), ui.ctx());
+            // Releasing a cancelled cut must not start a sculpt stroke.
+            self.viewport.wait_for_release();
+        }
         let (commands, toolbar_rect) =
             self.ui
                 .transform_toolbar(ui.ctx(), ui.available_rect_before_wrap(), enabled);
@@ -718,6 +985,7 @@ impl App {
             &mut self.camera,
             ViewportOptions {
                 slice: self.ui.slice_active.then_some(self.ui.slice_options),
+                select: self.ui.select_active,
                 slice_path_mode: self.ui.slice_path_mode,
                 transform_mode: self.ui.transform_mode,
                 transform_operation: self.ui.transform_operation,
@@ -735,10 +1003,14 @@ impl App {
                 },
                 show_guides: self.ui.show_symmetry_guides,
                 guide_opacity: self.ui.guide_opacity,
-                enabled: enabled && !over_toolbar && !over_editor,
+                enabled: enabled
+                    && !over_toolbar
+                    && !over_editor
+                    && !self.ui.pointer_over_pinned_menu(ui.ctx()),
                 smooth: self.ui.preferences.smooth,
                 reverse: self.ui.preferences.reverse,
                 zoom_hold: self.ui.preferences.zoom_hold,
+                pan_hold: self.ui.preferences.pan_hold,
             },
         );
         if let Some(operation) = self.viewport.completed_slice.take()
@@ -746,9 +1018,13 @@ impl App {
         {
             self.ui.status = error;
         }
+        if let Some(status) = self.viewport.visibility_status.take() {
+            self.ui.status = status;
+        }
         if self.viewport.completed_stroke
             && self.document.mesh_settings().dynamic
             && self.document.mesh_settings().auto_remesh
+            && !self.document.mesh().has_hidden_faces()
             && self.mesh_job.is_none()
             && let Err(error) = self.start_mesh_job(Operation::Remesh)
         {
@@ -782,13 +1058,19 @@ impl eframe::App for App {
         for command in self.ui.toolbar(ctx, &self.document, self.camera.zoom) {
             self.dispatch(command, ctx);
         }
-        for command in
-            self.ui
-                .brush_panel(ctx, &self.document, &self.tablet.status(), self.pressure)
-        {
+        for command in self.ui.custom_surfaces(ctx, &self.document) {
             self.dispatch(command, ctx);
         }
-        self.ui.settings(ctx);
+        for command in self.ui.brush_panel(
+            ctx,
+            &self.document,
+            &self.tablet.status(),
+            self.pressure,
+            self.camera.zoom,
+        ) {
+            self.dispatch(command, ctx);
+        }
+        self.ui.settings(ctx, &self.document);
         self.shortcuts(ctx);
         self.ui.status_bar(ctx);
         egui::CentralPanel::default().show(ctx, |ui| self.show_viewport(ui));
@@ -798,6 +1080,7 @@ impl eframe::App for App {
         if let Some(command) = self.ui.confirmation(ctx) {
             self.dispatch(command, ctx);
         }
+        self.ui.preferences.sync_active_workspace();
         if self.ui.preferences != self.saved_preferences {
             let since = self
                 .preferences_changed

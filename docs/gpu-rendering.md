@@ -55,3 +55,9 @@ CLAY_SLICE_PREVIEW=/tmp/clay-slice.png CLAY_SLICE_SEPARATE_PREVIEW=/tmp/clay-sep
 ```
 
 For an uncapped sliced hemisphere with temporary thickness, `CLAY_SLICE_THICKNESS_PREVIEW=/tmp/clay-slice-thickness.png cargo test --locked gpu_sliced_hemisphere -- --ignored` renders the rim and verifies that the preview and applied shell have identical geometry and shading.
+
+The visibility regression renders a full mesh, a hidden half, the two split submodels, and Undo. It checks framebuffer pixels and exact restoration of the hidden display:
+
+```sh
+CLAY_VISIBILITY_PREVIEW=/tmp/clay-visibility-preview.png cargo test gpu_visibility -- --ignored --nocapture
+```

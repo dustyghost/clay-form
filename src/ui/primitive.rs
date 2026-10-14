@@ -1,5 +1,5 @@
 //! Primitive replacement warning and inline submodel parameter controls.
-use super::UiState;
+use super::{Action, ActionResponse, UiState};
 use crate::{
     command::Command,
     document::Document,
@@ -152,7 +152,7 @@ impl UiState {
                     ui.checkbox(&mut self.wire,"Show wireframe");
                     ui.label(format!("{} vertices · {} triangles",document.mesh().vertices.len(),document.mesh().triangles.len()));
                     if params!=*current {commands.push(Command::UpdatePrimitive(params.clone()));}
-                    if ui.add_enabled(!document.mesh().triangles.is_empty(),egui::Button::new("Convert to sculpting mesh")).clicked() {commands.push(Command::ConvertPrimitive);}
+                    if ui.add_enabled(!document.mesh().triangles.is_empty(),egui::Button::new("Convert to sculpting mesh")).customize(Action::ConvertPrimitive).clicked() {commands.push(Command::ConvertPrimitive);}
                     ui.weak("Conversion keeps this surface and removes its editable recipe. Undo restores the recipe.");
         });
         if forced.is_some() {

@@ -210,6 +210,7 @@ impl Mesh {
         }
         let mut result = Self {
             vertex_groups: self.vertex_groups.clone(),
+            hidden_faces: Vec::new(),
             polygroups: Vec::new(),
             quads: Vec::new(),
             vertices: self.vertices.clone(),
@@ -251,6 +252,15 @@ impl Mesh {
                 .map(|(i, &t)| (key(t), self.polygroups[i]))
                 .collect()
         };
+        let hidden: HashMap<_, _> = if self.hidden_faces.is_empty() {
+            HashMap::new()
+        } else {
+            self.triangles
+                .iter()
+                .enumerate()
+                .map(|(i, &t)| (key(t), self.hidden_faces[i]))
+                .collect()
+        };
         for (fi, &[a, b, c]) in self.triangles.iter().enumerate() {
             if polygons.contains(&key([a, b, c])) {
                 continue;
@@ -263,6 +273,9 @@ impl Mesh {
                 .extend([[a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]]);
             if !self.polygroups.is_empty() {
                 result.polygroups.extend([self.polygroups[fi]; 4]);
+            }
+            if !self.hidden_faces.is_empty() {
+                result.hidden_faces.extend([self.hidden_faces[fi]; 4]);
             }
         }
         for &[a, b, c, d] in &self.quads {
@@ -286,6 +299,9 @@ impl Mesh {
                 .into_iter()
                 .find_map(|t| face_ids.get(&key(t)).copied())
                 .unwrap_or(0);
+            let hide = [[a, b, c], [a, c, d], [a, b, d], [b, c, d]]
+                .iter()
+                .any(|&t| hidden.get(&key(t)).copied().unwrap_or(false));
             for q in [
                 [a, ab, center, da],
                 [ab, b, bc, center],
@@ -297,6 +313,9 @@ impl Mesh {
                 result.triangles.extend([[a, b, c], [a, c, d]]);
                 if !self.polygroups.is_empty() {
                     result.polygroups.extend([id; 2]);
+                }
+                if !self.hidden_faces.is_empty() {
+                    result.hidden_faces.extend([hide; 2]);
                 }
             }
         }
@@ -380,6 +399,7 @@ mod tests {
     fn tetrahedron() -> Mesh {
         Mesh {
             vertex_groups: Vec::new(),
+            hidden_faces: Vec::new(),
             polygroups: Vec::new(),
             quads: Vec::new(),
             vertices: vec![

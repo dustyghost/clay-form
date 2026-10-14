@@ -140,7 +140,7 @@ impl Viewport {
         painter.text(
             scene.rect.left_bottom() + Vec2::new(16., -16.),
             egui::Align2::LEFT_BOTTOM,
-            "Slice · drag across the model · Space-drag moves line · release to apply · Esc cancels · right drag to orbit",
+            "Slice · drag across the model · Space-drag moves line · release to apply · Esc cancels and exits · right drag to orbit",
             egui::FontId::proportional(13.),
             controls::NEUTRAL,
         );
@@ -601,7 +601,7 @@ impl Viewport {
         painter.text(
             scene.rect.left_bottom() + Vec2::new(16., -16.),
             egui::Align2::LEFT_BOTTOM,
-            "Slice path · Enter applies · Esc clears · ends extend through the model",
+            "Slice path · Enter applies · Esc cancels and exits · ends extend through the model",
             egui::FontId::proportional(13.),
             controls::NEUTRAL,
         );

@@ -230,6 +230,12 @@ fn zero_radius(value: &f32) -> bool {
 fn disabled_cursor(value: &bool) -> bool {
     !*value
 }
+fn default_stabilizer_distance() -> f32 {
+    30.
+}
+fn default_stabilizer(value: &f32) -> bool {
+    *value == default_stabilizer_distance()
+}
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Brush {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -248,6 +254,13 @@ pub struct Brush {
     pub surface_cursor: bool,
     #[serde(default, skip_serializing_if = "StrokeMode::is_freehand")]
     pub stroke_mode: StrokeMode,
+    #[serde(default, skip_serializing_if = "disabled_cursor")]
+    pub stabilize: bool,
+    #[serde(
+        default = "default_stabilizer_distance",
+        skip_serializing_if = "default_stabilizer"
+    )]
+    pub stabilizer_distance: f32,
     pub spacing: f32,
     pub rotation: f32,
     pub subtract: bool,
@@ -275,6 +288,8 @@ impl Brush {
             inner_radius: 0.,
             surface_cursor: false,
             stroke_mode: StrokeMode::Freehand,
+            stabilize: false,
+            stabilizer_distance: default_stabilizer_distance(),
             spacing: if kind == Kind::Detail { 0.08 } else { 0.15 },
             rotation: 0.,
             subtract: false,
@@ -289,6 +304,9 @@ impl Brush {
         } else {
             self.stroke_mode
         }
+    }
+    pub fn supports_stabilization(&self) -> bool {
+        self.stroke_mode == StrokeMode::Freehand && !matches!(self.kind, Kind::Grab | Kind::Snake)
     }
     pub fn identity(&self) -> String {
         if let Some(id) = &self.id {
@@ -387,6 +405,8 @@ pub fn validate_brush(b: &Brush) -> Result<(), String> {
         || !(0.1..=8.).contains(&b.falloff)
         || !b.spacing.is_finite()
         || !(0.01..=1.).contains(&b.spacing)
+        || !b.stabilizer_distance.is_finite()
+        || !(1. ..=200.).contains(&b.stabilizer_distance)
         || !b.rotation.is_finite()
         || !b.pressure_curve.is_finite()
         || !(0.1..=4.).contains(&b.pressure_curve)
@@ -461,6 +481,36 @@ mod footprint_tests {
 #[cfg(test)]
 mod stroke_tests {
     use super::*;
+    #[test]
+    fn stabilization_preserves_legacy_identity_and_validates_distance() {
+        let legacy = include_str!("../../tests/fixtures/v1-project.json");
+        let project: super::super::Project = serde_json::from_str(legacy).unwrap();
+        let brush = &project.brushes[0];
+        assert!(!brush.stabilize);
+        assert_eq!(brush.stabilizer_distance, 30.);
+        let encoded = serde_json::to_string(brush).unwrap();
+        assert!(!encoded.contains("stabiliz"));
+        let mut enabled = brush.clone();
+        enabled.stabilize = true;
+        enabled.stabilizer_distance = 75.;
+        let restored: Brush =
+            serde_json::from_str(&serde_json::to_string(&enabled).unwrap()).unwrap();
+        assert!(restored == enabled);
+        for distance in [0., -1., 201., f32::NAN, f32::INFINITY] {
+            enabled.stabilizer_distance = distance;
+            assert!(validate_brush(&enabled).is_err());
+        }
+        for kind in Kind::ALL {
+            let mut brush = Brush::new(kind);
+            for mode in StrokeMode::ALL {
+                brush.stroke_mode = mode;
+                assert_eq!(
+                    brush.supports_stabilization(),
+                    mode == StrokeMode::Freehand && !matches!(kind, Kind::Grab | Kind::Snake)
+                );
+            }
+        }
+    }
     #[test]
     fn stroke_modes_roundtrip_and_legacy_brushes_remain_freehand() {
         let base = Brush::new(Kind::Standard);

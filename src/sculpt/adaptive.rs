@@ -405,6 +405,7 @@ impl Mesh {
         }
         let mut faces = Vec::with_capacity(self.triangles.len() + candidates.len() * 2);
         let mut new_groups = Vec::new();
+        let mut new_hidden = Vec::new();
         for (fi, &[a, b, c]) in self.triangles.iter().enumerate() {
             let start = faces.len();
             let m = [
@@ -445,12 +446,16 @@ impl Mesh {
                     faces.extend([[a, p, r], [p, b, q], [r, q, c], [p, q, r]]);
                 }
             }
+            if !self.hidden_faces.is_empty() {
+                new_hidden.resize(faces.len(), self.hidden_faces[fi]);
+            }
             if !self.polygroups.is_empty() {
                 new_groups.resize(faces.len(), self.polygroups[fi]);
                 debug_assert!(faces.len() > start);
             }
         }
         self.polygroups = new_groups;
+        self.hidden_faces = new_hidden;
         self.quads.clear();
         self.triangles = faces;
         candidates.len()
@@ -651,6 +656,9 @@ impl Mesh {
             .collect();
         if !self.polygroups.is_empty() {
             self.polygroups = old_faces.iter().map(|&i| self.polygroups[i]).collect();
+        }
+        if !self.hidden_faces.is_empty() {
+            self.hidden_faces = old_faces.iter().map(|&i| self.hidden_faces[i]).collect();
         }
         for g in &mut self.vertex_groups {
             g.weights = g
@@ -962,6 +970,42 @@ mod tests {
 #[cfg(test)]
 mod group_tests {
     use super::*;
+    #[test]
+    fn adaptive_topology_keeps_face_visibility_and_hidden_positions() {
+        let mut m = crate::sculpt::Mesh::starting_sphere();
+        m.hidden_faces = m
+            .triangles
+            .iter()
+            .map(|t| t.iter().any(|&v| m.vertices[v].0 > 0.))
+            .collect();
+        let hidden_points: Vec<_> = m
+            .triangles
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !m.face_visible(*i))
+            .flat_map(|(_, t)| t.iter().map(|&v| m.vertices[v]))
+            .collect();
+        let brush = Brush::new(Kind::Standard);
+        let dab = Dab {
+            center: Vec3(-1., 0., 0.),
+            normal: Vec3(-1., 0., 0.),
+            right: Vec3(0., 0., 1.),
+            up: Vec3(0., 1., 0.),
+            radius: 2.,
+            pressure: 1.,
+            delta: Vec3::default(),
+            invert: false,
+        };
+        assert!(m.split_local(&brush, &[dab], 0.02, 16) > 0);
+        m.validate_closed().unwrap();
+        assert!(m.hidden_face_count() > 0);
+        m.collapse_local(&brush, &[dab], 0.3, 16);
+        m.validate_closed().unwrap();
+        assert!(m.hidden_face_count() > 0);
+        for p in hidden_points {
+            assert!(m.vertices.contains(&p));
+        }
+    }
     #[test]
     fn adaptive_splits_and_collapses_preserve_groups() {
         let mut m = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Cube)
