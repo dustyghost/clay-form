@@ -1,14 +1,14 @@
 //! Whole menus share the sidebar ordering with ordinary tools and custom sections.
 use super::*;
-use crate::preferences::{PinnedMenu, Placement};
+use crate::preferences::Placement;
 
 impl UiState {
     pub(super) fn menu_dock_options(&mut self, ui: &mut egui::Ui, menu: BuiltinMenu) {
-        for (label, dock) in [
-            ("Make collapsible on left", Dock::Left),
-            ("Make collapsible on right", Dock::Right),
+        for (glyph, label, dock) in [
+            (Glyph::DockLeft, "Make collapsible on left", Dock::Left),
+            (Glyph::DockRight, "Make collapsible on right", Dock::Right),
         ] {
-            if ui.button(label).clicked() {
+            if design::icon_button(ui, glyph, label).clicked() {
                 self.preferences.dock_menu(menu, dock);
                 if ui
                     .stack()
@@ -129,12 +129,8 @@ impl UiState {
                 match section {
                     SidebarSection::Builtin(menu) => {
                         if ui.button("Float menu").clicked() {
-                            self.preferences.undock_menu(menu);
                             let pos = ui.min_rect().min;
-                            self.preferences.pinned_menus.push(PinnedMenu {
-                                menu,
-                                position: [pos.x, pos.y],
-                            });
+                            self.preferences.pin_menu(menu, [pos.x, pos.y]);
                             ui.close();
                         }
                         customization::sidebar_options(

@@ -4,6 +4,7 @@ use crate::sculpt::{AdaptiveSettings, Brush, Kind, Symmetry};
 pub(crate) enum PendingAction {
     New,
     Open(String),
+    Recover(crate::recovery::Entry),
     Quit,
 }
 pub(crate) enum Command {

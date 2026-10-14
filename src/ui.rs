@@ -36,6 +36,7 @@ pub(crate) struct UiState {
     pub preferences: Preferences,
     pub(super) customization: customization::Customization,
     pub settings_open: bool,
+    pub recovery_open: bool,
     pub layout_open: bool,
     pub capturing: Option<Action>,
     pub settings_message: String,
@@ -79,6 +80,7 @@ impl Default for UiState {
             preferences: Preferences::default(),
             customization: Default::default(),
             settings_open: false,
+            recovery_open: false,
             layout_open: false,
             capturing: None,
             settings_message: String::new(),
@@ -203,53 +205,9 @@ impl UiState {
                     ui.separator();
                     self.builtin_menu(ui, BuiltinMenu::Visibility, document, zoom, &mut commands);
                     self.builtin_menu(ui, BuiltinMenu::Mesh, document, zoom, &mut commands);
-                    if ui
-                        .add_enabled(
-                            !self.mesh_busy && document.primitive().is_none(),
-                            design::button(ui, Glyph::Slice, "Slice").selected(self.slice_active),
-                        )
-                        .on_hover_text(
-                            "Draw a line through the active model to group, trim, or separate it",
-                        )
-                        .customize(Action::Slice)
-                        .clicked()
-                    {
-                        commands.push(Command::SliceTool(!self.slice_active));
-                    }
-                    if ui
-                        .add_enabled(
-                            !self.mesh_busy,
-                            design::button(ui, Glyph::Transform, "Transform").selected(
-                                self.transform_mode != crate::viewport::TransformMode::Sculpt,
-                            ),
-                        )
-                        .on_hover_text("Activate transforms and show the viewport controls")
-                        .customize(Action::Transform)
-                        .clicked()
-                        && self.transform_mode == crate::viewport::TransformMode::Sculpt
-                    {
-                        commands.push(Command::TransformMode(
-                            crate::viewport::TransformMode::World,
-                        ));
-                    }
-                    if ui
-                        .add_enabled(
-                            !self.mesh_busy,
-                            design::button(
-                                ui,
-                                Glyph::Primitive,
-                                if document.primitive().is_some() {
-                                    "Edit primitive"
-                                } else {
-                                    "Primitive"
-                                },
-                            ),
-                        )
-                        .customize(Action::Primitive)
-                        .clicked()
-                    {
-                        commands.push(Command::RequestPrimitive);
-                    }
+                    self.builtin_menu(ui, BuiltinMenu::Slice, document, zoom, &mut commands);
+                    self.builtin_menu(ui, BuiltinMenu::Transform, document, zoom, &mut commands);
+                    self.builtin_menu(ui, BuiltinMenu::Primitive, document, zoom, &mut commands);
                     self.builtin_menu(ui, BuiltinMenu::Submodels, document, zoom, &mut commands);
                     ui.separator();
                     if ui
@@ -319,26 +277,11 @@ impl UiState {
                 });
             });
         }
-        if self.slice_active {
+        if self.slice_active && !self.preferences.menu_placed(BuiltinMenu::Slice) {
             egui::TopBottomPanel::top("slice_options").show(ctx, |ui| {
-                ui.add_enabled_ui(!self.mesh_busy && self.pending.is_none(), |ui| {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.strong("Slice");
-                        ui.selectable_value(&mut self.slice_path_mode, false, "Line");
-                        ui.selectable_value(&mut self.slice_path_mode, true, "Path");
-                        ui.separator();
-                        for mode in crate::sculpt::SliceMode::ALL {
-                            ui.selectable_value(&mut self.slice_options.mode, mode, mode.label());
-                        }
-                        if self.slice_options.mode != crate::sculpt::SliceMode::Polygroups {
-                            ui.checkbox(&mut self.slice_options.cap, "Cap cuts").on_hover_text("Close the cut with flat faces; requires a closed source surface");
-                        }
-                        if self.slice_options.mode == crate::sculpt::SliceMode::Trim {
-                            ui.checkbox(&mut self.slice_options.flip, "Flip kept side");
-                        }
-                        if ui.button("Done").clicked() { commands.push(Command::SliceTool(false)); }
-                        ui.label("Active model · through all depths · resets subdivision levels");
-                    });
+                ui.horizontal_wrapped(|ui| {
+                    self.menu_placement_controls(ui, BuiltinMenu::Slice, false);
+                    self.slice_controls(ui, document, &mut commands);
                 });
             });
         }
@@ -550,18 +493,7 @@ impl UiState {
         let b = &mut edited;
         match tool {
             Tool::Library => {
-                design::menu(ui, Glyph::Plus, "Add brush", |ui| {
-                    for kind in Kind::ALL {
-                        if ui
-                            .button(format!("{kind:?}"))
-                            .customize(Action::NewBrush(format!("{kind:?}")))
-                            .clicked()
-                        {
-                            commands.push(Command::AddBrush(kind));
-                            ui.close();
-                        }
-                    }
-                });
+                self.builtin_menu(ui, BuiltinMenu::Brushes, document, 1., commands);
                 let columns = (ui.available_width() / 76.).floor().clamp(1., 4.) as usize;
                 let width =
                     ((ui.available_width() - 6. * (columns - 1) as f32) / columns as f32).max(32.);
@@ -879,7 +811,7 @@ impl UiState {
             });
             if group != model.metadata.group { let mut metadata = model.metadata.clone(); metadata.group = group; commands.push(Command::EditSubmodel(index, model.name.into(), metadata)); }
             ui.separator();
-            self.primitive_controls(ui, document, commands);
+            if !self.preferences.menu_placed(BuiltinMenu::Primitive) { self.primitive_controls(ui, document, commands); }
             ui.label("Vertex groups");
             ui.add_enabled_ui(document.primitive().is_none(), |ui| {
                 ui.add(egui::TextEdit::singleline(&mut self.vertex_group_name).hint_text("Group name (optional)"));

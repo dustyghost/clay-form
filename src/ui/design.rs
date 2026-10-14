@@ -26,11 +26,50 @@ pub(super) enum Glyph {
     Mask,
     Close,
     Delete,
+    Pin,
+    Unpin,
+    DockLeft,
+    DockRight,
 }
 impl Glyph {
     fn lines(self) -> Vec<Vec<[f32; 2]>> {
         use Glyph::*;
         match self {
+            Pin | Unpin => {
+                let mut lines = vec![
+                    vec![
+                        [8., 3.],
+                        [17., 3.],
+                        [16., 11.],
+                        [20., 15.],
+                        [5., 15.],
+                        [9., 11.],
+                        [8., 3.],
+                    ],
+                    vec![[12., 15.], [12., 22.]],
+                ];
+                if matches!(self, Unpin) {
+                    lines.push(vec![[3., 3.], [22., 22.]]);
+                }
+                lines
+            }
+            DockLeft | DockRight => {
+                let mut lines = vec![
+                    vec![[3., 4.], [21., 4.], [21., 20.], [3., 20.], [3., 4.]],
+                    vec![[9., 4.], [9., 20.]],
+                    vec![[5., 8.], [7., 8.]],
+                    vec![[5., 12.], [7., 12.]],
+                    vec![[5., 16.], [7., 16.]],
+                ];
+                if matches!(self, DockRight) {
+                    for line in &mut lines {
+                        for p in line {
+                            p[0] = 24. - p[0];
+                        }
+                    }
+                }
+                lines
+            }
             Slice => vec![
                 vec![
                     [4., 7.],
@@ -283,13 +322,33 @@ pub(super) fn button(
     )
     .min_size(egui::vec2(0., 28.))
 }
+/// Compact, font-independent control with a readable accessibility label and tooltip.
+pub(super) fn icon_button(ui: &mut egui::Ui, glyph: Glyph, label: &str) -> egui::Response {
+    let response = ui.add(
+        egui::Button::image(
+            egui::Image::new((icon(ui.ctx(), glyph), Vec2::splat(16.)))
+                .tint(ui.visuals().text_color()),
+        )
+        .min_size(Vec2::splat(26.)),
+    );
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label)
+    });
+    #[cfg(test)]
+    ui.ctx()
+        .data_mut(|d| d.insert_temp(egui::Id::new(("icon_button", label)), response.rect));
+    response.on_hover_text(label)
+}
 pub(super) fn menu(
     ui: &mut egui::Ui,
     glyph: Glyph,
     label: &str,
     contents: impl FnOnce(&mut egui::Ui),
-) {
-    egui::containers::menu::MenuButton::from_button(button(ui, glyph, label)).ui(ui, contents);
+) -> bool {
+    egui::containers::menu::MenuButton::from_button(button(ui, glyph, label))
+        .ui(ui, contents)
+        .0
+        .clicked()
 }
 pub(super) fn theme(ctx: &egui::Context) {
     let key = egui::Id::new("clay-design-installed");

@@ -8,14 +8,54 @@ pub(crate) fn read_json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T,
     serde_json::from_slice(&std::fs::read(path).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())
 }
-pub(crate) fn write_json<T: serde::Serialize>(path: &str, value: &T) -> Result<(), String> {
+pub(crate) fn json_bytes<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, String> {
     let bytes = serde_json::to_vec(value).map_err(|e| e.to_string())?;
     if bytes.len() > 128 * 1024 * 1024 {
         return Err("File exceeds 128 MB limit; reduce mesh or group data before saving".into());
     }
-    let temp = format!("{path}.tmp");
-    std::fs::write(&temp, bytes).map_err(|e| e.to_string())?;
-    std::fs::rename(temp, path).map_err(|e| e.to_string())
+    Ok(bytes)
+}
+pub(crate) fn write_json<T: serde::Serialize>(path: &str, value: &T) -> Result<(), String> {
+    write_bytes(std::path::Path::new(path), &json_bytes(value)?)
+}
+/// Flush a uniquely named sibling before atomic replacement. Failed writes leave
+/// the previous destination intact; abandoned temporary files are never recovery candidates.
+pub(crate) fn write_bytes(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
+    use std::{
+        io::Write,
+        sync::atomic::{AtomicU64, Ordering},
+    };
+    static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+    let mut temporary = path.as_os_str().to_os_string();
+    temporary.push(format!(
+        ".tmp-{}-{}",
+        std::process::id(),
+        SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    ));
+    let temporary = std::path::PathBuf::from(temporary);
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .map_err(|e| e.to_string())?;
+    let result = (|| {
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        drop(file);
+        std::fs::rename(&temporary, path)?;
+        #[cfg(unix)]
+        std::fs::File::open(
+            path.parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or(std::path::Path::new(".")),
+        )?
+        .sync_all()?;
+        Ok::<(), std::io::Error>(())
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    result.map_err(|e| e.to_string())
 }
 pub(crate) fn same_path(a: &str, b: &str) -> bool {
     fn resolved(path: &str) -> std::path::PathBuf {

@@ -16,6 +16,7 @@ mod actions;
 mod commands;
 mod files;
 mod jobs;
+mod recovery;
 
 pub struct App {
     pub(crate) document: Document,
@@ -26,6 +27,9 @@ pub struct App {
     pressure: f32,
     closing: bool,
     mesh_job: Option<MeshJob>,
+    recovery: Option<crate::recovery::Recovery>,
+    recovery_entries: Vec<crate::recovery::Entry>,
+    recovery_error: Option<String>,
     preferences_path: Option<std::path::PathBuf>,
     saved_preferences: Preferences,
     preferences_changed: Option<std::time::Instant>,
@@ -41,6 +45,9 @@ impl Default for App {
             pressure: 1.,
             closing: false,
             mesh_job: None,
+            recovery: None,
+            recovery_entries: Vec::new(),
+            recovery_error: None,
             preferences_path: None,
             saved_preferences: Preferences::default(),
             preferences_changed: None,
@@ -65,6 +72,7 @@ impl App {
                 Err(error) => app.ui.status = format!("Could not load preferences: {error}"),
             }
         }
+        app.initialize_recovery(path.with_file_name("recovery"));
         app.preferences_path = Some(path);
         app
     }
@@ -95,6 +103,7 @@ impl App {
         if ctx.wants_keyboard_input()
             || self.ui.primitive_warning.is_some()
             || self.ui.pending.is_some()
+            || self.ui.recovery_open
             || self.ui.settings_open
             || self.ui.layout_open
             || self.ui.icon_capture_open()
@@ -117,6 +126,7 @@ impl App {
         let enabled = !self.ui.icon_capture_open()
             && self.ui.primitive_warning.is_none()
             && self.ui.pending.is_none()
+            && !self.ui.recovery_open
             && !self.ui.settings_open
             && !self.ui.layout_open
             && self.mesh_job.is_none();
@@ -198,6 +208,9 @@ impl App {
 impl eframe::App for App {
     fn on_exit(&mut self, gl: Option<&eframe::glow::Context>) {
         self.save_preferences();
+        if self.closing || !self.document.is_dirty() {
+            self.retire_recovery();
+        }
         if let Some(gl) = gl {
             self.viewport.destroy_renderer(gl);
         }
@@ -235,6 +248,22 @@ impl eframe::App for App {
         }
         self.ui.settings(ctx, &self.document);
         self.shortcuts(ctx);
+        if self.recovery_error.is_some() {
+            egui::TopBottomPanel::bottom("recovery_error").show(ctx, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.colored_label(
+                        egui::Color32::LIGHT_RED,
+                        format!(
+                            "Recovery failed: {}",
+                            self.recovery_error.as_deref().unwrap()
+                        ),
+                    );
+                    if ui.button("Recovery settings…").clicked() {
+                        self.open_recovery();
+                    }
+                });
+            });
+        }
         self.ui.status_bar(ctx);
         egui::CentralPanel::default().show(ctx, |ui| self.show_viewport(ui));
         if let Some(command) = self.ui.icon_capture_popup(ctx, &self.document) {
@@ -243,6 +272,7 @@ impl eframe::App for App {
         if let Some(command) = self.ui.confirmation(ctx) {
             self.dispatch(command, ctx);
         }
+        self.show_recovery(ctx);
         self.ui.preferences.sync_active_workspace();
         if self.ui.preferences != self.saved_preferences {
             let since = self
@@ -255,6 +285,7 @@ impl eframe::App for App {
             self.preferences_changed = None;
         }
         self.finish_parameter_input(ctx);
+        self.tick_recovery(ctx);
         ctx.request_repaint_after(std::time::Duration::from_millis(33));
     }
 }
@@ -264,3 +295,6 @@ mod tests;
 
 #[cfg(test)]
 mod parameter_tests;
+
+#[cfg(test)]
+mod recovery_tests;

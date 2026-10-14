@@ -1,5 +1,6 @@
 //! One set of transform controls reused by the sidebar and floating toolbar.
 use super::{UiState, customization::ActionResponse};
+use crate::preferences::BuiltinMenu;
 use crate::{
     command::Command,
     preferences::Action,
@@ -46,7 +47,9 @@ impl UiState {
         viewport: egui::Rect,
         enabled: bool,
     ) -> (Vec<Command>, Option<egui::Rect>) {
-        if self.transform_mode == Mode::Sculpt {
+        if self.transform_mode == Mode::Sculpt
+            || self.preferences.menu_placed(BuiltinMenu::Transform)
+        {
             return (Vec::new(), None);
         }
         let mut commands = Vec::new();
@@ -58,6 +61,7 @@ impl UiState {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     ui.set_max_width((viewport.width() - 32.).clamp(160., 300.));
                     ui.add_enabled_ui(enabled, |ui| {
+                        self.menu_placement_controls(ui, BuiltinMenu::Transform, false);
                         ui.horizontal_wrapped(|ui| {
                             ui.strong("Transform");
                             for (mode, label) in [

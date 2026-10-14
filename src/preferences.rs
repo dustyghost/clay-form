@@ -259,6 +259,10 @@ pub(crate) fn viewport_background(ctx: &egui::Context) -> egui::Color32 {
 /// Stable identities for built-in menus displayed as popups, windows or sections.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) enum BuiltinMenu {
+    Brushes,
+    Transform,
+    Slice,
+    Primitive,
     Edit,
     Settings,
     Visibility,
@@ -272,6 +276,10 @@ pub(crate) enum BuiltinMenu {
 impl BuiltinMenu {
     pub fn label(self) -> &'static str {
         match self {
+            Self::Brushes => "Add brush",
+            Self::Transform => "Transform",
+            Self::Slice => "Slice",
+            Self::Primitive => "Primitive",
             Self::Edit => "Edit",
             Self::Settings => "Settings",
             Self::Visibility => "Visibility",
@@ -325,6 +333,7 @@ pub(crate) struct Workspace {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct Preferences {
+    pub recovery: crate::recovery::Settings,
     pub version: u32,
     pub bindings: Vec<(Action, Option<Shortcut>)>,
     pub smooth: Hold,
@@ -375,6 +384,7 @@ impl Default for Preferences {
             (Key::Minus, none),
         ];
         Self {
+            recovery: Default::default(),
             version: 1,
             bindings: Action::ALL
                 .iter()
@@ -434,6 +444,7 @@ impl Preferences {
                 return Err("Duplicate or missing tool panel".into());
             }
         }
+        self.recovery.validate()?;
         self.appearance.validate()?;
         if self
             .active_workspace
@@ -588,11 +599,29 @@ impl Preferences {
         order.swap(a, b);
         self.sidebar_order = order;
     }
+    pub fn menu_placed(&self, menu: BuiltinMenu) -> bool {
+        self.pinned_menus.iter().any(|p| p.menu == menu)
+            || self.menu_sections.iter().any(|s| s.menu == menu)
+    }
+    fn hide_duplicate_tool(&mut self, menu: BuiltinMenu) {
+        if menu == BuiltinMenu::Transform
+            && let Some(panel) = self.panels.iter_mut().find(|p| p.tool == Tool::Transform)
+        {
+            panel.dock = Dock::Hidden;
+        }
+    }
+    pub fn pin_menu(&mut self, menu: BuiltinMenu, position: [f32; 2]) {
+        self.undock_menu(menu);
+        self.pinned_menus.retain(|p| p.menu != menu);
+        self.hide_duplicate_tool(menu);
+        self.pinned_menus.push(PinnedMenu { menu, position });
+    }
     pub fn dock_menu(&mut self, menu: BuiltinMenu, dock: Dock) {
         if !matches!(dock, Dock::Left | Dock::Right) {
             return;
         }
         self.pinned_menus.retain(|p| p.menu != menu);
+        self.hide_duplicate_tool(menu);
         if let Some(section) = self.menu_sections.iter_mut().find(|s| s.menu == menu) {
             section.dock = dock;
         } else {

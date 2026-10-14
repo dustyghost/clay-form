@@ -2927,6 +2927,11 @@ mod pinned_menus {
             .min_by(|a, b| a.y.total_cmp(&b.y))
             .unwrap_or_else(|| panic!("Missing control: {label}"))
     }
+    fn icon_point(ctx: &egui::Context, label: &str) -> Pos2 {
+        ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::new(("icon_button", label))))
+            .unwrap()
+            .center()
+    }
     fn click(app: &mut App, ctx: &egui::Context, point: Pos2) -> egui::FullOutput {
         frame(
             app,
@@ -2945,8 +2950,8 @@ mod pinned_menus {
         frame(&mut app, &ctx, vec![]);
         let output = frame(&mut app, &ctx, vec![]);
         click(&mut app, &ctx, text_point(&output, "Mask"));
-        let output = frame(&mut app, &ctx, vec![]);
-        click(&mut app, &ctx, text_point(&output, "Pin menu open"));
+        frame(&mut app, &ctx, vec![]);
+        click(&mut app, &ctx, icon_point(&ctx, "Pin menu open"));
         frame(&mut app, &ctx, vec![]);
         assert_eq!(app.ui.preferences.pinned_menus.len(), 1);
         assert_eq!(app.ui.preferences.pinned_menus[0].menu, BuiltinMenu::Mask);
@@ -2981,11 +2986,78 @@ mod pinned_menus {
         click(&mut app, &ctx, text_point(&output, "Clear mask"));
         assert!(app.document.mesh().mask.iter().all(|m| *m == 0.));
         assert_eq!(app.ui.preferences.pinned_menus[0].position, moved);
-        let output = frame(&mut app, &ctx, vec![]);
+        frame(&mut app, &ctx, vec![]);
         let before_close = app.document.geometry_snapshot();
-        click(&mut app, &ctx, text_point(&output, "Unpin menu"));
+        click(&mut app, &ctx, icon_point(&ctx, "Unpin menu"));
         assert!(app.ui.preferences.pinned_menus.is_empty());
         assert_eq!(app.document.geometry_snapshot(), before_close);
+    }
+
+    #[test]
+    fn transform_placement_icons_move_shared_controls_without_duplicate_toolbar() {
+        use crate::preferences::{Dock, Tool};
+        let mut app = App::default();
+        let ctx = egui::Context::default();
+        ctx.style_mut(|style| style.animation_time = 0.);
+        let before = app.document.geometry_snapshot();
+        frame(&mut app, &ctx, vec![]);
+        let output = frame(&mut app, &ctx, vec![]);
+        click(&mut app, &ctx, text_point(&output, "Transform"));
+        frame(&mut app, &ctx, vec![]);
+        click(&mut app, &ctx, icon_point(&ctx, "Pin menu open"));
+        frame(&mut app, &ctx, vec![]);
+        assert_eq!(
+            app.ui.preferences.pinned_menus[0].menu,
+            BuiltinMenu::Transform
+        );
+        assert_eq!(
+            app.ui
+                .preferences
+                .panels
+                .iter()
+                .find(|p| p.tool == Tool::Transform)
+                .unwrap()
+                .dock,
+            Dock::Hidden
+        );
+        assert!(
+            app.ui
+                .transform_toolbar(&ctx, egui::Rect::EVERYTHING, true)
+                .1
+                .is_none()
+        );
+        for dock in [Dock::Right, Dock::Left] {
+            if dock == Dock::Left {
+                app.ui
+                    .preferences
+                    .pin_menu(BuiltinMenu::Transform, [400., 200.]);
+            }
+            frame(&mut app, &ctx, vec![]);
+            let label = if dock == Dock::Left {
+                "Make collapsible on left"
+            } else {
+                "Make collapsible on right"
+            };
+            click(&mut app, &ctx, icon_point(&ctx, label));
+            assert!(app.ui.preferences.pinned_menus.is_empty());
+            assert_eq!(app.ui.preferences.menu_sections[0].dock, dock);
+            assert!(
+                app.ui
+                    .transform_toolbar(&ctx, egui::Rect::EVERYTHING, true)
+                    .1
+                    .is_none()
+            );
+        }
+        app.ui
+            .preferences
+            .save_workspace_as("Transform layout")
+            .unwrap();
+        let encoded = serde_json::to_vec(&app.ui.preferences).unwrap();
+        let restored: crate::preferences::Preferences = serde_json::from_slice(&encoded).unwrap();
+        restored.validate().unwrap();
+        assert_eq!(restored.menu_sections, app.ui.preferences.menu_sections);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert!(!app.document.is_dirty());
     }
 
     #[test]

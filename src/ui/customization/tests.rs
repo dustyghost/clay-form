@@ -408,12 +408,16 @@ fn whole_menu_converts_collapses_reorders_with_tools_and_returns_to_toolbar() {
         text_center(&output, "Mask"),
         egui::PointerButton::Primary,
     );
-    let (output, _) = frame(&mut state, &ctx, &doc, vec![]);
+    frame(&mut state, &ctx, &doc, vec![]);
     click(
         &mut state,
         &ctx,
         &doc,
-        text_center(&output, "Make collapsible on left"),
+        ctx.data(|d| {
+            d.get_temp::<egui::Rect>(egui::Id::new(("icon_button", "Make collapsible on left")))
+        })
+        .unwrap()
+        .center(),
         egui::PointerButton::Primary,
     );
     assert_eq!(state.preferences.menu_sections[0].menu, BuiltinMenu::Mask);
@@ -499,12 +503,16 @@ fn custom_menu_converts_as_one_section_and_moves_past_builtin_tools() {
         text_center(&output, "My whole menu"),
         egui::PointerButton::Primary,
     );
-    let (output, _) = frame(&mut state, &ctx, &doc, vec![]);
+    frame(&mut state, &ctx, &doc, vec![]);
     click(
         &mut state,
         &ctx,
         &doc,
-        text_center(&output, "Make collapsible on left"),
+        ctx.data(|d| {
+            d.get_temp::<egui::Rect>(egui::Id::new(("icon_button", "Make collapsible on left")))
+        })
+        .unwrap()
+        .center(),
         egui::PointerButton::Primary,
     );
     assert_eq!(state.preferences.menus[0].placement, Placement::LeftPanel);

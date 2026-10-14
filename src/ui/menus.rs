@@ -1,6 +1,5 @@
 //! Shared controls for drop-down menus and persistent movable menu windows.
 use super::*;
-use crate::preferences::PinnedMenu;
 
 impl UiState {
     pub(super) fn builtin_menu(
@@ -12,6 +11,10 @@ impl UiState {
         commands: &mut Vec<Command>,
     ) {
         let glyph = match menu {
+            BuiltinMenu::Brushes => Glyph::Plus,
+            BuiltinMenu::Transform => Glyph::Transform,
+            BuiltinMenu::Slice => Glyph::Slice,
+            BuiltinMenu::Primitive => Glyph::Primitive,
             BuiltinMenu::Edit => Glyph::Edit,
             BuiltinMenu::Settings | BuiltinMenu::Symmetry => Glyph::Settings,
             BuiltinMenu::Visibility | BuiltinMenu::Submodels => Glyph::Layers,
@@ -49,25 +52,55 @@ impl UiState {
             }
             return;
         }
-        design::menu(ui, glyph, menu.label(), |ui| {
-            if ui
-                .button("Pin menu open")
-                .on_hover_text(
-                    "Keep these controls in a floating window. Drag its title bar to move it.",
-                )
-                .clicked()
-            {
-                let position = ui.min_rect().min;
-                self.preferences.pinned_menus.push(PinnedMenu {
-                    menu,
-                    position: [position.x, position.y],
-                });
-                ui.close_kind(egui::UiKind::Menu);
-            }
-            self.menu_dock_options(ui, menu);
+        let clicked = design::menu(ui, glyph, menu.label(), |ui| {
+            self.menu_placement_controls(ui, menu, false);
             ui.separator();
             self.builtin_menu_contents(menu, ui, document, zoom, commands);
         });
+        if clicked && !self.mesh_busy {
+            if menu == BuiltinMenu::Transform
+                && self.transform_mode == crate::viewport::TransformMode::Sculpt
+            {
+                commands.push(Command::TransformMode(
+                    crate::viewport::TransformMode::World,
+                ));
+            }
+            if menu == BuiltinMenu::Slice && !self.slice_active && document.primitive().is_none() {
+                commands.push(Command::SliceTool(true));
+            }
+        }
+    }
+
+    pub(super) fn menu_placement_controls(
+        &mut self,
+        ui: &mut egui::Ui,
+        menu: BuiltinMenu,
+        pinned: bool,
+    ) -> bool {
+        let mut unpin = false;
+        ui.horizontal(|ui| {
+            if design::icon_button(
+                ui,
+                if pinned { Glyph::Unpin } else { Glyph::Pin },
+                if pinned {
+                    "Unpin menu"
+                } else {
+                    "Pin menu open"
+                },
+            )
+            .clicked()
+            {
+                if pinned {
+                    unpin = true;
+                } else {
+                    let pos = ui.min_rect().min;
+                    self.preferences.pin_menu(menu, [pos.x, pos.y]);
+                }
+                ui.close_kind(egui::UiKind::Menu);
+            }
+            self.menu_dock_options(ui, menu);
+        });
+        unpin
     }
 
     pub(super) fn pinned_menus(
@@ -84,6 +117,7 @@ impl UiState {
             let enabled = self.pending.is_none()
                 && self.primitive_warning.is_none()
                 && !self.icon_capture_open()
+                && !self.recovery_open
                 && !self.settings_open
                 && !self.layout_open;
             let response = egui::Window::new(pinned.menu.label())
@@ -98,13 +132,7 @@ impl UiState {
                 .max_height((ctx.content_rect().height() - 80.).max(120.))
                 .vscroll(true)
                 .show(ctx, |ui| {
-                    unpin = ui
-                        .button("Unpin menu")
-                        .on_hover_text(
-                            "Close this window and return its controls to the toolbar menu.",
-                        )
-                        .clicked();
-                    self.menu_dock_options(ui, pinned.menu);
+                    unpin = self.menu_placement_controls(ui, pinned.menu, true);
                     ui.separator();
                     self.builtin_menu_contents(pinned.menu, ui, document, zoom, commands);
                 });
@@ -147,6 +175,39 @@ impl UiState {
             .iter()
             .any(|stack| stack.info.kind == Some(egui::UiKind::Menu));
         match menu {
+            BuiltinMenu::Brushes => {
+                for kind in Kind::ALL {
+                    if ui
+                        .button(format!("{kind:?}"))
+                        .customize(Action::NewBrush(format!("{kind:?}")))
+                        .clicked()
+                    {
+                        commands.push(Command::AddBrush(kind));
+                        if popup {
+                            ui.close_kind(egui::UiKind::Menu);
+                        }
+                    }
+                }
+            }
+            BuiltinMenu::Transform => self.transform_controls(ui, commands),
+            BuiltinMenu::Slice => self.slice_controls(ui, document, commands),
+            BuiltinMenu::Primitive => {
+                if document.primitive().is_some() {
+                    self.primitive_controls(ui, document, commands);
+                } else if ui
+                    .add_enabled(
+                        !self.mesh_busy,
+                        design::button(ui, Glyph::Primitive, "Create primitive…"),
+                    )
+                    .customize(Action::Primitive)
+                    .clicked()
+                {
+                    commands.push(Command::RequestPrimitive);
+                    if popup {
+                        ui.close_kind(egui::UiKind::Menu);
+                    }
+                }
+            }
             BuiltinMenu::Edit => {
                 for (action, command, label, available) in [
                     (
@@ -194,6 +255,16 @@ impl UiState {
                 ui.label("Geometry and masks • history resets on New/Open");
             }
             BuiltinMenu::Settings => {
+                if ui
+                    .add(design::button(ui, Glyph::Restore, "Recovery saves…"))
+                    .customize(Action::RecoverySettings)
+                    .clicked()
+                {
+                    commands.push(Command::Action(Action::RecoverySettings));
+                    if popup {
+                        ui.close_kind(egui::UiKind::Menu);
+                    }
+                }
                 if ui
                     .add(design::button(ui, Glyph::Settings, "Key settings…"))
                     .customize(Action::KeySettings)
@@ -432,5 +503,51 @@ impl UiState {
                 }
             }
         }
+    }
+}
+
+impl UiState {
+    pub(super) fn slice_controls(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &Document,
+        commands: &mut Vec<Command>,
+    ) {
+        ui.add_enabled_ui(
+            !self.mesh_busy && self.pending.is_none() && document.primitive().is_none(),
+            |ui| {
+                if ui
+                    .selectable_label(
+                        self.slice_active,
+                        if self.slice_active {
+                            "Done slicing"
+                        } else {
+                            "Start slicing"
+                        },
+                    )
+                    .customize(Action::Slice)
+                    .clicked()
+                {
+                    commands.push(Command::SliceTool(!self.slice_active));
+                }
+                ui.horizontal_wrapped(|ui| {
+                    ui.selectable_value(&mut self.slice_path_mode, false, "Line");
+                    ui.selectable_value(&mut self.slice_path_mode, true, "Path");
+                    for mode in crate::sculpt::SliceMode::ALL {
+                        ui.selectable_value(&mut self.slice_options.mode, mode, mode.label());
+                    }
+                });
+                if self.slice_options.mode != crate::sculpt::SliceMode::Polygroups {
+                    ui.checkbox(&mut self.slice_options.cap, "Cap cuts")
+                        .on_hover_text(
+                            "Close the cut with flat faces; requires a closed source surface",
+                        );
+                }
+                if self.slice_options.mode == crate::sculpt::SliceMode::Trim {
+                    ui.checkbox(&mut self.slice_options.flip, "Flip kept side");
+                }
+                ui.label("Active model · through all depths · resets subdivision levels");
+            },
+        );
     }
 }

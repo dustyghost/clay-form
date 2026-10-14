@@ -228,6 +228,14 @@ impl App {
                 }
                 Some(Command::UpdateBrush(self.ui.selected, brush))
             }
+            Action::RecoverySettings => {
+                self.open_recovery();
+                None
+            }
+            Action::SaveRecovery => {
+                self.save_recovery(ctx);
+                None
+            }
             Action::KeySettings => {
                 self.ui.settings_open = true;
                 None
@@ -248,6 +256,23 @@ impl App {
                 None
             }
             Action::ShowPanel(tool) => {
+                if tool == crate::preferences::Tool::Transform
+                    && self
+                        .ui
+                        .preferences
+                        .menu_placed(crate::preferences::BuiltinMenu::Transform)
+                {
+                    if let Some(section) = self
+                        .ui
+                        .preferences
+                        .menu_sections
+                        .iter_mut()
+                        .find(|s| s.menu == crate::preferences::BuiltinMenu::Transform)
+                    {
+                        section.open = true;
+                    }
+                    return;
+                }
                 if let Some(panel) = self
                     .ui
                     .preferences

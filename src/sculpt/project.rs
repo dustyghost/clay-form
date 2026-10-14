@@ -90,7 +90,7 @@ fn is_default_model_name(name: &str) -> bool {
 fn default_model_name() -> String {
     "Model".into()
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Project {
     pub version: u32,
     #[serde(default, skip_serializing_if = "SceneSettings::is_default")]

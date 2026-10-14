@@ -91,16 +91,44 @@ pub(super) fn sidebar_options(ui: &mut egui::Ui, placement: Placement) {
     }
 }
 fn custom_dock_options(ui: &mut egui::Ui, menu: &CustomMenu) {
-    for (label, placement) in [
-        ("Make collapsible on left", Placement::LeftPanel),
-        ("Make collapsible on right", Placement::RightPanel),
-    ] {
-        if ui.button(label).clicked() {
-            ui.ctx()
-                .data_mut(|d| d.insert_temp(request_id(), Request::DockMenu(menu.id, placement)));
-            ui.close_kind(egui::UiKind::Menu);
+    ui.horizontal(|ui| {
+        for (glyph, label, placement) in [
+            (
+                if menu.placement == Placement::Floating {
+                    super::Glyph::Unpin
+                } else {
+                    super::Glyph::Pin
+                },
+                if menu.placement == Placement::Floating {
+                    "Unpin menu"
+                } else {
+                    "Pin menu open"
+                },
+                if menu.placement == Placement::Floating {
+                    Placement::Menu
+                } else {
+                    Placement::Floating
+                },
+            ),
+            (
+                super::Glyph::DockLeft,
+                "Make collapsible on left",
+                Placement::LeftPanel,
+            ),
+            (
+                super::Glyph::DockRight,
+                "Make collapsible on right",
+                Placement::RightPanel,
+            ),
+        ] {
+            if super::design::icon_button(ui, glyph, label).clicked() {
+                ui.ctx().data_mut(|d| {
+                    d.insert_temp(request_id(), Request::DockMenu(menu.id, placement))
+                });
+                ui.close_kind(egui::UiKind::Menu);
+            }
         }
-    }
+    });
 }
 pub(super) fn menu_options(ui: &mut egui::Ui, menu: &CustomMenu) {
     if !matches!(menu.placement, Placement::LeftPanel | Placement::RightPanel) {
@@ -488,6 +516,8 @@ impl UiState {
                 .open(&mut open)
                 .vscroll(true)
                 .show(ctx, |ui| {
+                    custom_dock_options(ui, &menu);
+                    ui.separator();
                     self.custom_items(ui, &menu, document, &mut commands, false);
                 });
             if let Some(current) = self.preferences.menus.iter_mut().find(|m| m.id == menu.id) {
@@ -513,6 +543,8 @@ impl UiState {
                 .default_pos(ctx.pointer_hover_pos().unwrap_or(egui::pos2(350., 160.)))
                 .vscroll(true)
                 .show(ctx, |ui| {
+                    custom_dock_options(ui, &menu);
+                    ui.separator();
                     self.custom_items(ui, &menu, document, &mut commands, true)
                 });
             if !open || before != commands.len() {

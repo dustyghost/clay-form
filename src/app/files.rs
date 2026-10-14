@@ -6,6 +6,7 @@ impl App {
         match persistence::save_project(path, &self.document.project()) {
             Ok(()) => {
                 self.document.mark_saved(path);
+                self.retire_recovery();
                 self.ui.status = format!("Saved {path}");
                 true
             }
@@ -29,6 +30,7 @@ impl App {
         match action {
             PendingAction::New => {
                 self.document.new_sphere();
+                self.retire_recovery();
                 self.ui.status = "New sphere".into();
             }
             PendingAction::Open(path) => {
@@ -36,13 +38,22 @@ impl App {
                     .and_then(|project| self.document.replace_project(project, &path));
                 match result {
                     Ok(()) => {
+                        self.retire_recovery();
                         self.ui.selected = 0;
                         self.ui.status = format!("Opened {path}");
                     }
                     Err(error) => self.ui.status = error,
                 }
             }
+            PendingAction::Recover(entry) => {
+                if let Err(error) = self.restore_recovery(entry) {
+                    self.ui.status = format!("Could not recover project: {error}");
+                    self.recovery_error = Some(error);
+                    self.ui.recovery_open = true;
+                }
+            }
             PendingAction::Quit => {
+                self.retire_recovery();
                 self.closing = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }

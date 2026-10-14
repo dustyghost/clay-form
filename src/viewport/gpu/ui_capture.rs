@@ -7,7 +7,7 @@ use eframe::{
 };
 use std::sync::Arc;
 
-pub(super) struct UiCapture {
+pub(crate) struct UiCapture {
     pub gl: Arc<glow::Context>,
     painter: Painter,
     size: [i32; 2],

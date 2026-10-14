@@ -2,7 +2,7 @@
 
 Updated 14 October 2026.
 
-The next priority is automatic recovery saves. Stroke stabilisation, mask blur/sharpen, lasso selection, and transform rotation/pivot controls are implemented. The hands-on tablet check for stroke stabilisation passed on 14 October 2026. Importing models, using reference images, and checking perspective follow. This is the proposed implementation order; dates are not assigned.
+The next priority is OBJ import. Stroke stabilisation, mask blur/sharpen, lasso selection, transform rotation/pivot controls, and automatic recovery saves are implemented. The hands-on tablet check for stroke stabilisation passed on 14 October 2026. Importing models, using reference images, and checking perspective follow. This is the proposed implementation order; dates are not assigned.
 
 ## Current foundation
 
@@ -11,7 +11,7 @@ These features are already implemented and should be preserved as the app grows:
 - Sculpt brushes, pen pressure, custom alphas, brush presets, and Freehand, Line, Drag Rect and Drag Dot strokes.
 - Mirror and radial symmetry, adjustable symmetry centres, and surface guides.
 - Subdivision levels, voxel remeshing, and local adaptive sculpting.
-- Submodels, duplication, Move and Scale transforms, and Action Line controls.
+- Submodels, duplication, Move, Scale, and Rotate transforms, and Action Line controls.
 - Vertex groups and group colours, masking, mask expand/contract and blur/sharpen, hide/isolate, extraction, split hidden, and merge down.
 - Parametric primitives, slicing/trimming, and thickness for open meshes.
 - Custom menus in either sidebar, removable custom buttons and menus, configurable shortcuts, and saved workspaces with colour settings.
@@ -21,15 +21,15 @@ Recent fixes address stale groups after Group all, Alt-drag panning when startin
 
 ## Implementation priorities
 
-Stroke stabilisation, mask blur/sharpen, lasso selection, and transform rotation/pivot controls are implemented. Automatic recovery saves are next; the remaining items are planned.
+Stroke stabilisation, mask blur/sharpen, lasso selection, transform rotation/pivot controls, and automatic recovery saves are implemented. OBJ import is next; the remaining items are planned.
 
 | Order | Feature | Main benefit |
 | --- | --- | --- |
 | 1 | Stroke stabilisation — implemented | More controlled wrinkles, eyelids, seams, and detail strokes |
 | 2 | Mask blur/sharpen and lasso selection — implemented | Faster selection and smoother transitions when sculpting or posing |
 | 3 | Transform rotation and pivot controls — implemented | Rotate models or unmasked regions directly |
-| 4 | Automatic recovery saves — next | Recover recent work after a crash or interrupted session |
-| 5 | OBJ import | Sculpt base meshes made in other software |
+| 4 | Automatic recovery saves — implemented | Recover recent work after a crash or interrupted session |
+| 5 | OBJ import — next | Sculpt base meshes made in other software |
 | 6 | Viewport reference images | Keep photographs and drawings beside or behind the sculpt |
 | 7 | Perspective view | Judge proportions with an adjustable perspective camera |
 
@@ -76,7 +76,11 @@ Completion criteria:
 
 ### 4 Automatic recovery saves
 
-Add configurable periodic recovery copies with a bounded number of versions and an option to recover work on startup. Bring this forward if sessions become long enough that losing recent work is a practical concern.
+Implemented 14 October 2026: automatic recovery defaults to every two minutes with five retained copies, configurable through Settings → Recovery saves. Complete project snapshots are taken between edits and written in a background worker using flushed temporary files and atomic replacement. Unchanged snapshots are deduplicated; retention runs only after a successful write. Recovery never changes the manual save target or clears modified state.
+
+Startup offers retained copies explicitly. Restoring marks the project modified and selects `recovered.clay`, preserving the original project. Saving or deliberately discarding clears the session's copies through the same ordered worker, including any in-flight write. Failed writes remain visible and retry at the configured interval. Recovery settings and Save recovery now are reusable shortcut/custom-menu actions. Automated checks cover complete-project round trips, retention, interrupted/invalid writes, worker failures and retries, save/discard races, edit boundaries, restart recovery, and unsaved-change decisions.
+
+The accompanying interface pass makes Transform, Slice, Primitive, and Add brush use the existing pinnable/dockable menu system. Compact pin/unpin and left/right sidebar icons with tooltips replace long placement buttons in built-in and custom menus. Transform retains its shared controls and suppresses duplicate automatic floating controls when explicitly placed.
 
 Completion criteria:
 

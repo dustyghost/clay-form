@@ -2,6 +2,8 @@
 mod controls;
 mod gizmo;
 mod gpu;
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) use gpu::ui_capture::UiCapture;
 mod guides;
 mod primitive;
 mod scene;

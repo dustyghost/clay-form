@@ -9,6 +9,7 @@ mod history;
 mod mesh_job;
 pub mod persistence;
 mod preferences;
+mod recovery;
 pub mod sculpt;
 mod tablet;
 mod ui;

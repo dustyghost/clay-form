@@ -82,6 +82,14 @@ impl Document {
     pub fn is_dirty(&self) -> bool {
         self.dirty
     }
+    pub(crate) fn edit_in_progress(&self) -> bool {
+        self.edit.is_some() || self.stroke_active
+    }
+    pub(crate) fn recover_project(&mut self, project: Project) -> Result<(), String> {
+        self.replace_project(project, "recovered.clay")?;
+        self.dirty = true;
+        Ok(())
+    }
     pub fn current_path(&self) -> &str {
         &self.current_path
     }
