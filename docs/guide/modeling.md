@@ -62,6 +62,14 @@ Pressure does not change extrusion distance. Each completed drag is one Undo ste
 
 The highlighted rim stays on the dragged face even as the pen moves across other faces.
 
+### Construct a region
+
+**Extrude** supports connected regions with shared side walls. Nonplanar regions move along averaged vertex normals; **Individual faces** makes separate extrusions. Distance is available numerically through **Apply amount**, as well as by pen drag. Matching-face tunnel joins remain available for aligned caps.
+
+**Inset** adds a border of the chosen Width inside a flat region. **Individual faces** insets each face separately. **Bevel boundary** trims a flat region's exterior corners, creating a single chamfer band; each corner must have one exterior edge descending away from the region. This first bevel does not handle arbitrary edge networks or rounded multi-segment profiles. Widths that collapse narrow faces are rejected. Inset and bevel retain the cap selection for the next operation. New faces inherit their source region's face label; surviving weights and creases are retained.
+
+**Extrude and fuse** adds contact handling while pushing a single flat face inward. It can stop at the first compatible intermediate loop, remove the swept exterior strips and retain the moved cap. **Join matching faces** separately permits opening a tunnel when an opposing cap matches. **Snap range** is a fraction of the local edge length, independent of sculpt brush size. Compatibility still requires aligned corners and complete adjoining side strips; this does not cut arbitrary intersecting surfaces. Symmetry applies only when all copies can complete safely.
+
 ### Push through to make a tunnel
 
 1. Create a cube with **3 spans on each axis**, then convert it to a sculpting mesh.

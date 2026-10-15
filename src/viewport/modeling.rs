@@ -23,6 +23,9 @@ pub(crate) enum ModelTool {
     Move,
     Rotate,
     Scale,
+    Inset,
+    Bevel,
+    Fuse,
 }
 impl ModelTool {
     pub fn label(self) -> &'static str {
@@ -33,6 +36,9 @@ impl ModelTool {
             Self::Move => "Move components",
             Self::Rotate => "Rotate components",
             Self::Scale => "Scale components",
+            Self::Inset => "Inset",
+            Self::Bevel => "Bevel boundary",
+            Self::Fuse => "Extrude and fuse",
         }
     }
 }
@@ -114,6 +120,8 @@ pub(crate) struct ModelingOptions {
     pub axis: ModelAxis,
     pub amount: f32,
     pub protect_mask: bool,
+    pub individual: bool,
+    pub snap: f32,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Component {
@@ -155,6 +163,8 @@ struct ExtrudeDrag {
     revision: u64,
     distance: f32,
     join: bool,
+    individual: bool,
+    protect_mask: bool,
     result: Option<Result<Extrusion, String>>,
 }
 impl ModelingState {
@@ -272,9 +282,16 @@ impl ModelingState {
             && let Some(point) = point
         {
             let distance = (drag.start.y - point.y) / drag.scale;
-            if distance != drag.distance || drag.join != options.join || drag.result.is_none() {
+            if distance != drag.distance
+                || drag.join != options.join
+                || drag.individual != options.individual
+                || drag.protect_mask != options.protect_mask
+                || drag.result.is_none()
+            {
                 drag.distance = distance;
                 drag.join = options.join;
+                drag.individual = options.individual;
+                drag.protect_mask = options.protect_mask;
                 drag.result = Some(
                     self.symmetry
                         .as_ref()
@@ -285,7 +302,13 @@ impl ModelingState {
                         .and_then(|symmetry| {
                             document
                                 .mesh()
-                                .extrude_symmetric(&drag.faces, distance, options.join, symmetry)
+                                .extrude_model(
+                                    &drag.faces,
+                                    distance,
+                                    options.join,
+                                    options.individual,
+                                    symmetry,
+                                )
                                 .and_then(|r| {
                                     document
                                         .mesh()
@@ -617,6 +640,8 @@ impl Viewport {
                     revision: document.display_revision(),
                     distance: 0.,
                     join: model.join,
+                    individual: model.individual,
+                    protect_mask: model.protect_mask,
                     result: None,
                 });
             }

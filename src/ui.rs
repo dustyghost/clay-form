@@ -83,6 +83,7 @@ impl Default for UiState {
             edges: Default::default(),
             modeling: modeling::ModelingControls {
                 amount: 0.1,
+                snap: 0.04,
                 protect_mask: true,
                 join: true,
                 loop_count: 1,

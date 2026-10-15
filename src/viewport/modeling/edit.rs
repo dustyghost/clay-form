@@ -12,10 +12,35 @@ pub(super) struct EditDrag {
 }
 impl ModelTool {
     pub fn is_edit(self) -> bool {
-        matches!(self, Self::Move | Self::Rotate | Self::Scale)
+        matches!(
+            self,
+            Self::Move | Self::Rotate | Self::Scale | Self::Inset | Self::Bevel | Self::Fuse
+        )
     }
 }
 impl ModelingState {
+    pub(super) fn cap_selection(
+        source: &Mesh,
+        out: &Mesh,
+        selected: &BTreeSet<Component>,
+    ) -> BTreeSet<Component> {
+        selected
+            .iter()
+            .filter_map(|c| {
+                if let Component::Face(f) = *c {
+                    let new = if f < source.quads.len() {
+                        f
+                    } else {
+                        out.quads.len() + f - source.quads.len()
+                    };
+                    (new < out.polygons().len()).then_some(Component::Face(new))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     pub(super) fn update_edit_preview(
         &mut self,
         document: &Document,
@@ -67,6 +92,47 @@ impl ModelingState {
                     .unwrap_or_default(),
             })
             .collect();
+        if matches!(
+            options.tool,
+            ModelTool::Extrude | ModelTool::Inset | ModelTool::Bevel | ModelTool::Fuse
+        ) {
+            let faces: Vec<_> = components
+                .iter()
+                .filter_map(|c| {
+                    if let Component::Face(f) = c {
+                        Some(*f)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let symmetry = ModelingSymmetry::new(mesh, document.symmetry())?;
+            let result = if options.tool == ModelTool::Fuse {
+                mesh.extrude_symmetric_contact(
+                    &faces,
+                    amount,
+                    crate::sculpt::ExtrudeContact {
+                        join: options.join,
+                        loops: true,
+                        snap: options.snap,
+                    },
+                    &symmetry,
+                )?
+                .mesh
+            } else if options.tool == ModelTool::Extrude {
+                mesh.extrude_model(&faces, amount, options.join, options.individual, &symmetry)?
+                    .mesh
+            } else {
+                let kind = match options.tool {
+                    ModelTool::Inset => crate::sculpt::Construction::Inset,
+                    ModelTool::Bevel => crate::sculpt::Construction::Bevel,
+                    _ => crate::sculpt::Construction::Extrude,
+                };
+                mesh.construct_symmetric(&faces, amount, kind, options.individual, &symmetry)?
+            };
+            mesh.check_model_protection(&result, options.protect_mask)?;
+            return Ok(result);
+        }
         let axis = if options.axis == ModelAxis::Normal {
             let mut normal = Vec3::default();
             for p in &polygons {
@@ -114,9 +180,24 @@ impl ModelingState {
             return Ok(());
         };
         let result = drag.result.ok_or("Drag to preview the edit")??;
+        let caps = if matches!(
+            options.tool,
+            ModelTool::Inset | ModelTool::Bevel | ModelTool::Extrude
+        ) {
+            Self::cap_selection(document.mesh(), &result, &drag.components)
+        } else {
+            BTreeSet::new()
+        };
         document.commit_modeling(result, options.tool.label(), drag.revision)?;
         self.sync(document);
-        self.selected = drag.components;
+        if matches!(
+            options.tool,
+            ModelTool::Move | ModelTool::Rotate | ModelTool::Scale
+        ) {
+            self.selected = drag.components;
+        } else {
+            self.selected = caps;
+        }
         Ok(())
     }
     pub fn apply_amount(
@@ -131,7 +212,21 @@ impl ModelingState {
             .map(|&v| document.mesh().vertices[v])
             .ok_or("Select components first")?;
         let result = Self::edit_result(document, &self.selected, anchor, options, options.amount)?;
+        let caps = if matches!(
+            options.tool,
+            ModelTool::Inset | ModelTool::Bevel | ModelTool::Extrude
+        ) {
+            Self::cap_selection(document.mesh(), &result, &self.selected)
+        } else {
+            BTreeSet::new()
+        };
         document.commit_modeling(result, options.tool.label(), self.revision)?;
+        if !matches!(
+            options.tool,
+            ModelTool::Move | ModelTool::Rotate | ModelTool::Scale
+        ) {
+            self.selected = caps;
+        }
         self.revision = document.display_revision();
         self.symmetry = None;
         Ok(())

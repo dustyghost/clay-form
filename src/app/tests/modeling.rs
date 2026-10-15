@@ -711,3 +711,47 @@ fn modeling_component_drag_is_transactional() {
     assert_ne!(app.document.mesh(), &before);
     assert!(!app.viewport.modeling.selected.is_empty());
 }
+#[test]
+fn modeling_construction_numeric_and_pen_share_valid_results() {
+    for tool in [ModelTool::Inset, ModelTool::Bevel, ModelTool::Fuse] {
+        let (mut app, ctx, rect) = setup();
+        let mut p = Primitive::for_kind(PrimitiveKind::Cube);
+        p.divisions = [1; 3];
+        app.document
+            .replace_geometry(Geometry::new(p.mesh().unwrap()))
+            .unwrap();
+        navigation_frame(&mut app, &ctx, vec![]);
+        tap(&mut app, &ctx, rect.center());
+        app.dispatch(Command::Action(Action::ModelTool(tool)), &ctx);
+        app.ui.modeling.amount = 0.1;
+        let before = app.document.mesh().clone();
+        let history = app.document.history_counts().0;
+        app.dispatch(Command::ModelApply, &ctx);
+        assert_ne!(
+            app.document.mesh(),
+            &before,
+            "{}: {}",
+            tool.label(),
+            app.ui.status
+        );
+        assert_eq!(app.document.history_counts().0, history + 1);
+        if tool != ModelTool::Fuse {
+            assert_eq!(app.viewport.modeling.selected.len(), 1);
+        }
+        app.dispatch(Command::Undo, &ctx);
+        assert_eq!(app.document.mesh(), &before);
+        pen_drag(
+            &mut app,
+            &ctx,
+            rect.center(),
+            rect.center() + Vec2::new(0., -20.),
+        );
+        assert_ne!(
+            app.document.mesh(),
+            &before,
+            "{}: {}",
+            tool.label(),
+            app.ui.status
+        );
+    }
+}

@@ -13,6 +13,8 @@ pub(crate) struct ModelingControls {
     pub axis: crate::viewport::ModelAxis,
     pub amount: f32,
     pub protect_mask: bool,
+    pub individual: bool,
+    pub snap: f32,
     pub group_name: String,
     pub group: usize,
 }
@@ -28,6 +30,8 @@ impl ModelingControls {
             axis: self.axis,
             amount: self.amount,
             protect_mask: self.protect_mask,
+            individual: self.individual,
+            snap: self.snap,
         }
     }
 }
@@ -98,6 +102,7 @@ impl UiState {
                     if ui.selectable_label(self.modeling.tool==tool,tool.label()).customize(Action::ModelTool(tool)).clicked() { commands.push(Command::Action(Action::ModelTool(tool))); }
                 }
             });
+            if self.modeling.mode==ComponentMode::Face { ui.horizontal_wrapped(|ui| { for tool in [ModelTool::Inset,ModelTool::Bevel,ModelTool::Fuse] { if ui.selectable_label(self.modeling.tool==tool,tool.label()).customize(Action::ModelTool(tool)).clicked() {commands.push(Command::Action(Action::ModelTool(tool)));} } }); }
             ui.label("Target");
             ui.horizontal_wrapped(|ui| {
                 for span in SelectionSpan::ALL.into_iter().filter(|s|s.available(self.modeling.mode)) {
@@ -129,13 +134,29 @@ impl UiState {
                     }
                     ui.weak("Replace clears once per stroke · Esc cancels");
                 }
-                ModelTool::Extrude => {
+                ModelTool::Extrude | ModelTool::Fuse => {
+                    if self.modeling.tool==ModelTool::Fuse {
+                        ui.label("Snap range (fraction of local edge)");
+                        ui.add(egui::DragValue::new(&mut self.modeling.snap).range(0.0..=0.25).speed(0.005));
+                        ui.weak("Push inward to fuse at a compatible side loop or cap.");
+                    }
+                    if self.modeling.tool==ModelTool::Extrude {ui.checkbox(&mut self.modeling.individual,"Individual faces");}
+                    ui.add(egui::DragValue::new(&mut self.modeling.amount).prefix("Distance ").speed(0.01));
+                    if ui.add_enabled(self.modeling.count>0,egui::Button::new("Apply amount")).customize(Action::ModelApply).clicked(){commands.push(Command::ModelApply);}
+
                     design::help(
                         ui.checkbox(&mut self.modeling.join, "Join matching faces").customize(Action::ModelJoin),
                         "Snap to an aligned opposite face and remove both caps to open a tunnel. Single-face extrusions only.",
                     );
                     ui.weak("Drag up: out · down: in · release: apply · Esc: cancel");
-                    ui.weak("Flat face regions only. Edits replace stored levels.");
+                    ui.weak("Connected regions share walls; Individual faces extrude separately.");
+                }
+                ModelTool::Inset | ModelTool::Bevel => {
+                    ui.checkbox(&mut self.modeling.individual,"Individual faces");
+                    ui.add(egui::DragValue::new(&mut self.modeling.amount).prefix("Width ").range(0.0..=1000.).speed(0.01));
+                    if ui.add_enabled(self.modeling.count>0,egui::Button::new("Apply amount")).customize(Action::ModelApply).clicked(){commands.push(Command::ModelApply);}
+                    ui.weak("Drag up to increase width · release applies · Esc cancels");
+                    if self.modeling.tool==ModelTool::Bevel {ui.weak("Flat region with one exterior edge at each corner.");}
                 }
                 ModelTool::Move | ModelTool::Rotate | ModelTool::Scale => {
                     ui.horizontal_wrapped(|ui| {

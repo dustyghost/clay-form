@@ -184,8 +184,27 @@ impl Mesh {
         join: bool,
         symmetry: &ModelingSymmetry,
     ) -> Result<Extrusion, String> {
+        self.extrude_symmetric_contact(
+            selected,
+            distance,
+            ExtrudeContact {
+                join,
+                loops: false,
+                snap: 0.04,
+            },
+            symmetry,
+        )
+    }
+    pub fn extrude_symmetric_contact(
+        &self,
+        selected: &[usize],
+        distance: f32,
+        contact: ExtrudeContact,
+        symmetry: &ModelingSymmetry,
+    ) -> Result<Extrusion, String> {
+        let join = contact.join;
         if symmetry.vertices.len() == 1 {
-            return self.extrude_faces(selected, distance, join);
+            return self.extrude_contact(selected, distance, contact);
         }
         let polygons = self.polygons();
         let mut remaining: BTreeSet<_> = selected
@@ -255,6 +274,7 @@ impl Mesh {
             mesh: self.clone(),
             distance,
             joined: false,
+            collapsed: false,
             rim: Vec::new(),
         };
         for group in groups {
@@ -280,10 +300,11 @@ impl Mesh {
             if indices.len() != group.len() {
                 return Err("Symmetric extrusion copies overlap; the edit was cancelled".into());
             }
-            let next = result.mesh.extrude_faces(&indices, distance, join)?;
+            let next = result.mesh.extrude_contact(&indices, distance, contact)?;
             result.mesh = next.mesh;
             result.distance = next.distance;
             result.joined |= next.joined;
+            result.collapsed |= next.collapsed;
             result.rim.extend(next.rim);
         }
         symmetry.validate_result(&result.mesh)?;

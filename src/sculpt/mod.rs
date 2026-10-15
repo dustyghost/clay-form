@@ -57,4 +57,6 @@ mod mirror_tests;
 mod edges;
 pub use edges::{BorderTarget, EdgeEdit};
 mod modeling;
-pub use modeling::{ComponentTransform, Extrusion, LoopCut, ModelingSymmetry};
+pub use modeling::{
+    ComponentTransform, Construction, ExtrudeContact, Extrusion, LoopCut, ModelingSymmetry,
+};

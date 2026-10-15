@@ -4,6 +4,9 @@ use super::{
     edges::{Polygon, edge},
 };
 use std::collections::{BTreeMap, BTreeSet};
+mod construction;
+mod contact;
+pub use construction::Construction;
 mod dissolve;
 mod join;
 mod loops;
@@ -14,10 +17,17 @@ pub use loops::LoopCut;
 pub use symmetry::ModelingSymmetry;
 pub use transform::ComponentTransform;
 
+#[derive(Clone, Copy)]
+pub struct ExtrudeContact {
+    pub join: bool,
+    pub loops: bool,
+    pub snap: f32,
+}
 pub struct Extrusion {
     pub mesh: Mesh,
     pub distance: f32,
     pub joined: bool,
+    pub collapsed: bool,
     pub rim: Vec<[Vec3; 2]>,
 }
 
@@ -69,7 +79,27 @@ impl Mesh {
         distance: f32,
         join: bool,
     ) -> Result<Extrusion, String> {
+        self.extrude_contact(
+            selected,
+            distance,
+            ExtrudeContact {
+                join,
+                loops: false,
+                snap: 0.04,
+            },
+        )
+    }
+    pub fn extrude_contact(
+        &self,
+        selected: &[usize],
+        distance: f32,
+        contact: ExtrudeContact,
+    ) -> Result<Extrusion, String> {
+        let join = contact.join;
         self.validate()?;
+        if !contact.snap.is_finite() || !(0.0..=0.25).contains(&contact.snap) {
+            return Err("Snap range must be between 0 and 0.25 of the local edge length".into());
+        }
         if !distance.is_finite() {
             return Err("Extrusion distance must be finite".into());
         }
@@ -105,6 +135,7 @@ impl Mesh {
                 mesh: self.clone(),
                 distance: 0.,
                 joined: false,
+                collapsed: false,
                 rim: Vec::new(),
             });
         }
@@ -139,7 +170,7 @@ impl Mesh {
         }
         // A tunnel is a reverse-wound, translated copy of one face. Require exact
         // lateral alignment; only the distance along the extrusion axis is snapped.
-        let mut target: Option<(usize, f32, BTreeMap<usize, usize>)> = None;
+        let mut target: Option<(Option<usize>, f32, BTreeMap<usize, usize>)> = None;
         if join && selected.len() == 1 {
             for (i, p) in polygons.iter().enumerate() {
                 if selected.contains(&i)
@@ -164,7 +195,8 @@ impl Mesh {
                         .collect();
                     let depth =
                         (self.vertices[mapping[&first.vertices[0]]] - origin).dot(direction);
-                    if depth * distance <= 0. || depth.abs() > distance.abs() + size * 0.04 {
+                    if depth * distance <= 0. || depth.abs() > distance.abs() + size * contact.snap
+                    {
                         continue;
                     }
                     if mapping.iter().any(|(&a, &b)| {
@@ -177,14 +209,31 @@ impl Mesh {
                         .as_ref()
                         .is_none_or(|(_, d, _)| depth.abs() < d.abs())
                     {
-                        target = Some((i, depth, mapping));
+                        target = Some((Some(i), depth, mapping));
                     }
                 }
             }
         }
+        if contact.loops
+            && distance < 0.
+            && selected.len() == 1
+            && let Some((depth, mapping)) = self.loop_contact(
+                &polygons,
+                *selected.first().unwrap(),
+                direction,
+                distance,
+                contact.snap,
+            )?
+            && target
+                .as_ref()
+                .is_none_or(|(_, d, _)| depth.abs() < d.abs())
+        {
+            target = Some((None, depth, mapping));
+        }
+        let collapsed = target.as_ref().is_some_and(|(f, _, _)| f.is_none());
         let mut out = self.empty_topology();
         let (distance, mapping, removed) = if let Some((i, depth, mapping)) = target {
-            (depth, mapping, Some(i))
+            (depth, mapping, i)
         } else {
             let mapping = vertices
                 .iter()
@@ -201,8 +250,8 @@ impl Mesh {
             .values()
             .map(|&(a, b, group)| ([a, b, mapping[&b], mapping[&a]], group))
             .collect();
-        let joined_walls = if let Some(target) = removed {
-            let excluded = selected.iter().copied().chain([target]).collect();
+        let joined_walls = if removed.is_some() || collapsed {
+            let excluded = selected.iter().copied().chain(removed).collect();
             Some(self.joined_walls(&polygons, &sides, &excluded, &mut out)?)
         } else {
             None
@@ -257,6 +306,7 @@ impl Mesh {
             mesh: out,
             distance,
             joined: removed.is_some(),
+            collapsed,
             rim,
         })
     }

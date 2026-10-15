@@ -207,6 +207,8 @@ impl App {
                         axis: self.ui.modeling.axis,
                         amount: self.ui.modeling.amount,
                         protect_mask: self.ui.modeling.protect_mask,
+                        individual: self.ui.modeling.individual,
+                        snap: self.ui.modeling.snap,
                     }),
                 arrange_references: self.ui.arrange_references,
                 references_visible: self.ui.references_visible,

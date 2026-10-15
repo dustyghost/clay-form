@@ -245,7 +245,8 @@ impl UiState {
                 self.edge_unavailable(action, document).is_none()
                     && self.modeling.active
                     && self.modeling.count > 0
-                    && self.modeling.tool.is_edit()
+                    && (self.modeling.tool.is_edit()
+                        || self.modeling.tool == crate::viewport::ModelTool::Extrude)
             }
             Action::ModelBoundary => {
                 self.edge_unavailable(action, document).is_none()

@@ -63,6 +63,18 @@ impl App {
                     self.dispatch(Command::ModelingMode(true), ctx);
                 }
                 self.viewport.cancel(&mut self.document);
+                if matches!(
+                    tool,
+                    crate::viewport::ModelTool::Inset
+                        | crate::viewport::ModelTool::Bevel
+                        | crate::viewport::ModelTool::Fuse
+                ) && self.ui.modeling.mode != crate::viewport::ComponentMode::Face
+                {
+                    self.dispatch(
+                        Command::ModelingComponent(crate::viewport::ComponentMode::Face),
+                        ctx,
+                    );
+                }
                 self.ui.modeling.tool = tool;
                 if tool == crate::viewport::ModelTool::Scale {
                     self.ui.modeling.amount = 1.;

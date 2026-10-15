@@ -677,3 +677,83 @@ fn modeling_protection_rejects_whole_edits() {
     assert!(mesh.check_model_protection(&extruded.mesh, true).is_err());
     mesh.check_model_protection(&extruded.mesh, false).unwrap();
 }
+
+#[test]
+fn modeling_inset_bevel_and_region_extrude_are_closed() {
+    let mesh = cube(1);
+    let f = mesh
+        .polygons()
+        .iter()
+        .position(|p| normal(&mesh, p).2 > 0.99)
+        .unwrap();
+    for bevel in [false, true] {
+        let out = mesh.inset_faces(&[f], 0.1, bevel).unwrap();
+        manifold(&out).unwrap();
+        assert_eq!(out.polygons().len(), 10);
+        let mut incidence = BTreeMap::<_, usize>::new();
+        for p in out.polygons() {
+            for (a, b) in p.edges() {
+                *incidence.entry(edge(a, b)).or_default() += 1;
+            }
+        }
+        assert!(incidence.values().all(|&n| n == 2));
+    }
+    assert!(mesh.inset_faces(&[f], 2., false).is_err());
+    let faces: Vec<_> = mesh
+        .polygons()
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| normal(&mesh, p).2 > 0.99 || normal(&mesh, p).0 > 0.99)
+        .map(|(f, _)| f)
+        .collect();
+    let out = mesh.extrude_region(&faces, 0.1).unwrap();
+    manifold(&out).unwrap();
+    let sym = ModelingSymmetry::new(&mesh, &mirror_x()).unwrap();
+    let f = mesh
+        .polygons()
+        .iter()
+        .position(|p| normal(&mesh, p).0 > 0.99)
+        .unwrap();
+    let out = mesh
+        .construct_symmetric(&[f], 0.1, Construction::Inset, false, &sym)
+        .unwrap();
+    sym.validate_result(&out).unwrap();
+}
+#[test]
+fn modeling_fuse_stops_at_intermediate_slab_loop() {
+    let mut primitive = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Cube);
+    primitive.divisions = [4, 4, 1];
+    let mut mesh = primitive.mesh().unwrap();
+    for v in &mut mesh.vertices {
+        v.2 *= 0.1;
+    }
+    let f = mesh
+        .polygons()
+        .iter()
+        .position(|p| {
+            normal(&mesh, p).0 > 0.99
+                && p.vertices.iter().map(|&v| mesh.vertices[v].1).sum::<f32>()
+                    / (p.vertices.len() as f32)
+                    < -0.5
+        })
+        .unwrap();
+    let contact = ExtrudeContact {
+        join: true,
+        loops: true,
+        snap: 0.04,
+    };
+    let result = mesh.extrude_contact(&[f], -0.8, contact).unwrap();
+    assert!(result.collapsed);
+    assert!(!result.joined);
+    assert!((result.distance + 0.5).abs() < 1e-5);
+    manifold(&result.mesh).unwrap();
+    assert!(result.mesh.polygons().len() < mesh.polygons().len() + 4);
+    assert!(!mesh.extrude_faces(&[f], -0.8, true).unwrap().joined);
+    assert!(!mesh.extrude_contact(&[f], -0.2, contact).unwrap().collapsed);
+    let sym = ModelingSymmetry::new(&mesh, &mirror_x()).unwrap();
+    let out = mesh
+        .extrude_symmetric_contact(&[f], -0.8, contact, &sym)
+        .unwrap();
+    assert!(out.collapsed);
+    sym.validate_result(&out.mesh).unwrap();
+}
