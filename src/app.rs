@@ -104,6 +104,7 @@ impl App {
         if ctx.wants_keyboard_input()
             || self.ui.primitive_warning.is_some()
             || self.ui.pending.is_some()
+            || self.ui.file_picker.is_some()
             || self.ui.recovery_open
             || self.ui.settings_open
             || self.ui.layout_open
@@ -113,7 +114,7 @@ impl App {
         }
         for action in self.ui.preferences.actions(ctx) {
             self.execute_action(action, ctx);
-            if self.ui.pending.is_some() {
+            if self.ui.pending.is_some() || self.ui.file_picker.is_some() {
                 break;
             }
         }
@@ -121,7 +122,8 @@ impl App {
 
     pub(crate) fn show_viewport(&mut self, ui: &mut egui::Ui) {
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
-        if self.ui.edges.selecting
+        if self.ui.file_picker.is_none()
+            && self.ui.edges.selecting
             && !ui.ctx().wants_keyboard_input()
             && ui.input(|i| i.key_pressed(egui::Key::Escape))
         {
@@ -131,7 +133,8 @@ impl App {
         }
         self.viewport.modeling.sync(&self.document);
         self.ui.modeling.count = self.viewport.modeling.selection().len();
-        if self.ui.modeling.active
+        if self.ui.file_picker.is_none()
+            && self.ui.modeling.active
             && !ui.ctx().wants_keyboard_input()
             && ui.input(|i| i.key_pressed(egui::Key::Escape))
         {
@@ -148,6 +151,7 @@ impl App {
         let enabled = !self.ui.icon_capture_open()
             && self.ui.primitive_warning.is_none()
             && self.ui.pending.is_none()
+            && self.ui.file_picker.is_none()
             && !self.ui.recovery_open
             && !self.ui.settings_open
             && !self.ui.layout_open
@@ -328,6 +332,9 @@ impl eframe::App for App {
         self.ui.status_bar(ctx);
         egui::CentralPanel::default().show(ctx, |ui| self.show_viewport(ui));
         if let Some(command) = self.ui.icon_capture_popup(ctx, &self.document) {
+            self.dispatch(command, ctx);
+        }
+        if let Some(command) = self.ui.project_file_dialog(ctx) {
             self.dispatch(command, ctx);
         }
         if let Some(command) = self.ui.confirmation(ctx) {

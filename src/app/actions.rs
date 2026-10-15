@@ -281,7 +281,8 @@ impl App {
                     .then(|| Command::SetMeshLevel(settings.level() + 1))
             }
             Action::Save => Some(Command::Save),
-            Action::Open => Some(Command::Request(PendingAction::Open(self.ui.path.clone()))),
+            Action::Open => Some(Command::BrowseProject(false)),
+            Action::SaveAs => Some(Command::BrowseProject(true)),
             Action::New => Some(Command::Request(PendingAction::New)),
             Action::Undo => Some(Command::Undo),
             Action::Redo => Some(Command::Redo),

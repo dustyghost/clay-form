@@ -69,6 +69,16 @@ impl App {
             self.execute_action(action, ctx);
             return;
         }
+        if self.ui.file_picker.is_some()
+            && !matches!(
+                command,
+                Command::NavigateProjectFiles(_)
+                    | Command::AcceptProjectFile(_)
+                    | Command::CancelProjectFile
+            )
+        {
+            return;
+        }
         if matches!(
             command,
             Command::AddReference(_)
@@ -444,9 +454,34 @@ impl App {
                 self.request(action, ctx);
                 Ok(())
             }
+            Command::BrowseProject(save) => {
+                if self.ui.pending.is_none() {
+                    self.browse_project(save, false);
+                }
+                Ok(())
+            }
+            Command::NavigateProjectFiles(path) => {
+                self.navigate_project_files(&path);
+                Ok(())
+            }
+            Command::AcceptProjectFile(overwrite) => {
+                self.accept_project_file(overwrite, ctx);
+                Ok(())
+            }
+            Command::CancelProjectFile => {
+                self.ui.file_picker = None;
+                self.viewport.wait_for_release();
+                Ok(())
+            }
             Command::Save => {
-                let path = self.ui.path.clone();
-                self.save_to(&path);
+                if !self.document.has_saved_path()
+                    || !persistence::same_path(&self.ui.path, self.document.current_path())
+                {
+                    self.browse_project(true, false);
+                } else {
+                    let path = self.ui.path.clone();
+                    self.save_to(&path);
+                }
                 Ok(())
             }
             Command::ImportObj => {
@@ -855,6 +890,10 @@ impl App {
                     if matches!(&action,PendingAction::Open(target) if persistence::same_path(&path,target))
                     {
                         self.ui.status="Choose a different save path to avoid overwriting the project you are opening".into();
+                    } else if !self.document.has_saved_path()
+                        || !persistence::same_path(&path, self.document.current_path())
+                    {
+                        self.browse_project(true, true);
                     } else if self.save_to(&path) {
                         self.ui.pending = None;
                         self.execute_pending(action, ctx);

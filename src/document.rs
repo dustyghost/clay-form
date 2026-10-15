@@ -51,6 +51,7 @@ pub struct Document {
     stroke_deformed: bool,
     stroke_before: Option<Geometry>,
     current_path: String,
+    has_saved_path: bool,
     adaptive_budget: AdaptiveBudget,
 }
 impl Default for Document {
@@ -68,6 +69,7 @@ impl Default for Document {
             stroke_deformed: false,
             stroke_before: None,
             current_path: "sculpt.clay".into(),
+            has_saved_path: false,
             adaptive_budget: AdaptiveBudget::default(),
         }
     }
@@ -125,7 +127,11 @@ impl Document {
             mesh_settings: self.geometry.settings.clone(),
         }
     }
+    pub fn has_saved_path(&self) -> bool {
+        self.has_saved_path
+    }
     pub fn mark_saved(&mut self, path: &str) {
+        self.has_saved_path = true;
         self.current_path = path.into();
         self.dirty = false;
     }
@@ -138,6 +144,7 @@ impl Document {
         self.dirty = false;
         self.end_stroke();
         self.current_path = "untitled.clay".into();
+        self.has_saved_path = false;
     }
     /// Validate before changing anything, so an invalid open leaves the current document intact.
     pub fn replace_project(&mut self, project: Project, path: &str) -> Result<(), String> {

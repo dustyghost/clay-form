@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum Action {
     Save,
+    SaveAs,
     Open,
     New,
     Undo,
@@ -258,6 +259,7 @@ impl Action {
         Self::AlphaSquare,
         Self::RecoverySettings,
         Self::SaveRecovery,
+        Self::SaveAs,
         Self::KeySettings,
         Self::CustomizeWorkspace,
         Self::CancelMeshOperation,
@@ -432,6 +434,7 @@ impl Action {
             Self::RelaxBorders => "Relax borders",
             Self::SmoothSubdivide => "Smooth subdivide",
             Self::Save => "Save project",
+            Self::SaveAs => "Save project as…",
             Self::Open => "Open project at path",
             Self::New => "New sphere",
             Self::Undo => "Undo",

@@ -11,10 +11,11 @@
 
 ### Save or open a project
 
-1. Enter a relative or absolute path in the toolbar, such as `my-sculpt.clay`.
-2. Choose **Save** or **Open**.
+Choose **Open** (**Ctrl+O**) to browse for a project. Double-click folders to enter them, select a file, then choose **Open project**. **Home**, **Up**, and the folder field help you navigate.
 
-The parent folder must exist. Saving replaces an existing file at that path. New, Open, and Quit prompt when work is unsaved.
+The first **Save** (**Ctrl+S**) opens a file chooser. Choose a folder and file name; `.clay` is added when you omit the extension. Later saves update that project's established file directly. Use **Save as…** (**Ctrl+Shift+S**) to choose another destination. The toolbar path seeds the chooser; changing it also makes Save ask for a destination.
+
+Save As asks before replacing an existing file. Cancel leaves the document and files unchanged. The parent folder must exist. New, Open, and Quit still prompt when work is unsaved; Save and continue opens the chooser when a destination is needed.
 
 | Format | Contains |
 | --- | --- |

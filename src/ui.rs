@@ -10,6 +10,8 @@ mod design;
 use design::Glyph;
 mod customization;
 mod edges;
+mod files;
+pub(crate) use files::{FileEntry, FilePicker};
 mod icons;
 mod menus;
 mod mirror;
@@ -52,6 +54,7 @@ pub(crate) struct UiState {
     pub selected: usize,
     smooth_brush: Option<String>,
     brush_editor_focus: Option<(egui::Id, String)>,
+    pub file_picker: Option<FilePicker>,
     pub path: String,
     pub obj_path: String,
     pub reference_path: String,
@@ -115,6 +118,7 @@ impl Default for UiState {
             selected: 0,
             smooth_brush: None,
             brush_editor_focus: None,
+            file_picker: None,
             path: "sculpt.clay".into(),
             obj_path: "model.obj".into(),
             reference_path: String::new(),
@@ -244,7 +248,7 @@ impl UiState {
                     .customize(Action::Open)
                     .clicked()
                 {
-                    commands.push(Command::Request(PendingAction::Open(self.path.clone())));
+                    commands.push(Command::BrowseProject(false));
                 }
                 if ui
                     .add(design::button(ui, Glyph::Save, "Save"))
@@ -252,6 +256,9 @@ impl UiState {
                     .clicked()
                 {
                     commands.push(Command::Save);
+                }
+                if ui.button("Save as…").customize(Action::SaveAs).clicked() {
+                    commands.push(Command::BrowseProject(true));
                 }
                 if ui
                     .add(design::button(ui, Glyph::Export, "Export OBJ"))
@@ -554,6 +561,9 @@ impl UiState {
         });
     }
     pub fn confirmation(&mut self, ctx: &egui::Context) -> Option<Command> {
+        if self.file_picker.is_some() {
+            return None;
+        }
         self.pending.as_ref()?;
         let mut command = None;
         egui::Window::new("Unsaved changes")

@@ -402,7 +402,14 @@ impl Default for Preferences {
                 .iter()
                 .cloned()
                 .enumerate()
-                .map(|(i, a)| (a, keys.get(i).copied()))
+                .map(|(i, a)| {
+                    let key = if a == Action::SaveAs {
+                        Some((Key::S, ctrl | Modifiers::SHIFT))
+                    } else {
+                        keys.get(i).copied()
+                    };
+                    (a, key)
+                })
                 .map(|(a, key)| (a, key.map(|(k, m)| Shortcut::new(k, m))))
                 .collect(),
             smooth: Hold::Shift,

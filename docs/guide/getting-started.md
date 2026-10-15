@@ -43,7 +43,7 @@ Open **Edit** to see the action names and your configured shortcuts.
 
 ## 5. Save your work
 
-Enter a path such as `first-sculpt.clay` in the toolbar and choose **Save**. Use an existing folder. Reopen with **Open** or **Ctrl+O**.
+Choose **Save** (**Ctrl+S**), browse to a folder, and enter a name such as `first-sculpt.clay`. Later saves update that file directly; **Save as…** (**Ctrl+Shift+S**) chooses a new destination. Reopen with **Open** or **Ctrl+O**.
 
 `.clay` keeps the editable project. **Export OBJ** saves the active mesh for other applications. See [Files and recovery](files.md).
 

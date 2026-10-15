@@ -39,7 +39,7 @@ The application owns the document, camera, UI state, viewport gesture state and 
 
 The viewport is an input adapter. It emits domain `Dab` values to the document, independent of mesh rendering details. The scene renderer reads mesh data and prepares projected triangles for display and surface picking. The OpenGL renderer uses cached GPU geometry; sculpt algorithms remain in the document and geometry modules. CPU projection and picking share the cached surface with the renderer.
 
-UI commands are executed between panels so the viewport sees the latest document. Destructive operations capture their target when requested. An Open confirmation therefore retains its target even if the toolbar path changes. Save-and-continue uses a separate path and refuses to overwrite that target. Failed loads leave content, dirty state and history intact.
+UI commands are executed between panels so the viewport sees the latest document. Destructive operations capture their target when requested. An Open confirmation therefore retains its target even if the toolbar path changes. Save-and-continue uses a separate path and refuses to overwrite that target. Failed loads leave content, dirty state and history intact. Open and first-time Save use a modal project file chooser; Save As always uses it and requires explicit confirmation before overwriting. Directory reads and writes stay in the application controller, while the UI holds listing and draft path state. An unsaved-change continuation can survive the chooser; cancellation leaves both the pending decision and document intact. A session-only document flag distinguishes a suggested filename from an established save destination.
 
 ## Compatibility and storage
 

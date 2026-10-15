@@ -150,6 +150,7 @@ impl Guide {
                     }
                 });
                 self.app.show_recovery(ctx);
+                commands.extend(self.app.ui.project_file_dialog(ctx));
             },
         );
         self.text_positions = output
@@ -649,6 +650,35 @@ fn click_guide_label(g: &mut Guide, label: &str) {
         primary_event(point, true),
     ]);
     g.frame(vec![primary_event(point, false), egui::Event::PointerGone]);
+}
+
+#[test]
+#[ignore = "renders project file dialogs; requires EGL and CLAY_GUIDE_PREVIEW"]
+fn project_file_dialog_offscreen_review() {
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
+    let directory = std::path::Path::new(&directory);
+    let projects = directory.join("projects");
+    std::fs::create_dir_all(projects.join("Studies")).unwrap();
+    let file = projects.join("Sculpt study.clay");
+    persistence::save_project(&file.to_string_lossy(), &Document::default().project()).unwrap();
+    let mut g = Guide::new(directory, [1200, 900]);
+    g.interactive = true;
+    g.app.ui.path = file.to_string_lossy().into();
+    let before = g.app.document.geometry_snapshot();
+    click_guide_label(&mut g, "Open");
+    assert!(g.app.ui.file_picker.is_some());
+    g.save("project-open-dialog");
+    click_guide_label(&mut g, "Cancel");
+    assert!(g.app.ui.file_picker.is_none());
+    click_guide_label(&mut g, "Save as…");
+    assert!(g.app.ui.file_picker.as_ref().unwrap().save);
+    g.save("project-save-dialog");
+    click_guide_label(&mut g, "Save project");
+    assert!(g.app.ui.file_picker.as_ref().unwrap().overwrite.is_some());
+    g.save("project-overwrite-dialog");
+    click_guide_label(&mut g, "Cancel");
+    assert!(g.app.ui.file_picker.is_none());
+    assert_eq!(g.app.document.geometry_snapshot(), before);
 }
 
 fn hover_guide_label(g: &mut Guide, label: &str) {

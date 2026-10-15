@@ -2,10 +2,142 @@
 use super::*;
 
 impl App {
+    pub(super) fn browse_project(&mut self, save: bool, resume_pending: bool) {
+        self.cancel_mesh_job();
+        self.viewport.cancel(&mut self.document);
+        let initial = if resume_pending {
+            &self.ui.pending_save_path
+        } else {
+            &self.ui.path
+        };
+        let path = std::path::PathBuf::from(initial);
+        let directory = if path.is_dir() {
+            path.clone()
+        } else {
+            path.parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or(std::path::Path::new("."))
+                .to_path_buf()
+        };
+        let filename = if path.is_dir() {
+            String::new()
+        } else {
+            path.file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned()
+        };
+        self.ui.file_picker = Some(crate::ui::FilePicker {
+            save,
+            resume_pending,
+            directory: std::env::current_dir().unwrap_or_else(|_| ".".into()),
+            location: String::new(),
+            filename,
+            entries: Vec::new(),
+            error: String::new(),
+            overwrite: None,
+        });
+        self.navigate_project_files(&directory.to_string_lossy());
+    }
+    pub(super) fn navigate_project_files(&mut self, location: &str) {
+        let Some(picker) = &mut self.ui.file_picker else {
+            return;
+        };
+        let path = if location == "~" {
+            std::env::var_os("HOME")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| picker.directory.clone())
+        } else {
+            picker.directory.join(location)
+        };
+        let result = (|| -> Result<_, std::io::Error> {
+            let directory = path.canonicalize()?;
+            let mut entries = Vec::new();
+            for entry in std::fs::read_dir(&directory)? {
+                let entry = entry?;
+                let Ok(metadata) = std::fs::metadata(entry.path()) else {
+                    continue;
+                };
+                if !metadata.is_file() && !metadata.is_dir() {
+                    continue;
+                }
+                entries.push(crate::ui::FileEntry {
+                    path: entry.path(),
+                    name: entry.file_name().to_string_lossy().into_owned(),
+                    directory: metadata.is_dir(),
+                });
+            }
+            entries.sort_by_key(|e| (!e.directory, e.name.to_lowercase()));
+            Ok((directory, entries))
+        })();
+        match result {
+            Ok((directory, entries)) => {
+                picker.location = directory.to_string_lossy().into_owned();
+                picker.directory = directory;
+                picker.entries = entries;
+                picker.overwrite = None;
+                picker.error.clear();
+            }
+            Err(error) => picker.error = format!("Cannot open folder {}: {error}", path.display()),
+        }
+    }
+    pub(super) fn accept_project_file(&mut self, overwrite: bool, ctx: &egui::Context) {
+        let Some(picker) = &mut self.ui.file_picker else {
+            return;
+        };
+        if picker.filename.trim().is_empty() {
+            picker.error = "Enter a file name first".into();
+            return;
+        }
+        let mut path = picker.directory.join(picker.filename.trim());
+        if path.is_dir() {
+            self.navigate_project_files(&path.to_string_lossy());
+            return;
+        }
+        if picker.save && path.extension().is_none() {
+            path.set_extension("clay");
+        }
+        let save = picker.save;
+        let resume_pending = picker.resume_pending;
+        if save {
+            if resume_pending
+                && matches!(&self.ui.pending, Some(PendingAction::Open(target)) if persistence::same_path(&path.to_string_lossy(), target))
+            {
+                picker.error =
+                    "Choose a different save path to avoid overwriting the project you are opening"
+                        .into();
+                return;
+            }
+            if path.exists() && !(overwrite && picker.overwrite.as_ref() == Some(&path)) {
+                picker.overwrite = Some(path);
+                return;
+            }
+            if !self.save_to(&path.to_string_lossy()) {
+                let picker = self.ui.file_picker.as_mut().unwrap();
+                picker.overwrite = None;
+                picker.error = self.ui.status.clone();
+                return;
+            }
+            self.ui.file_picker = None;
+            if resume_pending && let Some(action) = self.ui.pending.take() {
+                self.execute_pending(action, ctx);
+            }
+        } else if !path.is_file() {
+            picker.error = "Choose an existing project file".into();
+        } else {
+            self.ui.file_picker = None;
+            self.request(
+                PendingAction::Open(path.to_string_lossy().into_owned()),
+                ctx,
+            );
+        }
+        self.viewport.wait_for_release();
+    }
     pub(super) fn save_to(&mut self, path: &str) -> bool {
         match persistence::save_project(path, &self.document.project()) {
             Ok(()) => {
                 self.document.mark_saved(path);
+                self.ui.path = path.into();
                 self.retire_recovery();
                 self.ui.status = format!("Saved {path}");
                 true
@@ -17,6 +149,7 @@ impl App {
         }
     }
     pub(super) fn request(&mut self, action: PendingAction, ctx: &egui::Context) {
+        self.ui.file_picker = None;
         self.cancel_mesh_job();
         self.viewport.cancel(&mut self.document);
         if self.document.is_dirty() {
@@ -32,6 +165,7 @@ impl App {
         match action {
             PendingAction::New => {
                 self.document.new_sphere();
+                self.ui.path = self.document.current_path().into();
                 self.retire_recovery();
                 self.ui.status = "New sphere".into();
             }
@@ -40,6 +174,7 @@ impl App {
                     .and_then(|project| self.document.replace_project(project, &path));
                 match result {
                     Ok(()) => {
+                        self.ui.path = path.clone();
                         self.retire_recovery();
                         self.ui.selected = 0;
                         self.ui.status = format!("Opened {path}");
