@@ -26,6 +26,13 @@ impl Viewport {
         symmetry: Option<&ModelingSymmetry>,
     ) -> Result<Vec<Component>, String> {
         let targets = match (component, span) {
+            (
+                _,
+                SelectionSpan::Connected
+                | SelectionSpan::Flat
+                | SelectionSpan::Group
+                | SelectionSpan::Border,
+            ) => Self::region_target(component, span, mesh),
             (Component::Edge(e), SelectionSpan::Loop) => mesh
                 .expand_edge_loop(&[e])
                 .map(|es| es.into_iter().map(Component::Edge).collect()),
@@ -218,5 +225,148 @@ impl Viewport {
             }
             drag.last = end;
         }
+    }
+}
+
+impl ModelingState {
+    pub fn convert_selection(&mut self, mesh: &Mesh, mode: ComponentMode, boundary: bool) {
+        let vertices: BTreeSet<_> = self.selected_vertices(mesh).into_iter().collect();
+        let faces = mesh.polygons();
+        self.selected = match mode {
+            ComponentMode::Vertex => vertices.into_iter().map(Component::Vertex).collect(),
+            ComponentMode::Face => faces
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| p.visible && p.vertices.iter().all(|v| vertices.contains(v)))
+                .map(|(f, _)| Component::Face(f))
+                .collect(),
+            ComponentMode::Edge => {
+                let mut incidence = std::collections::BTreeMap::<[usize; 2], usize>::new();
+                for (f, p) in faces.iter().enumerate() {
+                    if self.selected.contains(&Component::Face(f)) {
+                        for (a, b) in p.edges() {
+                            *incidence.entry([a.min(b), a.max(b)]).or_default() += 1;
+                        }
+                    }
+                }
+                mesh.polygon_edges()
+                    .into_iter()
+                    .filter(|e| {
+                        if boundary {
+                            incidence.get(e) == Some(&1)
+                        } else {
+                            e.iter().all(|v| vertices.contains(v))
+                        }
+                    })
+                    .map(Component::Edge)
+                    .collect()
+            }
+        };
+    }
+}
+impl Viewport {
+    fn region_target(
+        seed: Component,
+        span: SelectionSpan,
+        mesh: &Mesh,
+    ) -> Result<Vec<Component>, String> {
+        let faces = mesh.polygons();
+        let seed_face = match seed {
+            Component::Face(f) => Some(f),
+            Component::Edge(e) => faces
+                .iter()
+                .position(|p| p.visible && e.iter().all(|v| p.vertices.contains(v))),
+            Component::Vertex(v) => faces
+                .iter()
+                .position(|p| p.visible && p.vertices.contains(&v)),
+        }
+        .ok_or("Choose a visible component")?;
+        let n = |f: usize| {
+            let p = &faces[f];
+            let a = mesh.vertices[p.vertices[0]];
+            (mesh.vertices[p.vertices[1]] - a)
+                .cross(mesh.vertices[p.vertices[2]] - a)
+                .norm()
+        };
+        let normal = n(seed_face);
+        let origin = mesh.vertices[faces[seed_face].vertices[0]];
+        let mut adjacent = std::collections::BTreeMap::<[usize; 2], Vec<usize>>::new();
+        for (f, p) in faces.iter().enumerate() {
+            for (a, b) in p.edges() {
+                adjacent.entry([a.min(b), a.max(b)]).or_default().push(f);
+            }
+        }
+        if span == SelectionSpan::Border {
+            let Component::Edge(e) = seed else {
+                return Err("Boundary target requires Edge mode".into());
+            };
+            if adjacent.get(&e).is_none_or(|fs| fs.len() != 1) {
+                return Err("Choose an open boundary edge".into());
+            }
+            let mut edges = BTreeSet::from([e]);
+            let mut pending = vec![e];
+            while let Some(e) = pending.pop() {
+                for (&other, fs) in &adjacent {
+                    if fs.len() == 1
+                        && faces[fs[0]].visible
+                        && other.iter().any(|v| e.contains(v))
+                        && edges.insert(other)
+                    {
+                        pending.push(other);
+                    }
+                }
+            }
+            return Ok(edges.into_iter().map(Component::Edge).collect());
+        }
+        let mut selected = BTreeSet::from([seed_face]);
+        let mut pending = vec![seed_face];
+        if span == SelectionSpan::Group {
+            selected = faces
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| p.visible && p.group == faces[seed_face].group)
+                .map(|(f, _)| f)
+                .collect();
+        } else {
+            while let Some(f) = pending.pop() {
+                for (a, b) in faces[f].edges() {
+                    for &next in &adjacent[&[a.min(b), a.max(b)]] {
+                        let p = &faces[next];
+                        if !p.visible
+                            || (span == SelectionSpan::Flat
+                                && (n(next).dot(normal) < 0.9999
+                                    || p.vertices.iter().any(|&v| {
+                                        (mesh.vertices[v] - origin).dot(normal).abs() > 1e-5
+                                    })))
+                        {
+                            continue;
+                        }
+                        if selected.insert(next) {
+                            pending.push(next);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(match seed {
+            Component::Face(_) => selected.into_iter().map(Component::Face).collect(),
+            Component::Edge(_) => selected
+                .into_iter()
+                .flat_map(|f| {
+                    faces[f]
+                        .edges()
+                        .map(|(a, b)| Component::Edge([a.min(b), a.max(b)]))
+                        .collect::<Vec<_>>()
+                })
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect(),
+            Component::Vertex(_) => selected
+                .into_iter()
+                .flat_map(|f| faces[f].vertices.iter().copied().map(Component::Vertex))
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect(),
+        })
     }
 }

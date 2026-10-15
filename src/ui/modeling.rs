@@ -10,8 +10,26 @@ pub(crate) struct ModelingControls {
     pub count: usize,
     pub loop_count: u32,
     pub join: bool,
+    pub axis: crate::viewport::ModelAxis,
+    pub amount: f32,
+    pub protect_mask: bool,
     pub group_name: String,
     pub group: usize,
+}
+impl ModelingControls {
+    pub fn options(&self) -> crate::viewport::ModelingOptions {
+        crate::viewport::ModelingOptions {
+            mode: self.mode,
+            tool: self.tool,
+            change: self.change,
+            span: self.span,
+            join: self.join,
+            loop_count: self.loop_count,
+            axis: self.axis,
+            amount: self.amount,
+            protect_mask: self.protect_mask,
+        }
+    }
 }
 impl UiState {
     pub(super) fn modeling_controls(
@@ -75,6 +93,19 @@ impl UiState {
                     }
                 }
             });
+            ui.horizontal_wrapped(|ui| {
+                for tool in [ModelTool::Move,ModelTool::Rotate,ModelTool::Scale] {
+                    if ui.selectable_label(self.modeling.tool==tool,tool.label()).customize(Action::ModelTool(tool)).clicked() { commands.push(Command::Action(Action::ModelTool(tool))); }
+                }
+            });
+            ui.label("Target");
+            ui.horizontal_wrapped(|ui| {
+                for span in SelectionSpan::ALL.into_iter().filter(|s|s.available(self.modeling.mode)) {
+                    if ui.selectable_label(self.modeling.span==span,span.label()).customize(match span { SelectionSpan::Single=>Action::ModelSelectSingle, SelectionSpan::Loop=>Action::ModelSelectLoops,SelectionSpan::Ring=>Action::ModelSelectRing,_=>Action::ModelTarget(span) }).clicked() { commands.push(Command::Action(Action::ModelTarget(span))); }
+                }
+            });
+            ui.checkbox(&mut self.modeling.protect_mask,"Protect mask").customize(Action::ModelProtectMask);
+            ui.weak("Hidden faces are protected · topology edits replace stored levels");
             match self.modeling.tool {
                 ModelTool::Select => {
                     ui.horizontal_wrapped(|ui| {
@@ -85,19 +116,6 @@ impl UiState {
                         ] {
                             if ui.selectable_label(self.modeling.change == change, format!("{change:?}"))
                                 .customize(action.clone()).clicked() {
-                                commands.push(Command::Action(action));
-                            }
-                        }
-                    });
-                    ui.horizontal_wrapped(|ui| {
-                        for (span,label,action) in [
-                            (SelectionSpan::Single,"Individual",Action::ModelSelectSingle),
-                            (SelectionSpan::Loop,"Loop",Action::ModelSelectLoops),
-                            (SelectionSpan::Ring,"Parallel edges",Action::ModelSelectRing),
-                        ] {
-                            if (span==SelectionSpan::Ring && self.modeling.mode!=ComponentMode::Edge)
-                                || (span==SelectionSpan::Loop && self.modeling.mode==ComponentMode::Vertex) {continue;}
-                            if ui.selectable_label(self.modeling.span==span,label).customize(action.clone()).clicked() {
                                 commands.push(Command::Action(action));
                             }
                         }
@@ -118,6 +136,20 @@ impl UiState {
                     );
                     ui.weak("Drag up: out · down: in · release: apply · Esc: cancel");
                     ui.weak("Flat face regions only. Edits replace stored levels.");
+                }
+                ModelTool::Move | ModelTool::Rotate | ModelTool::Scale => {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label("Axis");
+                        for axis in crate::viewport::ModelAxis::ALL {
+                            if axis==crate::viewport::ModelAxis::Uniform && self.modeling.tool!=ModelTool::Scale {continue;}
+                            ui.selectable_value(&mut self.modeling.axis,axis,format!("{axis:?}"));
+                        }
+                    });
+                    ui.label(match self.modeling.tool { ModelTool::Rotate=>"Angle (degrees)",ModelTool::Scale=>"Scale factor",_=>"Distance" });
+                    ui.add(egui::DragValue::new(&mut self.modeling.amount).speed(0.01));
+                    if ui.add_enabled(self.modeling.count>0,egui::Button::new("Apply amount")).customize(Action::ModelApply).clicked() { commands.push(Command::ModelApply); }
+                    ui.weak("Drag up/down to adjust · release applies · Esc cancels");
+                    ui.weak("Rotate and scale around the selection center");
                 }
                 ModelTool::LoopCut => {
                     use crate::sculpt::LoopCut;
@@ -146,6 +178,7 @@ impl UiState {
                     commands.push(Command::ModelSelectLoop);
                 }
             });
+            if self.modeling.mode==ComponentMode::Face && ui.button("Select region boundary").customize(Action::ModelBoundary).clicked() { commands.push(Command::ModelBoundary); }
             if self.modeling.mode==ComponentMode::Edge {
                 let response=ui.add_enabled(self.modeling.count>0,egui::Button::new("Dissolve selected loops"))
                     .customize(Action::ModelDissolveLoops);

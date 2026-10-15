@@ -81,6 +81,8 @@ impl App {
                 | Command::ModelingComponent(_)
                 | Command::ClearModelSelection
                 | Command::ModelSelectLoop
+                | Command::ModelApply
+                | Command::ModelBoundary
                 | Command::ModelDissolveLoops
                 | Command::GroupModelSelection(..)
         ) && (self.ui.pending.is_some()
@@ -163,6 +165,8 @@ impl App {
                     | Command::ModelingComponent(_)
                     | Command::ClearModelSelection
                     | Command::ModelSelectLoop
+                    | Command::ModelApply
+                    | Command::ModelBoundary
                     | Command::ModelDissolveLoops
                     | Command::GroupModelSelection(..)
             )
@@ -228,7 +232,10 @@ impl App {
             }),
             Command::ModelingComponent(mode) => {
                 self.viewport.cancel(&mut self.document);
-                self.viewport.modeling.selected.clear();
+                self.viewport.modeling.sync(&self.document);
+                self.viewport
+                    .modeling
+                    .convert_selection(self.document.mesh(), mode, false);
                 self.viewport.set_edge_selection(Vec::new(), &self.document);
                 self.ui.modeling.mode = mode;
                 self.ui.modeling.span = crate::viewport::SelectionSpan::Single;
@@ -240,6 +247,26 @@ impl App {
                 self.viewport.modeling.selected.clear();
                 self.viewport.set_edge_selection(Vec::new(), &self.document);
                 Ok(())
+            }
+            Command::ModelBoundary => {
+                self.viewport.cancel(&mut self.document);
+                self.viewport.modeling.sync(&self.document);
+                self.viewport.modeling.convert_selection(
+                    self.document.mesh(),
+                    crate::viewport::ComponentMode::Edge,
+                    true,
+                );
+                self.ui.modeling.mode = crate::viewport::ComponentMode::Edge;
+                self.ui.modeling.tool = crate::viewport::ModelTool::Select;
+                self.ui.modeling.span = crate::viewport::SelectionSpan::Single;
+                Ok(())
+            }
+            Command::ModelApply => {
+                self.viewport.cancel(&mut self.document);
+                let options = self.ui.modeling.options();
+                self.viewport
+                    .modeling
+                    .apply_amount(&mut self.document, options)
             }
             Command::ModelDissolveLoops => {
                 self.viewport.cancel(&mut self.document);
@@ -258,6 +285,9 @@ impl App {
                             .mesh()
                             .dissolve_loops(&symmetry.edges(&edges))?;
                         symmetry.validate_result(&mesh)?;
+                        self.document
+                            .mesh()
+                            .check_model_protection(&mesh, self.ui.modeling.protect_mask)?;
                         Ok(mesh)
                     })
                     .and_then(|mesh| {

@@ -82,6 +82,8 @@ impl Default for UiState {
             transform_mode: crate::viewport::TransformMode::Sculpt,
             edges: Default::default(),
             modeling: modeling::ModelingControls {
+                amount: 0.1,
+                protect_mask: true,
                 join: true,
                 loop_count: 1,
                 ..Default::default()

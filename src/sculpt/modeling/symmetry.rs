@@ -3,9 +3,10 @@ use super::*;
 use crate::sculpt::{Axis, Symmetry};
 
 pub struct ModelingSymmetry {
-    vertices: Vec<Vec<usize>>,
+    pub(super) vertices: Vec<Vec<usize>>,
+    pub(super) bases: Vec<[Vec3; 3]>,
     faces: Vec<Vec<usize>>,
-    settings: Symmetry,
+    pub(super) settings: Symmetry,
 }
 impl ModelingSymmetry {
     pub fn new(mesh: &Mesh, settings: &Symmetry) -> Result<Self, String> {
@@ -45,6 +46,7 @@ impl ModelingSymmetry {
         }
         let mut out = Self {
             vertices: vec![(0..mesh.vertices.len()).collect()],
+            bases: vec![identity.0],
             faces: vec![(0..polygons.len()).collect()],
             settings: settings.clone(),
         };
@@ -135,6 +137,7 @@ impl ModelingSymmetry {
                 face_map.push(f);
             }
             if !out.vertices.contains(&mapping) {
+                out.bases.push(basis);
                 out.vertices.push(mapping);
                 out.faces.push(face_map);
             }

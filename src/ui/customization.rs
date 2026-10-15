@@ -241,6 +241,25 @@ impl UiState {
                     && (*action == Action::ModelCreateGroup
                         || self.modeling.group < document.mesh().vertex_groups.len())
             }
+            Action::ModelApply => {
+                self.edge_unavailable(action, document).is_none()
+                    && self.modeling.active
+                    && self.modeling.count > 0
+                    && self.modeling.tool.is_edit()
+            }
+            Action::ModelBoundary => {
+                self.edge_unavailable(action, document).is_none()
+                    && self.modeling.active
+                    && self.modeling.count > 0
+                    && self.modeling.mode == crate::viewport::ComponentMode::Face
+            }
+            Action::ModelTarget(span) => {
+                self.edge_unavailable(action, document).is_none()
+                    && span.available(self.modeling.mode)
+            }
+            Action::ModelTool(_) | Action::ModelProtectMask => {
+                self.edge_unavailable(action, document).is_none()
+            }
             Action::ModelDissolveLoops => {
                 self.edge_unavailable(action, document).is_none()
                     && self.modeling.active
@@ -356,6 +375,9 @@ impl UiState {
         let brush = active.map(|index| &document.brushes()[index]);
         match action {
             Action::SelectBrush(id) => brush.is_some_and(|b| b.identity() == *id),
+            Action::ModelTool(tool) => self.modeling.active && self.modeling.tool == *tool,
+            Action::ModelTarget(span) => self.modeling.active && self.modeling.span == *span,
+            Action::ModelProtectMask => self.modeling.protect_mask,
             Action::PenModeling => self.modeling.active,
             Action::ModelSelectSingle => {
                 self.modeling.active

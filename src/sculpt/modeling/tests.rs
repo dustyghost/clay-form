@@ -605,3 +605,75 @@ fn modeling_symmetric_adjacent_caps_join_and_center_regions_extrude_once() {
     result.mesh.validate_closed().unwrap();
     symmetry.validate_result(&result.mesh).unwrap();
 }
+
+#[test]
+fn component_transforms_preserve_attributes_and_mirror_displacements() {
+    let mesh = cube(3);
+    let sym = ModelingSymmetry::new(&mesh, &mirror_x()).unwrap();
+    let selected: Vec<_> = mesh
+        .vertices
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| p.0 > 0.9 && p.1 > 0.2)
+        .map(|(v, _)| v)
+        .collect();
+    let out = mesh
+        .transform_components(
+            &selected,
+            Vec3(1., 1., 0.),
+            ComponentTransform::Move(Vec3(0.15, 0., 0.)),
+            false,
+            &sym,
+        )
+        .unwrap();
+    sym.validate_result(&out).unwrap();
+    for &v in &selected {
+        assert!((out.vertices[v].0 - mesh.vertices[v].0 - 0.15).abs() < 1e-5);
+    }
+    assert_eq!(out.quads, mesh.quads);
+    assert_eq!(out.mask, mesh.mask);
+    let face = front_center(&mesh);
+    let vertices = mesh.polygons()[face].vertices.clone();
+    let identity = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    for op in [
+        ComponentTransform::Rotate(Vec3(0., 0., 1.), 0.1),
+        ComponentTransform::Scale(Vec3::default(), 0.8),
+    ] {
+        let out = mesh
+            .transform_components(&vertices, Vec3(0., 0., 1.), op, false, &identity)
+            .unwrap();
+        manifold(&out).unwrap();
+        assert_ne!(out.vertices, mesh.vertices);
+    }
+    assert!(
+        mesh.transform_components(
+            &vertices,
+            Vec3::default(),
+            ComponentTransform::Scale(Vec3::default(), 0.),
+            false,
+            &identity
+        )
+        .is_err()
+    );
+}
+#[test]
+fn modeling_protection_rejects_whole_edits() {
+    let mut mesh = cube(3);
+    let f = front_center(&mesh);
+    let vertices = mesh.polygons()[f].vertices.clone();
+    mesh.mask[vertices[0]] = 1.;
+    let sym = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    assert!(
+        mesh.transform_components(
+            &vertices,
+            Vec3::default(),
+            ComponentTransform::Move(Vec3(0., 0., 0.1)),
+            true,
+            &sym
+        )
+        .is_err()
+    );
+    let extruded = mesh.extrude_faces(&[f], 0.1, false).unwrap();
+    assert!(mesh.check_model_protection(&extruded.mesh, true).is_err());
+    mesh.check_model_protection(&extruded.mesh, false).unwrap();
+}

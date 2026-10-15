@@ -22,6 +22,8 @@ pub(crate) enum Command {
     ClearModelSelection,
     ModelSelectLoop,
     ModelDissolveLoops,
+    ModelApply,
+    ModelBoundary,
     GroupModelSelection(Option<usize>, bool),
     Undo,
     Redo,

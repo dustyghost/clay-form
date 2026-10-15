@@ -9,8 +9,10 @@ mod join;
 mod loops;
 mod selection;
 mod symmetry;
+mod transform;
 pub use loops::LoopCut;
 pub use symmetry::ModelingSymmetry;
+pub use transform::ComponentTransform;
 
 pub struct Extrusion {
     pub mesh: Mesh,

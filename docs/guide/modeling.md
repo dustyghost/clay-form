@@ -41,7 +41,13 @@ Loop selections can wrap around the model, including its far side. Face loops an
 
 ![Parallel edges selected across a quad strip](../images/modeling-edge-ring.png)
 
-Faces select entire quads rather than their rendering triangles. Selections belong to the active mesh and clear after topology, visibility, or model changes. Navigation does not clear them. Drag the navigation frame or empty space to orbit; secondary-button navigation also works. Escape exits modeling when no preview is active.
+Faces select entire quads rather than their rendering triangles. Changing component mode converts the selection: faces contribute their corners and edges; returning to Face selects only faces whose corners are all selected. **Select region boundary** selects only the outer edges of the chosen faces. Selections belong to the active mesh and clear after topology, visibility, or model changes. Navigation does not clear them. Drag the navigation frame or empty space to orbit; secondary-button navigation also works. Escape exits modeling when no preview is active.
+
+### Shared targets and component transforms
+
+The **Target** choices apply to selection and component edits. **Connected** follows connected visible faces, **Flat region** stops at changes of plane, **Face group** selects the visible polygons with the same face label, and **Boundary** follows an open boundary in Edge mode. Loop and parallel-edge targets remain available where applicable. An edit starting on an already selected component uses the current selection; otherwise it uses the hovered target. Hover previews the affected target before pressing.
+
+Choose **Move components**, **Rotate components**, or **Scale components** in any component mode. Choose X/Y/Z or a face region's Normal; Scale also supports Uniform. Drag up/down to adjust, release to apply, or Escape to cancel. Alternatively select components, enter Distance, Angle in degrees, or Scale factor, then **Apply amount**. Rotation/scaling use the selection center. The selection survives these edits. Symmetry reflects displacement and keeps seam vertices on the enabled symmetry planes. Hidden faces and, by default, masked vertices are protected. These edits currently replace stored subdivision levels; Undo restores them.
 
 ### Extrude a face or flat region
 
@@ -50,7 +56,7 @@ Faces select entire quads rather than their rendering triangles. Selections belo
 3. Inspect the live preview and distance displayed at the bottom of the viewport.
 4. Release to apply, or press Escape to discard the preview and stay in modeling mode.
 
-Pressure does not change extrusion distance. Each completed drag is one Undo step. Selected faces must lie on the same plane and point in the same direction. Topology edits replace stored subdivision levels and turn off adaptive/dynamic topology; Undo restores the previous mesh settings and levels. Apply or disable temporary Thickness before modeling. Modeling uses the enabled symmetry axes when all sides have matching geometry and topology. Sculpt masks do not protect modeling edits.
+Pressure does not change extrusion distance. Each completed drag is one Undo step. Selected faces must lie on the same plane and point in the same direction. Topology edits replace stored subdivision levels and turn off adaptive/dynamic topology; Undo restores the previous mesh settings and levels. Apply or disable temporary Thickness before modeling. Modeling uses the enabled symmetry axes when all sides have matching geometry and topology. **Protect mask** is enabled by default: an edit touching masked geometry is rejected as a whole. Turn it off explicitly to edit through a mask. Hidden geometry stays protected.
 
 ![A face extruded outward, with its moving rim highlighted gold and its distance shown below](../images/modeling-extrusion-preview.png)
 

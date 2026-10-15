@@ -363,7 +363,7 @@ fn modeling_custom_actions_activate_tools_and_preserve_group_selection() {
     assert!(app.ui.modeling.active);
     assert_eq!(app.ui.modeling.mode, ComponentMode::Edge);
     assert_eq!(app.ui.modeling.tool, ModelTool::LoopCut);
-    assert!(app.viewport.modeling.selected.is_empty());
+    assert_eq!(app.viewport.modeling.selected.len(), 4); // Face selection converts to its edges.
     app.dispatch(Command::Action(Action::ModelMoreLoops), &ctx);
     assert_eq!(app.ui.modeling.loop_count, 2);
     app.dispatch(Command::Action(Action::ModelFewerLoops), &ctx);
@@ -661,4 +661,53 @@ fn modeling_symmetry_change_expands_existing_selection_and_cancels_held_preview(
     assert!(!app.viewport.modeling.dragging());
     assert_eq!(app.document.geometry_snapshot(), before);
     assert_eq!(app.document.history_counts(), history);
+}
+
+#[test]
+fn modeling_shared_targets_conversion_and_measured_move() {
+    use crate::viewport::{ModelAxis, SelectionSpan};
+    let (mut app, ctx, rect) = setup();
+    app.ui.modeling.span = SelectionSpan::Flat;
+    tap(&mut app, &ctx, rect.center());
+    assert_eq!(app.viewport.modeling.selected.len(), 9);
+    app.dispatch(Command::ModelBoundary, &ctx);
+    assert_eq!(app.viewport.modeling.selected.len(), 12);
+    app.dispatch(Command::ModelingComponent(ComponentMode::Vertex), &ctx);
+    assert_eq!(app.viewport.modeling.selected.len(), 12);
+    app.ui.modeling.tool = ModelTool::Move;
+    app.ui.modeling.axis = ModelAxis::Z;
+    app.ui.modeling.amount = 0.1;
+    let before = app.document.mesh().clone();
+    let history = app.document.history_counts().0;
+    app.dispatch(Command::ModelApply, &ctx);
+    assert_ne!(app.document.mesh(), &before);
+    assert_eq!(app.viewport.modeling.selected.len(), 12);
+    assert_eq!(app.document.history_counts().0, history + 1);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.mesh(), &before);
+}
+#[test]
+fn modeling_component_drag_is_transactional() {
+    let (mut app, ctx, rect) = setup();
+    app.ui.modeling.tool = ModelTool::Move;
+    let before = app.document.mesh().clone();
+    let p = rect.center();
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(p), primary_event(p, true)],
+    );
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(p + Vec2::new(0., -30.))],
+    );
+    assert_eq!(app.document.mesh(), &before);
+    assert_ne!(app.viewport.modeling.preview().unwrap(), &before);
+    navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Escape, true)]);
+    navigation_frame(&mut app, &ctx, vec![primary_event(p, false)]);
+    assert_eq!(app.document.mesh(), &before);
+    pen_drag(&mut app, &ctx, p, p + Vec2::new(0., -30.));
+    assert_ne!(app.document.mesh(), &before);
+    assert!(!app.viewport.modeling.selected.is_empty());
 }

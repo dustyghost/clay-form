@@ -712,10 +712,25 @@ fn modeling_buttons_offer_menu_and_shortcut_customization() {
         state.modeling.loop_count = 2;
         frame(&mut state, &ctx, &doc, vec![]);
         let (output, _) = frame(&mut state, &ctx, &doc, vec![]);
-        let group = text_center(&output, "Selection to vertex group");
+        // This harness renders the controls in both a dock and the central panel.
+        // Use the central copy; its expanded content is not clipped by dock scrolling.
+        let central_text = |output: &egui::FullOutput, label: &str| {
+            output
+                .shapes
+                .iter()
+                .rev()
+                .find_map(|shape| match &shape.shape {
+                    egui::Shape::Text(t) if t.galley.text() == label => {
+                        Some(t.pos + t.galley.size() * 0.5)
+                    }
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("Missing central UI text: {label}"))
+        };
+        let group = central_text(&output, "Selection to vertex group");
         click(&mut state, &ctx, &doc, group, egui::PointerButton::Primary);
         let (output, _) = frame(&mut state, &ctx, &doc, vec![]);
-        let pos = text_center(&output, label);
+        let pos = central_text(&output, label);
         let (_, commands) = click(&mut state, &ctx, &doc, pos, egui::PointerButton::Secondary);
         assert!(commands.is_empty(), "Right click must not execute {label}");
         let (output, _) = frame(&mut state, &ctx, &doc, vec![]);

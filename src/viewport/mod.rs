@@ -3,7 +3,7 @@ mod controls;
 mod edges;
 mod modeling;
 pub(crate) use modeling::{
-    ComponentMode, ModelTool, ModelingOptions, SelectionChange, SelectionSpan,
+    ComponentMode, ModelAxis, ModelTool, ModelingOptions, SelectionChange, SelectionSpan,
 };
 mod gizmo;
 mod gpu;

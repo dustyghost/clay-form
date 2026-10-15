@@ -58,6 +58,28 @@ impl App {
                 }
                 None
             }
+            Action::ModelTool(tool) => {
+                if !self.ui.modeling.active {
+                    self.dispatch(Command::ModelingMode(true), ctx);
+                }
+                self.viewport.cancel(&mut self.document);
+                self.ui.modeling.tool = tool;
+                if tool == crate::viewport::ModelTool::Scale {
+                    self.ui.modeling.amount = 1.;
+                }
+                None
+            }
+            Action::ModelTarget(span) => {
+                self.viewport.cancel(&mut self.document);
+                self.ui.modeling.span = span;
+                None
+            }
+            Action::ModelApply => Some(Command::ModelApply),
+            Action::ModelBoundary => Some(Command::ModelBoundary),
+            Action::ModelProtectMask => {
+                self.ui.modeling.protect_mask = !self.ui.modeling.protect_mask;
+                None
+            }
             Action::ModelJoin => {
                 self.ui.modeling.join = !self.ui.modeling.join;
                 None

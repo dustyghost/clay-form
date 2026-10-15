@@ -2,21 +2,27 @@
 use super::*;
 use crate::sculpt::{Extrusion, LoopCut, Mesh, ModelingSymmetry, Symmetry};
 use std::collections::BTreeSet;
+mod edit;
 mod selection;
+use edit::EditDrag;
 use selection::SelectionDrag;
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum ComponentMode {
     #[default]
     Face,
     Edge,
     Vertex,
 }
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum ModelTool {
     #[default]
     Select,
     Extrude,
     LoopCut,
+    Move,
+    Rotate,
+    Scale,
 }
 impl ModelTool {
     pub fn label(self) -> &'static str {
@@ -24,22 +30,78 @@ impl ModelTool {
             Self::Select => "Select",
             Self::Extrude => "Extrude",
             Self::LoopCut => "Loop cut",
+            Self::Move => "Move components",
+            Self::Rotate => "Rotate components",
+            Self::Scale => "Scale components",
         }
     }
 }
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum SelectionChange {
     #[default]
     Replace,
     Add,
     Remove,
 }
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum SelectionSpan {
     #[default]
     Single,
     Loop,
     Ring,
+    Connected,
+    Flat,
+    Group,
+    Border,
+}
+impl SelectionSpan {
+    pub const ALL: [Self; 7] = [
+        Self::Single,
+        Self::Loop,
+        Self::Ring,
+        Self::Connected,
+        Self::Flat,
+        Self::Group,
+        Self::Border,
+    ];
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Single => "Individual",
+            Self::Loop => "Loop",
+            Self::Ring => "Parallel edges",
+            Self::Connected => "Connected",
+            Self::Flat => "Flat region",
+            Self::Group => "Face group",
+            Self::Border => "Boundary",
+        }
+    }
+    pub fn available(self, mode: ComponentMode) -> bool {
+        match self {
+            Self::Flat | Self::Group => mode == ComponentMode::Face,
+            Self::Ring | Self::Border => mode == ComponentMode::Edge,
+            Self::Loop => mode != ComponentMode::Vertex,
+            _ => true,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum ModelAxis {
+    #[default]
+    X,
+    Y,
+    Z,
+    Normal,
+    Uniform,
+}
+impl ModelAxis {
+    pub const ALL: [Self; 5] = [Self::X, Self::Y, Self::Z, Self::Normal, Self::Uniform];
+    pub fn vector(self) -> Vec3 {
+        match self {
+            Self::X => Vec3(1., 0., 0.),
+            Self::Y => Vec3(0., 1., 0.),
+            _ => Vec3(0., 0., 1.),
+        }
+    }
 }
 #[derive(Clone, Copy)]
 pub(crate) struct ModelingOptions {
@@ -49,6 +111,9 @@ pub(crate) struct ModelingOptions {
     pub span: SelectionSpan,
     pub join: bool,
     pub loop_count: u32,
+    pub axis: ModelAxis,
+    pub amount: f32,
+    pub protect_mask: bool,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Component {
@@ -62,6 +127,7 @@ pub(crate) struct ModelingState {
     pub revision: u64,
     symmetry: Option<(Symmetry, Result<ModelingSymmetry, String>)>,
     drag: Option<ExtrudeDrag>,
+    edit_drag: Option<EditDrag>,
     selection_drag: Option<SelectionDrag>,
     loop_preview: Option<LoopPreview>,
     loop_drag: Option<LoopDrag>,
@@ -98,6 +164,7 @@ impl ModelingState {
             self.selected.clear();
             self.selection_drag = None;
             self.drag = None;
+            self.edit_drag = None;
             self.loop_drag = None;
             self.loop_preview = None;
             self.revision = document.display_revision();
@@ -106,11 +173,15 @@ impl ModelingState {
     pub fn cancel(&mut self) {
         self.selection_drag = None;
         self.drag = None;
+        self.edit_drag = None;
         self.loop_drag = None;
         self.loop_preview = None;
     }
     pub fn dragging(&self) -> bool {
-        self.drag.is_some() || self.loop_drag.is_some() || self.selection_drag.is_some()
+        self.edit_drag.is_some()
+            || self.drag.is_some()
+            || self.loop_drag.is_some()
+            || self.selection_drag.is_some()
     }
     pub fn selected_vertices(&self, mesh: &Mesh) -> Vec<usize> {
         let faces = mesh.polygons();
@@ -126,6 +197,9 @@ impl ModelingState {
             .collect()
     }
     pub fn preview(&self) -> Option<&Mesh> {
+        if let Some(drag) = &self.edit_drag {
+            return drag.result.as_ref().and_then(|r| r.as_ref().ok());
+        }
         self.drag
             .as_ref()?
             .result
@@ -189,6 +263,7 @@ impl ModelingState {
             self.loop_drag = None;
             self.loop_preview = None;
         }
+        self.update_edit_preview(document, point, options);
         if options.tool != ModelTool::Extrude {
             self.drag = None;
             return;
@@ -208,12 +283,15 @@ impl ModelingState {
                         .as_ref()
                         .map_err(Clone::clone)
                         .and_then(|symmetry| {
-                            document.mesh().extrude_symmetric(
-                                &drag.faces,
-                                distance,
-                                options.join,
-                                symmetry,
-                            )
+                            document
+                                .mesh()
+                                .extrude_symmetric(&drag.faces, distance, options.join, symmetry)
+                                .and_then(|r| {
+                                    document
+                                        .mesh()
+                                        .check_model_protection(&r.mesh, options.protect_mask)?;
+                                    Ok(r)
+                                })
                         }),
                 );
             }
@@ -356,7 +434,7 @@ impl Viewport {
                 .map(|d| Component::Edge(d.edge))
                 .or(hover)
             {
-                let targets = if model.tool == ModelTool::Select {
+                let targets = if model.tool != ModelTool::LoopCut {
                     Self::selection_target(
                         component,
                         point.unwrap(),
@@ -383,7 +461,16 @@ impl Viewport {
             .as_ref()
             .and_then(|(_, r)| r.as_ref().err())
             .cloned();
-        let hint = if let Some(error) = &symmetry_error {
+        let hint = if let Some(drag) = &self.modeling.edit_drag {
+            match &drag.result {
+                Some(Err(e)) => format!("{e} · Esc cancels"),
+                _ => format!(
+                    "{} {:.3} · release to apply · Esc cancels",
+                    model.tool.label(),
+                    drag.amount
+                ),
+            }
+        } else if let Some(error) = &symmetry_error {
             error.clone()
         } else if let Some(drag) = &self.modeling.drag {
             match &drag.result {
@@ -467,6 +554,9 @@ impl Viewport {
         let pressed =
             response.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_pressed());
         let clicked = response.clicked_by(egui::PointerButton::Primary);
+        if model.tool.is_edit() {
+            self.update_edit_gesture(document, scene, model, hover, point, pressed || clicked);
+        }
         if model.tool == ModelTool::Select {
             self.update_selection_stroke(
                 ui,
@@ -496,7 +586,29 @@ impl Viewport {
                         })
                         .collect()
                 } else {
-                    vec![face]
+                    match Self::selection_target(
+                        Component::Face(face),
+                        point.unwrap(),
+                        model.span,
+                        document.mesh(),
+                        scene,
+                        None,
+                    ) {
+                        Ok(targets) => targets
+                            .into_iter()
+                            .filter_map(|c| {
+                                if let Component::Face(f) = c {
+                                    Some(f)
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect(),
+                        Err(error) => {
+                            self.status = Some(error);
+                            return true;
+                        }
+                    }
                 };
                 self.modeling.drag = Some(ExtrudeDrag {
                     start: point.unwrap(),
@@ -587,6 +699,12 @@ impl Viewport {
                                 document
                                     .mesh()
                                     .insert_symmetric_edge_loops(edge, count, position, symmetry)
+                                    .and_then(|r| {
+                                        document
+                                            .mesh()
+                                            .check_model_protection(&r.mesh, model.protect_mask)?;
+                                        Ok(r)
+                                    })
                             }),
                     });
                 }
@@ -608,7 +726,11 @@ impl Viewport {
             && self.gesture == Some(Gesture::Modeling)
         {
             self.gesture = None;
-            if let Some(drag) = self.modeling.drag.take() {
+            if self.modeling.edit_drag.is_some() {
+                if let Err(e) = self.modeling.commit_edit(document, model) {
+                    self.status = Some(e);
+                }
+            } else if let Some(drag) = self.modeling.drag.take() {
                 if let Some(result) = drag.result {
                     match result.and_then(|r| {
                         document.commit_modeling(
@@ -629,6 +751,9 @@ impl Viewport {
             } else if let Some(drag) = self.modeling.loop_drag.take() {
                 if let Some(preview) = self.modeling.loop_preview.take() {
                     if let Err(e) = preview.result.and_then(|cut| {
+                        document
+                            .mesh()
+                            .check_model_protection(&cut.mesh, model.protect_mask)?;
                         document.commit_modeling(cut.mesh, "Insert edge loops", drag.revision)
                     }) {
                         self.status = Some(e);
