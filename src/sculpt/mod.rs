@@ -59,4 +59,5 @@ pub use edges::{BorderTarget, EdgeEdit};
 mod modeling;
 pub use modeling::{
     ComponentTransform, Construction, ExtrudeContact, Extrusion, LoopCut, ModelingSymmetry,
+    TopologyEdit,
 };

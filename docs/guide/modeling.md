@@ -115,6 +115,24 @@ This requires complete, noncrossing interior quad loops. An open loop must end a
 
 ![The selected loops removed, with larger connected quads remaining](../images/modeling-dissolve-after.png)
 
+### Slide and repair topology
+
+Use **Edge → Select → Loop**, then **Slide loop**. Drag to preview, or enter a fraction between -1 and 1 and choose **Apply amount**. The chosen axis determines the positive rail on the reference side; symmetry mirrors that movement. Sliding keeps the same topology and selection. It requires a complete interior quad loop with unambiguous rails; selected loops must not share a face.
+
+Expand **Topology** for operations on the current selection:
+
+| Mode | Action | Result and limits |
+| --- | --- | --- |
+| Face | Delete faces | Removes the selected faces and opens holes |
+| Edge | Fill boundary | Fills complete planar boundaries; concave outlines are triangulated |
+| Edge | Bridge boundaries | Connects two equal-count open boundaries and their symmetry copies with a strip of quads |
+| Edge | Split edges | Adds midpoint vertices; adjoining polygons may become triangles |
+| Edge | Collapse edges | Merges each connected set of selected edge endpoints at their average position |
+| Vertex | Connect vertices | Splits a quad between two opposite corners |
+| Vertex | Weld vertices | Merges two vertices at their midpoint, including corresponding symmetry pairs |
+
+Use **Target → Boundary** to select a complete hole. For two boundaries or vertices, use **Add** to select the second. These edits preserve surviving weights and creases, respect **Protect mask**, and reject invalid or ambiguous results as a whole. Bridge does not detect arbitrary intersections with other surfaces. Delete and collapse change the surface; **Dissolve selected loops** removes redundant loops while keeping it connected. Each completed edit is one Undo step.
+
 ### Model with symmetry
 
 Enable the existing **Symmetry** toggle and choose mirror axes or radial settings in **Symmetry settings**. Pen modeling uses the same center and axes for component selection, loop/ring selection, group assignment, extrusion/tunnels, loop cuts, and dissolve.
@@ -133,7 +151,7 @@ Choose **Select**, build a face, edge, or vertex selection, then expand **Select
 
 ![The selected quad outlined in cyan beside controls for creating and editing vertex groups](../images/modeling-selection.png)
 
-Right-click a modeling button and choose **Add to custom menu / shelf…** or **Assign shortcut…**. Component modes, Select/Extrude/Loop cut, selection modes and patterns, join toggle, loop-count buttons, selection clearing/loop expansion, dissolve, and group actions are available in the action catalog. Extrude and Loop cut on a custom shelf automatically enter the appropriate modeling mode. Group actions use the name and group currently chosen in the Mesh panel. This first modeling pass does not yet include bevel, inset, sliding existing edges, component transforms, or arbitrary face bridging.
+Right-click a modeling button and choose **Add to custom menu / shelf…** or **Assign shortcut…**. Component modes, Select/Extrude/Loop cut, selection modes and patterns, join toggle, loop-count buttons, selection clearing/loop expansion, dissolve, and group actions are available in the action catalog. Extrude and Loop cut on a custom shelf automatically enter the appropriate modeling mode. Group actions use the name and group currently chosen in the Mesh panel. Arbitrary intersecting-face bridging and general Boolean fusion remain outside the supported topology operations.
 
 ## Submodels
 

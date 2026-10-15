@@ -26,6 +26,7 @@ pub(crate) enum ModelTool {
     Inset,
     Bevel,
     Fuse,
+    Slide,
 }
 impl ModelTool {
     pub fn label(self) -> &'static str {
@@ -39,6 +40,7 @@ impl ModelTool {
             Self::Inset => "Inset",
             Self::Bevel => "Bevel boundary",
             Self::Fuse => "Extrude and fuse",
+            Self::Slide => "Slide loop",
         }
     }
 }

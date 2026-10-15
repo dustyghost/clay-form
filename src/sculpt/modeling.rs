@@ -12,9 +12,11 @@ mod join;
 mod loops;
 mod selection;
 mod symmetry;
+mod topology;
 mod transform;
 pub use loops::LoopCut;
 pub use symmetry::ModelingSymmetry;
+pub use topology::TopologyEdit;
 pub use transform::ComponentTransform;
 
 #[derive(Clone, Copy)]

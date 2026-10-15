@@ -757,3 +757,130 @@ fn modeling_fuse_stops_at_intermediate_slab_loop() {
     assert!(out.collapsed);
     sym.validate_result(&out.mesh).unwrap();
 }
+
+#[test]
+fn modeling_topology_open_fill_bridge_connect_split_and_weld() {
+    let mesh = cube(1);
+    let sym = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    let f = mesh
+        .polygons()
+        .iter()
+        .position(|p| normal(&mesh, p).2 > 0.99)
+        .unwrap();
+    let open = mesh
+        .edit_model_topology(TopologyEdit::DeleteFaces, &[f], &[], &[], &sym)
+        .unwrap();
+    let border = open
+        .border_edges(crate::sculpt::BorderTarget::Holes, 0.5, &[])
+        .unwrap();
+    let open_sym = ModelingSymmetry::new(&open, &Default::default()).unwrap();
+    let filled = open
+        .edit_model_topology(TopologyEdit::Fill, &[], &border, &[], &open_sym)
+        .unwrap();
+    assert_eq!(filled.quads.len(), 6);
+    manifold(&filled).unwrap();
+    assert!(
+        open.edit_model_topology(TopologyEdit::Fill, &[], &border[..1], &[], &open_sym)
+            .is_err()
+    );
+    let sides: Vec<_> = mesh
+        .polygons()
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| normal(&mesh, p).2.abs() < 0.5)
+        .map(|(f, _)| f)
+        .collect();
+    let caps = mesh
+        .edit_model_topology(TopologyEdit::DeleteFaces, &sides, &[], &[], &sym)
+        .unwrap();
+    let edges = caps
+        .border_edges(crate::sculpt::BorderTarget::Holes, 0.5, &[])
+        .unwrap();
+    let caps_sym = ModelingSymmetry::new(&caps, &Default::default()).unwrap();
+    let bridge = caps
+        .edit_model_topology(TopologyEdit::Bridge, &[], &edges, &[], &caps_sym)
+        .unwrap();
+    manifold(&bridge).unwrap();
+    assert_eq!(bridge.quads.len(), 6);
+    let p = &mesh.polygons()[f];
+    let connected = mesh
+        .edit_model_topology(
+            TopologyEdit::Connect,
+            &[],
+            &[],
+            &[p.vertices[0], p.vertices[2]],
+            &sym,
+        )
+        .unwrap();
+    assert_eq!(connected.quads.len(), 5);
+    assert_eq!(connected.polygons().len(), 7);
+    let e = [p.vertices[0], p.vertices[1]];
+    let split = mesh
+        .edit_model_topology(TopologyEdit::Split, &[], &[e], &[], &sym)
+        .unwrap();
+    assert_eq!(split.vertices.len(), mesh.vertices.len() + 1);
+    manifold(&split).unwrap();
+    for edit in [TopologyEdit::Weld, TopologyEdit::Collapse] {
+        let welded = mesh.edit_model_topology(edit, &[], &[e], &e, &sym).unwrap();
+        assert_eq!(welded.vertices.len(), mesh.vertices.len() - 1);
+        manifold(&welded).unwrap();
+    }
+}
+#[test]
+fn modeling_slide_preserves_loops_and_mirrors_the_rails() {
+    let mut p = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Grid);
+    p.divisions = [5, 5, 1];
+    let mesh = p.mesh().unwrap();
+    let seed = mesh
+        .polygon_edges()
+        .into_iter()
+        .find(|e| e.iter().all(|&v| (mesh.vertices[v].0 - 0.6).abs() < 1e-5))
+        .unwrap();
+    let edges = mesh.expand_edge_loop(&[seed]).unwrap();
+    assert_eq!(edges.len(), 5);
+    let sym = ModelingSymmetry::new(&mesh, &mirror_x()).unwrap();
+    let out = mesh
+        .slide_model_edges(&edges, 0.25, Vec3(1., 0., 0.), Vec3(1., 0., 0.), &sym)
+        .unwrap();
+    sym.validate_result(&out).unwrap();
+    assert_eq!(out.quads, mesh.quads);
+    for v in edges.iter().flatten() {
+        assert!((out.vertices[*v].0 - 0.7).abs() < 1e-5);
+    }
+    assert!(
+        mesh.slide_model_edges(&edges[..1], 0.2, Vec3(1., 0., 0.), Vec3::default(), &sym)
+            .is_err()
+    );
+    assert!(
+        mesh.slide_model_edges(&edges, 1., Vec3(1., 0., 0.), Vec3::default(), &sym)
+            .is_err()
+    );
+}
+#[test]
+fn modeling_connect_accepts_expanded_symmetry_selection() {
+    let mesh = cube(3);
+    let sym = ModelingSymmetry::new(&mesh, &mirror_x()).unwrap();
+    let f = mesh
+        .polygons()
+        .iter()
+        .position(|p| {
+            normal(&mesh, p).2 > 0.99 && p.vertices.iter().all(|&v| mesh.vertices[v].0 > 0.2)
+        })
+        .unwrap();
+    let p = &mesh.polygons()[f];
+    let selected: BTreeSet<_> = [p.vertices[0], p.vertices[2]]
+        .into_iter()
+        .flat_map(|v| sym.vertex_copies(v))
+        .collect();
+    let out = mesh
+        .edit_model_topology(
+            TopologyEdit::Connect,
+            &[],
+            &[],
+            &selected.into_iter().collect::<Vec<_>>(),
+            &sym,
+        )
+        .unwrap();
+    sym.validate_result(&out).unwrap();
+    assert_eq!(out.quads.len(), mesh.quads.len() - 2);
+}

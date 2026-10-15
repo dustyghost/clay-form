@@ -14,7 +14,13 @@ impl ModelTool {
     pub fn is_edit(self) -> bool {
         matches!(
             self,
-            Self::Move | Self::Rotate | Self::Scale | Self::Inset | Self::Bevel | Self::Fuse
+            Self::Move
+                | Self::Rotate
+                | Self::Scale
+                | Self::Inset
+                | Self::Bevel
+                | Self::Fuse
+                | Self::Slide
         )
     }
 }
@@ -133,6 +139,27 @@ impl ModelingState {
             mesh.check_model_protection(&result, options.protect_mask)?;
             return Ok(result);
         }
+        if options.tool == ModelTool::Slide {
+            let edges: Vec<_> = components
+                .iter()
+                .filter_map(|c| {
+                    if let Component::Edge(e) = c {
+                        Some(*e)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let result = mesh.slide_model_edges(
+                &edges,
+                amount,
+                options.axis.vector(),
+                anchor,
+                &ModelingSymmetry::new(mesh, document.symmetry())?,
+            )?;
+            mesh.check_model_protection(&result, options.protect_mask)?;
+            return Ok(result);
+        }
         let axis = if options.axis == ModelAxis::Normal {
             let mut normal = Vec3::default();
             for p in &polygons {
@@ -192,7 +219,7 @@ impl ModelingState {
         self.sync(document);
         if matches!(
             options.tool,
-            ModelTool::Move | ModelTool::Rotate | ModelTool::Scale
+            ModelTool::Move | ModelTool::Rotate | ModelTool::Scale | ModelTool::Slide
         ) {
             self.selected = drag.components;
         } else {
@@ -223,7 +250,7 @@ impl ModelingState {
         document.commit_modeling(result, options.tool.label(), self.revision)?;
         if !matches!(
             options.tool,
-            ModelTool::Move | ModelTool::Rotate | ModelTool::Scale
+            ModelTool::Move | ModelTool::Rotate | ModelTool::Scale | ModelTool::Slide
         ) {
             self.selected = caps;
         }
@@ -268,5 +295,34 @@ impl Viewport {
             }
             Err(e) => self.status = Some(e),
         }
+    }
+}
+
+impl ModelingState {
+    pub fn topology_edit(
+        &mut self,
+        document: &mut Document,
+        edit: crate::sculpt::TopologyEdit,
+        protect: bool,
+    ) -> Result<(), String> {
+        self.sync(document);
+        let mut faces = Vec::new();
+        let mut edges = Vec::new();
+        let mut vertices = Vec::new();
+        for c in &self.selected {
+            match *c {
+                Component::Face(f) => faces.push(f),
+                Component::Edge(e) => edges.push(e),
+                Component::Vertex(v) => vertices.push(v),
+            }
+        }
+        let symmetry = ModelingSymmetry::new(document.mesh(), document.symmetry())?;
+        let result = document
+            .mesh()
+            .edit_model_topology(edit, &faces, &edges, &vertices, &symmetry)?;
+        document.mesh().check_model_protection(&result, protect)?;
+        document.commit_modeling(result, edit.label(), self.revision)?;
+        self.sync(document);
+        Ok(())
     }
 }

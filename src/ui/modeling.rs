@@ -99,10 +99,11 @@ impl UiState {
             });
             ui.horizontal_wrapped(|ui| {
                 for tool in [ModelTool::Move,ModelTool::Rotate,ModelTool::Scale] {
-                    if ui.selectable_label(self.modeling.tool==tool,tool.label()).customize(Action::ModelTool(tool)).clicked() { commands.push(Command::Action(Action::ModelTool(tool))); }
+                    if ui.selectable_label(self.modeling.tool==tool,match tool {ModelTool::Move=>"Move",ModelTool::Rotate=>"Rotate",ModelTool::Scale=>"Scale",_=>tool.label()}).customize(Action::ModelTool(tool)).clicked() { commands.push(Command::Action(Action::ModelTool(tool))); }
                 }
             });
-            if self.modeling.mode==ComponentMode::Face { ui.horizontal_wrapped(|ui| { for tool in [ModelTool::Inset,ModelTool::Bevel,ModelTool::Fuse] { if ui.selectable_label(self.modeling.tool==tool,tool.label()).customize(Action::ModelTool(tool)).clicked() {commands.push(Command::Action(Action::ModelTool(tool)));} } }); }
+            if self.modeling.mode==ComponentMode::Face { ui.horizontal_wrapped(|ui| { for tool in [ModelTool::Inset,ModelTool::Bevel,ModelTool::Fuse] { if ui.selectable_label(self.modeling.tool==tool,match tool {ModelTool::Move=>"Move",ModelTool::Rotate=>"Rotate",ModelTool::Scale=>"Scale",_=>tool.label()}).customize(Action::ModelTool(tool)).clicked() {commands.push(Command::Action(Action::ModelTool(tool)));} } }); }
+            if self.modeling.mode==ComponentMode::Edge && ui.selectable_label(self.modeling.tool==ModelTool::Slide,"Slide loop").customize(Action::ModelTool(ModelTool::Slide)).clicked(){commands.push(Command::Action(Action::ModelTool(ModelTool::Slide)));}
             ui.label("Target");
             ui.horizontal_wrapped(|ui| {
                 for span in SelectionSpan::ALL.into_iter().filter(|s|s.available(self.modeling.mode)) {
@@ -158,7 +159,7 @@ impl UiState {
                     ui.weak("Drag up to increase width · release applies · Esc cancels");
                     if self.modeling.tool==ModelTool::Bevel {ui.weak("Flat region with one exterior edge at each corner.");}
                 }
-                ModelTool::Move | ModelTool::Rotate | ModelTool::Scale => {
+                ModelTool::Move | ModelTool::Rotate | ModelTool::Scale | ModelTool::Slide => {
                     ui.horizontal_wrapped(|ui| {
                         ui.label("Axis");
                         for axis in crate::viewport::ModelAxis::ALL {
@@ -166,7 +167,7 @@ impl UiState {
                             ui.selectable_value(&mut self.modeling.axis,axis,format!("{axis:?}"));
                         }
                     });
-                    ui.label(match self.modeling.tool { ModelTool::Rotate=>"Angle (degrees)",ModelTool::Scale=>"Scale factor",_=>"Distance" });
+                    ui.label(match self.modeling.tool { ModelTool::Slide=>"Slide fraction (-1 to 1)", ModelTool::Rotate=>"Angle (degrees)",ModelTool::Scale=>"Scale factor",_=>"Distance" });
                     ui.add(egui::DragValue::new(&mut self.modeling.amount).speed(0.01));
                     if ui.add_enabled(self.modeling.count>0,egui::Button::new("Apply amount")).customize(Action::ModelApply).clicked() { commands.push(Command::ModelApply); }
                     ui.weak("Drag up/down to adjust · release applies · Esc cancels");
@@ -207,6 +208,14 @@ impl UiState {
                     commands.push(Command::ModelDissolveLoops);
                 }
             }
+            ui.collapsing("Topology",|ui|{
+                for edit in crate::sculpt::TopologyEdit::ALL {
+                    use crate::sculpt::TopologyEdit as T;
+                    let mode=match edit {T::DeleteFaces=>ComponentMode::Face,T::Connect|T::Weld=>ComponentMode::Vertex,_=>ComponentMode::Edge};
+                    if self.modeling.mode==mode && ui.add_enabled(self.modeling.count>0,egui::Button::new(edit.label())).customize(Action::ModelTopology(edit)).clicked(){commands.push(Command::ModelTopology(edit));}
+                }
+                ui.weak("Delete opens holes; dissolve keeps the surface. Weld uses the midpoint.");
+            });
             ui.collapsing("Selection to vertex group", |ui| {
                 ui.text_edit_singleline(&mut self.modeling.group_name);
                 let enabled = self.modeling.count > 0 && document.mesh_settings().levels() == 1;

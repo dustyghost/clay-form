@@ -241,6 +241,11 @@ impl UiState {
                     && (*action == Action::ModelCreateGroup
                         || self.modeling.group < document.mesh().vertex_groups.len())
             }
+            Action::ModelTopology(_) => {
+                self.edge_unavailable(action, document).is_none()
+                    && self.modeling.active
+                    && self.modeling.count > 0
+            }
             Action::ModelApply => {
                 self.edge_unavailable(action, document).is_none()
                     && self.modeling.active

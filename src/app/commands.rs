@@ -81,6 +81,7 @@ impl App {
                 | Command::ModelingComponent(_)
                 | Command::ClearModelSelection
                 | Command::ModelSelectLoop
+                | Command::ModelTopology(_)
                 | Command::ModelApply
                 | Command::ModelBoundary
                 | Command::ModelDissolveLoops
@@ -165,6 +166,7 @@ impl App {
                     | Command::ModelingComponent(_)
                     | Command::ClearModelSelection
                     | Command::ModelSelectLoop
+                    | Command::ModelTopology(_)
                     | Command::ModelApply
                     | Command::ModelBoundary
                     | Command::ModelDissolveLoops
@@ -260,6 +262,14 @@ impl App {
                 self.ui.modeling.tool = crate::viewport::ModelTool::Select;
                 self.ui.modeling.span = crate::viewport::SelectionSpan::Single;
                 Ok(())
+            }
+            Command::ModelTopology(edit) => {
+                self.viewport.cancel(&mut self.document);
+                self.viewport.modeling.topology_edit(
+                    &mut self.document,
+                    edit,
+                    self.ui.modeling.protect_mask,
+                )
             }
             Command::ModelApply => {
                 self.viewport.cancel(&mut self.document);

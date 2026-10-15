@@ -23,6 +23,7 @@ pub(crate) enum Command {
     ModelSelectLoop,
     ModelDissolveLoops,
     ModelApply,
+    ModelTopology(crate::sculpt::TopologyEdit),
     ModelBoundary,
     GroupModelSelection(Option<usize>, bool),
     Undo,

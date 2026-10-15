@@ -75,6 +75,14 @@ impl App {
                         ctx,
                     );
                 }
+                if tool == crate::viewport::ModelTool::Slide
+                    && self.ui.modeling.mode != crate::viewport::ComponentMode::Edge
+                {
+                    self.dispatch(
+                        Command::ModelingComponent(crate::viewport::ComponentMode::Edge),
+                        ctx,
+                    );
+                }
                 self.ui.modeling.tool = tool;
                 if tool == crate::viewport::ModelTool::Scale {
                     self.ui.modeling.amount = 1.;
@@ -86,6 +94,7 @@ impl App {
                 self.ui.modeling.span = span;
                 None
             }
+            Action::ModelTopology(edit) => Some(Command::ModelTopology(edit)),
             Action::ModelApply => Some(Command::ModelApply),
             Action::ModelBoundary => Some(Command::ModelBoundary),
             Action::ModelProtectMask => {

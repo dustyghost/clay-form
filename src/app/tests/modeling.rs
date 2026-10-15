@@ -755,3 +755,24 @@ fn modeling_construction_numeric_and_pen_share_valid_results() {
         );
     }
 }
+#[test]
+fn modeling_topology_commands_are_atomic_and_undoable() {
+    use crate::sculpt::TopologyEdit;
+    let (mut app, ctx, rect) = setup();
+    tap(&mut app, &ctx, rect.center());
+    let before = app.document.mesh().clone();
+    let history = app.document.history_counts().0;
+    app.dispatch(Command::ModelTopology(TopologyEdit::DeleteFaces), &ctx);
+    assert_eq!(
+        app.document.mesh().polygons().len(),
+        before.polygons().len() - 1
+    );
+    assert_eq!(app.document.history_counts().0, history + 1);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.mesh(), &before);
+    navigation_frame(&mut app, &ctx, vec![]);
+    tap(&mut app, &ctx, rect.center());
+    app.dispatch(Command::ModelTopology(TopologyEdit::Bridge), &ctx);
+    assert_eq!(app.document.mesh(), &before);
+    assert_eq!(app.viewport.modeling.selected.len(), 1);
+}
