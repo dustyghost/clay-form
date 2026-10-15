@@ -884,3 +884,267 @@ fn modeling_connect_accepts_expanded_symmetry_selection() {
     sym.validate_result(&out).unwrap();
     assert_eq!(out.quads.len(), mesh.quads.len() - 2);
 }
+
+fn component_options(amount: f32) -> ComponentBuildOptions {
+    ComponentBuildOptions {
+        amount,
+        width: 0.1,
+        round: false,
+        triangulate: false,
+        crease: false,
+        other_side: false,
+    }
+}
+#[test]
+fn modeling_component_construction_preserves_closed_surfaces_and_attributes() {
+    let mut mesh = cube(3);
+    mesh.mask.fill(0.3);
+    mesh.create_vertex_group("Surface".into(), 0., true)
+        .unwrap();
+    let f = front_center(&mesh);
+    let p = &mesh.polygons()[f];
+    let e = [p.vertices[0], p.vertices[1]];
+    let v = p.vertices[0];
+    let sym = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    for kind in [
+        ComponentBuild::FacePoint,
+        ComponentBuild::FaceSplit,
+        ComponentBuild::EdgeSplit,
+        ComponentBuild::EdgeCollapse,
+        ComponentBuild::EdgeExtrude,
+        ComponentBuild::PointSplit,
+        ComponentBuild::PointExtrude,
+    ] {
+        let amount = if matches!(
+            kind,
+            ComponentBuild::EdgeSplit | ComponentBuild::EdgeCollapse
+        ) {
+            0.25
+        } else {
+            0.1
+        };
+        let out = mesh
+            .build_components(
+                kind,
+                &[f],
+                &[e],
+                &[v],
+                mesh.vertices[v],
+                component_options(amount),
+                &sym,
+            )
+            .unwrap_or_else(|e| panic!("{kind:?}: {e}"));
+        out.validate_closed().unwrap();
+        manifold(&out).unwrap();
+        assert_ne!(out, mesh);
+        assert!(out.mask.iter().all(|&w| (w - 0.3).abs() < 1e-6));
+        assert!(
+            out.vertex_groups[0]
+                .weights
+                .iter()
+                .all(|&w| (w - 1.).abs() < 1e-6)
+        );
+        assert!(out.polygroups.iter().all(|&g| g == 1));
+    }
+}
+#[test]
+fn modeling_face_split_propagates_edge_points_and_edge_positions_are_exact() {
+    let mesh = cube(1);
+    let f = front_center(&mesh);
+    let p = &mesh.polygons()[f];
+    let [a, b] = [p.vertices[0], p.vertices[1]];
+    let sym = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    let split = mesh
+        .build_components(
+            ComponentBuild::FaceSplit,
+            &[f],
+            &[],
+            &[],
+            Vec3::default(),
+            component_options(0.1),
+            &sym,
+        )
+        .unwrap();
+    assert_eq!(split.quads.len(), 5); // Four new quads and the unchanged opposite face.
+    split.validate_closed().unwrap();
+    for amount in [0., 0.25, 0.5, 1.] {
+        let kind = if amount == 0. || amount == 1. {
+            ComponentBuild::EdgeCollapse
+        } else {
+            ComponentBuild::EdgeSplit
+        };
+        let out = mesh
+            .build_components(
+                kind,
+                &[],
+                &[[a, b]],
+                &[],
+                mesh.vertices[a],
+                component_options(amount),
+                &sym,
+            )
+            .unwrap();
+        let target = mesh.vertices[a] * (1. - amount) + mesh.vertices[b] * amount;
+        assert!(out.vertices.iter().any(|&p| (p - target).len() < 1e-6));
+        out.validate_closed().unwrap();
+    }
+}
+#[test]
+fn modeling_point_ring_and_surface_edge_construction_are_symmetric() {
+    let mesh = cube(4);
+    let sym = ModelingSymmetry::new(
+        &mesh,
+        &crate::sculpt::Symmetry {
+            enabled: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let v = mesh
+        .vertices
+        .iter()
+        .position(|&v| (v - Vec3(0.5, 0.5, 1.)).len() < 1e-6)
+        .unwrap();
+    for kind in [ComponentBuild::PointSplit, ComponentBuild::PointExtrude] {
+        for round in [false, true] {
+            let mut options = component_options(0.1);
+            options.round = round;
+            options.crease = true;
+            let out = mesh
+                .build_components(kind, &[], &[], &[v], mesh.vertices[v], options, &sym)
+                .unwrap();
+            out.validate_closed().unwrap();
+            sym.validate_result(&out).unwrap();
+            assert!(!out.creases.is_empty());
+        }
+    }
+    let w = mesh
+        .vertices
+        .iter()
+        .position(|&p| (p - Vec3(1., 0.5, 1.)).len() < 1e-6)
+        .unwrap();
+    let out = mesh
+        .build_components(
+            ComponentBuild::EdgeExtrude,
+            &[],
+            &[[v, w]],
+            &[],
+            Vec3(0.75, 0.6, 1.),
+            component_options(0.1),
+            &sym,
+        )
+        .unwrap();
+    out.validate_closed().unwrap();
+    sym.validate_result(&out).unwrap();
+}
+#[test]
+fn modeling_boundary_extrusion_extends_a_shared_strip_without_cracks() {
+    let mut p = Primitive::for_kind(PrimitiveKind::Plane);
+    p.divisions = [3; 3];
+    let mesh = p.mesh().unwrap();
+    let sym = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    let mut incidence = BTreeMap::<_, usize>::new();
+    for p in mesh.polygons() {
+        for (a, b) in p.edges() {
+            *incidence.entry(edge(a, b)).or_default() += 1;
+        }
+    }
+    let edges: Vec<_> = incidence
+        .into_iter()
+        .filter(|(_, n)| *n == 1)
+        .map(|(e, _)| e)
+        .collect();
+    let out = mesh
+        .build_components(
+            ComponentBuild::EdgeExtrude,
+            &[],
+            &edges,
+            &[],
+            Vec3::default(),
+            component_options(0.1),
+            &sym,
+        )
+        .unwrap();
+    manifold(&out).unwrap();
+    assert_eq!(out.quads.len(), mesh.quads.len() + edges.len());
+}
+#[test]
+fn modeling_point_split_patch_can_be_extruded_and_surface_sides_differ() {
+    let mesh = cube(4);
+    let sym = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    let v = mesh
+        .vertices
+        .iter()
+        .position(|&p| (p - Vec3(0.5, 0.5, 1.)).len() < 1e-6)
+        .unwrap();
+    let split = mesh
+        .build_components(
+            ComponentBuild::PointSplit,
+            &[],
+            &[],
+            &[v],
+            mesh.vertices[v],
+            component_options(0.1),
+            &sym,
+        )
+        .unwrap();
+    let cap = split
+        .polygons()
+        .iter()
+        .position(|p| {
+            p.vertices.len() == 4
+                && p.vertices
+                    .iter()
+                    .all(|&w| (split.vertices[w] - mesh.vertices[v]).len() < 0.15)
+        })
+        .unwrap();
+    let symmetry = ModelingSymmetry::new(&split, &Default::default()).unwrap();
+    let tube = split
+        .extrude_model(&[cap], 0.3, false, false, &symmetry)
+        .unwrap();
+    tube.mesh.validate_closed().unwrap();
+    let p = &mesh.polygons()[front_center(&mesh)];
+    let e = [p.vertices[0], p.vertices[1]];
+    let a = mesh
+        .build_components(
+            ComponentBuild::EdgeExtrude,
+            &[],
+            &[e],
+            &[],
+            mesh.vertices[e[0]],
+            component_options(0.1),
+            &sym,
+        )
+        .unwrap();
+    let mut o = component_options(0.1);
+    o.other_side = true;
+    let b = mesh
+        .build_components(
+            ComponentBuild::EdgeExtrude,
+            &[],
+            &[e],
+            &[],
+            mesh.vertices[e[0]],
+            o,
+            &sym,
+        )
+        .unwrap();
+    assert_ne!(a, b);
+    a.validate_closed().unwrap();
+    b.validate_closed().unwrap();
+    let mut triangles = cube(1);
+    triangles.quads.clear();
+    let sym = ModelingSymmetry::new(&triangles, &Default::default()).unwrap();
+    let out = triangles
+        .build_components(
+            ComponentBuild::PointSplit,
+            &[],
+            &[],
+            &[0],
+            triangles.vertices[0],
+            component_options(0.1),
+            &sym,
+        )
+        .unwrap();
+    out.validate_closed().unwrap();
+}

@@ -4,6 +4,8 @@ use super::{
     edges::{Polygon, edge},
 };
 use std::collections::{BTreeMap, BTreeSet};
+mod components;
+pub use components::{ComponentBuild, ComponentBuildOptions};
 mod construction;
 mod contact;
 pub use construction::Construction;

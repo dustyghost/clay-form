@@ -5,7 +5,7 @@ use crate::sculpt::{Axis, Symmetry};
 pub struct ModelingSymmetry {
     pub(super) vertices: Vec<Vec<usize>>,
     pub(super) bases: Vec<[Vec3; 3]>,
-    faces: Vec<Vec<usize>>,
+    pub(super) faces: Vec<Vec<usize>>,
     pub(super) settings: Symmetry,
 }
 impl ModelingSymmetry {
