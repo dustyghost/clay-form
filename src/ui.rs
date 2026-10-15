@@ -1039,6 +1039,8 @@ impl UiState {
             ui.label("This submodel is parametric. Edit its controls or convert it in Submodels → Primitive.");
             return;
         }
+        self.modeling_controls(ui, document, commands);
+        ui.separator();
         let settings = document.mesh_settings();
         ui.label(format!(
             "{} vertices • {} faces",
@@ -1099,7 +1101,6 @@ impl UiState {
             }
         });
         ui.separator();
-        self.modeling_controls(ui, document, commands);
         self.edge_controls(ui, document, commands);
         if self.mesh_busy {
             ui.spinner();
