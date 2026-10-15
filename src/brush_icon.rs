@@ -98,6 +98,10 @@ pub(crate) fn default_icon(kind: Kind) -> BrushIcon {
             Kind::Inflate => 0.40 * (-r / 0.20).exp(),
             Kind::Smooth => 0.10 * (-r / 0.48).exp(),
             Kind::Flatten => 0.28 * (1. - (r / 0.45).min(1.)).min(0.5),
+            Kind::Polish => {
+                let plateau = (0.18 - x * 0.08).min(0.30 * (-r / 0.40).exp());
+                plateau.max(0.)
+            }
             Kind::Pinch => 0.30 * (-((x / 0.65).powi(6) + (y / 0.07).powi(2))).exp(),
             Kind::Crease => -0.24 * (-((x / 0.65).powi(6) + (y / 0.075).powi(2))).exp(),
             Kind::Detail => {

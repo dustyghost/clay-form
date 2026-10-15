@@ -7,6 +7,7 @@ pub enum Kind {
     Inflate,
     Smooth,
     Flatten,
+    Polish,
     Pinch,
     Crease,
     Grab,
@@ -15,12 +16,13 @@ pub enum Kind {
     Detail,
 }
 impl Kind {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Standard,
         Self::Clay,
         Self::Inflate,
         Self::Smooth,
         Self::Flatten,
+        Self::Polish,
         Self::Pinch,
         Self::Crease,
         Self::Grab,

@@ -18,6 +18,63 @@ struct Guide {
     directory: std::path::PathBuf,
     text_positions: Vec<(String, Pos2)>,
 }
+
+#[test]
+#[ignore = "renders Polish cleanup; requires EGL and CLAY_GUIDE_PREVIEW"]
+fn polish_brush_offscreen_review() {
+    use crate::sculpt::{Brush, Dab, Geometry, Kind, Vec3};
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
+    let directory = std::path::Path::new(&directory);
+    std::fs::create_dir_all(directory).unwrap();
+    let mut g = Guide::new(directory, [1200, 900]);
+    g.panel(Tool::Brush, Dock::Right);
+    g.panel(Tool::Library, Dock::Left);
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
+    primitive.divisions = [40, 40, 2];
+    let mut mesh = primitive.mesh().unwrap();
+    for p in &mut mesh.vertices {
+        if p.2 > 0.9 && p.0.abs() < 0.95 && p.1.abs() < 0.95 {
+            p.2 += 0.035 * (p.0 * 20.).cos() * (p.1 * 20.).cos();
+        }
+    }
+    g.app
+        .document
+        .replace_geometry(Geometry::new(mesh))
+        .unwrap();
+    g.app.ui.selected = g
+        .app
+        .document
+        .brushes()
+        .iter()
+        .position(|b| b.kind == Kind::Polish)
+        .unwrap();
+    g.app.camera.yaw = 0.35;
+    g.app.camera.pitch = -0.2;
+    g.app.camera.zoom = 0.7;
+    g.save("polish-before");
+    let before = g.app.document.geometry_snapshot();
+    for _ in 0..20 {
+        g.app.document.apply_dab(
+            &Brush::new(Kind::Polish),
+            Dab {
+                center: Vec3(0., 0., 1.),
+                normal: Vec3(0., 0., 1.),
+                right: Vec3(1., 0., 0.),
+                up: Vec3(0., 1., 0.),
+                radius: 1.8,
+                pressure: 1.,
+                delta: Vec3::default(),
+                invert: false,
+            },
+        );
+    }
+    g.app.document.end_stroke();
+    g.app.document.mesh().validate_closed().unwrap();
+    assert_ne!(g.app.document.geometry_snapshot(), before);
+    g.save("polish-after");
+    g.app.document.undo();
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+}
 impl Guide {
     fn new(directory: &std::path::Path, size: [i32; 2]) -> Self {
         let mut capture = UiCapture::new(size);

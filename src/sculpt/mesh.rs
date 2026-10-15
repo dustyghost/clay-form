@@ -307,6 +307,8 @@ impl Mesh {
                 }
             }
         }
+        let polish = (b.kind == Kind::Polish)
+            .then(|| self.polish_planes(b, dabs, &normals, &mut sculptable));
         let join_soft =
             b.kind == Kind::Standard && matches!(b.alpha, super::Alpha::Soft) && dabs.len() > 1;
         let origin = dabs.first().map_or(Vec3::default(), |dab| dab.center);
@@ -321,10 +323,16 @@ impl Mesh {
             let mut strongest_motion_squared = 0_f32;
             let mut contributions = 0;
             let mut mask_sign = 1.;
-            for dab in dabs {
+            for (dab_index, dab) in dabs.iter().enumerate() {
                 let offset = old[i] - dab.center;
                 if offset.len() > dab.radius * 1.5
                     || (b.kind != Kind::Snake && normals[i].dot(dab.normal) < 0.1)
+                {
+                    continue;
+                }
+                let plane = polish.as_ref().and_then(|planes| planes[dab_index]);
+                if b.kind == Kind::Polish
+                    && plane.is_none_or(|(_, normal)| normals[i].dot(normal) < 0.5)
                 {
                     continue;
                 }
@@ -370,6 +378,10 @@ impl Mesh {
                     Kind::Inflate => normals[i] * (radius * 0.15 * w * sign),
                     Kind::Smooth => (avg[i] * (1. / count[i].max(1.)) - old[i]) * (w * sign),
                     Kind::Flatten => normal * (-offset.dot(normal) * w * sign),
+                    Kind::Polish => {
+                        let (center, normal) = plane.expect("Polish requires a sampled plane");
+                        normal * (-(old[i] - center).dot(normal) * w.min(1.) * sign)
+                    }
                     Kind::Pinch => {
                         (center - old[i] - normal * (-offset.dot(normal))) * (w * 0.2 * sign)
                     }

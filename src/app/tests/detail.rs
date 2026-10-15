@@ -1,6 +1,44 @@
 use super::*;
 use crate::sculpt::{AdaptiveSettings, Kind};
 
+#[test]
+fn polish_can_be_added_to_old_projects_and_roundtrips_with_one_stroke_undo() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let mut project = app.document.project();
+    project.brushes.retain(|b| b.kind != Kind::Polish);
+    app.document.replace_project(project, "old.clay").unwrap();
+    app.dispatch(Command::Action(Action::NewBrush("Polish".into())), &ctx);
+    let brush = app.document.brushes()[app.ui.selected].clone();
+    assert_eq!(brush.kind, Kind::Polish);
+    let before = app.document.geometry_snapshot();
+    let history = app.document.history_counts();
+    for _ in 0..4 {
+        app.document.apply_dab(
+            &brush,
+            crate::sculpt::Dab {
+                center: crate::sculpt::Vec3(0., 0., 1.),
+                normal: crate::sculpt::Vec3(0., 0., 1.),
+                right: crate::sculpt::Vec3(1., 0., 0.),
+                up: crate::sculpt::Vec3(0., 1., 0.),
+                radius: 0.5,
+                pressure: 1.,
+                delta: Default::default(),
+                invert: false,
+            },
+        );
+    }
+    app.document.end_stroke();
+    assert_ne!(app.document.geometry_snapshot(), before);
+    assert_eq!(app.document.history_counts().0, history.0 + 1);
+    let serialized = serde_json::to_string(&app.document.project()).unwrap();
+    let loaded: crate::sculpt::Project = serde_json::from_str(&serialized).unwrap();
+    loaded.validate().unwrap();
+    assert!(loaded.brushes.iter().any(|b| b.kind == Kind::Polish));
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), before);
+}
+
 fn detail_groove(adaptive: AdaptiveSettings, stabilize: bool) -> (App, egui::Context) {
     let mut app = App::default();
     let ctx = egui::Context::default();

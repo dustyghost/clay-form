@@ -144,6 +144,8 @@ Each vertex group has a default-visible, default-omitted `visible` flag. The dis
 
 `viewport/stabilizer.rs` optionally filters Freehand input through a screen-space trailing tip before the existing dab spacing and picking path. The distance is latched at stroke start. Stationary input never catches up, and release discards the trailing state without an endpoint dab. Pressure and temporary modifiers remain live inputs to the existing document pipeline. `Brush::stabilize` and `stabilizer_distance` omit their defaults, retaining legacy brush serialization and identities; Grab, Snake, and patterned modes bypass the filter.
 
+`sculpt/polish.rs` estimates an area- and alpha-weighted local plane for each symmetry dab from visible, unmasked, similarly facing triangles. Polish moves vertices normally toward that plane, preserving marked creases and vertices at sharp normal discontinuities. All samples come from the same pre-dab surface; the shared stamp pipeline handles pressure, falloff, masks, inversion, and overlap blending.
+
 ## Slice tools
 
 `sculpt/slice.rs` intersects a view-defined plane with triangle edges, sharing each new intersection across incident faces and interpolating masks and all weighted vertex groups. Distances use double precision and a scale-relative on-plane tolerance. Whole quads survive where their triangles and face categories remain intact. Polygroups splits categories crossing the plane without disconnecting geometry; Trim compacts one half; Separate produces two independently indexed surfaces and inserts the second after the active submodel.

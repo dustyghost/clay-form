@@ -20,9 +20,12 @@ Choose a brush, drag on the clay, and use **Shift** to smooth. Start with the ta
 | --- | --- |
 | Build up or remove clay | Standard, Clay, Inflate |
 | Even out a surface | Smooth, Flatten |
+| Polish bumps into cleaner planes while holding sharp corners | Polish |
 | Tighten a fold | Pinch, Crease, Detail |
 | Move or pull a form | Grab, Snake |
 | Protect part of a surface | Mask |
+
+**Polish** levels the surface toward an averaged plane under the brush. It holds sharp corners and marked creases, respects masks and hidden surfaces, and uses your pressure, alpha, and symmetry settings. Use a larger radius for broader planes and lighter pressure for gradual cleanup. Like Flatten, its inverted operation exaggerates relief.
 
 Select a tile in **Brush library**. Use **Add brush** if a brush is missing from an older project.
 

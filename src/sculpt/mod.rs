@@ -5,6 +5,7 @@ mod detail;
 mod math;
 mod mesh;
 mod overlap;
+mod polish;
 mod project;
 mod remesh;
 mod subdivision;
