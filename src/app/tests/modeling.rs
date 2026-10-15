@@ -205,7 +205,7 @@ fn modeling_partial_quad_group_preserves_quad_labels_and_masks() {
     let quad = app.document.mesh().quads[0];
     let before = app.document.mesh().mask.clone();
     app.document
-        .group_model_selection(&quad[..3], "Corners", None, false)
+        .group_model_selection(&quad[..3], None, "Corners", None, false)
         .unwrap();
     app.document.mesh().validate().unwrap();
     assert_eq!(
@@ -1002,4 +1002,90 @@ fn modeling_presets_store_tap_repeat_and_accept_older_settings() {
     app.ui.modeling.tap_repeat = true;
     app.dispatch(Command::Action(Action::ModelPreset(id)), &ctx);
     assert!(!app.ui.modeling.tap_repeat);
+}
+
+#[test]
+fn modeling_face_group_assignment_keeps_unselected_gaps_and_neighbors() {
+    let (mut app, ctx, rect) = setup();
+    app.dispatch(
+        Command::SetSymmetry(crate::sculpt::Symmetry {
+            enabled: true,
+            ..Default::default()
+        }),
+        &ctx,
+    );
+    let scale = rect.width().min(rect.height()) * 0.35;
+    let outer = rect.center() + Vec2::new(scale * 2. / 3., 0.);
+    tap(&mut app, &ctx, rect.center());
+    let middle = app.viewport.modeling.selected_faces()[0];
+    app.ui.modeling.group_name = "Middle".into();
+    app.dispatch(Command::GroupModelSelection(None, false), &ctx);
+    assert_eq!(app.document.mesh().polygons()[middle].group, 1);
+    tap(&mut app, &ctx, outer);
+    let selected: std::collections::BTreeSet<_> =
+        app.viewport.modeling.selected_faces().into_iter().collect();
+    assert_eq!(selected.len(), 2);
+    assert!(!selected.contains(&middle));
+    // Every corner of the unselected middle face belongs to a selected neighbor.
+    let corners = app.viewport.modeling.selected_vertices(app.document.mesh());
+    assert!(
+        app.document.mesh().polygons()[middle]
+            .vertices
+            .iter()
+            .all(|v| corners.contains(v))
+    );
+    let before = app.document.geometry_snapshot();
+    let history = app.document.history_counts().0;
+    app.ui.modeling.group_name = "Outer".into();
+    app.dispatch(Command::GroupModelSelection(None, false), &ctx);
+    for (i, face) in app.document.mesh().polygons().iter().enumerate() {
+        let expected = if selected.contains(&i) {
+            2
+        } else {
+            before.mesh.polygons()[i].group
+        };
+        assert_eq!(
+            face.group, expected,
+            "Create changed face {i} outside the selection"
+        );
+    }
+    assert_eq!(app.document.mesh().mask, before.mesh.mask);
+    assert_eq!(app.document.history_counts().0, history + 1);
+    assert!(
+        corners
+            .iter()
+            .all(|&v| app.document.mesh().vertex_groups[1].weights[v] == 1.)
+    );
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    navigation_frame(&mut app, &ctx, vec![]);
+    tap(&mut app, &ctx, outer);
+    app.dispatch(Command::GroupModelSelection(Some(0), false), &ctx);
+    for (i, face) in app.document.mesh().polygons().iter().enumerate() {
+        let expected = if selected.contains(&i) {
+            1
+        } else {
+            before.mesh.polygons()[i].group
+        };
+        assert_eq!(
+            face.group, expected,
+            "Add changed face {i} outside the selection"
+        );
+    }
+    let added = app.document.geometry_snapshot();
+    app.dispatch(Command::GroupModelSelection(Some(0), true), &ctx);
+    for (i, face) in app.document.mesh().polygons().iter().enumerate() {
+        let expected = if selected.contains(&i) {
+            0
+        } else {
+            before.mesh.polygons()[i].group
+        };
+        assert_eq!(
+            face.group, expected,
+            "Remove changed face {i} outside the selection"
+        );
+    }
+    assert_eq!(app.document.mesh().mask, before.mesh.mask);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), added);
 }

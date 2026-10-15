@@ -702,7 +702,7 @@ fn modeling_buttons_offer_menu_and_shortcut_customization() {
         let ctx = egui::Context::default();
         ctx.style_mut(|s| s.animation_time = 0.);
         let mut doc = Document::default();
-        doc.group_model_selection(&[0], "Test", None, false)
+        doc.group_model_selection(&[0], None, "Test", None, false)
             .unwrap();
         let mut state = UiState::default();
         state.modeling.active = true;

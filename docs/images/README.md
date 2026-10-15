@@ -44,6 +44,8 @@ See [Development](../development.md#update-guide-screenshots) for prerequisites 
 | `modeling-symmetry-selection.png`, `modeling-symmetry-extrude.png`, `modeling-dissolve-before.png`, `modeling-dissolve-after.png` | [Symmetry and dissolving loops](../guide/modeling.md#dissolve-selected-loops) | `modeling_symmetry_dissolve_offscreen_review` |
 | `modeling-tap-repeat.png`, `modeling-milestone-inset.png`, `modeling-milestone-smooth.png`, `modeling-milestone-preset.png` | [Integrated construction, presets and smooth preview](../guide/modeling.md#keep-useful-tool-setups-and-inspect-the-smooth-result) | `modeling_milestones_offscreen_review` |
 
+| `modeling-face-group-gap.png` | [Exact face selection groups](../guide/modeling.md#save-a-component-selection-as-a-vertex-group) | `modeling_face_group_gap_offscreen_review` |
+
 ## Example assets
 
 [pyramid.obj](../examples/pyramid.obj) contains the imported sample. [Front study](../examples/front-study.png) and [Side study](../examples/side-study.png) are original renders of a scaled UV sphere, exported by the same model-icon renderer used in the app. They are input assets, not screenshots of controls.

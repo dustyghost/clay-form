@@ -165,7 +165,9 @@ Expand **Tool presets**, enter a name, then **Save tool preset**. Each preset st
 
 ### Save a component selection as a vertex group
 
-Choose **Select**, build a face, edge, or vertex selection, then expand **Selection to vertex group**. Enter a name and choose **Create group from selection**, or choose an existing group and use **Add to group** / **Remove from group**. Faces include all corners; edges include both endpoints. Sculpt masks stay unchanged. Use a single subdivision level for component-to-group assignment.
+Choose **Select**, build a face, edge, or vertex selection, then expand **Selection to vertex group**. Enter a name and choose **Create group from selection**, or choose an existing group and use **Add to group** / **Remove from group**. Face selections assign group colors and face-group targets to exactly the selected faces, including their symmetry copies. Unselected gaps and neighboring faces keep their existing labels, even when they share every corner with selected faces. This applies to creating, adding and removing. Vertex weights include all selected face corners; edges include both endpoints. Sculpt masks stay unchanged. Use a single subdivision level for component-to-group assignment.
+
+![Two selected face strips assigned to a group while the unselected middle strip stays ungrouped](../images/modeling-face-group-gap.png)
 
 ![The selected quad outlined in cyan beside controls for creating and editing vertex groups](../images/modeling-selection.png)
 

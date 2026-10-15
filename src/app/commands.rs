@@ -347,10 +347,13 @@ impl App {
                     .viewport
                     .modeling
                     .selected_vertices(self.document.mesh());
+                let faces = (self.ui.modeling.mode == crate::viewport::ComponentMode::Face)
+                    .then(|| self.viewport.modeling.selected_faces());
                 let edges = self.viewport.selected_edges(&self.document).to_vec();
                 self.document
                     .group_model_selection(
                         &vertices,
+                        faces.as_deref(),
                         &self.ui.modeling.group_name,
                         existing,
                         remove,

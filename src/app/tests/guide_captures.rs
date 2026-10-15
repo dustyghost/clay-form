@@ -1126,3 +1126,48 @@ fn modeling_milestones_offscreen_review() {
     assert_eq!(g.app.document.geometry_snapshot(), cage);
     g.save("modeling-milestone-preset");
 }
+
+#[test]
+#[ignore = "renders exact face group assignment; requires EGL and CLAY_GUIDE_PREVIEW"]
+fn modeling_face_group_gap_offscreen_review() {
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
+    let directory = std::path::Path::new(&directory);
+    std::fs::create_dir_all(directory).unwrap();
+    let mut g = Guide::new(directory, [1200, 1100]);
+    g.interactive = true;
+    g.panel(Tool::Mesh, Dock::Right);
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
+    primitive.divisions = [3, 5, 1];
+    g.app
+        .document
+        .replace_geometry(crate::sculpt::Geometry::new(primitive.mesh().unwrap()))
+        .unwrap();
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    g.app.camera.zoom = 0.65;
+    click_guide_label(&mut g, "Pen modeling");
+    click_guide_label(&mut g, "Symmetry");
+    let (rect, _) = g.frame(vec![]);
+    let scale = rect.width().min(rect.height()) * 0.35 * g.app.camera.zoom;
+    let start = rect.center() + Vec2::new(scale * 2. / 3., -scale * 0.8);
+    let end = rect.center() + Vec2::new(scale * 2. / 3., scale * 0.8);
+    g.stroke(start, end);
+    let selected: std::collections::BTreeSet<_> = g
+        .app
+        .viewport
+        .modeling
+        .selected_faces()
+        .into_iter()
+        .collect();
+    assert_eq!(selected.len(), 10);
+    click_guide_label(&mut g, "Selection to vertex group");
+    click_guide_label(&mut g, "Create group from selection");
+    assert_eq!(g.app.document.mesh().vertex_groups.len(), 1);
+    for (face, polygon) in g.app.document.mesh().polygons().iter().enumerate() {
+        assert_eq!(polygon.group, usize::from(selected.contains(&face)));
+    }
+    g.app.ui.show_polygroups = true;
+    g.app.camera.yaw = 0.2;
+    g.app.camera.pitch = -0.1;
+    g.save("modeling-face-group-gap");
+}

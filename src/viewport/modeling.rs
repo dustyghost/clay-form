@@ -221,6 +221,15 @@ impl ModelingState {
             .into_iter()
             .collect()
     }
+    pub fn selected_faces(&self) -> Vec<usize> {
+        self.selected
+            .iter()
+            .filter_map(|c| match c {
+                Component::Face(face) => Some(*face),
+                _ => None,
+            })
+            .collect()
+    }
     pub fn preview(&self) -> Option<&Mesh> {
         if let Some(drag) = &self.edit_drag {
             return drag
