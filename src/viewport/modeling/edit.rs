@@ -19,6 +19,8 @@ impl EditOutcome {
 }
 pub(super) struct EditDrag {
     pub start: Pos2,
+    pub rail: Option<egui::Vec2>,
+    pub initial_amount: f32,
     pub moved: bool,
     pub scale: f32,
     pub components: BTreeSet<Component>,
@@ -29,16 +31,17 @@ pub(super) struct EditDrag {
 }
 impl ModelTool {
     pub fn is_edit(self) -> bool {
-        matches!(
-            self,
-            Self::Move
-                | Self::Rotate
-                | Self::Scale
-                | Self::Inset
-                | Self::Bevel
-                | Self::Fuse
-                | Self::Slide
-        )
+        self.construction_kind().is_some()
+            || matches!(
+                self,
+                Self::Move
+                    | Self::Rotate
+                    | Self::Scale
+                    | Self::Inset
+                    | Self::Bevel
+                    | Self::Fuse
+                    | Self::Slide
+            )
     }
 }
 impl ModelingState {
@@ -82,6 +85,16 @@ impl ModelingState {
                 }
                 let travel = drag.start.y - point.y;
                 drag.amount = match options.tool {
+                    ModelTool::EdgeSplit | ModelTool::EdgeCollapse => {
+                        let rail = drag.rail.unwrap_or(egui::Vec2::ZERO);
+                        let fraction = drag.initial_amount
+                            + (point - drag.start).dot(rail) / rail.length_sq().max(1.);
+                        if options.tool == ModelTool::EdgeSplit {
+                            fraction.clamp(0.001, 0.999)
+                        } else {
+                            fraction.clamp(0., 1.)
+                        }
+                    }
                     ModelTool::Rotate => travel,
                     ModelTool::Scale => (travel / 150.).exp(),
                     _ => travel / drag.scale,
@@ -119,6 +132,57 @@ impl ModelingState {
                     .unwrap_or_default(),
             })
             .collect();
+        if let Some(kind) = options.tool.construction_kind() {
+            let faces: Vec<_> = components
+                .iter()
+                .filter_map(|c| {
+                    if let Component::Face(f) = c {
+                        Some(*f)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let edges: Vec<_> = components
+                .iter()
+                .filter_map(|c| {
+                    if let Component::Edge(e) = c {
+                        Some(*e)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let points: Vec<_> = components
+                .iter()
+                .filter_map(|c| {
+                    if let Component::Vertex(v) = c {
+                        Some(*v)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let c = options.construction;
+            let result = mesh.build_components(
+                kind,
+                &faces,
+                &edges,
+                &points,
+                anchor,
+                crate::sculpt::ComponentBuildOptions {
+                    amount,
+                    width: c.width,
+                    round: c.round,
+                    triangulate: c.triangulate,
+                    crease: c.crease,
+                    other_side: c.other_side,
+                },
+                &ModelingSymmetry::new(mesh, document.symmetry())?,
+            )?;
+            mesh.check_model_protection(&result, options.protect_mask)?;
+            return Ok(EditOutcome::new(result, amount, false));
+        }
         if matches!(
             options.tool,
             ModelTool::Extrude | ModelTool::Inset | ModelTool::Bevel | ModelTool::Fuse
@@ -267,7 +331,7 @@ impl ModelingState {
             return Ok(());
         };
         let result = if !drag.moved {
-            if !options.tap_repeat {
+            if !options.tap_repeat && !options.tool.instant() {
                 return Ok(());
             }
             Self::edit_result(
@@ -368,12 +432,37 @@ impl Viewport {
         let targets = if self.modeling.selected.contains(&component) {
             Ok(self.modeling.selected.iter().copied().collect::<Vec<_>>())
         } else {
-            Self::selection_target(component, point, model.span, document.mesh(), scene, None)
+            Self::selection_target(
+                component,
+                point,
+                model.span,
+                model.flat_angle,
+                document.mesh(),
+                scene,
+                None,
+            )
         };
         match targets {
             Ok(targets) => {
                 self.modeling.edit_drag = Some(EditDrag {
                     start: point,
+                    rail: if let Component::Edge([a, b]) = component {
+                        let anchor = scene.pick(point).map_or(Vec3::default(), |h| h.0);
+                        let delta = scene.project(document.mesh().vertices[b])
+                            - scene.project(document.mesh().vertices[a]);
+                        Some(
+                            if (document.mesh().vertices[a] - anchor).len()
+                                <= (document.mesh().vertices[b] - anchor).len()
+                            {
+                                delta
+                            } else {
+                                -delta
+                            },
+                        )
+                    } else {
+                        None
+                    },
+                    initial_amount: model.amount,
                     moved: false,
                     scale: scene.scale_at(scene.pick(point).map_or(Vec3::default(), |h| h.0)),
                     components: targets.into_iter().collect(),

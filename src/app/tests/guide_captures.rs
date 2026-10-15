@@ -751,7 +751,7 @@ fn modeling_workflow_offscreen_review() {
     let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
     let directory = std::path::Path::new(&directory);
     std::fs::create_dir_all(directory).unwrap();
-    let mut g = Guide::new(directory, [1100, 900]);
+    let mut g = Guide::new(directory, [1100, 1100]);
     g.interactive = true;
     g.panel(Tool::Mesh, Dock::Right);
     let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
@@ -1056,7 +1056,7 @@ fn modeling_milestones_offscreen_review() {
     let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
     let directory = std::path::Path::new(&directory);
     std::fs::create_dir_all(directory).unwrap();
-    let mut g = Guide::new(directory, [1200, 1100]);
+    let mut g = Guide::new(directory, [1200, 1250]);
     g.interactive = true;
     g.panel(Tool::Mesh, Dock::Right);
     let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
@@ -1170,4 +1170,91 @@ fn modeling_face_group_gap_offscreen_review() {
     g.app.camera.yaw = 0.2;
     g.app.camera.pitch = -0.1;
     g.save("modeling-face-group-gap");
+}
+
+#[test]
+#[ignore = "renders edge, point and face construction; requires EGL and CLAY_GUIDE_PREVIEW"]
+fn modeling_component_construction_offscreen_review() {
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
+    let directory = std::path::Path::new(&directory);
+    std::fs::create_dir_all(directory).unwrap();
+    let mut g = Guide::new(directory, [1200, 1200]);
+    g.interactive = true;
+    g.panel(Tool::Mesh, Dock::Right);
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
+    primitive.divisions = [4; 3];
+    let mesh = primitive.mesh().unwrap();
+    g.app
+        .document
+        .replace_geometry(crate::sculpt::Geometry::new(mesh.clone()))
+        .unwrap();
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    g.app.camera.zoom = 0.65;
+    click_guide_label(&mut g, "Pen modeling");
+    click_guide_label(&mut g, "Symmetry");
+    click_guide_label(&mut g, "Vertex");
+    click_guide_label(&mut g, "Split point");
+    let (rect, _) = g.frame(vec![]);
+    let scale = rect.width().min(rect.height()) * 0.35 * g.app.camera.zoom;
+    let point = rect.center() + Vec2::new(scale * 0.5, -scale * 0.5);
+    click_guide_label(&mut g, "Crease ring");
+    g.stroke(point, point + Vec2::new(0., -scale * 0.1));
+    g.app.document.mesh().validate_closed().unwrap();
+    assert_ne!(g.app.document.mesh(), &mesh);
+    crate::sculpt::ModelingSymmetry::new(g.app.document.mesh(), g.app.document.symmetry()).unwrap();
+    g.app.camera.yaw = 0.2;
+    g.app.camera.pitch = -0.1;
+    g.save("modeling-point-split");
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    click_guide_label(&mut g, "Face");
+    click_guide_label(&mut g, "Extrude");
+    let split = g.app.document.mesh().clone();
+    g.stroke(point, point + Vec2::new(0., -scale * 0.35));
+    assert_ne!(g.app.document.mesh(), &split);
+    g.app.document.mesh().validate_closed().unwrap();
+    g.app.camera.yaw = 0.3;
+    g.app.camera.pitch = -0.2;
+    g.save("modeling-point-tube");
+    g.app
+        .document
+        .replace_geometry(crate::sculpt::Geometry::new(mesh.clone()))
+        .unwrap();
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    click_guide_label(&mut g, "Edge");
+    click_guide_label(&mut g, "Extrude edge");
+    let point = rect.center() + Vec2::new(scale * 0.75, -scale * 0.5 + 2.);
+    g.frame(vec![
+        egui::Event::PointerMoved(point),
+        primary_event(point, true),
+    ]);
+    g.frame(vec![egui::Event::PointerMoved(
+        point + Vec2::new(0., -scale * 0.15),
+    )]);
+    assert_eq!(g.app.document.mesh(), &mesh);
+    assert_ne!(g.app.viewport.modeling.preview().unwrap(), &mesh);
+    g.app.camera.yaw = 0.35;
+    g.app.camera.pitch = -0.25;
+    g.save("modeling-edge-construction-preview");
+    g.frame(vec![primary_event(point, false)]);
+    g.app.document.mesh().validate_closed().unwrap();
+    g.app
+        .document
+        .replace_geometry(crate::sculpt::Geometry::new(mesh.clone()))
+        .unwrap();
+    click_guide_label(&mut g, "Face");
+    click_guide_label(&mut g, "Split face");
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    let point = rect.center() + Vec2::new(scale * 0.75, -scale * 0.75);
+    g.frame(vec![
+        egui::Event::PointerMoved(point),
+        primary_event(point, true),
+    ]);
+    g.frame(vec![primary_event(point, false)]);
+    assert_ne!(g.app.document.mesh(), &mesh);
+    g.app.document.mesh().validate_closed().unwrap();
+    g.save("modeling-face-split");
 }

@@ -27,6 +27,13 @@ pub(crate) enum ModelTool {
     Bevel,
     Fuse,
     Slide,
+    EdgeExtrude,
+    EdgeSplit,
+    EdgeCollapse,
+    PointExtrude,
+    PointSplit,
+    FacePoint,
+    FaceSplit,
 }
 impl ModelTool {
     pub fn label(self) -> &'static str {
@@ -41,7 +48,47 @@ impl ModelTool {
             Self::Bevel => "Bevel boundary",
             Self::Fuse => "Extrude and fuse",
             Self::Slide => "Slide loop",
+            Self::EdgeExtrude => "Extrude edge",
+            Self::EdgeSplit => "Split edge",
+            Self::EdgeCollapse => "Collapse edge",
+            Self::PointExtrude => "Extrude point",
+            Self::PointSplit => "Split point",
+            Self::FacePoint => "Insert center point",
+            Self::FaceSplit => "Split face",
         }
+    }
+    pub fn construction_kind(self) -> Option<crate::sculpt::ComponentBuild> {
+        use crate::sculpt::ComponentBuild as B;
+        Some(match self {
+            Self::EdgeExtrude => B::EdgeExtrude,
+            Self::EdgeSplit => B::EdgeSplit,
+            Self::EdgeCollapse => B::EdgeCollapse,
+            Self::PointExtrude => B::PointExtrude,
+            Self::PointSplit => B::PointSplit,
+            Self::FacePoint => B::FacePoint,
+            Self::FaceSplit => B::FaceSplit,
+            _ => return None,
+        })
+    }
+    pub fn required_mode(self) -> Option<ComponentMode> {
+        match self {
+            Self::Extrude
+            | Self::Inset
+            | Self::Bevel
+            | Self::Fuse
+            | Self::FacePoint
+            | Self::FaceSplit => Some(ComponentMode::Face),
+            Self::LoopCut
+            | Self::Slide
+            | Self::EdgeExtrude
+            | Self::EdgeSplit
+            | Self::EdgeCollapse => Some(ComponentMode::Edge),
+            Self::PointExtrude | Self::PointSplit => Some(ComponentMode::Vertex),
+            _ => None,
+        }
+    }
+    pub fn instant(self) -> bool {
+        matches!(self, Self::FacePoint | Self::FaceSplit)
     }
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,7 +125,7 @@ impl SelectionSpan {
             Self::Loop => "Loop",
             Self::Ring => "Parallel edges",
             Self::Connected => "Connected",
-            Self::Flat => "Flat region",
+            Self::Flat => "Flat island",
             Self::Group => "Face group",
             Self::Border => "Boundary",
         }
@@ -112,11 +159,33 @@ impl ModelAxis {
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub(crate) struct ModelConstruction {
+    pub width: f32,
+    pub round: bool,
+    pub triangulate: bool,
+    pub crease: bool,
+    pub other_side: bool,
+}
+impl Default for ModelConstruction {
+    fn default() -> Self {
+        Self {
+            width: 0.1,
+            round: false,
+            triangulate: false,
+            crease: false,
+            other_side: false,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct ModelingOptions {
     pub mode: ComponentMode,
     pub tool: ModelTool,
     pub change: SelectionChange,
     pub span: SelectionSpan,
+    #[serde(default)]
+    pub flat_angle: f32,
     pub join: bool,
     pub loop_count: u32,
     pub axis: ModelAxis,
@@ -124,6 +193,8 @@ pub(crate) struct ModelingOptions {
     pub protect_mask: bool,
     pub individual: bool,
     pub snap: f32,
+    #[serde(default)]
+    pub construction: ModelConstruction,
     #[serde(default = "tap_repeat_default")]
     pub tap_repeat: bool,
     #[serde(default)]
@@ -523,6 +594,31 @@ impl Viewport {
                 for component in components {
                     Self::paint_component(component, &result.mesh, scene, painter, highlighted);
                 }
+                if model.tool.construction_kind().is_some() {
+                    let key = |mesh: &Mesh, [a, b]: [usize; 2]| {
+                        let p = |v: usize| {
+                            let p = mesh.vertices[v];
+                            [p.0.to_bits(), p.1.to_bits(), p.2.to_bits()]
+                        };
+                        let mut points = [p(a), p(b)];
+                        points.sort_unstable();
+                        points
+                    };
+                    let old: BTreeSet<_> = document
+                        .mesh()
+                        .polygon_edges()
+                        .into_iter()
+                        .map(|e| key(document.mesh(), e))
+                        .collect();
+                    for edge in result.mesh.polygon_edges() {
+                        if !old.contains(&key(&result.mesh, edge))
+                            && let Some(points) =
+                                scene.clip_segment(edge.map(|v| result.mesh.vertices[v]))
+                        {
+                            painter.line_segment(points, egui::Stroke::new(2_f32, highlighted));
+                        }
+                    }
+                }
             }
         } else if let Some(drag) = &self.modeling.drag {
             if let Some(Ok(result)) = &drag.result {
@@ -553,6 +649,7 @@ impl Viewport {
                         component,
                         point.unwrap(),
                         model.span,
+                        model.flat_angle,
                         document.mesh(),
                         scene,
                         self.modeling
@@ -566,6 +663,78 @@ impl Viewport {
                 };
                 for target in targets {
                     Self::paint_component(target, document.mesh(), scene, painter, highlighted);
+                }
+            }
+        }
+        if matches!(
+            model.tool,
+            ModelTool::EdgeExtrude | ModelTool::EdgeSplit | ModelTool::EdgeCollapse
+        ) {
+            let anchor = self
+                .modeling
+                .edit_drag
+                .as_ref()
+                .map(|d| d.anchor)
+                .or_else(|| point.and_then(|p| scene.pick(p)).map(|h| h.0));
+            let target = self
+                .modeling
+                .edit_drag
+                .as_ref()
+                .and_then(|d| {
+                    d.components
+                        .iter()
+                        .filter_map(|c| {
+                            if let Component::Edge(e) = c {
+                                Some(*e)
+                            } else {
+                                None
+                            }
+                        })
+                        .min_by(|a, b| {
+                            let distance = |e: [usize; 2]| {
+                                ((document.mesh().vertices[e[0]] + document.mesh().vertices[e[1]])
+                                    * 0.5
+                                    - d.anchor)
+                                    .len()
+                            };
+                            distance(*a).total_cmp(&distance(*b))
+                        })
+                })
+                .or({
+                    if let Some(Component::Edge(e)) = hover {
+                        Some(e)
+                    } else {
+                        None
+                    }
+                });
+            if let (Some(e), Some(anchor)) = (target, anchor) {
+                if model.tool == ModelTool::EdgeExtrude {
+                    if let Some(f) = document.mesh().edge_construction_side(
+                        e,
+                        anchor,
+                        model.construction.other_side,
+                    ) {
+                        Self::paint_component(
+                            Component::Face(f),
+                            document.mesh(),
+                            scene,
+                            painter,
+                            highlighted,
+                        );
+                    }
+                } else {
+                    let a = if (document.mesh().vertices[e[0]] - anchor).len()
+                        <= (document.mesh().vertices[e[1]] - anchor).len()
+                    {
+                        e[0]
+                    } else {
+                        e[1]
+                    };
+                    painter.circle_stroke(
+                        scene.project(document.mesh().vertices[a]),
+                        7.,
+                        egui::Stroke::new(2_f32, highlighted),
+                    );
                 }
             }
         }
@@ -708,6 +877,7 @@ impl Viewport {
                         Component::Face(face),
                         point.unwrap(),
                         model.span,
+                        model.flat_angle,
                         document.mesh(),
                         scene,
                         None,
@@ -790,7 +960,7 @@ impl Viewport {
                 .loop_drag
                 .as_ref()
                 .map(|d| (d.edge, d.count, d.position))
-                .or_else(|| {
+                .or({
                     if let Some(Component::Edge(e)) = hover {
                         Some((e, model.loop_count.clamp(1, LoopCut::MAX_COUNT), 0.5))
                     } else {
@@ -855,6 +1025,8 @@ impl Viewport {
                 if !drag.moved {
                     self.modeling.edit_drag = Some(EditDrag {
                         start: drag.start,
+                        rail: None,
+                        initial_amount: model.amount,
                         moved: false,
                         scale: drag.scale,
                         components: drag.faces.into_iter().map(Component::Face).collect(),
@@ -949,7 +1121,12 @@ impl Viewport {
 
 impl ModelingOptions {
     pub fn validate(&self) -> Result<(), String> {
-        if !self.amount.is_finite()
+        if !self.flat_angle.is_finite()
+            || !(0. ..=180.).contains(&self.flat_angle)
+            || !self.construction.width.is_finite()
+            || self.construction.width <= 0.
+            || self.construction.width > 1_000_000.
+            || !self.amount.is_finite()
             || self.amount.abs() > 1_000_000.
             || !self.snap.is_finite()
             || !(0.0..=0.25).contains(&self.snap)
@@ -958,13 +1135,7 @@ impl ModelingOptions {
         {
             return Err("Invalid modeling preset settings".into());
         }
-        let mode = match self.tool {
-            ModelTool::Extrude | ModelTool::Inset | ModelTool::Bevel | ModelTool::Fuse => {
-                Some(ComponentMode::Face)
-            }
-            ModelTool::LoopCut | ModelTool::Slide => Some(ComponentMode::Edge),
-            _ => None,
-        };
+        let mode = self.tool.required_mode();
         if mode.is_some_and(|mode| mode != self.mode) {
             return Err("Preset action does not match its component mode".into());
         }

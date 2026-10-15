@@ -6,6 +6,7 @@ pub(super) struct SelectionDrag {
     change: SelectionChange,
     mode: ComponentMode,
     span: SelectionSpan,
+    flat_angle: f32,
     last: Pos2,
     visited: BTreeSet<Component>,
 }
@@ -21,6 +22,7 @@ impl Viewport {
         component: Component,
         point: Pos2,
         span: SelectionSpan,
+        flat_angle: f32,
         mesh: &Mesh,
         scene: &Scene,
         symmetry: Option<&ModelingSymmetry>,
@@ -32,7 +34,7 @@ impl Viewport {
                 | SelectionSpan::Flat
                 | SelectionSpan::Group
                 | SelectionSpan::Border,
-            ) => Self::region_target(component, span, mesh),
+            ) => Self::region_target(component, span, flat_angle, mesh),
             (Component::Edge(e), SelectionSpan::Loop) => mesh
                 .expand_edge_loop(&[e])
                 .map(|es| es.into_iter().map(Component::Edge).collect()),
@@ -138,6 +140,7 @@ impl Viewport {
                 component,
                 origin,
                 model.span,
+                model.flat_angle,
                 document.mesh(),
                 scene,
                 symmetry,
@@ -162,6 +165,7 @@ impl Viewport {
                 change,
                 mode: model.mode,
                 span: model.span,
+                flat_angle: model.flat_angle,
                 last: origin,
                 visited: BTreeSet::new(),
             });
@@ -207,6 +211,7 @@ impl Viewport {
                     component,
                     p,
                     drag.span,
+                    drag.flat_angle,
                     document.mesh(),
                     scene,
                     symmetry,
@@ -268,6 +273,7 @@ impl Viewport {
     fn region_target(
         seed: Component,
         span: SelectionSpan,
+        flat_angle: f32,
         mesh: &Mesh,
     ) -> Result<Vec<Component>, String> {
         let faces = mesh.polygons();
@@ -289,7 +295,7 @@ impl Viewport {
                 .norm()
         };
         let normal = n(seed_face);
-        let origin = mesh.vertices[faces[seed_face].vertices[0]];
+        let cosine = flat_angle.to_radians().cos();
         let mut adjacent = std::collections::BTreeMap::<[usize; 2], Vec<usize>>::new();
         for (f, p) in faces.iter().enumerate() {
             for (a, b) in p.edges() {
@@ -333,11 +339,7 @@ impl Viewport {
                     for &next in &adjacent[&[a.min(b), a.max(b)]] {
                         let p = &faces[next];
                         if !p.visible
-                            || (span == SelectionSpan::Flat
-                                && (n(next).dot(normal) < 0.9999
-                                    || p.vertices.iter().any(|&v| {
-                                        (mesh.vertices[v] - origin).dot(normal).abs() > 1e-5
-                                    })))
+                            || (span == SelectionSpan::Flat && n(next).dot(normal) + 1e-6 < cosine)
                         {
                             continue;
                         }
@@ -368,5 +370,65 @@ impl Viewport {
                 .into_iter()
                 .collect(),
         })
+    }
+}
+
+#[cfg(test)]
+mod angle_tests {
+    use super::*;
+    #[test]
+    fn modeling_flat_island_angle_uses_seed_normal_and_connected_visible_faces() {
+        let mut mesh = Mesh {
+            vertices: vec![Vec3(0., -0.5, 0.), Vec3(0., 0.5, 0.)],
+            triangles: vec![],
+            quads: vec![],
+            mask: vec![],
+            creases: vec![],
+            vertex_groups: vec![],
+            polygroups: vec![],
+            hidden_faces: vec![],
+        };
+        let mut x = 0.;
+        let mut z = 0.;
+        for (i, degrees) in [0_f32, 20., 40., 60.].into_iter().enumerate() {
+            let angle = degrees.to_radians();
+            x += angle.cos();
+            z -= angle.sin();
+            mesh.vertices.extend([Vec3(x, -0.5, z), Vec3(x, 0.5, z)]);
+            let a = i * 2;
+            let q = [a, a + 2, a + 3, a + 1];
+            mesh.quads.push(q);
+            mesh.triangles
+                .extend([[q[0], q[1], q[2]], [q[0], q[2], q[3]]]);
+        }
+        let a = mesh.vertices.len();
+        mesh.vertices.extend([
+            Vec3(10., -0.5, 0.),
+            Vec3(11., -0.5, 0.),
+            Vec3(11., 0.5, 0.),
+            Vec3(10., 0.5, 0.),
+        ]);
+        mesh.quads.push([a, a + 1, a + 2, a + 3]);
+        mesh.triangles
+            .extend([[a, a + 1, a + 2], [a, a + 2, a + 3]]);
+        mesh.mask = vec![0.; mesh.vertices.len()];
+        mesh.validate().unwrap();
+        let target = |mesh: &Mesh, angle| {
+            Viewport::region_target(Component::Face(0), SelectionSpan::Flat, angle, mesh).unwrap()
+        };
+        assert_eq!(target(&mesh, 0.), vec![Component::Face(0)]);
+        assert_eq!(
+            target(&mesh, 25.),
+            vec![Component::Face(0), Component::Face(1)]
+        );
+        assert_eq!(
+            target(&mesh, 45.),
+            vec![Component::Face(0), Component::Face(1), Component::Face(2)]
+        );
+        assert_eq!(target(&mesh, 180.).len(), 4); // Disconnected parallel face remains excluded.
+        mesh.hidden_faces = vec![false; mesh.triangles.len()];
+        mesh.hidden_faces[2] = true;
+        mesh.hidden_faces[3] = true;
+        assert_eq!(target(&mesh, 180.), vec![Component::Face(0)]);
     }
 }

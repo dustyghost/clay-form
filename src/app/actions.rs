@@ -64,25 +64,10 @@ impl App {
                     self.dispatch(Command::ModelingMode(true), ctx);
                 }
                 self.viewport.cancel(&mut self.document);
-                if matches!(
-                    tool,
-                    crate::viewport::ModelTool::Inset
-                        | crate::viewport::ModelTool::Bevel
-                        | crate::viewport::ModelTool::Fuse
-                ) && self.ui.modeling.mode != crate::viewport::ComponentMode::Face
+                if let Some(mode) = tool.required_mode()
+                    && self.ui.modeling.mode != mode
                 {
-                    self.dispatch(
-                        Command::ModelingComponent(crate::viewport::ComponentMode::Face),
-                        ctx,
-                    );
-                }
-                if tool == crate::viewport::ModelTool::Slide
-                    && self.ui.modeling.mode != crate::viewport::ComponentMode::Edge
-                {
-                    self.dispatch(
-                        Command::ModelingComponent(crate::viewport::ComponentMode::Edge),
-                        ctx,
-                    );
+                    self.dispatch(Command::ModelingComponent(mode), ctx);
                 }
                 self.ui.modeling.set_tool(tool);
                 None

@@ -1089,3 +1089,124 @@ fn modeling_face_group_assignment_keeps_unselected_gaps_and_neighbors() {
     app.dispatch(Command::Undo, &ctx);
     assert_eq!(app.document.geometry_snapshot(), added);
 }
+
+#[test]
+fn modeling_component_construction_taps_preview_cancel_and_undo() {
+    for tool in [
+        ModelTool::FacePoint,
+        ModelTool::FaceSplit,
+        ModelTool::EdgeSplit,
+        ModelTool::EdgeCollapse,
+        ModelTool::EdgeExtrude,
+        ModelTool::PointSplit,
+        ModelTool::PointExtrude,
+    ] {
+        let (mut app, ctx, rect) = setup();
+        let scale = rect.width().min(rect.height()) * 0.35;
+        app.dispatch(Command::Action(Action::ModelTool(tool)), &ctx);
+        let point = match tool.required_mode().unwrap() {
+            ComponentMode::Face => rect.center(),
+            ComponentMode::Edge => rect.center() + Vec2::new(scale / 3., 0.),
+            ComponentMode::Vertex => rect.center() + Vec2::new(scale / 3., scale / 3.),
+        };
+        app.ui.modeling.amount = if matches!(tool, ModelTool::EdgeSplit | ModelTool::EdgeCollapse) {
+            0.25
+        } else {
+            0.1
+        };
+        app.ui.modeling.construction.width = 0.08;
+        app.ui.modeling.options().validate().unwrap();
+        let before = app.document.geometry_snapshot();
+        let history = app.document.history_counts().0;
+        tap(&mut app, &ctx, point);
+        assert_ne!(
+            app.document.geometry_snapshot(),
+            before,
+            "{}: {}",
+            tool.label(),
+            app.ui.status
+        );
+        app.document.mesh().validate_closed().unwrap();
+        assert_eq!(app.document.history_counts().0, history + 1);
+        app.dispatch(Command::Undo, &ctx);
+        navigation_frame(&mut app, &ctx, vec![]);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(point), primary_event(point, true)],
+        );
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(point + Vec2::new(0., -20.))],
+        );
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert_ne!(
+            app.viewport.modeling.preview().unwrap(),
+            &before.mesh,
+            "{}",
+            tool.label()
+        );
+        navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Escape, true)]);
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![
+                primary_event(point, false),
+                slice_key(egui::Key::Escape, false),
+            ],
+        );
+        assert_eq!(app.document.geometry_snapshot(), before);
+        let mut protected = before.clone();
+        protected.mesh.mask.fill(1.);
+        app.document.replace_geometry(protected).unwrap();
+        let protected = app.document.geometry_snapshot();
+        let history = app.document.history_counts();
+        tap(&mut app, &ctx, point);
+        assert_eq!(
+            app.document.geometry_snapshot(),
+            protected,
+            "{} ignored protection",
+            tool.label()
+        );
+        assert_eq!(app.document.history_counts(), history);
+    }
+}
+#[test]
+fn modeling_construction_presets_roundtrip_and_keep_older_preferences_compatible() {
+    let (mut app, ctx, _) = setup();
+    let mut old = serde_json::to_value(app.ui.modeling.options()).unwrap();
+    old.as_object_mut().unwrap().remove("construction");
+    old.as_object_mut().unwrap().remove("flat_angle");
+    let options: crate::viewport::ModelingOptions = serde_json::from_value(old).unwrap();
+    options.validate().unwrap();
+    assert_eq!(options.construction.width, 0.1);
+    assert_eq!(options.flat_angle, 0.);
+    app.dispatch(
+        Command::Action(Action::ModelTool(ModelTool::PointSplit)),
+        &ctx,
+    );
+    app.ui.modeling.construction.round = true;
+    app.ui.modeling.construction.crease = true;
+    app.ui.modeling.construction.triangulate = true;
+    app.ui.modeling.amount = 0.08;
+    app.ui.modeling.flat_angle = 25.;
+    let options = app.ui.modeling.options();
+    app.ui.modeling.preset_name = "Round point socket".into();
+    app.dispatch(Command::Action(Action::ModelSavePreset), &ctx);
+    let id = app.ui.modeling.preset.unwrap();
+    app.dispatch(
+        Command::Action(Action::ModelTool(ModelTool::FaceSplit)),
+        &ctx,
+    );
+    app.ui.modeling.construction.round = false;
+    app.dispatch(Command::Action(Action::ModelPreset(id)), &ctx);
+    assert_eq!(app.ui.modeling.options(), options);
+    app.dispatch(Command::ModelingComponent(ComponentMode::Face), &ctx);
+    app.dispatch(
+        Command::Action(Action::ModelTool(ModelTool::PointSplit)),
+        &ctx,
+    );
+    assert_eq!(app.ui.modeling.amount, 0.08);
+}

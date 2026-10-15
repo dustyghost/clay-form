@@ -7,6 +7,7 @@ pub(crate) struct ModelingControls {
     pub tool: ModelTool,
     pub change: SelectionChange,
     pub span: SelectionSpan,
+    pub flat_angle: f32,
     pub count: usize,
     pub loop_count: u32,
     pub join: bool,
@@ -15,6 +16,7 @@ pub(crate) struct ModelingControls {
     pub protect_mask: bool,
     pub individual: bool,
     pub snap: f32,
+    pub construction: crate::viewport::ModelConstruction,
     pub tap_repeat: bool,
     pub smooth_preview: bool,
     pub preset_name: String,
@@ -33,6 +35,7 @@ impl ModelingControls {
         self.amounts.insert(self.tool, self.amount);
         self.tool = tool;
         self.amount = self.amounts.get(&tool).copied().unwrap_or(match tool {
+            ModelTool::EdgeSplit | ModelTool::EdgeCollapse => 0.5,
             ModelTool::Scale => 1.,
             ModelTool::Rotate => 15.,
             _ => 0.1,
@@ -40,10 +43,13 @@ impl ModelingControls {
     }
 
     pub fn load_options(&mut self, o: crate::viewport::ModelingOptions) {
+        self.amounts.insert(self.tool, self.amount);
+        self.amounts.insert(o.tool, o.amount);
         self.mode = o.mode;
         self.tool = o.tool;
         self.change = o.change;
         self.span = o.span;
+        self.flat_angle = o.flat_angle;
         self.join = o.join;
         self.loop_count = o.loop_count;
         self.axis = o.axis;
@@ -51,6 +57,7 @@ impl ModelingControls {
         self.protect_mask = o.protect_mask;
         self.individual = o.individual;
         self.snap = o.snap;
+        self.construction = o.construction;
         self.tap_repeat = o.tap_repeat;
         self.smooth_preview = o.smooth_preview;
     }
@@ -61,6 +68,7 @@ impl ModelingControls {
             tool: self.tool,
             change: self.change,
             span: self.span,
+            flat_angle: self.flat_angle,
             join: self.join,
             loop_count: self.loop_count,
             axis: self.axis,
@@ -68,6 +76,7 @@ impl ModelingControls {
             protect_mask: self.protect_mask,
             individual: self.individual,
             snap: self.snap,
+            construction: self.construction,
             tap_repeat: self.tap_repeat,
             smooth_preview: self.smooth_preview,
         }
@@ -142,15 +151,54 @@ impl UiState {
             });
             if self.modeling.mode==ComponentMode::Face { ui.horizontal_wrapped(|ui| { for tool in [ModelTool::Inset,ModelTool::Bevel,ModelTool::Fuse] { if ui.selectable_label(self.modeling.tool==tool,match tool {ModelTool::Move=>"Move",ModelTool::Rotate=>"Rotate",ModelTool::Scale=>"Scale",_=>tool.label()}).customize(Action::ModelTool(tool)).clicked() {commands.push(Command::Action(Action::ModelTool(tool)));} } }); }
             if self.modeling.mode==ComponentMode::Edge && ui.selectable_label(self.modeling.tool==ModelTool::Slide,"Slide loop").customize(Action::ModelTool(ModelTool::Slide)).clicked(){commands.push(Command::Action(Action::ModelTool(ModelTool::Slide)));}
+            ui.horizontal_wrapped(|ui| {
+                for tool in [ModelTool::EdgeExtrude,ModelTool::EdgeSplit,ModelTool::EdgeCollapse,ModelTool::PointExtrude,ModelTool::PointSplit,ModelTool::FacePoint,ModelTool::FaceSplit] {
+                    if tool.required_mode()==Some(self.modeling.mode) && ui.selectable_label(self.modeling.tool==tool,tool.label()).customize(Action::ModelTool(tool)).clicked(){commands.push(Command::Action(Action::ModelTool(tool)));}
+                }
+            });
             ui.label("Target");
             ui.horizontal_wrapped(|ui| {
                 for span in SelectionSpan::ALL.into_iter().filter(|s|s.available(self.modeling.mode)) {
                     if ui.selectable_label(self.modeling.span==span,span.label()).customize(match span { SelectionSpan::Single=>Action::ModelSelectSingle, SelectionSpan::Loop=>Action::ModelSelectLoops,SelectionSpan::Ring=>Action::ModelSelectRing,_=>Action::ModelTarget(span) }).clicked() { commands.push(Command::Action(Action::ModelTarget(span))); }
                 }
             });
+            if self.modeling.span==SelectionSpan::Flat {
+                ui.add(egui::Slider::new(&mut self.modeling.flat_angle,0. ..=180.).text("Island angle").suffix("°"));
+                ui.weak("Connected faces within this angle of the first face");
+            }
             ui.checkbox(&mut self.modeling.protect_mask,"Protect mask").customize(Action::ModelProtectMask);
             ui.weak("Hidden faces are protected · topology edits replace stored levels");
             match self.modeling.tool {
+                ModelTool::EdgeExtrude | ModelTool::EdgeSplit | ModelTool::EdgeCollapse | ModelTool::PointExtrude | ModelTool::PointSplit | ModelTool::FacePoint | ModelTool::FaceSplit => {
+                    let tool=self.modeling.tool;
+                    if matches!(tool,ModelTool::EdgeSplit|ModelTool::EdgeCollapse) {
+                        ui.label("Position from marked endpoint (0–1)");
+                        let range=if tool==ModelTool::EdgeSplit {0.001..=0.999}else{0.0..=1.0};
+                        ui.add(egui::DragValue::new(&mut self.modeling.amount).range(range).speed(0.01));
+                        if tool==ModelTool::EdgeCollapse {ui.horizontal_wrapped(|ui|{ui.selectable_value(&mut self.modeling.amount,0.,"Marked end");ui.selectable_value(&mut self.modeling.amount,0.5,"Midpoint");ui.selectable_value(&mut self.modeling.amount,1.,"Other end");});}
+                        ui.weak("Drag along the edge to place the point · Esc cancels");
+                    } else if !tool.instant() {
+                        ui.label(if tool==ModelTool::PointSplit {"Radius"}else{"Distance"});
+                        ui.add(egui::DragValue::new(&mut self.modeling.amount).speed(0.01));
+                        ui.weak("Drag up/down to adjust · release applies · Esc cancels");
+                    }
+                    if tool==ModelTool::EdgeExtrude {
+                        ui.checkbox(&mut self.modeling.construction.other_side,"Other adjacent side");
+                        ui.weak("Border: extend outward · surface: extrude the highlighted side");
+                    }
+                    if tool==ModelTool::PointExtrude {
+                        ui.add(egui::DragValue::new(&mut self.modeling.construction.width).prefix("Base radius ").range(0.0001..=1000.).speed(0.01));
+                    }
+                    if matches!(tool,ModelTool::PointSplit|ModelTool::PointExtrude) {
+                        ui.checkbox(&mut self.modeling.construction.round,"Circularize ring");
+                        ui.checkbox(&mut self.modeling.construction.crease,"Crease ring");
+                        if tool==ModelTool::PointSplit {ui.checkbox(&mut self.modeling.construction.triangulate,"Triangulate center");}
+                        ui.weak("Closed point fan · radius below half the shortest edge");
+                    }
+                    if tool.instant(){ui.weak(if tool==ModelTool::FacePoint {"Tap: connect a center point to each corner"}else{"Tap: split into quads and connect neighboring edges"});}
+                    if ui.add_enabled(self.modeling.count>0,egui::Button::new(if tool.instant(){"Apply to selection"}else{"Apply amount"})).customize(Action::ModelApply).clicked(){commands.push(Command::ModelApply);}
+                }
+
                 ModelTool::Select => {
                     ui.horizontal_wrapped(|ui| {
                         for (change, action) in [
@@ -229,7 +277,7 @@ impl UiState {
                     ui.weak("Follows visible quads. Edits replace stored levels.");
                 }
             }
-            if self.modeling.tool.is_edit() || self.modeling.tool==ModelTool::Extrude {
+            if (self.modeling.tool.is_edit() && !self.modeling.tool.instant()) || self.modeling.tool==ModelTool::Extrude {
                 ui.checkbox(&mut self.modeling.tap_repeat,"Tap to repeat").customize(Action::ModelTapRepeat)
                     .on_hover_text("Tap a target to apply the displayed amount and options. Drag to set a new amount. Select and centered loop cuts are unchanged.");
                 if self.modeling.tap_repeat {ui.weak(format!("Tap applies {:.3} · drag sets a new amount",self.modeling.amount));}

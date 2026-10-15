@@ -243,7 +243,9 @@ impl App {
                 self.viewport.set_edge_selection(Vec::new(), &self.document);
                 self.ui.modeling.mode = mode;
                 self.ui.modeling.span = crate::viewport::SelectionSpan::Single;
-                self.ui.modeling.tool = crate::viewport::ModelTool::Select;
+                self.ui
+                    .modeling
+                    .set_tool(crate::viewport::ModelTool::Select);
                 Ok(())
             }
             Command::ClearModelSelection => {
@@ -261,7 +263,9 @@ impl App {
                     true,
                 );
                 self.ui.modeling.mode = crate::viewport::ComponentMode::Edge;
-                self.ui.modeling.tool = crate::viewport::ModelTool::Select;
+                self.ui
+                    .modeling
+                    .set_tool(crate::viewport::ModelTool::Select);
                 self.ui.modeling.span = crate::viewport::SelectionSpan::Single;
                 Ok(())
             }
