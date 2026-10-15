@@ -236,7 +236,10 @@ impl Viewport {
             rect,
             document,
             camera,
-            options.wire,
+            options.wire
+                && !options
+                    .modeling
+                    .is_some_and(|m| m.smooth_preview && !self.modeling.dragging()),
             options.wire_mode,
             options.wire_triangles,
             self.renderer.as_mut(),

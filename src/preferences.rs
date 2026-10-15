@@ -333,8 +333,16 @@ pub(crate) struct Workspace {
     pub appearance: Appearance,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct ModelingPreset {
+    pub id: u64,
+    pub name: String,
+    pub options: crate::viewport::ModelingOptions,
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct Preferences {
+    pub modeling_presets: Vec<ModelingPreset>,
+    pub next_modeling_preset_id: u64,
     pub recovery: crate::recovery::Settings,
     pub version: u32,
     pub bindings: Vec<(Action, Option<Shortcut>)>,
@@ -386,6 +394,8 @@ impl Default for Preferences {
             (Key::Minus, none),
         ];
         Self {
+            modeling_presets: Vec::new(),
+            next_modeling_preset_id: 1,
             recovery: Default::default(),
             version: 1,
             bindings: Action::ALL
@@ -430,6 +440,21 @@ impl Default for Preferences {
 }
 impl Preferences {
     pub fn validate(&self) -> Result<(), String> {
+        if self.modeling_presets.len() > 128 || self.next_modeling_preset_id == 0 {
+            return Err("Invalid modeling preset library".into());
+        }
+        let mut ids = std::collections::BTreeSet::new();
+        for preset in &self.modeling_presets {
+            if preset.id == 0
+                || preset.id >= self.next_modeling_preset_id
+                || !ids.insert(preset.id)
+                || preset.name.trim().is_empty()
+                || preset.name.len() > 128
+            {
+                return Err("Invalid modeling preset".into());
+            }
+            preset.options.validate()?;
+        }
         if self.version != 1 {
             return Err("Unsupported preferences version".into());
         }

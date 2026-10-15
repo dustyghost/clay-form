@@ -42,6 +42,7 @@ See [Development](../development.md#update-guide-screenshots) for prerequisites 
 | `rotation-controls.png` | [Rotation rings and the live angle](../guide/modeling.md#example-rotate-a-cube-and-keep-its-recipe) | `gpu_rotation_controls_and_primitive_regeneration` |
 | `modeling-paint-selection.png`, `modeling-face-loop.png`, `modeling-edge-ring.png`, `modeling-edge-loop.png` | [Paint selection and loop patterns](../guide/modeling.md#select-faces-edges-or-vertices) | `modeling_selection_offscreen_review` |
 | `modeling-symmetry-selection.png`, `modeling-symmetry-extrude.png`, `modeling-dissolve-before.png`, `modeling-dissolve-after.png` | [Symmetry and dissolving loops](../guide/modeling.md#dissolve-selected-loops) | `modeling_symmetry_dissolve_offscreen_review` |
+| `modeling-milestone-inset.png`, `modeling-milestone-smooth.png`, `modeling-milestone-preset.png` | [Integrated construction, presets and smooth preview](../guide/modeling.md#keep-useful-tool-setups-and-inspect-the-smooth-result) | `modeling_milestones_offscreen_review` |
 
 ## Example assets
 

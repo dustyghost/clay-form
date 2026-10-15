@@ -42,11 +42,12 @@ impl App {
                 if mode != self.ui.modeling.mode {
                     self.dispatch(Command::ModelingComponent(mode), ctx);
                 }
-                self.ui.modeling.tool = match action {
+                let tool = match action {
                     Action::ModelExtrude => Tool::Extrude,
                     Action::ModelLoopCut => Tool::LoopCut,
                     _ => Tool::Select,
                 };
+                self.ui.modeling.set_tool(tool);
                 match action {
                     Action::ModelSelectSingle => self.ui.modeling.span = Span::Single,
                     Action::ModelSelectLoops => self.ui.modeling.span = Span::Loop,
@@ -83,10 +84,7 @@ impl App {
                         ctx,
                     );
                 }
-                self.ui.modeling.tool = tool;
-                if tool == crate::viewport::ModelTool::Scale {
-                    self.ui.modeling.amount = 1.;
-                }
+                self.ui.modeling.set_tool(tool);
                 None
             }
             Action::ModelTarget(span) => {
@@ -95,6 +93,59 @@ impl App {
                 None
             }
             Action::ModelTopology(edit) => Some(Command::ModelTopology(edit)),
+            Action::ModelRepeat => Some(Command::ModelRepeat),
+            Action::ModelSmoothPreview => {
+                self.ui.modeling.smooth_preview = !self.ui.modeling.smooth_preview;
+                None
+            }
+            Action::ModelSavePreset => {
+                let name = self.ui.modeling.preset_name.trim().to_string();
+                let options = self.ui.modeling.options();
+                if name.is_empty() || name.len() > 128 {
+                    self.ui.status = "Enter a preset name (up to 128 bytes)".into();
+                } else if let Err(e) = options.validate() {
+                    self.ui.status = e;
+                } else if self.ui.preferences.modeling_presets.len() >= 128 {
+                    self.ui.status = "The modeling library holds up to 128 presets".into();
+                } else if let Some(next) =
+                    self.ui.preferences.next_modeling_preset_id.checked_add(1)
+                {
+                    let id = self.ui.preferences.next_modeling_preset_id;
+                    self.ui.preferences.next_modeling_preset_id = next;
+                    self.ui
+                        .preferences
+                        .modeling_presets
+                        .push(crate::preferences::ModelingPreset { id, name, options });
+                    self.ui.modeling.preset = Some(id);
+                }
+                None
+            }
+            Action::ModelPreset(id) => {
+                if let Some(preset) = self
+                    .ui
+                    .preferences
+                    .modeling_presets
+                    .iter()
+                    .find(|p| p.id == id)
+                    .cloned()
+                {
+                    if !self.ui.modeling.active {
+                        self.dispatch(Command::ModelingMode(true), ctx);
+                    }
+                    self.dispatch(Command::ModelingComponent(preset.options.mode), ctx);
+                    self.ui.modeling.load_options(preset.options);
+                    self.ui.modeling.preset = Some(id);
+                    self.ui.modeling.preset_name = preset.name;
+                }
+                None
+            }
+            Action::ModelDeletePreset(id) => {
+                self.ui.preferences.modeling_presets.retain(|p| p.id != id);
+                if self.ui.modeling.preset == Some(id) {
+                    self.ui.modeling.preset = None;
+                }
+                None
+            }
             Action::ModelApply => Some(Command::ModelApply),
             Action::ModelBoundary => Some(Command::ModelBoundary),
             Action::ModelProtectMask => {

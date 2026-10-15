@@ -1041,6 +1041,20 @@ impl UiState {
         }
         self.modeling_controls(ui, document, commands);
         ui.separator();
+        if self.modeling.active {
+            ui.collapsing("Mesh settings", |ui| {
+                self.mesh_settings_controls(ui, document, commands)
+            });
+        } else {
+            self.mesh_settings_controls(ui, document, commands);
+        }
+    }
+    fn mesh_settings_controls(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &Document,
+        commands: &mut Vec<Command>,
+    ) {
         let settings = document.mesh_settings();
         ui.label(format!(
             "{} vertices • {} faces",

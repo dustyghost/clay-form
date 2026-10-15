@@ -82,6 +82,7 @@ impl App {
                 | Command::ClearModelSelection
                 | Command::ModelSelectLoop
                 | Command::ModelTopology(_)
+                | Command::ModelRepeat
                 | Command::ModelApply
                 | Command::ModelBoundary
                 | Command::ModelDissolveLoops
@@ -167,6 +168,7 @@ impl App {
                     | Command::ClearModelSelection
                     | Command::ModelSelectLoop
                     | Command::ModelTopology(_)
+                    | Command::ModelRepeat
                     | Command::ModelApply
                     | Command::ModelBoundary
                     | Command::ModelDissolveLoops
@@ -270,6 +272,21 @@ impl App {
                     edit,
                     self.ui.modeling.protect_mask,
                 )
+            }
+            Command::ModelRepeat => {
+                self.viewport.cancel(&mut self.document);
+                self.viewport
+                    .modeling
+                    .repeat_last(
+                        &mut self.document,
+                        self.ui.modeling.mode,
+                        self.ui.modeling.protect_mask,
+                    )
+                    .map(|()| {
+                        if let Some(last) = self.viewport.modeling.last_edit {
+                            self.ui.modeling.load_options(last);
+                        }
+                    })
             }
             Command::ModelApply => {
                 self.viewport.cancel(&mut self.document);

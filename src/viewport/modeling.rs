@@ -14,7 +14,7 @@ pub(crate) enum ComponentMode {
     Edge,
     Vertex,
 }
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub(crate) enum ModelTool {
     #[default]
     Select,
@@ -111,7 +111,7 @@ impl ModelAxis {
         }
     }
 }
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct ModelingOptions {
     pub mode: ComponentMode,
     pub tool: ModelTool,
@@ -124,6 +124,8 @@ pub(crate) struct ModelingOptions {
     pub protect_mask: bool,
     pub individual: bool,
     pub snap: f32,
+    #[serde(default)]
+    pub smooth_preview: bool,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Component {
@@ -142,6 +144,9 @@ pub(crate) struct ModelingState {
     loop_preview: Option<LoopPreview>,
     loop_drag: Option<LoopDrag>,
     pub requested_loop_count: Option<u32>,
+    pub requested_amount: Option<f32>,
+    pub last_edit: Option<ModelingOptions>,
+    smooth: Option<(u64, Result<Mesh, String>)>,
 }
 struct LoopPreview {
     edge: [usize; 2],
@@ -173,6 +178,7 @@ impl ModelingState {
     pub fn sync(&mut self, document: &Document) {
         if self.revision != document.display_revision() {
             self.symmetry = None;
+            self.smooth = None;
             self.selected.clear();
             self.selection_drag = None;
             self.drag = None;
@@ -184,6 +190,7 @@ impl ModelingState {
     }
     pub fn cancel(&mut self) {
         self.selection_drag = None;
+        self.smooth = None;
         self.drag = None;
         self.edit_drag = None;
         self.loop_drag = None;
@@ -210,7 +217,14 @@ impl ModelingState {
     }
     pub fn preview(&self) -> Option<&Mesh> {
         if let Some(drag) = &self.edit_drag {
-            return drag.result.as_ref().and_then(|r| r.as_ref().ok());
+            return drag
+                .result
+                .as_ref()
+                .and_then(|r| r.as_ref().ok())
+                .map(|r| &r.mesh);
+        }
+        if self.drag.is_none() {
+            return self.smooth.as_ref().and_then(|(_, r)| r.as_ref().ok());
         }
         self.drag
             .as_ref()?
@@ -268,6 +282,26 @@ impl ModelingState {
             }
         }
         let options = options.unwrap();
+        if options.smooth_preview {
+            if self
+                .smooth
+                .as_ref()
+                .is_none_or(|(revision, _)| *revision != document.display_revision())
+            {
+                let mesh = document.mesh();
+                let result = if mesh.triangles.len() > 20_000 {
+                    Err("Smooth preview supports cages up to 20,000 triangles".into())
+                } else if mesh.hidden_face_count() > 0 {
+                    Err("Show all faces for smooth preview".into())
+                } else {
+                    mesh.smooth_subdivide(1., &|| false)
+                };
+                self.smooth = Some((document.display_revision(), result));
+            }
+        } else {
+            self.smooth = None;
+        }
+
         if options.tool != ModelTool::Select {
             self.selection_drag = None;
         }
@@ -438,9 +472,40 @@ impl Viewport {
         let eligible =
             point.filter(|p| !navigation::contains(response.rect, *p) && !gizmo.contains(*p));
         let hover = eligible.and_then(|p| Self::component_at(p, model.mode, document, scene));
+        if model.smooth_preview && options.wire && !self.modeling.dragging() {
+            for [a, b] in document.mesh().polygon_edges() {
+                if let Some(points) =
+                    scene.clip_segment([document.mesh().vertices[a], document.mesh().vertices[b]])
+                {
+                    painter.line_segment(
+                        points,
+                        egui::Stroke::new(
+                            1_f32,
+                            Color32::from_rgba_unmultiplied(170, 195, 210, 120),
+                        ),
+                    );
+                }
+            }
+        }
         let selected = Color32::from_rgb(70, 225, 240);
         let highlighted = Color32::from_rgb(255, 205, 95);
-        if let Some(drag) = &self.modeling.drag {
+        if let Some(drag) = &self.modeling.edit_drag {
+            if let Some(Ok(result)) = &drag.result {
+                let components = if matches!(
+                    model.tool,
+                    ModelTool::Move | ModelTool::Rotate | ModelTool::Scale | ModelTool::Slide
+                ) {
+                    drag.components.clone()
+                } else if result.retain_caps {
+                    ModelingState::cap_selection(document.mesh(), &result.mesh, &drag.components)
+                } else {
+                    BTreeSet::new()
+                };
+                for component in components {
+                    Self::paint_component(component, &result.mesh, scene, painter, highlighted);
+                }
+            }
+        } else if let Some(drag) = &self.modeling.drag {
             if let Some(Ok(result)) = &drag.result {
                 for &edge in &result.rim {
                     if let Some(points) = scene.clip_segment(edge) {
@@ -459,7 +524,12 @@ impl Viewport {
                 .map(|d| Component::Edge(d.edge))
                 .or(hover)
             {
-                let targets = if model.tool != ModelTool::LoopCut {
+                let targets = if model.tool != ModelTool::Select
+                    && model.tool != ModelTool::LoopCut
+                    && self.modeling.selected.contains(&component)
+                {
+                    self.modeling.selected.iter().copied().collect()
+                } else if model.tool != ModelTool::LoopCut {
                     Self::selection_target(
                         component,
                         point.unwrap(),
@@ -489,12 +559,16 @@ impl Viewport {
         let hint = if let Some(drag) = &self.modeling.edit_drag {
             match &drag.result {
                 Some(Err(e)) => format!("{e} · Esc cancels"),
-                _ => format!(
-                    "{} {:.3} · release to apply · Esc cancels",
+                Some(Ok(r)) => format!(
+                    "{} {:.3} · {} · release to apply · Esc cancels",
                     model.tool.label(),
-                    drag.amount
+                    r.amount,
+                    r.notice
                 ),
+                None => format!("{} · drag to preview", model.tool.label()),
             }
+        } else if let Some((_, Err(error))) = &self.modeling.smooth {
+            error.clone()
         } else if let Some(error) = &symmetry_error {
             error.clone()
         } else if let Some(drag) = &self.modeling.drag {
@@ -759,22 +833,40 @@ impl Viewport {
                 }
             } else if let Some(drag) = self.modeling.drag.take() {
                 if let Some(result) = drag.result {
-                    match result.and_then(|r| {
-                        document.commit_modeling(
-                            r.mesh,
-                            if r.joined {
-                                "Extrude tunnel"
+                    match result {
+                        Ok(r) if r.mesh == *document.mesh() => {}
+                        Ok(r) => {
+                            let selected =
+                                drag.faces.iter().copied().map(Component::Face).collect();
+                            let caps = if !r.joined && !r.collapsed {
+                                ModelingState::cap_selection(document.mesh(), &r.mesh, &selected)
                             } else {
-                                "Extrude faces"
-                            },
-                            drag.revision,
-                        )
-                    }) {
-                        Ok(()) => {}
+                                BTreeSet::new()
+                            };
+                            let amount = r.distance;
+                            match document.commit_modeling(
+                                r.mesh,
+                                if r.joined {
+                                    "Extrude tunnel"
+                                } else {
+                                    "Extrude faces"
+                                },
+                                drag.revision,
+                            ) {
+                                Ok(()) => {
+                                    self.modeling.sync(document);
+                                    self.modeling.selected = caps;
+                                    let mut last = model;
+                                    last.amount = amount;
+                                    self.modeling.last_edit = Some(last);
+                                    self.modeling.requested_amount = Some(amount);
+                                }
+                                Err(e) => self.status = Some(e),
+                            }
+                        }
                         Err(e) => self.status = Some(e),
                     }
                 }
-                self.modeling.sync(document);
             } else if let Some(drag) = self.modeling.loop_drag.take() {
                 if let Some(preview) = self.modeling.loop_preview.take() {
                     if let Err(e) = preview.result.and_then(|cut| {
@@ -784,6 +876,11 @@ impl Viewport {
                         document.commit_modeling(cut.mesh, "Insert edge loops", drag.revision)
                     }) {
                         self.status = Some(e);
+                    } else {
+                        let mut last = model;
+                        last.amount = drag.position;
+                        last.loop_count = drag.count;
+                        self.modeling.last_edit = Some(last);
                     }
                     self.modeling.sync(document);
                 }
@@ -811,5 +908,30 @@ impl Viewport {
         // presses even if the chosen component has no hit (e.g. a face in vertex mode).
         self.gesture == Some(Gesture::Modeling)
             || eligible.is_some_and(|p| scene.pick_model(p).is_some())
+    }
+}
+
+impl ModelingOptions {
+    pub fn validate(&self) -> Result<(), String> {
+        if !self.amount.is_finite()
+            || self.amount.abs() > 1_000_000.
+            || !self.snap.is_finite()
+            || !(0.0..=0.25).contains(&self.snap)
+            || !(1..=LoopCut::MAX_COUNT).contains(&self.loop_count)
+            || !self.span.available(self.mode)
+        {
+            return Err("Invalid modeling preset settings".into());
+        }
+        let mode = match self.tool {
+            ModelTool::Extrude | ModelTool::Inset | ModelTool::Bevel | ModelTool::Fuse => {
+                Some(ComponentMode::Face)
+            }
+            ModelTool::LoopCut | ModelTool::Slide => Some(ComponentMode::Edge),
+            _ => None,
+        };
+        if mode.is_some_and(|mode| mode != self.mode) {
+            return Err("Preset action does not match its component mode".into());
+        }
+        Ok(())
     }
 }

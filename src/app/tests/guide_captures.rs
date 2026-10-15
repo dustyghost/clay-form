@@ -1049,3 +1049,67 @@ fn modeling_symmetry_dissolve_offscreen_review() {
     click_guide_label(&mut g, "Undo");
     assert_eq!(g.app.document.geometry_snapshot(), before);
 }
+
+#[test]
+#[ignore = "integrated pen construction, presets and smooth preview; requires EGL and CLAY_GUIDE_PREVIEW"]
+fn modeling_milestones_offscreen_review() {
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
+    let directory = std::path::Path::new(&directory);
+    std::fs::create_dir_all(directory).unwrap();
+    let mut g = Guide::new(directory, [1200, 1100]);
+    g.interactive = true;
+    g.panel(Tool::Mesh, Dock::Right);
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
+    primitive.divisions = [3; 3];
+    g.app
+        .document
+        .replace_geometry(crate::sculpt::Geometry::new(primitive.mesh().unwrap()))
+        .unwrap();
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    g.app.camera.zoom = 0.65;
+    click_guide_label(&mut g, "Pen modeling");
+    click_guide_label(&mut g, "Symmetry");
+    let (rect, _) = g.frame(vec![]);
+    let scale = rect.width().min(rect.height()) * 0.35 * g.app.camera.zoom;
+    let start = rect.center() + Vec2::new(scale * 2. / 3., 0.);
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    g.frame(vec![primary_event(start, false)]);
+    assert_eq!(g.app.ui.modeling.count, 2);
+    click_guide_label(&mut g, "Inset");
+    g.stroke(start, start + Vec2::new(0., -scale * 0.08));
+    assert_eq!(g.app.viewport.modeling.selected.len(), 2);
+    assert!((g.app.ui.modeling.amount - 0.08).abs() < 1e-4);
+    g.save("modeling-milestone-inset");
+    click_guide_label(&mut g, "Tool presets");
+    click_guide_label(&mut g, "Preset name");
+    g.frame(vec![egui::Event::Text("Measured inset".into())]);
+    click_guide_label(&mut g, "Save tool preset");
+    assert_eq!(g.app.ui.preferences.modeling_presets.len(), 1);
+    click_guide_label(&mut g, "Tool presets");
+    click_guide_label(&mut g, "Extrude");
+    g.stroke(start, start + Vec2::new(0., -scale * 0.2));
+    assert_eq!(g.app.viewport.modeling.selected.len(), 2);
+    crate::sculpt::ModelingSymmetry::new(g.app.document.mesh(), g.app.document.symmetry()).unwrap();
+    click_guide_label(&mut g, "Scale");
+    g.stroke(start, start + Vec2::new(0., -15.));
+    let cage = g.app.document.geometry_snapshot();
+    let history = g.app.document.history_counts();
+    click_guide_label(&mut g, "Smooth preview");
+    g.frame(vec![]);
+    assert_eq!(g.app.document.geometry_snapshot(), cage);
+    assert_eq!(g.app.document.history_counts(), history);
+    assert!(g.app.viewport.modeling.preview().unwrap().quads.len() > cage.mesh.quads.len());
+    g.app.camera.yaw = 0.35;
+    g.app.camera.pitch = -0.2;
+    g.save("modeling-milestone-smooth");
+    click_guide_label(&mut g, "Tool presets");
+    click_guide_label(&mut g, "Use Measured inset");
+    assert_eq!(g.app.ui.modeling.tool, crate::viewport::ModelTool::Inset);
+    assert!((g.app.ui.modeling.amount - 0.08).abs() < 1e-4);
+    assert_eq!(g.app.document.geometry_snapshot(), cage);
+    g.save("modeling-milestone-preset");
+}

@@ -197,19 +197,7 @@ impl App {
                     .ui
                     .modeling
                     .active
-                    .then_some(crate::viewport::ModelingOptions {
-                        mode: self.ui.modeling.mode,
-                        tool: self.ui.modeling.tool,
-                        change: self.ui.modeling.change,
-                        span: self.ui.modeling.span,
-                        join: self.ui.modeling.join,
-                        loop_count: self.ui.modeling.loop_count,
-                        axis: self.ui.modeling.axis,
-                        amount: self.ui.modeling.amount,
-                        protect_mask: self.ui.modeling.protect_mask,
-                        individual: self.ui.modeling.individual,
-                        snap: self.ui.modeling.snap,
-                    }),
+                    .then_some(self.ui.modeling.options()),
                 arrange_references: self.ui.arrange_references,
                 references_visible: self.ui.references_visible,
                 slice: self.ui.slice_active.then_some(self.ui.slice_options),
@@ -242,6 +230,14 @@ impl App {
         );
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         self.ui.modeling.count = self.viewport.modeling.selection().len();
+        self.ui.modeling.can_repeat = self.viewport.modeling.last_edit.is_some();
+        self.ui.modeling.repeat_label =
+            self.viewport.modeling.last_edit.map_or(String::new(), |o| {
+                format!("{} · {:.3}", o.tool.label(), o.amount)
+            });
+        if let Some(amount) = self.viewport.modeling.requested_amount.take() {
+            self.ui.modeling.amount = amount;
+        }
         if let Some(count) = self.viewport.modeling.requested_loop_count.take() {
             self.ui.modeling.loop_count = count;
         }

@@ -776,3 +776,64 @@ fn modeling_topology_commands_are_atomic_and_undoable() {
     assert_eq!(app.document.mesh(), &before);
     assert_eq!(app.viewport.modeling.selected.len(), 1);
 }
+#[test]
+fn modeling_presets_roundtrip_repeat_and_smooth_preview_do_not_lose_the_cage() {
+    use crate::viewport::ModelAxis;
+    let (mut app, ctx, rect) = setup();
+    tap(&mut app, &ctx, rect.center());
+    app.dispatch(Command::Action(Action::ModelTool(ModelTool::Move)), &ctx);
+    app.ui.modeling.axis = ModelAxis::Z;
+    app.ui.modeling.amount = 0.1;
+    app.ui.modeling.preset_name = "Measured lift".into();
+    let original = app.document.mesh().clone();
+    app.dispatch(Command::Action(Action::ModelSavePreset), &ctx);
+    let id = app.ui.modeling.preset.unwrap();
+    let serialized = serde_json::to_string(&app.ui.preferences).unwrap();
+    let prefs: crate::preferences::Preferences = serde_json::from_str(&serialized).unwrap();
+    prefs.validate().unwrap();
+    app.ui.preferences = prefs;
+    app.ui.modeling.amount = 0.9;
+    app.dispatch(Command::Action(Action::ModelPreset(id)), &ctx);
+    assert_eq!(app.ui.modeling.amount, 0.1);
+    assert_eq!(app.document.mesh(), &original);
+    app.dispatch(Command::ModelApply, &ctx);
+    let once = app.document.mesh().clone();
+    app.ui.modeling.amount = 0.8;
+    app.dispatch(Command::ModelRepeat, &ctx);
+    let twice = app.document.mesh().clone();
+    assert_eq!(app.ui.modeling.amount, 0.1);
+    for v in app.viewport.modeling.selected_vertices(&twice) {
+        assert!((twice.vertices[v].2 - once.vertices[v].2 - 0.1).abs() < 1e-5);
+    }
+    let history = app.document.history_counts();
+    app.ui.modeling.amount = 0.;
+    app.dispatch(Command::ModelApply, &ctx);
+    tap(&mut app, &ctx, rect.center());
+    assert_eq!(app.viewport.modeling.last_edit.unwrap().amount, 0.1);
+    assert_eq!(app.document.history_counts(), history);
+    app.ui.modeling.smooth_preview = true;
+    navigation_frame(&mut app, &ctx, vec![]);
+    assert_eq!(app.document.mesh(), &twice);
+    assert_eq!(app.document.history_counts(), history);
+    assert!(app.viewport.modeling.preview().unwrap().quads.len() > twice.quads.len());
+    app.dispatch(Command::ModelingMode(false), &ctx);
+    navigation_frame(&mut app, &ctx, vec![]);
+    assert!(app.viewport.modeling.preview().is_none());
+    app.dispatch(Command::Action(Action::ModelDeletePreset(id)), &ctx);
+    app.dispatch(Command::ModelingMode(true), &ctx);
+    app.dispatch(Command::Action(Action::ModelSavePreset), &ctx);
+    assert!(app.ui.modeling.preset.unwrap() > id);
+}
+#[test]
+fn modeling_tool_amounts_are_remembered_without_brush_size() {
+    let (mut app, ctx, _) = setup();
+    app.dispatch(Command::Action(Action::ModelTool(ModelTool::Inset)), &ctx);
+    app.ui.modeling.amount = 0.07;
+    app.dispatch(Command::Action(Action::ModelTool(ModelTool::Scale)), &ctx);
+    assert_eq!(app.ui.modeling.amount, 1.);
+    app.ui.modeling.amount = 1.3;
+    app.dispatch(Command::Action(Action::ModelTool(ModelTool::Inset)), &ctx);
+    assert_eq!(app.ui.modeling.amount, 0.07);
+    app.dispatch(Command::Action(Action::ModelTool(ModelTool::Scale)), &ctx);
+    assert_eq!(app.ui.modeling.amount, 1.3);
+}

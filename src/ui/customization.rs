@@ -169,12 +169,27 @@ impl UiState {
                 .iter()
                 .find(|m| m.id == *id)
                 .map_or_else(|| "Unavailable menu".into(), |m| format!("Open {}", m.name)),
+            Action::ModelPreset(id) => self
+                .preferences
+                .modeling_presets
+                .iter()
+                .find(|p| p.id == *id)
+                .map_or_else(
+                    || "Unavailable modeling preset".into(),
+                    |p| format!("Modeling: {}", p.name),
+                ),
             Action::NewBrush(name) => format!("Add {name} brush"),
             _ => action.label().into(),
         }
     }
     fn action_catalog(&self, document: &Document) -> Vec<Action> {
         let mut actions = Action::ALL.to_vec();
+        actions.extend(
+            self.preferences
+                .modeling_presets
+                .iter()
+                .map(|p| Action::ModelPreset(p.id)),
+        );
         actions.extend(
             document
                 .brushes()
@@ -241,6 +256,27 @@ impl UiState {
                     && (*action == Action::ModelCreateGroup
                         || self.modeling.group < document.mesh().vertex_groups.len())
             }
+            Action::ModelRepeat => {
+                self.edge_unavailable(action, document).is_none()
+                    && self.modeling.active
+                    && self.modeling.can_repeat
+                    && self.modeling.count > 0
+            }
+            Action::ModelSavePreset => self.modeling.active,
+            Action::ModelPreset(id) => {
+                self.edge_unavailable(action, document).is_none()
+                    && self
+                        .preferences
+                        .modeling_presets
+                        .iter()
+                        .any(|p| p.id == *id)
+            }
+            Action::ModelDeletePreset(id) => self
+                .preferences
+                .modeling_presets
+                .iter()
+                .any(|p| p.id == *id),
+            Action::ModelSmoothPreview => self.edge_unavailable(action, document).is_none(),
             Action::ModelTopology(_) => {
                 self.edge_unavailable(action, document).is_none()
                     && self.modeling.active
@@ -384,6 +420,8 @@ impl UiState {
             Action::ModelTool(tool) => self.modeling.active && self.modeling.tool == *tool,
             Action::ModelTarget(span) => self.modeling.active && self.modeling.span == *span,
             Action::ModelProtectMask => self.modeling.protect_mask,
+            Action::ModelSmoothPreview => self.modeling.smooth_preview,
+            Action::ModelPreset(id) => self.modeling.active && self.modeling.preset == Some(*id),
             Action::PenModeling => self.modeling.active,
             Action::ModelSelectSingle => {
                 self.modeling.active

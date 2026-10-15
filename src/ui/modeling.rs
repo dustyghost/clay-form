@@ -15,10 +15,44 @@ pub(crate) struct ModelingControls {
     pub protect_mask: bool,
     pub individual: bool,
     pub snap: f32,
+    pub smooth_preview: bool,
+    pub preset_name: String,
+    pub preset: Option<u64>,
+    pub can_repeat: bool,
+    pub repeat_label: String,
+    pub amounts: std::collections::BTreeMap<ModelTool, f32>,
     pub group_name: String,
     pub group: usize,
 }
 impl ModelingControls {
+    pub fn set_tool(&mut self, tool: ModelTool) {
+        if tool == self.tool {
+            return;
+        }
+        self.amounts.insert(self.tool, self.amount);
+        self.tool = tool;
+        self.amount = self.amounts.get(&tool).copied().unwrap_or(match tool {
+            ModelTool::Scale => 1.,
+            ModelTool::Rotate => 15.,
+            _ => 0.1,
+        });
+    }
+
+    pub fn load_options(&mut self, o: crate::viewport::ModelingOptions) {
+        self.mode = o.mode;
+        self.tool = o.tool;
+        self.change = o.change;
+        self.span = o.span;
+        self.join = o.join;
+        self.loop_count = o.loop_count;
+        self.axis = o.axis;
+        self.amount = o.amount;
+        self.protect_mask = o.protect_mask;
+        self.individual = o.individual;
+        self.snap = o.snap;
+        self.smooth_preview = o.smooth_preview;
+    }
+
     pub fn options(&self) -> crate::viewport::ModelingOptions {
         crate::viewport::ModelingOptions {
             mode: self.mode,
@@ -32,6 +66,7 @@ impl ModelingControls {
             protect_mask: self.protect_mask,
             individual: self.individual,
             snap: self.snap,
+            smooth_preview: self.smooth_preview,
         }
     }
 }
@@ -208,6 +243,22 @@ impl UiState {
                     commands.push(Command::ModelDissolveLoops);
                 }
             }
+            ui.horizontal_wrapped(|ui|{
+                if ui.add_enabled(self.modeling.can_repeat && self.modeling.count>0,egui::Button::new("Repeat last edit")).customize(Action::ModelRepeat).on_hover_text(&self.modeling.repeat_label).clicked(){commands.push(Command::ModelRepeat);}
+                ui.checkbox(&mut self.modeling.smooth_preview,"Smooth preview").customize(Action::ModelSmoothPreview);
+            });
+            if self.modeling.smooth_preview {ui.weak("One smooth level · cage stays editable · preview pauses during a drag");}
+            ui.collapsing("Tool presets",|ui|{
+                ui.add(egui::TextEdit::singleline(&mut self.modeling.preset_name).hint_text("Preset name"));
+                if ui.button("Save tool preset").customize(Action::ModelSavePreset).clicked(){commands.push(Command::Action(Action::ModelSavePreset));}
+                for preset in &self.preferences.modeling_presets {
+                    ui.horizontal(|ui|{
+                        if ui.selectable_label(self.modeling.preset==Some(preset.id),format!("Use {}",preset.name)).customize(Action::ModelPreset(preset.id)).clicked(){commands.push(Command::Action(Action::ModelPreset(preset.id)));}
+                        if ui.small_button("Delete").clicked(){commands.push(Command::Action(Action::ModelDeletePreset(preset.id)));}
+                    });
+                }
+                ui.weak("Saves action, target and options. Right-click a preset to add it to a shelf.");
+            });
             ui.collapsing("Topology",|ui|{
                 for edit in crate::sculpt::TopologyEdit::ALL {
                     use crate::sculpt::TopologyEdit as T;

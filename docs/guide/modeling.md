@@ -145,6 +145,20 @@ Selection previews show the matching components. Symmetry copies of an edit comm
 
 ![Two matching faces extruded together using symmetry](../images/modeling-symmetry-extrude.png)
 
+### Keep useful tool setups and inspect the smooth result
+
+Expand **Tool presets**, enter a name, then **Save tool preset**. Each preset stores component mode, action, target, axis, amount, loop count, contact options and protection/preview settings. **Use …** restores that setup without changing geometry. Right-click a preset to add it to a custom menu or shelf, or assign a shortcut. Presets save in application preferences, independently of the project. Deleting one leaves any old shelf entry unavailable; its identifier is never reused.
+
+Each measured tool remembers its amount during the session. **Repeat last edit** explicitly applies the previous measured operation to the current selection; its tooltip names the operation and amount. It uses the current mask-protection setting and current document symmetry. Tap selection remains selection. After tunnel/fusion snapping, the remembered distance is the snapped distance. Topology buttons such as Delete and Weld are direct commands and are not recorded as measured repeats.
+
+**Smooth preview** shows one Catmull–Clark level over the editable cage, respecting creases. It changes neither geometry, history nor saved subdivision levels. Picking and the faint cage overlay refer to the original mesh. During a drag the operation preview takes priority; the smooth result returns on release. Show all faces first; this interactive preview supports cages up to 20,000 triangles. Turn it off to inspect the unsmoothed geometry.
+
+![A symmetric inset with the shared modeling controls](../images/modeling-milestone-inset.png)
+
+![The smooth result displayed over the unchanged editable cage](../images/modeling-milestone-smooth.png)
+
+![A named tool preset restored without changing the mesh](../images/modeling-milestone-preset.png)
+
 ### Save a component selection as a vertex group
 
 Choose **Select**, build a face, edge, or vertex selection, then expand **Selection to vertex group**. Enter a name and choose **Create group from selection**, or choose an existing group and use **Add to group** / **Remove from group**. Faces include all corners; edges include both endpoints. Sculpt masks stay unchanged. Use a single subdivision level for component-to-group assignment.
