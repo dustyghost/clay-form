@@ -1084,6 +1084,18 @@ fn modeling_milestones_offscreen_review() {
     assert_eq!(g.app.viewport.modeling.selected.len(), 2);
     assert!((g.app.ui.modeling.amount - 0.08).abs() < 1e-4);
     g.save("modeling-milestone-inset");
+    let repeat_target = start + Vec2::new(0., -scale * 2. / 3.);
+    let faces = g.app.document.mesh().quads.len();
+    let history = g.app.document.history_counts().0;
+    g.frame(vec![
+        egui::Event::PointerMoved(repeat_target),
+        primary_event(repeat_target, true),
+    ]);
+    g.frame(vec![primary_event(repeat_target, false)]);
+    assert_eq!(g.app.document.mesh().quads.len(), faces + 8);
+    assert_eq!(g.app.document.history_counts().0, history + 1);
+    assert!((g.app.ui.modeling.amount - 0.08).abs() < 1e-4);
+    g.save("modeling-tap-repeat");
     click_guide_label(&mut g, "Tool presets");
     click_guide_label(&mut g, "Preset name");
     g.frame(vec![egui::Event::Text("Measured inset".into())]);
@@ -1092,6 +1104,7 @@ fn modeling_milestones_offscreen_review() {
     click_guide_label(&mut g, "Tool presets");
     click_guide_label(&mut g, "Extrude");
     g.stroke(start, start + Vec2::new(0., -scale * 0.2));
+    g.frame(vec![]);
     assert_eq!(g.app.viewport.modeling.selected.len(), 2);
     crate::sculpt::ModelingSymmetry::new(g.app.document.mesh(), g.app.document.symmetry()).unwrap();
     click_guide_label(&mut g, "Scale");

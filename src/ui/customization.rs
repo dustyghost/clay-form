@@ -276,7 +276,9 @@ impl UiState {
                 .modeling_presets
                 .iter()
                 .any(|p| p.id == *id),
-            Action::ModelSmoothPreview => self.edge_unavailable(action, document).is_none(),
+            Action::ModelSmoothPreview | Action::ModelTapRepeat => {
+                self.edge_unavailable(action, document).is_none()
+            }
             Action::ModelTopology(_) => {
                 self.edge_unavailable(action, document).is_none()
                     && self.modeling.active
@@ -421,6 +423,7 @@ impl UiState {
             Action::ModelTarget(span) => self.modeling.active && self.modeling.span == *span,
             Action::ModelProtectMask => self.modeling.protect_mask,
             Action::ModelSmoothPreview => self.modeling.smooth_preview,
+            Action::ModelTapRepeat => self.modeling.tap_repeat,
             Action::ModelPreset(id) => self.modeling.active && self.modeling.preset == Some(*id),
             Action::PenModeling => self.modeling.active,
             Action::ModelSelectSingle => {

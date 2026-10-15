@@ -98,6 +98,10 @@ impl App {
                 self.ui.modeling.smooth_preview = !self.ui.modeling.smooth_preview;
                 None
             }
+            Action::ModelTapRepeat => {
+                self.ui.modeling.tap_repeat = !self.ui.modeling.tap_repeat;
+                None
+            }
             Action::ModelSavePreset => {
                 let name = self.ui.modeling.preset_name.trim().to_string();
                 let options = self.ui.modeling.options();

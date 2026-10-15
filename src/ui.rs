@@ -85,6 +85,7 @@ impl Default for UiState {
                 amount: 0.1,
                 snap: 0.04,
                 protect_mask: true,
+                tap_repeat: true,
                 join: true,
                 loop_count: 1,
                 ..Default::default()

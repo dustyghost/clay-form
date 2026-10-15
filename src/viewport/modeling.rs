@@ -124,8 +124,13 @@ pub(crate) struct ModelingOptions {
     pub protect_mask: bool,
     pub individual: bool,
     pub snap: f32,
+    #[serde(default = "tap_repeat_default")]
+    pub tap_repeat: bool,
     #[serde(default)]
     pub smooth_preview: bool,
+}
+fn tap_repeat_default() -> bool {
+    true
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Component {
@@ -165,6 +170,7 @@ struct LoopDrag {
 }
 struct ExtrudeDrag {
     start: Pos2,
+    moved: bool,
     scale: f32,
     faces: Vec<usize>,
     revision: u64,
@@ -317,6 +323,10 @@ impl ModelingState {
         if let Some(drag) = &mut self.drag
             && let Some(point) = point
         {
+            drag.moved |= point.distance(drag.start) > 3.;
+            if !drag.moved {
+                return;
+            }
             let distance = (drag.start.y - point.y) / drag.scale;
             if distance != drag.distance
                 || drag.join != options.join
@@ -711,6 +721,7 @@ impl Viewport {
                 };
                 self.modeling.drag = Some(ExtrudeDrag {
                     start: point.unwrap(),
+                    moved: false,
                     scale: scene.scale_at(scene.pick(point.unwrap()).unwrap().0),
                     faces,
                     revision: document.display_revision(),
@@ -832,6 +843,22 @@ impl Viewport {
                     self.status = Some(e);
                 }
             } else if let Some(drag) = self.modeling.drag.take() {
+                if !drag.moved {
+                    self.modeling.edit_drag = Some(EditDrag {
+                        start: drag.start,
+                        moved: false,
+                        scale: drag.scale,
+                        components: drag.faces.into_iter().map(Component::Face).collect(),
+                        anchor: Vec3::default(),
+                        revision: drag.revision,
+                        amount: 0.,
+                        result: None,
+                    });
+                    if let Err(e) = self.modeling.commit_edit(document, model) {
+                        self.status = Some(e);
+                    }
+                    return true;
+                }
                 if let Some(result) = drag.result {
                     match result {
                         Ok(r) if r.mesh == *document.mesh() => {}

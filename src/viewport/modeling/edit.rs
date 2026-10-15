@@ -19,6 +19,7 @@ impl EditOutcome {
 }
 pub(super) struct EditDrag {
     pub start: Pos2,
+    pub moved: bool,
     pub scale: f32,
     pub components: BTreeSet<Component>,
     pub anchor: Vec3,
@@ -75,6 +76,10 @@ impl ModelingState {
         }
         if let Some(drag) = &mut self.edit_drag {
             if let Some(point) = point {
+                drag.moved |= point.distance(drag.start) > 3.;
+                if !drag.moved {
+                    return;
+                }
                 let travel = drag.start.y - point.y;
                 drag.amount = match options.tool {
                     ModelTool::Rotate => travel,
@@ -261,7 +266,20 @@ impl ModelingState {
         let Some(drag) = self.edit_drag.take() else {
             return Ok(());
         };
-        let result = drag.result.ok_or("Drag to preview the edit")??;
+        let result = if !drag.moved {
+            if !options.tap_repeat {
+                return Ok(());
+            }
+            Self::edit_result(
+                document,
+                &drag.components,
+                drag.anchor,
+                options,
+                options.amount,
+            )?
+        } else {
+            drag.result.ok_or("Drag to preview the edit")??
+        };
         if result.mesh == *document.mesh() {
             return Ok(());
         }
@@ -356,6 +374,7 @@ impl Viewport {
             Ok(targets) => {
                 self.modeling.edit_drag = Some(EditDrag {
                     start: point,
+                    moved: false,
                     scale: scene.scale_at(scene.pick(point).map_or(Vec3::default(), |h| h.0)),
                     components: targets.into_iter().collect(),
                     anchor: scene.pick(point).map_or(Vec3::default(), |h| h.0),

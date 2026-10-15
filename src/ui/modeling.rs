@@ -15,6 +15,7 @@ pub(crate) struct ModelingControls {
     pub protect_mask: bool,
     pub individual: bool,
     pub snap: f32,
+    pub tap_repeat: bool,
     pub smooth_preview: bool,
     pub preset_name: String,
     pub preset: Option<u64>,
@@ -50,6 +51,7 @@ impl ModelingControls {
         self.protect_mask = o.protect_mask;
         self.individual = o.individual;
         self.snap = o.snap;
+        self.tap_repeat = o.tap_repeat;
         self.smooth_preview = o.smooth_preview;
     }
 
@@ -66,6 +68,7 @@ impl ModelingControls {
             protect_mask: self.protect_mask,
             individual: self.individual,
             snap: self.snap,
+            tap_repeat: self.tap_repeat,
             smooth_preview: self.smooth_preview,
         }
     }
@@ -225,6 +228,11 @@ impl UiState {
                     ui.weak("Wheel while dragging: loop count · Esc: cancel");
                     ui.weak("Follows visible quads. Edits replace stored levels.");
                 }
+            }
+            if self.modeling.tool.is_edit() || self.modeling.tool==ModelTool::Extrude {
+                ui.checkbox(&mut self.modeling.tap_repeat,"Tap to repeat").customize(Action::ModelTapRepeat)
+                    .on_hover_text("Tap a target to apply the displayed amount and options. Drag to set a new amount. Select and centered loop cuts are unchanged.");
+                if self.modeling.tap_repeat {ui.weak(format!("Tap applies {:.3} · drag sets a new amount",self.modeling.amount));}
             }
             ui.horizontal_wrapped(|ui| {
                 if ui.button("Clear selection").customize(Action::ModelClearSelection).clicked() {

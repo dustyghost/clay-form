@@ -805,6 +805,7 @@ fn modeling_presets_roundtrip_repeat_and_smooth_preview_do_not_lose_the_cage() {
     for v in app.viewport.modeling.selected_vertices(&twice) {
         assert!((twice.vertices[v].2 - once.vertices[v].2 - 0.1).abs() < 1e-5);
     }
+    navigation_frame(&mut app, &ctx, vec![]);
     let history = app.document.history_counts();
     app.ui.modeling.amount = 0.;
     app.dispatch(Command::ModelApply, &ctx);
@@ -836,4 +837,169 @@ fn modeling_tool_amounts_are_remembered_without_brush_size() {
     assert_eq!(app.ui.modeling.amount, 0.07);
     app.dispatch(Command::Action(Action::ModelTool(ModelTool::Scale)), &ctx);
     assert_eq!(app.ui.modeling.amount, 1.3);
+}
+
+#[test]
+fn modeling_taps_apply_visible_settings_like_numeric_edits() {
+    use crate::viewport::ModelAxis;
+    for tool in [
+        ModelTool::Extrude,
+        ModelTool::Inset,
+        ModelTool::Bevel,
+        ModelTool::Fuse,
+        ModelTool::Move,
+        ModelTool::Rotate,
+        ModelTool::Scale,
+    ] {
+        let (mut app, ctx, rect) = setup();
+        let mut p = Primitive::for_kind(PrimitiveKind::Cube);
+        p.divisions = [1; 3];
+        app.document
+            .replace_geometry(Geometry::new(p.mesh().unwrap()))
+            .unwrap();
+        navigation_frame(&mut app, &ctx, vec![]);
+        tap(&mut app, &ctx, rect.center());
+        app.dispatch(Command::Action(Action::ModelTool(tool)), &ctx);
+        app.ui.modeling.axis = if tool == ModelTool::Scale {
+            ModelAxis::Uniform
+        } else {
+            ModelAxis::Normal
+        };
+        app.ui.modeling.amount = match tool {
+            ModelTool::Scale => 1.1,
+            ModelTool::Rotate => 10.,
+            _ => 0.08,
+        };
+        let before = app.document.mesh().clone();
+        app.dispatch(Command::ModelApply, &ctx);
+        let expected = app.document.mesh().clone();
+        assert_ne!(expected, before, "{}: {}", tool.label(), app.ui.status);
+        app.dispatch(Command::Undo, &ctx);
+        navigation_frame(&mut app, &ctx, vec![]);
+        let history = app.document.history_counts().0;
+        // A small amount of pen jitter still counts as a tap.
+        pen_drag(
+            &mut app,
+            &ctx,
+            rect.center(),
+            rect.center() + Vec2::new(1., 1.),
+        );
+        assert_eq!(
+            app.document.mesh(),
+            &expected,
+            "{}: {}",
+            tool.label(),
+            app.ui.status
+        );
+        assert_eq!(app.document.history_counts().0, history + 1);
+        app.dispatch(Command::Undo, &ctx);
+        assert_eq!(app.document.mesh(), &before);
+    }
+}
+
+#[test]
+fn modeling_tap_repeat_retargets_remembers_amount_and_respects_cancellation() {
+    let (mut app, ctx, rect) = setup();
+    let scale = rect.width().min(rect.height()) * 0.35;
+    let center = rect.center();
+    let next = center + Vec2::new(scale * 2. / 3., 0.);
+    app.dispatch(Command::Action(Action::ModelExtrude), &ctx);
+    pen_drag(&mut app, &ctx, center, center + Vec2::new(0., -30.));
+    let amount = app.ui.modeling.amount;
+    let after_drag = app.document.mesh().clone();
+    app.dispatch(Command::Action(Action::ModelSelect), &ctx);
+    tap(&mut app, &ctx, next);
+    assert_eq!(app.document.mesh(), &after_drag);
+    app.dispatch(Command::Action(Action::ModelExtrude), &ctx);
+    assert_eq!(app.ui.modeling.amount, amount);
+    let selected = app.viewport.modeling.selected_vertices(app.document.mesh());
+    tap(&mut app, &ctx, next);
+    let after_tap = app.document.mesh().clone();
+    assert_eq!(after_tap.quads.len(), after_drag.quads.len() + 4);
+    // Original vertices stay put, and each new cap corner is displaced by the remembered amount.
+    for v in selected {
+        let target = after_drag.vertices[v] + crate::sculpt::Vec3(0., 0., amount);
+        assert!(
+            after_tap
+                .vertices
+                .iter()
+                .any(|p| (*p - target).len() < 1e-5)
+        );
+    }
+    let history = app.document.history_counts();
+    app.dispatch(Command::Action(Action::ModelTapRepeat), &ctx);
+    assert!(!app.ui.modeling.tap_repeat);
+    tap(&mut app, &ctx, next);
+    assert_eq!(app.document.mesh(), &after_tap);
+    assert_eq!(app.document.history_counts(), history);
+    app.dispatch(Command::Action(Action::ModelTapRepeat), &ctx);
+    navigation_frame(&mut app, &ctx, vec![primary_event(next, true)]);
+    navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Escape, true)]);
+    navigation_frame(&mut app, &ctx, vec![primary_event(next, false)]);
+    assert_eq!(app.document.mesh(), &after_tap);
+    assert_eq!(app.document.history_counts(), history);
+    // A real drag returning to its origin is a zero-distance drag, not a repeat tap.
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            slice_key(egui::Key::Escape, false),
+            primary_event(next, true),
+        ],
+    );
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(next + Vec2::new(0., -30.))],
+    );
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(next)]);
+    navigation_frame(&mut app, &ctx, vec![primary_event(next, false)]);
+    assert_eq!(app.document.mesh(), &after_tap);
+    assert_eq!(app.document.history_counts(), history);
+}
+
+#[test]
+fn modeling_repeat_taps_obey_symmetry_and_protection() {
+    let (mut app, ctx, rect) = setup();
+    let scale = rect.width().min(rect.height()) * 0.35;
+    let p = rect.center() + Vec2::new(scale * 2. / 3., 0.);
+    app.dispatch(
+        Command::SetSymmetry(crate::sculpt::Symmetry {
+            enabled: true,
+            ..Default::default()
+        }),
+        &ctx,
+    );
+    app.dispatch(Command::Action(Action::ModelExtrude), &ctx);
+    let before = app.document.mesh().clone();
+    let history = app.document.history_counts().0;
+    tap(&mut app, &ctx, p);
+    assert_eq!(app.document.mesh().quads.len(), before.quads.len() + 8);
+    assert_eq!(app.document.history_counts().0, history + 1);
+    crate::sculpt::ModelingSymmetry::new(app.document.mesh(), app.document.symmetry()).unwrap();
+    app.dispatch(Command::Undo, &ctx);
+    let mut geometry = app.document.geometry_snapshot();
+    geometry.mesh.mask.fill(1.);
+    app.document.replace_geometry(geometry).unwrap();
+    let protected = app.document.geometry_snapshot();
+    let history = app.document.history_counts();
+    tap(&mut app, &ctx, p);
+    assert_eq!(app.document.geometry_snapshot(), protected);
+    assert_eq!(app.document.history_counts(), history);
+}
+
+#[test]
+fn modeling_presets_store_tap_repeat_and_accept_older_settings() {
+    let (mut app, ctx, _) = setup();
+    let mut old = serde_json::to_value(app.ui.modeling.options()).unwrap();
+    old.as_object_mut().unwrap().remove("tap_repeat");
+    let restored: crate::viewport::ModelingOptions = serde_json::from_value(old).unwrap();
+    assert!(restored.tap_repeat);
+    app.ui.modeling.tap_repeat = false;
+    app.ui.modeling.preset_name = "Drag only".into();
+    app.dispatch(Command::Action(Action::ModelSavePreset), &ctx);
+    let id = app.ui.modeling.preset.unwrap();
+    app.ui.modeling.tap_repeat = true;
+    app.dispatch(Command::Action(Action::ModelPreset(id)), &ctx);
+    assert!(!app.ui.modeling.tap_repeat);
 }
