@@ -87,7 +87,10 @@ impl Camera {
         }
         // Wrap complete turns for precision, without imposing a pole limit.
         let wrap = |angle: f32| angle % std::f32::consts::TAU;
-        self.yaw = wrap(self.yaw - delta.x * 0.008);
+        // After crossing a pole, world-up points down on screen. Reverse the
+        // yaw axis there so horizontal dragging keeps the same screen direction.
+        let up = if self.pitch.cos() >= 0. { 1. } else { -1. };
+        self.yaw = wrap(self.yaw - delta.x * 0.008 * up);
         self.pitch = wrap(self.pitch - delta.y * 0.008);
     }
 }
@@ -95,6 +98,38 @@ impl Camera {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn horizontal_orbit_follows_drag_on_both_sides_of_the_poles() {
+        for pitch in [
+            0.,
+            0.7,
+            -0.7,
+            1.7,
+            -1.7,
+            std::f32::consts::PI,
+            -std::f32::consts::PI,
+            4.6,
+            -4.6,
+            5.5,
+        ] {
+            for yaw in [0., 0.8, -1.2] {
+                for dx in [-8., 8.] {
+                    let mut camera = Camera {
+                        yaw,
+                        pitch,
+                        ..Default::default()
+                    };
+                    let visible_point = camera.basis().2;
+                    camera.orbit(Vec2::new(dx, 0.));
+                    let screen_x = visible_point.dot(camera.basis().0);
+                    assert!(screen_x * dx > 0., "pitch {pitch}, yaw {yaw}, drag {dx}");
+                    camera.orbit(Vec2::new(-dx, 0.));
+                    assert!((camera.yaw - yaw).abs() < 1e-6);
+                    assert_eq!(camera.pitch, pitch);
+                }
+            }
+        }
+    }
     #[test]
     fn vertical_orbit_continues_over_poles_and_through_full_turns() {
         let mut camera = Camera::default();

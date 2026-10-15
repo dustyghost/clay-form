@@ -441,3 +441,48 @@ fn missing_smooth_preset_uses_independent_defaults_without_changing_the_library(
     assert_eq!(app.document.brushes().len(), 1);
     assert_eq!(app.document.brushes()[0].strength, 0.);
 }
+
+#[test]
+fn upside_down_orbit_keeps_horizontal_direction_in_sculpt_and_modeling() {
+    for modeling in [false, true] {
+        for secondary in [false, true] {
+            let mut app = App::default();
+            let ctx = egui::Context::default();
+            app.dispatch(Command::ModelingMode(modeling), &ctx);
+            app.camera.pitch = std::f32::consts::PI;
+            let before = app.document.geometry_snapshot();
+            let history = app.document.history_counts();
+            let rect = navigation_frame(&mut app, &ctx, vec![]);
+            let start = if secondary {
+                rect.center()
+            } else {
+                Pos2::new(rect.left() + 10., rect.center().y)
+            };
+            let button = if secondary {
+                egui::PointerButton::Secondary
+            } else {
+                egui::PointerButton::Primary
+            };
+            let event = |pos, pressed| egui::Event::PointerButton {
+                pos,
+                button,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            };
+            navigation_frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::PointerMoved(start), event(start, true)],
+            );
+            let end = start + Vec2::new(25., 0.);
+            navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+            navigation_frame(&mut app, &ctx, vec![event(end, false)]);
+            assert!(
+                app.camera.yaw > 0.,
+                "modeling {modeling}, secondary {secondary}"
+            );
+            assert_eq!(app.document.geometry_snapshot(), before);
+            assert_eq!(app.document.history_counts(), history);
+        }
+    }
+}
