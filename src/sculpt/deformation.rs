@@ -1,0 +1,180 @@
+//! Keep brush proposals from folding or crushing incident triangles.
+use super::{Mesh, Vec3};
+
+type Vector = [f64; 3];
+fn difference(a: Vec3, b: Vec3) -> Vector {
+    [
+        a.0 as f64 - b.0 as f64,
+        a.1 as f64 - b.1 as f64,
+        a.2 as f64 - b.2 as f64,
+    ]
+}
+fn cross(a: Vector, b: Vector) -> Vector {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+fn dot(a: Vector, b: Vector) -> f64 {
+    a.into_iter().zip(b).map(|(a, b)| a * b).sum()
+}
+fn quality(a: Vector, b: Vector) -> f64 {
+    let c = std::array::from_fn(|i| b[i] - a[i]);
+    let normal = cross(a, b);
+    2. * 3_f64.sqrt() * dot(normal, normal).sqrt() / (dot(a, a) + dot(b, b) + dot(c, c))
+}
+
+fn safe_face(before: [Vec3; 3], after: [Vec3; 3]) -> bool {
+    let a = difference(before[1], before[0]);
+    let b = difference(before[2], before[0]);
+    let n = cross(a, b);
+    let area_squared = dot(n, n);
+    if area_squared == 0. {
+        return true;
+    } // Existing degenerate faces need topology repair.
+    let x = difference(after[1], after[0]);
+    let y = difference(after[2], after[0]);
+    let dx = std::array::from_fn(|i| x[i] - a[i]);
+    let dy = std::array::from_fn(|i| y[i] - b[i]);
+    // Projected area during linear movement is 1 + linear*t + quadratic*t².
+    // Check its minimum, not only the endpoint: two vertices could otherwise
+    // cross and leave an apparently correctly oriented triangle at release.
+    let quadratic = dot(cross(dx, dy), n) / area_squared;
+    let linear = (dot(cross(a, dy), n) + dot(cross(dx, b), n)) / area_squared;
+    let mut minimum = (1. + linear + quadratic).min(1.);
+    if quadratic > 0. {
+        let t = -linear / (2. * quadratic);
+        if (0. ..1.).contains(&t) {
+            minimum = minimum.min(1. + linear * t + quadratic * t * t);
+        }
+    }
+    minimum.is_finite() && minimum >= 0.05 && quality(x, y) >= quality(a, b).min(0.02) * (1. - 1e-6)
+}
+
+impl Mesh {
+    pub(super) fn limit_sculpt_deformation(&mut self, before: &[Vec3]) -> bool {
+        let active: Vec<_> = self
+            .triangles
+            .iter()
+            .filter(|t| t.iter().any(|&v| before[v] != self.vertices[v]))
+            .copied()
+            .collect();
+        let mut reduce = vec![false; self.vertices.len()];
+        for _ in 0..12 {
+            let mut unsafe_face = false;
+            for &t in &active {
+                if !safe_face(t.map(|v| before[v]), t.map(|v| self.vertices[v])) {
+                    unsafe_face = true;
+                    for v in t {
+                        reduce[v] = true;
+                    }
+                }
+            }
+            if !unsafe_face {
+                return self.vertices.iter().zip(before).any(|(a, b)| a != b);
+            }
+            for (v, flag) in reduce.iter_mut().enumerate() {
+                if *flag {
+                    self.vertices[v] = before[v] + (self.vertices[v] - before[v]) * 0.5;
+                    *flag = false;
+                }
+            }
+        }
+        // Never commit an unchecked last reduction; pinning one vertex can
+        // affect its neighbours. Reject a pathological dab without changing positions.
+        if active
+            .iter()
+            .any(|&t| !safe_face(t.map(|v| before[v]), t.map(|v| self.vertices[v])))
+        {
+            self.vertices.copy_from_slice(before);
+            return false;
+        }
+        self.vertices.iter().zip(before).any(|(a, b)| a != b)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn oversized_snake_pull_cannot_fold_the_surface() {
+        use crate::sculpt::{Brush, Dab, Kind};
+        let before = Mesh::sphere();
+        let brush = Brush::new(Kind::Snake);
+        let dab = Dab {
+            center: Vec3(0., 1., 0.),
+            normal: Vec3(0., 1., 0.),
+            right: Vec3(1., 0., 0.),
+            up: Vec3(0., 0., 1.),
+            radius: 0.3,
+            pressure: 1.,
+            delta: Vec3(0.2, 0., 0.),
+            invert: false,
+        };
+        let proposed: Vec<_> = before
+            .vertices
+            .iter()
+            .map(|&p| p + brush.snake_motion(dab) * brush.snake_weight(dab, p - dab.center))
+            .collect();
+        assert!(
+            before.triangles.iter().any(|&t| {
+                let [a, b, c] = t.map(|v| before.vertices[v]);
+                let [x, y, z] = t.map(|v| proposed[v]);
+                (b - a).cross(c - a).dot((y - x).cross(z - x)) <= 0.
+            }),
+            "The unrestricted pull reproduces a folded face"
+        );
+        let mut guarded = before.clone();
+        guarded.stamp(&brush, dab);
+        assert!(before.triangles.iter().all(|&t| safe_face(
+            t.map(|v| before.vertices[v]),
+            t.map(|v| guarded.vertices[v])
+        )));
+        guarded.validate_closed().unwrap();
+    }
+
+    #[test]
+    fn unsafe_motion_is_reduced_locally_and_cannot_cross_a_collapsed_face() {
+        for scale in [0.001, 1., 1000.] {
+            let before: Vec<_> = [
+                Vec3(0., 0., 0.),
+                Vec3(1., 0., 0.),
+                Vec3(0., 1., 0.),
+                Vec3(3., 0., 0.),
+                Vec3(4., 0., 0.),
+                Vec3(3., 1., 0.),
+            ]
+            .map(|p| (p + Vec3(100., 0., 0.)) * scale)
+            .into();
+            let mut mesh = Mesh {
+                vertices: before.clone(),
+                triangles: vec![[0, 1, 2], [3, 4, 5]],
+                mask: vec![0.; 6],
+                quads: Vec::new(),
+                creases: Vec::new(),
+                vertex_groups: Vec::new(),
+                polygroups: Vec::new(),
+                hidden_faces: Vec::new(),
+            };
+            // The endpoint is correctly wound, but reaching it crosses zero area.
+            mesh.vertices[1] = before[0] - (before[1] - before[0]);
+            mesh.vertices[2] = before[0] - (before[2] - before[0]);
+            for (v, &original) in before.iter().enumerate().skip(3) {
+                mesh.vertices[v] = original + Vec3(0., 0., scale);
+            }
+            let safe_patch = mesh.vertices[3..].to_vec();
+            assert!(mesh.limit_sculpt_deformation(&before));
+            assert_eq!(&mesh.vertices[3..], &safe_patch);
+            assert!(mesh.vertices[1].0 > before[0].0);
+            assert!(mesh.vertices[2].1 > before[0].1);
+            assert!(
+                mesh.vertices[1].0 < before[1].0,
+                "Keep useful movement instead of cancelling the whole dab"
+            );
+            assert_eq!(mesh.mask, vec![0.; 6]);
+            mesh.validate().unwrap();
+        }
+    }
+}

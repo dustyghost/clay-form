@@ -448,6 +448,10 @@ impl Mesh {
             self.vertices[i] = old[i] + displacement * stamp_gain;
             deformed |= self.vertices[i] != old[i];
         }
-        deformed
+        if deformed {
+            self.limit_sculpt_deformation(&old)
+        } else {
+            false
+        }
     }
 }

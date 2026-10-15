@@ -129,6 +129,126 @@ fn black_alpha_protects_from_every_brush() {
 }
 
 #[test]
+fn repeated_brush_strokes_do_not_fold_or_flatten_faces() {
+    for kind in Kind::ALL {
+        if kind == Kind::Mask {
+            continue;
+        }
+        let mut mesh = Mesh::sphere();
+        for p in &mut mesh.vertices {
+            p.2 *= 0.6;
+            if p.2 > 0. {
+                p.2 += 0.07 * (p.0 * 14.).cos() * (p.1 * 14.).cos();
+            }
+        }
+        let original = mesh.vertices.clone();
+        let mut brush = Brush::new(kind);
+        brush.strength = 0.5;
+        for step in 0..120 {
+            let target = Vec3(
+                0.15 * (step as f32 * 0.2).sin(),
+                0.15 * (step as f32 * 0.13).cos(),
+                0.7,
+            );
+            let i = mesh
+                .vertices
+                .iter()
+                .enumerate()
+                .min_by(|(_, a), (_, b)| (**a - target).len().total_cmp(&(**b - target).len()))
+                .unwrap()
+                .0;
+            let normal = mesh.normals()[i];
+            let right = Vec3(0., 1., 0.).cross(normal).norm();
+            let before = mesh.vertices.clone();
+            mesh.stamp(
+                &brush,
+                Dab {
+                    center: mesh.vertices[i],
+                    normal,
+                    right,
+                    up: normal.cross(right),
+                    radius: 0.4,
+                    pressure: 1.,
+                    delta: Vec3(0.03, 0., 0.01),
+                    invert: false,
+                },
+            );
+            for (face, &t) in mesh.triangles.iter().enumerate() {
+                let [a, b, c] = t.map(|v| before[v]);
+                let old = (b - a).cross(c - a);
+                let [a, b, c] = t.map(|v| mesh.vertices[v]);
+                let new = (b - a).cross(c - a);
+                if old.dot(new) <= 0. || new.len() < old.len() * 0.01 {
+                    panic!(
+                        "{kind:?}, step={step}, face={face}, dot={} area={}",
+                        old.norm().dot(new.norm()),
+                        new.len() / old.len()
+                    );
+                }
+            }
+        }
+        assert_ne!(mesh.vertices, original, "{kind:?} must still sculpt");
+        mesh.validate_closed().unwrap();
+    }
+}
+
+#[test]
+fn adaptive_brush_strokes_keep_deformation_oriented_between_topology_updates() {
+    for kind in [Kind::Standard, Kind::Smooth, Kind::Polish, Kind::Detail] {
+        let mut mesh = Mesh::sphere();
+        for p in &mut mesh.vertices {
+            p.2 *= 0.6;
+            if p.2 > 0. {
+                p.2 += 0.07 * (p.0 * 14.).cos() * (p.1 * 14.).cos();
+            }
+        }
+        let brush = Brush::new(kind);
+        let settings = super::AdaptiveSettings {
+            enabled: true,
+            ..Default::default()
+        };
+        for step in 0..24 {
+            let target = Vec3(0.15 * (step as f32 * 0.2).sin(), 0.1, 0.7);
+            let v = mesh
+                .vertices
+                .iter()
+                .enumerate()
+                .min_by(|(_, a), (_, b)| (**a - target).len().total_cmp(&(**b - target).len()))
+                .unwrap()
+                .0;
+            let normal = mesh.normals()[v];
+            let right = Vec3(0., 1., 0.).cross(normal).norm();
+            let dab = Dab {
+                center: mesh.vertices[v],
+                normal,
+                right,
+                up: normal.cross(right),
+                radius: 0.4,
+                pressure: 1.,
+                delta: Vec3::default(),
+                invert: false,
+            };
+            let mut budget = super::AdaptiveBudget::default();
+            mesh.adapt(&brush, &[dab], &settings, &mut budget, true);
+            let before = mesh.vertices.clone();
+            mesh.stamp(&brush, dab);
+            for &t in &mesh.triangles {
+                let [a, b, c] = t.map(|v| before[v]);
+                let old = (b - a).cross(c - a);
+                let [a, b, c] = t.map(|v| mesh.vertices[v]);
+                let new = (b - a).cross(c - a);
+                assert!(
+                    old.dot(new) > 0. && new.len() >= old.len() * 0.01,
+                    "{kind:?} step {step}"
+                );
+            }
+            mesh.adapt(&brush, &[dab], &settings, &mut budget, false);
+            mesh.validate_closed().unwrap();
+        }
+    }
+}
+
+#[test]
 fn project_roundtrip() {
     let p = Project {
         references: Vec::new(),
@@ -160,13 +280,15 @@ fn snake_brush_pulls_with_alpha_pressure_mask_and_reverse() {
         up: Vec3(0., 0., 1.),
         radius: 0.3,
         pressure: 1.,
-        delta: Vec3(0.2, 0., 0.),
+        // Test linear pressure/reversal with a safe, incremental drag. A jump
+        // across most of the radius can fold faces and must be limited.
+        delta: Vec3(0.02, 0., 0.),
         invert: false,
     };
     let mut full = original.clone();
     full.stamp(&brush, dab);
     let motion = full.vertices[0] - original.vertices[0];
-    assert!(motion.0 > 0.19);
+    assert!(motion.0 > 0.019);
     assert!(motion.1 > 0.);
     let mut low = original.clone();
     low.stamp(
