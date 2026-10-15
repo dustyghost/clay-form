@@ -34,6 +34,6 @@ impl Document {
             ..Default::default()
         };
         geometry.scene.active_metadata.temporary_thickness = 0.;
-        self.replace_geometry_named(geometry, "Apply thickness")
+        self.replace_geometry_named(geometry, "Apply Thickness modifier")
     }
 }

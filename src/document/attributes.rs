@@ -231,7 +231,7 @@ impl Document {
             return Err("Submodels are limited to 64".into());
         }
         if self.geometry.scene.active_metadata.temporary_thickness > 0. {
-            return Err("Apply or remove temporary thickness before splitting hidden faces".into());
+            return Err("Apply or remove thickness modifier before splitting hidden faces".into());
         }
         let hidden = self.mesh().hidden_face_count();
         if hidden == 0 || hidden == self.mesh().triangles.len() {

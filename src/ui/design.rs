@@ -492,3 +492,20 @@ pub(super) fn appearance(ctx: &egui::Context, appearance: &crate::preferences::A
         );
     });
 }
+
+/// The same short help is reachable with a pointer or keyboard focus.
+pub(super) fn help(response: egui::Response, text: impl Into<String>) -> egui::Response {
+    let text = text.into();
+    let contents = |ui: &mut egui::Ui| {
+        ui.set_max_width(360.);
+        ui.label(&text);
+    };
+    if response.has_focus() {
+        response.show_tooltip_ui(contents);
+        response
+    } else {
+        response
+            .on_hover_ui(contents)
+            .on_disabled_hover_ui(contents)
+    }
+}

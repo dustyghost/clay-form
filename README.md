@@ -20,6 +20,7 @@ Linux requires a working Wayland or X11 desktop and desktop OpenGL 3.3 or newer.
 | --- | --- |
 | [Sculpting and brushes](docs/guide/sculpting.md) | Brushes, alphas, symmetry, stroke modes, adaptive sculpting, undo/redo |
 | [Models and mesh tools](docs/guide/modeling.md) | Submodels, primitives, transforms, subdivision, remeshing, thickness, Slice, merge |
+| [Edge loops and creases](docs/guide/edges.md) | Hole borders, support loops, edge selection, creasing, smooth subdivision, thickness rims |
 | [Masks and selection](docs/guide/selection.md) | Mask editing, vertex groups, rectangle/lasso selection, visibility, split hidden |
 | [Files and recovery](docs/guide/files.md) | Projects, brush files, OBJ import/export, automatic recovery |
 | [Navigation and tablet input](docs/guide/navigation.md) | Orbit, pan, zoom, display options, Huion setup |

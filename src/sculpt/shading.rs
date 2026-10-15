@@ -66,7 +66,8 @@ impl Mesh {
                 if let Some((other, x, y)) = edges.remove(&edge) {
                     // Smooth only across consistently oriented, shallow edges.
                     // Sixty degrees keeps a planar cut distinct from curved walls.
-                    if self.triangles[other][x] == t[b]
+                    if self.creases.binary_search(&[edge.0, edge.1]).is_err()
+                        && self.triangles[other][x] == t[b]
                         && face_normals[face].dot(face_normals[other]) > 0.5
                     {
                         join(&mut parents, face * 3 + a, other * 3 + y);

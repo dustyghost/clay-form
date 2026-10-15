@@ -42,6 +42,9 @@ impl Mesh {
         resolution: u32,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Self, String> {
+        if !self.creases.is_empty() {
+            return Err("Clear creases before voxel remeshing".into());
+        }
         if self.has_hidden_faces() {
             return Err("Show all faces before remeshing".into());
         }
@@ -173,6 +176,7 @@ impl Mesh {
             })
             .collect();
         let mut mesh = Mesh {
+            creases: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
             polygroups: Vec::new(),
@@ -301,6 +305,7 @@ mod tests {
     use super::*;
     fn cube(offset: Vec3) -> Mesh {
         Mesh {
+            creases: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
             polygroups: Vec::new(),

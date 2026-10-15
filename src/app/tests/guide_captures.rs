@@ -14,7 +14,9 @@ struct Guide {
     time: f64,
     toolbar: bool,
     viewport: bool,
+    interactive: bool,
     directory: std::path::PathBuf,
+    text_positions: Vec<(String, Pos2)>,
 }
 impl Guide {
     fn new(directory: &std::path::Path, size: [i32; 2]) -> Self {
@@ -40,7 +42,9 @@ impl Guide {
             time: 0.,
             toolbar: true,
             viewport: true,
+            interactive: false,
             directory: directory.into(),
+            text_positions: Vec::new(),
         }
     }
     fn panel(&mut self, tool: Tool, dock: Dock) {
@@ -56,6 +60,7 @@ impl Guide {
     fn frame(&mut self, events: Vec<egui::Event>) -> (egui::Rect, Vec<u8>) {
         self.time += 0.1;
         let mut rect = egui::Rect::NOTHING;
+        let mut commands = Vec::new();
         let output = self.ctx.run(
             egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
@@ -68,15 +73,19 @@ impl Guide {
             },
             |ctx| {
                 if self.toolbar {
-                    let _ = self
-                        .app
-                        .ui
-                        .toolbar(ctx, &self.app.document, &self.app.camera);
+                    commands.extend(
+                        self.app
+                            .ui
+                            .toolbar(ctx, &self.app.document, &self.app.camera),
+                    );
                 }
-                let _ =
-                    self.app
-                        .ui
-                        .brush_panel(ctx, &self.app.document, "Guide", 1., &self.app.camera);
+                commands.extend(self.app.ui.brush_panel(
+                    ctx,
+                    &self.app.document,
+                    "Guide",
+                    1.,
+                    &self.app.camera,
+                ));
                 egui::CentralPanel::default().show(ctx, |ui| {
                     rect = ui.available_rect_before_wrap();
                     if self.viewport {
@@ -86,7 +95,24 @@ impl Guide {
                 self.app.show_recovery(ctx);
             },
         );
-        (rect, self.capture.render(&self.ctx, output))
+        self.text_positions = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some((
+                    text.galley.text().to_owned(),
+                    text.pos + text.galley.size() * 0.5,
+                )),
+                _ => None,
+            })
+            .collect();
+        let rgba = self.capture.render(&self.ctx, output);
+        if self.interactive {
+            for command in commands {
+                self.app.dispatch(command, &self.ctx);
+            }
+        }
+        (rect, rgba)
     }
     fn save(&mut self, name: &str) {
         for _ in 0..2 {
@@ -299,18 +325,18 @@ fn guide_workflows_offscreen_preview() {
         g.app.ui.show_polygroups = true;
         g.save("slice-trim-result");
     }
-    // A real base-head model supplies the front/side reference images.
+    // A simple ellipsoid supplies clear, repeatable front/side studies.
     {
         let mut g = Guide::new(directory, [1100, 760]);
-        let head = Primitive::for_kind(PrimitiveKind::HumanHead)
-            .mesh()
-            .unwrap();
+        let mut study = Primitive::for_kind(PrimitiveKind::UvSphere);
+        study.size = crate::sculpt::Vec3(1.4, 2., 0.8);
+        let study = study.mesh().unwrap();
         for (name, yaw, center) in [
             ("Front study", 0., [0.18, 0.3]),
             ("Side study", std::f32::consts::FRAC_PI_2, [0.18, 0.75]),
         ] {
             let icon = crate::brush_icon::capture(
-                &head,
+                &study,
                 &crate::camera::Camera {
                     yaw,
                     ..Default::default()
@@ -339,7 +365,7 @@ fn guide_workflows_offscreen_preview() {
         }
         g.app
             .document
-            .replace_geometry(crate::sculpt::Geometry::new(head))
+            .replace_geometry(crate::sculpt::Geometry::new(study))
             .unwrap();
         g.app
             .ui
@@ -392,4 +418,328 @@ fn mirror_guide_offscreen_preview() {
     g.save("mirror-after");
     g.app.dispatch(Command::Undo, &g.ctx);
     assert_eq!(g.app.document.geometry_snapshot(), before);
+}
+
+#[test]
+#[ignore = "renders edge tool documentation; requires EGL and CLAY_GUIDE_PREVIEW directory"]
+fn edge_tools_offscreen_preview() {
+    use crate::sculpt::{BorderTarget, Geometry};
+    let Ok(directory) = std::env::var("CLAY_GUIDE_PREVIEW") else {
+        return;
+    };
+    let directory = std::path::Path::new(&directory);
+    std::fs::create_dir_all(directory).unwrap();
+    {
+        let mut g = Guide::new(directory, [1200, 1000]);
+        g.toolbar = false; // Keep the loop controls visible beside the hole.
+        g.panel(Tool::Mesh, Dock::Right);
+        g.app.ui.edges.selecting = true;
+        g.app.ui.wire = true;
+        let mut primitive = Primitive::for_kind(PrimitiveKind::Grid);
+        primitive.divisions = [6, 6, 1];
+        let mut mesh = primitive.mesh().unwrap();
+        for (i, p) in mesh.vertices.iter().enumerate() {
+            mesh.mask[i] = if p.0.abs() < 0.4 && p.1.abs() < 0.4 {
+                1.
+            } else {
+                0.
+            };
+        }
+        let mut mesh = mesh.delete_masked().unwrap().unwrap();
+        mesh.mask.fill(0.);
+        g.app
+            .document
+            .replace_geometry(Geometry::new(mesh))
+            .unwrap();
+        g.app.ui.edges.target = BorderTarget::Holes;
+        g.app.ui.edges.loops = 2;
+        g.app.ui.edges.width = 0.3;
+        open_edge_controls(&mut g);
+        click_guide_label(&mut g, "Support loops");
+        g.save("edge-loops-before");
+        g.app
+            .dispatch(Command::Action(Action::AddSupportLoops), &g.ctx);
+        finish_mesh_job(&mut g.app);
+        assert_eq!(
+            g.app.document.undo_label(),
+            Some("Add support loops"),
+            "{}",
+            g.app.ui.status
+        );
+        g.save("edge-loops-after");
+    }
+    for crease in [false, true] {
+        let mut g = Guide::new(directory, [1200, 1000]);
+        g.panel(Tool::Mesh, Dock::Right);
+        g.app.ui.edges.selecting = true;
+        g.app.ui.wire = true;
+        g.app.camera.zoom = 0.7;
+        g.app.camera.yaw = 0.5;
+        g.app.camera.pitch = -0.3;
+        let mut p = Primitive::for_kind(PrimitiveKind::Cube);
+        p.divisions = [1; 3];
+        let mut mesh = p.mesh().unwrap();
+        if crease {
+            mesh.creases = mesh.polygon_edges();
+        }
+        g.app
+            .document
+            .replace_geometry(Geometry::new(mesh))
+            .unwrap();
+        for _ in 0..2 {
+            g.app
+                .dispatch(Command::Action(Action::SmoothSubdivide), &g.ctx);
+            finish_mesh_job(&mut g.app);
+            assert_eq!(
+                g.app.document.undo_label(),
+                Some("Smooth subdivide"),
+                "{}",
+                g.app.ui.status
+            );
+        }
+        open_edge_controls(&mut g);
+        g.save(if crease {
+            "crease-smooth-after"
+        } else {
+            "crease-smooth-before"
+        });
+        if crease {
+            g.app
+                .dispatch(Command::Action(Action::SelectCreases), &g.ctx);
+            assert!(!g.app.ui.edges.selected.is_empty());
+            g.save("crease-selection");
+            // Check real hover, keyboard-focus, and disabled help rendering.
+            hover_guide_label(&mut g, "Remove crease");
+            assert!(
+                g.text_positions
+                    .iter()
+                    .any(|(text, _)| text.contains("Remove sharp-edge marks"))
+            );
+            g.save("edge-help");
+            g.frame(vec![egui::Event::PointerGone]);
+            let mut focused_help = false;
+            for _ in 0..40 {
+                g.frame(vec![
+                    slice_key(egui::Key::Tab, true),
+                    slice_key(egui::Key::Tab, false),
+                ]);
+                g.frame(vec![]);
+                if g.text_positions
+                    .iter()
+                    .any(|(text, _)| text.contains("Turn edge picking on or off"))
+                {
+                    focused_help = true;
+                    break;
+                }
+            }
+            assert!(focused_help, "Keyboard focus exposes edge-selection help");
+            g.save("edge-focus-help");
+            if let Some(id) = g.ctx.memory(|m| m.focused()) {
+                g.ctx.memory_mut(|m| m.surrender_focus(id));
+            }
+            g.app.ui.mesh_busy = true;
+            hover_guide_label(&mut g, "Smooth subdivide");
+            assert!(
+                g.text_positions
+                    .iter()
+                    .any(|(text, _)| text.contains("Wait for the mesh operation"))
+            );
+            g.save("edge-disabled-help");
+        }
+    }
+    {
+        let mut g = Guide::new(directory, [1200, 1000]);
+        g.panel(Tool::Submodels, Dock::Right);
+        g.app.ui.wire = true;
+        g.app.camera.yaw = 0.35;
+        g.app.camera.pitch = -0.4;
+        let mut geometry = Geometry::new(Primitive::for_kind(PrimitiveKind::Plane).mesh().unwrap());
+        geometry.scene.active_metadata = crate::sculpt::ModelMetadata {
+            temporary_thickness: 0.35,
+            thickness_loops: 2,
+            thickness_crease: true,
+            ..Default::default()
+        };
+        g.app.document.replace_geometry(geometry).unwrap();
+        g.frame(vec![]);
+        g.frame(vec![
+            egui::Event::PointerMoved(Pos2::new(1080., 800.)),
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: Vec2::new(0., -300.),
+                modifiers: egui::Modifiers::NONE,
+            },
+        ]);
+        g.frame(vec![egui::Event::PointerGone]);
+        g.save("thickness-modifier");
+    }
+}
+
+fn open_edge_controls(g: &mut Guide) {
+    click_guide_label(g, "Edges and creases");
+}
+
+fn click_guide_label(g: &mut Guide, label: &str) {
+    g.frame(vec![]);
+    let point = g
+        .text_positions
+        .iter()
+        .find(|(text, _)| text == label)
+        .unwrap_or_else(|| panic!("{label} is visible"))
+        .1;
+    g.frame(vec![
+        egui::Event::PointerMoved(point),
+        primary_event(point, true),
+    ]);
+    g.frame(vec![primary_event(point, false), egui::Event::PointerGone]);
+}
+
+fn hover_guide_label(g: &mut Guide, label: &str) {
+    g.frame(vec![]);
+    let point = g
+        .text_positions
+        .iter()
+        .find(|(text, _)| text == label)
+        .unwrap_or_else(|| panic!("{label} is visible"))
+        .1;
+    g.frame(vec![egui::Event::PointerMoved(point)]);
+    for _ in 0..12 {
+        g.frame(vec![]);
+    }
+}
+
+#[test]
+#[ignore = "interactive rendered walkthrough; requires EGL and CLAY_GUIDE_PREVIEW"]
+fn edge_workflow_offscreen_review() {
+    use crate::sculpt::{BorderTarget, Geometry, PrimitiveKind};
+    let Ok(directory) = std::env::var("CLAY_GUIDE_PREVIEW") else {
+        return;
+    };
+    let directory = std::path::Path::new(&directory);
+    std::fs::create_dir_all(directory).unwrap();
+    let mut g = Guide::new(directory, [1200, 1250]);
+    g.interactive = true;
+    g.panel(Tool::Mesh, Dock::Right);
+    g.app
+        .document
+        .replace_geometry(Geometry::new(
+            Primitive::for_kind(PrimitiveKind::Plane).mesh().unwrap(),
+        ))
+        .unwrap();
+    open_edge_controls(&mut g);
+    let before = g.app.document.geometry_snapshot();
+    click_guide_label(&mut g, "Select target borders");
+    assert!(g.app.ui.edges.selecting);
+    assert_eq!(g.app.ui.edges.selected.len(), 4);
+    // Navigate from empty space across the surface while keeping the selection.
+    let (rect, _) = g.frame(vec![]);
+    let start = rect.min + Vec2::splat(60.);
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    g.frame(vec![egui::Event::PointerMoved(rect.center())]);
+    g.frame(vec![
+        primary_event(rect.center(), false),
+        egui::Event::PointerGone,
+    ]);
+    assert_ne!(g.app.camera.yaw, 0.);
+    assert_eq!(g.app.ui.edges.selected.len(), 4);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    click_guide_label(&mut g, "Add crease");
+    finish_mesh_job(&mut g.app);
+    assert_eq!(g.app.document.mesh().creases.len(), 4);
+    click_guide_label(&mut g, "Edge selection");
+    assert!(!g.app.ui.edges.selecting);
+    click_guide_label(&mut g, "Select creases");
+    assert!(
+        g.app.ui.edges.selecting,
+        "Selecting creases must switch from sculpting to picking"
+    );
+    click_guide_label(&mut g, "Expand loop");
+    click_guide_label(&mut g, "Remove crease");
+    finish_mesh_job(&mut g.app);
+    assert!(g.app.document.mesh().creases.is_empty());
+    click_guide_label(&mut g, "Undo");
+    assert_eq!(g.app.document.mesh().creases.len(), 4);
+    click_guide_label(&mut g, "Subdivide (+ level)");
+    finish_mesh_job(&mut g.app);
+    assert_eq!(g.app.document.mesh_settings().levels(), 2);
+    let stack = g.app.document.geometry_snapshot();
+    click_guide_label(&mut g, "Smooth subdivide");
+    finish_mesh_job(&mut g.app);
+    assert_eq!(g.app.document.mesh_settings().levels(), 1);
+    click_guide_label(&mut g, "Undo");
+    assert_eq!(g.app.document.geometry_snapshot(), stack);
+    g.save("subdivision-review");
+
+    // Select each scope through the actual dropdown and insert loops using its button.
+    for target in [
+        BorderTarget::Holes,
+        BorderTarget::Masked,
+        BorderTarget::VisibleGroups,
+    ] {
+        let mut p = Primitive::for_kind(PrimitiveKind::Grid);
+        p.divisions = [6, 6, 1];
+        let mut mesh = p.mesh().unwrap();
+        for (i, point) in mesh.vertices.iter().enumerate() {
+            mesh.mask[i] = if point.0.abs() < 0.4 && point.1.abs() < 0.4 {
+                1.
+            } else {
+                0.
+            };
+        }
+        if target == BorderTarget::Holes {
+            mesh = mesh.delete_masked().unwrap().unwrap();
+        }
+        if target == BorderTarget::VisibleGroups {
+            mesh.create_vertex_group("Center".into(), 0.5, false)
+                .unwrap();
+        }
+        g.app
+            .document
+            .replace_geometry(Geometry::new(mesh))
+            .unwrap();
+        g.frame(vec![]);
+        let current_target = g.app.ui.edges.target.label();
+        click_guide_label(&mut g, current_target);
+        click_guide_label(&mut g, target.label());
+        if target == BorderTarget::Holes {
+            click_guide_label(&mut g, "Support loops");
+        }
+        let before = g.app.document.geometry_snapshot();
+        click_guide_label(&mut g, "Add support loops");
+        finish_mesh_job(&mut g.app);
+        assert!(
+            g.app.document.mesh().vertices.len() > before.mesh.vertices.len(),
+            "{}: {}",
+            target.label(),
+            g.app.ui.status
+        );
+        click_guide_label(&mut g, "Undo");
+        assert_eq!(g.app.document.geometry_snapshot(), before);
+    }
+
+    g.app
+        .document
+        .replace_geometry(Geometry::new(
+            Primitive::for_kind(PrimitiveKind::Plane).mesh().unwrap(),
+        ))
+        .unwrap();
+    g.panel(Tool::Mesh, Dock::Hidden);
+    g.panel(Tool::Submodels, Dock::Right);
+    click_guide_label(&mut g, "Thickness modifier");
+    click_guide_label(&mut g, "Crease rim edges");
+    // Rim loop count is covered by the preview/apply equality regression too.
+    let source = g.app.document.geometry_snapshot();
+    let expected = source
+        .mesh
+        .solidify_with_metadata(&source.scene.active_metadata)
+        .unwrap();
+    assert!(!expected.creases.is_empty());
+    click_guide_label(&mut g, "Apply Thickness modifier");
+    assert_eq!(*g.app.document.mesh(), expected);
+    click_guide_label(&mut g, "Undo");
+    assert_eq!(g.app.document.geometry_snapshot(), source);
+    g.save("thickness-review");
 }

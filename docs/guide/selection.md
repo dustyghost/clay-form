@@ -127,8 +127,8 @@ An unfinished outline is cancelled by tool/view/model changes or loss of focus. 
 
 Choose **Visibility → Split hidden** to move hidden faces into a new visible submodel. Both pieces stay in place with masks, groups, and quads intact.
 
-You need both visible and hidden faces. Apply/remove temporary thickness first. Boundaries remain open, and both pieces get fresh subdivision stacks and adaptive/voxel settings. One Undo restores the original model.
+You need both visible and hidden faces. Apply/remove thickness modifier first. Boundaries remain open, and both pieces get fresh subdivision stacks and adaptive/voxel settings. One Undo restores the original model.
 
 ## Related guides
 
-[Model tools](modeling.md) · [Undo and redo](sculpting.md#undo-and-redo) · [Temporary thickness](modeling.md#temporary-thickness)
+[Model tools](modeling.md) · [Undo and redo](sculpting.md#undo-and-redo) · [Thickness modifier](modeling.md#thickness-modifier)

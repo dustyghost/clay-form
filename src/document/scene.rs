@@ -203,6 +203,8 @@ impl Document {
         let old = model.metadata;
         if metadata.temporary_thickness > 0.
             && (old.temporary_thickness != metadata.temporary_thickness
+                || old.thickness_loops != metadata.thickness_loops
+                || old.thickness_crease != metadata.thickness_crease
                 || old.thickness_groups != metadata.thickness_groups
                 || old.thickness_group_mask != metadata.thickness_group_mask
                 || old.thickness_mask_rim != metadata.thickness_mask_rim

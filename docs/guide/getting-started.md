@@ -53,7 +53,7 @@ Enter a path such as `first-sculpt.clay` in the toolbar and choose **Save**. Use
 | --- | --- |
 | Sculpt a crisp crease | [Detail brush](sculpting.md#detail-brush) |
 | Protect part of the model | [Mask lasso](selection.md#example-protect-a-region-with-a-lasso) |
-| Start from a cube or head | [Primitives](modeling.md#parametric-primitives) |
+| Start from a primitive | [Primitives](modeling.md#parametric-primitives) |
 | Cut away part of the form | [Slice](modeling.md#slice) |
 | Work beside a drawing | [Reference images](references.md) |
 | Keep favorite tools visible | [Workspace](workspace.md) |

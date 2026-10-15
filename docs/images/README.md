@@ -18,6 +18,10 @@ See [Development](../development.md#update-guide-screenshots) for prerequisites 
 
 | Images | What they explain | Capture test |
 | --- | --- | --- |
+| `edge-loops-before.png`, `edge-loops-after.png` | [Support loops around an open hole](../guide/edges.md#add-support-loops-around-a-hole) | `edge_tools_offscreen_preview` |
+| `crease-smooth-before.png`, `crease-smooth-after.png` | [Smoothness with and without creases](../guide/edges.md#control-subdivision-smoothness) | `edge_tools_offscreen_preview` |
+| `crease-selection.png` | [Select and remove creases](../guide/edges.md#select-edges-and-loops) | `edge_tools_offscreen_preview` |
+| `thickness-modifier.png` | [Rim loops and rim creases](../guide/edges.md#add-loops-and-creases-to-thickness) | `edge_tools_offscreen_preview` |
 | `first-sculpt-before.png`, `first-sculpt-after.png` | [First stroke](../guide/getting-started.md) with a consistent camera | `guide_workflows_offscreen_preview` |
 | `brush-reset-before.png`, `brush-reset-after.png` | [Reset](../guide/sculpting.md#example-reset-an-experimental-brush) changes settings but keeps the name | `guide_workflows_offscreen_preview` |
 | `mirror-before.png`, `mirror-after.png` | [Replace one half from the other](../guide/modeling.md#mirror-one-side) with a consistent camera | `mirror_guide_offscreen_preview` |
@@ -25,7 +29,7 @@ See [Development](../development.md#update-guide-screenshots) for prerequisites 
 | `adaptive-settings.png` | [Adaptive detail settings](../guide/sculpting.md#snake-brush-and-adaptive-sculpting) | `guide_workflows_offscreen_preview` |
 | `primitive-cube.png` | [Dimensions versus spans](../guide/modeling.md#parametric-primitives) | `guide_workflows_offscreen_preview` |
 | `slice-trim-preview.png`, `slice-trim-result.png` | [Keep/remove preview and the resulting cap](../guide/modeling.md#slice); the result is orbited to expose the cap | `guide_workflows_offscreen_preview` |
-| `reference-images.png` | [Placement, locking, and opacity](../guide/references.md) using front/side head studies | `guide_workflows_offscreen_preview` |
+| `reference-images.png` | [Placement, locking, and opacity](../guide/references.md) using front/side ellipsoid studies | `guide_workflows_offscreen_preview` |
 | `obj-import.png` | [Sample pyramid](../guide/files.md#example-import-the-sample-pyramid) with the original sphere hidden | `guide_workflows_offscreen_preview` |
 | `recovery-dialog.png` | [Recovery controls](../guide/files.md#recovery-saves) in a focused window | `guide_workflows_offscreen_preview` |
 | `menu-placement.png` | [Docked versus pinned controls](../guide/workspace.md#example-keep-frequently-used-controls-open) | `guide_workflows_offscreen_preview` |
@@ -37,6 +41,6 @@ See [Development](../development.md#update-guide-screenshots) for prerequisites 
 
 ## Example assets
 
-[pyramid.obj](../examples/pyramid.obj) contains the imported sample. [Front study](../examples/front-study.png) and [Side study](../examples/side-study.png) are original renders of Clay Form's Human head primitive, exported by the same model-icon renderer used in the app. They are input assets, not screenshots of controls.
+[pyramid.obj](../examples/pyramid.obj) contains the imported sample. [Front study](../examples/front-study.png) and [Side study](../examples/side-study.png) are original renders of a scaled UV sphere, exported by the same model-icon renderer used in the app. They are input assets, not screenshots of controls.
 
 The recovery screenshot uses an isolated temporary directory; its name may change when regenerated. Your personal workspace and project names can differ. Keep screenshots consistent in theme and verify that their steps, labels, and captions still agree after changes.

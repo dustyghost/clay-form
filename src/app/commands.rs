@@ -76,6 +76,7 @@ impl App {
                 | Command::RemoveReference(_)
                 | Command::ArrangeReferences(_)
                 | Command::Mirror(..)
+                | Command::EditEdges(_)
         ) && (self.ui.pending.is_some()
             || self.ui.recovery_open
             || self.ui.settings_open
@@ -151,6 +152,7 @@ impl App {
                     | Command::Remesh
                     | Command::ImportObj
                     | Command::Mirror(..)
+                    | Command::EditEdges(_)
             )
         {
             self.ui.status = "Wait for the mesh operation, or cancel it first".into();
@@ -187,10 +189,12 @@ impl App {
                 | Command::Redo
         ) {
             self.ui.arrange_references = false;
+            self.ui.edges.selecting = false;
             self.viewport.cancel_reference_drag();
         }
         self.document.prepare_edit(command.edit_kind());
         let result: Result<(), String> = match command {
+            Command::EditEdges(edit) => self.start_mesh_job(Operation::Edges(edit)),
             Command::Mirror(axis, source_positive) => {
                 self.start_mesh_job(Operation::Mirror(crate::sculpt::MirrorOptions {
                     axis,

@@ -340,6 +340,11 @@ impl Mesh {
         } else {
             old_faces.iter().map(|&i| self.hidden_faces[i]).collect()
         };
+        let mut indices = vec![usize::MAX; self.vertices.len()];
+        for (new, &old) in old_vertices.iter().enumerate() {
+            indices[old] = new;
+        }
+        self.reindex_creases(result, &indices);
         result.canonicalize_polygroups();
     }
 }

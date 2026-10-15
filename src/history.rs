@@ -110,6 +110,7 @@ mod tests {
     fn oldest_snapshots_are_evicted_at_the_limit() {
         let mut history = History::default();
         let mut mesh = Geometry::new(Mesh {
+            creases: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
             polygroups: Vec::new(),

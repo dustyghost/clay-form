@@ -12,6 +12,17 @@ pub(crate) enum Action {
     Perspective,
     Symmetry,
     Mirror(Axis, bool),
+    SelectEdges,
+    SelectCreases,
+    SelectBorderEdges,
+    ExpandEdgeLoop,
+    ClearEdgeSelection,
+    CreaseEdges,
+    UncreaseEdges,
+    ClearCreases,
+    AddSupportLoops,
+    RelaxBorders,
+    SmoothSubdivide,
     Wireframe,
     Guides,
     Smaller,
@@ -219,9 +230,70 @@ impl Action {
         Self::Mirror(Axis::Y, false),
         Self::Mirror(Axis::Z, true),
         Self::Mirror(Axis::Z, false),
+        Self::SelectEdges,
+        Self::SelectCreases,
+        Self::SelectBorderEdges,
+        Self::ExpandEdgeLoop,
+        Self::ClearEdgeSelection,
+        Self::CreaseEdges,
+        Self::UncreaseEdges,
+        Self::ClearCreases,
+        Self::AddSupportLoops,
+        Self::RelaxBorders,
+        Self::SmoothSubdivide,
     ];
+    /// Help shared by the built-in controls, custom menus, and shelves.
+    pub fn help(&self) -> Option<&'static str> {
+        Some(match self {
+            Self::SelectEdges => {
+                "Turn edge picking on or off. Click to select; Shift adds and Ctrl removes. Drag empty space to orbit. Escape exits."
+            }
+            Self::SelectCreases => {
+                "Select all visible crease edges and enter Edge selection mode. Replaces the current selection without changing the mesh."
+            }
+            Self::SelectBorderEdges => {
+                "Select the affected borders and enter Edge selection mode. Uses the selection as the target without changing the mesh."
+            }
+            Self::ExpandEdgeLoop => {
+                "Extend the selected edges along a crease, border, or unambiguous quad loop. Stops at junctions."
+            }
+            Self::ClearEdgeSelection => {
+                "Clear the selected-edge highlight. Keeps crease marks and geometry."
+            }
+            Self::CreaseEdges => {
+                "Mark the affected edges to stay sharp during smooth subdivision. Adds no vertices."
+            }
+            Self::UncreaseEdges => {
+                "Remove sharp-edge marks from the affected edges. Keeps the current shape; later smoothing can round the edges."
+            }
+            Self::ClearCreases => {
+                "Remove every crease on the active model, including hidden edges. Keeps the current shape. Undo restores the marks and stored levels."
+            }
+            Self::AddSupportLoops => {
+                "Insert support loops around the affected borders. Selected edges must form closed borders that separate a region. Keeps holes open."
+            }
+            Self::RelaxBorders => {
+                "Even out the affected border vertices while preserving corners and junctions. Does not fill holes or remove loops."
+            }
+            Self::SmoothSubdivide => {
+                "Refine and round the whole active mesh using Smoothness. Creases remain sharp. Replaces stored subdivision levels; Undo restores them."
+            }
+            _ => return None,
+        })
+    }
     pub fn label(&self) -> &'static str {
         match self {
+            Self::SelectEdges => "Edge selection",
+            Self::SelectCreases => "Select creases",
+            Self::SelectBorderEdges => "Select target borders",
+            Self::ExpandEdgeLoop => "Expand loop",
+            Self::ClearEdgeSelection => "Clear selection",
+            Self::CreaseEdges => "Add crease",
+            Self::UncreaseEdges => "Remove crease",
+            Self::ClearCreases => "Clear all creases",
+            Self::AddSupportLoops => "Add support loops",
+            Self::RelaxBorders => "Relax borders",
+            Self::SmoothSubdivide => "Smooth subdivide",
             Self::Save => "Save project",
             Self::Open => "Open project at path",
             Self::New => "New sphere",
@@ -273,8 +345,8 @@ impl Action {
             Self::DuplicateModel => "Duplicate submodel",
             Self::MergeDown => "Merge down",
             Self::ExtractMasked => "Extract masked",
-            Self::ApplyThickness => "Apply thickness",
-            Self::TemporaryThickness => "Toggle temporary thickness",
+            Self::ApplyThickness => "Apply Thickness modifier",
+            Self::TemporaryThickness => "Toggle thickness modifier",
             Self::GroupMasked => "Group masked",
             Self::GroupAll => "Group all",
             Self::MaskGroup => "Mask selected group",

@@ -8,8 +8,9 @@ Build a base shape, position it, and choose how to add detail.
 - [Create a primitive](#parametric-primitives)
 - [Move, scale, and rotate](#model-transforms)
 - [Mirror one side onto the other](#mirror-one-side)
+- [Edge loops and creases](edges.md)
 - [Add mesh detail](#mesh-management)
-- [Thicken an open surface](#temporary-thickness)
+- [Thicken an open surface](#thickness-modifier)
 - [Cut the model](#slice)
 - [Combine submodels](#merge-down)
 
@@ -41,7 +42,7 @@ Extracted boundaries stay open and use a fresh subdivision stack. The selection 
 3. Choose a shape and adjust its controls.
 4. Choose **Convert to sculpting mesh** when ready to use brushes or mesh operations.
 
-Available shapes: Plane, Cube, Circle, UV sphere, Icosphere, Cylinder, Cone, Torus, Grid, and Human head.
+Available shapes: Plane, Cube, Circle, UV sphere, Icosphere, Cylinder, Cone, Torus, and Grid.
 
 ### Adjust dimensions and resolution
 
@@ -54,28 +55,13 @@ Use the **Primitive** menu or **Submodels → Primitive**. Pin/dock the menu to 
 | Handle | Controls |
 | --- | --- |
 | Axis-colored square | Size along X (red), Y (green), or Z (blue) |
-| Teal circle | Radius or anatomical dimension |
+| Teal circle | Radius |
 | Diamond | Resolution; drag left/right |
 | White hover ring | The highlighted handle |
 
 Hover for a label, or type precise values in the panel. Wireframe shows the axis-colored span lines. Plane/Grid and Circle lie in XY; cylinders, cones, and tori use Y as their main axis.
 
 The recipe saves with the model and survives duplication, transforms, and reopening. Converting removes it but keeps the surface; Undo restores it. An unfilled Circle must be filled before conversion. Open surfaces need closing before adaptive sculpting or voxel remeshing.
-
-### Shape a human-head base
-
-The Human head controls adjust jaw, chin, cheeks, nose, eyes, brow, ears, mouth, lips, and neck. Facial settings are symmetric and provide a starting form for sculpting.
-
-| Control | Effect |
-| --- | --- |
-| Open mouth | Rotate the lower jaw, lower teeth, and tongue |
-| Upper / lower eyelid closure | Adjust each lid independently |
-| Open eyes / Close eyes | Set both lids together |
-| Include neck | Add/remove the welded neck |
-| Neck length, width, muscle, throat | Adjust the neck profile |
-| Reset head proportions | Apply current base proportions to an older recipe; undoable |
-
-Eyeballs, teeth, and tongue are separate closed surfaces within the same submodel. Drag a depth handle horizontally when facing it directly, or orbit to expose its direction. Choose **Done** after a transform to return to shape handles.
 
 ## Model transforms
 
@@ -139,7 +125,7 @@ The active submodel becomes symmetric across the plane. Source masks, vertex-gro
 
 Mirror keeps the current mesh level and discards its other subdivision levels. It also turns off dynamic/adaptive mesh modes. Other submodels are unchanged. **Undo** restores the previous geometry, masks, groups, and levels in one step.
 
-Convert parametric primitives first, show all faces of the active model, and apply or remove temporary thickness. A source half with no surface produces an error and leaves the model unchanged. Large operations can be cancelled from the status controls.
+Convert parametric primitives first, show all faces of the active model, and apply or remove thickness modifier. A source half with no surface produces an error and leaves the model unchanged. Large operations can be cancelled from the status controls.
 
 ## Mesh management
 
@@ -147,6 +133,7 @@ Choose the method that fits your work:
 
 | Method | Best for | Changes topology |
 | --- | --- | --- |
+| [Smooth subdivision](edges.md#control-subdivision-smoothness) | Rounding shapes while preserving creased edges | Bakes the current level into refined quads |
 | Subdivision | Keeping several editable detail levels | Adds resolution to the whole surface |
 | [Adaptive sculpt](sculpting.md#snake-brush-and-adaptive-sculpting) | Detail near the brush | Refines/simplifies locally |
 | Dynamic mesh / voxel remesh | Redistributing geometry or fusing overlapping closed parts | Rebuilds the whole surface |
@@ -155,7 +142,7 @@ Choose the method that fits your work:
 
 Choose **Mesh → Subdivide** from the highest level. Use **Lower / Higher** or the level slider to switch levels.
 
-Lower-level edits carry upward while retaining finer detail. Subdivision is linear: it adds resolution without automatically smoothing the shape. Masks interpolate between levels.
+Lower-level edits carry upward while retaining finer detail. Subdivision is linear: it adds resolution without automatically smoothing the shape. Masks interpolate between levels. For controlled rounding, use the separate [Smoothness slider and Smooth subdivide](edges.md#control-subdivision-smoothness) controls.
 
 **Delete lower** removes levels below the current one; **Delete higher** removes those above it. Both are undoable. Projects store all levels; OBJ exports only the active one.
 
@@ -169,17 +156,19 @@ Lower-level edits carry upward while retaining finer detail. Subdivision is line
 
 Mesh operations run in the background. Cancel keeps the original surface; Undo restores prior geometry and settings. A failed automatic remesh disables the automatic option so you can adjust it.
 
-## Temporary thickness
+## Thickness modifier
 
 ### Preview a shell
 
-In **Submodels → Thickness · open meshes**, enable **Temporary thickness** and set its total thickness in model units. Half is added to each side; walls close boundary loops.
+In **Submodels → Thickness · open meshes**, enable **Thickness modifier** and set its total thickness in model units. Half is added to each side; walls close boundary loops.
+
+Use **Rim loops** to add wall segments and **Crease rim edges** to preserve the joins during later smooth subdivision. See the [illustrated thickness example](edges.md#add-loops-and-creases-to-thickness).
 
 Orbit to inspect tight folds for intersections. The original surface, masks, levels, and picking remain unchanged. OBJ export uses the original surface while the shell is temporary.
 
 ### Apply the shell
 
-Choose **Apply thickness** to make the preview real geometry. This converts primitives, preserves masks/quads, and resets levels and topology modes. Undo restores the original surface and settings.
+Choose **Apply Thickness modifier** to make the preview real geometry. This converts primitives, preserves masks/quads, and resets levels and topology modes. Undo restores the original surface and settings.
 
 Thickness requires consistently oriented open surfaces with nonbranching boundaries. Closed meshes and outlines without faces are not eligible. Front/back/rim groups and masks can be generated in the same controls.
 
@@ -187,7 +176,7 @@ Thickness requires consistently oriented open surfaces with nonbranching boundar
 
 ### Trim away one side
 
-Before slicing, convert primitives, apply/remove temporary thickness, and show all faces of the active model.
+Before slicing, convert primitives, apply/remove thickness modifier, and show all faces of the active model.
 
 1. Open **Slice**, select **Line**, and choose **Trim**.
 2. Leave **Cap cuts** on for a closed result.
@@ -244,7 +233,7 @@ Choose **Submodels → Merge down** to combine the active model with the next on
 
 The active model keeps its name/folder. Masks, groups, visibility, and quads survive. Hidden models contribute hidden faces; duplicate group names receive suffixes.
 
-Merge bakes primitives and temporary thickness, uses current mesh levels, and resets the result's level/topology settings. Fill unfilled Circles first. It combines surfaces **without welding or boolean union**; use voxel remeshing for fusion. Undo restores both models.
+Merge bakes primitives and thickness modifier, uses current mesh levels, and resets the result's level/topology settings. Fill unfilled Circles first. It combines surfaces **without welding or boolean union**; use voxel remeshing for fusion. Undo restores both models.
 
 ## Related guides
 

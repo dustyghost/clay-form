@@ -6,8 +6,100 @@ impl App {
         if !self.ui.action_enabled(&action, &self.document) {
             return;
         }
+        self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         let active_brush = self.ui.brush_index_for_context(&self.document, ctx);
         let command = match action {
+            Action::SelectEdges => {
+                self.ui.edges.selecting = !self.ui.edges.selecting;
+                self.viewport.cancel(&mut self.document);
+                self.ui.selection_tool = None;
+                self.ui.slice_active = false;
+                self.ui.arrange_references = false;
+                self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
+                if self.ui.edges.selecting {
+                    self.ui.wire = true;
+                    self.ui.edges.target = crate::sculpt::BorderTarget::Selected;
+                }
+                None
+            }
+            Action::SelectCreases
+            | Action::SelectBorderEdges
+            | Action::ExpandEdgeLoop
+            | Action::ClearEdgeSelection => {
+                let edges = match action {
+                    Action::SelectCreases => self.document.mesh().border_edges(
+                        crate::sculpt::BorderTarget::Selected,
+                        0.5,
+                        &self.document.mesh().creases,
+                    ),
+                    Action::SelectBorderEdges => self.document.mesh().border_edges(
+                        self.ui.edges.target,
+                        self.document
+                            .model(self.document.active_model_index())
+                            .unwrap()
+                            .metadata
+                            .mask_threshold,
+                        &self.ui.edges.selected,
+                    ),
+                    Action::ExpandEdgeLoop => self
+                        .document
+                        .mesh()
+                        .expand_edge_loop(&self.ui.edges.selected),
+                    _ => Ok(Vec::new()),
+                };
+                match edges {
+                    Ok(edges) => {
+                        if action != Action::ClearEdgeSelection {
+                            // Selecting edges should make the next click refine that
+                            // selection, rather than unexpectedly sculpt the surface.
+                            self.ui.edges.selecting = true;
+                            self.viewport.cancel(&mut self.document);
+                            self.ui.selection_tool = None;
+                            self.ui.slice_active = false;
+                            self.ui.arrange_references = false;
+                            self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
+                        }
+                        self.viewport
+                            .set_edge_selection(edges.clone(), &self.document);
+                        self.ui.edges.selected = edges;
+                        self.ui.edges.target = crate::sculpt::BorderTarget::Selected;
+                        self.ui.wire = true;
+                    }
+                    Err(error) => self.ui.status = error,
+                }
+                None
+            }
+            Action::CreaseEdges
+            | Action::UncreaseEdges
+            | Action::ClearCreases
+            | Action::AddSupportLoops
+            | Action::RelaxBorders
+            | Action::SmoothSubdivide => {
+                use crate::sculpt::EdgeEdit;
+                let target = self.ui.edges.target;
+                let selected = self.ui.edges.selected.clone();
+                let edit = match action {
+                    Action::CreaseEdges | Action::UncreaseEdges => EdgeEdit::Crease {
+                        target,
+                        selected,
+                        remove: action == Action::UncreaseEdges,
+                    },
+                    Action::ClearCreases => EdgeEdit::ClearCreases,
+                    Action::AddSupportLoops => EdgeEdit::Loops {
+                        target,
+                        selected,
+                        count: self.ui.edges.loops,
+                        width: self.ui.edges.width,
+                    },
+                    Action::RelaxBorders => EdgeEdit::Relax {
+                        target,
+                        selected,
+                        amount: self.ui.edges.relax,
+                    },
+                    _ => EdgeEdit::SmoothSubdivide(self.ui.edges.smoothness),
+                };
+                Some(Command::EditEdges(edit))
+            }
             Action::Subdivide => Some(Command::Subdivide),
             Action::Remesh => Some(Command::Remesh),
             Action::LowerLevel => self

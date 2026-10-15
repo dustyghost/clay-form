@@ -21,13 +21,17 @@ Use `src/ui/design.rs` for shared action buttons, menus, icons, brush tiles and 
 - Group project/file actions separately from editing and view actions. Wrap toolbar rows when the window is narrow; constrain path fields so they leave room for actions.
 - Brush tiles share an 82-pixel height and a 48-pixel square preview. Use as many equal-width columns as fit (one to four). Put names below previews and show the full name on hover.
 - Teal fill and outlines identify selected tools and brushes. Neutral dark surfaces and restrained borders keep the model visually prominent. Hover and disabled states follow egui's interaction styling.
+- Separate persistent modes from immediate actions: use a checkbox or a clearly selected mode control, and keep the active mode visible even when its settings are collapsed.
+- Name actions with plain verbs. Show the affected selection or region beside the controls, and separate model-wide clearing actions from targeted edits.
+- Provide short help on hover and keyboard focus with `design::help`. Explain the result, important limits, and the user's configured shortcut. Disabled controls should explain how to enable them. Keep active modes, scope, and subdivision-level replacement visible without a tooltip.
+- Group controls by task; place optional detail in clearly named collapsible sections. Do not use the selected-state colour to decorate an immediate action.
 - Preserve accessible labels, keyboard interaction and existing shortcut behaviour. Preview image changes before committing them to a brush.
 
 ## Controls over the model
 
 Use `src/viewport/controls.rs` for the overlay palette, markers and labels.
 
-- Teal identifies shape parameters. Squares change dimensions or uniform size; circles change radii and anatomical features.
+- Teal identifies shape parameters. Squares change dimensions or uniform size; circles change radii.
 - Axis-colored diamonds identify X/Y/Z span counts; violet diamonds identify non-axis topology parameters such as segments and subdivision levels. Place these in a compact stack beside the model, with persistent names and current values. Drag horizontally; every 12 logical pixels changes one unit. Keep exact-value controls in the single collapsible Primitive section within Submodels; the section disappears after conversion.
 - World axes use the same coral X, green Y and blue Z colours in transform controls and the camera gizmo. Include axis names; colour alone must never communicate the axis.
 - Amber identifies Action Line controls. Neutral controls apply to all axes. Move and placement use circles; scale and stretch use squares.

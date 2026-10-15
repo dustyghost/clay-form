@@ -12,7 +12,7 @@ impl EditKind {
     fn label(self) -> &'static str {
         match self {
             Self::Primitive => "Edit primitive parameters",
-            Self::Thickness => "Edit temporary thickness",
+            Self::Thickness => "Edit thickness modifier",
             Self::MaskIntensity => "Mask intensity",
             Self::MaskThreshold => "Mask threshold",
         }

@@ -91,7 +91,7 @@ impl Geometry {
             );
         }
         if self.scene.active_metadata.temporary_thickness > 0. {
-            return Err("Apply or remove temporary thickness before slicing".into());
+            return Err("Apply or remove thickness modifier before slicing".into());
         }
         if options.mode == SliceMode::Separate && self.submodels.len() >= 63 {
             return Err("Submodels are limited to 64".into());
@@ -275,6 +275,18 @@ impl Mesh {
                 !(q.iter().any(|&i| distances[i] > 0.) && q.iter().any(|&i| distances[i] < 0.))
             })
             .collect();
+        work.creases = self
+            .creases
+            .iter()
+            .flat_map(|&[a, b]| {
+                if let Some(&m) = intersections.get(&key(a, b)) {
+                    vec![super::edges::edge(a, m), super::edges::edge(m, b)]
+                } else {
+                    vec![[a, b]]
+                }
+            })
+            .collect();
+        work.retain_creases();
         Ok((work, sides))
     }
     pub(super) fn finish_slice(
@@ -422,6 +434,7 @@ impl Mesh {
         for q in &mut out.quads {
             *q = q.map(|i| indices[i]);
         }
+        self.reindex_creases(&mut out, &indices);
         out
     }
     fn cap_slice(&mut self, normal: Vec3, cancel: &impl Fn() -> bool) -> Result<(), String> {

@@ -63,8 +63,11 @@ impl Mesh {
             return Err("Thickness requires nonbranching boundary loops".into());
         }
         boundary.sort_unstable();
+        let rim_loops = metadata.map_or(0, |m| m.thickness_loops as usize);
         let n = self.vertices.len();
-        if n * 2 > MAX_VERTICES || self.triangles.len() * 2 + boundary.len() * 2 > MAX_TRIANGLES {
+        if n * 2 + boundary.len() * rim_loops > MAX_VERTICES
+            || self.triangles.len() * 2 + boundary.len() * 2 * (rim_loops + 1) > MAX_TRIANGLES
+        {
             return Err(
                 "Thickness would exceed the mesh size limit; use a lower resolution".into(),
             );
@@ -102,6 +105,7 @@ impl Mesh {
             }
         }
         let mut shell = Mesh {
+            creases: Vec::new(),
             vertex_groups: self
                 .vertex_groups
                 .iter()
@@ -162,7 +166,7 @@ impl Mesh {
                 .iter()
                 .map(|&[a, b, c, d]| [a + n, d + n, c + n, b + n]),
         );
-        let boundary_vertices: std::collections::HashSet<_> =
+        let boundary_vertices: std::collections::BTreeSet<_> =
             boundary.iter().flat_map(|&(a, b)| [a, b]).collect();
         let edge_key = |a, b| if a < b { (a, b) } else { (b, a) };
         let hidden_edges: std::collections::HashSet<_> = self
@@ -172,23 +176,63 @@ impl Mesh {
             .filter(|(i, _)| self.hidden_faces.get(*i).copied().unwrap_or(false))
             .flat_map(|(_, &[a, b, c])| [edge_key(a, b), edge_key(b, c), edge_key(c, a)])
             .collect();
+        let mut layers = HashMap::new();
+        let mut source_vertex: Vec<_> = (0..n).chain(0..n).collect();
+        for &v in &boundary_vertices {
+            let mut ids = vec![v];
+            for layer in 1..=rim_loops {
+                let t = layer as f32 / (rim_loops + 1) as f32;
+                let position = shell.vertices[v] * (1. - t) + shell.vertices[v + n] * t;
+                let id = shell.vertices.len();
+                shell.vertices.push(position);
+                shell.mask.push(self.mask[v]);
+                for (g, old) in shell.vertex_groups.iter_mut().zip(&self.vertex_groups) {
+                    g.weights.push(old.weights[v]);
+                }
+                source_vertex.push(v);
+                ids.push(id);
+            }
+            ids.push(v + n);
+            layers.insert(v, ids);
+        }
+        shell.creases = self
+            .creases
+            .iter()
+            .copied()
+            .chain(self.creases.iter().map(|&[a, b]| [a + n, b + n]))
+            .collect();
         for (a, b) in boundary {
             if !self.hidden_faces.is_empty() {
-                shell
-                    .hidden_faces
-                    .extend([hidden_edges.contains(&edge_key(a, b)); 2]);
+                shell.hidden_faces.extend(vec![
+                    hidden_edges.contains(&edge_key(a, b));
+                    2 * (rim_loops + 1)
+                ]);
             }
-            shell.quads.push([b, a, a + n, b + n]);
-            shell.triangles.extend([[b, a, a + n], [b, a + n, b + n]]);
+            for layer in 0..=rim_loops {
+                let [aa, bb, cc, dd] = [
+                    layers[&b][layer],
+                    layers[&a][layer],
+                    layers[&a][layer + 1],
+                    layers[&b][layer + 1],
+                ];
+                shell.quads.push([aa, bb, cc, dd]);
+                shell.triangles.extend([[aa, bb, cc], [aa, cc, dd]]);
+            }
+            if metadata.is_some_and(|m| m.thickness_crease) {
+                shell
+                    .creases
+                    .extend([super::edges::edge(a, b), super::edges::edge(a + n, b + n)]);
+            }
             if !self.polygroups.is_empty() {
-                shell.polygroups.extend([0; 2]);
+                shell.polygroups.extend(vec![0; 2 * (rim_loops + 1)]);
             }
         }
         if let Some(options) = metadata {
             if options.thickness_mask_rim {
-                for &i in &boundary_vertices {
-                    shell.mask[i] = 1.;
-                    shell.mask[i + n] = 1.;
+                for ids in layers.values() {
+                    for &i in ids {
+                        shell.mask[i] = 1.;
+                    }
                 }
             }
             if options.thickness_groups {
@@ -204,12 +248,12 @@ impl Mesh {
                 {
                     let name = shell.unique_group_name(name);
                     let id = shell.vertex_groups.len() + 1;
-                    let weights = (0..n * 2)
+                    let weights = (0..shell.vertices.len())
                         .map(|i| {
                             let selected = match part {
                                 0 => i < n,
-                                1 => i >= n,
-                                _ => boundary_vertices.contains(&(i % n)),
+                                1 => i >= n && i < n * 2,
+                                _ => boundary_vertices.contains(&source_vertex[i]),
                             };
                             if selected { 1. } else { 0. }
                         })
@@ -274,6 +318,8 @@ impl Mesh {
         }) {
             return Err("This thickness collapses shell faces; choose a different thickness or adjust the mesh coordinates".into());
         }
+        shell.creases.sort_unstable();
+        shell.creases.dedup();
         shell.validate_closed()?;
         Ok(shell)
     }

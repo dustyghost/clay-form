@@ -26,7 +26,7 @@ mod transform;
 pub use transform::Transform;
 
 mod primitive;
-pub use primitive::{HeadOptions, Primitive, PrimitiveKind};
+pub use primitive::{Primitive, PrimitiveKind};
 
 mod thickness;
 
@@ -53,3 +53,6 @@ pub use mirror::MirrorOptions;
 
 #[cfg(test)]
 mod mirror_tests;
+
+mod edges;
+pub use edges::{BorderTarget, EdgeEdit};

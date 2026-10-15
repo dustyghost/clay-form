@@ -218,6 +218,59 @@ pub fn export_obj(path: &str, mesh: &Mesh) -> Result<(), String> {
 mod tests {
     use super::*;
     #[test]
+    fn removed_head_recipes_keep_saved_surfaces_in_active_and_other_submodels() {
+        use crate::sculpt::{MeshSettings, ModelMetadata, Primitive, PrimitiveKind, Submodel};
+        let mut expected = crate::document::Document::default().project();
+        expected.model_name = "Saved head".into();
+        expected.mesh = Primitive::for_kind(PrimitiveKind::Cube).mesh().unwrap();
+        expected.mesh.mask[0] = 0.75;
+        expected.submodels.push(Submodel {
+            name: "Hidden head".into(),
+            mesh: expected.mesh.clone(),
+            mesh_settings: MeshSettings::default(),
+            metadata: ModelMetadata {
+                visible: false,
+                ..Default::default()
+            },
+        });
+        // The stored mesh is authoritative, independent of the old recipe's
+        // anatomy version, dimensions, or generator. No regeneration is needed.
+        for anatomy_version in [None, Some(0), Some(1), Some(2)] {
+            let mut recipe = serde_json::json!({"kind":"HumanHead", "head":{}});
+            if let Some(version) = anatomy_version {
+                recipe["head"]["anatomy_version"] = version.into();
+            }
+            let mut saved = serde_json::to_value(&expected).unwrap();
+            saved["mesh_settings"] = serde_json::json!({"primitive": recipe.clone()});
+            saved["submodels"][0]["mesh_settings"]["primitive"] = recipe;
+            let loaded: Project = serde_json::from_value(saved).unwrap();
+            loaded.validate().unwrap();
+            assert!(loaded == expected);
+            let mut document = crate::document::Document::default();
+            document
+                .replace_project(loaded, "legacy-head.clay")
+                .unwrap();
+            assert!(document.primitive().is_none());
+            assert_eq!(document.mesh(), &expected.mesh);
+            let roundtrip: Project =
+                serde_json::from_slice(&json_bytes(&document.project()).unwrap()).unwrap();
+            assert_eq!(roundtrip.mesh, expected.mesh);
+            assert_eq!(roundtrip.submodels, expected.submodels);
+        }
+        assert!(
+            serde_json::from_value::<MeshSettings>(
+                serde_json::json!({"primitive":{"kind":"UnknownShape"}})
+            )
+            .is_err()
+        );
+        assert!(
+            PrimitiveKind::ALL
+                .iter()
+                .all(|kind| kind.label() != "Human head")
+        );
+    }
+
+    #[test]
     fn legacy_version_one_json_keeps_its_exact_data_shape() {
         let legacy = include_str!("../tests/fixtures/v1-project.json");
         let project: Project = serde_json::from_str(legacy).unwrap();

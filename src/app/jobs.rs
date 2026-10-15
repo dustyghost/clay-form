@@ -46,8 +46,15 @@ impl App {
                 .clone();
             let label = operation.history_label();
             self.ui.mesh_busy = false;
-            match result.and_then(|geometry| self.document.replace_geometry_named(geometry, label))
-            {
+            match result.and_then(|geometry| {
+                if matches!(operation, Operation::Edges(_))
+                    && geometry == self.document.geometry_snapshot()
+                {
+                    Ok(())
+                } else {
+                    self.document.replace_geometry_named(geometry, label)
+                }
+            }) {
                 Ok(()) => {
                     if matches!(
                         operation,

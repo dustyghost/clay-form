@@ -76,6 +76,9 @@ impl Document {
     pub fn set_adaptive(&mut self, settings: AdaptiveSettings) -> Result<(), String> {
         self.require_sculpt_mesh()?;
         settings.validate()?;
+        if settings.enabled && !self.mesh().creases.is_empty() {
+            return Err("Clear creases before enabling adaptive sculpt".into());
+        }
         if self.geometry.settings.adaptive == settings {
             return Ok(());
         }

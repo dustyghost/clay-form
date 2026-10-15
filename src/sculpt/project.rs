@@ -14,6 +14,9 @@ fn default_threshold() -> f32 {
 fn threshold_default(value: &f32) -> bool {
     *value == 0.5
 }
+fn is_zero_loops(value: &u32) -> bool {
+    *value == 0
+}
 fn disabled(value: &bool) -> bool {
     !*value
 }
@@ -38,6 +41,10 @@ pub struct ModelMetadata {
     pub mask_threshold: f32,
     #[serde(default, skip_serializing_if = "disabled")]
     pub thickness_groups: bool,
+    #[serde(default, skip_serializing_if = "is_zero_loops")]
+    pub thickness_loops: u32,
+    #[serde(default, skip_serializing_if = "disabled")]
+    pub thickness_crease: bool,
     #[serde(default, skip_serializing_if = "disabled")]
     pub thickness_mask_rim: bool,
     #[serde(default, skip_serializing_if = "disabled")]
@@ -51,6 +58,8 @@ impl Default for ModelMetadata {
             temporary_thickness: 0.,
             mask_threshold: 0.5,
             thickness_groups: false,
+            thickness_loops: 0,
+            thickness_crease: false,
             thickness_mask_rim: false,
             thickness_group_mask: false,
         }
@@ -58,13 +67,16 @@ impl Default for ModelMetadata {
 }
 impl ModelMetadata {
     pub fn validate(&self) -> Result<(), String> {
+        if self.thickness_loops > 8 {
+            return Err("Thickness modifier supports up to 8 rim loops".into());
+        }
         if !self.mask_threshold.is_finite() || !(0. ..=1.).contains(&self.mask_threshold) {
             return Err("Mask threshold must be between 0% and 100%".into());
         }
         if !self.temporary_thickness.is_finite()
             || !(0. ..=100.).contains(&self.temporary_thickness)
         {
-            return Err("Invalid temporary thickness".into());
+            return Err("Invalid thickness modifier".into());
         }
         Ok(())
     }

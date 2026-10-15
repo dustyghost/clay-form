@@ -66,6 +66,10 @@ impl Mesh {
                     .map(|i| other.hidden_faces.get(i).copied().unwrap_or(false)),
             );
         }
+        merged
+            .creases
+            .extend(other.creases.iter().map(|&[a, b]| [a + offset, b + offset]));
+        merged.creases.sort_unstable();
         merged.validate()?;
         Ok(merged)
     }

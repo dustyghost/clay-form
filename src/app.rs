@@ -120,6 +120,15 @@ impl App {
     }
 
     pub(crate) fn show_viewport(&mut self, ui: &mut egui::Ui) {
+        self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
+        if self.ui.edges.selecting
+            && !ui.ctx().wants_keyboard_input()
+            && ui.input(|i| i.key_pressed(egui::Key::Escape))
+        {
+            self.ui.edges.selecting = false;
+            self.viewport.cancel(&mut self.document);
+            self.viewport.wait_for_release();
+        }
         let (primitive_commands, editor_rect) = self.ui.primitive_confirmation(ui.ctx());
         for command in primitive_commands {
             self.dispatch(command, ui.ctx());
@@ -171,6 +180,7 @@ impl App {
             &mut self.document,
             &mut self.camera,
             ViewportOptions {
+                edge_select: self.ui.edges.selecting,
                 arrange_references: self.ui.arrange_references,
                 references_visible: self.ui.references_visible,
                 slice: self.ui.slice_active.then_some(self.ui.slice_options),
@@ -201,6 +211,7 @@ impl App {
                 pan_hold: self.ui.preferences.pan_hold,
             },
         );
+        self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         if let Some(index) = self.viewport.reference_selection() {
             self.ui.selected_reference = index;
         }

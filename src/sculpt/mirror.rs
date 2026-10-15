@@ -45,7 +45,7 @@ impl Geometry {
             return Err("Show the active model and all of its faces before mirroring".into());
         }
         if self.scene.active_metadata.temporary_thickness > 0. {
-            return Err("Apply or remove temporary thickness before mirroring".into());
+            return Err("Apply or remove thickness modifier before mirroring".into());
         }
         let mesh = self.mesh.mirror_half(options, cancel)?;
         check_cancel(cancel)?;
@@ -163,6 +163,13 @@ impl Mesh {
                 .iter()
                 .map(|&[a, b, c, d]| [reflected[a], reflected[d], reflected[c], reflected[b]]),
         );
+        result.creases.extend(
+            half.creases
+                .iter()
+                .map(|&[a, b]| super::edges::edge(reflected[a], reflected[b])),
+        );
+        result.creases.sort_unstable();
+        result.creases.dedup();
         result.validate()?;
         if was_closed {
             result

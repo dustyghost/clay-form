@@ -1,5 +1,6 @@
 //! Converts viewport gestures into camera movement and document sculpt dabs.
 mod controls;
+mod edges;
 mod gizmo;
 mod gpu;
 mod projection;
@@ -36,6 +37,7 @@ pub(crate) enum Gesture {
     Primitive,
     Slice,
     Select,
+    Edges,
 }
 struct SnakeStroke {
     center: Vec3,
@@ -44,6 +46,8 @@ struct SnakeStroke {
 }
 #[derive(Default)]
 pub(crate) struct Viewport {
+    edge_selection: Vec<[usize; 2]>,
+    edge_revision: u64,
     references: references::ReferenceOverlay,
     renderer: Option<gpu::Renderer>,
     pub(crate) gesture: Option<Gesture>,
@@ -69,6 +73,7 @@ pub(crate) struct Viewport {
 }
 #[derive(Clone, Copy)]
 pub(crate) struct ViewportOptions {
+    pub edge_select: bool,
     pub arrange_references: bool,
     pub references_visible: bool,
     pub slice: Option<crate::sculpt::SliceOptions>,
@@ -118,10 +123,14 @@ impl Viewport {
     }
     pub(crate) fn cancel(&mut self, document: &mut Document) {
         let renderer = self.renderer.take();
+        let edge_selection = std::mem::take(&mut self.edge_selection);
+        let edge_revision = self.edge_revision;
         let blocked_until_release = self.blocked_until_release || self.references.dragging();
         let mut references = std::mem::take(&mut self.references);
         references.cancel_drag();
         *self = Self {
+            edge_selection,
+            edge_revision,
             blocked_until_release,
             references,
             renderer,
@@ -167,6 +176,9 @@ impl Viewport {
             enabled: options.enabled && !blocked_this_frame && ui.input(|i| i.focused),
             ..options
         };
+        if !options.enabled && self.gesture == Some(Gesture::Edges) {
+            self.gesture = None;
+        }
         let (response, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
         let rect = response.rect;
         let gizmo_rect = egui::Rect::from_min_size(
@@ -217,6 +229,7 @@ impl Viewport {
             renderer.set_backfaces(options.backface_opacity);
             renderer.set_polygroups(options.show_polygroups);
         }
+        self.paint_edges(document, &scene, &painter);
         self.references
             .show(ui, &response, &painter, document, options);
         if options.show_guides && document.active_visible() {
@@ -273,6 +286,7 @@ impl Viewport {
             document,
             gizmo_rect,
             options.enabled
+                && !options.edge_select
                 && !options.arrange_references
                 && options.slice.is_none()
                 && options.transform_mode == TransformMode::Sculpt,
@@ -373,6 +387,35 @@ impl Viewport {
         }
         let primary =
             response.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_down());
+        if options.edge_select
+            && options.enabled
+            && (primary
+                || response.clicked_by(egui::PointerButton::Primary)
+                || self.gesture == Some(Gesture::Edges))
+            && (self.gesture == Some(Gesture::Edges)
+                || (self.gesture.is_none()
+                    && pointer.is_some_and(|p| {
+                        !gizmo_rect.contains(p)
+                            && !navigation::contains(rect, p)
+                            // Empty-space presses use the normal navigation path.
+                            // Include the edge hit tolerance just outside silhouettes.
+                            && (scene.pick_model(p).is_some()
+                                || Self::edge_at(p, document, &scene).is_some())
+                    })))
+        {
+            if primary {
+                self.gesture = Some(Gesture::Edges);
+            }
+            if ui.input(|i| i.pointer.any_released()) {
+                if response.clicked_by(egui::PointerButton::Primary)
+                    && let Some(point) = pointer
+                {
+                    self.pick_edge(point, ui.input(|i| i.modifiers), document, &scene);
+                }
+                self.gesture = None;
+            }
+            return;
+        }
         if (primary || response.clicked_by(egui::PointerButton::Primary))
             && self.gesture.is_none()
             && options.enabled

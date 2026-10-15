@@ -80,7 +80,7 @@ impl UiState {
                     });
                     if kind!=params.kind { let mut replacement=Primitive::for_kind(kind);replacement.center=params.center;replacement.basis=params.basis;params=replacement; }
                     ui.separator();
-                    if matches!(kind,Kind::Cube|Kind::Plane|Kind::Grid|Kind::UvSphere|Kind::Icosphere|Kind::HumanHead) {
+                    if matches!(kind,Kind::Cube|Kind::Plane|Kind::Grid|Kind::UvSphere|Kind::Icosphere) {
                         axis_control(ui, 0, |ui| { ui.add(egui::Slider::new(&mut params.size.0,0.05..=10.).text("Width")); });
                         axis_control(ui, 1, |ui| { ui.add(egui::Slider::new(&mut params.size.1,0.05..=10.).text("Height")); });
                         if !matches!(kind,Kind::Plane|Kind::Grid) {axis_control(ui, 2, |ui| { ui.add(egui::Slider::new(&mut params.size.2,0.05..=10.).text("Depth")); });}
@@ -94,7 +94,7 @@ impl UiState {
                             axis_control(ui, 0, |ui| { resolution_control(ui,"X spans",&mut params.divisions[0],1,128); });
                             axis_control(ui, 1, |ui| { resolution_control(ui,"Y spans",&mut params.divisions[1],1,128); });
                         }
-                        Kind::UvSphere|Kind::HumanHead=>{
+                        Kind::UvSphere=>{
                             resolution_control(ui,"Segments",&mut params.segments,3,256);
                             resolution_control(ui,"Rings",&mut params.rings,2,128);
                         }
@@ -120,33 +120,7 @@ impl UiState {
                             resolution_control(ui,"Tube segments",&mut params.rings,3,128);
                         }
                     }
-                    if kind==Kind::HumanHead {
-                        ui.separator();ui.strong("Face proportions");
-                        if params.head.anatomy_version<2 { ui.weak("This saved head uses the earlier proportions."); }
-                        if ui.button("Reset head proportions").on_hover_text("Use the revised anatomy, neutral facial proportions and default head dimensions; Undo restores your previous settings").clicked() { params.head=Default::default();params.size=Primitive::for_kind(Kind::HumanHead).size; }
-                        let h=&mut params.head;
-                        for (value,label) in [(&mut h.jaw_width,"Jaw width"),(&mut h.jaw_height,"Jaw length"),(&mut h.chin,"Chin projection"),(&mut h.cheeks,"Cheekbones"),(&mut h.nose_length,"Nose projection"),(&mut h.nose_width,"Nose width"),(&mut h.eye_spacing,"Eye spacing"),(&mut h.eye_depth,"Eye sockets"),(&mut h.brow,"Brow ridge"),(&mut h.ears,"Ear size"),(&mut h.eye_size,"Eye size"),(&mut h.eye_height,"Eye height"),(&mut h.mouth_width,"Mouth width"),(&mut h.lip_size,"Lip fullness")] {ui.add(egui::Slider::new(value,0. ..=2.).text(label));}
-                        ui.add(egui::Slider::new(&mut h.mouth_open,0. ..=2.).text("Open mouth"));
-                        ui.horizontal(|ui| {
-                            if ui.small_button("Close mouth").clicked() { h.mouth_open=0.; }
-                            if ui.small_button("Open mouth").clicked() { h.mouth_open=1.; }
-                        });
-                        if h.anatomy_version>0 {
-                            ui.add(egui::Slider::new(&mut h.upper_lid,0. ..=1.).text("Upper eyelid closure"));
-                            ui.add(egui::Slider::new(&mut h.lower_lid,0. ..=1.).text("Lower eyelid closure"));
-                            ui.horizontal(|ui| {
-                                if ui.small_button("Open eyes").clicked() {h.upper_lid=0.;h.lower_lid=0.;}
-                                if ui.small_button("Close eyes").clicked() {h.upper_lid=1.;h.lower_lid=1.;}
-                            });
-                        }
-                        if h.anatomy_version>=2 {
-                            ui.separator();ui.strong("Neck");ui.checkbox(&mut h.neck,"Include neck");
-                            ui.add_enabled_ui(h.neck,|ui| {
-                                for (value,label) in [(&mut h.neck_length,"Neck length"),(&mut h.neck_width,"Neck width"),(&mut h.neck_muscle,"Neck muscle definition"),(&mut h.throat,"Throat prominence")] {ui.add(egui::Slider::new(value,0. ..=2.).text(label));}
-                            });
-                        }
-                        ui.weak("Eyes, teeth and tongue are separate surfaces within this submodel. Convert to sculpt their anatomy.");
-                    }
+
                     ui.separator();
                     ui.checkbox(&mut params.triangulated,"Triangle topology");
                     ui.checkbox(&mut self.wire,"Show wireframe");

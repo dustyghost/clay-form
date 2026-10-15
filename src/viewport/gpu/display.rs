@@ -30,6 +30,7 @@ impl DisplayMesh {
     fn build(document: &Document, preview: bool, active_mesh: Option<&Mesh>) -> Self {
         let active = document.active_model_index();
         let mut mesh = Mesh {
+            creases: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
             polygroups: Vec::new(),
@@ -98,6 +99,12 @@ impl DisplayMesh {
                     })
                     .map(|q| q.map(|i| i + offset)),
             );
+            for &[a, b] in &surface.creases {
+                edge_colors.insert(
+                    (a + offset, b + offset),
+                    eframe::egui::Color32::from_rgb(255, 170, 65),
+                );
+            }
             mesh.vertices.extend_from_slice(&surface.vertices);
             mesh.mask.extend_from_slice(&surface.mask);
             let surface_shading = surface.surface_shading();

@@ -1156,75 +1156,6 @@ fn primitive_sidebar_changes_segments_without_dragging_model_and_hides_after_con
 }
 
 #[test]
-fn primitive_sidebar_opens_the_jaw_with_one_click_and_undo_restores_it() {
-    fn frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) -> egui::FullOutput {
-        ctx.run(
-            egui::RawInput {
-                screen_rect: Some(egui::Rect::from_min_size(
-                    Pos2::ZERO,
-                    Vec2::new(1000., 1800.),
-                )),
-                events,
-                ..Default::default()
-            },
-            |ctx| {
-                let mut commands = Vec::new();
-                egui::SidePanel::right("submodel_test_panel")
-                    .default_width(330.)
-                    .show(ctx, |ui| {
-                        app.ui.primitive_controls(ui, &app.document, &mut commands);
-                    });
-                for command in commands {
-                    app.dispatch(command, ctx);
-                }
-                egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
-            },
-        )
-    }
-    let mut app = App::default();
-    let ctx = egui::Context::default();
-    app.document.initialize_primitive().unwrap();
-    app.document
-        .update_primitive(crate::sculpt::Primitive::for_kind(
-            crate::sculpt::PrimitiveKind::HumanHead,
-        ))
-        .unwrap();
-    app.document.end_primitive_edit();
-    let before = app.document.geometry_snapshot();
-    frame(&mut app, &ctx, vec![]);
-    let output = frame(&mut app, &ctx, vec![]);
-    let texts: Vec<_> = output
-        .shapes
-        .iter()
-        .filter_map(|s| match &s.shape {
-            egui::Shape::Text(t) => Some((t.galley.text(), t.pos + t.galley.size() * 0.5)),
-            _ => None,
-        })
-        .collect();
-    let close = texts
-        .iter()
-        .find(|(text, _)| *text == "Close mouth")
-        .unwrap()
-        .1;
-    let point = texts
-        .iter()
-        .find(|(text, pos)| *text == "Open mouth" && (pos.y - close.y).abs() < 5.)
-        .unwrap()
-        .1;
-    frame(
-        &mut app,
-        &ctx,
-        vec![egui::Event::PointerMoved(point), primary_event(point, true)],
-    );
-    frame(&mut app, &ctx, vec![primary_event(point, false)]);
-    assert_eq!(app.document.primitive().unwrap().head.mouth_open, 1.);
-    assert!(!app.ui.primitive_controls_requested);
-    assert!(app.viewport.gesture.is_none());
-    app.document.undo();
-    assert_eq!(app.document.geometry_snapshot(), before);
-}
-
-#[test]
 fn brush_icon_capture_preview_cancel_and_assignment() {
     fn frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) -> egui::FullOutput {
         ctx.run(
@@ -3518,3 +3449,5 @@ mod guide_captures;
 mod perspective;
 
 mod mirror;
+
+mod edges;

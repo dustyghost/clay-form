@@ -14,6 +14,9 @@ pub struct Dab {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Mesh {
+    /// Persistent hard polygon edges, sorted and unique.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub creases: Vec<[usize; 2]>,
     pub vertices: Vec<Vec3>,
     pub triangles: Vec<[usize; 3]>,
     /// Polygon topology; triangles remain the surface used for picking and rendering.
@@ -35,6 +38,7 @@ impl Mesh {
     }
     pub fn extract_masked_threshold(&self, threshold: f32) -> Result<Self, String> {
         let mut result = Self {
+            creases: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
             polygroups: Vec::new(),
@@ -123,6 +127,7 @@ impl Mesh {
             })
             .collect();
         let mut result = Self {
+            creases: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
             polygroups: Vec::new(),
@@ -204,6 +209,7 @@ impl Mesh {
     }
     pub fn validate(&self) -> Result<(), String> {
         self.validate_groups()?;
+        self.validate_creases()?;
         if self.vertices.len() > super::subdivision::MAX_VERTICES
             || self.triangles.len() > super::subdivision::MAX_TRIANGLES
             || self
@@ -293,7 +299,14 @@ impl Mesh {
                 }
             }
         }
-        let sculptable = self.sculptable_vertices();
+        let mut sculptable = self.sculptable_vertices();
+        if b.kind == Kind::Smooth {
+            for edge in &self.creases {
+                for &v in edge {
+                    sculptable[v] = false;
+                }
+            }
+        }
         let join_soft =
             b.kind == Kind::Standard && matches!(b.alpha, super::Alpha::Soft) && dabs.len() > 1;
         let origin = dabs.first().map_or(Vec3::default(), |dab| dab.center);

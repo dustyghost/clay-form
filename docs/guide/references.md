@@ -17,14 +17,14 @@ Adding enters **Arrange images**. The file is embedded in the project, so moving
 
 ## Example: keep two studies beside the sculpt
 
-1. Add a front and a side study. Try the supplied [front](../examples/front-study.png) and [side](../examples/side-study.png) images of the Human head base.
+1. Add a front and a side study. Try the supplied [front](../examples/front-study.png) and [side](../examples/side-study.png) images of a simple ellipsoid.
 2. In **Arrange images**, drag them to the upper-left and lower-left corners. Resize with each image's lower-right handle.
 3. Select the side image, set **Opacity** to **70%**, and enable **Lock position and size**.
 4. Choose **Done**. Orbit the model; the images stay in place.
 
-![Front and side head references beside the sculpt with Side study selected and locked at 70 percent opacity](../images/reference-images.png)
+![Front and side ellipsoid references beside the sculpt with Side study selected and locked at 70 percent opacity](../images/reference-images.png)
 
-*The supplied images show two views of the same built-in base. Replace them with your own drawings or photos for a project.*
+*The supplied images show two views of the same ellipsoid, made by scaling a UV sphere. Replace them with your own drawings or photos for a project.*
 
 ## Sculpt with references
 

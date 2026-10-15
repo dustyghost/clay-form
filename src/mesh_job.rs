@@ -9,6 +9,7 @@ use std::sync::{
 #[derive(Clone)]
 pub(crate) enum Operation {
     ImportObj(String),
+    Edges(crate::sculpt::EdgeEdit),
     Mirror(crate::sculpt::MirrorOptions),
     SlicePath(crate::sculpt::SlicePath, crate::sculpt::SliceOptions),
     Subdivide,
@@ -18,6 +19,7 @@ pub(crate) enum Operation {
 impl Operation {
     pub fn history_label(&self) -> &'static str {
         match self {
+            Self::Edges(edit) => edit.label(),
             Self::ImportObj(_) => "Import OBJ",
             Self::Mirror(_) => "Mirror one side",
             Self::Subdivide => "Subdivide mesh",
@@ -27,6 +29,7 @@ impl Operation {
     }
     pub fn label(&self) -> &'static str {
         match self {
+            Self::Edges(_) => "Editing edges",
             Self::ImportObj(_) => "Importing OBJ",
             Self::Mirror(_) => "Mirroring",
             Self::Subdivide => "Subdividing",
@@ -51,6 +54,9 @@ impl MeshJob {
             .spawn(move || {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     match worker_operation {
+                        Operation::Edges(edit) => {
+                            geometry.edit_edges(&edit, &|| flag.load(Ordering::Relaxed))?
+                        }
                         Operation::Mirror(options) => {
                             geometry.mirror(options, &|| flag.load(Ordering::Relaxed))?;
                         }

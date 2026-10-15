@@ -233,6 +233,17 @@ impl UiState {
             Action::SelectBrush(id) => document.brushes().iter().any(|b| b.identity() == *id),
             Action::NewBrush(name) => Kind::ALL.iter().any(|k| format!("{k:?}") == *name),
             Action::OpenMenu(id) => self.preferences.menus.iter().any(|m| m.id == *id),
+            Action::SelectEdges
+            | Action::SelectCreases
+            | Action::SelectBorderEdges
+            | Action::ExpandEdgeLoop
+            | Action::ClearEdgeSelection
+            | Action::CreaseEdges
+            | Action::UncreaseEdges
+            | Action::ClearCreases
+            | Action::AddSupportLoops
+            | Action::RelaxBorders
+            | Action::SmoothSubdivide => self.edge_unavailable(action, document).is_none(),
             Action::Mirror(..) => self.mirror_unavailable(document).is_none(),
             Action::MergeDown => document.merge_down_target().is_some(),
             Action::ConvertPrimitive => {
@@ -308,6 +319,7 @@ impl UiState {
         let brush = active.map(|index| &document.brushes()[index]);
         match action {
             Action::SelectBrush(id) => brush.is_some_and(|b| b.identity() == *id),
+            Action::SelectEdges => self.edges.selecting,
             Action::Wireframe => self.wire,
             Action::Symmetry => document.symmetry().enabled,
             Action::Guides => self.show_symmetry_guides,
@@ -402,6 +414,7 @@ impl UiState {
                                     egui::Sense::click(),
                                 )
                             };
+                            let response = self.edge_help(response, action, document);
                             if response
                                 .custom_item(Some(action.clone()), menu.id, index)
                                 .clicked()

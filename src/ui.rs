@@ -9,6 +9,7 @@ use eframe::egui::{self, Color32, Sense, Vec2};
 mod design;
 use design::Glyph;
 mod customization;
+mod edges;
 mod icons;
 mod menus;
 mod mirror;
@@ -24,6 +25,7 @@ pub(crate) struct UiState {
     pub(crate) primitive_warning: Option<(usize, String)>,
     pub(crate) primitive_controls_requested: bool,
     pub transform_mode: crate::viewport::TransformMode,
+    pub edges: edges::EdgeControls,
     pub mirror_axis: Axis,
     pub slice_active: bool,
     pub selection_tool: Option<crate::viewport::SelectionTool>,
@@ -76,6 +78,7 @@ impl Default for UiState {
             primitive_warning: None,
             primitive_controls_requested: false,
             transform_mode: crate::viewport::TransformMode::Sculpt,
+            edges: Default::default(),
             mirror_axis: Axis::X,
             slice_active: false,
             selection_tool: None,
@@ -994,7 +997,7 @@ impl UiState {
             let mut thickness=model.metadata.temporary_thickness;
             let mut enabled=thickness>0.;
             ui.add_enabled_ui(!model.mesh.triangles.is_empty(),|ui| {
-                if ui.checkbox(&mut enabled,"Temporary thickness").on_hover_text("Preview a centered shell with closed edges. The sculpting surface stays unchanged until Apply.").changed() {
+                if ui.checkbox(&mut enabled,"Thickness modifier").on_hover_text("Preview a centered shell with closed edges. The sculpting surface stays unchanged until Apply.").changed() {
                     commands.push(Command::SetTemporaryThickness(if enabled {0.05}else{0.}));
                 }
                 if thickness>0. {
@@ -1002,11 +1005,13 @@ impl UiState {
                         commands.push(Command::SetTemporaryThickness(thickness));
                     }
                     let mut metadata = model.metadata.clone();
+                    design::help(ui.add(egui::Slider::new(&mut metadata.thickness_loops,0..=8).text("Rim loops")), "Add loops through the shell wall. Updates the preview immediately; set to 0 to remove them before applying.");
+                    design::help(ui.checkbox(&mut metadata.thickness_crease,"Crease rim edges"), "Keep the front/rim and back/rim joins sharp during later smooth subdivision. Updates the preview immediately; turn off to remove these marks before applying.");
                     ui.checkbox(&mut metadata.thickness_groups, "Group front / back / rim");
                     ui.checkbox(&mut metadata.thickness_mask_rim, "Mask rim vertices");
                     ui.checkbox(&mut metadata.thickness_group_mask, "Group masked vertices");
                     if metadata != *model.metadata { commands.push(Command::EditSubmodel(index, model.name.into(), metadata)); }
-                    if ui.add_enabled(model.metadata.visible,design::button(ui,Glyph::Mesh,"Apply thickness")).on_hover_text("Bake the preview into a closed mesh. Resets subdivision levels and converts primitives to a sculpting mesh. Undo restores the original.").customize(Action::ApplyThickness).clicked() {
+                    if ui.add_enabled(model.metadata.visible,design::button(ui,Glyph::Mesh,"Apply Thickness modifier")).on_hover_text("Bake the preview into a closed mesh. Resets subdivision levels and converts primitives to a sculpting mesh. Undo restores the original.").customize(Action::ApplyThickness).clicked() {
                         commands.push(Command::ApplyThickness);
                     }
                 }
@@ -1064,6 +1069,7 @@ impl UiState {
                 if ui.add(design::button(ui, Glyph::Restore, "Remesh now")).customize(Action::Remesh).clicked() { commands.push(Command::Remesh); }
             } else {
                 ui.label(format!("Level {} of {}",settings.level(),settings.levels()));
+                if settings.levels() > 1 {
                 let mut level=settings.level();
                 ui.add(egui::Slider::new(&mut level,1..=settings.levels()).text("Active level"));
                 if level!=settings.level() { commands.push(Command::SetMeshLevel(level)); }
@@ -1075,11 +1081,15 @@ impl UiState {
                     if ui.add_enabled(!settings.lower.is_empty(),design::button(ui, Glyph::Delete, "Delete lower")).on_hover_text("Remove all levels below the active level; keep the active surface and higher detail. Undo restores them.").customize(Action::DeleteLowerLevels).clicked() { commands.push(Command::DeleteLowerLevels); }
                     if ui.add_enabled(!settings.upper.is_empty(),design::button(ui, Glyph::Delete, "Delete higher")).on_hover_text("Remove all levels above the active level; keep the active surface and lower levels. Undo restores them.").customize(Action::DeleteHigherLevels).clicked() { commands.push(Command::DeleteHigherLevels); }
                 });
+                }
                 if ui.add_enabled(settings.upper.is_empty() && document.mesh().triangles.len() <= 250_000,design::button(ui, Glyph::Plus, "Subdivide (+ level)")).customize(Action::Subdivide).clicked() { commands.push(Command::Subdivide); }
-                ui.label("Each division creates four quads or triangles per face. Edit broad forms low and detail high.");
-                ui.label("Switching to dynamic or adaptive keeps the active surface and discards stored levels. Undo restores them.");
+                ui.weak("Adds an editable level without smoothing.");
+                ui.separator();
+                self.smooth_subdivision_controls(ui, document, commands);
             }
         });
+        ui.separator();
+        self.edge_controls(ui, document, commands);
         if self.mesh_busy {
             ui.spinner();
             ui.label("Working in the background…");

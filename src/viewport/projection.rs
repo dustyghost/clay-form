@@ -93,6 +93,7 @@ mod tests {
 
     fn scene(camera: &Camera, vertices: Vec<Vec3>) -> Scene {
         let mesh = Mesh {
+            creases: Vec::new(),
             vertices,
             triangles: vec![[0, 1, 2]],
             quads: vec![],

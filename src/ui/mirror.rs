@@ -18,7 +18,7 @@ impl UiState {
             .temporary_thickness
             > 0.
         {
-            Some("Apply or remove temporary thickness first.")
+            Some("Apply or remove thickness modifier first.")
         } else {
             None
         }

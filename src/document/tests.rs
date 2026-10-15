@@ -1089,6 +1089,7 @@ mod mask_edit_tests {
     #[test]
     fn delete_masked_cuts_and_compacts_preserving_remaining_quads_and_masks() {
         let mesh = Mesh {
+            creases: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
             polygroups: Vec::new(),
@@ -1233,7 +1234,7 @@ mod thickness_edit_tests {
         assert_eq!(d.mesh_settings().levels(), 1);
         assert_eq!(d.model(0).unwrap().metadata.temporary_thickness, 0.);
         assert_eq!(before.submodels, after.submodels);
-        assert_eq!(d.undo_label(), Some("Apply thickness"));
+        assert_eq!(d.undo_label(), Some("Apply Thickness modifier"));
         d.undo();
         assert_eq!(d.geometry_snapshot(), before);
         d.redo();

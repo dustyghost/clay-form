@@ -23,6 +23,8 @@ The parent folder must exist. Saving replaces an existing file at that path. New
 | `.brushes.json` | A brush library |
 | `.obj` | An exported mesh, including supported quad faces and face groups |
 
+Older projects containing the removed Human head primitive open with their saved geometry as ordinary sculpting meshes.
+
 Camera position and undo history are session-only. [Workspace preferences](workspace.md#where-preferences-are-stored) save separately.
 
 ## OBJ import
@@ -62,7 +64,7 @@ Maximum **128 MB**, **500,000 vertices**, **1,000,000 triangles** after triangul
 
 Select the submodel, then choose **Export OBJ**. The file is written beside the project path with an `.obj` extension.
 
-Export uses the active subdivision level. Apply temporary thickness first if you want the shell included. Use `.clay` to retain the full editable project.
+Export uses the active subdivision level. Apply the Thickness modifier first if you want the shell included. Use `.clay` to retain the full editable project.
 
 ## Recovery saves
 

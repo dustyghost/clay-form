@@ -19,6 +19,7 @@ export CLAY_ROTATION_PREVIEW="$capture_dir/rotation"
 export CLAY_GUIDE_PREVIEW="$capture_dir/guides"
 
 cargo test --locked --lib offscreen_preview -- --ignored --test-threads=1
+cargo test --locked --lib edge_workflow_offscreen_review -- --ignored --test-threads=1
 cargo test --locked --lib gpu_lasso_preview_and_commit -- --ignored
 cargo test --locked --lib gpu_rotation_controls_and_primitive_regeneration -- --ignored
 
@@ -32,7 +33,7 @@ cp "$capture_dir/lasso-mask-5.png" docs/images/mask-lasso-result.png
 cp "$capture_dir/lasso-hide-3.png" docs/images/hide-lasso-preview.png
 cp "$capture_dir/lasso-hide-5.png" docs/images/hide-lasso-result.png
 cp "$capture_dir/rotation-4.png" docs/images/rotation-controls.png
-for name in mirror-before mirror-after brush-reset-before brush-reset-after first-sculpt-before first-sculpt-after symmetry-stroke adaptive-settings primitive-cube slice-trim-preview slice-trim-result reference-images obj-import menu-placement recovery-dialog; do
+for name in edge-loops-before edge-loops-after crease-smooth-before crease-smooth-after crease-selection thickness-modifier mirror-before mirror-after brush-reset-before brush-reset-after first-sculpt-before first-sculpt-after symmetry-stroke adaptive-settings primitive-cube slice-trim-preview slice-trim-result reference-images obj-import menu-placement recovery-dialog; do
     cp "$capture_dir/guides/$name.png" "docs/images/$name.png"
 done
 cp "$capture_dir/guides/front-study.png" docs/examples/front-study.png

@@ -99,7 +99,8 @@ impl Mesh {
         dabs: &[Dab],
         settings: &AdaptiveSettings,
     ) -> bool {
-        if !settings.enabled
+        if !self.creases.is_empty()
+            || !settings.enabled
             || !settings.refine
             || !matches!(
                 brush.effective_stroke_mode(),
@@ -135,7 +136,8 @@ impl Mesh {
         budget: &mut Budget,
         collapse: bool,
     ) -> bool {
-        if !settings.enabled
+        if !self.creases.is_empty()
+            || !settings.enabled
             || brush.kind == Kind::Mask
             || brush.strength <= 0.
             || dabs.is_empty()

@@ -2,9 +2,9 @@
 
 [Documentation home](../README.md#documentation)
 
-Updated 14 October 2026.
+Updated 15 October 2026.
 
-The seven priorities below are implemented. Perspective viewing is ready for hands-on mouse/pen feedback. The hands-on tablet check for stroke stabilisation passed on 14 October 2026. The longer-term candidates remain separate possibilities; the next feature has not been selected.
+The seven priorities below are implemented. Perspective viewing is ready for hands-on mouse/pen feedback. The hands-on tablet check for stroke stabilisation passed on 14 October 2026. The longer-term candidates remain separate possibilities; edge loops and creases are now implemented.
 
 ## Current foundation
 
@@ -20,6 +20,12 @@ These features are already implemented and should be preserved as the app grows:
 - Undo/redo, project saving/recovery, and OBJ import/export.
 
 Recent fixes address stale groups after Group all, Alt-drag panning when starting off the model, Standard brush overlap at symmetry seams, and the vertical orbit angle limit. Continue checking these during normal sculpting, particularly seam behaviour on curved surfaces and navigation with a pen.
+
+## Edge loops and creases
+
+Current implementation: [Edges and creases](guide/edges.md) targets hole borders, masked region borders, visible polygroups, and selected edges. It includes support-loop insertion, border relaxation, crease/uncrease/clear, edge and loop selection, and smooth subdivision with a 0–1 Smoothness slider. Thickness modifier replaces the old Temporary thickness label and adds previewed rim loops and crease options.
+
+Smooth subdivision currently bakes the active level; the existing linear subdivision stack is unchanged. Loop cleanup is relaxation, without automatic retopology or loop dissolution. Verification covers geometry, selection, attributes, modifier preview/apply, cancellation, persistence, undo, and offscreen UI captures. The rendered UI walkthrough covers selection, empty-space navigation, crease removal, both subdivision operations, target scopes, and thickness application. Selecting creases or borders enters edge-selection mode. Linear and smooth subdivision share the Mesh → Subdivision controls. Mouse/pen feel remains available for user feedback.
 
 ## Implementation priorities
 

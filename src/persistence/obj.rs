@@ -238,6 +238,7 @@ fn parse(text: &str, cancelled: &impl Fn() -> bool) -> Result<Mesh, String> {
         return Err("OBJ texture or normal index is out of range".into());
     }
     let mut mesh = Mesh {
+        creases: Vec::new(),
         mask: vec![0.; vertices.len()],
         vertex_groups: names
             .into_iter()

@@ -11,7 +11,11 @@ const MAX_LEVELS: usize = 8;
 #[serde(default)]
 pub struct MeshSettings {
     /// Lowest to nearest lower level; higher levels are stored highest to nearest.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_primitive"
+    )]
     pub primitive: Option<super::Primitive>,
     pub lower: Vec<Mesh>,
     pub upper: Vec<Mesh>,
@@ -21,6 +25,23 @@ pub struct MeshSettings {
     #[serde(default, skip_serializing_if = "AdaptiveSettings::is_default")]
     pub adaptive: AdaptiveSettings,
 }
+// Removed head recipes load as ordinary sculpt meshes. The project already
+// stores their complete geometry; never regenerate or discard that surface.
+fn deserialize_primitive<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<super::Primitive>, D::Error> {
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    match value {
+        Some(value) if value.get("kind").and_then(|kind| kind.as_str()) == Some("HumanHead") => {
+            Ok(None)
+        }
+        Some(value) => serde_json::from_value(value)
+            .map(Some)
+            .map_err(serde::de::Error::custom),
+        None => Ok(None),
+    }
+}
+
 impl Default for MeshSettings {
     fn default() -> Self {
         Self {
@@ -69,6 +90,9 @@ impl MeshSettings {
             || (self.dynamic && self.levels() != 1)
         {
             return Err("Invalid mesh management settings".into());
+        }
+        if (self.adaptive.enabled || self.dynamic) && !mesh.creases.is_empty() {
+            return Err("Clear creases before enabling adaptive sculpt or voxel remeshing".into());
         }
         if self.adaptive.enabled {
             mesh.validate_closed()?;
@@ -209,6 +233,7 @@ impl Mesh {
             return Err("Subdivision would exceed the one-million-face limit".into());
         }
         let mut result = Self {
+            creases: Vec::new(),
             vertex_groups: self.vertex_groups.clone(),
             hidden_faces: Vec::new(),
             polygroups: Vec::new(),
@@ -319,6 +344,13 @@ impl Mesh {
                 }
             }
         }
+        for &[a, b] in &self.creases {
+            let m = edges[&(a.min(b), a.max(b))];
+            result
+                .creases
+                .extend([super::edges::edge(a, m), super::edges::edge(m, b)]);
+        }
+        result.creases.sort_unstable();
         result.validate()?;
         Ok(result)
     }
@@ -355,13 +387,9 @@ mod tests {
             PrimitiveKind::UvSphere,
             PrimitiveKind::Cylinder,
             PrimitiveKind::Torus,
-            PrimitiveKind::HumanHead,
         ] {
-            let mut primitive = Primitive::for_kind(kind);
-            if kind == PrimitiveKind::HumanHead {
-                primitive.segments = 24;
-                primitive.rings = 16;
-            }
+            let primitive = Primitive::for_kind(kind);
+
             let mesh = primitive.mesh().unwrap();
             assert!(!mesh.quads.is_empty());
             let refined = mesh.subdivide().unwrap();
@@ -398,6 +426,7 @@ mod tests {
     }
     fn tetrahedron() -> Mesh {
         Mesh {
+            creases: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
             polygroups: Vec::new(),

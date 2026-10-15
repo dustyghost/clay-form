@@ -45,6 +45,7 @@ impl Mesh {
             .filter(|&i| self.face_visible(i) == visible)
             .collect();
         let mut result = Self {
+            creases: Vec::new(),
             vertices: Vec::new(),
             triangles: Vec::new(),
             quads: Vec::new(),
