@@ -968,7 +968,7 @@ impl UiState {
             ui.add_enabled_ui(document.primitive().is_none(), |ui| {
                 ui.add(egui::TextEdit::singleline(&mut self.vertex_group_name).hint_text("Group name (optional)"));
                 ui.horizontal(|ui| {
-                    if ui.button("Group masked").customize(Action::GroupMasked).clicked() { commands.push(Command::CreateVertexGroup(self.vertex_group_name.clone(), false)); }
+                    if ui.button("Group masked").on_hover_text("Move masked membership into a new group. Keep old groups’ remaining regions and remove fully replaced groups. Supports Undo.").customize(Action::GroupMasked).clicked() { commands.push(Command::CreateVertexGroup(self.vertex_group_name.clone(), false)); }
                     if ui.button("Group all").on_hover_text("Replace all vertex groups on the active model with one group. Includes every subdivision level; Undo restores the previous groups.").customize(Action::GroupAll).clicked() { commands.push(Command::CreateVertexGroup(self.vertex_group_name.clone(), true)); }
                 });
                 if ui.add(design::button(ui, Glyph::Restore, "Flip visibility")).on_hover_text("Swap visible and hidden faces on the active submodel. Includes partially hidden groups; supports Undo.").customize(Action::InvertVisibility).clicked() {
@@ -994,7 +994,7 @@ impl UiState {
                     && target == index && g < model.mesh.vertex_groups.len() {
                         ui.horizontal_wrapped(|ui| {
                             if ui.button("Mask group").customize(Action::MaskGroup).clicked() { commands.push(Command::MaskVertexGroup(g)); }
-                            if ui.button("Add masked").customize(Action::AddMaskedToGroup).clicked() { commands.push(Command::AssignMaskToGroup(g, false)); }
+                            if ui.button("Add masked").on_hover_text("Move masked membership into this group. Keep old groups’ remaining regions and remove fully replaced groups. Supports Undo.").customize(Action::AddMaskedToGroup).clicked() { commands.push(Command::AssignMaskToGroup(g, false)); }
                             if ui.button("Remove masked").customize(Action::RemoveMaskedFromGroup).clicked() { commands.push(Command::AssignMaskToGroup(g, true)); }
                         });
                         ui.add(egui::TextEdit::singleline(&mut self.vertex_group_rename).hint_text("Rename group"));

@@ -41,7 +41,7 @@ impl Document {
         name: &str,
         existing: Option<usize>,
         remove: bool,
-    ) -> Result<(), String> {
+    ) -> Result<Option<usize>, String> {
         self.require_modeling()?;
         if self.mesh_settings().levels() != 1 {
             return Err(
@@ -89,7 +89,8 @@ impl Document {
         let mesh = &mut geometry.mesh;
         // Reuse weighted vertex assignment with a temporary mask. Exact face
         // labels replace the inferred labels when the input was a face selection.
-        let old_groups = face_triangles.as_ref().map(|_| mesh.polygroups.clone());
+        let previous = mesh.vertex_groups.clone();
+        let previous_labels = mesh.polygroups.clone();
         let mask = std::mem::replace(&mut mesh.mask, vec![0.; mesh.vertices.len()]);
         for v in selected {
             mesh.mask[v] = 1.;
@@ -103,11 +104,10 @@ impl Document {
             } else {
                 name.trim()
             });
-            mesh.create_vertex_group(name, 0.5, false)?
+            mesh.create_replacement_group(name, 0.5, false)?
         };
-        mesh.mask = mask;
-        if let (Some(triangles), Some(groups)) = (face_triangles, old_groups) {
-            mesh.polygroups = groups;
+        if let Some(triangles) = face_triangles {
+            mesh.polygroups = previous_labels.clone();
             mesh.polygroups.resize(mesh.triangles.len(), 0);
             for (i, &triangle) in mesh.triangles.iter().enumerate() {
                 let mut key = triangle;
@@ -122,10 +122,13 @@ impl Document {
             }
             mesh.canonicalize_polygroups();
         }
-        mesh.validate()?;
-        if geometry == self.geometry {
-            return Ok(());
+        mesh.replace_group_memberships(index, 0.5, remove, &previous, &previous_labels);
+        mesh.mask = mask;
+        let mapping = geometry.compact_vertex_groups();
+        geometry.mesh.validate()?;
+        if geometry != self.geometry {
+            self.replace_geometry_named(geometry, "Group component selection")?;
         }
-        self.replace_geometry_named(geometry, "Group component selection")
+        Ok(mapping[index])
     }
 }

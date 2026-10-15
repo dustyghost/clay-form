@@ -52,12 +52,7 @@ fn modeling_face_edge_vertex_selection_and_groups_are_explicit() {
     assert_eq!(app.document.mesh().mask, before.mesh.mask);
     assert_eq!(app.document.history_counts().0, history.0 + 1);
     app.dispatch(Command::GroupModelSelection(Some(0), true), &ctx);
-    assert!(
-        app.document.mesh().vertex_groups[0]
-            .weights
-            .iter()
-            .all(|&w| w == 0.)
-    );
+    assert!(app.document.mesh().vertex_groups.is_empty());
     let scale = rect.width().min(rect.height()) * 0.35;
     app.dispatch(Command::ModelingComponent(ComponentMode::Edge), &ctx);
     app.ui.modeling.change = SelectionChange::Replace;
@@ -74,7 +69,7 @@ fn modeling_face_edge_vertex_selection_and_groups_are_explicit() {
     assert_eq!(app.ui.modeling.count, 1);
     app.dispatch(Command::GroupModelSelection(None, false), &ctx);
     assert_eq!(
-        app.document.mesh().vertex_groups[1]
+        app.document.mesh().vertex_groups[0]
             .weights
             .iter()
             .filter(|&&w| w == 1.)
@@ -343,13 +338,11 @@ fn modeling_custom_actions_activate_tools_and_preserve_group_selection() {
     app.dispatch(Command::Action(Action::ModelCreateGroup), &ctx);
     assert_eq!(app.document.mesh().vertex_groups.len(), 1);
     app.dispatch(Command::Action(Action::ModelRemoveFromGroup), &ctx);
-    assert!(
-        app.document.mesh().vertex_groups[0]
-            .weights
-            .iter()
-            .all(|&w| w == 0.)
-    );
+    assert!(app.document.mesh().vertex_groups.is_empty());
+    let history = app.document.history_counts();
     app.dispatch(Command::Action(Action::ModelAddToGroup), &ctx);
+    assert_eq!(app.document.history_counts(), history);
+    app.dispatch(Command::Action(Action::ModelCreateGroup), &ctx);
     assert_eq!(
         app.document.mesh().vertex_groups[0]
             .weights
@@ -1466,4 +1459,42 @@ fn modeling_new_mesh_requires_confirmation_and_restores_everything_with_one_undo
     app.dispatch(Command::ConfirmPrimitive, &ctx);
     assert_eq!(app.document.geometry_snapshot(), before);
     assert_eq!(app.document.history_counts(), history);
+}
+
+#[test]
+fn modeling_group_reassignment_compacts_indices_and_keeps_the_target_selected() {
+    let (mut app, ctx, rect) = setup();
+    tap(&mut app, &ctx, rect.center());
+    app.ui.modeling.group_name = "First".into();
+    app.dispatch(Command::GroupModelSelection(None, false), &ctx);
+    let center = app.viewport.modeling.selected_faces()[0];
+    let scale = rect.width().min(rect.height()) * 0.35;
+    tap(
+        &mut app,
+        &ctx,
+        rect.center() + Vec2::new(scale * 2. / 3., 0.),
+    );
+    app.ui.modeling.group_name = "Target".into();
+    app.dispatch(Command::GroupModelSelection(None, false), &ctx);
+    assert_eq!(app.ui.modeling.group, 1);
+    let before = app.document.geometry_snapshot();
+    tap(&mut app, &ctx, rect.center());
+    app.dispatch(Command::GroupModelSelection(Some(1), false), &ctx);
+    assert_eq!(app.document.mesh().vertex_groups.len(), 1);
+    assert_eq!(app.document.mesh().vertex_groups[0].name, "Target");
+    assert_eq!(app.document.mesh().polygons()[center].group, 1);
+    assert_eq!(app.ui.modeling.group, 0);
+    assert_eq!(
+        app.ui.selected_vertex_group,
+        Some((app.document.active_model_index(), 0))
+    );
+    app.dispatch(Command::GroupModelSelection(None, false), &ctx);
+    assert_eq!(
+        app.document.mesh().vertex_groups.len(),
+        2,
+        "Partial replacement must keep the old remainder"
+    );
+    app.dispatch(Command::Undo, &ctx);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), before);
 }

@@ -8,11 +8,11 @@ mod core_tests {
     #[test]
     fn unnamed_vertex_groups_get_unique_names_and_keep_explicit_names() {
         let mut d = Document::default();
-        d.geometry.mesh.mask.fill(1.);
-        d.create_vertex_group("".into(), false).unwrap();
-        d.create_vertex_group("  ".into(), false).unwrap();
-        d.create_vertex_group(" Group 3 ".into(), false).unwrap();
-        d.create_vertex_group("".into(), false).unwrap();
+        for (v, name) in ["", "  ", " Group 3 ", ""].into_iter().enumerate() {
+            d.geometry.mesh.mask.fill(0.);
+            d.geometry.mesh.mask[v] = 1.;
+            d.create_vertex_group(name.into(), false).unwrap();
+        }
         assert_eq!(
             d.mesh()
                 .vertex_groups
@@ -1858,5 +1858,180 @@ mod lasso_mask_tests {
         assert_eq!(doc.geometry_snapshot(), before);
         assert_eq!(doc.history_counts(), (0, 1));
         assert!(!doc.is_dirty());
+    }
+}
+
+#[cfg(test)]
+mod group_replacement_tests {
+    use super::*;
+    use crate::sculpt::{Primitive, PrimitiveKind};
+    fn mask_faces(mesh: &mut Mesh, faces: &[usize]) {
+        mesh.mask.fill(0.);
+        for &face in faces {
+            for v in mesh.polygons()[face].vertices.clone() {
+                mesh.mask[v] = 1.;
+            }
+        }
+    }
+    #[test]
+    fn reassignment_splits_the_old_region_then_removes_it_when_fully_replaced() {
+        let mut p = Primitive::for_kind(PrimitiveKind::Grid);
+        p.divisions = [3, 1, 1];
+        let mut doc = Document::default();
+        doc.replace_geometry(Geometry::new(p.mesh().unwrap()))
+            .unwrap();
+        doc.geometry.mesh.mask.fill(1.);
+        doc.create_vertex_group("Old".into(), false).unwrap();
+        mask_faces(&mut doc.geometry.mesh, &[0]);
+        let before = doc.geometry_snapshot();
+        let history = doc.history_counts().0;
+        assert_eq!(doc.create_vertex_group("New".into(), false).unwrap(), 1);
+        assert_eq!(doc.history_counts().0, history + 1);
+        assert_eq!(doc.mesh().vertex_groups.len(), 2);
+        let polygons = doc.mesh().polygons();
+        assert_eq!(polygons[0].group, 2);
+        assert!(polygons[1..].iter().all(|p| p.group == 1));
+        let remainder: std::collections::BTreeSet<_> = polygons[1..]
+            .iter()
+            .flat_map(|p| p.vertices.iter().copied())
+            .collect();
+        for &v in &polygons[0].vertices {
+            assert_eq!(
+                doc.mesh().vertex_groups[0].weights[v],
+                if remainder.contains(&v) { 1. } else { 0. }
+            );
+        }
+        assert_eq!(doc.mesh().mask, before.mesh.mask);
+        mask_faces(&mut doc.geometry.mesh, &[1, 2]);
+        let partial = doc.geometry_snapshot();
+        assert_eq!(doc.assign_mask_to_group(1, false).unwrap(), Some(0));
+        assert_eq!(doc.mesh().vertex_groups.len(), 1);
+        assert_eq!(doc.mesh().vertex_groups[0].name, "New");
+        assert!(doc.mesh().polygroups.iter().all(|&g| g == 1));
+        let complete = doc.geometry_snapshot();
+        let history = doc.history_counts();
+        doc.assign_mask_to_group(0, false).unwrap();
+        assert_eq!(
+            doc.history_counts(),
+            history,
+            "Repeated assignment should not create an undo step"
+        );
+        doc.undo();
+        assert_eq!(doc.geometry_snapshot(), partial);
+        doc.redo();
+        assert_eq!(doc.geometry_snapshot(), complete);
+        doc.project().validate().unwrap();
+    }
+    #[test]
+    fn replacement_cleans_legacy_duplicates_across_levels_and_preserves_other_models() {
+        let mut mesh = Primitive::for_kind(PrimitiveKind::Cube).mesh().unwrap();
+        mesh.mask.fill(0.8);
+        mesh.create_vertex_group("Old".into(), 0.5, false).unwrap();
+        mesh.create_vertex_group("Duplicate".into(), 0.5, false)
+            .unwrap();
+        let mut geometry = Geometry::new(mesh);
+        geometry.subdivide().unwrap();
+        geometry.subdivide().unwrap();
+        geometry.set_level(1).unwrap();
+        let mut doc = Document::default();
+        doc.replace_geometry(geometry).unwrap();
+        doc.duplicate_model(false).unwrap();
+        let before = doc.geometry_snapshot();
+        assert_eq!(
+            doc.create_vertex_group("Replacement".into(), false)
+                .unwrap(),
+            0
+        );
+        let after = doc.geometry_snapshot();
+        assert_eq!(after.submodels, before.submodels);
+        for mesh in std::iter::once(&after.mesh)
+            .chain(after.settings.lower.iter())
+            .chain(after.settings.upper.iter())
+        {
+            assert_eq!(mesh.vertex_groups.len(), 1);
+            assert_eq!(mesh.vertex_groups[0].name, "Replacement");
+            assert!(mesh.polygroups.iter().all(|&g| g == 1));
+            mesh.validate().unwrap();
+        }
+        let json = serde_json::to_string(&doc.project()).unwrap();
+        serde_json::from_str::<Project>(&json)
+            .unwrap()
+            .validate()
+            .unwrap();
+        doc.undo();
+        assert_eq!(doc.geometry_snapshot(), before);
+    }
+    #[test]
+    fn replacing_the_last_face_removes_stale_weights_outside_the_old_region() {
+        let mut p = Primitive::for_kind(PrimitiveKind::Grid);
+        p.divisions = [3, 1, 1];
+        let mut mesh = p.mesh().unwrap();
+        mesh.mask.fill(1.);
+        mesh.create_vertex_group("Old".into(), 0.5, false).unwrap();
+        mask_faces(&mut mesh, &[0, 1]);
+        mesh.create_vertex_group("Other".into(), 0.5, false)
+            .unwrap();
+        let mut doc = Document::default();
+        doc.replace_geometry(Geometry::new(mesh)).unwrap();
+        let before = doc.geometry_snapshot();
+        let vertices = doc.mesh().polygons()[2].vertices.clone();
+        assert_eq!(
+            doc.group_model_selection(&vertices, Some(&[2]), "Replacement", None, false)
+                .unwrap(),
+            Some(1)
+        );
+        assert_eq!(
+            doc.mesh()
+                .vertex_groups
+                .iter()
+                .map(|g| g.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Other", "Replacement"]
+        );
+        let polygons = doc.mesh().polygons();
+        assert_eq!(
+            polygons.iter().map(|p| p.group).collect::<Vec<_>>(),
+            [1, 1, 2]
+        );
+        for polygon in &polygons[..2] {
+            for &v in &polygon.vertices {
+                assert_eq!(doc.mesh().vertex_groups[0].weights[v], 1.);
+            }
+        }
+        doc.project().validate().unwrap();
+        doc.undo();
+        assert_eq!(doc.geometry_snapshot(), before);
+    }
+    #[test]
+    fn face_replacement_at_group_limit_reclaims_an_old_slot_atomically() {
+        let mut p = Primitive::for_kind(PrimitiveKind::Grid);
+        p.divisions = [8, 8, 1];
+        let mut mesh = p.mesh().unwrap();
+        for face in 0..64 {
+            mask_faces(&mut mesh, &[face]);
+            mesh.create_vertex_group(format!("Group {face}"), 0.5, false)
+                .unwrap();
+        }
+        let mut doc = Document::default();
+        doc.replace_geometry(Geometry::new(mesh)).unwrap();
+        let before = doc.geometry_snapshot();
+        let vertices = doc.mesh().polygons()[0].vertices.clone();
+        assert_eq!(
+            doc.group_model_selection(&vertices, Some(&[0]), "Replacement", None, false)
+                .unwrap(),
+            Some(63)
+        );
+        assert_eq!(doc.mesh().vertex_groups.len(), 64);
+        assert!(!doc.mesh().vertex_groups.iter().any(|g| g.name == "Group 0"));
+        assert_eq!(doc.mesh().polygons()[0].group, 64);
+        doc.project().validate().unwrap();
+        let replaced = doc.geometry_snapshot();
+        assert!(
+            doc.group_model_selection(&vertices[..1], None, "Too many", None, false)
+                .is_err()
+        );
+        assert_eq!(doc.geometry_snapshot(), replaced);
+        doc.undo();
+        assert_eq!(doc.geometry_snapshot(), before);
     }
 }

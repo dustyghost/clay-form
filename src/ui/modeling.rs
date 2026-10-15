@@ -369,7 +369,7 @@ impl UiState {
             ui.collapsing("Selection to vertex group", |ui| {
                 ui.text_edit_singleline(&mut self.modeling.group_name);
                 let enabled = self.modeling.count > 0 && document.mesh_settings().levels() == 1;
-                let help = "Use a single subdivision level and select components first. Face colors use only selected faces; vertex weights include their corners. Edges include both ends. Masks stay unchanged.";
+                let help = "Use a single subdivision level and select components first. Face colors use only selected faces; vertex weights include their corners. Edges include both ends. Creating or adding replaces previous membership; partial regions remain, fully replaced groups disappear. Masks stay unchanged.";
                 if design::help(
                     ui.add_enabled(enabled, egui::Button::new("Create group from selection")).customize(Action::ModelCreateGroup), help,
                 ).clicked() {

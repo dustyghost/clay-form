@@ -61,7 +61,7 @@ Choose **Delete masked** to remove faces whose vertices all meet the threshold. 
 | Group action | Result |
 | --- | --- |
 | Group all | Replace the active model's groups with one whole-model group |
-| Add masked / Remove masked | Change membership using the current mask |
+| Add masked / Remove masked | Move masked membership into the chosen group / remove it from that group |
 | Rename / Delete | Manage a saved group |
 | Eye icon | Hide/show complete faces assigned to the group |
 | Flip visibility | Swap visible and hidden faces |
@@ -70,9 +70,9 @@ Blank names become Group 1, Group 2, and so on. New spheres start in a **Base** 
 
 ### Colors and saved weights
 
-Groups can overlap as soft vertex selections, but each face displays one group color. Partial face selections retain weights without coloring the whole face. Use **View → Show vertex group colors** to hide the colors without hiding geometry.
+Creating or adding to a group replaces the selected region’s previous membership. Partial reassignment keeps the old group’s remaining region; replacing its whole region removes the old group. Adjacent face groups can share boundary vertices, while each face displays one group color. Empty groups are removed consistently across stored subdivision levels, and Undo restores the previous assignments. Partial face selections retain weights without coloring the whole face. Use **View → Show vertex group colors** to hide the colors without hiding geometry.
 
-Groups survive saving, duplication, subdivision, extraction, and deletion. Adaptive topology interpolates weights; voxel remeshing approximates boundaries. OBJ exports face groups; `.clay` preserves independent soft weights.
+Groups survive saving, duplication, subdivision, extraction, and deletion. Adaptive topology interpolates weights; voxel remeshing approximates boundaries. OBJ exports face groups; `.clay` preserves soft weights.
 
 Thickness can generate front/back/rim groups and masks. These become editable after applying thickness.
 

@@ -364,9 +364,14 @@ impl App {
                         existing,
                         remove,
                     )
-                    .map(|()| {
-                        if existing.is_some_and(|i| !self.document.mesh().vertex_groups[i].visible)
-                        {
+                    .map(|target| {
+                        self.ui.modeling.group = target.unwrap_or(0);
+                        self.ui.selected_vertex_group =
+                            target.map(|g| (self.document.active_model_index(), g));
+                        self.ui.vertex_group_rename = target
+                            .map(|g| self.document.mesh().vertex_groups[g].name.clone())
+                            .unwrap_or_default();
+                        if target.is_some_and(|i| !self.document.mesh().vertex_groups[i].visible) {
                             self.viewport.modeling.sync(&self.document);
                         } else {
                             self.viewport.modeling.revision = self.document.display_revision();
@@ -663,12 +668,22 @@ impl App {
                     self.ui.vertex_group_rename =
                         self.document.mesh().vertex_groups[index].name.clone();
                     self.ui.vertex_group_name.clear();
+                    self.ui.modeling.group = index;
                     self.ui.status = "Vertex group created".into();
                 })
             }
             Command::AssignMaskToGroup(index, remove) => {
                 self.viewport.cancel(&mut self.document);
-                self.document.assign_mask_to_group(index, remove)
+                self.document
+                    .assign_mask_to_group(index, remove)
+                    .map(|target| {
+                        self.ui.selected_vertex_group =
+                            target.map(|g| (self.document.active_model_index(), g));
+                        self.ui.vertex_group_rename = target
+                            .map(|g| self.document.mesh().vertex_groups[g].name.clone())
+                            .unwrap_or_default();
+                        self.ui.modeling.group = target.unwrap_or(0);
+                    })
             }
             Command::MaskVertexGroup(index) => {
                 self.viewport.cancel(&mut self.document);

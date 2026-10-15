@@ -5,8 +5,16 @@ impl Document {
     pub(super) fn edit_group_meshes(
         &mut self,
         label: &'static str,
-        mut edit: impl FnMut(&mut Mesh) -> Result<(), String>,
+        edit: impl FnMut(&mut Mesh) -> Result<(), String>,
     ) -> Result<(), String> {
+        self.edit_group_registry(label, edit, false).map(|_| ())
+    }
+    fn edit_group_registry(
+        &mut self,
+        label: &'static str,
+        mut edit: impl FnMut(&mut Mesh) -> Result<(), String>,
+        compact: bool,
+    ) -> Result<Vec<Option<usize>>, String> {
         self.require_sculpt_mesh()?;
         self.end_edit();
         self.end_stroke();
@@ -17,10 +25,16 @@ impl Document {
         {
             edit(mesh)?;
         }
-        if geometry == self.geometry {
-            return Ok(());
+        let mapping = if compact {
+            geometry.compact_vertex_groups()
+        } else {
+            (0..geometry.mesh.vertex_groups.len()).map(Some).collect()
+        };
+        geometry.mesh.validate()?;
+        if geometry != self.geometry {
+            self.replace_geometry_named(geometry, label)?;
         }
-        self.replace_geometry_named(geometry, label)
+        Ok(mapping)
     }
     pub fn create_vertex_group(&mut self, name: String, all: bool) -> Result<usize, String> {
         let threshold = self.geometry.scene.active_metadata.mask_threshold;
@@ -47,7 +61,7 @@ impl Document {
         } else {
             self.mesh().vertex_groups.len()
         };
-        self.edit_group_meshes(
+        let mapping = self.edit_group_registry(
             if all {
                 "Group all vertices"
             } else {
@@ -64,22 +78,50 @@ impl Document {
                     mesh.vertex_groups.clear();
                     mesh.polygroups.clear();
                 }
-                mesh.create_vertex_group(name.clone(), threshold, all)
-                    .map(|_| ())
+                let previous = mesh.vertex_groups.clone();
+                let previous_labels = mesh.polygroups.clone();
+                let index = mesh.create_replacement_group(name.clone(), threshold, all)?;
+                mesh.replace_group_memberships(
+                    index,
+                    threshold,
+                    false,
+                    &previous,
+                    &previous_labels,
+                );
+                Ok(())
             },
+            true,
         )?;
-        Ok(index)
+        Ok(mapping[index].expect("A newly assigned group has members"))
     }
-    pub fn assign_mask_to_group(&mut self, index: usize, remove: bool) -> Result<(), String> {
+    pub fn assign_mask_to_group(
+        &mut self,
+        index: usize,
+        remove: bool,
+    ) -> Result<Option<usize>, String> {
         let threshold = self.geometry.scene.active_metadata.mask_threshold;
-        self.edit_group_meshes(
+        self.edit_group_registry(
             if remove {
                 "Remove masked vertices from group"
             } else {
                 "Assign masked vertices to group"
             },
-            |mesh| mesh.assign_mask_to_group(index, threshold, remove),
+            |mesh| {
+                let previous = mesh.vertex_groups.clone();
+                let previous_labels = mesh.polygroups.clone();
+                mesh.assign_mask_to_group(index, threshold, remove)?;
+                mesh.replace_group_memberships(
+                    index,
+                    threshold,
+                    remove,
+                    &previous,
+                    &previous_labels,
+                );
+                Ok(())
+            },
+            true,
         )
+        .map(|mapping| mapping[index])
     }
     pub fn mask_from_group(&mut self, index: usize) -> Result<(), String> {
         self.edit_group_meshes("Mask vertex group", |mesh| mesh.mask_from_group(index))

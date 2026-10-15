@@ -1,5 +1,5 @@
 //! Independent weighted vertex selections and categorical face groups.
-use super::Mesh;
+use super::{Geometry, Mesh};
 use serde::{Deserialize, Serialize};
 fn visible_default() -> bool {
     true
@@ -113,10 +113,28 @@ impl Mesh {
         threshold: f32,
         all: bool,
     ) -> Result<usize, String> {
+        self.create_group_with_limit(name, threshold, all, 64)
+    }
+    // Replacement may briefly need one extra slot before empty groups are removed.
+    pub(crate) fn create_replacement_group(
+        &mut self,
+        name: String,
+        threshold: f32,
+        all: bool,
+    ) -> Result<usize, String> {
+        self.create_group_with_limit(name, threshold, all, 65)
+    }
+    fn create_group_with_limit(
+        &mut self,
+        name: String,
+        threshold: f32,
+        all: bool,
+        limit: usize,
+    ) -> Result<usize, String> {
         let name = name.trim().to_string();
         if name.is_empty()
             || name.len() > 128
-            || self.vertex_groups.len() >= 64
+            || self.vertex_groups.len() >= limit
             || self.vertex_groups.iter().any(|g| g.name == name)
         {
             return Err("Choose a unique group name (up to 128 bytes; maximum 64 groups)".into());
@@ -211,6 +229,43 @@ impl Mesh {
         }
         self.assign_group_faces(index, threshold, false, remove);
         Ok(())
+    }
+    /// Face regions own their boundary vertices. Those corners may be shared by
+    /// neighboring groups, but reassigned interiors must not retain old weights.
+    pub(crate) fn replace_group_memberships(
+        &mut self,
+        index: usize,
+        threshold: f32,
+        remove: bool,
+        previous: &[VertexGroup],
+        previous_labels: &[usize],
+    ) {
+        let mut required = vec![std::collections::BTreeSet::new(); self.vertex_groups.len()];
+        for (face, triangle) in self.triangles.iter().enumerate() {
+            if let Some(id) = self.polygroups.get(face).copied().filter(|&id| id > 0) {
+                required[id - 1].extend(triangle.iter().copied());
+            }
+        }
+        for (g, group) in self.vertex_groups.iter_mut().enumerate() {
+            if (remove && g != index) || (!remove && g == index) {
+                continue;
+            }
+            // Older assignments could leave weights beyond the visible region.
+            // Once its last face is reassigned, that region has no remainder.
+            if required[g].is_empty() && previous_labels.contains(&(g + 1)) {
+                group.weights.fill(0.);
+                continue;
+            }
+            for (v, weight) in group.weights.iter_mut().enumerate() {
+                if mask_selected(self.mask[v], threshold) {
+                    *weight = if required[g].contains(&v) {
+                        previous.get(g).map_or(0., |old| old.weights[v])
+                    } else {
+                        0.
+                    };
+                }
+            }
+        }
     }
     pub fn mask_from_group(&mut self, index: usize) -> Result<(), String> {
         self.mask = self
@@ -346,5 +401,56 @@ impl Mesh {
         }
         self.reindex_creases(result, &indices);
         result.canonicalize_polygroups();
+    }
+}
+
+impl Geometry {
+    /// Compact one shared registry across every stored subdivision level.
+    pub(crate) fn compact_vertex_groups(&mut self) -> Vec<Option<usize>> {
+        let mut used = vec![false; self.mesh.vertex_groups.len()];
+        for mesh in std::iter::once(&self.mesh)
+            .chain(self.settings.lower.iter())
+            .chain(self.settings.upper.iter())
+        {
+            for (g, group) in mesh.vertex_groups.iter().enumerate() {
+                used[g] |= group.weights.iter().any(|&w| w > 0.);
+            }
+            for &id in &mesh.polygroups {
+                if id > 0 {
+                    used[id - 1] = true;
+                }
+            }
+        }
+        let mut next = 0;
+        let mapping: Vec<_> = used
+            .iter()
+            .map(|&keep| {
+                if keep {
+                    let index = next;
+                    next += 1;
+                    Some(index)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        for mesh in std::iter::once(&mut self.mesh)
+            .chain(self.settings.lower.iter_mut())
+            .chain(self.settings.upper.iter_mut())
+        {
+            mesh.vertex_groups = mesh
+                .vertex_groups
+                .drain(..)
+                .enumerate()
+                .filter_map(|(g, group)| used[g].then_some(group))
+                .collect();
+            for id in &mut mesh.polygroups {
+                if *id > 0 {
+                    *id = mapping[*id - 1].map_or(0, |g| g + 1);
+                }
+            }
+            mesh.canonicalize_polygroups();
+        }
+        mapping
     }
 }
