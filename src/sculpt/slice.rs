@@ -625,9 +625,17 @@ impl Mesh {
                 let p = project(current);
                 let offset = [p[0] - pa[0], p[1] - pa[1]];
                 let t = (offset[0] * d[0] + offset[1] * d[1]) / len2;
+                // The projected input comes from f32 intersections. On a tiny
+                // edge, one ULP can put an intermediate point just beyond an
+                // endpoint. Compare geometric distance, not the dimensionless
+                // parameter, using the same tolerance as the line-distance test.
+                let length = len2.sqrt();
+                let tolerance = cap_epsilon * 4.;
                 if current == a
-                    || !(0. ..=1.).contains(&t)
-                    || (offset[0] * d[1] - offset[1] * d[0]).abs() > len2.sqrt() * cap_epsilon * 4.
+                    || !t.is_finite()
+                    || t < 0. && -t * length > tolerance
+                    || t > 1. && (t - 1.) * length > tolerance
+                    || (offset[0] * d[1] - offset[1] * d[0]).abs() > length * tolerance
                 {
                     return Err("Could not triangulate the slice boundary accurately".into());
                 }

@@ -386,6 +386,68 @@ mod tests {
         }
     }
     #[test]
+    fn rounded_path_cap_preserves_tiny_boundary_edges_and_the_hole() {
+        let mut primitive = Primitive::for_kind(PrimitiveKind::Torus);
+        primitive.segments = 32;
+        primitive.rings = 16;
+        let mut source = primitive.mesh().unwrap();
+        for p in &mut source.vertices {
+            *p = p
+                .rotated(Vec3(0., 1., 0.), 0.21)
+                .rotated(Vec3(1., 0., 0.), -0.13);
+        }
+        source.validate_closed().unwrap();
+        // This shallow curve creates a cap edge about 1e-6 long with an
+        // intermediate point one f32 ULP beyond its endpoint after projection.
+        let a = (-2., 0.20829564);
+        let b = (-0.43961632, -0.042946994);
+        let c = (2., -0.022040188);
+        let points: Vec<_> = (0..=16)
+            .map(|i| {
+                let t = i as f32 / 16.;
+                let u = 1. - t;
+                (
+                    u * u * a.0 + 2. * u * t * b.0 + t * t * c.0,
+                    u * u * a.1 + 2. * u * t * b.1 + t * t * c.1,
+                )
+            })
+            .collect();
+        let path = path(&points);
+        let (positive, negative) = source
+            .slice_path(
+                &path,
+                SliceOptions {
+                    mode: SliceMode::Separate,
+                    cap: true,
+                    flip: false,
+                },
+                &|| false,
+            )
+            .unwrap();
+        let negative = negative.unwrap();
+        for mesh in [&positive, &negative] {
+            mesh.validate_closed().unwrap();
+            assert!(volume(mesh) > 0.);
+        }
+        assert!((volume(&positive) + volume(&negative) - volume(&source)).abs() < 1e-5);
+        for (flip, expected) in [(false, &positive), (true, &negative)] {
+            let (trimmed, other) = source
+                .slice_path(
+                    &path,
+                    SliceOptions {
+                        mode: SliceMode::Trim,
+                        cap: true,
+                        flip,
+                    },
+                    &|| false,
+                )
+                .unwrap();
+            assert!(other.is_none());
+            trimmed.validate_closed().unwrap();
+            assert!((volume(&trimmed) - volume(expected)).abs() < 1e-6);
+        }
+    }
+    #[test]
     fn crossing_and_cancelled_paths_reject_without_changing_source() {
         let source = sphere();
         let before = source.clone();
