@@ -1258,3 +1258,47 @@ fn modeling_component_construction_offscreen_review() {
     g.app.document.mesh().validate_closed().unwrap();
     g.save("modeling-face-split");
 }
+
+#[test]
+#[ignore = "renders component gizmos and modeling initialization; requires EGL and CLAY_GUIDE_PREVIEW"]
+fn modeling_transform_gizmo_offscreen_review() {
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
+    let directory = std::path::Path::new(&directory);
+    std::fs::create_dir_all(directory).unwrap();
+    let mut g = Guide::new(directory, [1200, 1150]);
+    g.interactive = true;
+    g.panel(Tool::Mesh, Dock::Right);
+    let before = g.app.document.geometry_snapshot();
+    click_guide_label(&mut g, "New mesh…");
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.save("modeling-new-mesh-warning");
+    click_guide_label(&mut g, "Replace and start modeling");
+    assert!(g.app.ui.modeling.active);
+    g.app.document.require_modeling().unwrap();
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    g.app.camera.zoom = 0.65;
+    let (rect, _) = g.frame(vec![]);
+    g.stroke(rect.center(), rect.center());
+    assert_eq!(g.app.viewport.modeling.selected.len(), 1);
+    click_guide_label(&mut g, "Move");
+    click_guide_label(&mut g, "Gizmo");
+    let before = g.app.document.geometry_snapshot();
+    g.stroke(
+        rect.center() + Vec2::new(85., 0.),
+        rect.center() + Vec2::new(110., 0.),
+    );
+    assert_ne!(g.app.document.geometry_snapshot(), before);
+    g.app.camera.yaw = 0.35;
+    g.app.camera.pitch = -0.25;
+    g.save("modeling-move-gizmo");
+    click_guide_label(&mut g, "Scale");
+    g.save("modeling-scale-gizmo");
+    click_guide_label(&mut g, "Rotate");
+    g.save("modeling-rotate-gizmo");
+    click_guide_label(&mut g, "Free");
+    assert_eq!(
+        g.app.ui.modeling.interaction,
+        crate::viewport::ModelInteraction::Free
+    );
+}

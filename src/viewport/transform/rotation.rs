@@ -6,7 +6,7 @@ use std::f32::consts::TAU;
 pub(super) const RADIUS: f32 = 85.;
 const SEGMENTS: usize = 96;
 
-pub(super) struct Ring {
+pub(in crate::viewport) struct Ring {
     pub axis: Vec3,
     pub pivot: Vec3,
     pub color: Color32,
@@ -104,7 +104,7 @@ impl Ring {
         drag
     }
 }
-pub(super) struct RotationDrag {
+pub(in crate::viewport) struct RotationDrag {
     pub axis: Vec3,
     pivot: Vec3,
     radial: Vec3,

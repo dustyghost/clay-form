@@ -1,5 +1,5 @@
 //! Shared World-axis and Action Line transforms, including session-only pivots.
-mod rotation;
+pub(super) mod rotation;
 use super::{controls, scene::Scene};
 use crate::{
     document::Document,

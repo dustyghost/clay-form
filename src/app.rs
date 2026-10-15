@@ -238,6 +238,9 @@ impl App {
         if let Some(amount) = self.viewport.modeling.requested_amount.take() {
             self.ui.modeling.amount = amount;
         }
+        if let Some(direction) = self.viewport.modeling.requested_direction.take() {
+            self.ui.modeling.transform_direction = direction;
+        }
         if let Some(count) = self.viewport.modeling.requested_loop_count.take() {
             self.ui.modeling.loop_count = count;
         }

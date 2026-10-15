@@ -51,6 +51,7 @@ pub(crate) enum Command {
     DeleteVertexGroup(usize),
     VertexGroupVisible(usize, bool),
     RequestPrimitive,
+    RequestModelingPrimitive,
     ConfirmPrimitive,
     CancelPrimitive,
     UpdatePrimitive(crate::sculpt::Primitive),

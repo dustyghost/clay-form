@@ -64,19 +64,17 @@ impl Mesh {
         }
         Ok(())
     }
-    pub fn transform_components(
+    /// Use the same reference-side vertices for the gizmo and the symmetric edit.
+    pub(crate) fn component_transform_frame(
         &self,
         selected: &[usize],
         anchor: Vec3,
-        transform: ComponentTransform,
-        protect: bool,
         symmetry: &ModelingSymmetry,
-    ) -> Result<Mesh, String> {
+    ) -> (Vec<usize>, Vec3) {
         let all: BTreeSet<_> = selected
             .iter()
             .flat_map(|&v| symmetry.vertex_copies(v))
             .collect();
-        self.protect_model_vertices(&all.iter().copied().collect::<Vec<_>>(), protect)?;
         let mut seeds = Vec::new();
         let mut visited = BTreeSet::new();
         for &v in &all {
@@ -98,7 +96,23 @@ impl Mesh {
         let pivot = seeds
             .iter()
             .fold(Vec3::default(), |a, &v| a + self.vertices[v])
-            * (1. / seeds.len() as f32);
+            * (1. / seeds.len().max(1) as f32);
+        (seeds, pivot)
+    }
+    pub fn transform_components(
+        &self,
+        selected: &[usize],
+        anchor: Vec3,
+        transform: ComponentTransform,
+        protect: bool,
+        symmetry: &ModelingSymmetry,
+    ) -> Result<Mesh, String> {
+        let all: BTreeSet<_> = selected
+            .iter()
+            .flat_map(|&v| symmetry.vertex_copies(v))
+            .collect();
+        self.protect_model_vertices(&all.iter().copied().collect::<Vec<_>>(), protect)?;
+        let (seeds, pivot) = self.component_transform_frame(selected, anchor, symmetry);
         let mut out = self.clone();
         for seed in seeds {
             let p = self.vertices[seed];

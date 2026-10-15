@@ -44,12 +44,18 @@ impl UiState {
         if let Some((_, name)) = &self.primitive_warning {
             let response=egui::Modal::new(egui::Id::new("replace_with_primitive")).show(ctx,|ui| {
                 ui.set_max_width(380.);
-                ui.heading("Replace submodel with a primitive?");
+                ui.heading(if self.modeling_primitive.is_some() {"Start a new modeling mesh?"} else {"Replace submodel with a primitive?"});
                 ui.label(format!("The current sculpted geometry, masks and subdivision levels of '{name}' will be replaced."));
-                ui.label("The new shape stays parametric until you convert it to a sculpting mesh. Undo can restore the previous model.");
+                if let Some((primitive,_)) = &mut self.modeling_primitive {
+                    ui.label("This replaces the active submodel with an editable cube and disables its temporary Thickness. Other submodels stay intact. Undo restores the previous model in one step.");
+                    for (axis,label) in ["X spans","Y spans","Z spans"].into_iter().enumerate() { resolution_control(ui,label,&mut primitive.divisions[axis],1,16); }
+                    ui.weak("3 spans per axis is a useful starting point for face extrusion and loops.");
+                } else {
+                    ui.label("The new shape stays parametric until you convert it to a sculpting mesh. Undo can restore the previous model.");
+                }
                 ui.horizontal(|ui| {
                     if ui.button("Cancel").clicked() { commands.push(Command::CancelPrimitive); }
-                    if ui.button("Replace with primitive").clicked() { commands.push(Command::ConfirmPrimitive); }
+                    if ui.button(if self.modeling_primitive.is_some() {"Replace and start modeling"} else {"Replace with primitive"}).clicked() { commands.push(Command::ConfirmPrimitive); }
                 });
             });
             if response.should_close() && commands.is_empty() {

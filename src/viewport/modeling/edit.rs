@@ -19,6 +19,7 @@ impl EditOutcome {
 }
 pub(super) struct EditDrag {
     pub start: Pos2,
+    pub direct: Option<super::transform::DirectDrag>,
     pub rail: Option<egui::Vec2>,
     pub initial_amount: f32,
     pub moved: bool,
@@ -78,6 +79,9 @@ impl ModelingState {
             return;
         }
         if let Some(drag) = &mut self.edit_drag {
+            if drag.direct.is_some() {
+                return;
+            }
             if let Some(point) = point {
                 drag.moved |= point.distance(drag.start) > 3.;
                 if !drag.moved {
@@ -109,7 +113,7 @@ impl ModelingState {
             ));
         }
     }
-    fn edit_result(
+    pub(super) fn edit_result(
         document: &Document,
         components: &BTreeSet<Component>,
         anchor: Vec3,
@@ -283,7 +287,14 @@ impl ModelingState {
             mesh.check_model_protection(&result, options.protect_mask)?;
             return Ok(EditOutcome::new(result, amount, false));
         }
-        let axis = if options.axis == ModelAxis::Normal {
+        let direct = options.interaction != ModelInteraction::Axis;
+        let axis = if direct {
+            if options.tool == ModelTool::Scale && options.interaction == ModelInteraction::Free {
+                Vec3::default()
+            } else {
+                options.transform_direction
+            }
+        } else if options.axis == ModelAxis::Normal {
             let mut normal = Vec3::default();
             for p in &polygons {
                 if p.vertices.iter().all(|v| vertices.contains(v)) {
@@ -300,11 +311,14 @@ impl ModelingState {
         } else {
             options.axis.vector()
         };
+        if direct && axis.len() < 1e-8 && options.tool != ModelTool::Scale {
+            return Ok(EditOutcome::new(mesh.clone(), amount, false));
+        }
         let transform = match options.tool {
             ModelTool::Move => ComponentTransform::Move(axis * amount),
             ModelTool::Rotate => ComponentTransform::Rotate(axis, amount.to_radians()),
             ModelTool::Scale => ComponentTransform::Scale(
-                if options.axis == ModelAxis::Uniform {
+                if !direct && options.axis == ModelAxis::Uniform {
                     Vec3::default()
                 } else {
                     axis
@@ -325,11 +339,19 @@ impl ModelingState {
     pub(super) fn commit_edit(
         &mut self,
         document: &mut Document,
-        options: ModelingOptions,
+        mut options: ModelingOptions,
     ) -> Result<(), String> {
         let Some(drag) = self.edit_drag.take() else {
             return Ok(());
         };
+        if let Some(direct) = &drag.direct {
+            if !drag.moved && direct.gizmo {
+                return Ok(());
+            }
+            if drag.moved {
+                options.transform_direction = direct.direction;
+            }
+        }
         let result = if !drag.moved {
             if !options.tap_repeat && !options.tool.instant() {
                 return Ok(());
@@ -363,6 +385,16 @@ impl ModelingState {
         last.amount = amount;
         self.last_edit = Some(last);
         self.requested_amount = Some(amount);
+        if options.tool.is_transform() {
+            self.requested_direction = Some(options.transform_direction);
+        }
+        self.selection_anchor = Some(
+            if drag.direct.is_some() && options.tool == ModelTool::Move {
+                drag.anchor + options.transform_direction * amount
+            } else {
+                drag.anchor
+            },
+        );
         if matches!(
             options.tool,
             ModelTool::Move | ModelTool::Rotate | ModelTool::Scale | ModelTool::Slide
@@ -380,9 +412,9 @@ impl ModelingState {
     ) -> Result<(), String> {
         self.sync(document);
         let vertices = self.selected_vertices(document.mesh());
-        let anchor = vertices
-            .first()
-            .map(|&v| document.mesh().vertices[v])
+        let anchor = self
+            .selection_anchor
+            .or_else(|| vertices.first().map(|&v| document.mesh().vertices[v]))
             .ok_or("Select components first")?;
         let result = Self::edit_result(document, &self.selected, anchor, options, options.amount)?;
         if result.mesh == *document.mesh() {
@@ -444,7 +476,32 @@ impl Viewport {
         };
         match targets {
             Ok(targets) => {
+                let anchor = scene.pick(point).map_or(Vec3::default(), |h| h.0);
+                if model.tool.is_transform() && model.interaction == ModelInteraction::Gizmo {
+                    self.modeling.selected = targets.into_iter().collect();
+                    self.modeling.selection_anchor = Some(anchor);
+                    self.modeling.symmetry = None;
+                    self.gesture = Some(Gesture::Modeling);
+                    return;
+                }
+                if model.tool.is_transform() && model.interaction == ModelInteraction::Free {
+                    match self.modeling.begin_direct(
+                        document,
+                        scene,
+                        model,
+                        point,
+                        targets.into_iter().collect(),
+                        anchor,
+                        super::transform::Handle::Free,
+                        false,
+                    ) {
+                        Ok(()) => self.gesture = Some(Gesture::Modeling),
+                        Err(e) => self.status = Some(e),
+                    }
+                    return;
+                }
                 self.modeling.edit_drag = Some(EditDrag {
+                    direct: None,
                     start: point,
                     rail: if let Component::Edge([a, b]) = component {
                         let anchor = scene.pick(point).map_or(Vec3::default(), |h| h.0);

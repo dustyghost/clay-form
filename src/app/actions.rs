@@ -72,11 +72,17 @@ impl App {
                 self.ui.modeling.set_tool(tool);
                 None
             }
+            Action::ModelInteraction(mode) => {
+                self.viewport.cancel(&mut self.document);
+                self.ui.modeling.interaction = mode;
+                None
+            }
             Action::ModelTarget(span) => {
                 self.viewport.cancel(&mut self.document);
                 self.ui.modeling.span = span;
                 None
             }
+            Action::ModelNewMesh => Some(Command::RequestModelingPrimitive),
             Action::ModelTopology(edit) => Some(Command::ModelTopology(edit)),
             Action::ModelRepeat => Some(Command::ModelRepeat),
             Action::ModelSmoothPreview => {

@@ -4,6 +4,7 @@ use crate::sculpt::{Extrusion, LoopCut, Mesh, ModelingSymmetry, Symmetry};
 use std::collections::BTreeSet;
 mod edit;
 mod selection;
+mod transform;
 use edit::EditDrag;
 use selection::SelectionDrag;
 use serde::{Deserialize, Serialize};
@@ -87,6 +88,9 @@ impl ModelTool {
             _ => None,
         }
     }
+    pub fn is_transform(self) -> bool {
+        matches!(self, Self::Move | Self::Rotate | Self::Scale)
+    }
     pub fn instant(self) -> bool {
         matches!(self, Self::FacePoint | Self::FaceSplit)
     }
@@ -158,6 +162,25 @@ impl ModelAxis {
         }
     }
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum ModelInteraction {
+    #[default]
+    Free,
+    Gizmo,
+    Axis,
+}
+impl ModelInteraction {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Free => "Free",
+            Self::Gizmo => "Gizmo",
+            Self::Axis => "Axis / amount",
+        }
+    }
+}
+fn legacy_interaction() -> ModelInteraction {
+    ModelInteraction::Axis
+}
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct ModelConstruction {
@@ -189,6 +212,10 @@ pub(crate) struct ModelingOptions {
     pub join: bool,
     pub loop_count: u32,
     pub axis: ModelAxis,
+    #[serde(default = "legacy_interaction")]
+    pub interaction: ModelInteraction,
+    #[serde(default)]
+    pub transform_direction: Vec3,
     pub amount: f32,
     pub protect_mask: bool,
     pub individual: bool,
@@ -213,6 +240,8 @@ pub(crate) enum Component {
 pub(crate) struct ModelingState {
     pub selected: BTreeSet<Component>,
     pub revision: u64,
+    selection_anchor: Option<Vec3>,
+    pub requested_direction: Option<Vec3>,
     symmetry: Option<(Symmetry, Result<ModelingSymmetry, String>)>,
     drag: Option<ExtrudeDrag>,
     edit_drag: Option<EditDrag>,
@@ -257,6 +286,7 @@ impl ModelingState {
             self.symmetry = None;
             self.smooth = None;
             self.selected.clear();
+            self.selection_anchor = None;
             self.selection_drag = None;
             self.drag = None;
             self.edit_drag = None;
@@ -561,6 +591,8 @@ impl Viewport {
             .or_else(|| response.interact_pointer_pos());
         let eligible =
             point.filter(|p| !navigation::contains(response.rect, *p) && !gizmo.contains(*p));
+        self.modeling
+            .advance_direct_transform(document, scene, point, model);
         let hover = eligible.and_then(|p| Self::component_at(p, model.mode, document, scene));
         if model.smooth_preview && options.wire && !self.modeling.dragging() {
             for [a, b] in document.mesh().polygon_edges() {
@@ -738,6 +770,9 @@ impl Viewport {
                 }
             }
         }
+        let transform_handle = self
+            .modeling
+            .paint_transform_gizmo(document, scene, painter, model, eligible);
         let symmetry_error = self
             .modeling
             .symmetry
@@ -841,6 +876,17 @@ impl Viewport {
         let pressed =
             response.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_pressed());
         let clicked = response.clicked_by(egui::PointerButton::Primary);
+        if let (true, Some(handle), Some(point)) = (pressed || clicked, transform_handle, eligible)
+            && self.gesture.is_none()
+        {
+            match self
+                .modeling
+                .begin_gizmo(document, scene, model, point, handle)
+            {
+                Ok(()) => self.gesture = Some(Gesture::Modeling),
+                Err(e) => self.status = Some(e),
+            }
+        }
         if model.tool.is_edit() {
             self.update_edit_gesture(document, scene, model, hover, point, pressed || clicked);
         }
@@ -1025,6 +1071,7 @@ impl Viewport {
                 if !drag.moved {
                     self.modeling.edit_drag = Some(EditDrag {
                         start: drag.start,
+                        direct: None,
                         rail: None,
                         initial_amount: model.amount,
                         moved: false,
@@ -1115,13 +1162,22 @@ impl Viewport {
         // Preserve empty-space, navigation-frame and gizmo navigation; consume model
         // presses even if the chosen component has no hit (e.g. a face in vertex mode).
         self.gesture == Some(Gesture::Modeling)
+            || transform_handle.is_some()
             || eligible.is_some_and(|p| scene.pick_model(p).is_some())
     }
 }
 
 impl ModelingOptions {
     pub fn validate(&self) -> Result<(), String> {
-        if !self.flat_angle.is_finite()
+        if ![
+            self.transform_direction.0,
+            self.transform_direction.1,
+            self.transform_direction.2,
+        ]
+        .iter()
+        .all(|v| v.is_finite())
+            || self.transform_direction.len() > 1.001
+            || !self.flat_angle.is_finite()
             || !(0. ..=180.).contains(&self.flat_angle)
             || !self.construction.width.is_finite()
             || self.construction.width <= 0.

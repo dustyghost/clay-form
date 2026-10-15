@@ -12,6 +12,9 @@ pub(crate) struct ModelingControls {
     pub loop_count: u32,
     pub join: bool,
     pub axis: crate::viewport::ModelAxis,
+    pub interaction: crate::viewport::ModelInteraction,
+    pub transform_direction: crate::sculpt::Vec3,
+    pub directions: std::collections::BTreeMap<ModelTool, crate::sculpt::Vec3>,
     pub amount: f32,
     pub protect_mask: bool,
     pub individual: bool,
@@ -33,6 +36,8 @@ impl ModelingControls {
             return;
         }
         self.amounts.insert(self.tool, self.amount);
+        self.directions.insert(self.tool, self.transform_direction);
+        self.transform_direction = self.directions.get(&tool).copied().unwrap_or_default();
         self.tool = tool;
         self.amount = self.amounts.get(&tool).copied().unwrap_or(match tool {
             ModelTool::EdgeSplit | ModelTool::EdgeCollapse => 0.5,
@@ -45,6 +50,10 @@ impl ModelingControls {
     pub fn load_options(&mut self, o: crate::viewport::ModelingOptions) {
         self.amounts.insert(self.tool, self.amount);
         self.amounts.insert(o.tool, o.amount);
+        self.directions.insert(self.tool, self.transform_direction);
+        self.directions.insert(o.tool, o.transform_direction);
+        self.interaction = o.interaction;
+        self.transform_direction = o.transform_direction;
         self.mode = o.mode;
         self.tool = o.tool;
         self.change = o.change;
@@ -72,6 +81,8 @@ impl ModelingControls {
             join: self.join,
             loop_count: self.loop_count,
             axis: self.axis,
+            interaction: self.interaction,
+            transform_direction: self.transform_direction,
             amount: self.amount,
             protect_mask: self.protect_mask,
             individual: self.individual,
@@ -92,11 +103,26 @@ impl UiState {
         let unavailable = self.edge_unavailable(&Action::SelectEdges, document);
         let mut active = self.modeling.active;
         let response = ui
-            .add_enabled(
-                unavailable.is_none(),
-                egui::Checkbox::new(&mut active, "Pen modeling"),
-            )
-            .customize(Action::PenModeling);
+            .horizontal(|ui| {
+                let response = ui
+                    .add_enabled(
+                        unavailable.is_none(),
+                        egui::Checkbox::new(&mut active, "Pen modeling"),
+                    )
+                    .customize(Action::PenModeling);
+                if ui
+                    .small_button("New mesh…")
+                    .customize(Action::ModelNewMesh)
+                    .on_hover_text(
+                        "Start with a low-resolution cube. Review the replacement warning first.",
+                    )
+                    .clicked()
+                {
+                    commands.push(Command::RequestModelingPrimitive);
+                }
+                response
+            })
+            .inner;
         if self
             .edge_help(response, &Action::PenModeling, document)
             .changed()
@@ -246,17 +272,34 @@ impl UiState {
                     if self.modeling.tool==ModelTool::Bevel {ui.weak("Flat region with one exterior edge at each corner.");}
                 }
                 ModelTool::Move | ModelTool::Rotate | ModelTool::Scale | ModelTool::Slide => {
-                    ui.horizontal_wrapped(|ui| {
+                    use crate::viewport::ModelInteraction;
+                    let direct = self.modeling.tool.is_transform();
+                    if direct {
+                        ui.horizontal_wrapped(|ui| {
+                            for mode in [ModelInteraction::Free,ModelInteraction::Gizmo,ModelInteraction::Axis] {
+                                if ui.selectable_label(self.modeling.interaction==mode,mode.label()).customize(Action::ModelInteraction(mode)).clicked() { commands.push(Command::Action(Action::ModelInteraction(mode))); }
+                            }
+                        });
+                    }
+                    if !direct || self.modeling.interaction==ModelInteraction::Axis { ui.horizontal_wrapped(|ui| {
                         ui.label("Axis");
                         for axis in crate::viewport::ModelAxis::ALL {
                             if axis==crate::viewport::ModelAxis::Uniform && self.modeling.tool!=ModelTool::Scale {continue;}
                             ui.selectable_value(&mut self.modeling.axis,axis,format!("{axis:?}"));
                         }
                     });
+                    } else {
+                        ui.weak(if self.modeling.interaction==ModelInteraction::Gizmo {"Select components, then drag the handles. Center: free / uniform. Colors: X, Y, Z."}else{match self.modeling.tool {ModelTool::Move=>"Drag a target freely in the view plane",ModelTool::Rotate=>"Drag a target to rotate with the trackball",_=>"Drag up/down to scale uniformly"}});
+                        let d=self.modeling.transform_direction;
+                        if d.len()<1e-6 {
+                            ui.weak(if self.modeling.tool==ModelTool::Scale {"Uniform scale"}else{"Drag first to set the direction for Apply amount"});
+                        } else { ui.weak(format!("Direction: X {:.2}, Y {:.2}, Z {:.2}",d.0,d.1,d.2)); }
+                    }
                     ui.label(match self.modeling.tool { ModelTool::Slide=>"Slide fraction (-1 to 1)", ModelTool::Rotate=>"Angle (degrees)",ModelTool::Scale=>"Scale factor",_=>"Distance" });
                     ui.add(egui::DragValue::new(&mut self.modeling.amount).speed(0.01));
-                    if ui.add_enabled(self.modeling.count>0,egui::Button::new("Apply amount")).customize(Action::ModelApply).clicked() { commands.push(Command::ModelApply); }
-                    ui.weak("Drag up/down to adjust · release applies · Esc cancels");
+                    let has_direction=!direct || self.modeling.interaction==ModelInteraction::Axis || self.modeling.tool==ModelTool::Scale || self.modeling.transform_direction.len()>1e-6;
+                    if ui.add_enabled(self.modeling.count>0 && has_direction,egui::Button::new("Apply amount")).customize(Action::ModelApply).clicked() { commands.push(Command::ModelApply); }
+                    ui.weak("Release applies · Esc cancels · one Undo per drag");
                     ui.weak("Rotate and scale around the selection center");
                 }
                 ModelTool::LoopCut => {
@@ -277,7 +320,7 @@ impl UiState {
                     ui.weak("Follows visible quads. Edits replace stored levels.");
                 }
             }
-            if (self.modeling.tool.is_edit() && !self.modeling.tool.instant()) || self.modeling.tool==ModelTool::Extrude {
+            if ((self.modeling.tool.is_edit() && !self.modeling.tool.instant()) || self.modeling.tool==ModelTool::Extrude) && !(self.modeling.tool.is_transform() && self.modeling.interaction==crate::viewport::ModelInteraction::Gizmo) {
                 ui.checkbox(&mut self.modeling.tap_repeat,"Tap to repeat").customize(Action::ModelTapRepeat)
                     .on_hover_text("Tap a target to apply the displayed amount and options. Drag to set a new amount. Select and centered loop cuts are unchanged.");
                 if self.modeling.tap_repeat {ui.weak(format!("Tap applies {:.3} · drag sets a new amount",self.modeling.amount));}

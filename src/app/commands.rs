@@ -77,6 +77,7 @@ impl App {
                 | Command::ArrangeReferences(_)
                 | Command::Mirror(..)
                 | Command::EditEdges(_)
+                | Command::RequestModelingPrimitive
                 | Command::ModelingMode(_)
                 | Command::ModelingComponent(_)
                 | Command::ClearModelSelection
@@ -111,6 +112,7 @@ impl App {
                     | Command::PlaceReference(..)
                     | Command::RemoveReference(_)
                     | Command::ArrangeReferences(_)
+                    | Command::RequestModelingPrimitive
                     | Command::RequestPrimitive
                     | Command::ConfirmPrimitive
                     | Command::UpdatePrimitive(_)
@@ -474,7 +476,24 @@ impl App {
                     label.map_or("Nothing to redo".into(), |label| format!("Redid: {label}"));
                 Ok(())
             }
+            Command::RequestModelingPrimitive => {
+                self.viewport.cancel(&mut self.document);
+                let mut primitive =
+                    crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Cube);
+                primitive.divisions = [3; 3];
+                self.ui.modeling_primitive = Some((primitive, self.document.display_revision()));
+                self.ui.primitive_warning = Some((
+                    self.document.active_model_index(),
+                    self.document
+                        .model(self.document.active_model_index())
+                        .unwrap()
+                        .name
+                        .into(),
+                ));
+                Ok(())
+            }
             Command::RequestPrimitive => {
+                self.ui.modeling_primitive = None;
                 self.ui.selection_tool = None;
                 self.ui.slice_active = false;
                 self.viewport.cancel(&mut self.document);
@@ -494,14 +513,34 @@ impl App {
             }
             Command::CancelPrimitive => {
                 self.ui.primitive_warning = None;
+                self.ui.modeling_primitive = None;
                 Ok(())
             }
             Command::ConfirmPrimitive => {
+                let modeling = self.ui.modeling_primitive.take();
                 if let Some((index, name)) = self.ui.primitive_warning.take() {
-                    if self.document.active_model_index() != index
+                    if modeling
+                        .as_ref()
+                        .is_some_and(|(_, revision)| *revision != self.document.display_revision())
+                        || self.document.active_model_index() != index
                         || self.document.model(index).is_none_or(|m| m.name != name)
                     {
                         Err("Submodel changed; request primitive replacement again".into())
+                    } else if let Some((primitive, _)) = modeling {
+                        self.document
+                            .initialize_modeling_primitive(primitive)
+                            .map(|()| {
+                                self.ui.primitive_controls_requested = false;
+                                self.dispatch(Command::ModelingMode(true), ctx);
+                                self.dispatch(
+                                    Command::ModelingComponent(
+                                        crate::viewport::ComponentMode::Face,
+                                    ),
+                                    ctx,
+                                );
+                                self.ui.status =
+                                    "Modeling cube ready · Undo restores the previous model".into();
+                            })
                     } else {
                         self.document.initialize_primitive().map(|()| {self.ui.primitive_controls_requested=true;self.ui.transform_mode=crate::viewport::TransformMode::Sculpt;self.ui.status="Parametric primitive: drag shape handles or edit parameters; convert when ready to sculpt".into();})
                     }

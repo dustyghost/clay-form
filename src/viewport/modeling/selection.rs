@@ -156,6 +156,7 @@ impl Viewport {
             } else {
                 model.change
             };
+            self.modeling.selection_anchor = scene.pick(origin).map(|h| h.0);
             self.modeling.selection_drag = Some(SelectionDrag {
                 current: if change == SelectionChange::Replace {
                     BTreeSet::new()

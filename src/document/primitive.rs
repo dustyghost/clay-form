@@ -1,5 +1,6 @@
 //! Parametric primitive editing and conversion.
 use super::*;
+use crate::sculpt::Vec3;
 
 impl Document {
     pub fn primitive(&self) -> Option<&crate::sculpt::Primitive> {
@@ -33,6 +34,29 @@ impl Document {
         };
         self.end_edit();
         self.replace_geometry_named(geometry, "Initialize primitive")
+    }
+    pub(crate) fn initialize_modeling_primitive(
+        &mut self,
+        mut primitive: crate::sculpt::Primitive,
+    ) -> Result<(), String> {
+        if !self.active_visible() {
+            return Err("Show the active model before replacing it".into());
+        }
+        if !self.mesh().vertices.is_empty() {
+            let mut min = self.mesh().vertices[0];
+            let mut max = min;
+            for p in &self.mesh().vertices {
+                min = Vec3(min.0.min(p.0), min.1.min(p.1), min.2.min(p.2));
+                max = Vec3(max.0.max(p.0), max.1.max(p.1), max.2.max(p.2));
+            }
+            primitive.center = (min + max) * 0.5;
+        }
+        let mut geometry = self.geometry.clone();
+        geometry.mesh = primitive.mesh()?;
+        geometry.settings = MeshSettings::default();
+        geometry.scene.active_metadata.temporary_thickness = 0.;
+        self.end_edit();
+        self.replace_geometry_named(geometry, "Initialize modeling mesh")
     }
     /// Continuous slider updates are one edit until the pointer is released.
     pub fn update_primitive(&mut self, primitive: crate::sculpt::Primitive) -> Result<(), String> {

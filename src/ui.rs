@@ -25,6 +25,7 @@ pub(crate) struct UiState {
     pub library_path: String,
     pub(crate) primitive_warning: Option<(usize, String)>,
     pub(crate) primitive_controls_requested: bool,
+    pub(crate) modeling_primitive: Option<(crate::sculpt::Primitive, u64)>,
     pub transform_mode: crate::viewport::TransformMode,
     pub edges: edges::EdgeControls,
     pub modeling: modeling::ModelingControls,
@@ -79,6 +80,7 @@ impl Default for UiState {
             library_path: "brush-library.brushes.json".into(),
             primitive_warning: None,
             primitive_controls_requested: false,
+            modeling_primitive: None,
             transform_mode: crate::viewport::TransformMode::Sculpt,
             edges: Default::default(),
             modeling: modeling::ModelingControls {

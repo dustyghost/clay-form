@@ -675,6 +675,7 @@ fn modeling_shared_targets_conversion_and_measured_move() {
     app.dispatch(Command::ModelingComponent(ComponentMode::Vertex), &ctx);
     assert_eq!(app.viewport.modeling.selected.len(), 12);
     app.ui.modeling.tool = ModelTool::Move;
+    app.ui.modeling.interaction = crate::viewport::ModelInteraction::Axis;
     app.ui.modeling.axis = ModelAxis::Z;
     app.ui.modeling.amount = 0.1;
     let before = app.document.mesh().clone();
@@ -782,6 +783,7 @@ fn modeling_presets_roundtrip_repeat_and_smooth_preview_do_not_lose_the_cage() {
     let (mut app, ctx, rect) = setup();
     tap(&mut app, &ctx, rect.center());
     app.dispatch(Command::Action(Action::ModelTool(ModelTool::Move)), &ctx);
+    app.ui.modeling.interaction = crate::viewport::ModelInteraction::Axis;
     app.ui.modeling.axis = ModelAxis::Z;
     app.ui.modeling.amount = 0.1;
     app.ui.modeling.preset_name = "Measured lift".into();
@@ -860,6 +862,7 @@ fn modeling_taps_apply_visible_settings_like_numeric_edits() {
         navigation_frame(&mut app, &ctx, vec![]);
         tap(&mut app, &ctx, rect.center());
         app.dispatch(Command::Action(Action::ModelTool(tool)), &ctx);
+        app.ui.modeling.interaction = crate::viewport::ModelInteraction::Axis;
         app.ui.modeling.axis = if tool == ModelTool::Scale {
             ModelAxis::Uniform
         } else {
@@ -1209,4 +1212,258 @@ fn modeling_construction_presets_roundtrip_and_keep_older_preferences_compatible
         &ctx,
     );
     assert_eq!(app.ui.modeling.amount, 0.08);
+}
+
+#[test]
+fn modeling_free_move_tracks_pen_in_both_projections_and_repeats_the_vector() {
+    use crate::sculpt::Vec3;
+    for perspective in [false, true] {
+        let (mut app, ctx, rect) = setup();
+        assert_eq!(
+            app.ui.modeling.interaction,
+            crate::viewport::ModelInteraction::Free
+        );
+        app.camera.perspective = perspective;
+        navigation_frame(&mut app, &ctx, vec![]);
+        tap(&mut app, &ctx, rect.center());
+        let vertices = app.viewport.modeling.selected_vertices(app.document.mesh());
+        app.dispatch(Command::Action(Action::ModelTool(ModelTool::Move)), &ctx);
+        let before = app.document.geometry_snapshot();
+        let history = app.document.history_counts().0;
+        let pixels = Vec2::new(28., -18.);
+        let distance = app.camera.eye_distance();
+        let scale = rect.width().min(rect.height())
+            * 0.35
+            * if perspective {
+                distance / (distance - 1.)
+            } else {
+                1.
+            };
+        let movement = Vec3(pixels.x / scale, -pixels.y / scale, 0.);
+        pen_drag(&mut app, &ctx, rect.center(), rect.center() + pixels);
+        assert_eq!(app.document.history_counts().0, history + 1);
+        for (v, &p) in before.mesh.vertices.iter().enumerate() {
+            let expected = p + if vertices.contains(&v) {
+                movement
+            } else {
+                Vec3::default()
+            };
+            assert!(
+                (app.document.mesh().vertices[v] - expected).len() < 1e-5,
+                "projection {perspective}, vertex {v}: {}",
+                app.ui.status
+            );
+        }
+        tap(&mut app, &ctx, rect.center() + pixels);
+        for &v in &vertices {
+            assert!(
+                (app.document.mesh().vertices[v] - before.mesh.vertices[v] - movement * 2.).len()
+                    < 1e-5
+            );
+        }
+        app.dispatch(Command::Undo, &ctx);
+        app.dispatch(Command::Undo, &ctx);
+        assert_eq!(app.document.geometry_snapshot(), before);
+    }
+}
+
+#[test]
+fn modeling_gizmo_handles_move_scale_rotate_and_cancel_without_camera_motion() {
+    use crate::viewport::ModelInteraction;
+    for perspective in [false, true] {
+        for (tool, offset, delta) in [
+            (ModelTool::Move, Vec2::new(85., 0.), Vec2::new(25., 10.)),
+            (ModelTool::Move, Vec2::new(26., -26.), Vec2::new(15., -20.)),
+            (ModelTool::Scale, Vec2::new(85., 0.), Vec2::new(25., 0.)),
+            (ModelTool::Scale, Vec2::ZERO, Vec2::new(0., -25.)),
+            (ModelTool::Rotate, Vec2::new(60., -60.), Vec2::new(10., 12.)),
+            (ModelTool::Rotate, Vec2::ZERO, Vec2::new(15., -20.)),
+        ] {
+            let (mut app, ctx, rect) = setup();
+            app.camera.perspective = perspective;
+            navigation_frame(&mut app, &ctx, vec![]);
+            tap(&mut app, &ctx, rect.center());
+            let selected = app.viewport.modeling.selected.clone();
+            let vertices = app.viewport.modeling.selected_vertices(app.document.mesh());
+            app.dispatch(Command::Action(Action::ModelTool(tool)), &ctx);
+            app.dispatch(
+                Command::Action(Action::ModelInteraction(ModelInteraction::Gizmo)),
+                &ctx,
+            );
+            let before = app.document.geometry_snapshot();
+            let history = app.document.history_counts().0;
+            let p = rect.center() + offset;
+            // Merely tapping a handle must not repeat a nonzero numeric amount.
+            app.ui.modeling.amount = if tool == ModelTool::Scale { 1.2 } else { 0.2 };
+            tap(&mut app, &ctx, p);
+            assert_eq!(app.document.geometry_snapshot(), before);
+            navigation_frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::PointerMoved(p), primary_event(p, true)],
+            );
+            navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(p + delta)]);
+            assert_eq!(app.document.geometry_snapshot(), before);
+            assert_ne!(
+                app.viewport.modeling.preview().unwrap(),
+                &before.mesh,
+                "{}",
+                tool.label()
+            );
+            navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Escape, true)]);
+            navigation_frame(
+                &mut app,
+                &ctx,
+                vec![
+                    primary_event(p + delta, false),
+                    slice_key(egui::Key::Escape, false),
+                ],
+            );
+            assert_eq!(app.document.geometry_snapshot(), before);
+            pen_drag(&mut app, &ctx, p, p + delta);
+            assert_ne!(
+                app.document.geometry_snapshot(),
+                before,
+                "{}: {}",
+                tool.label(),
+                app.ui.status
+            );
+            assert_eq!(app.document.history_counts().0, history + 1);
+            assert_eq!(app.viewport.modeling.selected, selected);
+            assert_eq!(app.camera.yaw, 0.);
+            assert_eq!(app.camera.pitch, 0.);
+            for (v, &p) in before.mesh.vertices.iter().enumerate() {
+                if !vertices.contains(&v) {
+                    assert_eq!(app.document.mesh().vertices[v], p);
+                }
+                if offset.x == 85. {
+                    assert!((app.document.mesh().vertices[v].1 - p.1).abs() < 1e-5);
+                    assert!((app.document.mesh().vertices[v].2 - p.2).abs() < 1e-5);
+                }
+            }
+            app.dispatch(Command::Undo, &ctx);
+            assert_eq!(app.document.geometry_snapshot(), before);
+        }
+    }
+}
+
+#[test]
+fn modeling_direct_transforms_preserve_symmetry_and_respect_masks() {
+    use crate::sculpt::{ModelingSymmetry, Symmetry};
+    for interaction in [
+        crate::viewport::ModelInteraction::Free,
+        crate::viewport::ModelInteraction::Gizmo,
+    ] {
+        for tool in [ModelTool::Move, ModelTool::Scale, ModelTool::Rotate] {
+            let (mut app, ctx, rect) = setup();
+            app.dispatch(
+                Command::SetSymmetry(Symmetry {
+                    enabled: true,
+                    mirror: [true, false, false],
+                    ..Default::default()
+                }),
+                &ctx,
+            );
+            let scale = rect.width().min(rect.height()) * 0.35;
+            let p = rect.center() + Vec2::new(scale * 0.65, 0.);
+            tap(&mut app, &ctx, p);
+            app.dispatch(Command::Action(Action::ModelTool(tool)), &ctx);
+            app.ui.modeling.interaction = interaction;
+            let before = app.document.geometry_snapshot();
+            pen_drag(&mut app, &ctx, p, p + Vec2::new(15., -20.));
+            assert_ne!(
+                app.document.geometry_snapshot(),
+                before,
+                "{}: {}",
+                tool.label(),
+                app.ui.status
+            );
+            ModelingSymmetry::new(app.document.mesh(), app.document.symmetry()).unwrap();
+            app.dispatch(Command::Undo, &ctx);
+            let mut protected = before.clone();
+            protected.mesh.mask.fill(1.);
+            app.document.replace_geometry(protected).unwrap();
+            let protected = app.document.geometry_snapshot();
+            if interaction == crate::viewport::ModelInteraction::Gizmo {
+                tap(&mut app, &ctx, p);
+            }
+            let history = app.document.history_counts();
+            pen_drag(&mut app, &ctx, p, p + Vec2::new(15., -20.));
+            assert_eq!(app.document.geometry_snapshot(), protected);
+            assert_eq!(app.document.history_counts(), history);
+        }
+    }
+}
+
+#[test]
+fn modeling_transform_presets_preserve_modes_vectors_and_legacy_axes() {
+    use crate::viewport::ModelInteraction;
+    let (mut app, ctx, _) = setup();
+    app.dispatch(Command::Action(Action::ModelTool(ModelTool::Move)), &ctx);
+    app.ui.modeling.transform_direction = crate::sculpt::Vec3(0.6, 0.8, 0.);
+    app.ui.modeling.amount = 0.25;
+    let options = app.ui.modeling.options();
+    let encoded = serde_json::to_value(options).unwrap();
+    let decoded: crate::viewport::ModelingOptions =
+        serde_json::from_value(encoded.clone()).unwrap();
+    decoded.validate().unwrap();
+    assert_eq!(decoded, options);
+    app.ui.modeling.load_options(decoded);
+    app.ui.modeling.set_tool(ModelTool::Scale);
+    assert_eq!(
+        app.ui.modeling.transform_direction,
+        crate::sculpt::Vec3::default()
+    );
+    app.ui.modeling.set_tool(ModelTool::Move);
+    assert_eq!(
+        app.ui.modeling.transform_direction,
+        options.transform_direction
+    );
+    let mut old = encoded;
+    old.as_object_mut().unwrap().remove("interaction");
+    old.as_object_mut().unwrap().remove("transform_direction");
+    let old: crate::viewport::ModelingOptions = serde_json::from_value(old).unwrap();
+    old.validate().unwrap();
+    assert_eq!(old.interaction, ModelInteraction::Axis);
+}
+
+#[test]
+fn modeling_new_mesh_requires_confirmation_and_restores_everything_with_one_undo() {
+    let (mut app, ctx, _) = setup();
+    app.document.duplicate_model(false).unwrap();
+    let mut geometry = app.document.geometry_snapshot();
+    geometry.mesh.mask.fill(0.7);
+    geometry.scene.active_metadata.temporary_thickness = 0.2;
+    app.document.replace_geometry(geometry).unwrap();
+    let before = app.document.geometry_snapshot();
+    let history = app.document.history_counts();
+    app.dispatch(Command::Action(Action::ModelNewMesh), &ctx);
+    assert!(app.ui.primitive_warning.is_some());
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert_eq!(app.document.history_counts(), history);
+    app.dispatch(Command::CancelPrimitive, &ctx);
+    assert!(app.ui.modeling_primitive.is_none());
+    assert_eq!(app.document.geometry_snapshot(), before);
+    app.dispatch(Command::RequestModelingPrimitive, &ctx);
+    app.ui.modeling_primitive.as_mut().unwrap().0.divisions = [2, 3, 4];
+    app.dispatch(Command::ConfirmPrimitive, &ctx);
+    assert!(app.ui.primitive_warning.is_none());
+    assert!(app.ui.modeling.active);
+    assert_eq!(app.ui.modeling.mode, ComponentMode::Face);
+    assert_eq!(app.ui.modeling.tool, ModelTool::Select);
+    app.document.require_modeling().unwrap();
+    app.document.mesh().validate_closed().unwrap();
+    assert_eq!(app.document.mesh().quads.len(), 2 * (2 * 3 + 3 * 4 + 2 * 4));
+    assert!(app.document.mesh().mask.iter().all(|&m| m == 0.));
+    assert_eq!(app.document.geometry_snapshot().submodels, before.submodels);
+    assert_eq!(app.document.history_counts().0, history.0 + 1);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    // A stale warning cannot replace geometry changed outside the modal dispatcher.
+    app.dispatch(Command::RequestModelingPrimitive, &ctx);
+    app.document.replace_geometry(before.clone()).unwrap();
+    let history = app.document.history_counts();
+    app.dispatch(Command::ConfirmPrimitive, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert_eq!(app.document.history_counts(), history);
 }
