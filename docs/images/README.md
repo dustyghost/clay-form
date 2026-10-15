@@ -43,8 +43,8 @@ See [Development](../development.md#update-guide-screenshots) for prerequisites 
 | `modeling-paint-selection.png`, `modeling-face-loop.png`, `modeling-edge-ring.png`, `modeling-edge-loop.png` | [Paint selection and loop patterns](../guide/modeling.md#select-faces-edges-or-vertices) | `modeling_selection_offscreen_review` |
 | `modeling-symmetry-selection.png`, `modeling-symmetry-extrude.png`, `modeling-dissolve-before.png`, `modeling-dissolve-after.png` | [Symmetry and dissolving loops](../guide/modeling.md#dissolve-selected-loops) | `modeling_symmetry_dissolve_offscreen_review` |
 | `modeling-tap-repeat.png`, `modeling-milestone-inset.png`, `modeling-milestone-smooth.png`, `modeling-milestone-preset.png` | [Integrated construction, presets and smooth preview](../guide/modeling.md#keep-useful-tool-setups-and-inspect-the-smooth-result) | `modeling_milestones_offscreen_review` |
-
 | `modeling-face-group-gap.png` | [Exact face selection groups](../guide/modeling.md#save-a-component-selection-as-a-vertex-group) | `modeling_face_group_gap_offscreen_review` |
+| `modeling-point-split.png`, `modeling-point-tube.png`, `modeling-edge-construction-preview.png`, `modeling-face-split.png` | [Edge, point and face-center construction](../guide/modeling.md#construct-from-edges-points-and-face-centers) | `modeling_component_construction_offscreen_review` |
 
 ## Example assets
 

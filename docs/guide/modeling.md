@@ -45,7 +45,9 @@ Faces select entire quads rather than their rendering triangles. Changing compon
 
 ### Shared targets and component transforms
 
-The **Target** choices apply to selection and component edits. **Connected** follows connected visible faces, **Flat region** stops at changes of plane, **Face group** selects the visible polygons with the same face label, and **Boundary** follows an open boundary in Edge mode. Loop and parallel-edge targets remain available where applicable. An edit starting on an already selected component uses the current selection; otherwise it uses the hovered target. Hover previews the affected target before pressing.
+The **Target** choices apply to selection and component edits. **Connected** follows connected visible faces, **Flat island** follows connected faces within the chosen **Island angle** of the starting face, **Face group** selects the visible polygons with the same face label, and **Boundary** follows an open boundary in Edge mode. Loop and parallel-edge targets remain available where applicable. An edit starting on an already selected component uses the current selection; otherwise it uses the hovered target. Hover previews the affected target before pressing.
+
+**Island angle** ranges from 0° (flat faces) to 180°. Each face is compared with the original face normal, so a chain of small bends cannot gradually wrap the selection around a curved surface. Hidden faces stop the flood; disconnected surfaces are excluded. Hover previews the result as you adjust the slider. The angle applies to the next selection or edit target and is saved in tool presets.
 
 Choose **Move components**, **Rotate components**, or **Scale components** in any component mode. Choose X/Y/Z or a face region's Normal; Scale also supports Uniform. Drag up/down to adjust, release to apply, or Escape to cancel. Alternatively select components, enter Distance, Angle in degrees, or Scale factor, then **Apply amount**. Rotation/scaling use the selection center. The selection survives these edits. Symmetry reflects displacement and keeps seam vertices on the enabled symmetry planes. Hidden faces and, by default, masked vertices are protected. These edits currently replace stored subdivision levels; Undo restores them.
 
@@ -69,6 +71,36 @@ The highlighted rim stays on the dragged face even as the pen moves across other
 **Inset** adds a border of the chosen Width inside a flat region. **Individual faces** insets each face separately. **Bevel boundary** trims a flat region's exterior corners, creating a single chamfer band; each corner must have one exterior edge descending away from the region. This first bevel does not handle arbitrary edge networks or rounded multi-segment profiles. Widths that collapse narrow faces are rejected. Inset and bevel retain the cap selection for the next operation. New faces inherit their source region's face label; surviving weights and creases are retained.
 
 **Extrude and fuse** adds contact handling while pushing a single flat face inward. It can stop at the first compatible intermediate loop, remove the swept exterior strips and retain the moved cap. **Join matching faces** separately permits opening a tunnel when an opposing cap matches. **Snap range** is a fraction of the local edge length, independent of sculpt brush size. Compatibility still requires aligned corners and complete adjoining side strips; this does not cut arbitrary intersecting surfaces. Symmetry applies only when all copies can complete safely.
+
+### Construct from edges, points and face centers
+
+Choose a component mode to reveal its construction tools. Measured tools support numeric amounts, pen previews, Escape to cancel, tap repeat and one Undo per completed edit.
+
+| Mode | Tool | Controls and result |
+| --- | --- | --- |
+| Edge | Extrude edge | Drag up/down or set Distance. An open border extends into a quad strip. A surface edge creates a ridge with new side faces; hover near the desired adjacent face, or enable **Other adjacent side**, then press to lock that side. |
+| Edge | Split edge | Drag along the edge to place a new vertex. **Position** runs from 0 to 1, starting at the circled endpoint nearest the initial press; insertion stays just inside the endpoints. |
+| Edge | Collapse edge | Drag along the edge or choose **Marked end**, **Midpoint**, or **Other end**. This merges both endpoints at the chosen position. |
+| Vertex | Split point | Set Radius or drag up/down to replace a vertex with a ring and center patch. **Circularize ring**, **Triangulate center**, and **Crease ring** control the patch. |
+| Vertex | Extrude point | Set Distance or drag up/down to create a pointed protrusion along the averaged surface normal. **Base radius** controls its footprint independently; circularization and ring creasing are optional. |
+| Face | Insert center point | Tap a face to insert its center and connect it to every corner with triangles. |
+| Face | Split face | Tap to connect a new center to shared edge midpoints, producing quads inside each selected face. |
+
+**Insert center point** and **Split face** act on a tap even when Tap to repeat is disabled. Both also offer **Apply to selection**. New construction tools clear the component selection after committing; hover or select the new geometry for the next operation. Their buttons can be added to custom menus, shelves and shortcuts, and their settings save in tool presets.
+
+To turn a point into a tube base, use **Vertex → Split point**, then switch to **Face → Extrude** and drag the center patch outward. A three- or four-sided patch remains one selectable polygon unless Triangulate center is enabled; larger patches use center triangles, which can be selected together for region extrusion.
+
+![A pair of vertices split into creased patches with matching symmetry](../images/modeling-point-split.png)
+
+![The patches extruded into short tubes](../images/modeling-point-tube.png)
+
+![A surface edge extrusion preview showing new geometry before release](../images/modeling-edge-construction-preview.png)
+
+![Matching faces split into quads, with neighboring faces connected to the new edge midpoints](../images/modeling-face-split.png)
+
+Point construction requires closed, visible vertex neighborhoods. Selected points must not share a face, and the radius must be less than half the shortest incident edge. Surface-edge extrusion requires separate edge neighborhoods; open border chains can share endpoints. Interactive Collapse edge requires edges with separate endpoints; the **Topology → Collapse edges** command remains available for collapsing connected sets to their average position. Symmetry rejects conflicting endpoint or adjacent-side choices instead of applying only part of an edit.
+
+New edge points propagate to neighboring faces to keep the surface connected without cracks. Polygons with more than four corners are represented by triangles; neighboring faces can therefore become triangulated. Source masks, group weights, face labels and surviving creases are retained. Hidden faces and protected masks reject the complete operation. Component extrusion creates geometry but does not automatically fuse intersecting surfaces.
 
 ### Push through to make a tunnel
 
@@ -147,9 +179,9 @@ Selection previews show the matching components. Symmetry copies of an edit comm
 
 ### Keep useful tool setups and inspect the smooth result
 
-Expand **Tool presets**, enter a name, then **Save tool preset**. Each preset stores component mode, action, target, axis, amount, loop count, contact options and protection/preview settings. **Use …** restores that setup without changing geometry. Right-click a preset to add it to a custom menu or shelf, or assign a shortcut. Presets save in application preferences, independently of the project. Deleting one leaves any old shelf entry unavailable; its identifier is never reused.
+Expand **Tool presets**, enter a name, then **Save tool preset**. Each preset stores component mode, action, target, axis, amount, loop count, flat-island angle, component-construction options, contact options and protection/preview settings. **Use …** restores that setup without changing geometry. Right-click a preset to add it to a custom menu or shelf, or assign a shortcut. Presets save in application preferences, independently of the project. Deleting one leaves any old shelf entry unavailable; its identifier is never reused.
 
-**Tap to repeat** is on by default for Extrude, Extrude and fuse, Inset, Bevel boundary, Move, Rotate, Scale and Slide loop. Drag to establish an amount, then tap another target to apply the displayed amount and current options. Each measured tool remembers its amount during the session, including when switching tools. Tapping a selected component applies to that selection; tapping elsewhere uses the hovered target. You can also enter an amount before the first tap. Small pen movements within three screen pixels count as a tap; once you drag farther, returning to the starting point does not trigger repeat. Escape cancels, and each completed tap is one Undo. Turn **Tap to repeat** off for drag-only editing; the toggle can be added to menus/shelves or shortcuts and is saved in tool presets. Select keeps its tap/paint behavior, and a Loop cut tap remains centered.
+**Tap to repeat** is on by default for Extrude, Extrude and fuse, Inset, Bevel boundary, Move, Rotate, Scale, Slide loop and the measured edge/point construction tools. Drag to establish an amount, then tap another target to apply the displayed amount and current options. Each measured tool remembers its amount during the session, including when switching tools. Tapping a selected component applies to that selection; tapping elsewhere uses the hovered target. You can also enter an amount before the first tap. Small pen movements within three screen pixels count as a tap; once you drag farther, returning to the starting point does not trigger repeat. Escape cancels, and each completed tap is one Undo. Turn **Tap to repeat** off for drag-only editing; the toggle can be added to menus/shelves or shortcuts and is saved in tool presets. Select keeps its tap/paint behavior, and a Loop cut tap remains centered.
 
 ![An inset repeated by tapping another target, with matching symmetry](../images/modeling-tap-repeat.png)
 

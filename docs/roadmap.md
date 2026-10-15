@@ -161,28 +161,23 @@ The interaction model is **Component → Action → Target → Options**. Compon
 
 Ordinary extrusion, contact fusion, vertex welding and loop dissolution have different meanings. Contact fusion gets a visible snap distance; geometric matching uses a separate conservative tolerance. Increasing tolerance does not make incompatible topology safe. Face labels describe polygon regions; weighted vertex groups remain a distinct selection/weighting concept even where they share existing storage.
 
-#### Milestone 5: construct from edges and points — planned, not shipped
+#### Milestone 5: construct from edges and points — implemented
 
-The first four milestones do not cover all of the basic component construction actions. The follow-up documentation audit identifies these gaps:
+| Workflow | Delivered behavior |
+| --- | --- |
+| Collapse an edge | Explicit endpoint/midpoint destination, numeric fraction, marked endpoint and pen preview; connected-set collapse remains a separate topology command |
+| Split an edge | Drag insertion along the edge or enter a fraction; neighboring faces receive matching vertices |
+| Extrude an edge | Extend an open border with a quad strip, or build a surface ridge with a visible adjacent-side choice locked at pen-down |
+| Extrude a point | Build a pointed protrusion with independent base radius, averaged-normal height, circularization and ring creasing |
+| Split a point into a patch | Replace a closed vertex fan with a ring and center patch; radius, circularization, triangulation and crease controls; patch can be extruded into a tube |
+| Add topology inside a face | Center-point insertion and quad-preserving face split; shared edge splits propagate into neighbors without T-junctions |
+| Angle-based flat islands | Select connected visible faces within 0–180° of the first face normal, with hover feedback and a preset-compatible slider |
 
-| Workflow | Current implementation | Next deliverable |
-| --- | --- | --- |
-| Collapse an edge | Selected connected edges collapse to their average position | Explicit endpoint or midpoint destination, preview and direct pen targeting |
-| Split an edge | Midpoint insertion, with adjacent polygons triangulated as needed | Drag the insertion position; preview the resulting connections |
-| Extrude an edge | Missing | Extend an open border with new faces; construct from a surface edge with a visible, locked choice of adjacent side |
-| Extrude a point | Missing | Create a local protrusion with new faces, rather than only moving existing geometry |
-| Split a point into a patch | Missing | Expand a vertex into a closed ring and center patch; control radius and center topology, with optional circularization and ring creasing |
-| Add topology inside a face | Opposite quad corners can be connected | Center-point insertion and quad-preserving face split; propagate shared edge splits to avoid T-junctions |
+These tools reuse numeric input, tap repeat, presets, mask protection, exact face labels, atomic symmetry and one-step Undo. Directional actions identify the chosen side or endpoint before contact and retain it throughout the stroke. Face-center actions are direct taps. New component construction clears selection after committing. Unsupported overlapping selections reject atomically; point rings require closed visible fans and a radius below half the shortest incident edge. Larger polygons are represented by triangles, including neighboring faces that need new edge points. These operations do not perform intersection detection or Boolean fusion.
 
-external software vendor's Edge Actions distinguish collapse, extrusion and split. Edge extrusion generates new geometry and uses cursor position to choose direction; edge split supports adjusting the new point along the edge. Our midpoint commands cover only part of those workflows.
+Geometry and controller tests cover closed surfaces, border extension, point patches and tube extrusion, edge positions, attributes, symmetry, masks, cancellation, tap repeat, Undo and preset compatibility. The rendered exercise uses the actual controls for a symmetric creased point patch, tube extrusion, surface-edge preview and face split. See [the component construction guide](guide/modeling.md#construct-from-edges-points-and-face-centers) for controls and limits.
 
-The closest match to turning one vertex into a multi-sided face is **Point Split**, which creates a circular patch around the clicked vertex. Its center, ring creasing and circularization options differ by target. **Point Extrude** produces a pointed protrusion and uses the nearby topology to choose its direction. See Point Actions. This should be a useful editable patch in Clay Form; it does not require introducing a native n-gon mesh representation.
-
-Polygon Actions distinguish Insert Point (center joined to corners) from Split (center joined to edge midpoints, maintaining quads). Both are currently missing.
-
-Deliver these as one component-construction workflow. Reuse the existing Action/Target controls, numeric input, tap repeat, presets, mask protection, exact face labels, atomic symmetry and one-step Undo. Directional actions must visibly identify the chosen side before contact and retain it throughout the stroke. Point rings must remain conforming to adjacent faces; unsupported overlapping selections must be rejected atomically.
-
-Acceptance exercise: extend a border into a strip, extrude a surface edge into a ridge, adjust and collapse an edge to an explicit endpoint, split a vertex into a circular patch and extrude it into a tube, then subdivide a neighboring face without cracks. Exercise matching symmetry, masks, cancellation, repeat, group boundaries, Undo and project round trips. This is a new planned milestone, not a claim of current support.
+The documentation audit used external software vendor's Edge Actions, Point Actions and Polygon Actions to identify missing construction workflows. Clay Form exposes explicit modes and visible values rather than duplicating modifier-dependent behavior.
 
 #### Research informing the design
 
