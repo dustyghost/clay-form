@@ -743,3 +743,309 @@ fn edge_workflow_offscreen_review() {
     assert_eq!(g.app.document.geometry_snapshot(), source);
     g.save("thickness-review");
 }
+
+#[test]
+#[ignore = "interactive modeling walkthrough; requires EGL and CLAY_GUIDE_PREVIEW"]
+fn modeling_workflow_offscreen_review() {
+    use crate::sculpt::Geometry;
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
+    let directory = std::path::Path::new(&directory);
+    std::fs::create_dir_all(directory).unwrap();
+    let mut g = Guide::new(directory, [1100, 900]);
+    g.interactive = true;
+    g.panel(Tool::Mesh, Dock::Right);
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
+    primitive.divisions = [3; 3];
+    g.app
+        .document
+        .replace_geometry(Geometry::new(primitive.mesh().unwrap()))
+        .unwrap();
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    g.app.camera.zoom = 0.65;
+    g.frame(vec![]);
+    click_guide_label(&mut g, "Pen modeling");
+    assert!(g.app.ui.modeling.active);
+    let (rect, _) = g.frame(vec![]);
+    let center = rect.center();
+    g.frame(vec![
+        egui::Event::PointerMoved(center),
+        primary_event(center, true),
+    ]);
+    g.frame(vec![primary_event(center, false)]);
+    assert_eq!(g.app.ui.modeling.count, 1);
+    click_guide_label(&mut g, "Selection to vertex group");
+    click_guide_label(&mut g, "Create group from selection");
+    assert_eq!(g.app.document.mesh().vertex_groups.len(), 1);
+    g.save("modeling-selection");
+    click_guide_label(&mut g, "Selection to vertex group");
+    click_guide_label(&mut g, "Extrude");
+    let before = g.app.document.geometry_snapshot();
+    let history = g.app.document.history_counts();
+    g.app.camera.yaw = 0.2;
+    g.app.camera.pitch = -0.15;
+    g.frame(vec![
+        egui::Event::PointerMoved(center),
+        primary_event(center, true),
+    ]);
+    g.frame(vec![egui::Event::PointerMoved(
+        center + Vec2::new(0., -70.),
+    )]);
+    assert!(g.app.viewport.modeling.preview().is_some());
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.save("modeling-extrusion-preview");
+    g.frame(vec![slice_key(egui::Key::Escape, true)]);
+    g.frame(vec![
+        primary_event(center, false),
+        slice_key(egui::Key::Escape, false),
+    ]);
+    assert_eq!(g.app.document.history_counts(), history);
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    let distance = rect.width().min(rect.height()) * 0.35 * g.app.camera.zoom * 2.;
+    g.stroke(center, center + Vec2::new(0., distance));
+    assert_eq!(
+        g.app.document.undo_label(),
+        Some("Extrude tunnel"),
+        "{}",
+        g.app.ui.status
+    );
+    g.app.document.mesh().validate_closed().unwrap();
+    assert_eq!(g.app.document.history_counts().0, history.0 + 1);
+    // Small turn exposes the thickness of the tunnel walls.
+    g.app.camera.yaw = 0.2;
+    g.app.camera.pitch = -0.15;
+    g.save("modeling-tunnel");
+    click_guide_label(&mut g, "Undo");
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    assert!(g.app.ui.modeling.active);
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    click_guide_label(&mut g, "Edge");
+    click_guide_label(&mut g, "Loop cut");
+    let edge = center + Vec2::new(distance / 6., 0.);
+    g.frame(vec![egui::Event::PointerMoved(edge)]);
+    g.save("modeling-loop-preview");
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.frame(vec![primary_event(edge, true)]);
+    g.frame(vec![primary_event(edge, false)]);
+    assert!(
+        g.app.document.mesh().vertices.len() > before.mesh.vertices.len(),
+        "{}",
+        g.app.ui.status
+    );
+    assert_eq!(g.app.document.undo_label(), Some("Insert edge loops"));
+    let single_count = g.app.document.mesh().vertices.len() - before.mesh.vertices.len();
+    click_guide_label(&mut g, "Undo");
+    click_guide_label(&mut g, "+");
+    click_guide_label(&mut g, "+");
+    assert_eq!(g.app.ui.modeling.loop_count, 3);
+    g.frame(vec![
+        egui::Event::PointerMoved(edge),
+        primary_event(edge, true),
+    ]);
+    let slid = edge + Vec2::new(0., 10.);
+    g.frame(vec![egui::Event::PointerMoved(slid)]);
+    assert!(g.app.viewport.modeling.dragging());
+    g.save("modeling-loop-drag");
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.frame(vec![primary_event(slid, false)]);
+    assert_eq!(
+        g.app.document.mesh().vertices.len() - before.mesh.vertices.len(),
+        single_count * 3
+    );
+    assert_eq!(g.app.document.history_counts().0, history.0 + 1);
+    click_guide_label(&mut g, "Undo");
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+}
+
+#[test]
+#[ignore = "boundary/adjacent tunnel walkthrough; requires EGL and CLAY_GUIDE_PREVIEW"]
+fn modeling_boundary_join_offscreen_review() {
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
+    let directory = std::path::Path::new(&directory);
+    std::fs::create_dir_all(directory).unwrap();
+    let mut g = Guide::new(directory, [1100, 900]);
+    g.interactive = true;
+    g.panel(Tool::Mesh, Dock::Right);
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
+    primitive.divisions = [4; 3];
+    let mut mesh = primitive.mesh().unwrap();
+    for v in &mut mesh.vertices {
+        v.2 *= 0.1;
+    }
+    g.app
+        .document
+        .replace_geometry(crate::sculpt::Geometry::new(mesh))
+        .unwrap();
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    g.app.camera.zoom = 0.65;
+    click_guide_label(&mut g, "Pen modeling");
+    click_guide_label(&mut g, "Extrude");
+    let before = g.app.document.geometry_snapshot();
+    let history = g.app.document.history_counts();
+    let (rect, _) = g.frame(vec![]);
+    let scale = rect.width().min(rect.height()) * 0.35 * g.app.camera.zoom;
+    // Adjacent holes, followed by a notch reaching the outside bottom edge.
+    for (x, y) in [(0.25, 0.25), (-0.25, 0.25), (0.25, -0.75)] {
+        let start = rect.center() + Vec2::new(x * scale, -y * scale);
+        g.stroke(start, start + Vec2::new(0., 0.21 * scale));
+        assert_eq!(
+            g.app.document.undo_label(),
+            Some("Extrude tunnel"),
+            "{}",
+            g.app.ui.status
+        );
+        g.app.document.mesh().validate_closed().unwrap();
+    }
+    assert_eq!(g.app.document.history_counts().0, history.0 + 3);
+    g.app.camera.yaw = 0.35;
+    g.app.camera.pitch = -0.2;
+    g.save("modeling-boundary-join");
+    let after = g.app.document.geometry_snapshot();
+    for _ in 0..3 {
+        g.app.dispatch(Command::Undo, &g.ctx);
+    }
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    for _ in 0..3 {
+        g.app.dispatch(Command::Redo, &g.ctx);
+    }
+    assert_eq!(g.app.document.geometry_snapshot(), after);
+    g.app.document.project().validate().unwrap();
+}
+
+#[test]
+#[ignore = "selection painting and loops walkthrough; requires EGL and CLAY_GUIDE_PREVIEW"]
+fn modeling_selection_offscreen_review() {
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
+    let directory = std::path::Path::new(&directory);
+    std::fs::create_dir_all(directory).unwrap();
+    let mut g = Guide::new(directory, [1100, 1000]);
+    g.interactive = true;
+    g.panel(Tool::Mesh, Dock::Right);
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Grid);
+    primitive.divisions = [5, 5, 1];
+    g.app
+        .document
+        .replace_geometry(crate::sculpt::Geometry::new(primitive.mesh().unwrap()))
+        .unwrap();
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    g.app.camera.zoom = 0.7;
+    click_guide_label(&mut g, "Pen modeling");
+    let before = g.app.document.geometry_snapshot();
+    let history = g.app.document.history_counts();
+    let (rect, _) = g.frame(vec![]);
+    let scale = rect.width().min(rect.height()) * 0.35 * g.app.camera.zoom;
+    let p = |x: f32, y: f32| rect.center() + Vec2::new(x * scale, -y * scale);
+    g.stroke(p(-0.8, 0.), p(0.8, 0.));
+    assert_eq!(g.app.ui.modeling.count, 5);
+    g.save("modeling-paint-selection");
+    click_guide_label(&mut g, "Loop");
+    g.frame(vec![egui::Event::PointerMoved(p(0., 0.18))]);
+    g.save("modeling-face-loop");
+    g.frame(vec![primary_event(p(0., 0.18), true)]);
+    g.frame(vec![primary_event(p(0., 0.18), false)]);
+    assert_eq!(g.app.ui.modeling.count, 5);
+    click_guide_label(&mut g, "Edge");
+    click_guide_label(&mut g, "Parallel edges");
+    g.frame(vec![
+        egui::Event::PointerMoved(p(0.2, 0.)),
+        primary_event(p(0.2, 0.), true),
+    ]);
+    g.frame(vec![primary_event(p(0.2, 0.), false)]);
+    assert_eq!(g.app.ui.modeling.count, 6);
+    g.save("modeling-edge-ring");
+    click_guide_label(&mut g, "Loop");
+    g.frame(vec![
+        egui::Event::PointerMoved(p(0.2, 0.)),
+        primary_event(p(0.2, 0.), true),
+    ]);
+    g.frame(vec![primary_event(p(0.2, 0.), false)]);
+    assert_eq!(g.app.ui.modeling.count, 5);
+    g.save("modeling-edge-loop");
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    assert_eq!(g.app.document.history_counts(), history);
+}
+
+#[test]
+#[ignore = "symmetric selection, extrusion and dissolve walkthrough; requires EGL and CLAY_GUIDE_PREVIEW"]
+fn modeling_symmetry_dissolve_offscreen_review() {
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
+    let directory = std::path::Path::new(&directory);
+    std::fs::create_dir_all(directory).unwrap();
+    let mut g = Guide::new(directory, [1100, 1050]);
+    g.interactive = true;
+    g.panel(Tool::Mesh, Dock::Right);
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Grid);
+    primitive.divisions = [5, 5, 1];
+    g.app
+        .document
+        .replace_geometry(crate::sculpt::Geometry::new(primitive.mesh().unwrap()))
+        .unwrap();
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    g.app.camera.zoom = 0.65;
+    click_guide_label(&mut g, "Pen modeling");
+    click_guide_label(&mut g, "Symmetry");
+    assert!(g.app.document.symmetry().enabled);
+    let (rect, _) = g.frame(vec![]);
+    let scale = rect.width().min(rect.height()) * 0.35 * g.app.camera.zoom;
+    let p = |x: f32, y: f32| rect.center() + Vec2::new(x * scale, -y * scale);
+    g.frame(vec![
+        egui::Event::PointerMoved(p(0.4, 0.)),
+        primary_event(p(0.4, 0.), true),
+    ]);
+    g.frame(vec![primary_event(p(0.4, 0.), false)]);
+    assert_eq!(g.app.ui.modeling.count, 2);
+    g.save("modeling-symmetry-selection");
+    click_guide_label(&mut g, "Extrude");
+    let before = g.app.document.geometry_snapshot();
+    let history = g.app.document.history_counts();
+    g.frame(vec![
+        egui::Event::PointerMoved(p(0.4, 0.)),
+        primary_event(p(0.4, 0.), true),
+    ]);
+    let end = p(0.4, 0.) + Vec2::new(0., -50.);
+    g.frame(vec![egui::Event::PointerMoved(end)]);
+    let preview = g.app.viewport.modeling.preview().expect("mirrored preview");
+    assert_eq!(preview.quads.len(), before.mesh.quads.len() + 8);
+    crate::sculpt::ModelingSymmetry::new(preview, g.app.document.symmetry()).unwrap();
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.frame(vec![primary_event(end, false)]);
+    assert_eq!(g.app.document.history_counts().0, history.0 + 1);
+    g.app.camera.yaw = 0.25;
+    g.app.camera.pitch = -0.2;
+    g.save("modeling-symmetry-extrude");
+    click_guide_label(&mut g, "Undo");
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    click_guide_label(&mut g, "Edge");
+    click_guide_label(&mut g, "Loop");
+    g.frame(vec![
+        egui::Event::PointerMoved(p(0.2, 0.)),
+        primary_event(p(0.2, 0.), true),
+    ]);
+    g.frame(vec![primary_event(p(0.2, 0.), false)]);
+    assert_eq!(g.app.ui.modeling.count, 10);
+    g.frame(vec![egui::Event::PointerMoved(
+        rect.left_top() + Vec2::new(5., 5.),
+    )]);
+    g.save("modeling-dissolve-before");
+    click_guide_label(&mut g, "Dissolve selected loops");
+    assert_eq!(
+        (
+            g.app.document.mesh().vertices.len(),
+            g.app.document.mesh().quads.len()
+        ),
+        (24, 15),
+        "{}",
+        g.app.ui.status
+    );
+    assert_eq!(g.app.document.history_counts().0, history.0 + 1);
+    g.save("modeling-dissolve-after");
+    click_guide_label(&mut g, "Undo");
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+}

@@ -78,7 +78,27 @@ impl Scene {
         show_triangles: bool,
         mut renderer: Option<&mut Renderer>,
         stroke: Option<&super::stroke::PendingStroke>,
+        model_preview: Option<&crate::sculpt::Mesh>,
     ) -> Self {
+        if let Some(mesh) = model_preview {
+            let geometry = if let Some(renderer) = renderer.as_mut() {
+                renderer.geometry(document)
+            } else {
+                Arc::new(DisplayMesh::new(document))
+            };
+            let scene = Self::from_geometry(rect, camera, geometry, renderer.is_none());
+            let display = Arc::new(DisplayMesh::with_active_mesh(document, mesh));
+            let preview = Self::from_geometry(rect, camera, display.clone(), renderer.is_none());
+            preview.paint_geometry(
+                painter,
+                renderer.as_deref(),
+                wire,
+                mode,
+                show_triangles,
+                Some(display),
+            );
+            return scene;
+        }
         let Some(stroke) = stroke.filter(|s| s.is_stamp()) else {
             return Self::paint_with_renderer(
                 painter,
@@ -529,6 +549,10 @@ impl Scene {
     pub fn pick_model(&self, point: Pos2) -> Option<(usize, Vec3, Vec3)> {
         let (p, normal, face) = pick_surface(self, &self.all_faces, point)?;
         Some((self.geometry.owners[face], p, normal))
+    }
+    pub(super) fn pick_face(&self, point: Pos2) -> Option<usize> {
+        let (_, _, face) = pick_surface(self, &self.all_faces, point)?;
+        (self.geometry.owners[face] == self.active).then_some(self.geometry.source_faces[face])
     }
     pub fn pick_polygroup(&self, point: Pos2, document: &Document) -> Option<usize> {
         let (_, _, face) = pick_surface(self, &self.all_faces, point)?;

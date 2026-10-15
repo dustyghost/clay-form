@@ -1,6 +1,10 @@
 //! Converts viewport gestures into camera movement and document sculpt dabs.
 mod controls;
 mod edges;
+mod modeling;
+pub(crate) use modeling::{
+    ComponentMode, ModelTool, ModelingOptions, SelectionChange, SelectionSpan,
+};
 mod gizmo;
 mod gpu;
 mod projection;
@@ -38,6 +42,7 @@ pub(crate) enum Gesture {
     Slice,
     Select,
     Edges,
+    Modeling,
 }
 struct SnakeStroke {
     center: Vec3,
@@ -46,6 +51,7 @@ struct SnakeStroke {
 }
 #[derive(Default)]
 pub(crate) struct Viewport {
+    pub(crate) modeling: modeling::ModelingState,
     edge_selection: Vec<[usize; 2]>,
     edge_revision: u64,
     references: references::ReferenceOverlay,
@@ -74,6 +80,7 @@ pub(crate) struct Viewport {
 #[derive(Clone, Copy)]
 pub(crate) struct ViewportOptions {
     pub edge_select: bool,
+    pub modeling: Option<ModelingOptions>,
     pub arrange_references: bool,
     pub references_visible: bool,
     pub slice: Option<crate::sculpt::SliceOptions>,
@@ -124,12 +131,15 @@ impl Viewport {
     pub(crate) fn cancel(&mut self, document: &mut Document) {
         let renderer = self.renderer.take();
         let edge_selection = std::mem::take(&mut self.edge_selection);
+        let mut modeling = std::mem::take(&mut self.modeling);
+        modeling.cancel();
         let edge_revision = self.edge_revision;
         let blocked_until_release = self.blocked_until_release || self.references.dragging();
         let mut references = std::mem::take(&mut self.references);
         references.cancel_drag();
         *self = Self {
             edge_selection,
+            modeling,
             edge_revision,
             blocked_until_release,
             references,
@@ -214,6 +224,13 @@ impl Viewport {
             pending.pressure = options.pressure;
             pending.invert = options.reverse.active(modifiers);
         }
+        self.modeling.update_preview(
+            document,
+            ui.input(|i| i.pointer.interact_pos()),
+            options.modeling,
+            options.enabled,
+            ui.input(|i| i.key_pressed(egui::Key::Escape)),
+        );
         let scene = Scene::paint_with_stroke(
             &painter,
             rect,
@@ -224,6 +241,7 @@ impl Viewport {
             options.wire_triangles,
             self.renderer.as_mut(),
             self.pending_stroke.as_ref().filter(|_| previewing),
+            self.modeling.preview(),
         );
         if let Some(renderer) = &self.renderer {
             renderer.set_backfaces(options.backface_opacity);
@@ -287,6 +305,7 @@ impl Viewport {
             gizmo_rect,
             options.enabled
                 && !options.edge_select
+                && options.modeling.is_none()
                 && !options.arrange_references
                 && options.slice.is_none()
                 && options.transform_mode == TransformMode::Sculpt,
@@ -349,6 +368,7 @@ impl Viewport {
         if options.enabled
             && self.gesture != Some(Gesture::Transform)
             && self.pending_stroke.is_none()
+            && !self.modeling.dragging()
             && self.slice.is_none()
             && self.slice_path.is_none()
             && response.hovered()
@@ -359,6 +379,7 @@ impl Viewport {
         if options.enabled
             && self.gesture != Some(Gesture::Transform)
             && self.pending_stroke.is_none()
+            && !self.modeling.dragging()
             && self.slice.is_none()
             && self.slice_path.is_none()
             && response.dragged_by(egui::PointerButton::Secondary)
@@ -375,6 +396,7 @@ impl Viewport {
         if options.enabled
             && self.gesture != Some(Gesture::Transform)
             && self.pending_stroke.is_none()
+            && !self.modeling.dragging()
             && self.slice.is_none()
             && self.slice_path.is_none()
             && response.dragged_by(egui::PointerButton::Middle)
@@ -387,6 +409,12 @@ impl Viewport {
         }
         let primary =
             response.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_down());
+        if self.update_modeling(
+            ui, &response, &painter, &scene, document, options, gizmo_rect,
+        ) {
+            draw_gizmo(camera, &painter, gizmo_rect, pointer);
+            return;
+        }
         if options.edge_select
             && options.enabled
             && (primary

@@ -18,6 +18,8 @@ See [Development](../development.md#update-guide-screenshots) for prerequisites 
 
 | Images | What they explain | Capture test |
 | --- | --- | --- |
+| `modeling-boundary-join.png` | [Joining adjacent holes and opening exterior notches across depth loops](../guide/modeling.md#push-through-to-make-a-tunnel) | `modeling_boundary_join_offscreen_review` |
+| `modeling-selection.png`, `modeling-extrusion-preview.png`, `modeling-tunnel.png`, `modeling-loop-preview.png`, `modeling-loop-drag.png` | [Component groups, extrusion previews, and matching-face tunnels](../guide/modeling.md#pen-modeling) | `modeling_workflow_offscreen_review` |
 | `edge-loops-before.png`, `edge-loops-after.png` | [Support loops around an open hole](../guide/edges.md#add-support-loops-around-a-hole) | `edge_tools_offscreen_preview` |
 | `crease-smooth-before.png`, `crease-smooth-after.png` | [Smoothness with and without creases](../guide/edges.md#control-subdivision-smoothness) | `edge_tools_offscreen_preview` |
 | `crease-selection.png` | [Select and remove creases](../guide/edges.md#select-edges-and-loops) | `edge_tools_offscreen_preview` |
@@ -38,6 +40,8 @@ See [Development](../development.md#update-guide-screenshots) for prerequisites 
 | `mask-lasso-preview.png`, `mask-lasso-result.png` | [Protection before/after release](../guide/selection.md#example-protect-a-region-with-a-lasso) | `gpu_lasso_preview_and_commit` |
 | `hide-lasso-preview.png`, `hide-lasso-result.png` | [Hiding before/after release](../guide/selection.md#hide-with-a-lasso) | `gpu_lasso_preview_and_commit` |
 | `rotation-controls.png` | [Rotation rings and the live angle](../guide/modeling.md#example-rotate-a-cube-and-keep-its-recipe) | `gpu_rotation_controls_and_primitive_regeneration` |
+| `modeling-paint-selection.png`, `modeling-face-loop.png`, `modeling-edge-ring.png`, `modeling-edge-loop.png` | [Paint selection and loop patterns](../guide/modeling.md#select-faces-edges-or-vertices) | `modeling_selection_offscreen_review` |
+| `modeling-symmetry-selection.png`, `modeling-symmetry-extrude.png`, `modeling-dissolve-before.png`, `modeling-dissolve-after.png` | [Symmetry and dissolving loops](../guide/modeling.md#dissolve-selected-loops) | `modeling_symmetry_dissolve_offscreen_review` |
 
 ## Example assets
 

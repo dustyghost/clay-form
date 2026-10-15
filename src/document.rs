@@ -11,6 +11,7 @@ mod brushes;
 mod edit;
 mod mask;
 mod mesh;
+mod modeling;
 mod primitive;
 mod references;
 mod scene;

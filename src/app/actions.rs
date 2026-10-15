@@ -9,8 +9,84 @@ impl App {
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         let active_brush = self.ui.brush_index_for_context(&self.document, ctx);
         let command = match action {
+            Action::PenModeling => Some(Command::ModelingMode(!self.ui.modeling.active)),
+            Action::ModelFaces
+            | Action::ModelEdges
+            | Action::ModelVertices
+            | Action::ModelSelectSingle
+            | Action::ModelSelectLoops
+            | Action::ModelSelectRing
+            | Action::ModelSelect
+            | Action::ModelExtrude
+            | Action::ModelLoopCut
+            | Action::ModelReplace
+            | Action::ModelAdd
+            | Action::ModelRemove => {
+                use crate::viewport::{
+                    ComponentMode as Mode, ModelTool as Tool, SelectionChange as Change,
+                    SelectionSpan as Span,
+                };
+                if !self.ui.modeling.active {
+                    self.dispatch(Command::ModelingMode(true), ctx);
+                }
+                self.viewport.cancel(&mut self.document);
+                let mode = match action {
+                    Action::ModelFaces | Action::ModelExtrude => Mode::Face,
+                    Action::ModelEdges | Action::ModelLoopCut | Action::ModelSelectRing => {
+                        Mode::Edge
+                    }
+                    Action::ModelSelectLoops if self.ui.modeling.mode == Mode::Vertex => Mode::Edge,
+                    Action::ModelVertices => Mode::Vertex,
+                    _ => self.ui.modeling.mode,
+                };
+                if mode != self.ui.modeling.mode {
+                    self.dispatch(Command::ModelingComponent(mode), ctx);
+                }
+                self.ui.modeling.tool = match action {
+                    Action::ModelExtrude => Tool::Extrude,
+                    Action::ModelLoopCut => Tool::LoopCut,
+                    _ => Tool::Select,
+                };
+                match action {
+                    Action::ModelSelectSingle => self.ui.modeling.span = Span::Single,
+                    Action::ModelSelectLoops => self.ui.modeling.span = Span::Loop,
+                    Action::ModelSelectRing => self.ui.modeling.span = Span::Ring,
+                    Action::ModelReplace => self.ui.modeling.change = Change::Replace,
+                    Action::ModelAdd => self.ui.modeling.change = Change::Add,
+                    Action::ModelRemove => self.ui.modeling.change = Change::Remove,
+                    _ => {}
+                }
+                None
+            }
+            Action::ModelJoin => {
+                self.ui.modeling.join = !self.ui.modeling.join;
+                None
+            }
+            Action::ModelFewerLoops | Action::ModelMoreLoops => {
+                self.ui.modeling.loop_count = (self.ui.modeling.loop_count as i32
+                    + if action == Action::ModelMoreLoops {
+                        1
+                    } else {
+                        -1
+                    })
+                .clamp(1, crate::sculpt::LoopCut::MAX_COUNT as i32)
+                    as u32;
+                None
+            }
+            Action::ModelClearSelection => Some(Command::ClearModelSelection),
+            Action::ModelSelectLoop => Some(Command::ModelSelectLoop),
+            Action::ModelDissolveLoops => Some(Command::ModelDissolveLoops),
+            Action::ModelCreateGroup => Some(Command::GroupModelSelection(None, false)),
+            Action::ModelAddToGroup | Action::ModelRemoveFromGroup => {
+                Some(Command::GroupModelSelection(
+                    Some(self.ui.modeling.group),
+                    action == Action::ModelRemoveFromGroup,
+                ))
+            }
+
             Action::SelectEdges => {
                 self.ui.edges.selecting = !self.ui.edges.selecting;
+                self.ui.modeling.active = false;
                 self.viewport.cancel(&mut self.document);
                 self.ui.selection_tool = None;
                 self.ui.slice_active = false;
@@ -53,6 +129,7 @@ impl App {
                             // Selecting edges should make the next click refine that
                             // selection, rather than unexpectedly sculpt the surface.
                             self.ui.edges.selecting = true;
+                            self.ui.modeling.active = false;
                             self.viewport.cancel(&mut self.document);
                             self.ui.selection_tool = None;
                             self.ui.slice_active = false;

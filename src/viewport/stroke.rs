@@ -199,6 +199,7 @@ mod tests {
                         false,
                         None,
                         pending,
+                        None,
                     );
                     assert!(
                         scene.geometry.mesh.mask.iter().all(|&m| m == 0.),

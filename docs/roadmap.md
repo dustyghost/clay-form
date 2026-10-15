@@ -136,6 +136,16 @@ Completion criteria:
 - Switching projection keeps the model framed sensibly and does not alter geometry.
 - Near and far clipping do not unexpectedly hide ordinary working views.
 
+## Pen modeling foundation
+
+First pass implemented 15 October 2026. Mesh now exposes an explicit Pen modeling mode with face/edge/vertex targets, visible Replace/Add/Remove selection controls, paint selection, directional face loops, edge loops and parallel edge rings, component-to-vertex-group assignment, flat-region extrusion previews, single-face matching tunnel joins, and draggable cuts through quad strips. A tap centers the cuts; dragging slides them, with 1–16 loops controlled by visible buttons or the wheel while held. Modeling buttons are available to custom menus, shelves, and shortcuts. Complete quad-loop dissolution and topology-checked mirror/radial symmetry are also implemented for pen modeling. Existing support loops and creasing remain available.
+
+Extrusions use vertical pen travel independent of pressure. Release commits one undo step; Escape discards the preview. Tunnel candidates require reversed, aligned boundary correspondence and snap to the first matching depth. Joins cancel coincident side patches at outer edges and beside existing holes, including subdivided side strips; the remaining walls conform to existing depth loops. Edits validate orientation, degeneracy, duplicate topology, mesh limits, and selection revision before commit. Stored levels are replaced only on a successful topology edit. Selection and previews are session-only, so the project schema remains unchanged.
+
+Focused geometry/controller checks cover closed tunnel topology, attribute/crease transfer, selection modes, group assignment, loop cuts, perspective previews, cancel, stale selections, modal blocking, navigation, undo/redo, and saved-project validation. The rendered workflow exercises the actual controls, selection-to-group, extrusion cancellation, tunnel commit, and undo. Hands-on tablet feedback is still needed before treating these interactions as settled.
+
+Next modeling increments: sliding existing loops; component move/scale/rotate; inset and bevel; nonplanar region extrusion; multi-face bridging; lasso component selection; and group assignment across subdivision levels. General intersection handling and Boolean merging remain separate work. See [Pen modeling](guide/modeling.md#pen-modeling) for the current workflow and limits.
+
 ## Longer term candidates
 
 These are separate possibilities, outside the seven priorities above. Each needs its own scope before implementation.

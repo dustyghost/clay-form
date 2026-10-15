@@ -13,6 +13,7 @@ mod edges;
 mod icons;
 mod menus;
 mod mirror;
+mod modeling;
 mod primitive;
 mod references;
 mod sidebar;
@@ -26,6 +27,7 @@ pub(crate) struct UiState {
     pub(crate) primitive_controls_requested: bool,
     pub transform_mode: crate::viewport::TransformMode,
     pub edges: edges::EdgeControls,
+    pub modeling: modeling::ModelingControls,
     pub mirror_axis: Axis,
     pub slice_active: bool,
     pub selection_tool: Option<crate::viewport::SelectionTool>,
@@ -79,6 +81,11 @@ impl Default for UiState {
             primitive_controls_requested: false,
             transform_mode: crate::viewport::TransformMode::Sculpt,
             edges: Default::default(),
+            modeling: modeling::ModelingControls {
+                join: true,
+                loop_count: 1,
+                ..Default::default()
+            },
             mirror_axis: Axis::X,
             slice_active: false,
             selection_tool: None,
@@ -1089,6 +1096,7 @@ impl UiState {
             }
         });
         ui.separator();
+        self.modeling_controls(ui, document, commands);
         self.edge_controls(ui, document, commands);
         if self.mesh_busy {
             ui.spinner();

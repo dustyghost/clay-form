@@ -129,6 +129,18 @@ impl App {
             self.viewport.cancel(&mut self.document);
             self.viewport.wait_for_release();
         }
+        self.viewport.modeling.sync(&self.document);
+        self.ui.modeling.count = self.viewport.modeling.selection().len();
+        if self.ui.modeling.active
+            && !ui.ctx().wants_keyboard_input()
+            && ui.input(|i| i.key_pressed(egui::Key::Escape))
+        {
+            if !self.viewport.modeling.dragging() {
+                self.ui.modeling.active = false;
+            }
+            self.viewport.cancel(&mut self.document);
+            self.viewport.wait_for_release();
+        }
         let (primitive_commands, editor_rect) = self.ui.primitive_confirmation(ui.ctx());
         for command in primitive_commands {
             self.dispatch(command, ui.ctx());
@@ -181,6 +193,18 @@ impl App {
             &mut self.camera,
             ViewportOptions {
                 edge_select: self.ui.edges.selecting,
+                modeling: self
+                    .ui
+                    .modeling
+                    .active
+                    .then_some(crate::viewport::ModelingOptions {
+                        mode: self.ui.modeling.mode,
+                        tool: self.ui.modeling.tool,
+                        change: self.ui.modeling.change,
+                        span: self.ui.modeling.span,
+                        join: self.ui.modeling.join,
+                        loop_count: self.ui.modeling.loop_count,
+                    }),
                 arrange_references: self.ui.arrange_references,
                 references_visible: self.ui.references_visible,
                 slice: self.ui.slice_active.then_some(self.ui.slice_options),
@@ -212,6 +236,10 @@ impl App {
             },
         );
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
+        self.ui.modeling.count = self.viewport.modeling.selection().len();
+        if let Some(count) = self.viewport.modeling.requested_loop_count.take() {
+            self.ui.modeling.loop_count = count;
+        }
         if let Some(index) = self.viewport.reference_selection() {
             self.ui.selected_reference = index;
         }

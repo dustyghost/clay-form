@@ -64,7 +64,7 @@ impl EdgeEdit {
     }
 }
 #[derive(Clone)]
-pub(super) struct Polygon {
+pub(crate) struct Polygon {
     pub vertices: Vec<usize>,
     pub group: usize,
     pub hidden: bool,
@@ -87,7 +87,7 @@ pub(super) fn cancelled(cancel: &impl Fn() -> bool) -> Result<(), String> {
 }
 
 impl Mesh {
-    pub(super) fn polygons(&self) -> Vec<Polygon> {
+    pub(crate) fn polygons(&self) -> Vec<Polygon> {
         let key = |mut t: [usize; 3]| {
             t.sort_unstable();
             t

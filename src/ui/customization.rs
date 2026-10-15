@@ -233,7 +233,44 @@ impl UiState {
             Action::SelectBrush(id) => document.brushes().iter().any(|b| b.identity() == *id),
             Action::NewBrush(name) => Kind::ALL.iter().any(|k| format!("{k:?}") == *name),
             Action::OpenMenu(id) => self.preferences.menus.iter().any(|m| m.id == *id),
-            Action::SelectEdges
+
+            Action::ModelCreateGroup | Action::ModelAddToGroup | Action::ModelRemoveFromGroup => {
+                self.edge_unavailable(action, document).is_none()
+                    && self.modeling.count > 0
+                    && document.mesh_settings().levels() == 1
+                    && (*action == Action::ModelCreateGroup
+                        || self.modeling.group < document.mesh().vertex_groups.len())
+            }
+            Action::ModelDissolveLoops => {
+                self.edge_unavailable(action, document).is_none()
+                    && self.modeling.active
+                    && self.modeling.mode == crate::viewport::ComponentMode::Edge
+                    && self.modeling.count > 0
+            }
+            Action::ModelFewerLoops => {
+                self.edge_unavailable(action, document).is_none() && self.modeling.loop_count > 1
+            }
+            Action::ModelMoreLoops => {
+                self.edge_unavailable(action, document).is_none()
+                    && self.modeling.loop_count < crate::sculpt::LoopCut::MAX_COUNT
+            }
+            Action::PenModeling
+            | Action::ModelFaces
+            | Action::ModelEdges
+            | Action::ModelVertices
+            | Action::ModelSelect
+            | Action::ModelExtrude
+            | Action::ModelLoopCut
+            | Action::ModelReplace
+            | Action::ModelAdd
+            | Action::ModelRemove
+            | Action::ModelJoin
+            | Action::ModelClearSelection
+            | Action::ModelSelectLoop
+            | Action::ModelSelectSingle
+            | Action::ModelSelectLoops
+            | Action::ModelSelectRing
+            | Action::SelectEdges
             | Action::SelectCreases
             | Action::SelectBorderEdges
             | Action::ExpandEdgeLoop
@@ -319,6 +356,55 @@ impl UiState {
         let brush = active.map(|index| &document.brushes()[index]);
         match action {
             Action::SelectBrush(id) => brush.is_some_and(|b| b.identity() == *id),
+            Action::PenModeling => self.modeling.active,
+            Action::ModelSelectSingle => {
+                self.modeling.active
+                    && self.modeling.tool == crate::viewport::ModelTool::Select
+                    && self.modeling.span == crate::viewport::SelectionSpan::Single
+            }
+            Action::ModelSelectLoops => {
+                self.modeling.active
+                    && self.modeling.tool == crate::viewport::ModelTool::Select
+                    && self.modeling.span == crate::viewport::SelectionSpan::Loop
+            }
+            Action::ModelSelectRing => {
+                self.modeling.active
+                    && self.modeling.tool == crate::viewport::ModelTool::Select
+                    && self.modeling.span == crate::viewport::SelectionSpan::Ring
+            }
+
+            Action::ModelFaces => {
+                self.modeling.active && self.modeling.mode == crate::viewport::ComponentMode::Face
+            }
+            Action::ModelEdges => {
+                self.modeling.active && self.modeling.mode == crate::viewport::ComponentMode::Edge
+            }
+            Action::ModelVertices => {
+                self.modeling.active && self.modeling.mode == crate::viewport::ComponentMode::Vertex
+            }
+            Action::ModelSelect => {
+                self.modeling.active && self.modeling.tool == crate::viewport::ModelTool::Select
+            }
+            Action::ModelExtrude => {
+                self.modeling.active && self.modeling.tool == crate::viewport::ModelTool::Extrude
+            }
+            Action::ModelLoopCut => {
+                self.modeling.active && self.modeling.tool == crate::viewport::ModelTool::LoopCut
+            }
+            Action::ModelReplace => {
+                self.modeling.active
+                    && self.modeling.change == crate::viewport::SelectionChange::Replace
+            }
+            Action::ModelAdd => {
+                self.modeling.active
+                    && self.modeling.change == crate::viewport::SelectionChange::Add
+            }
+            Action::ModelRemove => {
+                self.modeling.active
+                    && self.modeling.change == crate::viewport::SelectionChange::Remove
+            }
+            Action::ModelJoin => self.modeling.active && self.modeling.join,
+
             Action::SelectEdges => self.edges.selecting,
             Action::Wireframe => self.wire,
             Action::Symmetry => document.symmetry().enabled,

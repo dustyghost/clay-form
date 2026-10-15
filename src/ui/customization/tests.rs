@@ -29,6 +29,9 @@ fn frame(
             egui::CentralPanel::default().show(ctx, |ui| {
                 // Same response hook used by the ordinary toolbar and tool panels.
                 ui.button("Source mask button").customize(Action::ClearMask);
+                if state.modeling.active {
+                    state.modeling_controls(ui, doc, &mut commands);
+                }
             });
             state.settings(ctx, doc);
         },
@@ -622,5 +625,108 @@ fn typing_in_brush_settings_keeps_the_preset_that_received_focus() {
         let expected = doc.brushes().iter().position(|b| b.name == name).unwrap();
         assert!(commands.iter().any(|command| matches!(command, Command::UpdateBrush(index, brush) if *index == expected && brush.name.contains('X'))));
         assert_eq!(state.selected, 0);
+    }
+}
+
+#[test]
+fn modeling_buttons_offer_menu_and_shortcut_customization() {
+    use crate::viewport::{ComponentMode as Mode, ModelTool as Tool};
+    for (label, mode, tool, action) in [
+        (
+            "Individual",
+            Mode::Face,
+            Tool::Select,
+            Action::ModelSelectSingle,
+        ),
+        ("Loop", Mode::Face, Tool::Select, Action::ModelSelectLoops),
+        (
+            "Parallel edges",
+            Mode::Edge,
+            Tool::Select,
+            Action::ModelSelectRing,
+        ),
+        (
+            "Dissolve selected loops",
+            Mode::Edge,
+            Tool::Select,
+            Action::ModelDissolveLoops,
+        ),
+        ("Face", Mode::Face, Tool::Select, Action::ModelFaces),
+        ("Edge", Mode::Face, Tool::Select, Action::ModelEdges),
+        ("Vertex", Mode::Face, Tool::Select, Action::ModelVertices),
+        ("Extrude", Mode::Face, Tool::Select, Action::ModelExtrude),
+        ("Loop cut", Mode::Edge, Tool::Select, Action::ModelLoopCut),
+        ("Select", Mode::Face, Tool::Extrude, Action::ModelSelect),
+        ("Add", Mode::Face, Tool::Select, Action::ModelAdd),
+        ("Remove", Mode::Face, Tool::Select, Action::ModelRemove),
+        ("Replace", Mode::Face, Tool::Select, Action::ModelReplace),
+        (
+            "Join matching faces",
+            Mode::Face,
+            Tool::Extrude,
+            Action::ModelJoin,
+        ),
+        ("+", Mode::Edge, Tool::LoopCut, Action::ModelMoreLoops),
+        ("−", Mode::Edge, Tool::LoopCut, Action::ModelFewerLoops),
+        (
+            "Clear selection",
+            Mode::Face,
+            Tool::Select,
+            Action::ModelClearSelection,
+        ),
+        (
+            "Select loop",
+            Mode::Edge,
+            Tool::Select,
+            Action::ModelSelectLoop,
+        ),
+        (
+            "Create group from selection",
+            Mode::Face,
+            Tool::Select,
+            Action::ModelCreateGroup,
+        ),
+        (
+            "Add to group",
+            Mode::Face,
+            Tool::Select,
+            Action::ModelAddToGroup,
+        ),
+        (
+            "Remove from group",
+            Mode::Face,
+            Tool::Select,
+            Action::ModelRemoveFromGroup,
+        ),
+    ] {
+        let ctx = egui::Context::default();
+        ctx.style_mut(|s| s.animation_time = 0.);
+        let mut doc = Document::default();
+        doc.group_model_selection(&[0], "Test", None, false)
+            .unwrap();
+        let mut state = UiState::default();
+        state.modeling.active = true;
+        state.modeling.mode = mode;
+        state.modeling.tool = tool;
+        state.modeling.count = 1;
+        state.modeling.loop_count = 2;
+        frame(&mut state, &ctx, &doc, vec![]);
+        let (output, _) = frame(&mut state, &ctx, &doc, vec![]);
+        let group = text_center(&output, "Selection to vertex group");
+        click(&mut state, &ctx, &doc, group, egui::PointerButton::Primary);
+        let (output, _) = frame(&mut state, &ctx, &doc, vec![]);
+        let pos = text_center(&output, label);
+        let (_, commands) = click(&mut state, &ctx, &doc, pos, egui::PointerButton::Secondary);
+        assert!(commands.is_empty(), "Right click must not execute {label}");
+        let (output, _) = frame(&mut state, &ctx, &doc, vec![]);
+        text_center(&output, "Assign shortcut…");
+        let add = text_center(&output, "Add to custom menu / shelf…");
+        click(&mut state, &ctx, &doc, add, egui::PointerButton::Primary);
+        assert_eq!(state.customization.chosen, Some(action.clone()), "{label}");
+        assert!(Action::ALL.contains(&action));
+        assert_eq!(
+            serde_json::from_str::<Action>(&serde_json::to_string(&action).unwrap()).unwrap(),
+            action
+        );
     }
 }

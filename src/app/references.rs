@@ -14,6 +14,7 @@ impl App {
             self.ui.references_visible = true;
             self.ui.slice_active = false;
             self.ui.selection_tool = None;
+            self.ui.modeling.active = false;
             self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
         }
     }

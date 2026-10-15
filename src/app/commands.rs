@@ -77,6 +77,12 @@ impl App {
                 | Command::ArrangeReferences(_)
                 | Command::Mirror(..)
                 | Command::EditEdges(_)
+                | Command::ModelingMode(_)
+                | Command::ModelingComponent(_)
+                | Command::ClearModelSelection
+                | Command::ModelSelectLoop
+                | Command::ModelDissolveLoops
+                | Command::GroupModelSelection(..)
         ) && (self.ui.pending.is_some()
             || self.ui.recovery_open
             || self.ui.settings_open
@@ -153,6 +159,12 @@ impl App {
                     | Command::ImportObj
                     | Command::Mirror(..)
                     | Command::EditEdges(_)
+                    | Command::ModelingMode(_)
+                    | Command::ModelingComponent(_)
+                    | Command::ClearModelSelection
+                    | Command::ModelSelectLoop
+                    | Command::ModelDissolveLoops
+                    | Command::GroupModelSelection(..)
             )
         {
             self.ui.status = "Wait for the mesh operation, or cancel it first".into();
@@ -190,10 +202,112 @@ impl App {
         ) {
             self.ui.arrange_references = false;
             self.ui.edges.selecting = false;
+            if !matches!(command, Command::Undo | Command::Redo) {
+                self.ui.modeling.active = false;
+            }
             self.viewport.cancel_reference_drag();
         }
         self.document.prepare_edit(command.edit_kind());
         let result: Result<(), String> = match command {
+            Command::ModelingMode(active) => if active {
+                self.document.require_modeling()
+            } else {
+                Ok(())
+            }
+            .map(|()| {
+                self.viewport.cancel(&mut self.document);
+                self.ui.modeling.active = active;
+                self.ui.edges.selecting = false;
+                self.ui.selection_tool = None;
+                self.ui.slice_active = false;
+                self.ui.arrange_references = false;
+                self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
+                if active {
+                    self.ui.wire = true;
+                }
+            }),
+            Command::ModelingComponent(mode) => {
+                self.viewport.cancel(&mut self.document);
+                self.viewport.modeling.selected.clear();
+                self.viewport.set_edge_selection(Vec::new(), &self.document);
+                self.ui.modeling.mode = mode;
+                self.ui.modeling.span = crate::viewport::SelectionSpan::Single;
+                self.ui.modeling.tool = crate::viewport::ModelTool::Select;
+                Ok(())
+            }
+            Command::ClearModelSelection => {
+                self.viewport.cancel(&mut self.document);
+                self.viewport.modeling.selected.clear();
+                self.viewport.set_edge_selection(Vec::new(), &self.document);
+                Ok(())
+            }
+            Command::ModelDissolveLoops => {
+                self.viewport.cancel(&mut self.document);
+                self.viewport.modeling.sync(&self.document);
+                let edges = self.viewport.selected_edges(&self.document).to_vec();
+                let revision = self.document.display_revision();
+                self.document
+                    .require_modeling()
+                    .and_then(|()| {
+                        let symmetry = crate::sculpt::ModelingSymmetry::new(
+                            self.document.mesh(),
+                            self.document.symmetry(),
+                        )?;
+                        let mesh = self
+                            .document
+                            .mesh()
+                            .dissolve_loops(&symmetry.edges(&edges))?;
+                        symmetry.validate_result(&mesh)?;
+                        Ok(mesh)
+                    })
+                    .and_then(|mesh| {
+                        self.document
+                            .commit_modeling(mesh, "Dissolve selected loops", revision)
+                    })
+                    .map(|()| {
+                        self.viewport.modeling.sync(&self.document);
+                        self.viewport.set_edge_selection(Vec::new(), &self.document);
+                    })
+            }
+            Command::ModelSelectLoop => {
+                self.viewport.cancel(&mut self.document);
+                self.viewport.modeling.sync(&self.document);
+                let edges = self.viewport.selected_edges(&self.document).to_vec();
+                crate::sculpt::ModelingSymmetry::new(self.document.mesh(), self.document.symmetry())
+                    .and_then(|symmetry| {
+                        self.document
+                            .mesh()
+                            .expand_edge_loop(&edges)
+                            .map(|edges| symmetry.edges(&edges))
+                    })
+                    .map(|edges| {
+                        self.viewport.set_model_edges(edges, &self.document);
+                    })
+            }
+            Command::GroupModelSelection(existing, remove) => {
+                self.viewport.modeling.sync(&self.document);
+                let vertices = self
+                    .viewport
+                    .modeling
+                    .selected_vertices(self.document.mesh());
+                let edges = self.viewport.selected_edges(&self.document).to_vec();
+                self.document
+                    .group_model_selection(
+                        &vertices,
+                        &self.ui.modeling.group_name,
+                        existing,
+                        remove,
+                    )
+                    .map(|()| {
+                        if existing.is_some_and(|i| !self.document.mesh().vertex_groups[i].visible)
+                        {
+                            self.viewport.modeling.sync(&self.document);
+                        } else {
+                            self.viewport.modeling.revision = self.document.display_revision();
+                            self.viewport.set_edge_selection(edges, &self.document);
+                        }
+                    })
+            }
             Command::EditEdges(edit) => self.start_mesh_job(Operation::Edges(edit)),
             Command::Mirror(axis, source_positive) => {
                 self.start_mesh_job(Operation::Mirror(crate::sculpt::MirrorOptions {
@@ -555,7 +669,11 @@ impl App {
                 Ok(())
             }
             Command::SetSymmetry(symmetry) => {
+                let modeling_drag = self.viewport.modeling.dragging();
                 self.viewport.cancel(&mut self.document);
+                if modeling_drag {
+                    self.viewport.wait_for_release();
+                }
                 self.document.set_symmetry(symmetry)
             }
             Command::AddBrush(kind) => self

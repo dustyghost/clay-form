@@ -12,6 +12,30 @@ pub(crate) enum Action {
     Perspective,
     Symmetry,
     Mirror(Axis, bool),
+    PenModeling,
+    ModelFaces,
+    ModelEdges,
+    ModelVertices,
+    ModelSelect,
+    ModelExtrude,
+    ModelLoopCut,
+    ModelReplace,
+    ModelAdd,
+    ModelRemove,
+    ModelJoin,
+    ModelFewerLoops,
+    ModelMoreLoops,
+    ModelClearSelection,
+    ModelSelectLoop,
+    ModelDissolveLoops,
+    ModelSelectSingle,
+    ModelSelectLoops,
+    ModelSelectRing,
+
+    ModelCreateGroup,
+    ModelAddToGroup,
+    ModelRemoveFromGroup,
+
     SelectEdges,
     SelectCreases,
     SelectBorderEdges,
@@ -230,6 +254,28 @@ impl Action {
         Self::Mirror(Axis::Y, false),
         Self::Mirror(Axis::Z, true),
         Self::Mirror(Axis::Z, false),
+        Self::PenModeling,
+        Self::ModelFaces,
+        Self::ModelEdges,
+        Self::ModelVertices,
+        Self::ModelSelect,
+        Self::ModelExtrude,
+        Self::ModelLoopCut,
+        Self::ModelReplace,
+        Self::ModelAdd,
+        Self::ModelRemove,
+        Self::ModelJoin,
+        Self::ModelFewerLoops,
+        Self::ModelMoreLoops,
+        Self::ModelClearSelection,
+        Self::ModelSelectLoop,
+        Self::ModelDissolveLoops,
+        Self::ModelSelectSingle,
+        Self::ModelSelectLoops,
+        Self::ModelSelectRing,
+        Self::ModelCreateGroup,
+        Self::ModelAddToGroup,
+        Self::ModelRemoveFromGroup,
         Self::SelectEdges,
         Self::SelectCreases,
         Self::SelectBorderEdges,
@@ -245,6 +291,9 @@ impl Action {
     /// Help shared by the built-in controls, custom menus, and shelves.
     pub fn help(&self) -> Option<&'static str> {
         Some(match self {
+            Self::PenModeling => {
+                "Select faces, edges, or vertices with a pen or mouse. Modeling controls are in Mesh. Escape cancels a preview, or exits when idle."
+            }
             Self::SelectEdges => {
                 "Turn edge picking on or off. Click to select; Shift adds and Ctrl removes. Drag empty space to orbit. Escape exits."
             }
@@ -283,6 +332,30 @@ impl Action {
     }
     pub fn label(&self) -> &'static str {
         match self {
+            Self::PenModeling => "Pen modeling",
+            Self::ModelFaces => "Modeling: Faces",
+            Self::ModelEdges => "Modeling: Edges",
+            Self::ModelVertices => "Modeling: Vertices",
+            Self::ModelSelect => "Modeling: Select",
+            Self::ModelExtrude => "Modeling: Extrude",
+            Self::ModelLoopCut => "Modeling: Loop cut",
+            Self::ModelReplace => "Modeling: Replace selection",
+            Self::ModelAdd => "Modeling: Add selection",
+            Self::ModelRemove => "Modeling: Remove selection",
+            Self::ModelJoin => "Modeling: Join matching faces",
+            Self::ModelFewerLoops => "Modeling: Fewer loops",
+            Self::ModelMoreLoops => "Modeling: More loops",
+            Self::ModelClearSelection => "Modeling: Clear selection",
+            Self::ModelSelectLoop => "Modeling: Select loop",
+            Self::ModelDissolveLoops => "Modeling: Dissolve selected loops",
+            Self::ModelSelectSingle => "Modeling: Select individual components",
+            Self::ModelSelectLoops => "Modeling: Select loops",
+            Self::ModelSelectRing => "Modeling: Select parallel edge ring",
+
+            Self::ModelCreateGroup => "Modeling: Create group from selection",
+            Self::ModelAddToGroup => "Modeling: Add to current group",
+            Self::ModelRemoveFromGroup => "Modeling: Remove from current group",
+
             Self::SelectEdges => "Edge selection",
             Self::SelectCreases => "Select creases",
             Self::SelectBorderEdges => "Select target borders",
