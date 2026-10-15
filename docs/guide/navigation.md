@@ -31,7 +31,7 @@ The thin inset frame reserves a **20-pixel navigation strip**. Start a pen/left 
 
 ### Snap to an axis
 
-Tap X, Y, or Z on the top-right orientation gizmo. Dimmed axes face away from you. Drag the gizmo to orbit; vertical orbit can continue over the poles.
+Tap X, Y, or Z on the top-right orientation gizmo. Dimmed axes face away from you. Drag the gizmo to orbit; vertical orbit can continue over the poles. Horizontal dragging keeps the same screen direction when the view is upside down, in both sculpting and modeling.
 
 ## Zoom
 

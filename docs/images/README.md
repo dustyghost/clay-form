@@ -45,6 +45,7 @@ See [Development](../development.md#update-guide-screenshots) for prerequisites 
 | `modeling-tap-repeat.png`, `modeling-milestone-inset.png`, `modeling-milestone-smooth.png`, `modeling-milestone-preset.png` | [Integrated construction, presets and smooth preview](../guide/modeling.md#keep-useful-tool-setups-and-inspect-the-smooth-result) | `modeling_milestones_offscreen_review` |
 | `modeling-face-group-gap.png` | [Exact face selection groups](../guide/modeling.md#save-a-component-selection-as-a-vertex-group) | `modeling_face_group_gap_offscreen_review` |
 | `modeling-point-split.png`, `modeling-point-tube.png`, `modeling-edge-construction-preview.png`, `modeling-face-split.png` | [Edge, point and face-center construction](../guide/modeling.md#construct-from-edges-points-and-face-centers) | `modeling_component_construction_offscreen_review` |
+| `modeling-new-mesh-warning.png`, `modeling-move-gizmo.png`, `modeling-scale-gizmo.png`, `modeling-rotate-gizmo.png` | [Modeling initialization and selection-local transforms](../guide/modeling.md#shared-targets-and-component-transforms) | `modeling_transform_gizmo_offscreen_review` |
 
 ## Example assets
 

@@ -150,7 +150,7 @@ The four workflows below are implemented in incremental commits. Geometry/contro
 
 | Milestone | Deliverable | Acceptance exercise |
 | --- | --- | --- |
-| 1. Select and manipulate | Shared component targets, connected/flat/group regions, explicit conversion, component move/rotate/scale with constraints and numeric amounts, visible protection rules | Paint a region, convert its boundary to edges, manipulate it, assign a group, target that group again, repeat with symmetry; cancel and Undo restore the original |
+| 1. Select and manipulate | Shared component targets, connected/flat/group regions, explicit conversion, component move/rotate/scale with free dragging, selection gizmos, constraints and numeric amounts, visible protection rules | Paint a region, convert its boundary to edges, manipulate it, assign a group, target that group again, repeat with symmetry; cancel and Undo restore the original |
 | 2. Construct shapes | Coordinated extrusion, inset, bevel and fuse; region/individual options, numeric amounts, independent contact snapping, group propagation | Make a recessed panel, inset/extrude a rim, bevel its boundary, create adjacent tunnels and push an exterior slab face to an intermediate loop |
 | 3. Edit topology | Insert/slide/dissolve loops, bridge/fill boundaries, connect/split/weld/collapse and explicit face deletion | Adjust support loops, remove an unnecessary loop, open and bridge a pair of boundaries, close a hole, connect and weld vertices |
 | 4. Finish the workflow | Configuration presets, explicit repeat with remembered amounts, subdivision preview, integrated pen walkthroughs | Build symmetric inset/extruded features with visible controls, save/reload a preset, repeat a measured feature, inspect the smooth result without changing the cage |
@@ -178,6 +178,12 @@ These tools reuse numeric input, tap repeat, presets, mask protection, exact fac
 Geometry and controller tests cover closed surfaces, border extension, point patches and tube extrusion, edge positions, attributes, symmetry, masks, cancellation, tap repeat, Undo and preset compatibility. The rendered exercise uses the actual controls for a symmetric creased point patch, tube extrusion, surface-edge preview and face split. See [the component construction guide](guide/modeling.md#construct-from-edges-points-and-face-centers) for controls and limits.
 
 The documentation audit used external software vendor's Edge Actions, Point Actions and Polygon Actions to identify missing construction workflows. Clay Form exposes explicit modes and visible values rather than duplicating modifier-dependent behavior.
+
+#### Direct manipulation and a modeling starter
+
+Move, Rotate and Scale now offer Free, Gizmo and Axis / amount interactions. The selection gizmo includes axis arrows/scale handles, movement planes, rotation rings and a free/uniform center. Free movement follows the pen at the selection depth in either projection; free rotation uses a trackball. Symmetric edits share the same reference-side pivot as the displayed gizmo. Direction and amount survive repeat, tool switching and presets. Existing presets keep their axis behavior.
+
+**New mesh…** opens a replacement warning with cube span controls (default 3 per axis), then creates an editable modeling cube in one undoable transaction. Other submodels remain intact. The shared camera orbit also keeps horizontal dragging consistent after crossing a pole, including upside-down sculpting and modeling views.
 
 #### Research informing the design
 

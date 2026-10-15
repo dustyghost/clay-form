@@ -17,7 +17,11 @@ Build a base shape, position it, and choose how to add detail.
 
 ## Pen modeling
 
-Open **Mesh → Pen modeling** after converting a primitive to a sculpting mesh. Start with a low-resolution cube or grid. Choose the active submodel in **Submodels** before selecting components.
+Open **Mesh → Pen modeling** to edit the active submodel. For a fresh starting shape, click **New mesh…** beside the toggle. The confirmation dialog defaults to a cube with **3 spans per axis**; adjust X/Y/Z spans before choosing **Replace and start modeling**. Nothing changes until confirmation. Cancel keeps the current model, and one Undo restores its geometry, masks, subdivision levels and temporary Thickness after replacement. Other submodels are preserved. The new cube is immediately editable in Face selection mode.
+
+![The modeling starter warning, with span controls and explicit replacement confirmation](../images/modeling-new-mesh-warning.png)
+
+You can also create another shape through **Primitive**, configure it, and convert it to a sculpting mesh before enabling Pen modeling. Choose the active submodel in **Submodels** before selecting components.
 
 ### Select faces, edges, or vertices
 
@@ -49,7 +53,25 @@ The **Target** choices apply to selection and component edits. **Connected** fol
 
 **Island angle** ranges from 0° (flat faces) to 180°. Each face is compared with the original face normal, so a chain of small bends cannot gradually wrap the selection around a curved surface. Hidden faces stop the flood; disconnected surfaces are excluded. Hover previews the result as you adjust the slider. The angle applies to the next selection or edit target and is saved in tool presets.
 
-Choose **Move components**, **Rotate components**, or **Scale components** in any component mode. Choose X/Y/Z or a face region's Normal; Scale also supports Uniform. Drag up/down to adjust, release to apply, or Escape to cancel. Alternatively select components, enter Distance, Angle in degrees, or Scale factor, then **Apply amount**. Rotation/scaling use the selection center. The selection survives these edits. Symmetry reflects displacement and keeps seam vertices on the enabled symmetry planes. Hidden faces and, by default, masked vertices are protected. These edits currently replace stored subdivision levels; Undo restores them.
+Choose **Move**, **Rotate**, or **Scale** in any component mode, then choose an interaction:
+
+| Interaction | Move | Rotate | Scale |
+| --- | --- | --- | --- |
+| **Free** (default) | Drag a target with the pen in the view plane; works in orthographic and perspective views | Drag with a virtual trackball around the selection center | Drag up/down for uniform scaling |
+| **Gizmo** | Drag colored X/Y/Z arrows, XY/YZ/XZ plane squares, or the center for free movement | Drag a colored axis ring, or the center for trackball rotation | Drag an axis box to stretch, or the center up/down to scale uniformly |
+| **Axis / amount** | Choose X/Y/Z or Normal, then drag up/down or enter Distance | Choose the axis and enter degrees or drag up/down | Choose an axis or Uniform, then enter the factor or drag up/down |
+
+In Gizmo mode, select components first, or tap a target to make it the selection. Merely tapping a gizmo handle never applies an edit; drag to begin. Axis handles pointing almost directly into the screen are hidden because their direction cannot be dragged reliably; orbit the view or use Axis / amount for that axis. Edge-on rotation rings use a stable tangent drag.
+
+![Selection-local move arrows and plane handles](../images/modeling-move-gizmo.png)
+
+![Axis scaling handles and the uniform center handle](../images/modeling-scale-gizmo.png)
+
+![Rotation rings around the selected region](../images/modeling-rotate-gizmo.png)
+
+Release to apply, or Escape to cancel. Each completed drag is one Undo step and keeps the selection. Rotate and scale use the selection center; with symmetry, the gizmo uses the reference-side center and the other copies follow the same edit. Symmetry keeps shared seam vertices on their planes. Hidden faces and, by default, masked vertices are protected. These edits currently replace stored subdivision levels; Undo restores them.
+
+A free or gizmo drag remembers its direction and amount. **Apply amount** reuses that direction with the displayed value; move and rotation need an initial drag to establish a direction. **Repeat last edit** also retains it. Free scaling stays uniform. Free mode supports **Tap to repeat** after establishing the edit; Gizmo mode reserves taps for selecting targets and handles. Transform modes, directions and amounts save in presets; older presets retain Axis / amount behavior. Right-click Free, Gizmo or Axis / amount to add it to a custom menu or shelf, or assign a shortcut.
 
 ### Extrude a face or flat region
 
@@ -179,9 +201,9 @@ Selection previews show the matching components. Symmetry copies of an edit comm
 
 ### Keep useful tool setups and inspect the smooth result
 
-Expand **Tool presets**, enter a name, then **Save tool preset**. Each preset stores component mode, action, target, axis, amount, loop count, flat-island angle, component-construction options, contact options and protection/preview settings. **Use …** restores that setup without changing geometry. Right-click a preset to add it to a custom menu or shelf, or assign a shortcut. Presets save in application preferences, independently of the project. Deleting one leaves any old shelf entry unavailable; its identifier is never reused.
+Expand **Tool presets**, enter a name, then **Save tool preset**. Each preset stores component mode, action, target, transform interaction/direction, axis, amount, loop count, flat-island angle, component-construction options, contact options and protection/preview settings. **Use …** restores that setup without changing geometry. Right-click a preset to add it to a custom menu or shelf, or assign a shortcut. Presets save in application preferences, independently of the project. Deleting one leaves any old shelf entry unavailable; its identifier is never reused.
 
-**Tap to repeat** is on by default for Extrude, Extrude and fuse, Inset, Bevel boundary, Move, Rotate, Scale, Slide loop and the measured edge/point construction tools. Drag to establish an amount, then tap another target to apply the displayed amount and current options. Each measured tool remembers its amount during the session, including when switching tools. Tapping a selected component applies to that selection; tapping elsewhere uses the hovered target. You can also enter an amount before the first tap. Small pen movements within three screen pixels count as a tap; once you drag farther, returning to the starting point does not trigger repeat. Escape cancels, and each completed tap is one Undo. Turn **Tap to repeat** off for drag-only editing; the toggle can be added to menus/shelves or shortcuts and is saved in tool presets. Select keeps its tap/paint behavior, and a Loop cut tap remains centered.
+**Tap to repeat** is on by default for Extrude, Extrude and fuse, Inset, Bevel boundary, Move, Rotate, Scale, Slide loop and the measured edge/point construction tools. Drag to establish an amount, then tap another target to apply the displayed amount and current options. Each measured tool remembers its amount during the session, including when switching tools. Tapping a selected component applies to that selection; tapping elsewhere uses the hovered target. You can also enter an amount before the first tap; free move and rotation need an initial drag to establish their direction. Gizmo transforms use drag handles instead of tap repeat. Small pen movements within three screen pixels count as a tap; once you drag farther, returning to the starting point does not trigger repeat. Escape cancels, and each completed tap is one Undo. Turn **Tap to repeat** off for drag-only editing; the toggle can be added to menus/shelves or shortcuts and is saved in tool presets. Select keeps its tap/paint behavior, and a Loop cut tap remains centered.
 
 ![An inset repeated by tapping another target, with matching symmetry](../images/modeling-tap-repeat.png)
 
