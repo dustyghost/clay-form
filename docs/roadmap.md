@@ -144,7 +144,35 @@ Extrusions use vertical pen travel independent of pressure. Release commits one 
 
 Focused geometry/controller checks cover closed tunnel topology, attribute/crease transfer, selection modes, group assignment, loop cuts, perspective previews, cancel, stale selections, modal blocking, navigation, undo/redo, and saved-project validation. The rendered workflow exercises the actual controls, selection-to-group, extrusion cancellation, tunnel commit, and undo. Hands-on tablet feedback is still needed before treating these interactions as settled.
 
-Next modeling increments: sliding existing loops; component move/scale/rotate; inset and bevel; nonplanar region extrusion; multi-face bridging; lasso component selection; and group assignment across subdivision levels. General intersection handling and Boolean merging remain separate work. See [Pen modeling](guide/modeling.md#pen-modeling) for the current workflow and limits.
+### Modeling delivery specification — 15 October 2026
+
+The next work is organised into complete workflows. Each milestone is committed after its geometry and interaction checks pass; the list below describes planned work, not shipped features.
+
+| Milestone | Deliverable | Acceptance exercise |
+| --- | --- | --- |
+| 1. Select and manipulate | Shared component targets, connected/flat/group regions, explicit conversion, component move/rotate/scale with constraints and numeric amounts, visible protection rules | Paint a region, convert its boundary to edges, manipulate it, assign a group, target that group again, repeat with symmetry; cancel and Undo restore the original |
+| 2. Construct shapes | Coordinated extrusion, inset, bevel and fuse; region/individual options, numeric amounts, independent contact snapping, group propagation | Make a recessed panel, inset/extrude a rim, bevel its boundary, create adjacent tunnels and push an exterior slab face to an intermediate loop |
+| 3. Edit topology | Insert/slide/dissolve loops, bridge/fill boundaries, connect/split/weld/collapse and explicit face deletion | Adjust support loops, remove an unnecessary loop, open and bridge a pair of boundaries, close a hole, connect and weld vertices |
+| 4. Finish the workflow | Configuration presets, explicit repeat with remembered amounts, subdivision preview, integrated pen walkthroughs | Build a symmetric bracket using only visible controls, save/reload a preset, repeat a measured feature, inspect the smooth result without changing the cage |
+
+All edits use a draft, visible affected components, an explanation for unsupported topology, cancellation and one Undo per completed operation. Symmetry is atomic and requires matching sides. Topology edits preserve surviving masks, group weights and creases. Hidden geometry is protected. Mask protection must be explicit: a topology operation that touches protected vertices is rejected as a whole rather than partially applied. Modeling keeps its own selection and never silently replaces the sculpt mask. Geometry validity checks are not a general intersection/Boolean solver.
+
+The interaction model is **Component → Action → Target → Options**. Component modes stay locked until deliberately changed; picking tolerance is measured in screen pixels, separate from sculpt brush size. Targets preview before contact and lock at pen-down. Shared targets include individual components, current selection, loops/rings, connected regions, flat regions and face groups; only applicable combinations are offered. Direction-sensitive targets show their direction. A visible panel is the reliable entry point, with custom menus and shortcuts using the same action identities. Parameters have visible names and values; modifiers are optional accelerators. Repeating an operation is explicit so a tap cannot unexpectedly replay an old extrusion.
+
+Ordinary extrusion, contact fusion, vertex welding and loop dissolution have different meanings. Contact fusion gets a visible snap distance; geometric matching uses a separate conservative tolerance. Increasing tolerance does not make incompatible topology safe. Face labels describe polygon regions; weighted vertex groups remain a distinct selection/weighting concept even where they share existing storage.
+
+#### Research informing the design
+
+external software vendor's Actions and Targets and Options and Modifiers provide a useful compositional model. Polygon Actions separates extrusion from fused extrusion's fusing behavior. Clay Form uses explicit controls and its own terminology rather than reproducing external sculpting application's modifier timing or brush-size-dependent attraction.
+
+Community reports are qualitative evidence, not a prevalence survey or a claim that every external sculpting application version has the same problems:
+
+- Pen edge targeting and unintended component targeting motivate locked component modes and screen-space picking.
+- Selection/masking workflow motivates explicit selection, component transforms and visible subdivision constraints.
+- Unexpected dynamic brush sizing motivates settings independent of sculpt brushes and retained user choices.
+- Hidden state affecting operations motivates visible protection state and actionable rejection messages.
+
+Curve/mesh instancing authoring, arbitrary Boolean fusion, detail reprojection onto changed topology and full component modeling feature parity are outside these milestones. See [Pen modeling](guide/modeling.md#pen-modeling) for shipped behavior and limits.
 
 ## Longer term candidates
 
