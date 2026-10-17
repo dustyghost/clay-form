@@ -4,11 +4,15 @@
 
 Updated 15 October 2026.
 
-The seven priorities below are implemented. Perspective viewing is ready for hands-on mouse/pen feedback. The hands-on tablet check for stroke stabilisation passed on 14 October 2026. The longer-term candidates remain separate possibilities; edge loops and creases are now implemented.
+**Shipped:** all seven priorities, edge loops and creases, and the pen modeling workflows below.
+
+**Next feedback:** try perspective navigation and pen modeling with a mouse or tablet. Their automated and rendered checks have passed; hands-on feedback will guide interaction refinements. Stroke stabilisation passed its tablet check on 14 October 2026.
+
+This page records delivery scope and acceptance checks. For everyday controls, start with the [user guides](../README.md#documentation). [Longer-term candidates](#longer-term-candidates) are possibilities, not commitments.
 
 ## Current foundation
 
-These features are already implemented and should be preserved as the app grows:
+Keep these working as the app grows:
 
 - Sculpt brushes, pen pressure, custom alphas, brush presets, and Freehand, Line, Drag Rect and Drag Dot strokes.
 - Mirror and radial symmetry, adjustable symmetry centres, and surface guides.
@@ -23,13 +27,20 @@ Recent fixes address stale groups after Group all, Alt-drag panning when startin
 
 ## Edge loops and creases
 
-Current implementation: [Edges and creases](guide/edges.md) targets hole borders, masked region borders, visible polygroups, and selected edges. It includes support-loop insertion, border relaxation, crease/uncrease/clear, edge and loop selection, and smooth subdivision with a 0–1 Smoothness slider. Thickness modifier replaces the old Temporary thickness label and adds previewed rim loops and crease options.
+[Edges and creases](guide/edges.md) supports hole borders, masked region borders, visible polygroups, and selected edges:
 
-Smooth subdivision currently bakes the active level; the existing linear subdivision stack is unchanged. Loop cleanup is relaxation, without automatic retopology or loop dissolution. Verification covers geometry, selection, attributes, modifier preview/apply, cancellation, persistence, undo, and offscreen UI captures. The rendered UI walkthrough covers selection, empty-space navigation, crease removal, both subdivision operations, target scopes, and thickness application. Selecting creases or borders enters edge-selection mode. Linear and smooth subdivision share the Mesh → Subdivision controls. Mouse/pen feel remains available for user feedback.
+- Insert support loops and relax borders.
+- Select edges or loops; crease, uncrease, or clear creases.
+- Apply smooth subdivision with a 0–1 Smoothness slider.
+- Preview rim loops and crease options in **Thickness modifier** (formerly **Temporary thickness**).
+
+**Limits:** smooth subdivision bakes the active level; linear subdivision keeps its existing stack. Loop cleanup here means relaxation, not automatic retopology or loop dissolution. Selecting creases or borders enters edge-selection mode. Both subdivision operations live under **Mesh → Subdivision**.
+
+**Checked:** geometry, selection, attributes, modifier preview/apply, cancellation, persistence and undo. Offscreen captures and a rendered walkthrough cover selection, empty-space navigation, crease removal, both subdivision operations, target scopes and thickness application. Mouse/pen feedback is still welcome.
 
 ## Implementation priorities
 
-All seven priorities are implemented; interaction refinements can follow hands-on feedback.
+All seven shipped on 14 October 2026. The original order is retained below; further interaction refinements depend on hands-on feedback.
 
 | Order | Feature | Main benefit |
 | --- | --- | --- |
@@ -43,11 +54,11 @@ All seven priorities are implemented; interaction refinements can follow hands-o
 
 ### 1 Stroke stabilisation
 
-Implemented 14 October 2026: optional trailing stabilisation for Freehand strokes, with a 1–200 px distance and visible guide. Settings are saved per brush in projects, presets, and libraries; the toggle is available through custom menus and shortcuts. Existing brushes default to disabled. Grab and Snake retain their current behaviour.
+Freehand strokes offer optional trailing stabilisation with a 1–200 px distance and visible guide. Settings are saved per brush in projects, presets, and libraries; the toggle is available through custom menus and shortcuts. Existing brushes default to disabled. Grab and Snake retain their current behaviour.
 
 Automated checks cover jitter, spacing, changing pen pressure, masks, symmetry, temporary Smooth/reverse, subdivision, release without a jump, one-step undo, interrupted strokes, and file compatibility. The user completed the hands-on tablet check on 14 October 2026 and reported that the feel works well.
 
-Completion criteria:
+**Acceptance checks**
 
 - Mouse and pen strokes follow a smooth, predictable path, with pressure and spacing still working.
 - Symmetry, masks, and temporary Smooth/reverse modifiers behave consistently.
@@ -56,13 +67,13 @@ Completion criteria:
 
 ### 2 Mask editing and lasso selection
 
-Implemented 14 October 2026: Blur mask and Sharpen mask alongside expand/contract, with custom-menu and shortcut support. Blur averages along polygon edges; Sharpen increases contrast around 50%. Both apply to the active submodel's stored subdivision levels, including hidden faces, without changing geometry or saved vertex group weights. Each changed operation has one undo step, and unchanged masks preserve redo history.
+Blur mask and Sharpen mask sit alongside expand/contract and support custom menus and shortcuts. Blur averages along polygon edges; Sharpen increases contrast around 50%. Both apply to the active submodel's stored subdivision levels, including hidden faces, without changing geometry or saved vertex group weights. Each changed operation has one undo step, and unchanged masks preserve redo history.
 
-Implemented 14 October 2026: Mask lasso and visibility Select lasso, with a live outline, Alt to erase/hide, Space to move, and Escape to cancel. Both explicitly select through all depths on the active submodel; face visibility selects whole quads by their centers, while masking selects vertices and protects hidden faces and shared boundary vertices. Each changed gesture has one undo step and applies to all stored subdivision levels. Both tools support custom menus and configurable shortcuts. Front-surface-only selection is outside this phase.
+Mask lasso and visibility Select lasso show a live outline. Use Alt to erase/hide, Space to move, and Escape to cancel. Both explicitly select through all depths on the active submodel; face visibility selects whole quads by their centers, while masking selects vertices and protects hidden faces and shared boundary vertices. Each changed gesture has one undo step and applies to all stored subdivision levels. Both tools support custom menus and configurable shortcuts. Front-surface-only selection is outside this phase.
 
 Regression checks cover closed and concave outlines, crossings, multiple samples in one frame, multiple view angles, through-depth selection, cancellation and interrupted input, translation, undo/redo, hidden-face protection, subdivision levels, and project persistence. GPU preview and commit checks cover the rendered outline and resulting mask/visibility. Hands-on lasso pen feel remains available for user feedback.
 
-Completion criteria:
+**Acceptance checks**
 
 - Blur softens a mask boundary and Sharpen tightens it without changing mesh geometry or saved vertex-group weights.
 - Lasso selections can be cancelled, respect the active submodel, and work from different viewing angles.
@@ -71,11 +82,11 @@ Completion criteria:
 
 ### 3 Transform rotation and pivot controls
 
-Implemented 14 October 2026: Rotate extends the existing World axes and Action Line transform controls. World mode offers X/Y/Z rings and a placeable/resettable pivot; Action Line reuses its start and direction for rotation around the line. The same operation controls serve the floating toolbar and sidebar, including custom-menu/shortcut actions. No parallel transform subsystem or project-format change is introduced.
+Rotate extends the existing World axes and Action Line transform controls. World mode offers X/Y/Z rings and a placeable/resettable pivot; Action Line reuses its start and direction for rotation around the line. The same operation controls serve the floating toolbar and sidebar, including custom-menu/shortcut actions. No parallel transform subsystem or project-format change is introduced.
 
 Soft masks reduce rotation angles, stored subdivision levels follow, and primitives retain their existing affine placement when regenerated. Each changed drag has one undo step. Pivot/line placement is session-only and preserves clean state and redo. Automated checks cover angle direction and wraparound, edge-on views, pivot reset, focus loss and tool switching, final release movement, masks, stored levels, primitive dimension edits and persistence, and real OpenGL control rendering. Hands-on pen feedback remains welcome before refining ring feel.
 
-Completion criteria:
+**Acceptance checks**
 
 - Axis rotation handles and angle feedback make the direction and amount of rotation clear.
 - Respect mask works with soft masks, and stored subdivision levels follow the transformation.
@@ -84,13 +95,13 @@ Completion criteria:
 
 ### 4 Automatic recovery saves
 
-Implemented 14 October 2026: automatic recovery defaults to every two minutes with five retained copies, configurable through Settings → Recovery saves. Complete project snapshots are taken between edits and written in a background worker using flushed temporary files and atomic replacement. Unchanged snapshots are deduplicated; retention runs only after a successful write. Recovery never changes the manual save target or clears modified state.
+Automatic recovery defaults to every two minutes with five retained copies, configurable through Settings → Recovery saves. Complete project snapshots are taken between edits and written in a background worker using flushed temporary files and atomic replacement. Unchanged snapshots are deduplicated; retention runs only after a successful write. Recovery never changes the manual save target or clears modified state.
 
 Startup offers retained copies explicitly. Restoring marks the project modified and selects `recovered.clay`, preserving the original project. Saving or deliberately discarding clears the session's copies through the same ordered worker, including any in-flight write. Failed writes remain visible and retry at the configured interval. Recovery settings and Save recovery now are reusable shortcut/custom-menu actions. Automated checks cover complete-project round trips, retention, interrupted/invalid writes, worker failures and retries, save/discard races, edit boundaries, restart recovery, and unsaved-change decisions.
 
 The accompanying interface pass makes Transform, Slice, Primitive, and Add brush use the existing pinnable/dockable menu system. Compact pin/unpin and left/right sidebar icons with tooltips replace long placement buttons in built-in and custom menus. Transform retains its shared controls and suppresses duplicate automatic floating controls when explicitly placed.
 
-Completion criteria:
+**Acceptance checks**
 
 - Recovery captures a complete, consistent project between edits, including work that has never been manually saved.
 - Recovery files are separate from the user's chosen project file and survive an interrupted write.
@@ -99,11 +110,11 @@ Completion criteria:
 
 ### 5 OBJ import
 
-Implemented 14 October 2026: Submodels → OBJ path → Import OBJ loads a new submodel through the existing cancellable mesh worker and commits one undo step. The rest of the scene, project save path, and brush settings remain intact. Position, scale, winding, and quads are preserved; simple planar n-gons are triangulated with the existing triangulation library. OBJ groups become vertex groups, with the first membership determining each face's category. Multiple objects form one imported submodel. UVs, supplied normals, materials, and vertex colors are outside this phase; unsupported geometry and malformed files fail explicitly.
+Submodels → OBJ path → Import OBJ loads a new submodel through the existing cancellable mesh worker and commits one undo step. The rest of the scene, project save path, and brush settings remain intact. Position, scale, winding, and quads are preserved; simple planar n-gons are triangulated with the existing triangulation library. OBJ groups become vertex groups, with the first membership determining each face's category. Multiple objects form one imported submodel. UVs, supplied normals, materials, and vertex colors are outside this phase; unsupported geometry and malformed files fail explicitly.
 
 Checks cover relative/absolute and UV/normal indices, concave and reversed polygons, overlapping group membership, size limits, invalid/interrupted/cancelled imports, primitive preservation, undo/redo, project persistence, and export/import round trips. The importer uses the existing scene/history/action paths and requires no new project format or dependency.
 
-Completion criteria:
+**Acceptance checks**
 
 - Common triangle and quad meshes import with correct geometry and winding; other polygon handling is documented.
 - OBJ face groups map to the app's vertex group workflow where possible.
@@ -112,11 +123,11 @@ Completion criteria:
 
 ### 6 Viewport reference images
 
-Implemented 14 October 2026: screen-fixed PNG/JPEG references, added by dropping files onto the viewport or through the shared References menu. Arrange images provides explicit move/resize controls and a visible Done/Escape exit; all references are passive while sculpting. Per-image opacity, visibility, and position/size locking, plus a session-only show/hide-all action, keep references manageable. The menu can be pinned or docked through the existing placement controls; its actions support custom menus and shortcuts.
+Add screen-fixed PNG/JPEG references by dropping files onto the viewport or using the shared References menu. Arrange images provides explicit move/resize controls and a visible Done/Escape exit; all references are passive while sculpting. Per-image opacity, visibility, and position/size locking, plus a session-only show/hide-all action, keep references manageable. The menu can be pinned or docked through the existing placement controls; its actions support custom menus and shortcuts.
 
 Images and placement are embedded in projects and recovery copies, independently of sculpt geometry/history. Loading applies photo orientation and bounds image dimensions, file size, count, and aggregate memory. Checks cover file removal after import, legacy projects, recovery, invalid files and placements, drag release/cancellation/focus loss, undo during a drag, locked-image navigation, and normal/small viewport OpenGL composition. See the [reference image guide](guide/references.md) for controls and limits. Front/side view-plane references remain a possible extension; hands-on pen feedback will guide interaction refinements.
 
-Completion criteria:
+**Acceptance checks**
 
 - Images can be moved, resized, hidden, locked, and removed without modifying the sculpt.
 - Locked images do not intercept sculpting or navigation gestures.
@@ -125,11 +136,11 @@ Completion criteria:
 
 ### 7 Perspective view
 
-Implemented 14 October 2026: **View → Perspective view** switches projection, with a 20–75° field-of-view control and a reusable toggle for custom menus and shortcuts. Projection changes fit the eye distance to the visible scene and adjust zoom to preserve apparent size within the normal zoom limits. Zoom enlarges the projection without moving the eye through the surface. Camera state remains session-only; changing projection ends active gestures and discards unapplied previews without adding a geometry undo step.
+**View → Perspective view** switches projection, with a 20–75° field-of-view control and a reusable toggle for custom menus and shortcuts. Projection changes fit the eye distance to the visible scene and adjust zoom to preserve apparent size within the normal zoom limits. Zoom enlarges the projection without moving the eye through the surface. Camera state remains session-only; changing projection ends active gestures and discards unapplied previews without adding a geometry undo step.
 
 GPU surfaces, wireframe and surface overlays share the perspective projection. CPU picking casts rays against the same mesh snapshot; brush radii, drag movement, rotation rings, primitive controls, selections, symmetry guides and cuts account for depth. Perspective path cuts converge at the eye and preserve closed caps. Geometry crossing the eye is clipped for viewing; a path cut through it reports an explicit error. Tests cover surface/pixel agreement, clipping, field-of-view limits, framing, shortcut migration, stamp cancellation, undo, rotation and path-cap volume. The View-panel preview has been visually checked; hands-on pen feedback remains welcome. See the [navigation guide](guide/navigation.md#perspective-view).
 
-Completion criteria:
+**Acceptance checks**
 
 - Rendering, surface picking, brush footprints, symmetry guides, and transform handles agree in both modes.
 - Orbit, pan, and zoom remain predictable, including close views and turns over the poles.
@@ -138,7 +149,15 @@ Completion criteria:
 
 ## Pen modeling foundation
 
-First pass implemented 15 October 2026. Mesh now exposes an explicit Pen modeling mode with face/edge/vertex targets, visible Replace/Add/Remove selection controls, paint selection, directional face loops, edge loops and parallel edge rings, component-to-vertex-group assignment, flat-region extrusion previews, single-face matching tunnel joins, and draggable cuts through quad strips. A tap centers the cuts; dragging slides them, with 1–16 loops controlled by visible buttons or the wheel while held. Modeling buttons are available to custom menus, shelves, and shortcuts. Complete quad-loop dissolution and topology-checked mirror/radial symmetry are also implemented for pen modeling. Existing support loops and creasing remain available.
+First pass shipped 15 October 2026. **Mesh → Pen modeling** provides:
+
+- Face, edge and vertex targets; visible Replace/Add/Remove controls and paint selection.
+- Directional face loops, edge loops, parallel edge rings and component-to-vertex-group assignment.
+- Flat-region extrusion previews and single-face matching tunnel joins.
+- Draggable cuts through quad strips: tap to center, drag to slide, and choose 1–16 loops with buttons or the wheel while held.
+- Complete quad-loop dissolution and topology-checked mirror/radial symmetry.
+
+Actions work in custom menus, shelves and shortcuts. Existing support loops and creasing remain available.
 
 Extrusions use vertical pen travel independent of pressure. Release commits one undo step; Escape discards the preview. Tunnel candidates require reversed, aligned boundary correspondence and snap to the first matching depth. Joins cancel coincident side patches at outer edges and beside existing holes, including subdivided side strips; the remaining walls conform to existing depth loops. Edits validate orientation, degeneracy, duplicate topology, mesh limits, and selection revision before commit. Stored levels are replaced only on a successful topology edit. Selection and previews are session-only, so the project schema remains unchanged.
 
@@ -146,7 +165,9 @@ Focused geometry/controller checks cover closed tunnel topology, attribute/creas
 
 ### Modeling delivery specification — 15 October 2026
 
-The four workflows below are implemented in incremental commits. Geometry/controller checks and rendered interaction exercises cover the supported operations; the user guide records their limits. Boundary bevel is a single chamfer on compatible exterior corners, bridge requires matching boundary counts, and smooth preview is one level on a low-resolution cage. These milestones establish a usable construction workflow; they do not imply arbitrary edge bevels, Boolean fusion or component modeling feature parity.
+All four workflows below are implemented and covered by geometry/controller checks and rendered interaction exercises. The [modeling guide](guide/modeling.md) explains how to use them.
+
+**Scope limits:** boundary bevel is a single chamfer on compatible exterior corners; bridge needs matching boundary counts; smooth preview adds one level to a low-resolution cage. Arbitrary edge bevels, Boolean fusion and full component modeling feature parity are outside this scope.
 
 | Milestone | Deliverable | Acceptance exercise |
 | --- | --- | --- |
@@ -155,9 +176,25 @@ The four workflows below are implemented in incremental commits. Geometry/contro
 | 3. Edit topology | Insert/slide/dissolve loops, bridge/fill boundaries, connect/split/weld/collapse and explicit face deletion | Adjust support loops, remove an unnecessary loop, open and bridge a pair of boundaries, close a hole, connect and weld vertices |
 | 4. Finish the workflow | Configuration presets, explicit repeat with remembered amounts, subdivision preview, integrated pen walkthroughs | Build symmetric inset/extruded features with visible controls, save/reload a preset, repeat a measured feature, inspect the smooth result without changing the cage |
 
-All edits use a draft, visible affected components, an explanation for unsupported topology, cancellation and one Undo per completed operation. Symmetry is atomic and requires matching sides. Topology edits preserve surviving masks, group weights and creases. Component transforms and loop slides retain selection; inset, bevel and ordinary extrusion retain their cap selection. Hidden geometry is protected. Mask protection must be explicit: a topology operation that touches protected vertices is rejected as a whole rather than partially applied. Modeling keeps its own selection and never silently replaces the sculpt mask. Geometry validity checks are not a general intersection/Boolean solver.
+**Rules every modeling edit must keep:**
 
-The interaction model is **Component → Action → Target → Options**. Component modes stay locked until deliberately changed; picking tolerance is measured in screen pixels, separate from sculpt brush size. Targets preview before contact and lock at pen-down. Shared targets include individual components, current selection, loops/rings, connected regions, flat regions and face groups; only applicable combinations are offered. Direction-sensitive targets show their direction. A visible panel is the reliable entry point, with custom menus and shortcuts using the same action identities. Parameters have visible names and values; modifiers are optional accelerators. Measured tools offer **Tap to repeat**, using the visible amount and current options; dragging sets the next amount. The toggle can disable tap edits and is stored in presets. Select keeps selection gestures and Loop cut retains its centered tap. A separate Repeat last edit command remains available for the previous measured operation.
+- Preview a draft with affected components visible. Explain unsupported topology, allow cancellation, and create one Undo per completed operation.
+- Apply symmetry atomically and require matching sides.
+- Preserve surviving masks, group weights and creases. Protect hidden geometry.
+- Reject the whole topology edit if it touches mask-protected vertices; never apply only part of it.
+- Keep selection after component transforms and loop slides; retain cap selection after inset, bevel and ordinary extrusion.
+- Keep modeling selection separate from the sculpt mask.
+
+Geometry validation is not an intersection or Boolean solver.
+
+The interaction model is **Component → Action → Target → Options**:
+
+- Component mode stays locked until changed deliberately. Picking uses screen pixels, independently of sculpt brush size.
+- Targets preview before contact and lock at pen-down. Direction-sensitive targets show their direction.
+- Targets include individual components, current selection, loops/rings, connected regions, flat regions and face groups. Offer only applicable combinations.
+- The visible panel is the main entry point. Custom menus and shortcuts use the same actions; parameters have visible names and values. Modifiers are optional shortcuts.
+- Measured tools offer **Tap to repeat** with the visible amount and current options; dragging sets the next amount. The preset-compatible toggle can disable tap edits.
+- Select keeps its selection gestures; Loop cut keeps its centered tap. **Repeat last edit** separately repeats the previous measured operation.
 
 Ordinary extrusion, contact fusion, vertex welding and loop dissolution have different meanings. Contact fusion gets a visible snap distance; geometric matching uses a separate conservative tolerance. Increasing tolerance does not make incompatible topology safe. Face labels describe polygon regions; weighted vertex groups remain a distinct selection/weighting concept even where they share existing storage.
 
@@ -177,7 +214,7 @@ These tools reuse numeric input, tap repeat, presets, mask protection, exact fac
 
 Geometry and controller tests cover closed surfaces, border extension, point patches and tube extrusion, edge positions, attributes, symmetry, masks, cancellation, tap repeat, Undo and preset compatibility. The rendered exercise uses the actual controls for a symmetric creased point patch, tube extrusion, surface-edge preview and face split. See [the component construction guide](guide/modeling.md#construct-from-edges-points-and-face-centers) for controls and limits.
 
-The documentation audit used external software vendor's Edge Actions, Point Actions and Polygon Actions to identify missing construction workflows. Clay Form exposes explicit modes and visible values rather than duplicating modifier-dependent behavior.
+A comparison of edge, point and polygon workflows helped identify missing construction tools. Clay Form uses explicit modes and visible values for these operations.
 
 #### Direct manipulation and a modeling starter
 
@@ -187,9 +224,9 @@ Move, Rotate and Scale now offer Free, Gizmo and Axis / amount interactions. The
 
 #### Research informing the design
 
-external software vendor's Actions and Targets and Options and Modifiers provide a useful compositional model. Polygon Actions separates extrusion from fused extrusion's fusing behavior. Clay Form uses explicit controls and its own terminology rather than reproducing external sculpting application's modifier timing or brush-size-dependent attraction.
+The action/target/options model draws on other sculpting workflows, including their distinction between ordinary extrusion and fused extrusion. Clay Form keeps its own explicit controls and terminology; modifier timing and brush-size-dependent attraction are not requirements.
 
-Community reports are qualitative evidence, not a prevalence survey or a claim that every external sculpting application version has the same problems:
+Community reports informed these choices. They describe individual experiences, not how common a problem is or which versions share it:
 
 - Pen edge targeting and unintended component targeting motivate locked component modes and screen-space picking.
 - Selection/masking workflow motivates explicit selection, component transforms and visible subdivision constraints.
@@ -212,20 +249,23 @@ These are separate possibilities, outside the seven priorities above. Each needs
 
 ## Delivery checks
 
-Prioritise the user experience over feature-for-feature or gesture-for-gesture parity with external sculpting application. Reference workflows explain the intended task; they do not require copying awkward interactions. Follow the [interaction principles](ui-design.md#interaction-principles), reuse existing functionality, and assess discoverability, predictable mouse/pen behaviour, and ease of cancelling or finishing each workflow.
+Follow the [interaction principles](ui-design.md#interaction-principles) and reuse existing functionality. Check that each workflow is easy to find, predictable with mouse and pen, and easy to finish or cancel. Comparison workflows explain the task; matching another application’s features or gestures is not a goal.
 
 New actions should be available through custom menus and configurable shortcuts where appropriate. Preserve existing projects, brush presets, and saved workspaces. Geometry changes need coherent undo behaviour; camera and interface changes must not dirty sculpt geometry.
 
 For each feature, run focused regression tests and check its interaction with masks, symmetry, subdivision, and pen input where relevant. Mark it complete only after its completion criteria have been checked, then update the relevant user guide linked from the README.
 
-## external sculpting application workflow references
+<a id="external-sculpting-application-workflow-references"></a>
 
-These references describe the comparison workflows; Clay Form's scope and completion criteria are defined above.
+## Comparison workflows
 
-- stroke stabilization and sculpting
+The comparisons cover these tasks. Clay Form’s scope and acceptance checks are defined above.
+
+- Stroke stabilisation and sculpting
 - Masking and lasso selection
 - Gizmo operations
-- automatic save
+- Automatic save
 - OBJ import and export
-- image reference reference images
+- Reference images
 - Orthographic and perspective cameras
+

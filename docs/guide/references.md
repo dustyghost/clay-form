@@ -2,7 +2,7 @@
 
 [Documentation home](../../README.md#documentation)
 
-Keep drawings or photographs beside the sculpt. Images stay fixed on screen while you orbit the model.
+Keep a silhouette study, anatomy sketch, or photograph beside your sculpt so you can check proportions without switching windows. Images stay fixed on screen while you orbit the model.
 
 - [Add an image](#add-a-reference)
 - [Place two studies](#example-keep-two-studies-beside-the-sculpt)
@@ -47,7 +47,7 @@ Choose **Arrange images** to edit placements. Primary drags move images; they do
 | Show references | Temporarily hide/show the collection |
 | Remove image | Remove it from the project |
 
-Outside Arrange mode, images do not intercept sculpting or navigation. Later images appear on top; use the list to select overlapping ones.
+Choose **Done** before sculpting again. Outside Arrange mode, images let sculpting and navigation gestures pass through them. If images overlap, select the one you need in the list; later images appear on top.
 
 ## Save and customize
 
@@ -68,3 +68,4 @@ Invalid/oversized images report an error without being added. These are screen o
 ## Related guides
 
 [Navigation](navigation.md) · [Workspace](workspace.md) · [Files and recovery](files.md)
+

@@ -1,21 +1,25 @@
 # Releasing Clay Form
 
-Releases are built and published by `.github/workflows/release.yml`. The workflow creates an annotated version tag, a GitHub Release, a Linux x86-64 archive and a SHA-256 checksum file.
+Use **Actions → Release → Run workflow** after the version change reaches `main` and CI passes.
 
 ## Create a release
 
-1. Update the `version` in `Cargo.toml` and commit the resulting `Cargo.lock` change.
-2. Merge that version change into `main` and wait for CI to pass.
+1. Update `version` in `Cargo.toml`. Commit that change and the resulting `Cargo.lock` change.
+2. Merge into `main` and wait for CI to pass.
 3. Open **Actions → Release → Run workflow**.
-4. Select `main` and enter the exact Cargo version, such as `0.1.0`.
+4. Select `main` and enter the exact Cargo version, for example `0.1.0`.
 
-The workflow validates the requested version against `Cargo.toml`, runs the tests, builds the release binary, creates an annotated tag such as `v0.1.0`, and publishes the assets.
+[The release workflow](workflows/release.yml) checks the requested version against `Cargo.toml`, runs tests, builds the binary, creates an annotated tag such as `v0.1.0` and publishes a GitHub Release.
 
-The same workflow also accepts a directly pushed `v*` tag. The tag version must match `Cargo.toml`. If a tag already exists, a rerun is accepted only when it points to the commit being released.
+**Releasing from a tag:** the same workflow accepts directly pushed `v*` tags. The tag version must match `Cargo.toml`.
+
+**Rerunning a release:** if the tag already exists, it must point to the commit being released.
 
 ## Release assets
 
-- `clay-form-vX.Y.Z-linux-x86_64.tar.gz` contains the executable and README.
-- `SHA256SUMS` contains the archive checksum.
+| Asset | Contents |
+| --- | --- |
+| `clay-form-vX.Y.Z-linux-x86_64.tar.gz` | Linux x86-64 executable and README |
+| `SHA256SUMS` | SHA-256 checksum for the archive |
 
-Generated release notes are based on the commits and pull requests since the previous GitHub Release.
+GitHub generates release notes from commits and pull requests since the previous GitHub Release.
