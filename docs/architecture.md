@@ -6,17 +6,12 @@ Start here to find the owner of a change. Follow the linked references when you 
 
 Clay Form uses immediate-mode egui, one application controller, and one document owner. It has no MVC framework, ECS, event bus, or plugin layer.
 
-```mermaid
-flowchart LR
-    UI[UI widgets] -->|Commands| App[Application controller]
-    App --> Document[Document and history]
-    App --> Files[Persistence adapter]
-    App --> Tablet[Tablet service]
-    Viewport[Viewport gestures] -->|Sculpt dabs| Document
-    Viewport --> Camera[Camera]
-    Scene[Rendering and picking] -->|Reads| Document
-    Document --> Sculpt[Brush and mesh algorithms]
-```
+The main paths through the app are:
+
+- **Controls:** UI widgets send commands to the application controller, which coordinates document edits, file operations, and tablet input.
+- **Sculpting:** viewport gestures send sculpt dabs to the document, which uses the brush and mesh algorithms and records history.
+- **Navigation:** viewport gestures update the camera.
+- **Display:** rendering and picking read the document’s mesh data.
 
 ## Ownership and responsibilities
 
