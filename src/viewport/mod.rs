@@ -120,13 +120,16 @@ impl Viewport {
         }
         self.references.cancel_drag();
     }
-    pub(crate) fn initialize_renderer(&mut self, gl: &eframe::glow::Context) -> Result<(), String> {
-        self.renderer = Some(gpu::Renderer::new(gl)?);
+    pub(crate) fn initialize_renderer(
+        &mut self,
+        state: &eframe::egui_wgpu::RenderState,
+    ) -> Result<(), String> {
+        self.renderer = Some(gpu::Renderer::new(state)?);
         Ok(())
     }
-    pub(crate) fn destroy_renderer(&self, gl: &eframe::glow::Context) {
+    pub(crate) fn destroy_renderer(&self) {
         if let Some(renderer) = &self.renderer {
-            renderer.destroy(gl);
+            renderer.destroy();
         }
     }
     pub(crate) fn cancel(&mut self, document: &mut Document) {
