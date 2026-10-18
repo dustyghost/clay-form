@@ -727,6 +727,7 @@ impl Gpu {
         if let Some((symmetry, opacity)) = &preview.symmetry {
             u.guide_center = vector(symmetry.center, *opacity);
             for (i, guide) in symmetry.guides().into_iter().take(32).enumerate() {
+                u.right[3] = (i + 1) as f32; // Uniform guide count for derivative-safe loops.
                 u.guide_normals[i] = vector(guide.normal, 1.);
                 u.guide_sides[i] = vector(
                     guide.side.unwrap_or_default(),

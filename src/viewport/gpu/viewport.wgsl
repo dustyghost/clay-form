@@ -62,10 +62,10 @@ fn alpha_weight(input: vec2f) -> f32 {
  var rgb=base*shade*(1.-v.mask*0.75);
  // Derivatives must be evaluated uniformly, before per-fragment conditions.
  var widths: array<f32,32>;
- for(var i=0u;i<32u;i++) { widths[i]=fwidth(dot(v.position-u.guide_center.xyz,u.guide_normals[i].xyz)); }
+ for(var i=0u;i<u32(u.right.w);i++) { widths[i]=fwidth(dot(v.position-u.guide_center.xyz,u.guide_normals[i].xyz)); }
  if u.flags.z==1. { return vec4f(rgb,u.flags.w); }
  if v.is_active>0.5 {
-  for(var i=0u;i<32u;i++) {
+  for(var i=0u;i<u32(u.right.w);i++) {
    let offset=v.position-u.guide_center.xyz;
    let distance=dot(offset,u.guide_normals[i].xyz); let width=widths[i];
    if u.guide_normals[i].w>0. && width>0.000001 && (u.guide_sides[i].w<0.5 || dot(offset,u.guide_sides[i].xyz)>=0.) {
