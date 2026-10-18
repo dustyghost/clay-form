@@ -324,14 +324,14 @@ fn adaptive_shift_smooth_reports_actual_density_reduction_and_undoes() {
 
 #[cfg(target_os = "linux")]
 #[test]
-#[ignore = "requires an installed EGL OpenGL implementation"]
+#[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn navigation_and_smooth_offscreen_preview() {
     use crate::preferences::{Dock, Tool};
     let size = [1200, 850];
     let mut capture = crate::viewport::UiCapture::new(size);
     let ctx = egui::Context::default();
     let mut app = App::default();
-    app.viewport.initialize_renderer(&capture.gl).unwrap();
+    app.viewport.initialize_renderer(&capture.state).unwrap();
     app.camera.set_zoom(8.);
     for panel in &mut app.ui.preferences.panels {
         panel.dock = match panel.tool {
@@ -397,7 +397,7 @@ fn navigation_and_smooth_offscreen_preview() {
         }
     }
     assert_eq!(app.document.geometry_snapshot(), before);
-    app.viewport.destroy_renderer(&capture.gl);
+    app.viewport.destroy_renderer();
 }
 
 #[test]

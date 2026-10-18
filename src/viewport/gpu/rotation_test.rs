@@ -9,12 +9,12 @@ use crate::{
 use eframe::egui;
 
 #[test]
-#[ignore = "requires an installed EGL OpenGL implementation"]
+#[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn gpu_rotation_controls_and_primitive_regeneration() {
     let mut capture = UiCapture::new([1000, 800]);
     let ctx = egui::Context::default();
     let mut app = App::default();
-    app.viewport.initialize_renderer(&capture.gl).unwrap();
+    app.viewport.initialize_renderer(&capture.state).unwrap();
     app.document.initialize_primitive().unwrap();
     let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
     primitive.size = Vec3(1.4, 0.8, 1.);
@@ -114,5 +114,5 @@ fn gpu_rotation_controls_and_primitive_regeneration() {
             capture.save(format!("{path}-{step}.png"), &rgba);
         }
     }
-    app.viewport.destroy_renderer(&capture.gl);
+    app.viewport.destroy_renderer();
 }

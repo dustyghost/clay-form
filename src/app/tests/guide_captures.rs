@@ -20,7 +20,7 @@ struct Guide {
 }
 
 #[test]
-#[ignore = "renders Polish cleanup; requires EGL and CLAY_GUIDE_PREVIEW"]
+#[ignore = "renders Polish cleanup; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn polish_brush_offscreen_review() {
     use crate::sculpt::{Brush, Dab, Geometry, Kind, Vec3};
     let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
@@ -79,7 +79,7 @@ impl Guide {
     fn new(directory: &std::path::Path, size: [i32; 2]) -> Self {
         let mut capture = UiCapture::new(size);
         let mut app = App::default();
-        app.viewport.initialize_renderer(&capture.gl).unwrap();
+        app.viewport.initialize_renderer(&capture.state).unwrap();
         for panel in &mut app.ui.preferences.panels {
             panel.dock = Dock::Hidden;
         }
@@ -195,12 +195,12 @@ impl Guide {
 }
 impl Drop for Guide {
     fn drop(&mut self) {
-        self.app.viewport.destroy_renderer(&self.capture.gl);
+        self.app.viewport.destroy_renderer();
     }
 }
 
 #[test]
-#[ignore = "renders documentation screenshots; requires EGL and CLAY_GUIDE_PREVIEW directory"]
+#[ignore = "renders documentation screenshots; requires Vulkan and CLAY_GUIDE_PREVIEW directory"]
 fn guide_workflows_offscreen_preview() {
     let Ok(directory) = std::env::var("CLAY_GUIDE_PREVIEW") else {
         return;
@@ -439,7 +439,7 @@ fn guide_workflows_offscreen_preview() {
 }
 
 #[test]
-#[ignore = "renders mirror documentation screenshots; requires EGL and CLAY_GUIDE_PREVIEW directory"]
+#[ignore = "renders mirror documentation screenshots; requires Vulkan and CLAY_GUIDE_PREVIEW directory"]
 fn mirror_guide_offscreen_preview() {
     let Ok(directory) = std::env::var("CLAY_GUIDE_PREVIEW") else {
         return;
@@ -479,7 +479,7 @@ fn mirror_guide_offscreen_preview() {
 }
 
 #[test]
-#[ignore = "renders edge tool documentation; requires EGL and CLAY_GUIDE_PREVIEW directory"]
+#[ignore = "renders edge tool documentation; requires Vulkan and CLAY_GUIDE_PREVIEW directory"]
 fn edge_tools_offscreen_preview() {
     use crate::sculpt::{BorderTarget, Geometry};
     let Ok(directory) = std::env::var("CLAY_GUIDE_PREVIEW") else {
@@ -653,7 +653,7 @@ fn click_guide_label(g: &mut Guide, label: &str) {
 }
 
 #[test]
-#[ignore = "renders project file dialogs; requires EGL and CLAY_GUIDE_PREVIEW"]
+#[ignore = "renders project file dialogs; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn project_file_dialog_offscreen_review() {
     let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
     let directory = std::path::Path::new(&directory);
@@ -696,7 +696,7 @@ fn hover_guide_label(g: &mut Guide, label: &str) {
 }
 
 #[test]
-#[ignore = "interactive rendered walkthrough; requires EGL and CLAY_GUIDE_PREVIEW"]
+#[ignore = "interactive rendered walkthrough; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn edge_workflow_offscreen_review() {
     use crate::sculpt::{BorderTarget, Geometry, PrimitiveKind};
     let Ok(directory) = std::env::var("CLAY_GUIDE_PREVIEW") else {
@@ -832,7 +832,7 @@ fn edge_workflow_offscreen_review() {
 }
 
 #[test]
-#[ignore = "interactive modeling walkthrough; requires EGL and CLAY_GUIDE_PREVIEW"]
+#[ignore = "interactive modeling walkthrough; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn modeling_workflow_offscreen_review() {
     use crate::sculpt::Geometry;
     let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
@@ -947,7 +947,7 @@ fn modeling_workflow_offscreen_review() {
 }
 
 #[test]
-#[ignore = "boundary/adjacent tunnel walkthrough; requires EGL and CLAY_GUIDE_PREVIEW"]
+#[ignore = "boundary/adjacent tunnel walkthrough; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn modeling_boundary_join_offscreen_review() {
     let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
     let directory = std::path::Path::new(&directory);
@@ -1003,7 +1003,7 @@ fn modeling_boundary_join_offscreen_review() {
 }
 
 #[test]
-#[ignore = "selection painting and loops walkthrough; requires EGL and CLAY_GUIDE_PREVIEW"]
+#[ignore = "selection painting and loops walkthrough; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn modeling_selection_offscreen_review() {
     let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
     let directory = std::path::Path::new(&directory);
@@ -1057,7 +1057,7 @@ fn modeling_selection_offscreen_review() {
 }
 
 #[test]
-#[ignore = "symmetric selection, extrusion and dissolve walkthrough; requires EGL and CLAY_GUIDE_PREVIEW"]
+#[ignore = "symmetric selection, extrusion and dissolve walkthrough; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn modeling_symmetry_dissolve_offscreen_review() {
     let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
     let directory = std::path::Path::new(&directory);
@@ -1138,7 +1138,7 @@ fn modeling_symmetry_dissolve_offscreen_review() {
 }
 
 #[test]
-#[ignore = "integrated pen construction, presets and smooth preview; requires EGL and CLAY_GUIDE_PREVIEW"]
+#[ignore = "integrated pen construction, presets and smooth preview; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn modeling_milestones_offscreen_review() {
     let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
     let directory = std::path::Path::new(&directory);
@@ -1215,7 +1215,7 @@ fn modeling_milestones_offscreen_review() {
 }
 
 #[test]
-#[ignore = "renders exact face group assignment; requires EGL and CLAY_GUIDE_PREVIEW"]
+#[ignore = "renders exact face group assignment; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn modeling_face_group_gap_offscreen_review() {
     let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
     let directory = std::path::Path::new(&directory);
@@ -1260,7 +1260,7 @@ fn modeling_face_group_gap_offscreen_review() {
 }
 
 #[test]
-#[ignore = "renders edge, point and face construction; requires EGL and CLAY_GUIDE_PREVIEW"]
+#[ignore = "renders edge, point and face construction; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn modeling_component_construction_offscreen_review() {
     let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
     let directory = std::path::Path::new(&directory);
@@ -1347,7 +1347,7 @@ fn modeling_component_construction_offscreen_review() {
 }
 
 #[test]
-#[ignore = "renders component gizmos and modeling initialization; requires EGL and CLAY_GUIDE_PREVIEW"]
+#[ignore = "renders component gizmos and modeling initialization; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn modeling_transform_gizmo_offscreen_review() {
     let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
     let directory = std::path::Path::new(&directory);

@@ -1,17 +1,13 @@
-use super::{tests::Egl, *};
+use super::{ui_capture::Headless, *};
 use crate::camera::Camera;
 
 #[test]
-#[ignore = "requires an installed EGL OpenGL implementation"]
+#[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn gpu_visibility_hide_split_and_undo() {
-    unsafe {
-        let egl = Egl::new();
-        let gl = glow::Context::from_loader_function(|name| {
-            let name = std::ffi::CString::new(name).unwrap();
-            (egl.get_proc)(name.as_ptr())
-        });
+    {
+        let gl = Headless::new();
         let mut document = Document::default();
-        let mut renderer = Renderer::new(&gl).unwrap();
+        let mut renderer = Renderer::new(&gl.state).unwrap();
         let mut frames = Vec::new();
         for phase in 0..4 {
             match phase {
@@ -33,9 +29,8 @@ fn gpu_visibility_hide_split_and_undo() {
                 display.depth_extent,
             );
             let mut gpu = renderer.gpu.lock().unwrap();
-            gpu.upload(&gl, &display);
+            gpu.upload(&display);
             gpu.paint(
-                &gl,
                 &params,
                 [512, 512],
                 false,
@@ -44,21 +39,7 @@ fn gpu_visibility_hide_split_and_undo() {
                 &Preview::default(),
             );
             let mut pixels = vec![0; 512 * 512 * 4];
-            gl.bind_framebuffer(
-                glow::READ_FRAMEBUFFER,
-                Some(gpu.target.as_ref().unwrap().framebuffer),
-            );
-            gl.read_pixels(
-                0,
-                0,
-                512,
-                512,
-                glow::RGBA,
-                glow::UNSIGNED_BYTE,
-                glow::PixelPackData::Slice(Some(&mut pixels)),
-            );
-            gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
-            assert_eq!(gl.get_error(), glow::NO_ERROR);
+            pixels = gpu.read();
             let pixel = |x: usize| &pixels[(256 * 512 + x) * 4..(256 * 512 + x) * 4 + 4];
             let background = &[23, 26, 31, 255];
             assert_ne!(pixel(180), background, "visible half must render");
@@ -79,6 +60,6 @@ fn gpu_visibility_hide_split_and_undo() {
             }
             image::save_buffer(path, &pixels, 2048, 512, image::ColorType::Rgba8).unwrap();
         }
-        renderer.destroy(&gl);
+        renderer.destroy();
     }
 }

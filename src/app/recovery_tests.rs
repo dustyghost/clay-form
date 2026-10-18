@@ -86,7 +86,7 @@ fn invalid_recovery_keeps_current_document_and_visible_error() {
 
 #[cfg(target_os = "linux")]
 #[test]
-#[ignore = "requires an installed EGL OpenGL implementation"]
+#[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn recovery_and_menu_placement_offscreen_preview() {
     use crate::{
         preferences::{BuiltinMenu, Dock, Tool},
@@ -101,7 +101,7 @@ fn recovery_and_menu_placement_offscreen_preview() {
         ..Default::default()
     };
     app.initialize_recovery(directory.0.clone());
-    app.viewport.initialize_renderer(&capture.gl).unwrap();
+    app.viewport.initialize_renderer(&capture.state).unwrap();
     for panel in &mut app.ui.preferences.panels {
         panel.dock = Dock::Hidden;
     }
@@ -166,5 +166,5 @@ fn recovery_and_menu_placement_offscreen_preview() {
             );
         }
     }
-    app.viewport.destroy_renderer(&capture.gl);
+    app.viewport.destroy_renderer();
 }

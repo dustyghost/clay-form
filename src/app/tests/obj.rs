@@ -139,7 +139,7 @@ fn scene_limit_and_name_collisions_are_handled_without_partial_edits() {
 
 #[cfg(target_os = "linux")]
 #[test]
-#[ignore = "requires an installed EGL OpenGL implementation"]
+#[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn obj_import_offscreen_preview() {
     use crate::{
         preferences::{Dock, Tool},
@@ -152,7 +152,7 @@ fn obj_import_offscreen_preview() {
         "v -0.7 -0.7 0.8\nv 0.7 -0.7 0.8\nv 0.7 0.7 0.8\nv -0.7 0.7 0.8\nv 0 0 1.8\ng Base\nf 4 3 2 1\ng Sides\nf 1 2 5\nf 2 3 5\nf 3 4 5\nf 4 1 5\n",
     );
     let mut app = App::default();
-    app.viewport.initialize_renderer(&capture.gl).unwrap();
+    app.viewport.initialize_renderer(&capture.state).unwrap();
     for panel in &mut app.ui.preferences.panels {
         panel.dock = if panel.tool == Tool::Submodels {
             Dock::Right
@@ -198,5 +198,5 @@ fn obj_import_offscreen_preview() {
         }
     }
     assert_eq!(app.document.geometry_snapshot(), before);
-    app.viewport.destroy_renderer(&capture.gl);
+    app.viewport.destroy_renderer();
 }
