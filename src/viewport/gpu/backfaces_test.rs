@@ -8,7 +8,7 @@ use crate::{
 #[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn gpu_backfaces_are_faint_depth_tested_and_do_not_modify_geometry() {
     {
-        let gl = Headless::new();
+        let headless = Headless::new();
         let mut plane = Primitive::for_kind(PrimitiveKind::Plane);
         plane.divisions = [1; 3];
         let mut mesh = plane.mesh().unwrap();
@@ -20,7 +20,7 @@ fn gpu_backfaces_are_faint_depth_tested_and_do_not_modify_geometry() {
         }
         let mut document = Document::default();
         document.replace_geometry(Geometry::new(mesh)).unwrap();
-        let mut renderer = Renderer::new(&gl.state).unwrap();
+        let mut renderer = Renderer::new(&headless.state).unwrap();
         let display = renderer.geometry(&document);
         let original = document.geometry_snapshot();
         let (right, up, view) = Camera::default().basis();

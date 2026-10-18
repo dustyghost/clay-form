@@ -1,3 +1,4 @@
+#[cfg(target_os = "linux")]
 use super::ui_capture::{Headless, UiCapture};
 use super::*;
 use crate::{
@@ -69,9 +70,9 @@ fn similarly_named_groups_display_distinct_muted_colors_and_renames_keep_them() 
 #[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn gpu_offscreen_depth_wireframe_and_cache() {
     {
-        let gl = Headless::new();
+        let headless = Headless::new();
 
-        let mut renderer = Renderer::new(&gl.state).unwrap();
+        let mut renderer = Renderer::new(&headless.state).unwrap();
         let mut document = Document::default();
         let mut plane = Primitive::for_kind(PrimitiveKind::Plane);
         plane.divisions = [1; 3];
@@ -701,7 +702,7 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         let renderer = viewport.renderer.take().unwrap();
         renderer.destroy();
         drop(renderer);
-        drop(gl);
+        drop(headless);
     }
 }
 

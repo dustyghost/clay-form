@@ -8,7 +8,7 @@ use crate::{
 #[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn gpu_slice_cap_shading_preview() {
     {
-        let gl = Headless::new();
+        let headless = Headless::new();
         for separate in [false, true] {
             let mut geometry = Geometry::new(crate::sculpt::Mesh::starting_sphere());
             let options = SliceOptions {
@@ -46,7 +46,7 @@ fn gpu_slice_cap_shading_preview() {
             let mut document = Document::default();
             document.replace_geometry(geometry).unwrap();
             let before = document.geometry_snapshot();
-            let mut renderer = Renderer::new(&gl.state).unwrap();
+            let mut renderer = Renderer::new(&headless.state).unwrap();
             let display = renderer.geometry(&document);
             let camera = Camera {
                 yaw: 0.35,
@@ -118,7 +118,7 @@ fn gpu_slice_cap_shading_preview() {
 #[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn gpu_sliced_hemisphere_thickness_preview_matches_applied_shell() {
     {
-        let gl = Headless::new();
+        let headless = Headless::new();
         let mut geometry = Geometry::new(crate::sculpt::Mesh::starting_sphere());
         geometry
             .slice(
@@ -139,7 +139,7 @@ fn gpu_sliced_hemisphere_thickness_preview_matches_applied_shell() {
         let mut document = Document::default();
         document.replace_geometry(geometry).unwrap();
         let source = document.geometry_snapshot();
-        let mut renderer = Renderer::new(&gl.state).unwrap();
+        let mut renderer = Renderer::new(&headless.state).unwrap();
         let base = renderer.geometry(&document);
         assert_eq!(base.mesh.vertices, source.mesh.vertices);
         let display = renderer.render_geometry.as_ref().unwrap().clone();
@@ -202,7 +202,7 @@ fn gpu_sliced_hemisphere_thickness_preview_matches_applied_shell() {
 #[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn gpu_rounded_slice_path_preview() {
     {
-        let gl = Headless::new();
+        let headless = Headless::new();
         let mut geometry = Geometry::new(crate::sculpt::Mesh::starting_sphere());
         let a = Vec3(-0.5, 0.2, 0.);
         let b = Vec3(0., -0.25, 0.);
@@ -230,7 +230,7 @@ fn gpu_rounded_slice_path_preview() {
         geometry.mesh.validate_closed().unwrap();
         let mut document = Document::default();
         document.replace_geometry(geometry).unwrap();
-        let mut renderer = Renderer::new(&gl.state).unwrap();
+        let mut renderer = Renderer::new(&headless.state).unwrap();
         let display = renderer.geometry(&document);
         let camera = Camera {
             yaw: 0.2,

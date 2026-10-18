@@ -10,8 +10,8 @@ use std::time::Instant;
 #[ignore = "load profile requires Vulkan; run in release mode"]
 fn gpu_load_profile() {
     {
-        let gl = Headless::new();
-        let driver = format!("{:?}", gl.state.adapter.get_info());
+        let headless = Headless::new();
+        let driver = format!("{:?}", headless.state.adapter.get_info());
         eprintln!("{driver}");
         let mut csv = String::from(
             "levels,models,vertices,triangles,mesh_prepare_ms,upload_ms,cpu_view_ms,pick_ms,solid_p50_ms,solid_p95_ms,wire_p50_ms,wire_p95_ms,dab_ms\n",
@@ -58,14 +58,14 @@ fn gpu_load_profile() {
                     previous = center;
                 }
             }
-            let mut renderer = Renderer::new(&gl.state).unwrap();
+            let mut renderer = Renderer::new(&headless.state).unwrap();
             let start = Instant::now();
             let display = renderer.geometry(&document);
             let mesh_prepare = start.elapsed().as_secs_f64() * 1000.;
             let mut gpu = renderer.gpu.lock().unwrap();
             let start = Instant::now();
             gpu.upload(&display);
-            gl.wait();
+            headless.wait();
             let upload = start.elapsed().as_secs_f64() * 1000.;
             let mut solid = Vec::new();
             let mut wire = Vec::new();
@@ -94,7 +94,7 @@ fn gpu_load_profile() {
                         false,
                         &Preview::default(),
                     );
-                    gl.wait();
+                    headless.wait();
                     // First draw includes framebuffer/edge buffer creation.
                     if frame > 0 {
                         times.push(start.elapsed().as_secs_f64() * 1000.);

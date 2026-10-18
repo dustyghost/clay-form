@@ -5,9 +5,9 @@ use crate::camera::Camera;
 #[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn gpu_visibility_hide_split_and_undo() {
     {
-        let gl = Headless::new();
+        let headless = Headless::new();
         let mut document = Document::default();
-        let mut renderer = Renderer::new(&gl.state).unwrap();
+        let mut renderer = Renderer::new(&headless.state).unwrap();
         let mut frames = Vec::new();
         for phase in 0..4 {
             match phase {
