@@ -64,6 +64,10 @@ The output identifies the wgpu adapter and backend. A `llvmpipe` result measures
 
 Use those measurements to choose the next optimization. Likely candidates to investigate are a spatial index for picking, limiting uploads and normal updates to changed mesh regions, and spatial brush-neighborhood queries. Higher-density sculpting may need CPU geometry work even when drawing is fast.
 
+### Software Vulkan validation sample
+
+The [2026-10-18 CSV](validation/wgpu-lavapipe-2026-10-18.csv) records a release run on Debian 13, Rust 1.99.0 and Mesa 25.0.7 lavapipe (LLVM 19.1.7), at 256 × 256 pixels with two Mesa worker threads. Solid-frame medians ranged from 2.128 ms for 4,706 vertices to 64.857 ms for 301,058 vertices; visible-wireframe medians were 4.013 ms and 136.242 ms respectively. These CPU software-renderer timings are diagnostic and do not establish hardware performance parity with glow. The profile excludes surface presentation and real input latency.
+
 ### Document edit profile
 
 `cargo run --release --locked --example edit_profile` measures the document layer without a window. It times the first translation (including its undo snapshot), the median of five further translations in that stroke, and one half-space mask operation. The larger cases retain two additional subdivision levels. Each inactive model retains the same stored geometry as the active model.
