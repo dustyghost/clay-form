@@ -16,19 +16,19 @@ cargo clippy --locked --all-targets -- -D warnings
 
 Tests cover brush and mask behavior, legacy JSON compatibility, project/preset disk saves, stroke and bounded undo/redo, failed loads, save/open protection, and simulated viewport/gizmo gestures.
 
-CI runs formatting, the ordinary test suite, and Clippy, plus a separate Mesa/EGL job for the GPU correctness tests. See [GPU validation](gpu-rendering.md#validation) for the Linux graphics checks, including the app previews.
+CI runs formatting, the ordinary test suite, and Clippy, plus a separate Mesa Vulkan job for the GPU correctness tests. See [GPU validation](gpu-rendering.md#validation) for the Linux graphics checks, including the app previews.
 
 For manual performance measurements, see [GPU rendering and profiling](gpu-rendering.md). `cargo run --release --locked --example edit_profile` measures document transform and mask-edit costs without opening a window.
 
 ## Update guide screenshots
 
-On Linux with Mesa/EGL installed, run:
+On Linux with Mesa Vulkan installed, run:
 
 ```sh
 bash scripts/update-doc-screenshots.sh
 ```
 
-The script runs the real application UI and OpenGL renderer offscreen with synthetic scenes, then copies the selected PNGs into `docs/images/` only after every capture test passes. It uses software rendering and defaults to two Mesa worker threads; no desktop window is needed. The temporary capture directory is printed at the end and retains extra frames for inspection. The edge workflow review also clicks the real controls to check selection, navigation, crease removal, both subdivision operations, loop targets, thickness application, and Undo.
+The script runs the real application UI and wgpu renderer offscreen with synthetic scenes, then copies the selected PNGs into `docs/images/` only after every capture test passes. It uses software rendering and defaults to two Mesa worker threads; no desktop window is needed. The temporary capture directory is printed at the end and retains extra frames for inspection. The edge workflow review also clicks the real controls to check selection, navigation, crease removal, both subdivision operations, loop targets, thickness application, and Undo.
 
 Review the resulting images before committing them, and update the guide's steps and captions whenever controls or behavior change. Follow the [documentation style](documentation-style.md): short tasks, searchable headings, and images that show the relevant control or result. See the [screenshot inventory](images/README.md) for capture sources and the [GPU validation prerequisites](gpu-rendering.md#validation) for graphics setup. These captures check appearance and behavior; they are not performance measurements.
 

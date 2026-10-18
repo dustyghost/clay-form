@@ -10,7 +10,7 @@ Install Rust through rustup, then run from the repository root (rustup selects t
 cargo run --release
 ```
 
-Linux requires a working Wayland or X11 desktop and desktop OpenGL 3.3 or newer. The model viewport uses cached GPU buffers, depth-tested rendering, shader lighting, and surface alpha/symmetry overlays; egui draws the interface. The first build downloads Cargo dependencies. `Cargo.lock` is committed for reproducible application builds.
+Linux requires a working Wayland or X11 desktop and a Vulkan-capable GPU and driver (Mesa lavapipe also works for software rendering). The model viewport uses cached GPU buffers, depth-tested rendering, shader lighting, and surface alpha/symmetry overlays; egui draws the interface. The first build downloads Cargo dependencies. `Cargo.lock` is committed for reproducible application builds.
 
 ## Documentation
 
@@ -35,4 +35,4 @@ See the [roadmap](docs/roadmap.md) for completed work, upcoming phases, and deli
 
 ## Scope
 
-This is a desktop sculpting prototype. Meshes retain quad topology where available and use triangles for rendering and picking. The viewport supports orthographic and perspective viewing with OpenGL rendering; sculpting, picking, and topology operations run on the CPU. Subdivision, voxel remeshing, and local adaptive topology are implemented; quad retopology, sculpt layers, materials, and texture painting are future work. Meshes are limited to 500,000 vertices and 1,000,000 triangles; large scenes can still be limited by CPU editing and picking work. Mesh/alpha file sizes are bounded on load.
+This is a desktop sculpting prototype. Meshes retain quad topology where available and use triangles for rendering and picking. The viewport supports orthographic and perspective viewing with wgpu rendering; sculpting, picking, and topology operations run on the CPU. Subdivision, voxel remeshing, and local adaptive topology are implemented; quad retopology, sculpt layers, materials, and texture painting are future work. Meshes are limited to 500,000 vertices and 1,000,000 triangles; large scenes can still be limited by CPU editing and picking work. Mesh/alpha file sizes are bounded on load.

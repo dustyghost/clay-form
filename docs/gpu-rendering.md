@@ -2,9 +2,9 @@
 
 [Documentation home](../README.md#documentation)
 
-Clay Form retains egui for the interface and uses its existing glow/OpenGL backend for a dedicated 3D viewport. Desktop OpenGL 3.3 or newer is required. No new rendering dependency or file-format change is introduced.
+Clay Form retains egui for the interface and uses eframe’s wgpu backend for a dedicated 3D viewport. Linux requires Vulkan; the enabled native backends also include Metal and DX12. CPU sculpting and project file formats are unchanged.
 
-The renderer caches positions, normals, masks, materials, triangle indices, and model ownership. Camera changes update shader uniforms. Geometry/mask edits and model visibility/selection changes invalidate the cache; undo, redo, New, Open, and completed topology jobs do the same. Wireframe edge buffers are generated only when wireframe is requested after an edit. Quad diagonals remain optional.
+The renderer splits surface and wireframe buffers at device allocation/binding limits, preserving the existing per-model geometry limits across dense multi-model scenes. It caches positions, normals, masks, materials, triangle indices, and model ownership. Camera changes update shader uniforms. Geometry/mask edits and model visibility/selection changes invalidate the cache; undo, redo, New, Open, and completed topology jobs do the same. Wireframe edge buffers are generated only when wireframe is requested after an edit. Quad diagonals remain optional.
 
 An offscreen color/depth framebuffer gives intersecting and overlapping submodels proper depth testing. Visible wireframe uses that depth buffer; Front shows front-facing edges through surfaces; Transparent shows every edge with no surface fill. The View menu optionally draws back-facing surfaces in a separate translucent pass (15% default opacity). That pass depth-tests against opaque front faces but does not write depth, allowing surfaces behind a back to remain visible. Lighting reverses the display normal for that pass; geometry normals and CPU front-surface picking are unchanged. Transparent wireframe continues to omit surface fills.
 
@@ -14,21 +14,21 @@ Mesh deformation, subdivision, remeshing, undo, and surface picking remain CPU o
 
 ## Validation
 
-The ordinary test suite retains a CPU paint path for headless UI and picking tests. CI also runs every ignored GPU correctness test in a separate Linux job using surfaceless Mesa software rendering:
+The ordinary test suite retains a CPU paint path for headless UI and picking tests. CI also runs every ignored GPU correctness test in a separate Linux job using Mesa lavapipe software Vulkan. Install `mesa-vulkan-drivers` and `libvulkan1` (plus the usual build dependencies). No EGL library, display server or window is required:
 
 ```sh
-EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib viewport::gpu:: -- --ignored --skip gpu_load_profile --test-threads=1
-EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib recovery_and_menu_placement_offscreen_preview -- --ignored
-EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib obj_import_offscreen_preview -- --ignored
-EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib reference_images_offscreen_preview -- --ignored
-EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib navigation_and_smooth_offscreen_preview -- --ignored
-EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib detail_groove_offscreen_preview -- --ignored
-EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 cargo test --locked --lib perspective_view_offscreen_preview -- --ignored
+CLAY_GPU_SOFTWARE=1 cargo test --locked --lib viewport::gpu:: -- --ignored --skip gpu_load_profile --test-threads=1
+CLAY_GPU_SOFTWARE=1 cargo test --locked --lib recovery_and_menu_placement_offscreen_preview -- --ignored
+CLAY_GPU_SOFTWARE=1 cargo test --locked --lib obj_import_offscreen_preview -- --ignored
+CLAY_GPU_SOFTWARE=1 cargo test --locked --lib reference_images_offscreen_preview -- --ignored
+CLAY_GPU_SOFTWARE=1 cargo test --locked --lib navigation_and_smooth_offscreen_preview -- --ignored
+CLAY_GPU_SOFTWARE=1 cargo test --locked --lib detail_groove_offscreen_preview -- --ignored
+CLAY_GPU_SOFTWARE=1 cargo test --locked --lib perspective_view_offscreen_preview -- --ignored
 ```
 
 Only the manual load profile is excluded. Software rendering checks shader, framebuffer, picking/display, and UI composition correctness; it is not a hardware performance measurement.
 
-The focused checks remain available for local debugging. On a Linux host with EGL installed, the opt-in OpenGL test compiles the real shaders and reads back rendered pixels:
+The focused checks remain available for local debugging. On a Linux host with Vulkan installed, the opt-in wgpu test compiles the real shaders and reads back rendered pixels:
 
 ```sh
 cargo test --locked gpu_offscreen -- --ignored --nocapture
@@ -60,7 +60,7 @@ The workload includes approximately 4.7k, 19k, 75k, and 301k vertices in a singl
 
 The CSV records display-mesh preparation, initial buffer upload, CPU view preparation, picking, solid/wireframe frame times, and Standard-brush dab time. Rendering measurements finish GPU work before stopping the clock and exclude the first framebuffer/edge-buffer creation draw. Median and approximate 95th percentile use 16 camera frames. These are diagnostic samples, not CI performance thresholds or a complete end-to-end input-latency benchmark. The first dab includes the undo snapshot; later dabs share the stroke.
 
-The output identifies the GL driver. A `llvmpipe` result measures software rendering on the CPU and cannot establish hardware GPU performance. Compare runs on the same driver, hardware, resolution, and workload. Native application profiling at normal window size should also cover sustained strokes, adaptive topology, masks, symmetry, high-DPI screens, and repeated New/Open/undo/redo to check memory stability.
+The output identifies the wgpu adapter and backend. A `llvmpipe` result measures software rendering on the CPU and cannot establish hardware GPU performance. Compare runs on the same driver, hardware, resolution, and workload. Native application profiling at normal window size should also cover sustained strokes, adaptive topology, masks, symmetry, high-DPI screens, and repeated New/Open/undo/redo to check memory stability.
 
 Use those measurements to choose the next optimization. Likely candidates to investigate are a spatial index for picking, limiting uploads and normal updates to changed mesh regions, and spatial brush-neighborhood queries. Higher-density sculpting may need CPU geometry work even when drawing is fast.
 
@@ -78,13 +78,13 @@ A local sample on 2026-10-14, using an Intel Core i7-7500U with other validation
 
 Transforms now prepare and check coordinates without cloning inactive models or validating unchanged topology on every update. The first update still snapshots the scene for undo. These samples measure document work, not complete viewport latency: display preparation and GPU uploads still follow an edit. Bulk mask operations still clone and validate the mesh stack, and CPU picking still scans triangles. Those remain separate scaling work; this change adds no spatial index or hardware-rendering performance claim.
 
-Polygroup colors are cached per display triangle in a packed RGBA8 texture. The fragment shader fetches by primitive ID, retaining indexed position/normal buffers and sharp category boundaries. Group registry order selects deliberately separated hues from a muted palette, so renaming keeps the color; masks, guides and brush previews still compose over the surface. The View toggle changes uniforms without rebuilding geometry. If the combined scene exceeds the GPU texture capacity, the renderer retains ordinary clay shading.
+Polygroup colors are cached per display triangle in a storage buffer. The vertex shader pulls indexed position/normal data and face colors using the draw vertex index, retaining sharp category boundaries without optional primitive-index features. Group registry order selects deliberately separated hues from a muted palette, so renaming keeps the color; masks, guides and brush previews still compose over the surface. The View toggle changes uniforms without rebuilding geometry.
 
 Visible wireframe uses slope-scaled polygon offset on filled surfaces and unshifted edge positions. This prevents depth fighting on tilted primitive faces while retaining depth occlusion by foreground surfaces. Axis colors are per-edge attributes in the cached line buffers.
 
-Surface lighting uses angle-weighted corner normals with separate smoothing fans at edges of 60 degrees or more. `sculpt/shading.rs` builds display vertices mapped back to the original welded vertices; surface index order still matches polygroup texture entries. This prevents cap triangles and thin clipped faces from producing bright or dark triangular patches around slice rims. GPU rendering, CPU preview, brush-icon captures, and picked surface normals use these same fans. Sculpting, subdivision, wireframe topology, and saved geometry keep the original welded mesh; polygroup color boundaries alone do not introduce hard shading edges.
+Surface lighting uses angle-weighted corner normals with separate smoothing fans at edges of 60 degrees or more. `sculpt/shading.rs` builds display vertices mapped back to the original welded vertices; surface index order still matches polygroup buffer entries. This prevents cap triangles and thin clipped faces from producing bright or dark triangular patches around slice rims. GPU rendering, CPU preview, brush-icon captures, and picked surface normals use these same fans. Sculpting, subdivision, wireframe topology, and saved geometry keep the original welded mesh; polygroup color boundaries alone do not introduce hard shading edges.
 
-The focused slice render check uses real GL pixel readback to detect lighting spikes below a trim rim and renders touching separated pieces too:
+The focused slice render check uses real wgpu pixel readback to detect lighting spikes below a trim rim and renders touching separated pieces too:
 
 ```sh
 CLAY_SLICE_PREVIEW=/tmp/clay-slice.png CLAY_SLICE_SEPARATE_PREVIEW=/tmp/clay-separate.png cargo test --locked gpu_slice -- --ignored
@@ -101,7 +101,7 @@ CLAY_VISIBILITY_PREVIEW=/tmp/clay-visibility-preview.png cargo test gpu_visibili
 The transform-control regression renders colored World rotation rings, the shared floating toolbar, live angle feedback, and a rotated primitive after a dimension edit. It shares its offscreen capture fixture with the lasso test:
 
 ```sh
-EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 CLAY_ROTATION_PREVIEW=/tmp/clay-rotation cargo test --release --locked gpu_rotation_controls -- --ignored
+CLAY_GPU_SOFTWARE=1 CLAY_ROTATION_PREVIEW=/tmp/clay-rotation cargo test --release --locked gpu_rotation_controls -- --ignored
 ```
 
 This writes `-1.png` (ready), `-4.png` (rotation drag), and `-6.png` (regenerated dimensions) at the requested prefix.
