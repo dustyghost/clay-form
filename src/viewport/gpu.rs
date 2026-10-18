@@ -154,8 +154,17 @@ impl egui_wgpu::CallbackTrait for ViewCallback {
         _: &mut egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
         // Match egui's endpoint rounding, including fractional DPI and clipping.
-        let size = [self.rect.width(), self.rect.height()]
-            .map(|n| (n * screen.pixels_per_point).round().max(1.) as u32);
+        let viewport = egui::PaintCallbackInfo {
+            viewport: self.rect,
+            clip_rect: self.rect,
+            pixels_per_point: screen.pixels_per_point,
+            screen_size_px: screen.size_in_pixels,
+        }
+        .viewport_in_pixels();
+        let size = [
+            viewport.width_px.max(1) as u32,
+            viewport.height_px.max(1) as u32,
+        ];
         let mut gpu = self.gpu.lock().unwrap();
         gpu.upload(&self.geometry);
         gpu.encode(
@@ -213,6 +222,12 @@ struct Uniforms {
     guide_sides: [[f32; 4]; 32],
     guide_colors: [[f32; 4]; 32],
 }
+struct MeshBuffers {
+    vertices: wgpu::Buffer,
+    indices: wgpu::Buffer,
+    colors: wgpu::Buffer,
+    count: u32,
+}
 struct Gpu {
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -227,14 +242,9 @@ struct Gpu {
     uniform: wgpu::Buffer,
     // Backfaces use a separate buffer: queue writes are visible to the entire submission.
     back_uniform: wgpu::Buffer,
-    vertices: wgpu::Buffer,
-    indices: wgpu::Buffer,
-    colors: wgpu::Buffer,
-    edges: Option<wgpu::Buffer>,
-    triangle_edges: Option<wgpu::Buffer>,
-    edge_count: u32,
-    triangle_edge_count: u32,
-    index_count: u32,
+    meshes: Vec<MeshBuffers>,
+    edges: Option<Vec<(wgpu::Buffer, u32)>>,
+    triangle_edges: Option<Vec<(wgpu::Buffer, u32)>>,
     uploaded: Option<Arc<DisplayMesh>>,
     target: Option<Target>,
     alpha: wgpu::Texture,
@@ -449,7 +459,6 @@ impl Gpu {
             multiview: None,
             cache: None,
         });
-        let empty = |label| buffer(device, label, &[0; 16], wgpu::BufferUsages::STORAGE);
         let uniform = || {
             buffer(
                 device,
@@ -487,14 +496,9 @@ impl Gpu {
             composite_layout,
             uniform: uniform(),
             back_uniform: uniform(),
-            vertices: empty("vertices"),
-            indices: empty("indices"),
-            colors: empty("face colors"),
+            meshes: vec![Self::mesh_buffers(device, &[], &[], &[])],
             edges: None,
             triangle_edges: None,
-            edge_count: 0,
-            triangle_edge_count: 0,
-            index_count: 0,
             uploaded: None,
             target: None,
             alpha,
@@ -507,26 +511,37 @@ impl Gpu {
         self.uploaded = None;
         self.edges = None;
         self.triangle_edges = None;
-        self.index_count = 0;
-        self.vertices = buffer(
-            &self.device,
-            "empty vertices",
-            &[],
-            wgpu::BufferUsages::STORAGE,
-        );
-        self.indices = buffer(
-            &self.device,
-            "empty indices",
-            &[],
-            wgpu::BufferUsages::STORAGE,
-        );
-        self.colors = buffer(
-            &self.device,
-            "empty colors",
-            &[],
-            wgpu::BufferUsages::STORAGE,
-        );
+        self.meshes = vec![Self::mesh_buffers(&self.device, &[], &[], &[])];
     }
+    fn mesh_buffers(
+        device: &wgpu::Device,
+        vertices: &[f32],
+        indices: &[u32],
+        colors: &[[f32; 4]],
+    ) -> MeshBuffers {
+        MeshBuffers {
+            vertices: buffer(
+                device,
+                "mesh vertices",
+                bytemuck::cast_slice(vertices),
+                wgpu::BufferUsages::STORAGE,
+            ),
+            indices: buffer(
+                device,
+                "mesh indices",
+                bytemuck::cast_slice(indices),
+                wgpu::BufferUsages::STORAGE,
+            ),
+            colors: buffer(
+                device,
+                "face colors",
+                bytemuck::cast_slice(colors),
+                wgpu::BufferUsages::STORAGE,
+            ),
+            count: indices.len() as u32,
+        }
+    }
+
     fn texture(
         device: &wgpu::Device,
         size: [u32; 2],
@@ -556,40 +571,65 @@ impl Gpu {
         {
             return;
         }
-        self.vertices = buffer(
-            &self.device,
-            "mesh vertices",
-            bytemuck::cast_slice(&data.vertices()),
-            wgpu::BufferUsages::STORAGE,
+        self.upload_meshes(
+            data,
+            self.device.limits().max_storage_buffer_binding_size as usize,
         );
-        let indices: Vec<u32> = data
-            .shading
-            .triangles
-            .iter()
-            .flatten()
-            .map(|&i| i as u32)
-            .collect();
-        self.index_count = indices.len() as u32;
-        self.indices = buffer(
-            &self.device,
-            "mesh indices",
-            bytemuck::cast_slice(&indices),
-            wgpu::BufferUsages::STORAGE,
-        );
+        self.edges = None;
+        self.triangle_edges = None;
+        self.uploaded = Some(data.clone());
+    }
+    // A document may contain several maximum-density models. Chunk the display
+    // data at the device binding limit instead of imposing a new geometry limit.
+    fn upload_meshes(&mut self, data: &DisplayMesh, limit: usize) {
+        let vertices = data.vertices();
         let colors: Vec<[f32; 4]> = data
             .poly_colors
             .iter()
             .map(|c| c.map(|n| n as f32 / 255.))
             .collect();
-        self.colors = buffer(
-            &self.device,
-            "face colors",
-            bytemuck::cast_slice(&colors),
-            wgpu::BufferUsages::STORAGE,
-        );
-        self.edges = None;
-        self.triangle_edges = None;
-        self.uploaded = Some(data.clone());
+        if vertices.len() * 4 <= limit && data.shading.triangles.len() * 16 <= limit {
+            let indices: Vec<u32> = data
+                .shading
+                .triangles
+                .iter()
+                .flatten()
+                .map(|&i| i as u32)
+                .collect();
+            self.meshes = vec![Self::mesh_buffers(
+                &self.device,
+                &vertices,
+                &indices,
+                &colors,
+            )];
+            return;
+        }
+        self.meshes.clear();
+        let per_batch = (limit / (3 * 40)).max(1);
+        for (batch, triangles) in data.shading.triangles.chunks(per_batch).enumerate() {
+            let mut mapping = std::collections::HashMap::new();
+            let mut packed = Vec::new();
+            let mut indices = Vec::with_capacity(triangles.len() * 3);
+            for &source in triangles.iter().flatten() {
+                let index = *mapping.entry(source).or_insert_with(|| {
+                    let index = (packed.len() / 10) as u32;
+                    packed.extend_from_slice(&vertices[source * 10..source * 10 + 10]);
+                    index
+                });
+                indices.push(index);
+            }
+            let start = batch * per_batch;
+            self.meshes.push(Self::mesh_buffers(
+                &self.device,
+                &packed,
+                &indices,
+                &colors[start..start + triangles.len()],
+            ));
+        }
+        if self.meshes.is_empty() {
+            self.meshes
+                .push(Self::mesh_buffers(&self.device, &[], &[], &[]));
+        }
     }
     fn upload_edges(&mut self) {
         if self.edges.is_some() {
@@ -598,19 +638,26 @@ impl Gpu {
         let data = self.uploaded.as_ref().unwrap();
         for triangles in [false, true] {
             let edges = data.edges(triangles);
-            let count = (edges.len() / 12) as u32;
-            let buf = buffer(
-                &self.device,
-                "wire edges",
-                bytemuck::cast_slice(&edges),
-                wgpu::BufferUsages::VERTEX,
-            );
+            // Split only on whole line segments, including triangle diagonals.
+            let per_batch = (self.device.limits().max_buffer_size as usize / 96).max(1) * 24;
+            let buffers = edges
+                .chunks(per_batch)
+                .map(|edge| {
+                    (
+                        buffer(
+                            &self.device,
+                            "wire edges",
+                            bytemuck::cast_slice(edge),
+                            wgpu::BufferUsages::VERTEX,
+                        ),
+                        (edge.len() / 12) as u32,
+                    )
+                })
+                .collect();
             if triangles {
-                self.triangle_edges = Some(buf);
-                self.triangle_edge_count = count;
+                self.triangle_edges = Some(buffers);
             } else {
-                self.edges = Some(buf);
-                self.edge_count = count;
+                self.edges = Some(buffers);
             }
         }
     }
@@ -702,7 +749,7 @@ impl Gpu {
         }
         u
     }
-    fn bindings(&self, uniform: &wgpu::Buffer) -> wgpu::BindGroup {
+    fn bindings(&self, uniform: &wgpu::Buffer, mesh: &MeshBuffers) -> wgpu::BindGroup {
         self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("viewport bindings"),
             layout: &self.layout,
@@ -719,15 +766,15 @@ impl Gpu {
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: self.vertices.as_entire_binding(),
+                    resource: mesh.vertices.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
-                    resource: self.indices.as_entire_binding(),
+                    resource: mesh.indices.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 4,
-                    resource: self.colors.as_entire_binding(),
+                    resource: mesh.colors.as_entire_binding(),
                 },
             ],
         })
@@ -801,8 +848,16 @@ impl Gpu {
         back_u.flags[3] = preview.backface_opacity;
         self.queue
             .write_buffer(&self.back_uniform, 0, bytemuck::bytes_of(&back_u));
-        let bindings = self.bindings(&self.uniform);
-        let back_bindings = self.bindings(&self.back_uniform);
+        let bindings: Vec<_> = self
+            .meshes
+            .iter()
+            .map(|m| self.bindings(&self.uniform, m))
+            .collect();
+        let back_bindings: Vec<_> = self
+            .meshes
+            .iter()
+            .map(|m| self.bindings(&self.back_uniform, m))
+            .collect();
         let target = self.target.as_ref().unwrap();
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("clay viewport"),
@@ -830,19 +885,24 @@ impl Gpu {
             }),
             ..Default::default()
         });
-        pass.set_bind_group(0, &bindings, &[]);
+        pass.set_bind_group(0, &bindings[0], &[]);
         if !wire || mode != WireMode::Transparent {
             pass.set_pipeline(if wire && mode == WireMode::Visible {
                 &self.offset_surface
             } else {
                 &self.surface
             });
-            pass.draw(0..self.index_count, 0..1);
+            for (mesh, bind) in self.meshes.iter().zip(&bindings) {
+                pass.set_bind_group(0, bind, &[]);
+                pass.draw(0..mesh.count, 0..1);
+            }
             if preview.backface_opacity > 0. {
                 pass.set_pipeline(&self.backs);
-                pass.set_bind_group(0, &back_bindings, &[]);
-                pass.draw(0..self.index_count, 0..1);
-                pass.set_bind_group(0, &bindings, &[]);
+                for (mesh, bind) in self.meshes.iter().zip(&back_bindings) {
+                    pass.set_bind_group(0, bind, &[]);
+                    pass.draw(0..mesh.count, 0..1);
+                }
+                pass.set_bind_group(0, &bindings[0], &[]);
             }
         }
         if wire {
@@ -851,23 +911,15 @@ impl Gpu {
             } else {
                 &self.xray_lines
             });
-            pass.set_vertex_buffer(
-                0,
-                if triangles {
-                    self.triangle_edges.as_ref().unwrap()
-                } else {
-                    self.edges.as_ref().unwrap()
-                }
-                .slice(..),
-            );
-            pass.draw(
-                0..if triangles {
-                    self.triangle_edge_count
-                } else {
-                    self.edge_count
-                },
-                0..1,
-            );
+            let edges = if triangles {
+                self.triangle_edges.as_ref().unwrap()
+            } else {
+                self.edges.as_ref().unwrap()
+            };
+            for (buffer, count) in edges {
+                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.draw(0..*count, 0..1);
+            }
         }
     }
     #[cfg(test)]

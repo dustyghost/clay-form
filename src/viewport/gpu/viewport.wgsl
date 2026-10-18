@@ -22,7 +22,7 @@ fn project(p: vec3f) -> vec4f {
 struct Surface {
  @builtin(position) clip: vec4f,
  @location(0) normal: vec3f, @location(1) color: vec3f, @location(2) position: vec3f,
- @location(3) mask: f32, @location(4) active: f32, @location(5) @interpolate(flat) group: vec4f,
+ @location(3) mask: f32, @location(4) is_active: f32, @location(5) @interpolate(flat) group: vec4f,
 }
 @vertex fn surface_vertex(@builtin(vertex_index) index: u32) -> Surface {
  let i=indices[index]*10u;
@@ -32,7 +32,7 @@ struct Surface {
  out.clip=project(p); out.position=p;
  out.normal=vec3f(vertices[i+3u],vertices[i+4u],vertices[i+5u]);
  out.color=vec3f(vertices[i+6u],vertices[i+7u],vertices[i+8u]);
- out.mask=max(mask,0.); out.active=step(0.,mask); out.group=groups[index/3u];
+ out.mask=max(mask,0.); out.is_active=step(0.,mask); out.group=groups[index/3u];
  return out;
 }
 // Bilinear R32Float sampling without requiring FLOAT32_FILTERABLE.
@@ -58,13 +58,13 @@ fn alpha_weight(input: vec2f) -> f32 {
  let light=normalize(u.view.xyz+u.up.xyz*0.7-u.right.xyz*0.5);
  let shade=0.25+0.75*max(dot(normalize(v.normal)*select(1.,-1.,u.flags.z==1.),light),0.);
  var base=v.color;
- if u.flags.x==1. && v.group.a>0.5 { base=mix(v.color,v.group.rgb,mix(0.5,1.,v.active)); }
+ if u.flags.x==1. && v.group.a>0.5 { base=mix(v.color,v.group.rgb,mix(0.5,1.,v.is_active)); }
  var rgb=base*shade*(1.-v.mask*0.75);
  // Derivatives must be evaluated uniformly, before per-fragment conditions.
  var widths: array<f32,32>;
  for(var i=0u;i<32u;i++) { widths[i]=fwidth(dot(v.position-u.guide_center.xyz,u.guide_normals[i].xyz)); }
  if u.flags.z==1. { return vec4f(rgb,u.flags.w); }
- if v.active>0.5 {
+ if v.is_active>0.5 {
   for(var i=0u;i<32u;i++) {
    let offset=v.position-u.guide_center.xyz;
    let distance=dot(offset,u.guide_normals[i].xyz); let width=widths[i];
