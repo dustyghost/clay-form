@@ -134,69 +134,9 @@ impl Renderer {
     }
 }
 
-#[derive(Default)]
-struct Preview {
-    show_polygroups: bool,
-    backface_opacity: f32,
-    brush: Option<BrushPreview>,
-    symmetry: Option<(Symmetry, f32)>,
-}
-struct BrushPreview {
-    center: Vec3,
-    normal: Vec3,
-    radius: f32,
-    brush: Brush,
-    color: [f32; 3],
-}
+mod state;
+use state::{Preview, BrushPreview, Params};
 
-struct Params {
-    background: [u8; 3],
-    right: Vec3,
-    up: Vec3,
-    view: Vec3,
-    projection: [f32; 4],
-    depth: f32,
-    perspective: [f32; 3],
-}
-impl Params {
-    fn new(
-        rect: egui::Rect,
-        right: Vec3,
-        up: Vec3,
-        view: Vec3,
-        scale: f32,
-        center: egui::Pos2,
-        extent: f32,
-    ) -> Self {
-        Self {
-            right,
-            up,
-            view,
-            projection: [
-                scale * 2. / rect.width(),
-                scale * 2. / rect.height(),
-                (center.x - rect.center().x) * 2. / rect.width(),
-                -(center.y - rect.center().y) * 2. / rect.height(),
-            ],
-            depth: 1. / extent,
-            perspective: [0.; 3],
-            background: [23, 26, 31],
-        }
-    }
-    fn set_perspective(&mut self, distance: f32, extent: f32) {
-        if distance > 0. {
-            let near = distance * 0.001;
-            let far = distance + extent;
-            self.perspective = [
-                1. / distance,
-                (far + near) / (far - near),
-                -2. * far * near / ((far - near) * distance),
-            ];
-        } else {
-            self.perspective = [0.; 3];
-        }
-    }
-}
 struct Target {
     framebuffer: glow::Framebuffer,
     color: glow::Texture,
