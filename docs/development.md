@@ -2,11 +2,11 @@
 
 [Documentation home](../README.md#documentation)
 
-Run these commands from the repository root.
-
-`rust-toolchain.toml` pins the compiler, Clippy, and rustfmt used locally and by CI/release builds. Rustup installs the specified toolchain when needed. Upgrade the version in that file deliberately, then run the checks below and the GPU validation before committing the upgrade.
+Run commands from the repository root.
 
 ## Checks and profiling
+
+Before opening a pull request, run:
 
 ```sh
 cargo fmt --check
@@ -14,28 +14,38 @@ cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
 ```
 
-Tests cover brush and mask behavior, legacy JSON compatibility, project/preset disk saves, stroke and bounded undo/redo, failed loads, save/open protection, and simulated viewport/gizmo gestures.
+CI runs these checks and a separate Mesa/EGL job for GPU correctness. For graphics setup, GPU tests and app previews, follow [GPU validation](gpu-rendering.md#validation).
 
-CI runs formatting, the ordinary test suite, and Clippy, plus a separate Mesa/EGL job for the GPU correctness tests. See [GPU validation](gpu-rendering.md#validation) for the Linux graphics checks, including the app previews.
+The ordinary tests cover brushes and masks, legacy JSON, project and preset saves, strokes, bounded undo/redo, failed loads, save/open protection, and simulated viewport/gizmo gestures.
 
-For manual performance measurements, see [GPU rendering and profiling](gpu-rendering.md). `cargo run --release --locked --example edit_profile` measures document transform and mask-edit costs without opening a window.
+**Changing Rust?** `rust-toolchain.toml` pins the compiler, Clippy and rustfmt for local work, CI and releases. Rustup installs that toolchain when needed. Upgrade the pin deliberately; run the checks above and GPU validation before committing it.
+
+**Measuring performance?** See [GPU rendering and profiling](gpu-rendering.md). To measure document transforms and mask edits without a window:
+
+```sh
+cargo run --release --locked --example edit_profile
+```
 
 ## Update guide screenshots
 
-On Linux with Mesa/EGL installed, run:
+1. On Linux, install the [Mesa/EGL prerequisites](gpu-rendering.md#validation).
+2. Run:
 
-```sh
-bash scripts/update-doc-screenshots.sh
-```
+   ```sh
+   bash scripts/update-doc-screenshots.sh
+   ```
 
-The script runs the real application UI and OpenGL renderer offscreen with synthetic scenes, then copies the selected PNGs into `docs/images/` only after every capture test passes. It uses software rendering and defaults to two Mesa worker threads; no desktop window is needed. The temporary capture directory is printed at the end and retains extra frames for inspection. The edge workflow review also clicks the real controls to check selection, navigation, crease removal, both subdivision operations, loop targets, thickness application, and Undo.
+3. Inspect the images in `docs/images/` and any extra frames in the temporary directory printed by the script.
+4. Update affected guide steps and captions, then the [screenshot inventory](images/README.md). Follow the [documentation style](documentation-style.md) before committing.
 
-Review the resulting images before committing them, and update the guide's steps and captions whenever controls or behavior change. Follow the [documentation style](documentation-style.md): short tasks, searchable headings, and images that show the relevant control or result. See the [screenshot inventory](images/README.md) for capture sources and the [GPU validation prerequisites](gpu-rendering.md#validation) for graphics setup. These captures check appearance and behavior; they are not performance measurements.
+The script captures the real app UI and OpenGL renderer offscreen using synthetic scenes. It needs no desktop window, uses software rendering and defaults to two Mesa worker threads. It copies selected PNGs only after **every capture test passes**.
+
+The edge workflow review also clicks the real controls: selection, navigation, crease removal, both subdivision operations, loop targets, thickness application and Undo. These captures check appearance and behavior; use the profiling tools for performance measurements.
 
 ## Architecture and roadmap
 
-See the [development roadmap](roadmap.md) for planned sculpting improvements, priorities, and completion criteria.
+- [Architecture](architecture.md): document ownership, sculpting algorithms, UI commands, camera/navigation, rendering/picking, persistence and tablet input.
+- [Roadmap](roadmap.md): planned sculpting improvements, priorities and completion criteria.
+- [UI design rules](ui-design.md): requirements for new or changed controls.
 
-The app separates document ownership, sculpting algorithms, UI commands, camera/navigation, rendering/picking, persistence, and tablet input. See [the architecture guide](architecture.md) for responsibilities and extension points. Existing version 1 projects and brush presets remain compatible.
-
-See also the [UI design rules](ui-design.md) when adding or changing controls.
+Keep existing version 1 projects and brush presets compatible.

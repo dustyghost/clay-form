@@ -17,7 +17,9 @@
 1. Choose **Mask → Mask lasso**.
 2. Drag an L-shaped outline over the sphere. The green outline closes back to the starting point.
 3. Release to apply, then choose **Done**. The dark region is protected.
-4. Try a Standard stroke across its boundary. Undo the trial stroke when finished.
+4. Try a Standard stroke across its boundary. Clay should change on the unmasked side while the dark area stays protected. Undo the trial stroke when finished.
+
+If you protected the wrong side, choose **Invert mask**. To start over, use **Clear mask**; see the controls below.
 
 | While drawing | After release |
 | --- | --- |
@@ -70,7 +72,11 @@ Blank names become Group 1, Group 2, and so on. New spheres start in a **Base** 
 
 ### Colors and saved weights
 
-Creating or adding to a group replaces the selected region’s previous membership. Partial reassignment keeps the old group’s remaining region; replacing its whole region removes the old group. Adjacent face groups can share boundary vertices, while each face displays one group color. Empty groups are removed consistently across stored subdivision levels, and Undo restores the previous assignments. Partial face selections retain weights without coloring the whole face. Use **View → Show vertex group colors** to hide the colors without hiding geometry.
+Use **View → Show vertex group colors** to check group boundaries, or turn it off to see the clay without group colors.
+
+- Assigning a region to a group replaces its previous membership. Any unassigned remainder stays in its old group; empty groups are removed across stored subdivision levels.
+- Neighboring face groups can share boundary vertices. Each face shows one color; a partial face selection can retain weights without coloring the whole face.
+- Made the wrong assignment? **Undo** restores the previous groups.
 
 Groups survive saving, duplication, subdivision, extraction, and deletion. Adaptive topology interpolates weights; voxel remeshing approximates boundaries. OBJ exports face groups; `.clay` preserves soft weights.
 
@@ -132,3 +138,4 @@ You need both visible and hidden faces. Apply/remove thickness modifier first. B
 ## Related guides
 
 [Model tools](modeling.md) · [Undo and redo](sculpting.md#undo-and-redo) · [Thickness modifier](modeling.md#thickness-modifier)
+

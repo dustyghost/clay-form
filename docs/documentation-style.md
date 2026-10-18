@@ -2,29 +2,30 @@
 
 [Documentation home](../README.md#documentation)
 
-Write guides for someone using Clay Form with the app open beside them.
+Help someone finish a task with Clay Form open beside the guide. Give them a reason to try it, clear steps and a result they can recognise.
 
 ## Organize around tasks
 
-- Give beginners one short end-to-end tutorial: [Make your first sculpt](guide/getting-started.md).
-- Start topic guides with a one-sentence purpose and links to their main tasks.
-- Use headings such as “Restore a copy” or “Adjust protection.” Keep each section about one question.
-- Put numbered steps before detailed options. Use tables for settings, shortcuts, and comparisons.
-- Keep paragraphs short. Explain a limitation where it changes the user's next action.
-- Keep implementation details, historical changes, and test coverage in developer documents or the roadmap.
-- Preserve existing heading links where practical; check incoming links when renaming a heading.
+- **Give beginners a complete first project.** Keep [Make your first sculpt](guide/getting-started.md) short, achievable and satisfying.
+- **Make the next action easy to find.** Start topic guides with a one-sentence purpose and links to their main tasks. Use searchable headings such as “Restore a copy” or “Adjust protection,” with one question per section.
+- **Put the task first.** Give numbered steps before detailed options. Use tables for settings, shortcuts and comparisons.
+- **Keep reading light.** Use short paragraphs. Explain a limitation where it changes the reader's next action.
+- **Keep developer detail elsewhere.** Implementation details, historical changes and test coverage belong in developer docs or the roadmap.
+- **Protect links.** Preserve heading anchors where practical; check incoming links when renaming a heading.
 
-This adapts [Diátaxis's separation of practical instructions from reference/explanation](https://diataxis.fr/how-to-guides/) and the task sections used in [Figma's app help](https://help.figma.com/hc/en-us/articles/360056440594-Create-and-use-variants). Google's [heading guidance](https://developers.google.com/style/headings) provides useful rules for descriptive, consistent heading levels.
+Useful references: [Diátaxis on practical instructions](https://diataxis.fr/how-to-guides/), [Figma's task-based help](https://help.figma.com/hc/en-us/articles/360056440594-Create-and-use-variants) and [Google's heading guidance](https://developers.google.com/style/headings).
 
 ## Make every screenshot answer a question
 
-Show where to act, which settings matter, or what the result should look like. Use real app captures with simple practice scenes.
+Show where to act, which settings matter or what success looks like. Use real app captures of simple practice scenes.
 
-- Capture a focused panel for settings; include the viewport when the spatial result matters.
-- For a before/after pair, keep the camera and framing consistent. Explain any intentional view change.
-- Place images beside their steps. Add concise alt text and a caption explaining what to notice.
-- Keep UI text readable at normal page width. Only use side-by-side images when their important details remain legible.
-- Avoid unrelated windows, clipped controls, placeholder artwork, and personal paths.
-- Supply small example assets when they help readers repeat the task.
+| Check | What to do |
+| --- | --- |
+| Framing | Focus on the panel for settings; include the viewport when the spatial result matters. |
+| Before/after | Keep the camera and framing consistent. Explain intentional view changes. |
+| Placement | Put images beside their steps, with concise alt text and a caption saying what to notice. |
+| Readability | Keep UI text readable at normal page width. Use side-by-side images only when the important details stay legible. |
+| Clean captures | Exclude unrelated windows, clipped controls, placeholder artwork and personal paths. |
+| Repeatability | Supply small example assets when they help readers repeat the task. |
 
-These choices follow [Google's image guidance](https://developers.google.com/style/images). Generate captures with [the screenshot script](development.md#update-guide-screenshots), inspect them, and update the [inventory](images/README.md). Screenshots complement written instructions; essential steps must remain understandable without the image.
+Generate captures with [the screenshot script](development.md#update-guide-screenshots), inspect them and update the [inventory](images/README.md). Essential steps must make sense without the image. See [Google's image guidance](https://developers.google.com/style/images) for more examples.
