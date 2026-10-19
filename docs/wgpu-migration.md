@@ -13,7 +13,7 @@ The viewport and egui use eframe's wgpu renderer. CPU sculpting, picking, scene 
 - `viewport.wgsl` preserves projection, lighting, masks, polygroups, brush rotation/falloff/image interpolation, symmetry guides and front-facing wireframe semantics. Clip depth is converted to WebGPU's range. Bilinear R32Float loads avoid optional float-filtering requirements.
 - `composite.wgsl` draws the viewport inside egui's viewport/scissor and preserves display RGB on both linear and sRGB attachments. Physical target dimensions use egui's endpoint rounding at fractional DPI.
 - `ui_capture.rs` replaces EGL with surface-free Vulkan capture, padded buffer copies and asynchronous mapping. The fixture's bottom-up pixel convention remains at the readback boundary; PNG exports remain upright.
-- The release load profile waits for wgpu completion and records adapter/backend metadata. CI and screenshot regeneration use Mesa Vulkan.
+- The release load profile submits queued buffer copies and waits for wgpu completion and records adapter/backend metadata. CI and screenshot regeneration use Mesa Vulkan.
 
 ## Validation record — 2026-10-18
 
@@ -26,13 +26,21 @@ Environment: Debian 13 x86_64, Rust 1.99.0, wgpu 27.0.1, Mesa 25.0.7 lavapipe (`
 | `cargo test --locked` | 412 passed, 33 opt-in tests ignored |
 | Ignored viewport correctness tests, excluding load profile | 12 passed |
 | Ignored `offscreen_preview` app/control captures | 10 passed (includes the viewport customization capture) |
-| Release `gpu_load_profile` | Passed at all six scene densities/model counts |
+| Release `gpu_load_profile` | Initial run completed at all six workloads; upload timing corrected and sample replaced on 2026-10-19 |
 | Native X11 on Xvfb 21.1.16 | Window mapped; survived 900×650, 1600×1000 and 1280×850 resizes |
 | Native Wayland on Weston 14.0.2, headless/pixman | App remained running through a timed startup smoke test, with no reported surface/shader errors |
 
 The viewport regressions retain depth/cache, CPU-alpha agreement, mask, backface, symmetry, quad/triangle wireframe, clipping, slice, visibility, lasso, rotation and perspective assertions. Additional checks compare forced small-buffer batches with unbatched pixels, verify non-aligned readback rows, and check fractional-DPI sizing, scissor clipping and sRGB composition. Existing application regressions cover save/load, legacy JSON, undo/redo, topology and simulated pen/navigation input.
 
 See [GPU rendering and profiling](gpu-rendering.md) for reproducible commands and software profile data.
+
+## Review fixes — 2026-10-19
+
+Merged the documentation restructuring from `main`, retaining the overview and detailed subsystem pages with updated wgpu setup and lifecycle references. The upload profile now submits queued staging copies before waiting for GPU completion and excludes renderer initialization from the upload interval.
+
+The corrected release profile passed all six workloads on Arch Linux, Rust 1.99.0 and Mesa 26.2.4 lavapipe (LLVM 23.1.1), using Vulkan with two Mesa worker threads. The [replacement CSV](validation/wgpu-lavapipe-2026-10-19.csv) records this environment and supersedes the initial sample. The environment differs from the original run, so timing changes do not establish a renderer performance difference.
+
+After the merge and timing correction, `cargo fmt --check`, `cargo clippy --release --locked --all-targets -- -D warnings`, and `cargo test --release --locked --lib` passed (412 tests passed, 33 opt-in tests ignored). Relative documentation links and section anchors were checked. The preceding review also reran all 12 viewport GPU regressions and six application captures successfully; the production renderer is unchanged by these review fixes.
 
 ## Remaining acceptance checks
 

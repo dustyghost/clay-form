@@ -59,12 +59,18 @@ fn gpu_load_profile() {
                 }
             }
             let mut renderer = Renderer::new(&headless.state).unwrap();
+            // Finish renderer initialization before timing geometry uploads.
+            headless.state.queue.submit([]);
+            headless.wait();
             let start = Instant::now();
             let display = renderer.geometry(&document);
             let mesh_prepare = start.elapsed().as_secs_f64() * 1000.;
             let mut gpu = renderer.gpu.lock().unwrap();
             let start = Instant::now();
             gpu.upload(&display);
+            // Buffer initialization queues staging copies; polling alone does
+            // not submit them. Include their GPU completion in upload_ms.
+            headless.state.queue.submit([]);
             headless.wait();
             let upload = start.elapsed().as_secs_f64() * 1000.;
             let mut solid = Vec::new();

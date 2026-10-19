@@ -89,7 +89,7 @@ Use those measurements to choose the next optimization. Likely candidates to inv
 
 ### Software Vulkan validation sample
 
-The [2026-10-18 CSV](validation/wgpu-lavapipe-2026-10-18.csv) records a release run on Debian 13, Rust 1.99.0 and Mesa 25.0.7 lavapipe (LLVM 19.1.7), at 256 × 256 pixels with two Mesa worker threads. Solid-frame medians ranged from 2.128 ms for 4,706 vertices to 64.857 ms for 301,058 vertices; visible-wireframe medians were 4.013 ms and 136.242 ms respectively. These CPU software-renderer timings are diagnostic and do not establish hardware performance parity with glow. The profile excludes surface presentation and real input latency.
+The [2026-10-19 CSV](validation/wgpu-lavapipe-2026-10-19.csv) records a release run on Arch Linux, Rust 1.99.0 and Mesa 26.2.4 lavapipe (LLVM 23.1.1), at 256 × 256 pixels with two Mesa worker threads. Solid-frame medians were 4.003 ms for 4,706 vertices and 105.177 ms for 301,058 vertices; visible-wireframe medians were 8.737 ms and 261.962 ms respectively. This replaces the initial 2026-10-18 sample, whose upload timing omitted pending GPU copies. Upload measurements now include submission and completion, with renderer initialization completed beforehand. The environment also changed, so the two runs are not a performance comparison. These CPU software-renderer timings are diagnostic and do not establish hardware performance parity with glow. The profile excludes surface presentation and real input latency.
 
 ## Document edit profile
 
