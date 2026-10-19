@@ -1398,40 +1398,54 @@ fn modeling_region_fuse_offscreen_review() {
     let mut g = Guide::new(std::path::Path::new(&directory), [1200, 1050]);
     g.interactive = true;
     g.panel(Tool::Mesh, Dock::Right);
-    let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
-    primitive.divisions = [4, 4, 1];
-    let mut mesh = primitive.mesh().unwrap();
-    for p in &mut mesh.vertices {
-        p.2 *= 0.15;
+    for (divisions, xs, name) in [
+        ([4, 4, 1], [-0.25, 0.25], "modeling-region-fuse"),
+        ([6, 4, 1], [-0.5, 0.5], "modeling-separate-fuse"),
+    ] {
+        let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
+        primitive.divisions = divisions;
+        let mut mesh = primitive.mesh().unwrap();
+        for p in &mut mesh.vertices {
+            p.2 *= 0.15;
+        }
+        g.app
+            .document
+            .replace_geometry(crate::sculpt::Geometry::new(mesh))
+            .unwrap();
+        g.app.camera.yaw = 0.;
+        g.app.camera.pitch = 0.;
+        g.app.camera.zoom = 0.8;
+        if !g.app.ui.modeling.active {
+            click_guide_label(&mut g, "Modeling");
+        }
+        click_guide_label(&mut g, "Select");
+        g.app.ui.modeling.change = crate::viewport::SelectionChange::Replace;
+        let (rect, _) = g.frame(vec![]);
+        let scale = rect.width().min(rect.height()) * 0.35 * g.app.camera.zoom;
+        for x in xs {
+            let point = rect.center() + Vec2::new(x * scale, 0.25 * scale);
+            g.frame(vec![
+                egui::Event::PointerMoved(point),
+                primary_event(point, true),
+            ]);
+            g.frame(vec![primary_event(point, false)]);
+            g.app.ui.modeling.change = crate::viewport::SelectionChange::Add;
+        }
+        assert_eq!(g.app.viewport.modeling.selected.len(), 2);
+        click_guide_label(&mut g, "Extrude and fuse");
+        g.app.ui.modeling.join = true;
+        g.app.ui.modeling.amount = -0.8;
+        g.app.camera.yaw = 0.4;
+        g.app.camera.pitch = -0.2;
+        g.save(&format!("{name}-selection"));
+        let before = g.app.document.geometry_snapshot();
+        let history = g.app.document.history_counts();
+        click_guide_label(&mut g, "Apply amount");
+        g.app.document.mesh().validate_closed().unwrap();
+        g.save(&format!("{name}-result"));
+        assert!((g.app.ui.modeling.amount + 0.3).abs() < 1e-5);
+        assert_eq!(g.app.document.history_counts().0, history.0 + 1);
+        click_guide_label(&mut g, "Undo");
+        assert_eq!(g.app.document.geometry_snapshot(), before);
     }
-    g.app
-        .document
-        .replace_geometry(crate::sculpt::Geometry::new(mesh))
-        .unwrap();
-    g.app.camera.yaw = 0.;
-    g.app.camera.pitch = 0.;
-    g.app.camera.zoom = 0.8;
-    click_guide_label(&mut g, "Modeling");
-    let (rect, _) = g.frame(vec![]);
-    let scale = rect.width().min(rect.height()) * 0.35 * g.app.camera.zoom;
-    for x in [-0.25, 0.25] {
-        let point = rect.center() + Vec2::new(x * scale, 0.25 * scale);
-        g.frame(vec![
-            egui::Event::PointerMoved(point),
-            primary_event(point, true),
-        ]);
-        g.frame(vec![primary_event(point, false)]);
-        g.app.ui.modeling.change = crate::viewport::SelectionChange::Add;
-    }
-    assert_eq!(g.app.viewport.modeling.selected.len(), 2);
-    click_guide_label(&mut g, "Extrude and fuse");
-    g.app.ui.modeling.join = true;
-    g.app.ui.modeling.amount = -0.8;
-    g.app.camera.yaw = 0.4;
-    g.app.camera.pitch = -0.2;
-    g.save("modeling-region-fuse-selection");
-    click_guide_label(&mut g, "Apply amount");
-    g.app.document.mesh().validate_closed().unwrap();
-    g.save("modeling-region-fuse-result");
-    assert!((g.app.ui.modeling.amount + 0.3).abs() < 1e-5);
 }

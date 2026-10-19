@@ -32,6 +32,10 @@ pub struct Extrusion {
     pub distance: f32,
     pub joined: bool,
     pub collapsed: bool,
+    /// At least one region snapped while another continued freely.
+    pub partial_contact: bool,
+    /// Regions moved different distances; `distance` retains the requested amount.
+    pub varying_distance: bool,
     pub rim: Vec<[Vec3; 2]>,
 }
 
@@ -140,6 +144,8 @@ impl Mesh {
                 distance: 0.,
                 joined: false,
                 collapsed: false,
+                partial_contact: false,
+                varying_distance: false,
                 rim: Vec::new(),
             });
         }
@@ -173,7 +179,7 @@ impl Mesh {
             return Err("Extrusion would exceed the mesh size limit".into());
         }
         if contact.loops && !contact::connected(&polygons, &selected) {
-            return Err("Extrude and fuse needs one connected flat face region; select disconnected regions separately".into());
+            return Err("Each fuse region must be connected".into());
         }
         let region = contact::ContactRegion {
             polygons: &polygons,
@@ -279,6 +285,8 @@ impl Mesh {
             distance,
             joined: !removed.is_empty(),
             collapsed,
+            partial_contact: false,
+            varying_distance: false,
             rim,
         })
     }

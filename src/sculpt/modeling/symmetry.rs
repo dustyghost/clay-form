@@ -203,10 +203,17 @@ impl Mesh {
         symmetry: &ModelingSymmetry,
     ) -> Result<Extrusion, String> {
         let join = contact.join;
-        if symmetry.vertices.len() == 1 {
+        if symmetry.vertices.len() == 1 && !contact.loops {
             return self.extrude_contact(selected, distance, contact);
         }
+        self.validate()?;
         let polygons = self.polygons();
+        if selected
+            .iter()
+            .any(|&f| polygons.get(f).is_none_or(|p| !p.visible))
+        {
+            return Err("Select visible faces on the active mesh".into());
+        }
         let mut remaining: BTreeSet<_> = selected
             .iter()
             .flat_map(|&f| symmetry.face_copies(f))
@@ -238,17 +245,6 @@ impl Mesh {
             }
             groups.push(group);
         }
-        if contact.loops {
-            let first: BTreeSet<_> = groups[0].iter().copied().collect();
-            if groups.iter().any(|group| {
-                !symmetry.faces.iter().any(|mapping| {
-                    first.iter().map(|&f| mapping[f]).collect::<BTreeSet<_>>()
-                        == group.iter().copied().collect()
-                })
-            }) {
-                return Err("Extrude and fuse needs one connected flat region and its symmetry copies; select unrelated regions separately".into());
-            }
-        }
         let mut group_vertices = BTreeSet::new();
         for group in &groups {
             let vertices: BTreeSet<_> = group
@@ -257,7 +253,7 @@ impl Mesh {
                 .collect();
             if vertices.iter().any(|v| group_vertices.contains(v)) {
                 return Err(
-                    "Symmetry copies meet at a corner; choose separate flat face regions".into(),
+                    "Selected regions meet at a corner or fold across an edge; choose flat regions with no shared vertices".into(),
                 );
             }
             group_vertices.extend(vertices);
@@ -286,9 +282,27 @@ impl Mesh {
             distance,
             joined: false,
             collapsed: false,
+            partial_contact: false,
+            varying_distance: false,
             rim: Vec::new(),
         };
-        for group in groups {
+        // Resolve contacts against the unchanged source. Earlier regions must
+        // not create new targets or make a later region pass its original stop.
+        let plans = if contact.loops && groups.len() > 1 {
+            groups
+                .iter()
+                .map(|group| {
+                    self.extrude_contact(group, distance, contact)
+                        .map(|r| (r.distance, r.joined, r.collapsed))
+                })
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            Vec::new()
+        };
+        let mut first_distance: Option<f32> = None;
+        let mut free_regions = 0;
+        let mut joined_targets = Vec::<Vec<Vec3>>::new();
+        for (index, group) in groups.into_iter().enumerate() {
             // Earlier edits compact vertex indices. Locate untouched source caps
             // by their original corners, rather than reusing stale indices.
             let current = result.mesh.polygons();
@@ -305,19 +319,60 @@ impl Mesh {
                     })
                 })
                 .collect();
-            if indices.is_empty() && result.joined {
-                continue;
-            } // The opposite cap of the same tunnel was already removed.
+            if indices.is_empty()
+                && group.iter().all(|&f| {
+                    joined_targets.iter().any(|target| {
+                        target.len() == polygons[f].vertices.len()
+                            && polygons[f].vertices.iter().all(|&v| {
+                                target.iter().any(|&p| (p - self.vertices[v]).len() < 1e-5)
+                            })
+                    })
+                })
+            {
+                continue; // Both selected ends of this tunnel were already joined.
+            }
             if indices.len() != group.len() {
-                return Err("Symmetric extrusion copies overlap; the edit was cancelled".into());
+                return Err("Selected extrusion regions overlap; the edit was cancelled".into());
             }
             let next = result.mesh.extrude_contact(&indices, distance, contact)?;
+            if let Some(&(depth, joined, collapsed)) = plans.get(index)
+                && (next.joined != joined
+                    || next.collapsed != collapsed
+                    || (next.distance - depth).abs() > depth.abs().max(1.) * 1e-5)
+            {
+                return Err(
+                    "Selected regions interfere with each other's contact; extrude them separately"
+                        .into(),
+                );
+            }
+            if let Some(first) = first_distance {
+                result.varying_distance |=
+                    (next.distance - first).abs() > first.abs().max(1.) * 1e-5;
+            } else {
+                first_distance = Some(next.distance);
+            }
+            free_regions += usize::from(!next.joined && !next.collapsed);
+            if next.joined {
+                let direction = normal(self, &polygons[group[0]]);
+                joined_targets.extend(group.iter().map(|&f| {
+                    polygons[f]
+                        .vertices
+                        .iter()
+                        .map(|&v| self.vertices[v] + direction * next.distance)
+                        .collect()
+                }));
+            }
             result.mesh = next.mesh;
-            result.distance = next.distance;
+            result.distance = if result.varying_distance {
+                distance
+            } else {
+                next.distance
+            };
             result.joined |= next.joined;
             result.collapsed |= next.collapsed;
             result.rim.extend(next.rim);
         }
+        result.partial_contact = free_regions > 0 && (result.joined || result.collapsed);
         symmetry.validate_result(&result.mesh)?;
         Ok(result)
     }

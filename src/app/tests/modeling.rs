@@ -1508,7 +1508,7 @@ fn modeling_group_reassignment_compacts_indices_and_keeps_the_target_selected() 
 
 #[test]
 fn modeling_region_fuse_preview_numeric_cancel_and_history_agree() {
-    for individual in [false, true] {
+    for (individual, separate) in [(false, false), (true, false), (false, true), (true, true)] {
         let (mut app, ctx, _) = setup();
         let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
         primitive.divisions = [4, 4, 1];
@@ -1533,19 +1533,20 @@ fn modeling_region_fuse_preview_numeric_cancel_and_history_agree() {
         app.document.replace_geometry(Geometry::new(mesh)).unwrap();
         let rect = navigation_frame(&mut app, &ctx, vec![]);
         let scale = rect.width().min(rect.height()) * 0.35;
+        let x = if separate { 0.75 } else { 0.25 };
         let select = |app: &mut App| {
             app.ui.modeling.tool = ModelTool::Select;
             app.ui.modeling.change = SelectionChange::Replace;
             tap(
                 app,
                 &ctx,
-                rect.center() + Vec2::new(0.25 * scale, 0.25 * scale),
+                rect.center() + Vec2::new(x * scale, 0.25 * scale),
             );
             app.ui.modeling.change = SelectionChange::Add;
             tap(
                 app,
                 &ctx,
-                rect.center() + Vec2::new(-0.25 * scale, 0.25 * scale),
+                rect.center() + Vec2::new(-x * scale, 0.25 * scale),
             );
             app.ui.modeling.change = SelectionChange::Replace;
             assert_eq!(app.viewport.modeling.selected.len(), 2);
@@ -1572,7 +1573,7 @@ fn modeling_region_fuse_preview_numeric_cancel_and_history_agree() {
         assert_eq!(app.document.geometry_snapshot(), before);
         select(&mut app);
         let scale = rect.width().min(rect.height()) * 0.35;
-        let start = rect.center() + Vec2::new(0.25 * scale, 0.25 * scale);
+        let start = rect.center() + Vec2::new(x * scale, 0.25 * scale);
         let end = start + Vec2::new(0., 0.35 * scale);
         let far = start + Vec2::new(0., 0.8 * scale);
         for cancel in [true, false] {
@@ -1613,7 +1614,9 @@ fn modeling_region_fuse_preview_numeric_cancel_and_history_agree() {
             }
         }
         let mut protected = before.clone();
-        protected.mesh.mask.fill(1.);
+        for (v, weight) in protected.mesh.vertices.iter().zip(&mut protected.mesh.mask) {
+            *weight = if separate && v.0 < 0.5 { 0. } else { 1. };
+        }
         app.document.replace_geometry(protected).unwrap();
         select(&mut app);
         app.ui.modeling.protect_mask = true;
@@ -1637,4 +1640,51 @@ fn modeling_label_preserves_saved_action_identity() {
         serde_json::from_str::<Action>("\"PenModeling\"").unwrap(),
         Action::PenModeling
     );
+}
+
+#[test]
+fn modeling_separate_fuse_reports_partial_contacts_and_requested_travel() {
+    let (mut app, ctx, _) = setup();
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
+    primitive.divisions = [4, 4, 1];
+    let mut mesh = primitive.mesh().unwrap();
+    for p in &mut mesh.vertices {
+        p.2 *= if p.0 >= 0.5 && p.2 < 0. { 0.2 } else { 0.1 };
+    }
+    for (amount, message) in [
+        (-0.25, "Some regions snapped"),
+        (-0.8, "Regions snapped at different depths"),
+    ] {
+        app.document
+            .replace_geometry(Geometry::new(mesh.clone()))
+            .unwrap();
+        app.ui.modeling.tool = ModelTool::Select;
+        let rect = navigation_frame(&mut app, &ctx, vec![]);
+        let scale = rect.width().min(rect.height()) * 0.35;
+        app.ui.modeling.change = SelectionChange::Replace;
+        tap(
+            &mut app,
+            &ctx,
+            rect.center() + Vec2::new(-0.75 * scale, 0.25 * scale),
+        );
+        app.ui.modeling.change = SelectionChange::Add;
+        tap(
+            &mut app,
+            &ctx,
+            rect.center() + Vec2::new(0.75 * scale, 0.25 * scale),
+        );
+        assert_eq!(app.viewport.modeling.selected.len(), 2);
+        app.ui.modeling.tool = ModelTool::Fuse;
+        app.ui.modeling.join = true;
+        app.ui.modeling.amount = amount;
+        let history = app.document.history_counts();
+        app.dispatch(Command::ModelApply, &ctx);
+        navigation_frame(&mut app, &ctx, vec![]);
+        assert!(app.ui.status.contains(message), "{}", app.ui.status);
+        assert!((app.ui.modeling.amount - amount).abs() < 1e-5);
+        assert_eq!(app.document.history_counts().0, history.0 + 1);
+        app.document.mesh().validate_closed().unwrap();
+        app.dispatch(Command::Undo, &ctx);
+        assert_eq!(app.document.mesh(), &mesh);
+    }
 }

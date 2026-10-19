@@ -251,7 +251,7 @@ impl UiState {
                     if self.modeling.tool==ModelTool::Fuse {
                         ui.label("Snap range (fraction of local edge)");
                         ui.add(egui::DragValue::new(&mut self.modeling.snap).range(0.0..=0.25).speed(0.005));
-                        ui.weak("Push a connected flat region inward to a compatible loop or cap.");
+                        ui.weak("Each separate flat region snaps to its own compatible loop or cap.");
                     }
                     if self.modeling.tool==ModelTool::Extrude {ui.checkbox(&mut self.modeling.individual,"Individual faces");}
                     ui.add(egui::DragValue::new(&mut self.modeling.amount).prefix("Distance ").speed(0.01));
@@ -263,7 +263,7 @@ impl UiState {
                     );
                     ui.weak("Drag up: out · down: in · release: apply · Esc: cancel");
                     if self.modeling.tool == ModelTool::Fuse {
-                        ui.weak("Fuses the whole region; Individual faces does not apply.");
+                        ui.weak("Adjacent faces stay together; separate regions fuse independently.");
                     } else {
                         ui.weak("Connected regions share walls; Individual faces extrude separately.");
                     }

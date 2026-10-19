@@ -221,7 +221,13 @@ impl ModelingState {
                     mesh: r.mesh,
                     amount: r.distance,
                     retain_caps: !r.joined && !r.collapsed,
-                    notice: if r.joined {
+                    notice: if r.partial_contact {
+                        "Some regions snapped; others have no compatible contact"
+                    } else if r.varying_distance {
+                        "Regions snapped at different depths; amount shows requested travel"
+                    } else if r.joined && r.collapsed {
+                        "Regions snapped to caps and edge loops"
+                    } else if r.joined {
                         "Tunnel snapped"
                     } else if r.collapsed {
                         "Edge loop snapped"
