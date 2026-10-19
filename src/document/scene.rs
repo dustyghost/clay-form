@@ -80,7 +80,7 @@ impl Document {
         }
         self.end_edit();
         self.end_stroke();
-        self.history.record_named(&self.geometry, "Select submodel");
+        self.record_edit("Select submodel");
         self.install_models(self.ordered_models(), index);
         Ok(())
     }
@@ -105,14 +105,11 @@ impl Document {
         };
         self.end_edit();
         self.end_stroke();
-        self.history.record_named(
-            &self.geometry,
-            if extract {
-                "Extract masked submodel"
-            } else {
-                "Duplicate submodel"
-            },
-        );
+        self.record_edit(if extract {
+            "Extract masked submodel"
+        } else {
+            "Duplicate submodel"
+        });
         let base = if extract { "Extract" } else { "Copy" };
         let mut number = 1;
         let name = loop {
@@ -180,7 +177,7 @@ impl Document {
         models.remove(target);
         self.end_edit();
         self.end_stroke();
-        self.history.record_named(&self.geometry, "Merge down");
+        self.record_edit("Merge down");
         self.install_models(models, active - usize::from(target < active));
         Ok(())
     }
@@ -217,7 +214,7 @@ impl Document {
         }
         self.end_edit();
         self.end_stroke();
-        self.history.record_named(&self.geometry, "Edit submodel");
+        self.record_edit("Edit submodel");
         if index == self.active_model_index() {
             self.geometry.name = name;
             self.geometry.scene.active_metadata = metadata;
@@ -243,8 +240,7 @@ impl Document {
         }
         self.end_edit();
         self.end_stroke();
-        self.history
-            .record_named(&self.geometry, "Reorder submodels");
+        self.record_edit("Reorder submodels");
         let active = self.active_model_index();
         let new_active = if active == from {
             to
@@ -272,8 +268,7 @@ impl Document {
         }
         self.end_edit();
         self.end_stroke();
-        self.history
-            .record_named(&self.geometry, "Add submodel group");
+        self.record_edit("Add submodel group");
         self.geometry.scene.groups.push(name);
         self.dirty = true;
         Ok(())
@@ -284,8 +279,7 @@ impl Document {
         }
         self.end_edit();
         self.end_stroke();
-        self.history
-            .record_named(&self.geometry, "Ungroup submodels");
+        self.record_edit("Ungroup submodels");
         self.geometry.scene.groups.retain(|g| g != name);
         if self.geometry.scene.active_metadata.group == name {
             self.geometry.scene.active_metadata.group.clear();
@@ -307,7 +301,7 @@ impl Document {
         }
         self.end_edit();
         self.end_stroke();
-        self.history.record_named(&self.geometry, "Reorder groups");
+        self.record_edit("Reorder groups");
         let group = self.geometry.scene.groups.remove(from);
         self.geometry.scene.groups.insert(to, group);
         self.dirty = true;
@@ -325,8 +319,7 @@ impl Document {
         }
         self.end_edit();
         self.end_stroke();
-        self.history
-            .record_named(&self.geometry, "Group visibility");
+        self.record_edit("Group visibility");
         if self.geometry.scene.active_metadata.group == name {
             self.geometry.scene.active_metadata.visible = visible;
         }

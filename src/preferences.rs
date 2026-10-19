@@ -344,6 +344,7 @@ pub(crate) struct Preferences {
     pub modeling_presets: Vec<ModelingPreset>,
     pub next_modeling_preset_id: u64,
     pub recovery: crate::recovery::Settings,
+    pub history_retention: crate::diagnostics::Retention,
     pub version: u32,
     pub bindings: Vec<(Action, Option<Shortcut>)>,
     pub smooth: Hold,
@@ -397,6 +398,7 @@ impl Default for Preferences {
             modeling_presets: Vec::new(),
             next_modeling_preset_id: 1,
             recovery: Default::default(),
+            history_retention: Default::default(),
             version: 1,
             bindings: Action::ALL
                 .iter()
@@ -479,6 +481,7 @@ impl Preferences {
             }
         }
         self.recovery.validate()?;
+        self.history_retention.validate()?;
         self.appearance.validate()?;
         if self
             .active_workspace

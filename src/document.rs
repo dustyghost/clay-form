@@ -8,6 +8,7 @@ use crate::{
 };
 mod attributes;
 mod brushes;
+mod diagnostics;
 mod edit;
 mod mask;
 mod mesh;
@@ -44,6 +45,7 @@ pub struct Document {
     display_revision: u64,
     brushes: Vec<Brush>,
     history: History,
+    diagnostic_context: Option<serde_json::Value>,
     symmetry: Symmetry,
     dirty: bool,
     edit: Option<EditSession>,
@@ -62,6 +64,7 @@ impl Default for Document {
             display_revision: 0,
             brushes: Kind::ALL.into_iter().map(Brush::new).collect(),
             history: History::default(),
+            diagnostic_context: None,
             symmetry: Symmetry::default(),
             dirty: false,
             edit: None,
@@ -140,7 +143,7 @@ impl Document {
         self.references.clear();
         self.geometry = Geometry::new(Mesh::starting_sphere());
         self.display_changed();
-        self.history = History::default();
+        self.history.reset();
         self.dirty = false;
         self.end_stroke();
         self.current_path = "untitled.clay".into();
@@ -161,7 +164,7 @@ impl Document {
         self.references = project.references;
         self.brushes = project.brushes;
         self.symmetry = project.symmetry;
-        self.history = History::default();
+        self.history.reset();
         self.end_stroke();
         self.mark_saved(path);
         Ok(())

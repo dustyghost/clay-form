@@ -47,8 +47,7 @@ impl Document {
         self.prepare_edit(Some(session.kind()));
         self.end_stroke();
         if self.edit.is_none() {
-            self.history
-                .record_named(&self.geometry, session.kind().label());
+            self.record_edit(session.kind().label());
             self.edit = Some(session);
         }
     }

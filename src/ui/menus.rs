@@ -257,6 +257,19 @@ impl UiState {
             }
             BuiltinMenu::Settings => {
                 if ui
+                    .add(design::button(
+                        ui,
+                        Glyph::Export,
+                        "Export diagnostic bundle…",
+                    ))
+                    .clicked()
+                {
+                    self.diagnostics_open = true;
+                    if popup {
+                        ui.close_kind(egui::UiKind::Menu);
+                    }
+                }
+                if ui
                     .add(design::button(ui, Glyph::Restore, "Recovery saves…"))
                     .customize(Action::RecoverySettings)
                     .clicked()

@@ -302,7 +302,7 @@ impl Document {
         );
         self.end_edit();
         self.end_stroke();
-        self.history.record_named(&self.geometry, "Split hidden");
+        self.record_edit("Split hidden");
         self.install_models(models, active);
         Ok(())
     }

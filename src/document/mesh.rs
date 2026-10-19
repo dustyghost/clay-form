@@ -20,11 +20,23 @@ impl Document {
         geometry: Geometry,
         label: &'static str,
     ) -> Result<(), String> {
+        self.replace_geometry_recorded(geometry, label, None)
+    }
+    pub(crate) fn replace_geometry_recorded(
+        &mut self,
+        geometry: Geometry,
+        label: &'static str,
+        settings: Option<crate::diagnostics::EditSettings>,
+    ) -> Result<(), String> {
         geometry.settings.validate(&geometry.mesh)?;
         self.end_edit();
         self.end_stroke();
         let previous = std::mem::replace(&mut self.geometry, geometry);
-        self.history.record_owned(previous, label);
+        if let Some(settings) = settings {
+            self.history.record_owned(previous, label, Some(settings));
+        } else {
+            self.record_edit_owned(previous, label);
+        }
         self.dirty = true;
         self.display_changed();
         Ok(())

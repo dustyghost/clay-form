@@ -46,6 +46,8 @@ pub(crate) struct UiState {
     pub preferences: Preferences,
     pub(super) customization: customization::Customization,
     pub settings_open: bool,
+    pub diagnostics_open: bool,
+    pub diagnostic_path: String,
     pub recovery_open: bool,
     pub layout_open: bool,
     pub capturing: Option<Action>,
@@ -110,6 +112,8 @@ impl Default for UiState {
             preferences: Preferences::default(),
             customization: Default::default(),
             settings_open: false,
+            diagnostics_open: false,
+            diagnostic_path: "clay-session".into(),
             recovery_open: false,
             layout_open: false,
             capturing: None,
@@ -267,6 +271,18 @@ impl UiState {
                 {
                     commands.push(Command::Export);
                 }
+                if ui
+                    .add(design::button(
+                        ui,
+                        Glyph::Export,
+                        "Export diagnostic bundle…",
+                    ))
+                    .clicked()
+                {
+                    self.diagnostics_open = true;
+                    ui.close_kind(egui::UiKind::Menu);
+                }
+
                 if self.mesh_busy {
                     ui.spinner();
                     if ui

@@ -3,58 +3,111 @@ use crate::sculpt::Geometry;
 use std::collections::VecDeque;
 const UNDO_LIMIT: usize = 24;
 const MEMORY_LIMIT: usize = 128 * 1024 * 1024;
-struct Entry {
-    geometry: Geometry,
-    label: &'static str,
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct Retention {
+    pub edits: usize,
+    pub memory_mib: usize,
+}
+impl Default for Retention {
+    fn default() -> Self {
+        Self {
+            edits: UNDO_LIMIT,
+            memory_mib: MEMORY_LIMIT / 1024 / 1024,
+        }
+    }
+}
+impl Retention {
+    pub fn validate(&self) -> Result<(), String> {
+        if !(1..=256).contains(&self.edits) || !(16..=1024).contains(&self.memory_mib) {
+            return Err("History requires 1–256 edits and 16–1024 MiB".into());
+        }
+        Ok(())
+    }
+}
+pub(crate) struct Entry {
+    pub geometry: Geometry,
+    pub label: &'static str,
+    pub id: u64,
+    pub settings: Option<crate::diagnostics::EditSettings>,
+    bytes: usize,
 }
 #[derive(Default)]
 pub(crate) struct History {
-    undo: VecDeque<Entry>,
-    redo: Vec<Entry>,
+    pub undo: VecDeque<Entry>,
+    pub redo: Vec<Entry>,
+    pub retention: Retention,
+    pub evicted: usize,
+    pub discarded_redo: usize,
+    next_id: u64,
 }
 impl History {
+    pub fn reset(&mut self) {
+        *self = Self {
+            retention: self.retention,
+            ..Default::default()
+        };
+    }
+    #[cfg(test)]
     pub fn record_named(&mut self, mesh: &Geometry, label: &'static str) {
-        self.record_owned(mesh.clone(), label);
+        self.record_owned(mesh.clone(), label, None);
     }
-    pub fn record_owned(&mut self, geometry: Geometry, label: &'static str) {
+    pub fn record_owned(
+        &mut self,
+        geometry: Geometry,
+        label: &'static str,
+        settings: Option<crate::diagnostics::EditSettings>,
+    ) {
+        self.discarded_redo += self.redo.len();
         self.redo.clear();
-        self.push_undo(Entry { geometry, label });
+        self.next_id += 1;
+        let bytes =
+            geometry_bytes(&geometry) + settings.as_ref().map_or(0, |s| s.estimated_bytes());
+        self.undo.push_back(Entry {
+            geometry,
+            label,
+            id: self.next_id,
+            settings,
+            bytes,
+        });
+        self.enforce_limits();
     }
-    fn push_undo(&mut self, mesh: Entry) {
-        if self.undo.len() == UNDO_LIMIT {
-            self.undo.pop_front();
-        }
-        self.undo.push_back(mesh);
-        while self.undo.len() > 1
-            && self
-                .undo
-                .iter()
-                .chain(self.redo.iter())
-                .map(|entry| geometry_bytes(&entry.geometry))
-                .sum::<usize>()
-                > MEMORY_LIMIT
+    pub fn retained_bytes(&self) -> usize {
+        self.undo.iter().chain(&self.redo).map(|e| e.bytes).sum()
+    }
+    pub fn enforce_limits(&mut self) {
+        while self.undo.len() + self.redo.len() > self.retention.edits
+            || self.retained_bytes() > self.retention.memory_mib * 1024 * 1024
         {
-            self.undo.pop_front();
+            // Preserve the contiguous stages closest to the current position.
+            if self.undo.pop_front().is_none() {
+                self.redo.remove(0);
+            }
+            self.evicted += 1;
         }
     }
     pub fn undo(&mut self, mesh: &mut Geometry) -> bool {
-        if let Some(previous) = self.undo.pop_back() {
-            self.redo.push(Entry {
-                geometry: std::mem::replace(mesh, previous.geometry),
-                label: previous.label,
-            });
+        if let Some(mut previous) = self.undo.pop_back() {
+            std::mem::swap(mesh, &mut previous.geometry);
+            previous.bytes = geometry_bytes(&previous.geometry)
+                + previous
+                    .settings
+                    .as_ref()
+                    .map_or(0, |s| s.estimated_bytes());
+            self.redo.push(previous);
+            self.enforce_limits();
             true
         } else {
             false
         }
     }
     pub fn redo(&mut self, mesh: &mut Geometry) -> bool {
-        if let Some(next) = self.redo.pop() {
-            let previous = std::mem::replace(mesh, next.geometry);
-            self.push_undo(Entry {
-                geometry: previous,
-                label: next.label,
-            });
+        if let Some(mut next) = self.redo.pop() {
+            std::mem::swap(mesh, &mut next.geometry);
+            next.bytes = geometry_bytes(&next.geometry)
+                + next.settings.as_ref().map_or(0, |s| s.estimated_bytes());
+            self.undo.push_back(next);
+            self.enforce_limits();
             true
         } else {
             false
@@ -91,6 +144,7 @@ fn geometry_bytes(geometry: &Geometry) -> usize {
                 + mesh.mask.len() * std::mem::size_of::<f32>()
                 + mesh.triangles.len() * std::mem::size_of::<[usize; 3]>()
                 + mesh.quads.len() * std::mem::size_of::<[usize; 4]>()
+                + mesh.creases.len() * std::mem::size_of::<[usize; 2]>()
                 + mesh.hidden_faces.len()
                 + mesh.polygroups.len() * std::mem::size_of::<usize>()
                 + mesh
@@ -133,5 +187,38 @@ mod tests {
         }
         assert!(!history.redo(&mut mesh));
         assert_eq!(mesh.mesh.vertices[0].0, (UNDO_LIMIT + 3) as f32);
+    }
+}
+
+#[cfg(test)]
+mod retention_tests {
+    use super::*;
+    use crate::sculpt::{Mesh, Vec3};
+    #[test]
+    fn oversized_snapshots_are_evicted_and_redo_shares_the_budget() {
+        let mut history = History {
+            retention: Retention {
+                edits: 3,
+                memory_mib: 16,
+            },
+            ..Default::default()
+        };
+        let mut geometry = Geometry::new(Mesh::sphere());
+        for _ in 0..3 {
+            history.record_named(&geometry, "edit");
+        }
+        for _ in 0..3 {
+            assert!(history.undo(&mut geometry));
+        }
+        history.retention.edits = 1;
+        history.enforce_limits();
+        assert_eq!(history.counts(), (0, 1));
+        assert_eq!(history.redo[0].id, 1, "keep the nearest redo stage");
+        assert_eq!(history.evicted, 2);
+        geometry.mesh.vertices = vec![Vec3::default(); 1_500_000];
+        history.record_named(&geometry, "oversized");
+        assert_eq!(history.counts(), (0, 0));
+        assert_eq!(history.evicted, 3);
+        assert_eq!(history.discarded_redo, 1);
     }
 }

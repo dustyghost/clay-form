@@ -22,7 +22,7 @@ Linux needs a working Wayland or X11 desktop and a Vulkan-capable GPU and driver
 | [Models and mesh tools](docs/guide/modeling.md) | Pen modeling, face extrusion, tunnels, component selection, submodels, primitives, transforms, mesh tools |
 | [Edge loops and creases](docs/guide/edges.md) | Hole borders, support loops, edge selection, creasing, smooth subdivision, thickness rims |
 | [Masks and selection](docs/guide/selection.md) | Mask editing, vertex groups, rectangle/lasso selection, visibility, split hidden |
-| [Files and recovery](docs/guide/files.md) | Projects, brush files, OBJ import/export, automatic recovery |
+| [Files and recovery](docs/guide/files.md) | Projects, brush files, OBJ import/export, diagnostic bundles, automatic recovery |
 | [Navigation and tablet input](docs/guide/navigation.md) | Orbit, pan, zoom, display options, Huion setup |
 | [Reference images](docs/guide/references.md) | Embedded photographs/drawings, placement, opacity, locking, visibility |
 | [Workspace and shortcuts](docs/guide/workspace.md) | Pinned menus, collapsible panels, custom shelves, workspaces, key bindings |

@@ -7,6 +7,7 @@ Keep an editable `.clay` project, export a mesh for another app, or recover work
 - [Save and open projects](#projects-and-brush-files)
 - [Import a mesh](#obj-import)
 - [Export a mesh](#export-an-obj)
+- [Export session evidence](#diagnostic-bundles)
 - [Recover recent work](#recovery-saves)
 
 ## Projects and brush files
@@ -29,6 +30,30 @@ Save As asks before replacing an existing file. Cancel leaves the document and f
 Older projects containing the removed Human head primitive open with their saved geometry as ordinary sculpting meshes.
 
 Camera position and undo history are session-only. [Workspace preferences](workspace.md#where-preferences-are-stored) save separately.
+
+## Diagnostic bundles
+
+Choose **Settings → Export diagnostic bundle…**, or the same action beside **Export OBJ** in the file toolbar. Finish any active edit or mesh operation, enter a **new folder path** whose parent exists, and choose **Export locally**. The dialog lists the included content and lets you configure saved history retention limits.
+
+The folder contains:
+
+| File | Purpose |
+| --- | --- |
+| `README.txt` | Environment, current history position, labeled transitions, settings highlights, missing evidence and restore instructions |
+| `manifest.json` | Schema version, chronological stage indices, stable edit IDs, retention/eviction counts, current settings and settings captured at each edit boundary |
+| `stage-NNN.clay` | Each retained geometry stage, ordered oldest to newest, including the current stage and available redo stages |
+
+Open `README.txt` first. To inspect or restore a stage, use **Open** on its `.clay` file, then **Save as…** to a new filename. Opening a stage resets live history; this is not a session replay/import. The current stage is the complete current project. Other stages preserve geometry, masks, visibility, groups, submodels, primitive recipes and subdivision levels. They use the brush library and symmetry captured at the indicated edit boundary; their earlier reference images are unavailable.
+
+`transitions[i]` describes the edit from stage `i` to `i + 1`. Its settings include brush/preset/alpha, pressure configuration, stroke mode, symmetry and topology/remesh policy. Sculpt strokes additionally record the effective brush and first effective dab's pressure/invert state. View/input state is recorded when available from the UI; background mesh operations retain the settings at launch. `current_settings` is separate from this historical evidence. Undo/redo moves geometry only and does not restore brush or view settings.
+
+Brush, symmetry and view changes are outside geometry history. Their intermediate changes and changes during a continuous edit are not reconstructed. The manifest explicitly distinguishes unavailable settings from defaults used to open a legacy stage. The retained branch is ordered by edits, not by undo/redo button clicks. It contains no full input sample stream, replay timestamps, evicted steps or discarded redo branches. New/Open clears live history; increasing retention cannot recover earlier evictions.
+
+Export borrows the document without marking it saved or consuming undo/redo. Existing files or folders are refused. A failed export removes the new incomplete folder. Output is limited to **128 MiB per file** and **512 MiB total**; exceeding a limit fails with an explanation. Normal `.clay` projects remain unchanged and do not contain history.
+
+Export is local and user initiated. It includes embedded reference images in the current project and user-authored names, so review those before sharing. It includes app version/source build identity, OS family/architecture, available renderer/backend/GPU/driver information and an input-device category. It excludes project paths, device paths, credentials and environment variables. Up to 32 recent application-command/mesh-job warning categories and the current recovery-error category are available; detailed error text and a full log are not collected.
+
+For tooling, `clay_form::diagnostics::load_manifest` checks the schema version, indices, transition ordering and stage filenames. Load individual stage files with the normal validated project loader. Consumers must reject unsupported manifest versions.
 
 ## OBJ import
 

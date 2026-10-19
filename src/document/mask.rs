@@ -115,7 +115,7 @@ impl Document {
         }
         self.end_edit();
         self.end_stroke();
-        self.history.record_named(&self.geometry, "Invert mask");
+        self.record_edit("Invert mask");
         for mesh in std::iter::once(&mut self.geometry.mesh)
             .chain(self.geometry.settings.lower.iter_mut())
             .chain(self.geometry.settings.upper.iter_mut())
@@ -159,7 +159,7 @@ impl Document {
         if self.mask_peak() == 0. {
             return;
         }
-        self.history.record_named(&self.geometry, "Clear mask");
+        self.record_edit("Clear mask");
         self.geometry.mesh.mask.fill(0.);
         for level in self
             .geometry

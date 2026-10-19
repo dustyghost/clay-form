@@ -14,6 +14,7 @@ use eframe::egui;
 
 mod actions;
 mod commands;
+mod diagnostics;
 mod files;
 mod jobs;
 mod recovery;
@@ -26,6 +27,8 @@ pub struct App {
     ui: UiState,
     tablet: Tablet,
     pressure: f32,
+    diagnostic_environment: crate::diagnostics::Environment,
+    job_settings: Option<crate::diagnostics::EditSettings>,
     closing: bool,
     mesh_job: Option<MeshJob>,
     recovery: Option<crate::recovery::Recovery>,
@@ -44,6 +47,8 @@ impl Default for App {
             ui: UiState::default(),
             tablet: Tablet::new(),
             pressure: 1.,
+            diagnostic_environment: Default::default(),
+            job_settings: None,
             closing: false,
             mesh_job: None,
             recovery: None,
@@ -59,6 +64,11 @@ impl App {
     pub fn with_wgpu(state: &eframe::egui_wgpu::RenderState) -> Result<Self, String> {
         let mut app = Self::new();
         app.viewport.initialize_renderer(state)?;
+        let info = state.adapter.get_info();
+        app.diagnostic_environment.renderer = Some("wgpu".into());
+        app.diagnostic_environment.backend = Some(format!("{:?}", info.backend));
+        app.diagnostic_environment.gpu = Some(info.name);
+        app.diagnostic_environment.driver = Some(format!("{} {}", info.driver, info.driver_info));
         Ok(app)
     }
     pub fn new() -> Self {
@@ -73,6 +83,9 @@ impl App {
                 Err(error) => app.ui.status = format!("Could not load preferences: {error}"),
             }
         }
+        let _ = app
+            .document
+            .set_history_retention(app.ui.preferences.history_retention);
         app.initialize_recovery(path.with_file_name("recovery"));
         app.preferences_path = Some(path);
         app
@@ -106,6 +119,7 @@ impl App {
             || self.ui.pending.is_some()
             || self.ui.file_picker.is_some()
             || self.ui.recovery_open
+            || self.ui.diagnostics_open
             || self.ui.settings_open
             || self.ui.layout_open
             || self.ui.icon_capture_open()
@@ -153,6 +167,7 @@ impl App {
             && self.ui.pending.is_none()
             && self.ui.file_picker.is_none()
             && !self.ui.recovery_open
+            && !self.ui.diagnostics_open
             && !self.ui.settings_open
             && !self.ui.layout_open
             && self.mesh_job.is_none();
@@ -191,6 +206,7 @@ impl App {
             ui.input(|i| i.pointer.hover_pos().is_some_and(|p| rect.contains(p)))
         });
         let selected = self.ui.brush_index_for_context(&self.document, ui.ctx());
+        self.capture_diagnostic_context(ui.ctx());
         self.viewport.show(
             ui,
             &mut self.document,
@@ -339,6 +355,7 @@ impl eframe::App for App {
             self.dispatch(command, ctx);
         }
         self.show_recovery(ctx);
+        self.show_diagnostics(ctx);
         self.ui.preferences.sync_active_workspace();
         if self.ui.preferences != self.saved_preferences {
             let since = self
