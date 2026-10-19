@@ -301,7 +301,7 @@ impl Mesh {
         };
         let mut first_distance: Option<f32> = None;
         let mut free_regions = 0;
-        let mut joined_targets = Vec::<Vec<Vec3>>::new();
+        let mut joined_targets = Vec::<(Vec<Vec3>, f32)>::new();
         for (index, group) in groups.into_iter().enumerate() {
             // Earlier edits compact vertex indices. Locate untouched source caps
             // by their original corners, rather than reusing stale indices.
@@ -321,10 +321,12 @@ impl Mesh {
                 .collect();
             if indices.is_empty()
                 && group.iter().all(|&f| {
-                    joined_targets.iter().any(|target| {
+                    joined_targets.iter().any(|(target, tolerance)| {
                         target.len() == polygons[f].vertices.len()
                             && polygons[f].vertices.iter().all(|&v| {
-                                target.iter().any(|&p| (p - self.vertices[v]).len() < 1e-5)
+                                target
+                                    .iter()
+                                    .any(|&p| (p - self.vertices[v]).len() <= *tolerance)
                             })
                     })
                 })
@@ -353,13 +355,23 @@ impl Mesh {
             }
             free_regions += usize::from(!next.joined && !next.collapsed);
             if next.joined {
-                let direction = normal(self, &polygons[group[0]]);
+                let first = &polygons[group[0]];
+                let direction = normal(self, first);
+                let tolerance = (first
+                    .edges()
+                    .map(|(a, b)| (self.vertices[a] - self.vertices[b]).len())
+                    .fold(0_f32, f32::max)
+                    * 1e-4)
+                    .max(1e-7);
                 joined_targets.extend(group.iter().map(|&f| {
-                    polygons[f]
-                        .vertices
-                        .iter()
-                        .map(|&v| self.vertices[v] + direction * next.distance)
-                        .collect()
+                    (
+                        polygons[f]
+                            .vertices
+                            .iter()
+                            .map(|&v| self.vertices[v] + direction * next.distance)
+                            .collect(),
+                        tolerance,
+                    )
                 }));
             }
             result.mesh = next.mesh;

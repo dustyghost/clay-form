@@ -1487,34 +1487,40 @@ fn modeling_fuse_separate_depths_report_mixed_contacts_and_fail_atomically() {
 
 #[test]
 fn modeling_fuse_both_selected_ends_of_a_tunnel_join_once() {
-    let mesh = slab();
-    let front = front_at(&mesh, 0.25, 0.25);
-    let back = mesh
-        .polygons()
-        .iter()
-        .position(|p| {
-            normal(&mesh, p).2 < -0.99
-                && p.vertices.iter().all(|&v| {
-                    mesh.vertices[v].0 >= 0.
-                        && mesh.vertices[v].0 <= 0.5
-                        && mesh.vertices[v].1 >= 0.
-                        && mesh.vertices[v].1 <= 0.5
-                })
-        })
-        .unwrap();
-    let symmetry = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
-    let out = mesh
-        .extrude_symmetric_contact(
-            &[front, back],
-            -0.8,
-            ExtrudeContact {
-                join: true,
-                loops: true,
-                snap: 0.04,
-            },
-            &symmetry,
-        )
-        .unwrap();
-    assert!(out.joined && !out.partial_contact && !out.varying_distance);
-    check_joined_surface(&out.mesh, 1);
+    for lateral_offset in [0., 2e-5] {
+        let mut mesh = slab();
+        let front = front_at(&mesh, 0.25, 0.25);
+        let back = mesh
+            .polygons()
+            .iter()
+            .position(|p| {
+                normal(&mesh, p).2 < -0.99
+                    && p.vertices.iter().all(|&v| {
+                        mesh.vertices[v].0 >= 0.
+                            && mesh.vertices[v].0 <= 0.5
+                            && mesh.vertices[v].1 >= 0.
+                            && mesh.vertices[v].1 <= 0.5
+                    })
+            })
+            .unwrap();
+        // Cap matching already permits this scale-relative lateral tolerance.
+        for v in &mut mesh.vertices {
+            v.0 += lateral_offset * (0.1 - v.2) / 0.2;
+        }
+        let symmetry = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+        let out = mesh
+            .extrude_symmetric_contact(
+                &[front, back],
+                -0.8,
+                ExtrudeContact {
+                    join: true,
+                    loops: true,
+                    snap: 0.04,
+                },
+                &symmetry,
+            )
+            .unwrap();
+        assert!(out.joined && !out.partial_contact && !out.varying_distance);
+        check_joined_surface(&out.mesh, 1);
+    }
 }
