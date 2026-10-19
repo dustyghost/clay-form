@@ -32,6 +32,10 @@ The controller locks geometry edits while a worker holds its snapshot. New/Open/
 History entries pair a geometry snapshot with an action label shared by undo and redo. The document exposes read-only labels and counts for UI feedback. A stroke holds a provisional snapshot until its first actual geometry or mask change, then transfers it into history without another clone; an unchanged stroke discards it and preserves redo. Completed background jobs supply explicit subdivision/remesh labels when the controller commits their results.
 
 
+## Clay buildup
+
+Clay samples an area-weighted local surface plane with a smooth spatial taper, excluding hidden and back-facing faces and weighting out masked regions. This reduces dependence on the single picked normal and avoids bias toward densely refined areas. It fills toward a plane offset by a fifth of the brush radius; additive and subtractive strokes use matching signed distances. Each dab bounds its correction, and stamp strength is clamped before application so a high-strength drag stamp cannot overshoot its target layer. Alphas still control the footprint, and the common symmetry blending and deformation safety checks remain in effect. The reference is sampled anew for each dab, so repeated passes can build further volume.
+
 ## Local adaptive sculpting and Snake
 
 `sculpt/adaptive.rs` provides local conforming edge splits, conservative edge collapses, and quality-improving edge flips. Candidate faces intersect the brush footprint and front-facing dab hemisphere (Snake uses a volumetric tip); masks, pressure, and alpha eligibility restrict work. Every selected edge midpoint is reused across incident faces, and triangles with one, two, or three split edges are triangulated consistently.

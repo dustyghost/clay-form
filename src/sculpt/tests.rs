@@ -194,7 +194,13 @@ fn repeated_brush_strokes_do_not_fold_or_flatten_faces() {
 
 #[test]
 fn adaptive_brush_strokes_keep_deformation_oriented_between_topology_updates() {
-    for kind in [Kind::Standard, Kind::Smooth, Kind::Polish, Kind::Detail] {
+    for kind in [
+        Kind::Standard,
+        Kind::Clay,
+        Kind::Smooth,
+        Kind::Polish,
+        Kind::Detail,
+    ] {
         let mut mesh = Mesh::sphere();
         for p in &mut mesh.vertices {
             p.2 *= 0.6;

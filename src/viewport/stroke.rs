@@ -234,71 +234,73 @@ mod tests {
 
     #[test]
     fn live_stamp_matches_commit_without_buildup_or_document_edits() {
-        for mode in [StrokeMode::DragRect, StrokeMode::DragDot] {
-            for adaptive in [false, true] {
-                let mut document = Document::default();
-                let mut plane = Primitive::for_kind(if adaptive {
-                    PrimitiveKind::Cube
-                } else {
-                    PrimitiveKind::Plane
-                });
-                plane.divisions = [10, 10, 10];
-                document
-                    .replace_geometry(Geometry::new(plane.mesh().unwrap()))
-                    .unwrap();
-                document
-                    .set_adaptive(crate::sculpt::AdaptiveSettings {
-                        enabled: adaptive,
-                        ..Default::default()
-                    })
-                    .unwrap();
-                let original = document.geometry_snapshot();
-                let history = document.history_counts();
-                let dirty = document.is_dirty();
-                let ctx = egui::Context::default();
-                let rect = egui::Rect::from_min_size(Pos2::ZERO, egui::Vec2::splat(400.));
-                let mut scene = None;
-                let _ = ctx.run(egui::RawInput::default(), |ctx| {
-                    scene = Some(Scene::paint(
-                        &ctx.layer_painter(egui::LayerId::background()),
-                        rect,
-                        &document,
-                        &Camera::default(),
-                        false,
-                        super::super::WireMode::Visible,
-                        false,
-                    ));
-                });
-                let scene = scene.unwrap();
-                let mut brush = Brush::new(Kind::Standard);
-                brush.stroke_mode = mode;
-                brush.radius = 60.;
-                let stroke = PendingStroke {
-                    start: rect.center(),
-                    end: rect.center() + egui::vec2(60., 0.),
-                    anchor: scene.pick(rect.center()).unwrap(),
-                    brush,
-                    pressure: 0.75,
-                    invert: false,
-                };
-                let preview = stroke.preview_mesh(&document, &scene);
-                assert!(preview.vertices != document.mesh().vertices);
-                assert!(
-                    preview == stroke.preview_mesh(&document, &scene),
-                    "holding still must not accumulate depth"
-                );
-                assert!(document.geometry_snapshot() == original);
-                assert_eq!(document.history_counts(), history);
-                assert_eq!(document.is_dirty(), dirty);
-                stroke.commit(&mut document, &scene);
-                document.end_stroke();
-                assert!(
-                    *document.mesh() == preview,
-                    "preview and released stamp must match, including adaptive topology"
-                );
-                assert_eq!(document.history_counts().0, history.0 + 1);
-                document.undo();
-                assert!(document.geometry_snapshot() == original);
+        for kind in [Kind::Standard, Kind::Clay] {
+            for mode in [StrokeMode::DragRect, StrokeMode::DragDot] {
+                for adaptive in [false, true] {
+                    let mut document = Document::default();
+                    let mut plane = Primitive::for_kind(if adaptive {
+                        PrimitiveKind::Cube
+                    } else {
+                        PrimitiveKind::Plane
+                    });
+                    plane.divisions = [10, 10, 10];
+                    document
+                        .replace_geometry(Geometry::new(plane.mesh().unwrap()))
+                        .unwrap();
+                    document
+                        .set_adaptive(crate::sculpt::AdaptiveSettings {
+                            enabled: adaptive,
+                            ..Default::default()
+                        })
+                        .unwrap();
+                    let original = document.geometry_snapshot();
+                    let history = document.history_counts();
+                    let dirty = document.is_dirty();
+                    let ctx = egui::Context::default();
+                    let rect = egui::Rect::from_min_size(Pos2::ZERO, egui::Vec2::splat(400.));
+                    let mut scene = None;
+                    let _ = ctx.run(egui::RawInput::default(), |ctx| {
+                        scene = Some(Scene::paint(
+                            &ctx.layer_painter(egui::LayerId::background()),
+                            rect,
+                            &document,
+                            &Camera::default(),
+                            false,
+                            super::super::WireMode::Visible,
+                            false,
+                        ));
+                    });
+                    let scene = scene.unwrap();
+                    let mut brush = Brush::new(kind);
+                    brush.stroke_mode = mode;
+                    brush.radius = 60.;
+                    let stroke = PendingStroke {
+                        start: rect.center(),
+                        end: rect.center() + egui::vec2(60., 0.),
+                        anchor: scene.pick(rect.center()).unwrap(),
+                        brush,
+                        pressure: 0.75,
+                        invert: false,
+                    };
+                    let preview = stroke.preview_mesh(&document, &scene);
+                    assert!(preview.vertices != document.mesh().vertices);
+                    assert!(
+                        preview == stroke.preview_mesh(&document, &scene),
+                        "holding still must not accumulate depth"
+                    );
+                    assert!(document.geometry_snapshot() == original);
+                    assert_eq!(document.history_counts(), history);
+                    assert_eq!(document.is_dirty(), dirty);
+                    stroke.commit(&mut document, &scene);
+                    document.end_stroke();
+                    assert!(
+                        *document.mesh() == preview,
+                        "preview and released stamp must match, including adaptive topology"
+                    );
+                    assert_eq!(document.history_counts().0, history.0 + 1);
+                    document.undo();
+                    assert!(document.geometry_snapshot() == original);
+                }
             }
         }
     }

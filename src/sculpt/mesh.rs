@@ -309,6 +309,7 @@ impl Mesh {
         }
         let polish = (b.kind == Kind::Polish)
             .then(|| self.polish_planes(b, dabs, &normals, &mut sculptable));
+        let clay = (b.kind == Kind::Clay).then(|| self.clay_planes(dabs));
         let join_soft =
             b.kind == Kind::Standard && matches!(b.alpha, super::Alpha::Soft) && dabs.len() > 1;
         let origin = dabs.first().map_or(Vec3::default(), |dab| dab.center);
@@ -374,7 +375,24 @@ impl Mesh {
                 let w = influence * (1. - self.mask[i]);
                 let displacement = match b.kind {
                     Kind::Standard => normal * (radius * 0.15 * w * sign),
-                    Kind::Clay => normal * ((radius * 0.1 - offset.dot(normal)).max(0.) * w * sign),
+                    Kind::Clay => {
+                        let (plane_center, plane_normal) = clay.as_ref().unwrap()[dab_index];
+                        // Fill toward an offset surface plane, with the same
+                        // bounded response for removal. The old subtract rule
+                        // increased its displacement as a depression deepened.
+                        let height = radius * 0.2;
+                        let distance = (old[i] - plane_center).dot(plane_normal) * sign;
+                        let depth = (height - distance).clamp(0., height * 2.);
+                        let gain = if matches!(
+                            b.stroke_mode,
+                            super::StrokeMode::DragRect | super::StrokeMode::DragDot
+                        ) {
+                            4.
+                        } else {
+                            1.
+                        };
+                        plane_normal * (depth * (w * gain).min(1.) * sign)
+                    }
                     Kind::Inflate => normals[i] * (radius * 0.15 * w * sign),
                     Kind::Smooth => (avg[i] * (1. / count[i].max(1.)) - old[i]) * (w * sign),
                     Kind::Flatten => normal * (-offset.dot(normal) * w * sign),
@@ -439,7 +457,7 @@ impl Mesh {
                 super::StrokeMode::DragRect | super::StrokeMode::DragDot
             ) && matches!(
                 b.kind,
-                Kind::Standard | Kind::Clay | Kind::Inflate | Kind::Crease | Kind::Detail
+                Kind::Standard | Kind::Inflate | Kind::Crease | Kind::Detail
             ) {
                 4.
             } else {
