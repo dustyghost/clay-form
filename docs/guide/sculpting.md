@@ -178,7 +178,7 @@ Use **Edit → Undo / Redo** or **Ctrl+Z / Ctrl+Shift+Z**. Tooltips and the Edit
 | Sculpt/mask strokes, transforms, cuts, topology edits | Brush settings, symmetry settings, camera navigation, workspace preferences |
 | Completed parameter drags as one step | Reference-image placement and settings |
 
-History holds up to **24 edits** within **128 MB**. New/Open clears it; it is not saved in projects. A new geometry edit clears redo. Cancelled or unchanged operations preserve it.
+History defaults to **24 edits** within an estimated **128 MiB**, shared by undo and redo. Use **Export diagnostic bundle…** in the file toolbar to configure **1–256 edits** and **16–1024 MiB**. Older undo steps are evicted first, then the most distant redo steps; a single snapshot larger than the budget cannot be retained. The estimate covers geometry and captured settings, excluding the live project and allocator overhead. Lowering limits may evict steps immediately. New/Open clears it; it is not saved in projects. A new geometry edit clears redo. Cancelled or unchanged operations preserve it. [Diagnostic bundles](files.md#diagnostic-bundles) can preserve the retained stages for inspection.
 
 ## Related guides
 

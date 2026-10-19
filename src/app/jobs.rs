@@ -19,6 +19,7 @@ impl App {
         } else {
             self.viewport.cancel(&mut self.document);
         }
+        self.job_settings = Some(self.document.capture_edit_settings());
         self.mesh_job = Some(MeshJob::start(
             self.document.geometry_snapshot(),
             operation.clone(),
@@ -35,6 +36,7 @@ impl App {
             self.ui.status = "Mesh operation cancelled; original mesh kept".into();
         }
         self.ui.mesh_busy = false;
+        self.job_settings = None;
     }
     pub(super) fn poll_mesh_job(&mut self) {
         if let Some(result) = self.mesh_job.as_ref().and_then(MeshJob::poll) {
@@ -46,13 +48,15 @@ impl App {
                 .clone();
             let label = operation.history_label();
             self.ui.mesh_busy = false;
+            let settings = self.job_settings.take();
             match result.and_then(|geometry| {
                 if matches!(operation, Operation::Edges(_))
                     && geometry == self.document.geometry_snapshot()
                 {
                     Ok(())
                 } else {
-                    self.document.replace_geometry_named(geometry, label)
+                    self.document
+                        .replace_geometry_recorded(geometry, label, settings)
                 }
             }) {
                 Ok(()) => {
@@ -75,6 +79,10 @@ impl App {
                     )
                 }
                 Err(error) => {
+                    self.diagnostic_warning(&format!(
+                        "{} failed; detailed error text withheld",
+                        operation.history_label()
+                    ));
                     self.ui.status = error;
                     if matches!(operation, Operation::Remesh)
                         && self.document.mesh_settings().auto_remesh

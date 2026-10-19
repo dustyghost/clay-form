@@ -66,6 +66,11 @@ impl Document {
             || old_mask.is_some_and(|mask| mask != self.geometry.mesh.mask)
         {
             if let Some(before) = self.stroke_before.take() {
+                let mut captured = self.capture_edit_settings();
+                captured.active_brush = Some(brush.clone());
+                captured.first_dab = Some(serde_json::json!({
+                    "pressure": dab.pressure, "invert": dab.invert,
+                }));
                 self.history.record_owned(
                     before,
                     if settings.enabled {
@@ -80,6 +85,7 @@ impl Document {
                             crate::sculpt::StrokeMode::DragDot => "Drag Dot stamp",
                         }
                     },
+                    Some(captured),
                 );
             }
             self.dirty = true;

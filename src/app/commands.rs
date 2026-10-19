@@ -65,6 +65,7 @@ impl App {
         .into();
     }
     pub(crate) fn dispatch(&mut self, command: Command, ctx: &egui::Context) {
+        self.capture_diagnostic_context(ctx);
         if let Command::Action(action) = command {
             self.execute_action(action, ctx);
             return;
@@ -913,6 +914,7 @@ impl App {
             }
         };
         if let Err(error) = result {
+            self.diagnostic_warning("An application command failed; detailed error text withheld to exclude personal paths");
             self.ui.status = error;
         }
     }

@@ -56,7 +56,7 @@ impl Document {
         };
         self.begin_stroke();
         if let Some(before) = self.stroke_before.take() {
-            self.history.record_owned(before, "Transform submodel");
+            self.record_edit_owned(before, "Transform submodel");
         }
         match update {
             Transformed::Primitive(update) => {

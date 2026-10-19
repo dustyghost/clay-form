@@ -4,6 +4,7 @@ mod app;
 mod brush_icon;
 pub mod camera;
 mod command;
+pub mod diagnostics;
 pub mod document;
 mod history;
 mod mesh_job;
