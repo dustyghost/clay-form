@@ -272,6 +272,9 @@ impl App {
         {
             self.ui.status = error;
         }
+        if let Some(notice) = self.viewport.modeling.notice.take() {
+            self.ui.status = notice.into();
+        }
         if let Some(status) = self.viewport.status.take() {
             self.ui.status = status;
         }

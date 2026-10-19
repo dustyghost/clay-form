@@ -4,7 +4,7 @@
 
 Build a base shape, move its parts, and add the detail your sculpt needs.
 
-Start with [a primitive](#parametric-primitives) for a brush sculpt, or try [a square tunnel](#push-through-to-make-a-tunnel) to learn pen modeling with a visible result.
+Start with [a primitive](#parametric-primitives) for a brush sculpt, or try [a square tunnel](#push-through-to-make-a-tunnel) to learn modeling with a visible result.
 
 - [Manage submodels](#submodels)
 - [Create a primitive](#parametric-primitives)
@@ -130,12 +130,14 @@ Mirror keeps the current mesh level and discards its other subdivision levels. I
 
 Convert parametric primitives first, show all faces of the active model, and apply or remove thickness modifier. A source half with no surface produces an error and leaves the model unchanged. Large operations can be cancelled from the status controls.
 
-## Pen modeling
+<a id="pen-modeling"></a>
 
-Use pen modeling to build deliberate forms: a raised panel, a tube, or a hole through a block. You edit faces (surface patches), edges (their borders), and vertices (their corner points).
+## Modeling
+
+Use modeling to build deliberate forms: a raised panel, a tube, or a hole through a block. You edit faces (surface patches), edges (their borders), and vertices (their corner points).
 
 1. Choose the active part in **Submodels**.
-2. Open **Mesh → Pen modeling**.
+2. Open **Mesh → Modeling**.
 3. For a fresh start, click **New mesh…**. Keep the cube's **3 spans per axis**, or adjust X/Y/Z spans.
 4. Choose **Replace and start modeling**. The cube opens in Face selection mode.
 
@@ -143,7 +145,7 @@ Use pen modeling to build deliberate forms: a raised panel, a tube, or a hole th
 
 ![The modeling starter warning, with span controls and explicit replacement confirmation](../images/modeling-new-mesh-warning.png)
 
-To start from a different shape, create it through **Primitive**, adjust its controls, and convert it to a sculpting mesh before enabling Pen modeling.
+To start from a different shape, create it through **Primitive**, adjust its controls, and convert it to a sculpting mesh before enabling Modeling.
 
 ### Select faces, edges, or vertices
 
@@ -245,9 +247,15 @@ The highlighted rim stays on the dragged face even as the pen moves across other
 
 Inset and bevel retain the cap selection for the next operation. New faces inherit their source region's face label; surviving weights and creases are retained.
 
-**Extrude and fuse** adds contact handling while pushing a single flat face inward. It can stop at the first compatible intermediate loop, remove the swept exterior strips and retain the moved cap. **Join matching faces** separately permits opening a tunnel when an opposing cap matches.
+**Extrude and fuse** pushes selected flat face regions inward. Select nonadjacent faces with **Add** (or Shift); adjacent faces stay together as one region, and separate regions move independently. Each region stops at its first compatible intermediate loop, removes the swept exterior strips and retains the moved cap. Internal edges between selected faces do not create walls. **Join matching faces** separately permits opening a tunnel when the opposite cap has the same face layout. Dragging farther keeps the preview at the first compatible contact; release or **Apply amount** commits the same result in one Undo step.
 
-**Snap range** is a fraction of the local edge length, independent of sculpt brush size. Compatibility still requires aligned corners and complete adjoining side strips; this does not cut arbitrary intersecting surfaces. Symmetry applies only when all copies can complete safely.
+**Snap range** is a fraction of the local edge length, independent of sculpt brush size. Compatibility requires aligned corners and complete adjoining side strips; this does not cut arbitrary intersecting surfaces. Before a compatible contact is reached, the tool extrudes freely and reports that no fusion occurred. Unmatched or differently tessellated targets are not fused.
+
+Each region must be flat and separate regions must not share vertices. **Individual faces** applies to ordinary Extrude, not Extrude and fuse. Regions can snap at different depths; in that case Distance retains the requested travel. If only some regions find contact, the tool reports that the others are still extruding freely. Every region and symmetry copy commits together in one Undo step. A mask, hidden face, or interfering edit that prevents any region from completing cancels the whole operation; Escape cancels its preview.
+
+![Two adjacent faces fused into one open tunnel, with the distance snapped to the opposite cap](../images/modeling-region-fuse-result.png)
+
+![Two nonadjacent faces fused into separate tunnels in one edit](../images/modeling-separate-fuse-result.png)
 
 ### Construct from edges, points and face centers
 
@@ -352,7 +360,7 @@ Use **Target → Boundary** to select a complete hole. For two boundaries or ver
 
 ### Model with symmetry
 
-Enable **Symmetry** and choose mirror axes or radial settings in **Symmetry settings**. Pen modeling uses the same center and axes for component selection, loop/ring selection, group assignment, extrusion/tunnels, loop cuts, and dissolve.
+Enable **Symmetry** and choose mirror axes or radial settings in **Symmetry settings**. Modeling uses the same center and axes for component selection, loop/ring selection, group assignment, extrusion/tunnels, loop cuts, and dissolve.
 
 Every enabled copy must match the active mesh's vertex positions, polygon connectivity, winding, and face visibility. A small automatic tolerance accommodates floating-point rounding; it does not approximate asymmetric shapes or remesh mismatched sides. If correspondence fails, the tool displays an explanation and leaves geometry unchanged. Disable symmetry to work on unmatched geometry.
 

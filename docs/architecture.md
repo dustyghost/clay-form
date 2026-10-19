@@ -66,7 +66,7 @@ These references retain the implementation limits, data mappings, and failure be
 | --- | --- |
 | [Editing and history](architecture/editing.md) | Edit sessions, subdivision, remesh, adaptive sculpting, Snake, scene transforms, primitives, brush libraries |
 | [Surfaces, masks, and cuts](architecture/surfaces.md) | Mask deletion, thickness, weighted groups, stroke previews, deformation safety, slices, visibility, merging |
-| [Edges and pen modeling](architecture/modeling.md) | Edge loops, creases, smooth subdivision, component selection, construction, symmetry, modeling drafts and presets |
+| [Edges and modeling](architecture/modeling.md) | Edge loops, creases, smooth subdivision, component selection, construction, symmetry, modeling drafts and presets |
 | [Application integration](architecture/integration.md) | Ownership, symmetry, projection, files, references, preferences, GPU lifecycle, custom menus and actions |
 | [GPU rendering](gpu-rendering.md) | Render passes, offscreen correctness tests, screenshot exports, performance profiles |
 
@@ -124,6 +124,8 @@ These references retain the implementation limits, data mappings, and failure be
 
 [Edge targeting, crease propagation, Catmull–Clark, and transaction rules →](architecture/modeling.md#edge-loops-creases-and-smooth-subdivision)
 
-## Pen modeling
+<a id="pen-modeling"></a>
+
+## Modeling
 
 [Selection, construction, joins, symmetry, transforms, measured drafts, and presets →](architecture/modeling.md#pen-modeling)

@@ -24,6 +24,8 @@ See [Development](../development.md#update-guide-screenshots) for prerequisites 
 
 | Images | What they explain | Capture test |
 | --- | --- | --- |
+| `modeling-separate-fuse-result.png` | [Nonadjacent faces fused into separate tunnels in one edit](../guide/modeling.md#construct-a-region) | `modeling_region_fuse_offscreen_review` |
+| `modeling-region-fuse-result.png` | [Connected faces fused into one open tunnel](../guide/modeling.md#construct-a-region) | `modeling_region_fuse_offscreen_review` |
 | `modeling-boundary-join.png` | [Joining adjacent holes and opening exterior notches across depth loops](../guide/modeling.md#push-through-to-make-a-tunnel) | `modeling_boundary_join_offscreen_review` |
 | `modeling-selection.png`, `modeling-extrusion-preview.png`, `modeling-tunnel.png`, `modeling-loop-preview.png`, `modeling-loop-drag.png` | [Component groups, extrusion previews, and matching-face tunnels](../guide/modeling.md#pen-modeling) | `modeling_workflow_offscreen_review` |
 | `edge-loops-before.png`, `edge-loops-after.png` | [Support loops around an open hole](../guide/edges.md#add-support-loops-around-a-hole) | `edge_tools_offscreen_preview` |

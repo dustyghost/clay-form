@@ -35,6 +35,8 @@ impl Mesh {
             distance,
             joined: false,
             collapsed: false,
+            partial_contact: false,
+            varying_distance: false,
             rim: Vec::new(),
         })
     }

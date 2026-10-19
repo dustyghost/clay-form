@@ -203,10 +203,17 @@ impl Mesh {
         symmetry: &ModelingSymmetry,
     ) -> Result<Extrusion, String> {
         let join = contact.join;
-        if symmetry.vertices.len() == 1 {
+        if symmetry.vertices.len() == 1 && !contact.loops {
             return self.extrude_contact(selected, distance, contact);
         }
+        self.validate()?;
         let polygons = self.polygons();
+        if selected
+            .iter()
+            .any(|&f| polygons.get(f).is_none_or(|p| !p.visible))
+        {
+            return Err("Select visible faces on the active mesh".into());
+        }
         let mut remaining: BTreeSet<_> = selected
             .iter()
             .flat_map(|&f| symmetry.face_copies(f))
@@ -246,14 +253,14 @@ impl Mesh {
                 .collect();
             if vertices.iter().any(|v| group_vertices.contains(v)) {
                 return Err(
-                    "Symmetry copies meet at a corner; choose separate flat face regions".into(),
+                    "Selected regions meet at a corner or fold across an edge; choose flat regions with no shared vertices".into(),
                 );
             }
             group_vertices.extend(vertices);
         }
-        // Adjacent mirrored caps must extrude together, but a snapped tunnel
-        // joins them one at a time so their shared wall can be cancelled.
-        if join && distance < 0. {
+        // Ordinary extrusion retains per-face tunnel eligibility. Fuse instead
+        // requires contact for the entire connected region, including mirror seams.
+        if !contact.loops && join && distance < 0. {
             groups = groups
                 .into_iter()
                 .flat_map(|group| {
@@ -275,9 +282,27 @@ impl Mesh {
             distance,
             joined: false,
             collapsed: false,
+            partial_contact: false,
+            varying_distance: false,
             rim: Vec::new(),
         };
-        for group in groups {
+        // Resolve contacts against the unchanged source. Earlier regions must
+        // not create new targets or make a later region pass its original stop.
+        let plans = if contact.loops && groups.len() > 1 {
+            groups
+                .iter()
+                .map(|group| {
+                    self.extrude_contact(group, distance, contact)
+                        .map(|r| (r.distance, r.joined, r.collapsed))
+                })
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            Vec::new()
+        };
+        let mut first_distance: Option<f32> = None;
+        let mut free_regions = 0;
+        let mut joined_targets = Vec::<(Vec<Vec3>, f32)>::new();
+        for (index, group) in groups.into_iter().enumerate() {
             // Earlier edits compact vertex indices. Locate untouched source caps
             // by their original corners, rather than reusing stale indices.
             let current = result.mesh.polygons();
@@ -294,19 +319,72 @@ impl Mesh {
                     })
                 })
                 .collect();
-            if indices.is_empty() && result.joined {
-                continue;
-            } // The opposite cap of the same tunnel was already removed.
+            if indices.is_empty()
+                && group.iter().all(|&f| {
+                    joined_targets.iter().any(|(target, tolerance)| {
+                        target.len() == polygons[f].vertices.len()
+                            && polygons[f].vertices.iter().all(|&v| {
+                                target
+                                    .iter()
+                                    .any(|&p| (p - self.vertices[v]).len() <= *tolerance)
+                            })
+                    })
+                })
+            {
+                continue; // Both selected ends of this tunnel were already joined.
+            }
             if indices.len() != group.len() {
-                return Err("Symmetric extrusion copies overlap; the edit was cancelled".into());
+                return Err("Selected extrusion regions overlap; the edit was cancelled".into());
             }
             let next = result.mesh.extrude_contact(&indices, distance, contact)?;
+            if let Some(&(depth, joined, collapsed)) = plans.get(index)
+                && (next.joined != joined
+                    || next.collapsed != collapsed
+                    || (next.distance - depth).abs() > depth.abs().max(1.) * 1e-5)
+            {
+                return Err(
+                    "Selected regions interfere with each other's contact; extrude them separately"
+                        .into(),
+                );
+            }
+            if let Some(first) = first_distance {
+                result.varying_distance |=
+                    (next.distance - first).abs() > first.abs().max(1.) * 1e-5;
+            } else {
+                first_distance = Some(next.distance);
+            }
+            free_regions += usize::from(!next.joined && !next.collapsed);
+            if next.joined {
+                let first = &polygons[group[0]];
+                let direction = normal(self, first);
+                let tolerance = (first
+                    .edges()
+                    .map(|(a, b)| (self.vertices[a] - self.vertices[b]).len())
+                    .fold(0_f32, f32::max)
+                    * 1e-4)
+                    .max(1e-7);
+                joined_targets.extend(group.iter().map(|&f| {
+                    (
+                        polygons[f]
+                            .vertices
+                            .iter()
+                            .map(|&v| self.vertices[v] + direction * next.distance)
+                            .collect(),
+                        tolerance,
+                    )
+                }));
+            }
             result.mesh = next.mesh;
-            result.distance = next.distance;
+            result.distance = if result.varying_distance {
+                distance
+            } else {
+                next.distance
+            };
             result.joined |= next.joined;
             result.collapsed |= next.collapsed;
             result.rim.extend(next.rim);
         }
+        result.partial_contact = free_regions > 0 && (result.joined || result.collapsed);
         symmetry.validate_result(&result.mesh)?;
         Ok(result)
     }

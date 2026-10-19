@@ -1,4 +1,4 @@
-//! Transactional commits for the pen modeling tools.
+//! Transactional commits for the modeling tools.
 use super::*;
 use std::collections::BTreeSet;
 impl Document {

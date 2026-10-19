@@ -1148,3 +1148,379 @@ fn modeling_point_split_patch_can_be_extruded_and_surface_sides_differ() {
         .unwrap();
     out.validate_closed().unwrap();
 }
+
+#[test]
+fn modeling_fuse_connected_region_stops_at_intermediate_slab_loop() {
+    let mut primitive = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Cube);
+    primitive.divisions = [4, 4, 1];
+    let mut mesh = primitive.mesh().unwrap();
+    for v in &mut mesh.vertices {
+        v.2 *= 0.1;
+    }
+    let faces: Vec<_> = mesh
+        .polygons()
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| {
+            normal(&mesh, p).0 > 0.99
+                && p.vertices.iter().map(|&v| mesh.vertices[v].1).sum::<f32>()
+                    / (p.vertices.len() as f32)
+                    < 0.
+        })
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(faces.len(), 2);
+    let result = mesh
+        .extrude_contact(
+            &faces,
+            -0.8,
+            ExtrudeContact {
+                join: true,
+                loops: true,
+                snap: 0.04,
+            },
+        )
+        .unwrap();
+    assert!(
+        result.collapsed,
+        "multi-face region passed the first compatible loop"
+    );
+    assert!(!result.joined);
+    assert!((result.distance + 0.5).abs() < 1e-5);
+    manifold(&result.mesh).unwrap();
+    result.mesh.validate_closed().unwrap();
+    // A farther hidden cap must not block a safe intermediate contact.
+    let mut hidden = mesh.clone();
+    hidden.hidden_faces = hidden
+        .triangles
+        .iter()
+        .map(|t| t.iter().all(|&v| (hidden.vertices[v].0 + 1.).abs() < 1e-5))
+        .collect();
+    let nearest = hidden
+        .extrude_contact(
+            &faces,
+            -3.,
+            ExtrudeContact {
+                join: true,
+                loops: true,
+                snap: 0.04,
+            },
+        )
+        .unwrap();
+    assert!(nearest.collapsed);
+    assert!((nearest.distance + 0.5).abs() < 1e-5);
+    nearest.mesh.validate_closed().unwrap();
+}
+
+#[test]
+fn modeling_fuse_region_caps_join_without_internal_walls() {
+    let mesh = slab();
+    let faces = [front_at(&mesh, -0.25, -0.25), front_at(&mesh, 0.25, -0.25)];
+    let contact = ExtrudeContact {
+        join: true,
+        loops: true,
+        snap: 0.04,
+    };
+    let joined = mesh.extrude_contact(&faces, -0.21, contact).unwrap();
+    assert!(joined.joined);
+    assert!(!joined.collapsed);
+    assert!((joined.distance + 0.2).abs() < 1e-5);
+    check_joined_surface(&joined.mesh, 2);
+    assert_eq!(
+        joined.mesh,
+        mesh.extrude_contact(&faces, -10., contact).unwrap().mesh
+    );
+    let free = mesh.extrude_contact(&faces, -0.1, contact).unwrap();
+    assert!(!free.joined && !free.collapsed);
+    let no_join = mesh
+        .extrude_contact(
+            &faces,
+            -0.21,
+            ExtrudeContact {
+                join: false,
+                ..contact
+            },
+        )
+        .unwrap();
+    assert!(!no_join.joined && !no_join.collapsed);
+    assert!((no_join.distance + 0.21).abs() < 1e-5);
+    assert!(mesh.extrude_contact(&faces, -0.19, contact).unwrap().joined);
+    assert!(
+        !mesh
+            .extrude_contact(
+                &faces,
+                -0.19,
+                ExtrudeContact {
+                    snap: 0.,
+                    ..contact
+                }
+            )
+            .unwrap()
+            .joined
+    );
+}
+
+#[test]
+fn modeling_fuse_tiled_cap_translates_interior_vertices_and_preserves_symmetry() {
+    let mesh = cube(4);
+    let faces: Vec<_> = mesh
+        .polygons()
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| normal(&mesh, p).0 > 0.99)
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(faces.len(), 16);
+    let contact = ExtrudeContact {
+        join: true,
+        loops: true,
+        snap: 0.04,
+    };
+    let out = mesh.extrude_contact(&faces, -0.8, contact).unwrap();
+    assert!(out.collapsed);
+    assert!((out.distance + 0.5).abs() < 1e-5);
+    out.mesh.validate_closed().unwrap();
+    manifold(&out.mesh).unwrap();
+    assert_eq!(
+        out.mesh,
+        mesh.extrude_contact(&faces, -3., contact).unwrap().mesh
+    );
+    assert!(
+        out.mesh
+            .vertices
+            .iter()
+            .any(|p| (p.0 - 0.5).abs() < 1e-5 && p.1 == 0. && p.2 == 0.)
+    );
+    let symmetry = ModelingSymmetry::new(&mesh, &mirror_x()).unwrap();
+    let out = mesh
+        .extrude_symmetric_contact(&faces, -0.8, contact, &symmetry)
+        .unwrap();
+    assert!(out.collapsed);
+    out.mesh.validate_closed().unwrap();
+    ModelingSymmetry::new(&out.mesh, &mirror_x()).unwrap();
+}
+
+#[test]
+fn modeling_fuse_rejects_disconnected_nonplanar_and_hidden_targets_transactionally() {
+    let mesh = slab();
+    let contact = ExtrudeContact {
+        join: true,
+        loops: true,
+        snap: 0.04,
+    };
+    let disconnected = [front_at(&mesh, -0.75, -0.25), front_at(&mesh, 0.75, -0.25)];
+    assert!(
+        mesh.extrude_contact(&disconnected, -0.21, contact)
+            .err()
+            .unwrap()
+            .contains("connected")
+    );
+    let front = front_at(&mesh, 0.25, 0.25);
+    let side = mesh
+        .polygons()
+        .iter()
+        .position(|p| normal(&mesh, p).0 > 0.99)
+        .unwrap();
+    assert!(
+        mesh.extrude_contact(&[front, side], -0.21, contact)
+            .err()
+            .unwrap()
+            .contains("flat")
+    );
+    let faces = [front, front_at(&mesh, -0.25, 0.25)];
+    let mut hidden = mesh.clone();
+    let target = hidden
+        .polygons()
+        .iter()
+        .position(|p| {
+            normal(&hidden, p).2 < -0.99
+                && p.vertices.iter().all(|&v| {
+                    hidden.vertices[v].0 >= 0.
+                        && hidden.vertices[v].0 <= 0.5
+                        && hidden.vertices[v].1 >= 0.
+                        && hidden.vertices[v].1 <= 0.5
+                })
+        })
+        .unwrap();
+    hidden.hidden_faces = vec![false; hidden.triangles.len()];
+    hidden.hidden_faces[target * 2] = true;
+    hidden.hidden_faces[target * 2 + 1] = true;
+    let before = hidden.clone();
+    assert!(
+        hidden
+            .extrude_contact(&faces, -0.21, contact)
+            .err()
+            .unwrap()
+            .contains("target")
+    );
+    assert_eq!(hidden, before);
+}
+
+#[test]
+fn modeling_fuse_separate_regions_make_independent_tunnels() {
+    let mesh = slab();
+    let faces = [
+        front_at(&mesh, -0.75, -0.25),
+        front_at(&mesh, -0.25, -0.25),
+        front_at(&mesh, 0.75, -0.25),
+    ];
+    let contact = ExtrudeContact {
+        join: true,
+        loops: true,
+        snap: 0.04,
+    };
+    let symmetry = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    let out = mesh
+        .extrude_symmetric_contact(&faces, -0.8, contact, &symmetry)
+        .unwrap();
+    assert!(out.joined && !out.collapsed && !out.partial_contact && !out.varying_distance);
+    assert!((out.distance + 0.2).abs() < 1e-5);
+    check_joined_surface(&out.mesh, 3);
+    let reversed: Vec<_> = faces.into_iter().rev().collect();
+    assert_eq!(
+        out.mesh,
+        mesh.extrude_symmetric_contact(&reversed, -4., contact, &symmetry)
+            .unwrap()
+            .mesh
+    );
+    let symmetry = ModelingSymmetry::new(&mesh, &mirror_x()).unwrap();
+    let out = mesh
+        .extrude_symmetric_contact(&[faces[0]], -0.8, contact, &symmetry)
+        .unwrap();
+    check_joined_surface(&out.mesh, 2);
+    ModelingSymmetry::new(&out.mesh, &mirror_x()).unwrap();
+}
+
+#[test]
+fn modeling_fuse_separate_regions_stop_at_side_loops() {
+    let mut p = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Cube);
+    p.divisions = [4, 4, 1];
+    let mesh = p.mesh().unwrap();
+    let faces: Vec<_> = mesh
+        .polygons()
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| {
+            normal(&mesh, p).0 > 0.99
+                && p.vertices
+                    .iter()
+                    .map(|&v| mesh.vertices[v].1)
+                    .sum::<f32>()
+                    .abs()
+                    > 2.
+        })
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(faces.len(), 2);
+    let symmetry = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    let contact = ExtrudeContact {
+        join: false,
+        loops: true,
+        snap: 0.04,
+    };
+    let out = mesh
+        .extrude_symmetric_contact(&faces, -0.8, contact, &symmetry)
+        .unwrap();
+    assert!(out.collapsed && !out.joined && !out.partial_contact && !out.varying_distance);
+    assert!((out.distance + 0.5).abs() < 1e-5);
+    out.mesh.validate_closed().unwrap();
+    manifold(&out.mesh).unwrap();
+    assert_eq!(
+        out.mesh,
+        mesh.extrude_symmetric_contact(&faces, -3., contact, &symmetry)
+            .unwrap()
+            .mesh
+    );
+}
+
+#[test]
+fn modeling_fuse_separate_depths_report_mixed_contacts_and_fail_atomically() {
+    let mut other = slab();
+    for v in &mut other.vertices {
+        v.0 += 3.;
+        v.2 *= 2.;
+    }
+    let mesh = slab().merged_with(&other).unwrap();
+    let faces = [front_at(&mesh, 0.25, 0.25), front_at(&mesh, 3.25, 0.25)];
+    let symmetry = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    let contact = ExtrudeContact {
+        join: true,
+        loops: true,
+        snap: 0.04,
+    };
+    let mixed = mesh
+        .extrude_symmetric_contact(&faces, -0.3, contact, &symmetry)
+        .unwrap();
+    assert!(mixed.joined && mixed.partial_contact && mixed.varying_distance);
+    assert!((mixed.distance + 0.3).abs() < 1e-5);
+    mixed.mesh.validate_closed().unwrap();
+    let both = mesh
+        .extrude_symmetric_contact(&faces, -0.8, contact, &symmetry)
+        .unwrap();
+    assert!(both.joined && !both.partial_contact && both.varying_distance);
+    assert!((both.distance + 0.8).abs() < 1e-5);
+    both.mesh.validate_closed().unwrap();
+    manifold(&both.mesh).unwrap();
+    assert_eq!(
+        both.mesh,
+        mesh.extrude_symmetric_contact(&faces, -3., contact, &symmetry)
+            .unwrap()
+            .mesh
+    );
+    let mut hidden = mesh.clone();
+    hidden.hidden_faces = hidden
+        .triangles
+        .iter()
+        .map(|t| {
+            t.iter()
+                .all(|&v| hidden.vertices[v].0 > 2. && hidden.vertices[v].2 < -0.19)
+        })
+        .collect();
+    let before = hidden.clone();
+    let error = hidden
+        .extrude_symmetric_contact(&faces, -0.8, contact, &symmetry)
+        .err()
+        .unwrap();
+    assert!(error.contains("target"), "{error}");
+    assert_eq!(hidden, before);
+}
+
+#[test]
+fn modeling_fuse_both_selected_ends_of_a_tunnel_join_once() {
+    for lateral_offset in [0., 2e-5] {
+        let mut mesh = slab();
+        let front = front_at(&mesh, 0.25, 0.25);
+        let back = mesh
+            .polygons()
+            .iter()
+            .position(|p| {
+                normal(&mesh, p).2 < -0.99
+                    && p.vertices.iter().all(|&v| {
+                        mesh.vertices[v].0 >= 0.
+                            && mesh.vertices[v].0 <= 0.5
+                            && mesh.vertices[v].1 >= 0.
+                            && mesh.vertices[v].1 <= 0.5
+                    })
+            })
+            .unwrap();
+        // Cap matching already permits this scale-relative lateral tolerance.
+        for v in &mut mesh.vertices {
+            v.0 += lateral_offset * (0.1 - v.2) / 0.2;
+        }
+        let symmetry = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+        let out = mesh
+            .extrude_symmetric_contact(
+                &[front, back],
+                -0.8,
+                ExtrudeContact {
+                    join: true,
+                    loops: true,
+                    snap: 0.04,
+                },
+                &symmetry,
+            )
+            .unwrap();
+        assert!(out.joined && !out.partial_contact && !out.varying_distance);
+        check_joined_surface(&out.mesh, 1);
+    }
+}

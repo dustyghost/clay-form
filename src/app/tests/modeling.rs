@@ -731,6 +731,13 @@ fn modeling_construction_numeric_and_pen_share_valid_results() {
         assert_eq!(app.document.history_counts().0, history + 1);
         if tool != ModelTool::Fuse {
             assert_eq!(app.viewport.modeling.selected.len(), 1);
+        } else {
+            assert_eq!(
+                app.viewport.modeling.notice,
+                Some("No compatible contact; free extrusion")
+            );
+            navigation_frame(&mut app, &ctx, vec![]);
+            assert!(app.ui.status.contains("No compatible contact"));
         }
         app.dispatch(Command::Undo, &ctx);
         assert_eq!(app.document.mesh(), &before);
@@ -1497,4 +1504,187 @@ fn modeling_group_reassignment_compacts_indices_and_keeps_the_target_selected() 
     app.dispatch(Command::Undo, &ctx);
     app.dispatch(Command::Undo, &ctx);
     assert_eq!(app.document.geometry_snapshot(), before);
+}
+
+#[test]
+fn modeling_region_fuse_preview_numeric_cancel_and_history_agree() {
+    for (individual, separate) in [(false, false), (true, false), (false, true), (true, true)] {
+        let (mut app, ctx, _) = setup();
+        let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
+        primitive.divisions = [4, 4, 1];
+        let mut mesh = primitive.mesh().unwrap();
+        for p in &mut mesh.vertices {
+            p.2 *= 0.1;
+        }
+        let faces: Vec<_> = mesh
+            .polygons()
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| {
+                p.vertices.iter().all(|&v| mesh.vertices[v].2 > 0.)
+                    && p.vertices
+                        .iter()
+                        .all(|&v| mesh.vertices[v].1 >= -0.5 && mesh.vertices[v].1 <= 0.)
+                    && p.vertices.iter().all(|&v| mesh.vertices[v].0.abs() <= 0.5)
+            })
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(faces.len(), 2);
+        app.document.replace_geometry(Geometry::new(mesh)).unwrap();
+        let rect = navigation_frame(&mut app, &ctx, vec![]);
+        let scale = rect.width().min(rect.height()) * 0.35;
+        let x = if separate { 0.75 } else { 0.25 };
+        let select = |app: &mut App| {
+            app.ui.modeling.tool = ModelTool::Select;
+            app.ui.modeling.change = SelectionChange::Replace;
+            tap(
+                app,
+                &ctx,
+                rect.center() + Vec2::new(x * scale, 0.25 * scale),
+            );
+            app.ui.modeling.change = SelectionChange::Add;
+            tap(
+                app,
+                &ctx,
+                rect.center() + Vec2::new(-x * scale, 0.25 * scale),
+            );
+            app.ui.modeling.change = SelectionChange::Replace;
+            assert_eq!(app.viewport.modeling.selected.len(), 2);
+            app.ui.modeling.tool = ModelTool::Fuse;
+        };
+        select(&mut app);
+        app.ui.modeling.tool = ModelTool::Fuse;
+        app.ui.modeling.individual = individual;
+        app.ui.modeling.join = true;
+        app.ui.modeling.amount = -0.8;
+        let before = app.document.geometry_snapshot();
+        let history = app.document.history_counts();
+        app.dispatch(Command::ModelApply, &ctx);
+        assert_ne!(
+            app.document.geometry_snapshot(),
+            before,
+            "{}",
+            app.ui.status
+        );
+        let expected = app.document.geometry_snapshot();
+        assert_eq!(app.document.history_counts().0, history.0 + 1);
+        assert!((app.viewport.modeling.requested_amount.unwrap() + 0.2).abs() < 1e-5);
+        app.dispatch(Command::Undo, &ctx);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        select(&mut app);
+        let scale = rect.width().min(rect.height()) * 0.35;
+        let start = rect.center() + Vec2::new(x * scale, 0.25 * scale);
+        let end = start + Vec2::new(0., 0.35 * scale);
+        let far = start + Vec2::new(0., 0.8 * scale);
+        for cancel in [true, false] {
+            app.pressure = if individual { 0.4 } else { 1. };
+            navigation_frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+            );
+            navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+            assert_eq!(app.viewport.modeling.preview().unwrap(), &expected.mesh);
+            navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(far)]);
+            assert_eq!(app.viewport.modeling.preview().unwrap(), &expected.mesh);
+            assert_eq!(app.document.geometry_snapshot(), before);
+            assert_eq!(app.document.history_counts().0, history.0);
+            if cancel {
+                navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Escape, true)]);
+                navigation_frame(
+                    &mut app,
+                    &ctx,
+                    vec![
+                        primary_event(far, false),
+                        slice_key(egui::Key::Escape, false),
+                    ],
+                );
+                assert_eq!(app.document.geometry_snapshot(), before);
+                assert!(app.viewport.modeling.preview().is_none());
+                select(&mut app);
+            } else {
+                navigation_frame(&mut app, &ctx, vec![primary_event(far, false)]);
+                assert_eq!(app.document.geometry_snapshot(), expected);
+                assert_eq!(app.document.history_counts().0, history.0 + 1);
+                app.document.mesh().validate_closed().unwrap();
+                app.dispatch(Command::Undo, &ctx);
+                assert_eq!(app.document.geometry_snapshot(), before);
+                app.dispatch(Command::Redo, &ctx);
+                assert_eq!(app.document.geometry_snapshot(), expected);
+            }
+        }
+        let mut protected = before.clone();
+        for (v, weight) in protected.mesh.vertices.iter().zip(&mut protected.mesh.mask) {
+            *weight = if separate && v.0 < 0.5 { 0. } else { 1. };
+        }
+        app.document.replace_geometry(protected).unwrap();
+        select(&mut app);
+        app.ui.modeling.protect_mask = true;
+        let protected = app.document.geometry_snapshot();
+        let history = app.document.history_counts();
+        app.dispatch(Command::ModelApply, &ctx);
+        assert_eq!(app.document.geometry_snapshot(), protected);
+        assert_eq!(app.document.history_counts(), history);
+        assert!(app.ui.status.contains("mask"), "{}", app.ui.status);
+    }
+}
+
+#[test]
+fn modeling_label_preserves_saved_action_identity() {
+    assert_eq!(Action::PenModeling.label(), "Modeling");
+    assert_eq!(
+        serde_json::to_string(&Action::PenModeling).unwrap(),
+        "\"PenModeling\""
+    );
+    assert_eq!(
+        serde_json::from_str::<Action>("\"PenModeling\"").unwrap(),
+        Action::PenModeling
+    );
+}
+
+#[test]
+fn modeling_separate_fuse_reports_partial_contacts_and_requested_travel() {
+    let (mut app, ctx, _) = setup();
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
+    primitive.divisions = [4, 4, 1];
+    let mut mesh = primitive.mesh().unwrap();
+    for p in &mut mesh.vertices {
+        p.2 *= if p.0 >= 0.5 && p.2 < 0. { 0.2 } else { 0.1 };
+    }
+    for (amount, message) in [
+        (-0.25, "Some regions snapped"),
+        (-0.8, "Regions snapped at different depths"),
+    ] {
+        app.document
+            .replace_geometry(Geometry::new(mesh.clone()))
+            .unwrap();
+        app.ui.modeling.tool = ModelTool::Select;
+        let rect = navigation_frame(&mut app, &ctx, vec![]);
+        let scale = rect.width().min(rect.height()) * 0.35;
+        app.ui.modeling.change = SelectionChange::Replace;
+        tap(
+            &mut app,
+            &ctx,
+            rect.center() + Vec2::new(-0.75 * scale, 0.25 * scale),
+        );
+        app.ui.modeling.change = SelectionChange::Add;
+        tap(
+            &mut app,
+            &ctx,
+            rect.center() + Vec2::new(0.75 * scale, 0.25 * scale),
+        );
+        assert_eq!(app.viewport.modeling.selected.len(), 2);
+        app.ui.modeling.tool = ModelTool::Fuse;
+        app.ui.modeling.join = true;
+        app.ui.modeling.amount = amount;
+        let history = app.document.history_counts();
+        app.dispatch(Command::ModelApply, &ctx);
+        navigation_frame(&mut app, &ctx, vec![]);
+        assert!(app.ui.status.contains(message), "{}", app.ui.status);
+        assert!((app.ui.modeling.amount - amount).abs() < 1e-5);
+        assert_eq!(app.document.history_counts().0, history.0 + 1);
+        app.document.mesh().validate_closed().unwrap();
+        app.dispatch(Command::Undo, &ctx);
+        assert_eq!(app.document.mesh(), &mesh);
+    }
 }

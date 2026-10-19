@@ -107,7 +107,7 @@ impl UiState {
                 let response = ui
                     .add_enabled(
                         unavailable.is_none(),
-                        egui::Checkbox::new(&mut active, "Pen modeling"),
+                        egui::Checkbox::new(&mut active, "Modeling"),
                     )
                     .customize(Action::PenModeling);
                 if ui
@@ -251,7 +251,7 @@ impl UiState {
                     if self.modeling.tool==ModelTool::Fuse {
                         ui.label("Snap range (fraction of local edge)");
                         ui.add(egui::DragValue::new(&mut self.modeling.snap).range(0.0..=0.25).speed(0.005));
-                        ui.weak("Push inward to fuse at a compatible side loop or cap.");
+                        ui.weak("Each separate flat region snaps to its own compatible loop or cap.");
                     }
                     if self.modeling.tool==ModelTool::Extrude {ui.checkbox(&mut self.modeling.individual,"Individual faces");}
                     ui.add(egui::DragValue::new(&mut self.modeling.amount).prefix("Distance ").speed(0.01));
@@ -259,10 +259,14 @@ impl UiState {
 
                     design::help(
                         ui.checkbox(&mut self.modeling.join, "Join matching faces").customize(Action::ModelJoin),
-                        "Snap to an aligned opposite face and remove both caps to open a tunnel. Single-face extrusions only.",
+                        "Snap to an aligned opposite cap with matching face layout and remove both caps to open a tunnel.",
                     );
                     ui.weak("Drag up: out · down: in · release: apply · Esc: cancel");
-                    ui.weak("Connected regions share walls; Individual faces extrude separately.");
+                    if self.modeling.tool == ModelTool::Fuse {
+                        ui.weak("Adjacent faces stay together; separate regions fuse independently.");
+                    } else {
+                        ui.weak("Connected regions share walls; Individual faces extrude separately.");
+                    }
                 }
                 ModelTool::Inset | ModelTool::Bevel => {
                     ui.checkbox(&mut self.modeling.individual,"Individual faces");
