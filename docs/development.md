@@ -14,7 +14,7 @@ cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
 ```
 
-CI runs these checks and a separate Mesa/EGL job for GPU correctness. For graphics setup, GPU tests and app previews, follow [GPU validation](gpu-rendering.md#validation).
+CI runs these checks and a separate Mesa Vulkan job for GPU correctness. For graphics setup, GPU tests and app previews, follow [GPU validation](gpu-rendering.md#validation).
 
 The ordinary tests cover brushes and masks, legacy JSON, project and preset saves, strokes, bounded undo/redo, failed loads, save/open protection, and simulated viewport/gizmo gestures.
 
@@ -28,7 +28,7 @@ cargo run --release --locked --example edit_profile
 
 ## Update guide screenshots
 
-1. On Linux, install the [Mesa/EGL prerequisites](gpu-rendering.md#validation).
+1. On Linux, install the [Mesa Vulkan prerequisites](gpu-rendering.md#validation).
 2. Run:
 
    ```sh
@@ -38,7 +38,7 @@ cargo run --release --locked --example edit_profile
 3. Inspect the images in `docs/images/` and any extra frames in the temporary directory printed by the script.
 4. Update affected guide steps and captions, then the [screenshot inventory](images/README.md). Follow the [documentation style](documentation-style.md) before committing.
 
-The script captures the real app UI and OpenGL renderer offscreen using synthetic scenes. It needs no desktop window, uses software rendering and defaults to two Mesa worker threads. It copies selected PNGs only after **every capture test passes**.
+The script captures the real app UI and wgpu renderer offscreen using synthetic scenes. It needs no desktop window, uses software rendering and defaults to two Mesa worker threads. It copies selected PNGs only after **every capture test passes**.
 
 The edge workflow review also clicks the real controls: selection, navigation, crease removal, both subdivision operations, loop targets, thickness application and Undo. These captures check appearance and behavior; use the profiling tools for performance measurements.
 

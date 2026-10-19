@@ -1,10 +1,10 @@
 # Guide screenshots
 
-Use real egui/OpenGL captures of practice scenes. Capture a panel when the controls matter, or the full window for navigation and spatial results. Keep controls readable. Do not paint over screenshots or generate them with AI.
+Use real egui/wgpu captures of practice scenes. Capture a panel when the controls matter, or the full window for navigation and spatial results. Keep controls readable. Do not paint over screenshots or generate them with AI. Earlier checked-in captures used glow; regeneration now uses wgpu.
 
 ## Regenerate
 
-On Linux with Rust and Mesa/EGL installed, run from the repository root:
+On Linux with Rust and Mesa Vulkan installed, run from the repository root:
 
 ```sh
 bash scripts/update-doc-screenshots.sh

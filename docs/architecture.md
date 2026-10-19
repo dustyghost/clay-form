@@ -94,7 +94,7 @@ These references retain the implementation limits, data mappings, and failure be
 
 ## GPU viewport
 
-[Buffers, invalidation, shader agreement, and GL resource lifecycle →](architecture/integration.md#gpu-viewport)
+[Buffers, invalidation, shader agreement, and wgpu resource lifecycle →](architecture/integration.md#gpu-viewport)
 
 ## Mask edits and cuts
 

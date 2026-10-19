@@ -155,7 +155,7 @@ fn perspective_switch_and_fov_preserve_visible_model_framing_without_drift() {
 
 #[cfg(target_os = "linux")]
 #[test]
-#[ignore = "requires an installed EGL OpenGL implementation"]
+#[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn perspective_view_offscreen_preview() {
     use crate::sculpt::{Geometry, Primitive, PrimitiveKind};
     use crate::viewport::UiCapture;
@@ -167,7 +167,7 @@ fn perspective_view_offscreen_preview() {
     let mut capture = UiCapture::new([1000, 800]);
     let ctx = egui::Context::default();
     let mut app = App::default();
-    app.viewport.initialize_renderer(&capture.gl).unwrap();
+    app.viewport.initialize_renderer(&capture.state).unwrap();
     app.document
         .replace_geometry(Geometry::new(
             Primitive::for_kind(PrimitiveKind::Cube).mesh().unwrap(),
@@ -223,7 +223,7 @@ fn perspective_view_offscreen_preview() {
         }
     }
     assert_eq!(app.document.geometry_snapshot(), before);
-    app.viewport.destroy_renderer(&capture.gl);
+    app.viewport.destroy_renderer();
 }
 
 #[test]

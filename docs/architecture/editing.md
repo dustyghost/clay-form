@@ -73,7 +73,7 @@ Transforms prepare new vertex coordinates for the active surface and its stored 
 
 `Geometry` snapshots contain the active surface and its subdivision stack plus inactive `Submodel` records and `SceneSettings`. Inactive records retain full geometry; display uses the lowest existing level. The active index describes its position among the ordered inactive records, so selection preserves scene order. Per-model metadata owns visibility and group membership; scene settings own group order. Optional default-omitted project fields preserve the legacy single-model JSON fixture. Model organization and transforms use the same bounded scene history as sculpting.
 
-The viewport caches merged visible display surfaces, normals, and triangle ownership by a session-only document display revision. OpenGL draws model geometry with a depth buffer; CPU picking projects the same immutable geometry snapshot. Active faces alone supply symmetry guides. A pick on an inactive foreground surface cannot sculpt the active model behind it; a selection click waits for release before permitting a new sculpt stroke.
+The viewport caches merged visible display surfaces, normals, and triangle ownership by a session-only document display revision. wgpu draws model geometry with a depth buffer; CPU picking projects the same immutable geometry snapshot. Active faces alone supply symmetry guides. A pick on an inactive foreground surface cannot sculpt the active model behind it; a selection click waits for release before permitting a new sculpt stroke.
 
 ### Transform gestures
 

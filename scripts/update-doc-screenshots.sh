@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# Render synthetic example scenes through the real application/OpenGL code.
+# Render synthetic example scenes through the real application/wgpu code.
 set -euo pipefail
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 capture_dir=$(mktemp -d "${TMPDIR:-/tmp}/clay-doc-screenshots.XXXXXX")
-export EGL_PLATFORM=surfaceless
-export LIBGL_ALWAYS_SOFTWARE=1
+export CLAY_GPU_SOFTWARE=1
 export LP_NUM_THREADS=${LP_NUM_THREADS:-2}
 export CLAY_PERSPECTIVE_PREVIEW="$capture_dir/perspective"
 export CLAY_DETAIL_PREVIEW="$capture_dir/detail"

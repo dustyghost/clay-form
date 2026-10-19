@@ -1,18 +1,14 @@
-use super::{tests::Egl, *};
+use super::{ui_capture::Headless, *};
 use crate::{
     camera::Camera,
     sculpt::{Geometry, SliceMode, SliceOptions, SlicePlane},
 };
 
 #[test]
-#[ignore = "requires an installed EGL OpenGL implementation"]
+#[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn gpu_slice_cap_shading_preview() {
-    unsafe {
-        let egl = Egl::new();
-        let gl = glow::Context::from_loader_function(|name| {
-            let name = std::ffi::CString::new(name).unwrap();
-            (egl.get_proc)(name.as_ptr())
-        });
+    {
+        let headless = Headless::new();
         for separate in [false, true] {
             let mut geometry = Geometry::new(crate::sculpt::Mesh::starting_sphere());
             let options = SliceOptions {
@@ -50,7 +46,7 @@ fn gpu_slice_cap_shading_preview() {
             let mut document = Document::default();
             document.replace_geometry(geometry).unwrap();
             let before = document.geometry_snapshot();
-            let mut renderer = Renderer::new(&gl).unwrap();
+            let mut renderer = Renderer::new(&headless.state).unwrap();
             let display = renderer.geometry(&document);
             let camera = Camera {
                 yaw: 0.35,
@@ -69,9 +65,8 @@ fn gpu_slice_cap_shading_preview() {
                 display.depth_extent,
             );
             let mut gpu = renderer.gpu.lock().unwrap();
-            gpu.upload(&gl, &display);
+            gpu.upload(&display);
             gpu.paint(
-                &gl,
                 &params,
                 [1000, 600],
                 false,
@@ -83,21 +78,7 @@ fn gpu_slice_cap_shading_preview() {
                 },
             );
             let mut pixels = vec![0; 1000 * 600 * 4];
-            gl.bind_framebuffer(
-                glow::READ_FRAMEBUFFER,
-                Some(gpu.target.as_ref().unwrap().framebuffer),
-            );
-            gl.read_pixels(
-                0,
-                0,
-                1000,
-                600,
-                glow::RGBA,
-                glow::UNSIGNED_BYTE,
-                glow::PixelPackData::Slice(Some(&mut pixels)),
-            );
-            gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
-            assert_eq!(gl.get_error(), glow::NO_ERROR);
+            pixels = gpu.read();
             assert_eq!(document.geometry_snapshot(), before);
             if !separate {
                 // These rows lie just below the visible cap seam. Old area-weighted
@@ -128,20 +109,16 @@ fn gpu_slice_cap_shading_preview() {
                     .collect();
                 image::save_buffer(path, &flipped, 1000, 600, image::ColorType::Rgba8).unwrap();
             }
-            gpu.destroy(&gl);
+            gpu.clear();
         }
     }
 }
 
 #[test]
-#[ignore = "requires an installed EGL OpenGL implementation"]
+#[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn gpu_sliced_hemisphere_thickness_preview_matches_applied_shell() {
-    unsafe {
-        let egl = Egl::new();
-        let gl = glow::Context::from_loader_function(|name| {
-            let name = std::ffi::CString::new(name).unwrap();
-            (egl.get_proc)(name.as_ptr())
-        });
+    {
+        let headless = Headless::new();
         let mut geometry = Geometry::new(crate::sculpt::Mesh::starting_sphere());
         geometry
             .slice(
@@ -162,7 +139,7 @@ fn gpu_sliced_hemisphere_thickness_preview_matches_applied_shell() {
         let mut document = Document::default();
         document.replace_geometry(geometry).unwrap();
         let source = document.geometry_snapshot();
-        let mut renderer = Renderer::new(&gl).unwrap();
+        let mut renderer = Renderer::new(&headless.state).unwrap();
         let base = renderer.geometry(&document);
         assert_eq!(base.mesh.vertices, source.mesh.vertices);
         let display = renderer.render_geometry.as_ref().unwrap().clone();
@@ -185,9 +162,8 @@ fn gpu_sliced_hemisphere_thickness_preview_matches_applied_shell() {
         );
         {
             let mut gpu = renderer.gpu.lock().unwrap();
-            gpu.upload(&gl, &display);
+            gpu.upload(&display);
             gpu.paint(
-                &gl,
                 &params,
                 [1000, 600],
                 false,
@@ -199,21 +175,7 @@ fn gpu_sliced_hemisphere_thickness_preview_matches_applied_shell() {
                 },
             );
             let mut pixels = vec![0; 1000 * 600 * 4];
-            gl.bind_framebuffer(
-                glow::READ_FRAMEBUFFER,
-                Some(gpu.target.as_ref().unwrap().framebuffer),
-            );
-            gl.read_pixels(
-                0,
-                0,
-                1000,
-                600,
-                glow::RGBA,
-                glow::UNSIGNED_BYTE,
-                glow::PixelPackData::Slice(Some(&mut pixels)),
-            );
-            gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
-            assert_eq!(gl.get_error(), glow::NO_ERROR);
+            pixels = gpu.read();
             if let Ok(path) = std::env::var("CLAY_SLICE_THICKNESS_PREVIEW") {
                 let flipped: Vec<_> = pixels
                     .as_chunks::<{ 1000 * 4 }>()
@@ -232,19 +194,15 @@ fn gpu_sliced_hemisphere_thickness_preview_matches_applied_shell() {
         assert_eq!(applied.mesh, display.mesh);
         assert_eq!(applied.shading.triangles, display.shading.triangles);
         assert_eq!(applied.shading.vertices, display.shading.vertices);
-        renderer.destroy(&gl);
+        renderer.destroy();
     }
 }
 
 #[test]
-#[ignore = "requires an installed EGL OpenGL implementation"]
+#[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn gpu_rounded_slice_path_preview() {
-    unsafe {
-        let egl = Egl::new();
-        let gl = glow::Context::from_loader_function(|name| {
-            let name = std::ffi::CString::new(name).unwrap();
-            (egl.get_proc)(name.as_ptr())
-        });
+    {
+        let headless = Headless::new();
         let mut geometry = Geometry::new(crate::sculpt::Mesh::starting_sphere());
         let a = Vec3(-0.5, 0.2, 0.);
         let b = Vec3(0., -0.25, 0.);
@@ -272,7 +230,7 @@ fn gpu_rounded_slice_path_preview() {
         geometry.mesh.validate_closed().unwrap();
         let mut document = Document::default();
         document.replace_geometry(geometry).unwrap();
-        let mut renderer = Renderer::new(&gl).unwrap();
+        let mut renderer = Renderer::new(&headless.state).unwrap();
         let display = renderer.geometry(&document);
         let camera = Camera {
             yaw: 0.2,
@@ -291,9 +249,8 @@ fn gpu_rounded_slice_path_preview() {
             display.depth_extent,
         );
         let mut gpu = renderer.gpu.lock().unwrap();
-        gpu.upload(&gl, &display);
+        gpu.upload(&display);
         gpu.paint(
-            &gl,
             &params,
             [1000, 600],
             false,
@@ -305,21 +262,7 @@ fn gpu_rounded_slice_path_preview() {
             },
         );
         let mut pixels = vec![0; 1000 * 600 * 4];
-        gl.bind_framebuffer(
-            glow::READ_FRAMEBUFFER,
-            Some(gpu.target.as_ref().unwrap().framebuffer),
-        );
-        gl.read_pixels(
-            0,
-            0,
-            1000,
-            600,
-            glow::RGBA,
-            glow::UNSIGNED_BYTE,
-            glow::PixelPackData::Slice(Some(&mut pixels)),
-        );
-        gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
-        assert_eq!(gl.get_error(), glow::NO_ERROR);
+        pixels = gpu.read();
         if let Ok(path) = std::env::var("CLAY_SLICE_PATH_PREVIEW") {
             let flipped: Vec<_> = pixels
                 .as_chunks::<{ 1000 * 4 }>()
@@ -331,6 +274,6 @@ fn gpu_rounded_slice_path_preview() {
                 .collect();
             image::save_buffer(path, &flipped, 1000, 600, image::ColorType::Rgba8).unwrap();
         }
-        gpu.destroy(&gl);
+        gpu.clear();
     }
 }

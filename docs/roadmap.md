@@ -84,7 +84,7 @@ Regression checks cover closed and concave outlines, crossings, multiple samples
 
 Rotate extends the existing World axes and Action Line transform controls. World mode offers X/Y/Z rings and a placeable/resettable pivot; Action Line reuses its start and direction for rotation around the line. The same operation controls serve the floating toolbar and sidebar, including custom-menu/shortcut actions. No parallel transform subsystem or project-format change is introduced.
 
-Soft masks reduce rotation angles, stored subdivision levels follow, and primitives retain their existing affine placement when regenerated. Each changed drag has one undo step. Pivot/line placement is session-only and preserves clean state and redo. Automated checks cover angle direction and wraparound, edge-on views, pivot reset, focus loss and tool switching, final release movement, masks, stored levels, primitive dimension edits and persistence, and real OpenGL control rendering. Hands-on pen feedback remains welcome before refining ring feel.
+Soft masks reduce rotation angles, stored subdivision levels follow, and primitives retain their existing affine placement when regenerated. Each changed drag has one undo step. Pivot/line placement is session-only and preserves clean state and redo. Automated checks cover angle direction and wraparound, edge-on views, pivot reset, focus loss and tool switching, final release movement, masks, stored levels, primitive dimension edits and persistence, and real wgpu control rendering. Hands-on pen feedback remains welcome before refining ring feel.
 
 **Acceptance checks**
 
@@ -125,7 +125,7 @@ Checks cover relative/absolute and UV/normal indices, concave and reversed polyg
 
 Add screen-fixed PNG/JPEG references by dropping files onto the viewport or using the shared References menu. Arrange images provides explicit move/resize controls and a visible Done/Escape exit; all references are passive while sculpting. Per-image opacity, visibility, and position/size locking, plus a session-only show/hide-all action, keep references manageable. The menu can be pinned or docked through the existing placement controls; its actions support custom menus and shortcuts.
 
-Images and placement are embedded in projects and recovery copies, independently of sculpt geometry/history. Loading applies photo orientation and bounds image dimensions, file size, count, and aggregate memory. Checks cover file removal after import, legacy projects, recovery, invalid files and placements, drag release/cancellation/focus loss, undo during a drag, locked-image navigation, and normal/small viewport OpenGL composition. See the [reference image guide](guide/references.md) for controls and limits. Front/side view-plane references remain a possible extension; hands-on pen feedback will guide interaction refinements.
+Images and placement are embedded in projects and recovery copies, independently of sculpt geometry/history. Loading applies photo orientation and bounds image dimensions, file size, count, and aggregate memory. Checks cover file removal after import, legacy projects, recovery, invalid files and placements, drag release/cancellation/focus loss, undo during a drag, locked-image navigation, and normal/small viewport wgpu composition. See the [reference image guide](guide/references.md) for controls and limits. Front/side view-plane references remain a possible extension; hands-on pen feedback will guide interaction refinements.
 
 **Acceptance checks**
 

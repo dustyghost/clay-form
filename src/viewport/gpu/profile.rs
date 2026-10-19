@@ -1,5 +1,5 @@
 //! Opt-in baseline, separated from correctness tests and CI timing assertions.
-use super::{tests::Egl, *};
+use super::{ui_capture::Headless, *};
 use crate::{
     camera::Camera,
     sculpt::{Dab, Geometry, Kind, Mesh},
@@ -7,19 +7,11 @@ use crate::{
 use std::time::Instant;
 
 #[test]
-#[ignore = "load profile requires EGL; run in release mode"]
+#[ignore = "load profile requires Vulkan; run in release mode"]
 fn gpu_load_profile() {
-    unsafe {
-        let egl = Egl::new();
-        let gl = glow::Context::from_loader_function(|name| {
-            let name = std::ffi::CString::new(name).unwrap();
-            (egl.get_proc)(name.as_ptr())
-        });
-        let driver = format!(
-            "{} / {}",
-            gl.get_parameter_string(glow::VERSION),
-            gl.get_parameter_string(glow::RENDERER)
-        );
+    {
+        let headless = Headless::new();
+        let driver = format!("{:?}", headless.state.adapter.get_info());
         eprintln!("{driver}");
         let mut csv = String::from(
             "levels,models,vertices,triangles,mesh_prepare_ms,upload_ms,cpu_view_ms,pick_ms,solid_p50_ms,solid_p95_ms,wire_p50_ms,wire_p95_ms,dab_ms\n",
@@ -66,16 +58,21 @@ fn gpu_load_profile() {
                     previous = center;
                 }
             }
-            let mut renderer = Renderer::new(&gl).unwrap();
+            let mut renderer = Renderer::new(&headless.state).unwrap();
+            // Finish renderer initialization before timing geometry uploads.
+            headless.state.queue.submit([]);
+            headless.wait();
             let start = Instant::now();
             let display = renderer.geometry(&document);
             let mesh_prepare = start.elapsed().as_secs_f64() * 1000.;
             let mut gpu = renderer.gpu.lock().unwrap();
             let start = Instant::now();
-            gpu.upload(&gl, &display);
-            gl.finish();
+            gpu.upload(&display);
+            // Buffer initialization queues staging copies; polling alone does
+            // not submit them. Include their GPU completion in upload_ms.
+            headless.state.queue.submit([]);
+            headless.wait();
             let upload = start.elapsed().as_secs_f64() * 1000.;
-            gl.viewport(0, 0, 256, 256);
             let mut solid = Vec::new();
             let mut wire = Vec::new();
             for (wireframe, times) in [(false, &mut solid), (true, &mut wire)] {
@@ -96,7 +93,6 @@ fn gpu_load_profile() {
                     );
                     let start = Instant::now();
                     gpu.paint(
-                        &gl,
                         &params,
                         [256, 256],
                         wireframe,
@@ -104,7 +100,7 @@ fn gpu_load_profile() {
                         false,
                         &Preview::default(),
                     );
-                    gl.finish();
+                    headless.wait();
                     // First draw includes framebuffer/edge buffer creation.
                     if frame > 0 {
                         times.push(start.elapsed().as_secs_f64() * 1000.);
@@ -175,8 +171,7 @@ fn gpu_load_profile() {
             );
             eprint!("{line}");
             csv.push_str(&line);
-            assert_eq!(gl.get_error(), glow::NO_ERROR);
-            renderer.destroy(&gl);
+            renderer.destroy();
         }
         if let Ok(path) = std::env::var("CLAY_GPU_PROFILE") {
             std::fs::write(path, format!("# {driver}\n{csv}")).unwrap();

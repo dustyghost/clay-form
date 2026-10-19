@@ -56,9 +56,9 @@ impl Default for App {
     }
 }
 impl App {
-    pub fn with_gl(gl: &eframe::glow::Context) -> Result<Self, String> {
+    pub fn with_wgpu(state: &eframe::egui_wgpu::RenderState) -> Result<Self, String> {
         let mut app = Self::new();
-        app.viewport.initialize_renderer(gl)?;
+        app.viewport.initialize_renderer(state)?;
         Ok(app)
     }
     pub fn new() -> Self {
@@ -271,14 +271,12 @@ impl App {
     }
 }
 impl eframe::App for App {
-    fn on_exit(&mut self, gl: Option<&eframe::glow::Context>) {
+    fn on_exit(&mut self) {
         self.save_preferences();
         if self.closing || !self.document.is_dirty() {
             self.retire_recovery();
         }
-        if let Some(gl) = gl {
-            self.viewport.destroy_renderer(gl);
-        }
+        self.viewport.destroy_renderer();
     }
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         self.poll_mesh_job();

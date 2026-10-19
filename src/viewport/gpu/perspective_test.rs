@@ -63,11 +63,11 @@ fn coverage(scene: &Scene, rgba: &[u8]) {
     assert!(hits > 50);
 }
 #[test]
-#[ignore = "requires an installed EGL OpenGL implementation"]
+#[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn gpu_perspective_picking_alpha_wireframe_and_clipping() {
     let mut capture = UiCapture::new([512, 512]);
     let ctx = egui::Context::default();
-    let mut renderer = Renderer::new(&capture.gl).unwrap();
+    let mut renderer = Renderer::new(&capture.state).unwrap();
     let mut document = Document::default();
     let cube = Primitive::for_kind(PrimitiveKind::Cube);
     document
@@ -167,5 +167,5 @@ fn gpu_perspective_picking_alpha_wireframe_and_clipping() {
         let (scene, rgba) = render(&mut capture, &ctx, &mut renderer, &document, &camera, false);
         coverage(&scene, &rgba);
     }
-    renderer.destroy(&capture.gl);
+    renderer.destroy();
 }

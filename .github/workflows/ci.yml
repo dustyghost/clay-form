@@ -48,12 +48,13 @@ jobs:
         run: cargo clippy --locked --all-targets -- -D warnings
 
   graphics:
-    name: Headless OpenGL regressions
+    name: Headless wgpu/Vulkan regressions
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      EGL_PLATFORM: surfaceless
-      LIBGL_ALWAYS_SOFTWARE: "1"
+      CLAY_GPU_SOFTWARE: "1"
+      WGPU_BACKEND: vulkan
+      LP_NUM_THREADS: "2"
 
     steps:
       - name: Check out repository
@@ -68,7 +69,7 @@ jobs:
       - name: Install build and Mesa runtime dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes libwayland-dev libxkbcommon-dev libegl1 libgl1-mesa-dri
+          sudo apt-get install --yes libwayland-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
 
       - name: Run all GPU correctness checks
         # The manual load profile is diagnostic, not a correctness test.

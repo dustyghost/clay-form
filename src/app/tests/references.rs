@@ -313,14 +313,14 @@ fn reference_drop_embeds_the_file_and_focus_loss_discards_a_drag() {
 
 #[cfg(target_os = "linux")]
 #[test]
-#[ignore = "requires an installed EGL OpenGL implementation"]
+#[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn reference_images_offscreen_preview() {
     use crate::preferences::{BuiltinMenu, Dock};
     for size in [[1200, 850], [760, 560]] {
         let mut capture = crate::viewport::UiCapture::new(size);
         let ctx = egui::Context::default();
         let mut app = App::default();
-        app.viewport.initialize_renderer(&capture.gl).unwrap();
+        app.viewport.initialize_renderer(&capture.state).unwrap();
         for panel in &mut app.ui.preferences.panels {
             panel.dock = Dock::Hidden;
         }
@@ -382,6 +382,6 @@ fn reference_images_offscreen_preview() {
             }
         }
         assert_eq!(app.document.geometry_snapshot(), before);
-        app.viewport.destroy_renderer(&capture.gl);
+        app.viewport.destroy_renderer();
     }
 }

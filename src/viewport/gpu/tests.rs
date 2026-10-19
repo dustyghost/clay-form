@@ -1,3 +1,5 @@
+#[cfg(target_os = "linux")]
+use super::ui_capture::{Headless, UiCapture};
 use super::*;
 use crate::{
     camera::Camera,
@@ -62,23 +64,15 @@ fn similarly_named_groups_display_distinct_muted_colors_and_renames_keep_them() 
 }
 
 /// Real shader compilation and framebuffer readback, without opening a window.
-/// Uses the installed EGL implementation; run explicitly on Linux graphics hosts.
+/// Uses the installed Vulkan implementation; run explicitly on Linux graphics hosts.
 #[cfg(target_os = "linux")]
 #[test]
-#[ignore = "requires an installed EGL OpenGL implementation"]
+#[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn gpu_offscreen_depth_wireframe_and_cache() {
-    unsafe {
-        let egl = Egl::new();
-        let gl = glow::Context::from_loader_function(|name| {
-            let name = std::ffi::CString::new(name).unwrap();
-            (egl.get_proc)(name.as_ptr())
-        });
-        eprintln!(
-            "OpenGL: {} / {}",
-            gl.get_parameter_string(glow::VERSION),
-            gl.get_parameter_string(glow::RENDERER)
-        );
-        let mut renderer = Renderer::new(&gl).unwrap();
+    {
+        let headless = Headless::new();
+
+        let mut renderer = Renderer::new(&headless.state).unwrap();
         let mut document = Document::default();
         let mut plane = Primitive::for_kind(PrimitiveKind::Plane);
         plane.divisions = [1; 3];
@@ -122,28 +116,9 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         );
         let handle = renderer.gpu.clone();
         let mut gpu = handle.lock().unwrap();
-        gpu.upload(&gl, &display);
-        gl.viewport(0, 0, 256, 256);
-        let read = |gpu: &Gpu| {
-            let mut rgba = vec![0; 256 * 256 * 4];
-            gl.bind_framebuffer(
-                glow::READ_FRAMEBUFFER,
-                Some(gpu.target.as_ref().unwrap().framebuffer),
-            );
-            gl.read_pixels(
-                0,
-                0,
-                256,
-                256,
-                glow::RGBA,
-                glow::UNSIGNED_BYTE,
-                glow::PixelPackData::Slice(Some(&mut rgba)),
-            );
-            gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
-            rgba
-        };
+        gpu.upload(&display);
+        let read = |gpu: &Gpu| gpu.read();
         gpu.paint(
-            &gl,
             &params,
             [256, 256],
             false,
@@ -160,7 +135,6 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         assert_eq!(&solid[..4], &[23, 26, 31, 255]);
         params.background = [190, 197, 205];
         gpu.paint(
-            &gl,
             &params,
             [256, 256],
             false,
@@ -177,10 +151,9 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         );
         params.background = [23, 26, 31];
         let uploaded = gpu.uploaded.clone().unwrap();
-        gpu.upload(&gl, &display);
+        gpu.upload(&display);
         assert!(Arc::ptr_eq(&uploaded, gpu.uploaded.as_ref().unwrap()));
         gpu.paint(
-            &gl,
             &params,
             [256, 256],
             true,
@@ -190,7 +163,6 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         );
         let visible = read(&gpu);
         gpu.paint(
-            &gl,
             &params,
             [256, 256],
             true,
@@ -204,7 +176,6 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             "visible mode rejects the occluded rear edges; front mode draws them"
         );
         gpu.paint(
-            &gl,
             &params,
             [256, 256],
             true,
@@ -242,7 +213,6 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             symmetry: None,
         };
         gpu.paint(
-            &gl,
             &params,
             [256, 256],
             false,
@@ -256,11 +226,10 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         );
         document.select_submodel(0).unwrap();
         let active = renderer.geometry(&document);
-        gpu.upload(&gl, &active);
+        gpu.upload(&active);
         let mut preview = make_preview(Alpha::Hard);
         preview.brush.as_mut().unwrap().center.2 = 0.4;
         gpu.paint(
-            &gl,
             &params,
             [256, 256],
             false,
@@ -270,7 +239,6 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         );
         let active_solid = read(&gpu);
         gpu.paint(
-            &gl,
             &params,
             [256, 256],
             false,
@@ -288,7 +256,6 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             pixels: vec![0.; 4].into(),
         };
         gpu.paint(
-            &gl,
             &params,
             [256, 256],
             false,
@@ -306,7 +273,6 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             pixels: vec![1.; 4].into(),
         };
         gpu.paint(
-            &gl,
             &params,
             [256, 256],
             false,
@@ -338,7 +304,6 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             let weight = b.brush.weight(q, q);
             let tint = b.color;
             gpu.paint(
-                &gl,
                 &params,
                 [256, 256],
                 false,
@@ -367,7 +332,6 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             symmetry: Some((symmetry, 1.)),
         };
         gpu.paint(
-            &gl,
             &params,
             [256, 256],
             false,
@@ -383,13 +347,12 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             .create_vertex_group("GPU color".into(), true)
             .unwrap();
         let grouped = renderer.geometry(&document);
-        gpu.upload(&gl, &grouped);
+        gpu.upload(&grouped);
         let colored = Preview {
             show_polygroups: true,
             ..Default::default()
         };
         gpu.paint(
-            &gl,
             &params,
             [256, 256],
             false,
@@ -403,7 +366,6 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             "polygroup color must reach the framebuffer"
         );
         gpu.paint(
-            &gl,
             &params,
             [256, 256],
             false,
@@ -422,9 +384,8 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             hidden.mesh.triangles.len(),
             grouped.mesh.triangles.len() - 2
         );
-        gpu.upload(&gl, &hidden);
+        gpu.upload(&hidden);
         gpu.paint(
-            &gl,
             &params,
             [256, 256],
             false,
@@ -438,9 +399,8 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             "hiding the foreground group reveals the surface behind it"
         );
         document.set_vertex_group_visible(0, true).unwrap();
-        gpu.upload(&gl, &renderer.geometry(&document));
+        gpu.upload(&renderer.geometry(&document));
         gpu.paint(
-            &gl,
             &params,
             [256, 256],
             false,
@@ -450,7 +410,6 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         );
         assert_eq!(read(&gpu), active_solid);
         gpu.paint(
-            &gl,
             &params,
             [128, 128],
             false,
@@ -464,9 +423,8 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         let mut geometry = Geometry::new(plane.mesh().unwrap());
         geometry.settings.primitive = Some(plane);
         document.replace_geometry(geometry).unwrap();
-        gpu.upload(&gl, &renderer.geometry(&document));
+        gpu.upload(&renderer.geometry(&document));
         gpu.paint(
-            &gl,
             &params,
             [256, 256],
             true,
@@ -492,9 +450,8 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         let mut geometry = Geometry::new(tilted.mesh().unwrap());
         geometry.settings.primitive = Some(tilted);
         document.replace_geometry(geometry).unwrap();
-        gpu.upload(&gl, &renderer.geometry(&document));
+        gpu.upload(&renderer.geometry(&document));
         gpu.paint(
-            &gl,
             &params,
             [256, 256],
             true,
@@ -519,14 +476,12 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             covered >= 160,
             "tilted-face cut lines must remain continuous, got {covered} columns"
         );
-        assert_eq!(gl.get_error(), glow::NO_ERROR);
-        gpu.destroy(&gl);
-        gpu.destroy(&gl); // shutdown is safe even when a callback retains the handle
+        gpu.clear();
+        gpu.clear(); // shutdown is safe even when a callback retains the handle
         drop(gpu);
         drop(renderer);
-        let gl = Arc::new(gl);
-        let mut painter = eframe::egui_glow::Painter::new(gl.clone(), "", None, false).unwrap();
-        let mut renderer = Renderer::new(&gl).unwrap();
+        let mut capture = UiCapture::new([256, 256]);
+        let mut renderer = Renderer::new(&capture.state).unwrap();
         let document = Document::default();
         let mut camera = Camera::default();
         camera.orbit(egui::vec2(50., 20.));
@@ -578,26 +533,8 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
                 );
             },
         );
-        gl.bind_framebuffer(glow::FRAMEBUFFER, None);
-        gl.clear_color(23. / 255., 26. / 255., 31. / 255., 1.);
-        gl.clear(glow::COLOR_BUFFER_BIT);
-        let shapes = ctx.tessellate(output.shapes, output.pixels_per_point);
-        painter.paint_and_update_textures(
-            [256, 256],
-            output.pixels_per_point,
-            &shapes,
-            &output.textures_delta,
-        );
-        let mut rgba = vec![0; 256 * 256 * 4];
-        gl.read_pixels(
-            0,
-            0,
-            256,
-            256,
-            glow::RGBA,
-            glow::UNSIGNED_BYTE,
-            glow::PixelPackData::Slice(Some(&mut rgba)),
-        );
+        let captured = capture.render(&ctx, output);
+        let rgba = captured;
         let overlay = ((256 - 36) * 256 + 36) * 4;
         assert_eq!(
             &rgba[overlay..overlay + 4],
@@ -605,7 +542,6 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             "egui overlays must survive the callback"
         );
         assert!(rgba[center] > 40, "model callback must render inside egui");
-        assert_eq!(gl.get_error(), glow::NO_ERROR);
         if let Ok(path) = std::env::var("CLAY_GPU_PREVIEW") {
             let mut flipped = Vec::with_capacity(rgba.len());
             for row in rgba.as_chunks::<{ 256 * 4 }>().0.iter().rev() {
@@ -640,28 +576,12 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
                 );
             },
         );
-        gl.clear(glow::COLOR_BUFFER_BIT);
-        let shapes = ctx.tessellate(output.shapes, output.pixels_per_point);
-        painter.paint_and_update_textures(
-            [256, 256],
-            output.pixels_per_point,
-            &shapes,
-            &output.textures_delta,
-        );
-        gl.read_pixels(
-            0,
-            0,
-            256,
-            256,
-            glow::RGBA,
-            glow::UNSIGNED_BYTE,
-            glow::PixelPackData::Slice(Some(&mut rgba)),
-        );
+        let captured = capture.render(&ctx, output);
+        let rgba = captured;
         assert!(
             rgba.as_chunks::<4>().0.iter().filter(|p| p[0] > 80).count() > 100,
             "unfilled circle outline must remain visible"
         );
-        assert_eq!(gl.get_error(), glow::NO_ERROR);
         let cache = renderer.geometry(&document);
         document.new_sphere();
         assert!(
@@ -685,37 +605,15 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         assert!(empty.mesh.vertices.is_empty());
         {
             let mut gpu = renderer.gpu.lock().unwrap();
-            gpu.upload(&gl, &empty);
-            gl.viewport(0, 0, 256, 256);
+            gpu.upload(&empty);
             for (wire, mode) in [
                 (false, WireMode::Visible),
                 (true, WireMode::Visible),
                 (true, WireMode::Transparent),
             ] {
-                gpu.paint(
-                    &gl,
-                    &params,
-                    [256, 256],
-                    wire,
-                    mode,
-                    false,
-                    &Preview::default(),
-                );
+                gpu.paint(&params, [256, 256], wire, mode, false, &Preview::default());
             }
-            gl.bind_framebuffer(
-                glow::READ_FRAMEBUFFER,
-                Some(gpu.target.as_ref().unwrap().framebuffer),
-            );
-            gl.read_pixels(
-                0,
-                0,
-                256,
-                256,
-                glow::RGBA,
-                glow::UNSIGNED_BYTE,
-                glow::PixelPackData::Slice(Some(&mut rgba)),
-            );
-            gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
+            let rgba = gpu.read();
             assert!(
                 rgba.as_chunks::<4>()
                     .0
@@ -723,7 +621,6 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
                     .all(|p| *p == [23, 26, 31, 255]),
                 "an empty model must render a clean background"
             );
-            assert_eq!(gl.get_error(), glow::NO_ERROR);
         }
         // Temporary shells are display-only; picking keeps the original mesh.
         let plane = Primitive::for_kind(PrimitiveKind::Plane);
@@ -739,9 +636,8 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         shell.mesh.validate_closed().unwrap();
         {
             let mut gpu = renderer.gpu.lock().unwrap();
-            gpu.upload(&gl, &shell);
+            gpu.upload(&shell);
             gpu.paint(
-                &gl,
                 &params,
                 [256, 256],
                 false,
@@ -749,7 +645,6 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
                 false,
                 &Preview::default(),
             );
-            assert_eq!(gl.get_error(), glow::NO_ERROR);
         }
         if let Ok(path) = std::env::var("CLAY_THICKNESS_PREVIEW") {
             let camera = Camera {
@@ -769,7 +664,6 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             );
             let mut gpu = renderer.gpu.lock().unwrap();
             gpu.paint(
-                &gl,
                 &params,
                 [256, 256],
                 false,
@@ -778,20 +672,7 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
                 &Preview::default(),
             );
             let mut pixels = vec![0; 256 * 256 * 4];
-            gl.bind_framebuffer(
-                glow::READ_FRAMEBUFFER,
-                Some(gpu.target.as_ref().unwrap().framebuffer),
-            );
-            gl.read_pixels(
-                0,
-                0,
-                256,
-                256,
-                glow::RGBA,
-                glow::UNSIGNED_BYTE,
-                glow::PixelPackData::Slice(Some(&mut pixels)),
-            );
-            gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
+            pixels = gpu.read();
             let mut flipped = Vec::with_capacity(pixels.len());
             for row in pixels.as_chunks::<{ 256 * 4 }>().0.iter().rev() {
                 flipped.extend_from_slice(row);
@@ -816,144 +697,143 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         viewport.cancel(&mut document);
         assert!(
             Arc::ptr_eq(&handle, &viewport.renderer.as_ref().unwrap().gpu),
-            "gesture cancellation must keep GL resources"
+            "gesture cancellation must keep wgpu resources"
         );
         let renderer = viewport.renderer.take().unwrap();
-        renderer.destroy(&gl);
-        painter.destroy();
-        drop(painter);
+        renderer.destroy();
         drop(renderer);
-        drop(gl);
+        drop(headless);
     }
 }
 
 #[cfg(target_os = "linux")]
-static EGL_LOCK: Mutex<()> = Mutex::new(());
-#[cfg(target_os = "linux")]
-pub(super) struct Egl {
-    _lock: std::sync::MutexGuard<'static, ()>,
-    library: *mut libc::c_void,
-    display: *mut libc::c_void,
-    context: *mut libc::c_void,
-    surface: *mut libc::c_void,
-    pub(super) get_proc: unsafe extern "C" fn(*const libc::c_char) -> *const libc::c_void,
-    make_current: unsafe extern "C" fn(
-        *mut libc::c_void,
-        *mut libc::c_void,
-        *mut libc::c_void,
-        *mut libc::c_void,
-    ) -> u32,
-    destroy_context: unsafe extern "C" fn(*mut libc::c_void, *mut libc::c_void) -> u32,
-    destroy_surface: unsafe extern "C" fn(*mut libc::c_void, *mut libc::c_void) -> u32,
-    terminate: unsafe extern "C" fn(*mut libc::c_void) -> u32,
+#[test]
+#[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
+fn gpu_batches_preserve_face_colors_and_depth() {
+    let headless = Headless::new();
+    let document = Document::default();
+    let display = Arc::new(DisplayMesh::new(&document));
+    let mut gpu = Gpu::new(&headless.state.device, &headless.state.queue, COLOR);
+    gpu.upload(&display);
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(253., 189.));
+    let (right, up, view) = Camera::default().basis();
+    let params = Params::new(
+        rect,
+        right,
+        up,
+        view,
+        70.,
+        rect.center(),
+        display.depth_extent,
+    );
+    let preview = Preview {
+        show_polygroups: true,
+        backface_opacity: 0.3,
+        ..Default::default()
+    };
+    gpu.paint(
+        &params,
+        [253, 189],
+        false,
+        WireMode::Visible,
+        false,
+        &preview,
+    );
+    let original = gpu.read(); // Exercises padded readback rows as well.
+    gpu.upload_meshes(&display, 16_384);
+    assert!(gpu.meshes.len() > 1);
+    assert!(gpu.meshes.iter().all(|m| m.vertices.size() <= 16_384));
+    gpu.paint(
+        &params,
+        [253, 189],
+        false,
+        WireMode::Visible,
+        false,
+        &preview,
+    );
+    assert_eq!(
+        original,
+        gpu.read(),
+        "batch boundaries must not change pixels or depth"
+    );
 }
+
 #[cfg(target_os = "linux")]
-impl Egl {
-    pub(super) unsafe fn new() -> Self {
-        let lock = EGL_LOCK.lock().unwrap();
-        unsafe {
-            let library = libc::dlopen(c"libEGL.so.1".as_ptr(), libc::RTLD_NOW);
-            assert!(!library.is_null(), "libEGL.so.1 is required");
-            macro_rules! symbol {
-                ($name:literal,$ty:ty) => {{
-                    let pointer = libc::dlsym(library, concat!($name, "\0").as_ptr().cast());
-                    assert!(!pointer.is_null(), "missing EGL entry point");
-                    std::mem::transmute::<*mut libc::c_void, $ty>(pointer)
-                }};
-            }
-            type Ptr = *mut libc::c_void;
-            let get_display = symbol!(
-                "eglGetPlatformDisplay",
-                unsafe extern "C" fn(u32, Ptr, *const isize) -> Ptr
-            );
-            let initialize = symbol!(
-                "eglInitialize",
-                unsafe extern "C" fn(Ptr, *mut i32, *mut i32) -> u32
-            );
-            let choose = symbol!(
-                "eglChooseConfig",
-                unsafe extern "C" fn(Ptr, *const i32, *mut Ptr, i32, *mut i32) -> u32
-            );
-            let bind = symbol!("eglBindAPI", unsafe extern "C" fn(u32) -> u32);
-            let create_context = symbol!(
-                "eglCreateContext",
-                unsafe extern "C" fn(Ptr, Ptr, Ptr, *const i32) -> Ptr
-            );
-            let create_surface = symbol!(
-                "eglCreatePbufferSurface",
-                unsafe extern "C" fn(Ptr, Ptr, *const i32) -> Ptr
-            );
-            let make_current = symbol!(
-                "eglMakeCurrent",
-                unsafe extern "C" fn(Ptr, Ptr, Ptr, Ptr) -> u32
-            );
-            let display = get_display(0x31DD, std::ptr::null_mut(), std::ptr::null()); // EGL_PLATFORM_SURFACELESS_MESA
-            assert!(!display.is_null());
-            assert_eq!(
-                initialize(display, std::ptr::null_mut(), std::ptr::null_mut()),
-                1
-            );
-            assert_eq!(bind(0x30A2), 1); // EGL_OPENGL_API
-            let attributes = [
-                0x3033, 1, 0x3040, 8, 0x3024, 8, 0x3023, 8, 0x3022, 8, 0x3021, 8, 0x3038,
-            ];
-            let mut config = std::ptr::null_mut();
-            let mut count = 0;
-            assert_eq!(
-                choose(display, attributes.as_ptr(), &mut config, 1, &mut count),
-                1
-            );
-            assert!(count > 0);
-            let context_attributes = [0x3098, 3, 0x30FB, 3, 0x30FD, 1, 0x3038]; // OpenGL 3.3 core
-            let context = create_context(
-                display,
-                config,
-                std::ptr::null_mut(),
-                context_attributes.as_ptr(),
-            );
-            assert!(!context.is_null());
-            let surface =
-                create_surface(display, config, [0x3057, 256, 0x3056, 256, 0x3038].as_ptr());
-            assert!(!surface.is_null());
-            assert_eq!(make_current(display, surface, surface, context), 1);
-            Self {
-                _lock: lock,
-                library,
-                display,
-                context,
-                surface,
-                make_current,
-                get_proc: symbol!(
-                    "eglGetProcAddress",
-                    unsafe extern "C" fn(*const libc::c_char) -> *const libc::c_void
-                ),
-                destroy_context: symbol!(
-                    "eglDestroyContext",
-                    unsafe extern "C" fn(Ptr, Ptr) -> u32
-                ),
-                destroy_surface: symbol!(
-                    "eglDestroySurface",
-                    unsafe extern "C" fn(Ptr, Ptr) -> u32
-                ),
-                terminate: symbol!("eglTerminate", unsafe extern "C" fn(Ptr) -> u32),
-            }
+#[test]
+#[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
+fn gpu_composite_preserves_dpi_clipping_and_srgb() {
+    let mut samples = Vec::new();
+    for format in [COLOR, wgpu::TextureFormat::Rgba8UnormSrgb] {
+        let mut capture = UiCapture::with_format([381, 285], format);
+        let mut renderer = Renderer::new(&capture.state).unwrap();
+        let document = Document::default();
+        let ctx = egui::Context::default();
+        ctx.set_pixels_per_point(1.5);
+        let rect = egui::Rect::from_min_max(egui::pos2(10.3, 12.7), egui::pos2(243.7, 177.3));
+        let clip = egui::Rect::from_min_max(egui::pos2(70., 40.), egui::pos2(190., 150.));
+        let output = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(254., 190.),
+                )),
+                ..Default::default()
+            },
+            |ctx| {
+                let painter = ctx.layer_painter(egui::LayerId::background());
+                painter.rect_filled(
+                    egui::Rect::EVERYTHING,
+                    0.,
+                    egui::Color32::from_rgb(23, 26, 31),
+                );
+                let painter = painter.with_clip_rect(clip);
+                Scene::paint_with_renderer(
+                    &painter,
+                    rect,
+                    &document,
+                    &Camera::default(),
+                    false,
+                    WireMode::Visible,
+                    false,
+                    Some(&mut renderer),
+                );
+            },
+        );
+        assert_eq!(output.pixels_per_point, 1.5);
+        let rgba = capture.render(&ctx, output);
+        let sample = |x: usize, y: usize| {
+            let i = ((284 - y) * 381 + x) * 4;
+            <[u8; 4]>::try_from(&rgba[i..i + 4]).unwrap()
+        };
+        assert_eq!(
+            sample(90, 140),
+            [23, 26, 31, 255],
+            "outside the scissor must keep the background"
+        );
+        let center = sample(190, 142);
+        assert!(
+            center[0] > 40,
+            "fractional-DPI viewport must paint inside the scissor"
+        );
+        let target = renderer.gpu.lock().unwrap().target.as_ref().unwrap().size;
+        let viewport = egui::PaintCallbackInfo {
+            viewport: rect,
+            clip_rect: clip,
+            pixels_per_point: 1.5,
+            screen_size_px: [381, 285],
         }
+        .viewport_in_pixels();
+        assert_eq!(
+            target,
+            [viewport.width_px as u32, viewport.height_px as u32]
+        );
+        samples.push(center);
     }
-}
-#[cfg(target_os = "linux")]
-impl Drop for Egl {
-    fn drop(&mut self) {
-        unsafe {
-            (self.make_current)(
-                self.display,
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-            );
-            (self.destroy_surface)(self.display, self.surface);
-            (self.destroy_context)(self.display, self.context);
-            (self.terminate)(self.display);
-            libc::dlclose(self.library);
-        }
-    }
+    assert!(
+        samples[0]
+            .iter()
+            .zip(samples[1])
+            .all(|(&a, b)| a.abs_diff(b) <= 1),
+        "sRGB output must preserve display RGB shading: {samples:?}"
+    );
 }

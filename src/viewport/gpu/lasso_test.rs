@@ -3,7 +3,7 @@ use super::{ui_capture::UiCapture, *};
 use crate::{command::Command, ui::UiState, viewport::SelectionTool};
 
 #[test]
-#[ignore = "requires an installed EGL OpenGL implementation"]
+#[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn gpu_lasso_preview_and_commit() {
     let size = [1000, 800];
     let mut capture = UiCapture::new(size);
@@ -13,7 +13,7 @@ fn gpu_lasso_preview_and_commit() {
     ] {
         let ctx = egui::Context::default();
         let mut app = crate::App::default();
-        app.viewport.initialize_renderer(&capture.gl).unwrap();
+        app.viewport.initialize_renderer(&capture.state).unwrap();
         app.dispatch(Command::SelectTool(Some(tool)), &ctx);
         let mut controls = UiState::default();
         controls.selection_tool = Some(tool);
@@ -80,6 +80,6 @@ fn gpu_lasso_preview_and_commit() {
                 }
             }
         }
-        app.viewport.destroy_renderer(&capture.gl);
+        app.viewport.destroy_renderer();
     }
 }

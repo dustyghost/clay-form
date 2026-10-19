@@ -1,51 +1,19 @@
 //! Opt-in visual QA of the customization windows through the actual egui renderer.
+use super::ui_capture::UiCapture;
 use crate::{
     document::Document,
     preferences::{Action, Appearance, CustomItem, Placement, Shortcut},
     ui::UiState,
 };
-use eframe::{
-    egui,
-    glow::{self, HasContext},
-};
-use std::sync::Arc;
+use eframe::egui;
 
 #[test]
-#[ignore = "requires an installed EGL OpenGL implementation"]
+#[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn custom_interface_offscreen_preview() {
-    unsafe {
-        let egl = super::tests::Egl::new();
-        let gl = Arc::new(glow::Context::from_loader_function(|name| {
-            (egl.get_proc)(std::ffi::CString::new(name).unwrap().as_ptr())
-        }));
+    {
         let size = [1440, 1000];
-        let texture = gl.create_texture().unwrap();
-        gl.bind_texture(glow::TEXTURE_2D, Some(texture));
-        gl.tex_image_2d(
-            glow::TEXTURE_2D,
-            0,
-            glow::RGBA8 as i32,
-            size[0],
-            size[1],
-            0,
-            glow::RGBA,
-            glow::UNSIGNED_BYTE,
-            glow::PixelUnpackData::Slice(None),
-        );
-        let framebuffer = gl.create_framebuffer().unwrap();
-        gl.bind_framebuffer(glow::FRAMEBUFFER, Some(framebuffer));
-        gl.framebuffer_texture_2d(
-            glow::FRAMEBUFFER,
-            glow::COLOR_ATTACHMENT0,
-            glow::TEXTURE_2D,
-            Some(texture),
-            0,
-        );
-        assert_eq!(
-            gl.check_framebuffer_status(glow::FRAMEBUFFER),
-            glow::FRAMEBUFFER_COMPLETE
-        );
-        let mut painter = eframe::egui_glow::Painter::new(gl.clone(), "", None, false).unwrap();
+        let mut capture = UiCapture::new(size);
+        let mut rgba = Vec::new();
         let ctx = egui::Context::default();
         ctx.style_mut(|style| style.animation_time = 0.);
         let document = Document::default();
@@ -161,47 +129,11 @@ fn custom_interface_offscreen_preview() {
                         });
                     },
                 );
-                gl.bind_framebuffer(glow::FRAMEBUFFER, Some(framebuffer));
-                gl.clear_color(0.07, 0.07, 0.07, 1.);
-                gl.clear(glow::COLOR_BUFFER_BIT);
-                let shapes = ctx.tessellate(output.shapes, output.pixels_per_point);
-                painter.paint_and_update_textures(
-                    [size[0] as u32, size[1] as u32],
-                    output.pixels_per_point,
-                    &shapes,
-                    &output.textures_delta,
-                );
+                rgba = capture.render(&ctx, output);
             }
-            assert_eq!(gl.get_error(), glow::NO_ERROR);
             if let Ok(path) = std::env::var("CLAY_CUSTOM_UI_PREVIEW") {
-                let mut rgba = vec![0; (size[0] * size[1] * 4) as usize];
-                gl.read_pixels(
-                    0,
-                    0,
-                    size[0],
-                    size[1],
-                    glow::RGBA,
-                    glow::UNSIGNED_BYTE,
-                    glow::PixelPackData::Slice(Some(&mut rgba)),
-                );
-                let flipped: Vec<_> = rgba
-                    .chunks_exact(size[0] as usize * 4)
-                    .rev()
-                    .flatten()
-                    .copied()
-                    .collect();
-                image::save_buffer(
-                    format!("{path}-{name}.png"),
-                    &flipped,
-                    size[0] as u32,
-                    size[1] as u32,
-                    image::ColorType::Rgba8,
-                )
-                .unwrap();
+                capture.save(format!("{path}-{name}.png"), &rgba);
             }
         }
-        painter.destroy();
-        gl.delete_framebuffer(framebuffer);
-        gl.delete_texture(texture);
     }
 }

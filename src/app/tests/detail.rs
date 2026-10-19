@@ -77,7 +77,7 @@ fn detail_groove(adaptive: AdaptiveSettings, stabilize: bool) -> (App, egui::Con
 
 #[cfg(target_os = "linux")]
 #[test]
-#[ignore = "requires an installed EGL OpenGL implementation"]
+#[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn detail_groove_offscreen_preview() {
     let mut capture = crate::viewport::UiCapture::new([1000, 800]);
     let (mut app, ctx) = detail_groove(
@@ -87,7 +87,7 @@ fn detail_groove_offscreen_preview() {
         },
         false,
     );
-    app.viewport.initialize_renderer(&capture.gl).unwrap();
+    app.viewport.initialize_renderer(&capture.state).unwrap();
     app.camera.set_zoom(2.);
     app.document.mesh().validate_closed().unwrap();
     let mesh = app.document.mesh();
@@ -120,7 +120,7 @@ fn detail_groove_offscreen_preview() {
             );
         }
     }
-    app.viewport.destroy_renderer(&capture.gl);
+    app.viewport.destroy_renderer();
 }
 
 #[test]

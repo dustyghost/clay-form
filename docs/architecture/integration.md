@@ -37,7 +37,7 @@ The renderer independently intersects those symmetry planes with visible surface
 
 GPU surfaces and wireframe use homogeneous projection; CPU perspective picking intersects rays with the same cached triangles and interpolates world-space normals. The CPU-only test painter omits triangles crossing the near plane; the production GPU renderer clips them, and picking supports them. Perspective path cuts converge at the eye and unfold caps through the same projection.
 
-The viewport is an input adapter. It emits domain `Dab` values to the document, independent of mesh rendering details. The scene renderer reads mesh data and prepares projected triangles for display and surface picking. The OpenGL renderer uses cached GPU geometry; sculpt algorithms remain in the document and geometry modules. CPU projection and picking share the cached surface with the renderer.
+The viewport is an input adapter. It emits domain `Dab` values to the document, independent of mesh rendering details. The scene renderer reads mesh data and prepares projected triangles for display and surface picking. The wgpu renderer uses cached GPU geometry; sculpt algorithms remain in the document and geometry modules. CPU projection and picking share the cached surface with the renderer.
 
 ### File actions and confirmation
 
@@ -68,13 +68,11 @@ User preferences use their own versioned JSON file in the user configuration dir
 
 ## GPU viewport
 
-`viewport/gpu.rs` owns OpenGL programs, vertex/index buffers, lazily built wireframe buffers, the brush-alpha texture, and a viewport-sized color/depth framebuffer. `gpu/display.rs` builds camera-independent display geometry and edge adjacency; `gpu/shaders.rs` performs projection, lighting, masking, front-facing edge rejection, and surface alpha/symmetry projection. A glow paint callback draws the scene before egui overlays, resolves color into egui’s framebuffer, and restores framebuffer/viewport state. The framebuffer resizes in physical pixels, preserving high-DPI sizing and egui clipping.
+`viewport/gpu/state.rs` defines renderer-neutral view and preview inputs. `viewport/gpu.rs` owns wgpu pipelines, packed vertex/index/face-color storage buffers, lazy wireframe vertex buffers, an R32Float brush-alpha texture, and viewport-sized RGBA8/Depth32Float targets. `gpu/display.rs` builds the unchanged camera-independent display geometry and edge adjacency; `gpu/viewport.wgsl` performs projection, lighting, masking, front-facing edge rejection, and surface alpha/symmetry projection. An `egui_wgpu` callback encodes the offscreen passes during prepare, then composites color during egui’s render pass, before overlays. The target resizes in physical pixels; egui applies viewport/scissor clipping. `gpu/composite.wgsl` preserves display-RGB shading on both linear and sRGB swapchain formats.
 
 Geometry-changing edits, mask edits, model selection/visibility, undo/redo, topology operations, and New/Open advance the display revision. Brush settings, symmetry settings, and camera changes do not invalidate geometry buffers. The CPU scene retains projected coordinates and front-facing ownership for picking and gizmos, without sorting/shading faces or rasterizing a wireframe depth buffer in the GPU path. The CPU paint path remains available for headless interaction tests.
 
-`App::with_gl` initializes resources with the context current. Gesture cancellation preserves the renderer; `App::on_exit` explicitly deletes its GL objects while the context is valid. GPU alpha uses the same rotation, image interpolation, inner core, and falloff as CPU brush weights. Alpha and symmetry colors apply to active surfaces in the solid shader, so inactive foreground models occlude them. Tangent rings and the normal indicator remain egui controls. See [GPU rendering](../gpu-rendering.md) for the offscreen GL checks and load profile.
-
-
+`App::with_wgpu` initializes resources from eframe’s render state. Gesture cancellation preserves the renderer; `App::on_exit` releases cached resources, and wgpu reference counting handles callback lifetimes without context-dependent deletion. GPU alpha uses explicit bilinear texture loads, preserving rotation, image interpolation, inner core and falloff without requiring float32 filtering support. Alpha and symmetry colors apply to active surfaces in the solid shader, so inactive foreground models occlude them. Tangent rings and the normal indicator remain egui controls. See [GPU rendering](../gpu-rendering.md) for offscreen checks and the load profile.
 
 ## Custom interface actions
 
@@ -108,4 +106,4 @@ Workspace appearance updates egui visuals and both CPU/GPU viewport backgrounds.
 
 To add a reusable operation, add an `Action`, its label/catalog entry, availability and dispatch mapping, then attach `.customize(action)` to its source response. Append new entries to `Action::ALL`: `Preferences::default` currently assigns the first 19 shortcuts by catalog position, so inserting an action into that prefix shifts existing defaults. New actions are unbound unless a default is deliberately added.
 
-Confirmation buttons and per-object numeric editors keep their local context. Run the preference and application tests for key/layout behavior; the optional EGL test `custom_interface_offscreen_preview` renders the editor and key settings. Set `CLAY_CUSTOM_UI_PREVIEW=/tmp/clay-custom-ui` to export PNGs.
+Confirmation buttons and per-object numeric editors keep their local context. Run the preference and application tests for key/layout behavior; the optional Vulkan test `custom_interface_offscreen_preview` renders the editor and key settings. Set `CLAY_CUSTOM_UI_PREVIEW=/tmp/clay-custom-ui` to export PNGs.
