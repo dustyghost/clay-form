@@ -2,29 +2,42 @@
 
 [Documentation home](../../README.md#documentation)
 
-Make a raised mark, smooth it, undo it, and save a project. A mouse is enough; a pen works too.
+Turn a sphere into a small moon: carve a few craters, soften their edges, and save your own pocket planet. A mouse is enough; a pen works too. Allow about ten minutes.
 
 ## 1. Start with a sphere
 
-Choose **New sphere**. If you have unsaved work, save it or cancel the prompt before continuing.
+1. Choose **New sphere**. Save any work you want to keep before replacing it.
+2. Select **Standard** in **Brush library**.
+3. In **Brush settings**, choose **Add**, **Freehand**, **Soft** alpha, **Radius 60**, and **Strength 0.25**. Turn **Stroke stabilisation** off for this exercise.
+4. Turn **Symmetry** off so each crater appears only where you draw. For a single clay color, turn off **View → Show vertex group colors**.
 
-Select **Standard** in **Brush library**. In Brush settings, use **Radius 60** and **Strength 0.50**. For the clay color shown here, turn off **View → Show vertex group colors**. Your panel arrangement may differ.
+You should have an unmarked sphere and a circular brush preview when you hover over it. Your panels may be arranged differently.
 
-![Starting sphere with Standard selected in the brush library](../images/first-sculpt-before.png)
+<a id="2-make-a-mark"></a>
 
-*The brush library selects the tool; the center is your working surface.*
+## 2. Carve three craters
 
-## 2. Make a mark
+1. Hold **Alt**, start on the front of the sphere, and draw a short, slow curl. Release the pointer, then Alt. Standard pushes inward while Alt is held.
+2. Move to another spot. Reduce **Radius** to **35** and draw a second, smaller curl with Alt held.
+3. Add a third crater nearby, leaving some untouched surface between them. Different sizes and uneven spacing give the moon character.
 
-Press on the front of the sphere, drag downward, and release. A raised stroke follows the pointer.
+Look for shallow hollows rather than deep tunnels. You can build depth with another short pass. If a crater becomes too deep, press **Ctrl+Z**, lower Strength, and try again. Each completed stroke is one undo step.
 
-![Sphere after one downward Standard brush stroke](../images/first-sculpt-after.png)
+If clay rises instead, check that Standard is set to **Add**: Alt reverses its current operation. If the view rotates, the stroke started off the model; start the next one on clay.
 
-*One completed stroke is one undo step.*
+## 3. Soften the rims
 
-Hold **Shift** and brush lightly over the mark to smooth it. Release Shift to return to Standard. Hold **Alt** while using Standard to push inward instead of raising clay.
+Hold **Shift** and make a light pass around one crater's edge. Release Shift to return to Standard. Aim to soften the transition while keeping the hollow visible.
 
-## 3. Inspect the shape
+Too much smoothing can erase the crater. Undo that pass and use a shorter stroke. Shift uses your last Smooth preset, so its size and strength may differ from Standard; see [brush settings](sculpting.md#choose-a-brush) if you need to adjust it.
+
+For a raised rim, release Alt and Shift and trace a short Standard stroke beside part of a crater. Leave some gaps rather than drawing a perfect ring.
+
+<a id="3-inspect-the-shape"></a>
+
+## 4. Inspect the shape
+
+Orbit slightly to see whether the hollows have depth and the rims catch the light.
 
 | To… | Use… |
 | --- | --- |
@@ -35,17 +48,17 @@ Hold **Shift** and brush lightly over the mark to smooth it. Release Shift to re
 
 If the model fills the screen, start a navigation drag in the thin border strip. See [Navigation](navigation.md) for pen gestures and perspective.
 
-## 4. Undo and compare
+<a id="4-undo-and-compare"></a>
 
-Press **Ctrl+Z** to undo the smoothing stroke. Press it again to remove the raised stroke. **Ctrl+Shift+Z** redoes an edit.
-
-Open **Edit** to see the action names and your configured shortcuts.
+Compare a change with **Ctrl+Z**, then restore it with **Ctrl+Shift+Z**. Open **Edit** to see which action will be undone. Brush settings and camera movements are outside sculpt history.
 
 ## 5. Save your work
 
-Choose **Save** (**Ctrl+S**), browse to a folder, and enter a name such as `first-sculpt.clay`. Later saves update that file directly; **Save as…** (**Ctrl+Shift+S**) chooses a new destination. Reopen with **Open** or **Ctrl+O**.
+Choose **Save** (**Ctrl+S**), browse to a folder, and name the project `pocket-moon.clay`. Later saves update that file directly; **Save as…** (**Ctrl+Shift+S**) makes a separate version. Reopen with **Open** or **Ctrl+O**.
 
-`.clay` keeps the editable project. **Export OBJ** saves the active mesh for other applications. See [Files and recovery](files.md).
+Keep the `.clay` project for further sculpting. **Export OBJ** saves the active mesh for other applications. See [Files and recovery](files.md).
+
+Your moon is ready when you can see three distinct hollows from an angled view and have a saved project. Try adding one tiny crater across the edge of a larger one, or leave the far side smooth.
 
 ## Try next
 
@@ -57,3 +70,4 @@ Choose **Save** (**Ctrl+S**), browse to a folder, and enter a name such as `firs
 | Cut away part of the form | [Slice](modeling.md#slice) |
 | Work beside a drawing | [Reference images](references.md) |
 | Keep favorite tools visible | [Workspace](workspace.md) |
+

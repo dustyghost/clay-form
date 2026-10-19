@@ -2,7 +2,7 @@
 
 [Documentation home](../../README.md#documentation)
 
-Keep your most-used tools close to the sculpt.
+Keep the controls you reach for visible and give the rest of the screen to your sculpt. Start by pinning one menu; build a custom shelf when you know which tools you use most.
 
 - [Pin or dock a menu](#key-settings-and-workspace)
 - [Create a custom shelf](#create-a-custom-menu-or-shelf)
@@ -71,7 +71,9 @@ Open **Settings → Customize workspace**.
 | Workspace colours and style | Choose Dark/Light/Warm or customize colors, spacing, and rounding |
 | Manage saved workspaces | Delete arrangements or start from defaults |
 
-Named workspaces remember later layout/style edits automatically. Starting from defaults preserves saved workspaces. Keyboard bindings are shared across workspaces.
+Create a named workspace once, then arrange panels as you work: later layout and style edits save automatically. Try a compact sculpting layout and a second layout with modeling controls open. Starting from defaults preserves your saved workspaces.
+
+Keyboard bindings are shared across workspaces, so switching layouts keeps your shortcuts.
 
 ### Where preferences are stored
 
@@ -120,3 +122,4 @@ The toolbar wraps as the window narrows. Brush tiles show the selected brush wit
 ## Related guides
 
 [Navigation](navigation.md) · [Brush settings](sculpting.md) · [Recovery saves](files.md#recovery-saves)
+

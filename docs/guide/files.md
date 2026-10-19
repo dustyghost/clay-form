@@ -2,6 +2,8 @@
 
 [Documentation home](../../README.md#documentation)
 
+Keep an editable `.clay` project, export a mesh for another app, or recover work after an interruption. **Save** is the way to keep a version you choose; recovery keeps recent backup copies.
+
 - [Save and open projects](#projects-and-brush-files)
 - [Import a mesh](#obj-import)
 - [Export a mesh](#export-an-obj)
@@ -103,8 +105,9 @@ Startup offers retained copies after an interrupted session. You can also open t
 
 Copies live in `~/.config/clay-form/recovery/`, or `$XDG_CONFIG_HOME/clay-form/recovery/` when set. Recovery preferences are global, independent of workspaces.
 
-Writes run in the background using temporary files and atomic replacement. A failed save leaves earlier copies available and shows a persistent error; retries use your interval. Test screenshots use temporary folders rather than your personal recovery directory.
+If a recovery save fails, earlier copies remain available and an error stays visible. The app retries at your chosen interval. Save your project normally to a working destination before continuing.
 
 ## Related guides
 
 [Submodels](modeling.md#submodels) · [Brush presets](sculpting.md#save-presets-and-brush-icons) · [Workspace](workspace.md)
+

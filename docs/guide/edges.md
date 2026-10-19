@@ -2,7 +2,9 @@
 
 [Documentation home](../../README.md#documentation)
 
-Open **Mesh → Edges and creases**. Convert parametric primitives before editing their edges. Hover over a control or focus it with Tab for help and any assigned shortcut. Disabled actions explain what to do before using them.
+Keep a rim sharp, add supporting geometry around an opening, or even out a rough border with **Mesh → Edges and creases**. Convert parametric primitives before editing their edges.
+
+For a sharp corner, start with **Add crease**. For extra geometry around a hole, use **Support loops**. Hover over a disabled action, or focus it with Tab, to find out what it needs.
 
 - [Choose a target](#choose-a-target)
 - [Select edges and loops](#select-edges-and-loops)
@@ -34,7 +36,7 @@ For these tools, a mask chooses the region to work on. **Select target borders**
 
 ![Creased cube with cyan selected edges and the selection and uncrease controls visible](../images/crease-selection.png)
 
-Drag empty space to orbit while selecting, using the same pan and zoom modifiers as usual. A drag that starts on the model stays in edge selection. Right-drag and the navigation frame also orbit. Selection is session-only and clears when mesh data changes, avoiding stale edge indices.
+Drag empty space to orbit while selecting, using the same pan and zoom modifiers as usual. A drag that starts on the model stays in edge selection. Right-drag and the navigation frame also orbit. Edge selections are temporary: mesh edits clear them, and saving does not preserve them.
 
 ## Add support loops around a hole
 
@@ -91,7 +93,7 @@ Open **Mesh → Subdivision**. Both **Subdivide (+ level)** and **Smooth subdivi
 
 ## Add loops and creases to thickness
 
-The former “Temporary thickness” controls are now **Thickness modifier**, under **Submodels → Thickness · open meshes**.
+Open **Submodels → Thickness · open meshes** to give an open surface a wall and rim.
 
 1. Enable the modifier and choose a thickness.
 2. Set **Rim loops** to add up to eight loops through the wall thickness.
@@ -109,3 +111,4 @@ Each changed edge operation is one undo step. It keeps the active mesh level, di
 Projects save crease marks and modifier settings. Creases survive linear/smooth subdivision, mirroring, slicing, extraction, and merging. OBJ does not store crease marks. Clear creases before enabling adaptive sculpt or voxel remeshing, which rebuild topology.
 
 Loop insertion and smooth subdivision use the existing mesh-size limits and cancellable worker. These tools do not provide automatic retopology or general self-intersection repair.
+

@@ -2,7 +2,7 @@
 
 [Documentation home](../../README.md#documentation)
 
-Move the view without changing the sculpt.
+Get a clear look at the shape you are making. Start a sculpt stroke on clay; start a left/pen navigation drag in empty space. If you lose your bearings, press **F** to reset the view.
 
 - [Orbit and pan](#orbit-and-pan)
 - [Zoom](#zoom)
@@ -97,7 +97,9 @@ Enable **View → Faint back-facing surfaces** to see the back of an open surfac
 
 ### Check input
 
-Your desktop tablet driver supplies cursor and tip/button input. On Linux, Clay Form also looks for Huion devices under `/sys/class/input` and reads pressure from their `/dev/input/event*` devices. Native pen/touch pressure is accepted where the window system provides it; otherwise strokes use full pressure.
+First check that your desktop tablet driver moves the cursor and registers the pen tip. Then open **Tablet & navigation** and press lightly and firmly: the live pressure value should change.
+
+Clay Form accepts native pen/touch pressure where available. On Linux it also reads Huion pressure from `/dev/input/event*`, using `/sys/class/input` to find devices. Without pressure input, strokes use full pressure.
 
 The **Tablet & navigation** panel shows live pressure and connection errors. Tilt, eraser detection, and express-key configuration are not implemented. Physical Huion pressure has not yet been verified.
 
@@ -117,3 +119,4 @@ Other models need their own vendor/model rule. If pressure reports permission de
 ## Related guides
 
 [Brushes](sculpting.md) · [Shortcuts](workspace.md#shortcuts) · [GPU rendering](../gpu-rendering.md)
+

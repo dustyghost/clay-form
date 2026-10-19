@@ -2,7 +2,7 @@
 
 [Documentation home](../../README.md#documentation) · New here? [Make your first sculpt](getting-started.md).
 
-Choose a brush, drag on the clay, and use **Shift** to smooth. Start with the task you need:
+Build a rounded form, cut a fold, or pull out a horn: choose the brush for the shape you want, then tune it with a short trial stroke. **Ctrl+Z** lets you try again. Start here:
 
 - [Choose and adjust a brush](#brushes-alphas-and-symmetry)
 - [Reset a brush](#example-reset-an-experimental-brush)
@@ -25,13 +25,20 @@ Choose a brush, drag on the clay, and use **Shift** to smooth. Start with the ta
 | Move or pull a form | Grab, Snake |
 | Protect part of a surface | Mask |
 
-**Polish** levels the surface toward an averaged plane under the brush. It holds sharp corners and marked creases, respects masks and hidden surfaces, and uses your pressure, alpha, and symmetry settings. Use a larger radius for broader planes and lighter pressure for gradual cleanup. Like Flatten, its inverted operation exaggerates relief.
+For broad, clean planes, try **Polish** with a large radius and light pressure. It flattens local bumps while holding sharp corners and marked creases. Masks, hidden surfaces, pressure, alphas, and symmetry still apply. Reversing Polish exaggerates relief, as with Flatten.
 
 Select a tile in **Brush library**. Use **Add brush** if a brush is missing from an older project.
 
 **Shift** temporarily uses your most recently selected Smooth preset, including its size and stroke settings. Release Shift to return to your previous brush. **Alt** reverses the operation by default; you can also choose **Add / Subtract** in Brush settings.
 
 ### Adjust the feel
+
+Make one short stroke before changing several settings at once:
+
+- Too strong? Lower **Strength** and build up with several passes.
+- Too broad? Reduce **Radius**. Radius is measured on screen, so zoom changes how much of the model it covers.
+- A dotted trail? Reduce **Spacing** for closer dabs.
+- A shaky line? Try [Stroke stabilisation](#steady-a-freehand-stroke).
 
 | Brush setting | Effect |
 | --- | --- |
@@ -172,3 +179,4 @@ History holds up to **24 edits** within **128 MB**. New/Open clears it; it is no
 ## Related guides
 
 [Navigation](navigation.md) · [Masks and selection](selection.md) · [Mesh management](modeling.md#mesh-management) · [Files and presets](files.md)
+
