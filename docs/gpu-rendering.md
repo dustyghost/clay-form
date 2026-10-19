@@ -44,6 +44,7 @@ CLAY_GPU_SOFTWARE=1 cargo test --locked --lib obj_import_offscreen_preview -- --
 CLAY_GPU_SOFTWARE=1 cargo test --locked --lib reference_images_offscreen_preview -- --ignored
 CLAY_GPU_SOFTWARE=1 cargo test --locked --lib navigation_and_smooth_offscreen_preview -- --ignored
 CLAY_GPU_SOFTWARE=1 cargo test --locked --lib detail_groove_offscreen_preview -- --ignored
+CLAY_GPU_SOFTWARE=1 cargo test --locked --lib clay_buildup_offscreen_preview -- --ignored
 CLAY_GPU_SOFTWARE=1 cargo test --locked --lib perspective_view_offscreen_preview -- --ignored
 ```
 

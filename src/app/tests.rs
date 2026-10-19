@@ -3442,6 +3442,7 @@ mod references;
 
 mod navigation_smooth;
 
+mod clay;
 mod detail;
 
 #[cfg(target_os = "linux")]

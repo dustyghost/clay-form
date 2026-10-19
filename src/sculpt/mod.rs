@@ -1,6 +1,7 @@
 //! Sculpting data and algorithms, independent of windowing and UI.
 mod adaptive;
 mod brush;
+mod clay;
 mod deformation;
 mod detail;
 mod math;

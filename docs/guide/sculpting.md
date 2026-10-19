@@ -29,6 +29,10 @@ For broad, clean planes, try **Polish** with a large radius and light pressure. 
 
 Select a tile in **Brush library**. Use **Add brush** if a brush is missing from an older project.
 
+**Clay** builds a layer against the average surface beneath the brush. It fills hollows faster than raised spots, helping overlapping dabs form a cohesive mass. **Standard** adds depth along the picked normal and retains more of the existing small surface variations. Clay samples the surrounding patch to keep small bumps from steering each dab; repeated passes still add volume. Subtract removes a similarly controlled layer.
+
+Try Clay on a sphere with the default Soft alpha: draw one broad stroke, then pass over it again to build up the form. Increase **Inner radius** for a wider full-strength core, or lower **Spacing** if you can see individual dabs. Subdivide or enable adaptive sculpting when the mesh is too coarse to carry the shape. Clay's drag stamps stop at their target layer even at full strength.
+
 **Shift** temporarily uses your most recently selected Smooth preset, including its size and stroke settings. Release Shift to return to your previous brush. **Alt** reverses the operation by default; you can also choose **Add / Subtract** in Brush settings.
 
 ### Adjust the feel
