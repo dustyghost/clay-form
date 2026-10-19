@@ -225,6 +225,8 @@ impl ModelingState {
                         "Tunnel snapped"
                     } else if r.collapsed {
                         "Edge loop snapped"
+                    } else if options.tool == ModelTool::Fuse {
+                        "No compatible contact; free extrusion"
                     } else {
                         ""
                     },
@@ -341,6 +343,7 @@ impl ModelingState {
         document: &mut Document,
         mut options: ModelingOptions,
     ) -> Result<(), String> {
+        self.notice = None;
         let Some(drag) = self.edit_drag.take() else {
             return Ok(());
         };
@@ -383,6 +386,7 @@ impl ModelingState {
         self.sync(document);
         let mut last = options;
         last.amount = amount;
+        self.notice = (!result.notice.is_empty()).then_some(result.notice);
         self.last_edit = Some(last);
         self.requested_amount = Some(amount);
         if options.tool.is_transform() {
@@ -410,6 +414,7 @@ impl ModelingState {
         document: &mut Document,
         options: ModelingOptions,
     ) -> Result<(), String> {
+        self.notice = None;
         self.sync(document);
         let vertices = self.selected_vertices(document.mesh());
         let anchor = self
@@ -439,6 +444,7 @@ impl ModelingState {
             self.selected = caps;
         }
         self.revision = document.display_revision();
+        self.notice = (!result.notice.is_empty()).then_some(result.notice);
         self.last_edit = Some(options);
         self.requested_amount = Some(options.amount);
         self.symmetry = None;

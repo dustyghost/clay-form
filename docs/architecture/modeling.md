@@ -1,4 +1,4 @@
-# Edges and pen modeling
+# Edges and modeling
 
 [Architecture overview](../architecture.md) · [Documentation home](../../README.md#documentation)
 
@@ -21,9 +21,13 @@ Clicking depth-tests candidates against the active visible surface. Edge-selecti
 Edge operations use the cancellable mesh worker and one undo transaction; unchanged results do not dirty the document or clear redo. Thickness modifier retains its legacy serialized field name. New default-omitted rim-loop and rim-crease settings generate deterministic shell geometry shared by preview and Apply. Mesh and project size validation applies to the generated loops and smooth subdivisions.
 
 
-## Pen modeling
+<a id="pen-modeling"></a>
 
-`sculpt/modeling.rs` builds extrusion and loop-cut results without changing the input mesh. Polygon indices come from the shared quad-aware polygon view. Extrusion duplicates the selected flat region, adds walls only on its boundary, and optionally replaces a single translated cap with an opposite-wound boundary match.
+## Modeling
+
+`sculpt/modeling.rs` builds extrusion and loop-cut results without changing the input mesh. Polygon indices come from the shared quad-aware polygon view. Extrusion duplicates the selected flat region, adds walls only on its boundary, and optionally joins a translated cap region to opposite-wound faces with the same layout.
+
+`contact.rs` indexes existing positions and tests candidate depths nearest first. A cap join maps every selected face; intermediate-loop fusion maps only the exterior rim and translates any interior cap vertices. Connected planar regions are processed as units, so internal selected edges never generate walls. Fuse accepts symmetry copies of a connected region but rejects unrelated islands. The selected target controls the final distance shared by preview and commit; farther pointer travel cannot pass it. A free extrusion reports that no compatible contact was found.
 
 At a matching-face join, `sculpt/modeling/join.rs` follows connected coplanar side patches and verifies full, reversed perimeter coverage before cancelling coincident walls. It reuses the patch boundary vertices, interpolates additional depth vertices on free wall paths, and connects unequal boundary spacing with triangles when necessary.
 

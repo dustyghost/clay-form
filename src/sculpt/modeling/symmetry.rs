@@ -238,6 +238,17 @@ impl Mesh {
             }
             groups.push(group);
         }
+        if contact.loops {
+            let first: BTreeSet<_> = groups[0].iter().copied().collect();
+            if groups.iter().any(|group| {
+                !symmetry.faces.iter().any(|mapping| {
+                    first.iter().map(|&f| mapping[f]).collect::<BTreeSet<_>>()
+                        == group.iter().copied().collect()
+                })
+            }) {
+                return Err("Extrude and fuse needs one connected flat region and its symmetry copies; select unrelated regions separately".into());
+            }
+        }
         let mut group_vertices = BTreeSet::new();
         for group in &groups {
             let vertices: BTreeSet<_> = group
@@ -251,9 +262,9 @@ impl Mesh {
             }
             group_vertices.extend(vertices);
         }
-        // Adjacent mirrored caps must extrude together, but a snapped tunnel
-        // joins them one at a time so their shared wall can be cancelled.
-        if join && distance < 0. {
+        // Ordinary extrusion retains per-face tunnel eligibility. Fuse instead
+        // requires contact for the entire connected region, including mirror seams.
+        if !contact.loops && join && distance < 0. {
             groups = groups
                 .into_iter()
                 .flat_map(|group| {

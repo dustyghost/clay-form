@@ -172,96 +172,64 @@ impl Mesh {
         {
             return Err("Extrusion would exceed the mesh size limit".into());
         }
-        // A tunnel is a reverse-wound, translated copy of one face. Require exact
-        // lateral alignment; only the distance along the extrusion axis is snapped.
-        let mut target: Option<(Option<usize>, f32, BTreeMap<usize, usize>)> = None;
-        if join && selected.len() == 1 {
-            for (i, p) in polygons.iter().enumerate() {
-                if selected.contains(&i)
-                    || !p.visible
-                    || p.vertices.len() != first.vertices.len()
-                    || p.vertices.iter().any(|v| vertices.contains(v))
-                    || normal(self, p).dot(direction) > -0.9999
-                {
-                    continue;
-                }
-                for shift in 0..p.vertices.len() {
-                    let mapping: BTreeMap<_, _> = first
-                        .vertices
-                        .iter()
-                        .enumerate()
-                        .map(|(k, &v)| {
-                            (
-                                v,
-                                p.vertices[(shift + p.vertices.len() - k) % p.vertices.len()],
-                            )
-                        })
-                        .collect();
-                    let depth =
-                        (self.vertices[mapping[&first.vertices[0]]] - origin).dot(direction);
-                    if depth * distance <= 0. || depth.abs() > distance.abs() + size * contact.snap
-                    {
-                        continue;
-                    }
-                    if mapping.iter().any(|(&a, &b)| {
-                        (self.vertices[b] - self.vertices[a] - direction * depth).len()
-                            > size * 1e-4
-                    }) {
-                        continue;
-                    }
-                    if target
-                        .as_ref()
-                        .is_none_or(|(_, d, _)| depth.abs() < d.abs())
-                    {
-                        target = Some((Some(i), depth, mapping));
-                    }
-                }
-            }
+        if contact.loops && !contact::connected(&polygons, &selected) {
+            return Err("Extrude and fuse needs one connected flat face region; select disconnected regions separately".into());
         }
+        let region = contact::ContactRegion {
+            polygons: &polygons,
+            selected: &selected,
+            vertices: &vertices,
+            boundary: &boundary,
+            direction,
+            distance,
+            snap: contact.snap,
+        };
+        let mut target = if join {
+            self.cap_contact(&region, size)
+        } else {
+            None
+        };
         if contact.loops
             && distance < 0.
-            && selected.len() == 1
-            && let Some((depth, mapping)) = self.loop_contact(
-                &polygons,
-                *selected.first().unwrap(),
-                direction,
-                distance,
-                contact.snap,
-            )?
-            && target
-                .as_ref()
-                .is_none_or(|(_, d, _)| depth.abs() < d.abs())
+            && let Some(loop_target) =
+                self.loop_contact(&region, target.as_ref().map(|cap| cap.depth))?
         {
-            target = Some((None, depth, mapping));
+            target = Some(loop_target);
         }
-        let collapsed = target.as_ref().is_some_and(|(f, _, _)| f.is_none());
+        if target
+            .as_ref()
+            .is_some_and(|t| t.caps.iter().any(|&i| !polygons[i].visible))
+        {
+            return Err("Show the matching target faces before joining this region".into());
+        }
+        let collapsed = target.as_ref().is_some_and(|t| t.caps.is_empty());
         let mut out = self.empty_topology();
-        let (distance, mapping, removed) = if let Some((i, depth, mapping)) = target {
-            (depth, mapping, i)
+        let (distance, mut mapping, removed) = if let Some(target) = target {
+            (target.depth, target.mapping, target.caps)
         } else {
-            let mapping = vertices
-                .iter()
-                .map(|&v| {
-                    (
-                        v,
-                        out.append_blend(self, &[(v, 1.)], self.vertices[v] + direction * distance),
-                    )
-                })
-                .collect();
-            (distance, mapping, None)
+            (distance, BTreeMap::new(), BTreeSet::new())
         };
+        // The contact rim uses existing vertices. A tiled cap may also contain
+        // interior vertices with no counterpart inside the solid; translate these.
+        if removed.is_empty() {
+            for &v in &vertices {
+                mapping.entry(v).or_insert_with(|| {
+                    out.append_blend(self, &[(v, 1.)], self.vertices[v] + direction * distance)
+                });
+            }
+        }
         let sides: Vec<_> = boundary
             .values()
             .map(|&(a, b, group)| ([a, b, mapping[&b], mapping[&a]], group))
             .collect();
-        let joined_walls = if removed.is_some() || collapsed {
-            let excluded = selected.iter().copied().chain(removed).collect();
+        let joined_walls = if !removed.is_empty() || collapsed {
+            let excluded = selected.iter().chain(&removed).copied().collect();
             Some(self.joined_walls(&polygons, &sides, &excluded, &mut out)?)
         } else {
             None
         };
         for (i, p) in polygons.iter().enumerate() {
-            if Some(i) == removed
+            if removed.contains(&i)
                 || joined_walls
                     .as_ref()
                     .is_some_and(|walls| walls.remove.contains(&i))
@@ -269,7 +237,7 @@ impl Mesh {
                 continue;
             }
             if selected.contains(&i) {
-                if removed.is_none() {
+                if removed.is_empty() {
                     out.push_polygon(
                         &p.vertices.iter().map(|v| mapping[v]).collect::<Vec<_>>(),
                         p.group,
@@ -309,7 +277,7 @@ impl Mesh {
         Ok(Extrusion {
             mesh: out,
             distance,
-            joined: removed.is_some(),
+            joined: !removed.is_empty(),
             collapsed,
             rim,
         })

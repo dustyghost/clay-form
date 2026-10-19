@@ -251,6 +251,7 @@ pub(crate) struct ModelingState {
     pub requested_loop_count: Option<u32>,
     pub requested_amount: Option<f32>,
     pub last_edit: Option<ModelingOptions>,
+    pub notice: Option<&'static str>,
     smooth: Option<(u64, Result<Mesh, String>)>,
 }
 struct LoopPreview {

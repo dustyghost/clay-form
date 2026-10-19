@@ -384,7 +384,7 @@ impl Action {
     }
     pub fn label(&self) -> &'static str {
         match self {
-            Self::PenModeling => "Pen modeling",
+            Self::PenModeling => "Modeling",
             Self::ModelFaces => "Modeling: Faces",
             Self::ModelEdges => "Modeling: Edges",
             Self::ModelVertices => "Modeling: Vertices",

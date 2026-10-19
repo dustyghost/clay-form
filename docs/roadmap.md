@@ -4,9 +4,9 @@
 
 Updated 15 October 2026.
 
-**Shipped:** all seven priorities, edge loops and creases, and the pen modeling workflows below.
+**Shipped:** all seven priorities, edge loops and creases, and the modeling workflows below.
 
-**Next feedback:** try perspective navigation and pen modeling with a mouse or tablet. Their automated and rendered checks have passed; hands-on feedback will guide interaction refinements. Stroke stabilisation passed its tablet check on 14 October 2026.
+**Next feedback:** try perspective navigation and modeling with a mouse or tablet. Their automated and rendered checks have passed; hands-on feedback will guide interaction refinements. Stroke stabilisation passed its tablet check on 14 October 2026.
 
 This page records delivery scope and acceptance checks. For everyday controls, start with the [user guides](../README.md#documentation). [Longer-term candidates](#longer-term-candidates) are possibilities, not commitments.
 
@@ -147,13 +147,13 @@ GPU surfaces, wireframe and surface overlays share the perspective projection. C
 - Switching projection keeps the model framed sensibly and does not alter geometry.
 - Near and far clipping do not unexpectedly hide ordinary working views.
 
-## Pen modeling foundation
+## Modeling foundation
 
-First pass shipped 15 October 2026. **Mesh → Pen modeling** provides:
+First pass shipped 15 October 2026. **Mesh → Modeling** provides:
 
 - Face, edge and vertex targets; visible Replace/Add/Remove controls and paint selection.
 - Directional face loops, edge loops, parallel edge rings and component-to-vertex-group assignment.
-- Flat-region extrusion previews and single-face matching tunnel joins.
+- Flat-region extrusion previews, connected-region fusion and matching-cap tunnel joins.
 - Draggable cuts through quad strips: tap to center, drag to slide, and choose 1–16 loops with buttons or the wheel while held.
 - Complete quad-loop dissolution and topology-checked mirror/radial symmetry.
 
@@ -233,7 +233,7 @@ Community reports informed these choices. They describe individual experiences, 
 - Unexpected dynamic brush sizing motivates settings independent of sculpt brushes and retained user choices.
 - Hidden state affecting operations motivates visible protection state and actionable rejection messages.
 
-Curve/mesh instancing authoring, arbitrary Boolean fusion, detail reprojection onto changed topology and full component modeling feature parity are outside these milestones. See [Pen modeling](guide/modeling.md#pen-modeling) for shipped behavior and limits.
+Curve/mesh instancing authoring, arbitrary Boolean fusion, detail reprojection onto changed topology and full component modeling feature parity are outside these milestones. See [Modeling](guide/modeling.md#pen-modeling) for shipped behavior and limits.
 
 ## Longer term candidates
 
