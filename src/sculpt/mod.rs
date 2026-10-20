@@ -64,3 +64,6 @@ pub use modeling::{
     ComponentBuild, ComponentBuildOptions, ComponentTransform, Construction, ExtrudeContact,
     Extrusion, LoopCut, ModelingSymmetry, TopologyEdit,
 };
+
+mod projection;
+pub use projection::{ProjectionOptions, ProjectionReport};

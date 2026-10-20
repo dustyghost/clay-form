@@ -2035,3 +2035,118 @@ mod group_replacement_tests {
         assert_eq!(doc.geometry_snapshot(), before);
     }
 }
+
+mod delete_submodel_tests {
+    use super::*;
+
+    #[test]
+    fn delete_submodel_selects_panel_neighbor_and_restores_complete_saved_scene() {
+        let mut d = Document::default();
+        let mut geometry = Geometry::new(
+            crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Plane)
+                .mesh()
+                .unwrap(),
+        );
+        geometry
+            .mesh
+            .create_vertex_group("Surface".into(), 0.5, true)
+            .unwrap();
+        geometry.subdivide().unwrap();
+        geometry.mesh.mask[0] = 0.75;
+        d.replace_geometry(geometry).unwrap();
+        d.duplicate_model(false).unwrap();
+        d.duplicate_model(false).unwrap();
+        d.add_group("References".into()).unwrap();
+        let mut metadata = d.model(0).unwrap().metadata.clone();
+        metadata.group = "References".into();
+        metadata.visible = false;
+        metadata.temporary_thickness = 0.01;
+        d.set_model_metadata(0, "Hidden reference".into(), metadata)
+            .unwrap();
+        // Panel order is [1, 2, 0], so the last row's previous neighbor is 2.
+        let before = d.geometry_snapshot();
+        let remaining = d.ordered_models()[1..].to_vec();
+        let counts = d.history_counts();
+        d.mark_saved("parts.clay");
+        assert!(d.delete_submodel());
+        assert_eq!(d.ordered_models(), remaining);
+        assert_eq!(d.active_model_index(), 1);
+        assert_eq!(d.model_count(), 2);
+        assert_eq!(d.history_counts(), (counts.0 + 1, 0));
+        assert_eq!(d.undo_label(), Some("Delete submodel"));
+        assert!(d.is_dirty());
+        let after = d.geometry_snapshot();
+        let project = serde_json::from_str(&serde_json::to_string(&d.project()).unwrap()).unwrap();
+        let mut loaded = Document::default();
+        loaded.replace_project(project, "parts.clay").unwrap();
+        assert_eq!(loaded.geometry_snapshot(), after);
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), before);
+        d.redo();
+        assert_eq!(d.geometry_snapshot(), after);
+        d.select_submodel(0).unwrap();
+        let survivor = d.model(1).unwrap().name.to_owned();
+        assert!(d.delete_submodel());
+        assert_eq!(d.active_model_index(), 0);
+        assert_eq!(d.model(0).unwrap().name, survivor);
+    }
+
+    #[test]
+    fn delete_submodel_uses_next_grouped_row_even_when_its_index_is_lower() {
+        let mut d = Document::default();
+        d.duplicate_model(false).unwrap();
+        d.add_group("Folder".into()).unwrap();
+        let mut metadata = d.model(0).unwrap().metadata.clone();
+        metadata.group = "Folder".into();
+        d.set_model_metadata(0, "Survivor".into(), metadata)
+            .unwrap();
+        d.select_submodel(1).unwrap();
+        assert!(d.delete_submodel());
+        assert_eq!(d.model_count(), 1);
+        assert_eq!(d.active_model_index(), 0);
+        assert_eq!(d.model(0).unwrap().name, "Survivor");
+        assert_eq!(d.model(0).unwrap().metadata.group, "Folder");
+        d.project().validate().unwrap();
+    }
+
+    #[test]
+    fn delete_submodel_last_primitive_leaves_saved_empty_slot_with_undo_and_noop_redo() {
+        let mut d = Document::default();
+        d.initialize_primitive().unwrap();
+        d.add_reference(crate::reference::tests::image()).unwrap();
+        let references = d.references().to_vec();
+        let brushes = d.brushes().to_vec();
+        let before = d.geometry_snapshot();
+        assert!(d.delete_submodel());
+        assert_eq!(d.model_count(), 1);
+        assert_eq!(d.mesh(), &Mesh::default());
+        assert_eq!(d.mesh_settings(), &MeshSettings::default());
+        assert_eq!(d.model(0).unwrap().name, "Empty model");
+        assert_eq!(d.references(), references);
+        assert!(d.brushes() == brushes);
+        d.project().validate().unwrap();
+        let empty = d.geometry_snapshot();
+        let mut loaded = Document::default();
+        loaded
+            .replace_project(
+                serde_json::from_str(&serde_json::to_string(&d.project()).unwrap()).unwrap(),
+                "empty.clay",
+            )
+            .unwrap();
+        assert_eq!(loaded.geometry_snapshot(), empty);
+        d.undo();
+        assert_eq!(d.geometry_snapshot(), before);
+        d.redo();
+        assert_eq!(d.geometry_snapshot(), empty);
+        d.initialize_primitive().unwrap();
+        d.undo();
+        d.mark_saved("empty.clay");
+        let counts = d.history_counts();
+        assert!(!d.delete_submodel());
+        assert_eq!(d.history_counts(), counts);
+        assert!(d.can_redo());
+        assert!(!d.is_dirty());
+        d.redo();
+        assert!(d.primitive().is_some());
+    }
+}

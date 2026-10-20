@@ -14,6 +14,8 @@ mod mask;
 mod mesh;
 mod modeling;
 mod primitive;
+mod projection;
+pub use projection::ProjectionSource;
 mod references;
 mod scene;
 mod stroke;

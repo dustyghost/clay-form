@@ -25,6 +25,16 @@ Surface crossings interpolate these distances instead of using grid-edge midpoin
 
 For background on tetrahedral isosurface extraction, see [Paul Bourke's polygonisation reference](https://www.paulbourke.net/geometry/polygonise/); for multiresolution editing concepts, see [Zorin, Schröder, and Sweldens](https://graphics.stanford.edu/~dzorin/multires/meshed/). The implementation here is a simpler linear refinement and world-space detail scheme.
 
+### Detail projection
+
+`sculpt/projection.rs` builds a median-split triangle AABB tree over visible reference faces. Eight neighbour-averaging passes over target normals produce coherent projection directions without smoothing vertex positions. Double-precision triangle queries find the nearest hit in either direction along that field, within the world-distance bound and a 30-million-node visit budget per operation. This avoids the sideways bunching of unrestricted closest-point matching and the inconsistent directions of raw normals around steep rims.
+
+The nearest opposing face (agreement with the projection direction below 0.2) is rejected without looking through it. A closest-point query excludes the first connected component and rejects another component within 1.25 times the hit distance plus a small tolerance, capped by the requested distance. This is a conservative ambiguity heuristic, not global collision detection. Mask-weighted proposals pass through the triangle-deformation limiter with an additional shared-edge check: neighbouring faces must not become opposing, and existing folds must not become sharper. Unsafe movement is reduced locally. Reports distinguish misses, protection, orientation rejection, ambiguity, and limited movement.
+
+`document/projection.rs` preserves references as ordinary hidden submodels, so the version 1 project format needs no new fields. Submodel references use the stored active mesh, not the low-detail display. A level reference is materialized through `Geometry::set_level` on a private copy after validating correspondence. Position-only commits retain attributes and the compatible subdivision stack.
+
+`app/projection.rs` owns a cancellable worker and an immutable draft. The projection dialog blocks scene edits while retaining viewport navigation. Apply checks the display revision and exact topology/attribute compatibility, then commits one history entry with launch settings; no-op results preserve redo and dirty state. Cancel, Escape and dialog close discard the draft without editing the document. The separate Keep reference copy command is itself an undoable scene edit.
+
 ### Worker and history boundaries
 
 The controller locks geometry edits while a worker holds its snapshot. New/Open/Quit and explicit cancellation discard the in-flight result. Mode changes, level changes, and worker completions record the entire geometry stack in history. Brush, symmetry, camera, and file actions retain their existing separate responsibilities. Automatic remeshing is triggered by a completed deformation stroke, never a mask-only stroke, and waits for release before sculpting can resume after an in-flight topology change.
@@ -68,6 +78,10 @@ For the manifold safety principle, see [CGAL's edge-collapse reference](https://
 
 Adaptive Smooth with simplification enabled skips edge splits and doubles the ordinary collapse ratio, capped at 95% of the target edge length. Smooth collapses also check resulting triangle quality (a 0.2–0.35 quality floor based on the original face). Quality flips remain available. This prevents cleanup strokes from replacing removed vertices with newly split ones, while preserving the shared work budget and conservative manifold/mask checks. Shift smoothing uses the same path.
 
+
+## Submodel deletion
+
+`Document::delete_submodel` removes the active model as one scene history entry and selects the next row in grouped panel order, falling back to the previous row. Other model data and visibility remain exact. The final model becomes an empty mesh with default metadata/settings, retaining the required active-model slot and version 1 file compatibility. Repeating deletion on the reset empty slot preserves history, redo and dirty state. The controller cancels gestures, clears component/group selections and the index-based projection source, and blocks deletion while jobs or modal workflows own the scene.
 
 ## Model scenes and transforms
 

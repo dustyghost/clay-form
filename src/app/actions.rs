@@ -266,6 +266,8 @@ impl App {
                 };
                 Some(Command::EditEdges(edit))
             }
+            Action::ProjectDetails => Some(Command::OpenProjection),
+            Action::KeepProjectionReference => Some(Command::KeepProjectionReference),
             Action::Subdivide => Some(Command::Subdivide),
             Action::Remesh => Some(Command::Remesh),
             Action::LowerLevel => self
@@ -368,6 +370,7 @@ impl App {
             Action::Primitive => Some(Command::RequestPrimitive),
             Action::ConvertPrimitive => Some(Command::ConvertPrimitive),
             Action::DuplicateModel => Some(Command::DuplicateModel),
+            Action::DeleteSubmodel => Some(Command::DeleteSubmodel),
             Action::MergeDown => Some(Command::MergeDown),
             Action::ExtractMasked => Some(Command::ExtractMasked),
             Action::ApplyThickness => Some(Command::ApplyThickness),

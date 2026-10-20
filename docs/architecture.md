@@ -23,6 +23,7 @@ The main paths through the app are:
 | Brushes, topology, or validation | `sculpt/` | No egui, filesystem, or tablet dependencies. |
 | Project files, image alphas, or OBJ export | `persistence.rs` | Preserve version 1 compatibility. |
 | Subdivision or remesh jobs | `mesh_job.rs` | Compute privately; commit through the controller. |
+| Detail projection | `sculpt/projection.rs`, `document/projection.rs`, `app/projection.rs` | Preserve reference submodels; preview privately and commit once. |
 | Navigation or projection | `camera.rs`, `viewport/projection.rs` | Camera state is session-only. |
 | Gestures, picking, or drawing | `viewport/` | Picking and rendering share one immutable mesh snapshot per frame. |
 | Controls and menus | `ui/` | File and mesh operations belong outside widgets. |

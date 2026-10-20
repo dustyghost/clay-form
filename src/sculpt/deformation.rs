@@ -52,14 +52,70 @@ fn safe_face(before: [Vec3; 3], after: [Vec3; 3]) -> bool {
     minimum.is_finite() && minimum >= 0.05 && quality(x, y) >= quality(a, b).min(0.02) * (1. - 1e-6)
 }
 
+fn face_normal(points: [Vec3; 3]) -> Vector {
+    cross(
+        difference(points[1], points[0]),
+        difference(points[2], points[0]),
+    )
+}
+
+fn normal_agreement(a: Vector, b: Vector) -> f64 {
+    let length = (dot(a, a) * dot(b, b)).sqrt();
+    if length == 0. { 1. } else { dot(a, b) / length }
+}
+
 impl Mesh {
     pub(super) fn limit_sculpt_deformation(&mut self, before: &[Vec3]) -> bool {
+        self.limit_deformation(before, false)
+    }
+
+    pub(super) fn limit_projection_deformation(&mut self, before: &[Vec3]) -> bool {
+        self.limit_deformation(before, true)
+    }
+
+    fn limit_deformation(&mut self, before: &[Vec3], prevent_folds: bool) -> bool {
         let active: Vec<_> = self
             .triangles
             .iter()
             .filter(|t| t.iter().any(|&v| before[v] != self.vertices[v]))
             .copied()
             .collect();
+        if active.is_empty() {
+            return self.vertices.iter().zip(before).any(|(a, b)| a != b);
+        }
+        // Individually well-oriented faces can still fold back against their
+        // neighbour. Check shared edges too when moving onto a reference surface.
+        // Preserve existing sharp folds, but never create a new opposing pair.
+        let mut pairs = Vec::new();
+        if prevent_folds {
+            let mut edges = std::collections::HashMap::new();
+            for (face, &[a, b, c]) in self.triangles.iter().enumerate() {
+                for (a, b) in [(a, b), (b, c), (c, a)] {
+                    let edge = if a < b { (a, b) } else { (b, a) };
+                    if let Some(other) = edges.insert(edge, face) {
+                        let first = self.triangles[other];
+                        let second = self.triangles[face];
+                        if first
+                            .iter()
+                            .chain(&second)
+                            .any(|&v| before[v] != self.vertices[v])
+                        {
+                            let agreement = normal_agreement(
+                                face_normal(first.map(|v| before[v])),
+                                face_normal(second.map(|v| before[v])),
+                            );
+                            pairs.push((other, face, agreement.min(0.)));
+                        }
+                    }
+                }
+            }
+        }
+        let safe_pair = |vertices: &[Vec3], &(a, b, minimum): &(usize, usize, f64)| {
+            normal_agreement(
+                face_normal(self.triangles[a].map(|v| vertices[v])),
+                face_normal(self.triangles[b].map(|v| vertices[v])),
+            ) >= minimum - 1e-6
+        };
         let mut reduce = vec![false; self.vertices.len()];
         for _ in 0..12 {
             let mut unsafe_face = false;
@@ -67,6 +123,17 @@ impl Mesh {
                 if !safe_face(t.map(|v| before[v]), t.map(|v| self.vertices[v])) {
                     unsafe_face = true;
                     for v in t {
+                        reduce[v] = true;
+                    }
+                }
+            }
+            for pair in &pairs {
+                if !safe_pair(&self.vertices, pair) {
+                    unsafe_face = true;
+                    for v in self.triangles[pair.0]
+                        .into_iter()
+                        .chain(self.triangles[pair.1])
+                    {
                         reduce[v] = true;
                     }
                 }
@@ -86,6 +153,7 @@ impl Mesh {
         if active
             .iter()
             .any(|&t| !safe_face(t.map(|v| before[v]), t.map(|v| self.vertices[v])))
+            || pairs.iter().any(|pair| !safe_pair(&self.vertices, pair))
         {
             self.vertices.copy_from_slice(before);
             return false;
@@ -97,6 +165,59 @@ impl Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn projection_fold_guard_is_local_and_preserves_existing_sharp_edges() {
+        for scale in [0.01, 1., 100.] {
+            let before = [
+                Vec3(0., -1., 0.),
+                Vec3(0., 1., 0.),
+                Vec3(-1., 0., 0.),
+                Vec3(1., 0., 0.),
+                Vec3(3., 0., 0.),
+                Vec3(4., 0., 0.),
+                Vec3(3., 1., 0.),
+            ]
+            .map(|p| p * scale);
+            let mut mesh = Mesh {
+                vertices: before.into(),
+                triangles: vec![[0, 1, 2], [1, 0, 3], [4, 5, 6]],
+                mask: vec![0.; 7],
+                ..Mesh::default()
+            };
+            mesh.vertices[2] = Vec3(-0.25, 0., 1.) * scale;
+            mesh.vertices[3] = Vec3(0.25, 0., 1.) * scale;
+            for v in &mut mesh.vertices[4..] {
+                v.2 += scale;
+            }
+            assert!(
+                mesh.triangles
+                    .iter()
+                    .all(|&t| safe_face(t.map(|v| before[v]), t.map(|v| mesh.vertices[v]))),
+                "A face-only check misses the fold"
+            );
+            let independent_patch = mesh.vertices[4..].to_vec();
+            assert!(mesh.limit_projection_deformation(&before));
+            assert!(
+                normal_agreement(
+                    face_normal(mesh.triangles[0].map(|v| mesh.vertices[v])),
+                    face_normal(mesh.triangles[1].map(|v| mesh.vertices[v])),
+                ) >= 0.
+            );
+            assert_eq!(&mesh.vertices[4..], independent_patch);
+
+            // An already sharp edge is allowed to translate without flattening.
+            mesh.vertices[2] = Vec3(-0.25, 0., 1.) * scale;
+            mesh.vertices[3] = Vec3(0.25, 0., 1.) * scale;
+            let sharp = mesh.vertices.clone();
+            for v in &mut mesh.vertices {
+                v.2 += scale;
+            }
+            let translated = mesh.vertices.clone();
+            assert!(mesh.limit_projection_deformation(&sharp));
+            assert_eq!(mesh.vertices, translated);
+        }
+    }
 
     #[test]
     fn oversized_snake_pull_cannot_fold_the_surface() {

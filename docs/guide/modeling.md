@@ -28,6 +28,7 @@ Open **Submodels**. Click a row or click an inactive surface in Sculpt mode to s
 | Eye | Hide/show a model |
 | Up / down | Reorder models |
 | Duplicate | Copy the active surface, mask, and subdivision levels |
+| Delete submodel | Remove the selected model, including hidden geometry and stored levels; Undo restores it |
 | Extract masked | Copy fully selected faces into a new unmasked model |
 | Group selector | Assign the model to an organizational group |
 | Ungroup | Remove the folder while keeping its models |
@@ -35,6 +36,20 @@ Open **Submodels**. Click a row or click an inactive surface in Sculpt mode to s
 The active model is clay-colored and inactive models blue-gray unless vertex-group colors override them. Hidden models cannot be sculpted or transformed. Inactive models display their lowest stored level without losing higher detail.
 
 Extracted boundaries stay open and use a fresh subdivision stack. The selection threshold defaults to 50%. Add an existing mesh through [OBJ import](files.md#obj-import).
+
+### Delete a submodel
+
+1. Open **Submodels** and select the row you want to remove. Hidden models can be selected from the list too.
+2. Check the **Selected** name above **Delete submodel**, then click that button.
+3. Use **Undo** if you need to restore it. Save the project to keep the removal after reopening.
+
+Deletion removes the whole model, including masks, subdivision levels, primitive settings and modifiers. The next model in the panel becomes active, or the previous one if you removed the last row. Other models retain their geometry and visibility.
+
+Deleting the final submodel leaves a visible **Empty model** slot. You can create a primitive there or import another model; Undo restores the deleted model. Deleting an already empty, reset slot does nothing. Reference images and brush presets stay in the project.
+
+![The selected hidden reference with the Delete submodel button above the model list](../images/submodel-delete.png)
+
+The eye only hides a model; **Delete submodel** removes it from the project. After projecting detail, use this control to remove an unwanted reference copy. Deletion is unavailable during mesh jobs and projection previews; finish or cancel those first. You can also right-click **Delete submodel** to assign a shortcut or add it to a custom menu.
 
 ## Parametric primitives
 
@@ -463,6 +478,29 @@ Lower-level edits carry upward while retaining finer detail. Subdivision is line
 **Remeshing clears masks and can lose details thinner than a voxel.** Use moderate resolution first. It requires closed, consistently oriented surfaces and can fuse overlapping outward-facing shells; separate volumes remain separate.
 
 Mesh operations run in the background. Cancel keeps the original surface; Undo restores prior geometry and settings. A failed automatic remesh disables the automatic option so you can adjust it.
+
+## Recover detail after remeshing
+
+Keep an unchanged reference before rebuilding topology, then move the remeshed vertices back toward that surface.
+
+1. In **Mesh → Detail projection**, select **Keep reference copy**. This adds a hidden reference submodel immediately below the active model and saves it with the project.
+2. Remesh or adaptively sculpt the active target. The reference keeps its original surface and subdivision levels. Add resolution if the target is too coarse to represent the details you want back.
+3. Open **Mesh → Detail projection → Project details…**. Choose the reference, or select **Use model below**. The dialog names the reference and the active target; only the target moves.
+4. Set **Maximum distance** in model units. Start small near thin walls or nearby parts. Use **Strength** below 1 for a partial blend; target masks reduce movement further.
+5. Select **Preview projection**. Drag the viewport to orbit and scroll to zoom. Read the counts of moved, protected, out-of-range, opposing, ambiguous and safety-limited vertices.
+6. Select **Apply projection** to commit one undoable edit. **Cancel**, closing the window or **Escape** discards the preview. Changing reference or settings requires another preview.
+
+![Detail projection preview with source, target, distance, strength and match counts beside the remeshed model](../images/detail-projection-preview.png)
+
+The hidden reference stays unchanged while the active model previews the recovered surface.
+
+You can select any other submodel as a reference, including one lower in the Submodels panel. **Use model below** follows the panel's grouped order. To project a lower submodel *from* an upper one, cancel, activate the lower target, reopen Project details, and choose the upper reference. Submodels are the supported “layers” in this workflow; sculpt layers are separate future work.
+
+The reference uses its stored active surface, even when inactive models display a coarser level. A different stored subdivision level of the target is also available as a reference. Projection preserves target topology and its existing compatible level stack; switching levels uses the normal detail-preserving level behavior. Incompatible stacks are rejected. Reference and target must already line up in space. Convert a target primitive and apply or remove temporary Thickness modifiers before projecting.
+
+Whole-model hiding keeps a reference out of the way without disabling it. Individually hidden reference faces are excluded. Hidden target faces and their boundary vertices remain fixed; fully masked vertices stay fixed too. Target masks, groups, creases and quads are retained.
+
+Projection follows locally averaged surface directions to keep neighbouring vertices from bunching around steep rims. It does not smooth the target's positions. Vertices with no reference hit within the distance stay in place. The closest opposing sheet is skipped rather than searching through it; near-equal matches on disconnected parts are skipped as ambiguous. Triangle safety can reduce movement to prevent neighbouring faces folding back against each other. Very sharp details may need a denser target mesh. These checks cannot infer which overlapping surface you intended, so inspect folds and thin walls before applying. Projection moves existing vertices; it cannot restore detail finer than the target topology can represent.
 
 ## Thickness modifier
 

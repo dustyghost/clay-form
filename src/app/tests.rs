@@ -3456,3 +3456,53 @@ mod edges;
 mod modeling;
 
 mod files;
+
+mod projection;
+
+#[test]
+fn delete_submodel_action_removes_hidden_reference_clears_targets_and_locks_during_jobs() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.dispatch(Command::KeepProjectionReference, &ctx);
+    app.dispatch(Command::SelectSubmodel(1), &ctx);
+    app.ui.selected_vertex_group = Some((1, 0));
+    app.ui.projection.source = Some(crate::document::ProjectionSource::Submodel(0));
+    let before = app.document.geometry_snapshot();
+    assert!(!app.document.active_visible());
+    assert!(
+        app.ui
+            .action_enabled(&Action::DeleteSubmodel, &app.document)
+    );
+    app.dispatch(Command::Action(Action::DeleteSubmodel), &ctx);
+    assert_eq!(app.document.model_count(), 1);
+    assert!(app.document.active_visible());
+    assert!(app.ui.selected_vertex_group.is_none());
+    assert!(app.ui.projection.source.is_none());
+    let after = app.document.geometry_snapshot();
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    app.dispatch(Command::Redo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), after);
+    app.dispatch(Command::Subdivide, &ctx);
+    assert!(
+        !app.ui
+            .action_enabled(&Action::DeleteSubmodel, &app.document)
+    );
+    app.dispatch(Command::DeleteSubmodel, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), after);
+    app.dispatch(Command::CancelMeshJob, &ctx);
+    app.dispatch(Command::OpenProjection, &ctx);
+    app.dispatch(Command::DeleteSubmodel, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), after);
+    app.dispatch(Command::CancelProjection, &ctx);
+    app.ui.settings_open = true;
+    app.dispatch(Command::DeleteSubmodel, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), after);
+    app.ui.settings_open = false;
+    app.dispatch(Command::DeleteSubmodel, &ctx);
+    assert!(app.document.mesh().vertices.is_empty());
+    // The empty slot remains renderable and can host a new primitive.
+    navigation_frame(&mut app, &ctx, vec![]);
+    app.document.initialize_primitive().unwrap();
+    assert!(app.document.primitive().is_some());
+}

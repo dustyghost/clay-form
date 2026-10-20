@@ -2,7 +2,7 @@
 
 [Documentation home](../README.md#documentation)
 
-Updated 15 October 2026.
+Updated 20 October 2026.
 
 **Shipped:** all seven priorities, edge loops and creases, and the modeling workflows below.
 
@@ -233,7 +233,13 @@ Community reports informed these choices. They describe individual experiences, 
 - Unexpected dynamic brush sizing motivates settings independent of sculpt brushes and retained user choices.
 - Hidden state affecting operations motivates visible protection state and actionable rejection messages.
 
-Curve/mesh instancing authoring, arbitrary Boolean fusion, detail reprojection onto changed topology and full component modeling feature parity are outside these milestones. See [Modeling](guide/modeling.md#pen-modeling) for shipped behavior and limits.
+Curve/mesh instancing authoring, arbitrary Boolean fusion and full component modeling feature parity are outside these milestones. See [Modeling](guide/modeling.md#pen-modeling) for shipped behavior and limits.
+
+## Detail projection after remeshing (#6)
+
+The Mesh panel can preserve a hidden reference copy and preview detail transfer onto the active target from another submodel or a stored subdivision level. Source/target direction is explicit, with a shortcut to the model below in grouped panel order. Distance, strength, masks, hidden-face protection, opposing-surface rejection, disconnected-part ambiguity checks and triangle safety limit movement. Apply is one undoable position edit; cancel leaves geometry intact. References use ordinary saved submodels and compatible target subdivision stacks are retained. See [Recover detail after remeshing](guide/modeling.md#recover-detail-after-remeshing).
+
+Projection transfers detail along locally averaged surface directions, with nearest-hit, distance and fold safeguards. Fine detail needs enough target vertices. It preserves topology and does not provide sculpt layers or global intersection repair. Automated and rendered validation accompanies the implementation; physical tablet review remains a hands-on check.
 
 ## Longer term candidates
 
@@ -243,7 +249,7 @@ These are separate possibilities, outside the seven priorities above. Each needs
 | --- | --- |
 | Sculpt layers and morph targets | Adjust or remove a set of sculpted changes without undoing later work |
 | Materials and vertex colour painting | Inspect forms under different shading and paint colour directly on the surface |
-| Quad retopology and detail projection | Rebuild cleaner topology while recovering sculpted detail |
+| Quad retopology | Rebuild cleaner topology, using detail projection to recover the reference surface |
 | Boolean operations | Combine or subtract submodels for construction and hard-surface work |
 | Texture painting and UV workflows | Prepare textured assets for other applications |
 

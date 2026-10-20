@@ -20,6 +20,37 @@ struct Guide {
 }
 
 #[test]
+#[ignore = "local project review; requires Vulkan, CLAY_REVIEW_PROJECT and CLAY_GUIDE_PREVIEW"]
+fn project_file_offscreen_review() {
+    let path = std::env::var("CLAY_REVIEW_PROJECT").expect("Set CLAY_REVIEW_PROJECT");
+    let directory = std::path::PathBuf::from(
+        std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW"),
+    );
+    std::fs::create_dir_all(&directory).unwrap();
+    let project = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    let mut g = Guide::new(&directory, [1000, 1000]);
+    g.toolbar = false;
+    g.app.document.replace_project(project, &path).unwrap();
+    if let Ok(manifest) = std::env::var("CLAY_REVIEW_MANIFEST") {
+        let manifest: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(manifest).unwrap()).unwrap();
+        let camera = &manifest["current_settings"]["view_input"]["camera"];
+        let value = |key: &str| camera[key].as_f64().unwrap() as f32;
+        g.app.camera.yaw = value("yaw");
+        g.app.camera.pitch = value("pitch");
+        g.app.camera.zoom = value("zoom");
+        g.app.camera.pan = Vec2::new(
+            camera["pan"][0].as_f64().unwrap() as f32,
+            camera["pan"][1].as_f64().unwrap() as f32,
+        );
+        g.app.camera.perspective = camera["perspective"].as_bool().unwrap();
+        g.app.camera.field_of_view = value("field_of_view");
+        g.app.camera.perspective_radius = value("perspective_radius");
+    }
+    g.save("project-review");
+}
+
+#[test]
 #[ignore = "renders Polish cleanup; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn polish_brush_offscreen_review() {
     use crate::sculpt::{Brush, Dab, Geometry, Kind, Vec3};
@@ -151,6 +182,7 @@ impl Guide {
                 });
                 self.app.show_recovery(ctx);
                 commands.extend(self.app.ui.project_file_dialog(ctx));
+                commands.extend(self.app.ui.projection_window(ctx, &self.app.document));
             },
         );
         self.text_positions = output
@@ -1448,4 +1480,95 @@ fn modeling_region_fuse_offscreen_review() {
         click_guide_label(&mut g, "Undo");
         assert_eq!(g.app.document.geometry_snapshot(), before);
     }
+}
+
+#[test]
+#[ignore = "renders projection controls; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn detail_projection_offscreen_review() {
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
+    let directory = std::path::Path::new(&directory);
+    std::fs::create_dir_all(directory).unwrap();
+    let mut g = Guide::new(directory, [1200, 850]);
+    g.interactive = true;
+    let mut source = crate::sculpt::Mesh::sphere();
+    for p in &mut source.vertices {
+        *p = *p * (1. + 0.07 * (p.0 * 12.).cos() * (p.1 * 12.).cos());
+    }
+    g.app
+        .document
+        .replace_geometry(crate::sculpt::Geometry::new(source))
+        .unwrap();
+    g.app.dispatch(Command::KeepProjectionReference, &g.ctx);
+    g.app.dispatch(Command::SetDynamicMesh(true), &g.ctx);
+    g.app
+        .dispatch(Command::SetRemeshSettings(24, false), &g.ctx);
+    g.app.dispatch(Command::Remesh, &g.ctx);
+    finish_mesh_job(&mut g.app);
+    g.app.camera.zoom = 0.85;
+    g.app.camera.pan = Vec2::new(200., 0.);
+    let before = g.app.document.geometry_snapshot();
+    g.app.document.mark_saved("projection-review.clay");
+    g.app.dispatch(Command::OpenProjection, &g.ctx);
+    g.app.ui.projection.options.max_distance = 0.2;
+    g.save("detail-projection-before");
+    click_guide_label(&mut g, "Use model below");
+    click_guide_label(&mut g, "Preview projection");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    while g.app.ui.projection.busy {
+        g.app.poll_projection();
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(g.app.ui.projection.report.as_ref().unwrap().moved > 0);
+    let preview = g.app.projection.draft.as_ref().unwrap().mesh.clone();
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    assert!(!g.app.document.is_dirty());
+    g.save("detail-projection-preview");
+    click_guide_label(&mut g, "Cancel");
+    assert!(!g.app.ui.projection.open);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.app.dispatch(Command::OpenProjection, &g.ctx);
+    click_guide_label(&mut g, "Preview projection");
+    while g.app.ui.projection.busy {
+        g.app.poll_projection();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    click_guide_label(&mut g, "Apply projection");
+    assert_eq!(g.app.document.mesh(), preview.as_ref());
+    assert_eq!(g.app.document.undo_label(), Some("Project details"));
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.app.dispatch(Command::Redo, &g.ctx);
+    assert_eq!(g.app.document.mesh(), preview.as_ref());
+}
+
+#[test]
+#[ignore = "renders submodel deletion; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn delete_submodel_offscreen_review() {
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
+    let directory = std::path::Path::new(&directory);
+    std::fs::create_dir_all(directory).unwrap();
+    let mut g = Guide::new(directory, [1100, 850]);
+    g.interactive = true;
+    g.panel(Tool::Submodels, Dock::Left);
+    g.app.dispatch(Command::KeepProjectionReference, &g.ctx);
+    g.app.dispatch(Command::SelectSubmodel(1), &g.ctx);
+    let before = g.app.document.geometry_snapshot();
+    let counts = g.app.document.history_counts();
+    g.save("submodel-delete");
+    click_guide_label(&mut g, "Delete submodel");
+    assert_eq!(g.app.document.model_count(), 1);
+    assert_eq!(g.app.document.history_counts().0, counts.0 + 1);
+    assert_eq!(g.app.document.undo_label(), Some("Delete submodel"));
+    let after = g.app.document.geometry_snapshot();
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.app.dispatch(Command::Redo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), after);
+    click_guide_label(&mut g, "Delete submodel");
+    assert_eq!(g.app.document.model_count(), 1);
+    assert!(g.app.document.mesh().vertices.is_empty());
+    g.save("submodel-delete-empty");
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), after);
 }

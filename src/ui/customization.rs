@@ -213,6 +213,9 @@ impl UiState {
         actions
     }
     pub fn action_enabled(&self, action: &Action, document: &Document) -> bool {
+        if self.projection.open {
+            return false;
+        }
         if *action == Action::CancelMeshOperation {
             return self.mesh_busy;
         }
@@ -345,6 +348,13 @@ impl UiState {
             | Action::RelaxBorders
             | Action::SmoothSubdivide => self.edge_unavailable(action, document).is_none(),
             Action::Mirror(..) => self.mirror_unavailable(document).is_none(),
+            Action::DeleteSubmodel => {
+                !self.recovery_open
+                    && !self.diagnostics_open
+                    && !self.settings_open
+                    && !self.layout_open
+                    && self.file_picker.is_none()
+            }
             Action::MergeDown => document.merge_down_target().is_some(),
             Action::ConvertPrimitive => {
                 document.primitive().is_some() && !document.mesh().triangles.is_empty()
@@ -379,6 +389,10 @@ impl UiState {
             }
             Action::HigherLevel | Action::DeleteHigherLevels => {
                 sculpt && document.mesh_settings().level() < document.mesh_settings().levels()
+            }
+            Action::ProjectDetails => document.require_projection_target().is_ok(),
+            Action::KeepProjectionReference => {
+                document.model_count() < 64 && document.require_projection_target().is_ok()
             }
             Action::Subdivide => {
                 sculpt
