@@ -104,6 +104,10 @@ fn default_model_name() -> String {
 }
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Project {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub alphas: Vec<super::alpha::Asset>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stencil: Option<super::alpha::Stencil>,
     #[serde(
         default,
         skip_serializing_if = "Vec::is_empty",
@@ -130,6 +134,10 @@ pub struct Project {
 impl Project {
     pub const VERSION: u32 = 1;
     pub fn validate(&self) -> Result<(), String> {
+        super::alpha::validate_library(&self.alphas)?;
+        if let Some(stencil) = &self.stencil {
+            stencil.validate()?;
+        }
         crate::reference::validate(&self.references)?;
         if self.version != Self::VERSION {
             return Err("Unsupported project version".into());

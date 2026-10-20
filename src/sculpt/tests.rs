@@ -257,6 +257,8 @@ fn adaptive_brush_strokes_keep_deformation_oriented_between_topology_updates() {
 #[test]
 fn project_roundtrip() {
     let p = Project {
+        alphas: Vec::new(),
+        stencil: None,
         references: Vec::new(),
         scene: Default::default(),
         model_name: "Model".into(),

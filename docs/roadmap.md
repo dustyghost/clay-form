@@ -14,7 +14,7 @@ This page records delivery scope and acceptance checks. For everyday controls, s
 
 Keep these working as the app grows:
 
-- Sculpt brushes, pen pressure, custom alphas, brush presets, and Freehand, Line, Drag Rect and Drag Dot strokes.
+- Sculpt brushes, pen pressure, project alpha libraries with image editing, view/surface-plane stencils, brush presets, and Freehand, Line, Drag Rect and Drag Dot strokes.
 - Mirror and radial symmetry, adjustable symmetry centres, and surface guides.
 - Subdivision levels, voxel remeshing, and local adaptive sculpting.
 - Submodels, duplication, Move, Scale, and Rotate transforms, and Action Line controls.

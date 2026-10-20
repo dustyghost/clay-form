@@ -3506,3 +3506,5 @@ fn delete_submodel_action_removes_hidden_reference_clears_targets_and_locks_duri
     app.document.initialize_primitive().unwrap();
     assert!(app.document.primitive().is_some());
 }
+
+mod alphas;

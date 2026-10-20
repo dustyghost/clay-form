@@ -59,9 +59,63 @@ Grab follows pointer movement; spacing does not affect it. Subtracting Smooth sh
 
 ### Choose an alpha
 
-An alpha shapes each dab. Choose **Soft**, **Hard**, or **Square**, or load a PNG/JPEG up to **2048 × 2048**.
+An alpha shapes each dab. Open the **Alpha** panel, select **Soft**, **Hard**, or **Square** in the **Alpha library**, then choose **Use on brush**. The library includes **39 built-ins**, with **Nature’s curve** (a flowing spiral), **Leaf veins**, **Wood grain**, and **Pebbles** alongside the following collections. These built-ins are always available, including in older projects. You can also **Place stencil** with them or **Duplicate alpha** to edit a variation. Built-ins cannot be removed; saved copies can. Search by name or category to find a pattern. The library starts four rows tall; drag **Resize library** up or down to change its height. This centered handle stays clear of the sidebar scrollbar.
 
-White affects the surface; black protects it. Transparency reduces influence. Rotation turns the pattern, and inner radius gives Soft/image alphas a stronger core. Custom images are embedded in brushes and projects.
+| Category | Examples |
+| --- | --- |
+| Masonry | Weathered and broken bricks, cobbles, stone blocks, flagstones, cracked plaster |
+| Circuits | Traces, circuit hub, microchip, data grid, cables, riveted plate |
+| Sci-fi | Hull panels, hex armor, vent grille, reactor rings, alien glyphs, mech seams |
+| Skin | Fine wrinkles, deep folds, crow’s feet, pores, fingerprint, scar tissue |
+| Organic | Tree bark, rock strata, cracked earth, scales, fur |
+| Materials | Woven cloth, leather grain, hammered metal |
+
+Use **Subtract** for recessed wrinkles, pores, and engraved details. **Duplicate alpha** lets you invert a copy or adjust its contrast.
+
+![Built-in patterns in the scrollable alpha library](../images/alpha-library.png)
+
+### Create and reuse an image alpha
+
+1. Open **Alpha → Import image**, enter a PNG/JPEG path, and choose **Preview image**. Images can be up to **2048 × 2048** and **32 MB**.
+2. Name the alpha and give it a category such as *Stone*. Compare **Source** with **Result** while adjusting the crop, black/white levels, gamma, inversion, and **Edge fade**.
+3. Choose **Save alpha**. Select its thumbnail in the project library, then choose **Use on brush**. Switch brushes and choose **Use on brush** again to reuse the same image.
+4. Search by name or category. Use **Edit alpha** to adjust an asset, **Duplicate alpha** for a variation, or **Export selected alpha → Export PNG** to share a 16-bit height image. Import that PNG to use it in another project.
+
+![Source and result previews beside crop and tonal controls](../images/alpha-editor.png)
+
+*Adjust the image privately, then save it to the project alpha library.*
+
+White affects the surface; black protects it. Imported transparency reduces influence. Image inversion happens after transparency is combined with brightness. **Alpha rotation** turns each dab; brush falloff and inner radius soften its circular footprint. **Spacing** controls freehand and Line dab spacing, and strength and pressure control depth. Drag Rect adds its drag angle to the brush rotation; Drag Dot keeps the preset's angle.
+
+**Copy brush alpha to library** brings an existing embedded alpha into the editor. Cancel leaves the library and brush unchanged. Brushes and stencils keep independent copies: editing or removing a library asset does not change existing strokes, brush presets, or a placed stencil. Use **Use on brush** again to adopt an edited image.
+
+The project saves the library, categories, brush images, and stencil settings. Library edits are outside sculpt Undo/Redo, like brush settings. Exported PNGs contain the adjusted heights; names and categories stay in the project. The project library holds up to 64 saved assets and 16 million pixels in total, in addition to the built-ins.
+
+### Brush through a placed stencil
+
+1. Select an alpha thumbnail and choose **Place stencil**. A translucent guide appears over the model. Start with **Standard**, a **Soft** brush alpha, and either adaptive sculpting or a finely subdivided mesh.
+2. Drag the amber square above the stencil to **move** it, a corner to **resize** proportionally, or the round handle above it to **rotate**. Hold **Shift** while rotating to snap to 15°; hold Shift on a corner to stretch freely. The right and bottom edge handles resize width and height separately. **Escape** cancels the current drag. For precise values, use **Horizontal**, **Vertical**, **Width**, **Height**, and **Rotation** under **Alpha → Stencil placement**. View-attached positions and sizes use fractions of the viewport's shorter side. Positive vertical moves up; positive rotation turns counterclockwise.
+3. Brush back and forth through the guide. White areas permit the brush, black areas and everything outside the rectangle protect the surface. Brush alpha, falloff, pressure, strength, existing masks, and hidden geometry still apply.
+4. Choose **Attach to surface…**, then click the model. Orbit to inspect it: the stencil now stays on that surface plane. Its position and size controls use model units. **Follow view** returns to a centered view stencil. Escape cancels attachment without painting.
+5. Use the floating viewport controls to adjust **Guide opacity**, hide **Handles**, or **Reset placement**. Set opacity to zero to inspect the sculpt while continuing to stencil. Disable **Stencil enabled** to sculpt freely, or choose **Remove stencil** to close it. These controls remain available with the Alpha panel closed. Removing the stencil keeps the library alpha and existing sculpted strokes.
+
+![On-canvas stencil handles and floating controls](../images/alpha-stencil-controls.png)
+
+Placement changes save on release and stay outside sculpt Undo/Redo.
+
+![Surface stencil stays on its plane as the camera orbits, with placement controls visible](../images/alpha-surface-stencil.png)
+
+*The guide follows the surface plane; brush strokes only affect its bright regions.*
+
+A view stencil stays in the viewport while you orbit, pan, or zoom. A surface stencil is a fixed planar projection in model coordinates: it follows camera changes but does not track later mesh transforms, deformations, or remeshing. Reattach it after moving the model. It projects through curved surfaces rather than wrapping along them.
+
+Freehand, Line, Drag Rect, and Drag Dot work through the placed stencil. Dragging a stamp changes the brush footprint; the stencil stays placed. Stamp previews are private, release creates one undoable edit, and Escape cancels. Completed freehand strokes use the usual one-step Undo. Symmetry mirrors or rotates the stencil with each brush copy.
+
+Adaptive sculpting works through stencils on closed meshes: refinement samples the projected pattern, and simplification stays inside fully white regions to protect dark gaps and edges. Lower adaptive **Edge size** for finer patterns. Stamp preview and release use the same refinement. Automatic remeshing stays paused while a stencil is enabled because it would rebuild the whole surface. **Grab**, **Snake**, and **Detail** require the stencil to be disabled. The viewport explains this restriction. Toggle, attachment, and removal actions can be assigned in **Settings → Key settings** or added to custom controls.
+
+![Adaptive sculpting adds a spiral relief to a coarse cube through Nature’s curve](../images/alpha-adaptive-spiral.png)
+
+*Nature’s curve applied through a stencil with adaptive sculpting enabled; the overlay is hidden to show the relief.*
 
 ### Example: reset an experimental brush
 
@@ -183,4 +237,3 @@ History defaults to **24 edits** within an estimated **128 MiB**, shared by undo
 ## Related guides
 
 [Navigation](navigation.md) · [Masks and selection](selection.md) · [Mesh management](modeling.md#mesh-management) · [Files and presets](files.md)
-

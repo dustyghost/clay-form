@@ -182,6 +182,7 @@ impl Guide {
                 });
                 self.app.show_recovery(ctx);
                 commands.extend(self.app.ui.project_file_dialog(ctx));
+                commands.extend(self.app.ui.alpha_popup(ctx));
                 commands.extend(self.app.ui.projection_window(ctx, &self.app.document));
             },
         );
@@ -1571,4 +1572,263 @@ fn delete_submodel_offscreen_review() {
     g.save("submodel-delete-empty");
     g.app.dispatch(Command::Undo, &g.ctx);
     assert_eq!(g.app.document.geometry_snapshot(), after);
+}
+
+#[test]
+#[ignore = "renders alpha library and stencil workflows; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn alpha_library_stencil_offscreen_review() {
+    use crate::sculpt::{
+        Alpha, Geometry,
+        alpha::{Asset, Stencil},
+    };
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(std::path::Path::new(&directory), [1300, 1000]);
+    g.interactive = true;
+    g.panel(Tool::Alpha, Dock::Right);
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Plane);
+    primitive.divisions = [128, 128, 1];
+    g.app
+        .document
+        .replace_geometry(Geometry::new(primitive.mesh().unwrap()))
+        .unwrap();
+    // Built-ins also exist in projects with no saved library assets.
+    assert!(g.app.document.alphas().is_empty());
+    for (name, alpha) in [
+        ("Hard", Alpha::Hard),
+        ("Square", Alpha::Square),
+        ("Soft", Alpha::Soft),
+    ] {
+        g.app.document.mark_saved("alpha-builtins.clay");
+        let previous = g.app.document.brushes()[0].alpha.clone();
+        click_guide_label(&mut g, name);
+        assert_eq!(g.app.document.brushes()[0].alpha, previous);
+        assert!(!g.app.document.is_dirty());
+        click_guide_label(&mut g, "Use on brush");
+        assert_eq!(g.app.document.brushes()[0].alpha, alpha);
+        click_guide_label(&mut g, "Place stencil");
+        assert_eq!(g.app.document.stencil().unwrap().asset.image, alpha);
+        // Allow the new floating Area to finish its initial sizing pass before
+        // locating a label that also appears in the sidebar.
+        g.frame(vec![]);
+        g.frame(vec![]);
+        g.frame(vec![]);
+        click_guide_label(&mut g, "Remove stencil");
+        assert!(g.app.document.stencil().is_none());
+    }
+    click_guide_label(&mut g, "Duplicate alpha");
+    assert!(g.app.ui.alphas.draft.is_some());
+    click_guide_label(&mut g, "Save alpha");
+    assert_eq!(g.app.document.alphas()[0].name, "Soft copy");
+    click_guide_label(&mut g, "Remove alpha");
+    assert!(g.app.document.alphas().is_empty());
+    let image = Alpha::Image {
+        width: 128,
+        height: 128,
+        pixels: (0..128 * 128)
+            .map(|i| {
+                let x = (i % 128) as f32 / 127. * 2. - 1.;
+                let y = (i / 128) as f32 / 127. * 2. - 1.;
+                if x.abs() < 0.72 && y.abs() < 0.72 {
+                    ((x * 12.).sin() * 2.).clamp(0., 1.)
+                } else {
+                    0.
+                }
+            })
+            .collect::<Vec<_>>()
+            .into(),
+    };
+    let asset = Asset {
+        name: "Carved stripes".into(),
+        category: "Relief".into(),
+        image,
+    };
+    g.app.document.save_alpha(None, asset.clone()).unwrap();
+    g.app.ui.alphas.selected = Some(crate::ui::alphas::Selection::Project(0));
+    g.save("alpha-library");
+    click_guide_label(&mut g, "Edit alpha");
+    assert!(g.app.ui.alphas.draft.is_some());
+    g.save("alpha-editor");
+    click_guide_label(&mut g, "Cancel");
+    assert!(g.app.ui.alphas.draft.is_none());
+    click_guide_label(&mut g, "Use on brush");
+    assert_eq!(g.app.document.brushes()[0].alpha, asset.image);
+    // Use a soft brush to brush through the placed pattern, rather than stamp it twice.
+    g.app.document.set_alpha(0, Alpha::Soft).unwrap();
+    let mut stencil = Stencil::new(asset);
+    stencil.rotation = 20.;
+    g.app.dispatch(Command::SetStencil(Some(stencil)), &g.ctx);
+    click_guide_label(&mut g, "Stencil placement");
+    g.save("alpha-view-stencil");
+    let (rect, _) = g.frame(vec![]);
+    g.app.dispatch(Command::AttachStencil, &g.ctx);
+    g.frame(vec![
+        egui::Event::PointerMoved(rect.center()),
+        primary_event(rect.center(), true),
+    ]);
+    g.frame(vec![primary_event(rect.center(), false)]);
+    assert!(g.app.document.stencil().unwrap().surface.is_some());
+    let before = g.app.document.geometry_snapshot();
+    g.stroke(
+        rect.center() + Vec2::new(-140., 0.),
+        rect.center() + Vec2::new(140., 0.),
+    );
+    assert!(g.app.document.geometry_snapshot() != before);
+    let mut stencil = g.app.document.stencil().unwrap().clone();
+    stencil.opacity = 0.;
+    g.app.dispatch(Command::SetStencil(Some(stencil)), &g.ctx);
+    g.save("alpha-sculpt-through");
+    let mut stencil = g.app.document.stencil().unwrap().clone();
+    stencil.opacity = 0.3;
+    g.app.dispatch(Command::SetStencil(Some(stencil)), &g.ctx);
+    g.app.camera.yaw = 0.45;
+    g.app.camera.pitch = -0.25;
+    g.save("alpha-surface-stencil");
+    let geometry = g.app.document.geometry_snapshot();
+    let alphas = g.app.document.alphas().to_vec();
+    let brush_alpha = g.app.document.brushes()[0].alpha.clone();
+    click_guide_label(&mut g, "Remove stencil");
+    assert!(g.app.document.stencil().is_none());
+    assert_eq!(g.app.document.geometry_snapshot(), geometry);
+    assert_eq!(g.app.document.alphas(), alphas);
+    assert_eq!(g.app.document.brushes()[0].alpha, brush_alpha);
+    // A coarse closed surface must gain real geometry beneath a built-in stencil.
+    let mut cube = Primitive::for_kind(PrimitiveKind::Cube);
+    cube.divisions = [10, 10, 10];
+    g.app
+        .document
+        .replace_geometry(Geometry::new(cube.mesh().unwrap()))
+        .unwrap();
+    g.app
+        .document
+        .set_adaptive(AdaptiveSettings {
+            enabled: true,
+            detail: 4.,
+            simplify: true,
+            ..Default::default()
+        })
+        .unwrap();
+    g.app.camera = Default::default();
+    let mut brush = g.app.document.brushes()[0].clone();
+    brush.stroke_mode = crate::sculpt::StrokeMode::DragRect;
+    brush.alpha = Alpha::Soft;
+    brush.inner_radius = 0.7;
+    brush.strength = 0.15;
+    g.app.document.update_brush(0, brush).unwrap();
+    click_guide_label(&mut g, "Nature's curve");
+    click_guide_label(&mut g, "Place stencil");
+    g.app.ui.wire = true;
+    g.app.ui.wire_triangles = true;
+    let before = g.app.document.geometry_snapshot();
+    let (rect, _) = g.frame(vec![]);
+    g.save("alpha-adaptive-before");
+    let start = rect.center();
+    let end = start + Vec2::new(270., 0.);
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    g.frame(vec![egui::Event::PointerMoved(end)]);
+    assert!(
+        g.app.document.geometry_snapshot() == before,
+        "stamp preview stays private"
+    );
+    g.frame(vec![primary_event(end, false), egui::Event::PointerGone]);
+    assert!(g.app.document.mesh().vertices.len() > before.mesh.vertices.len());
+    assert!(g.app.document.mesh().vertices.iter().any(|p| p.2 > 1.01));
+    let mut stencil = g.app.document.stencil().unwrap().clone();
+    stencil.opacity = 0.;
+    g.app.dispatch(Command::SetStencil(Some(stencil)), &g.ctx);
+    g.save("alpha-adaptive-wire");
+    g.app.ui.wire = false;
+    g.app.camera.yaw = 0.3;
+    g.app.camera.pitch = -0.2;
+    g.save("alpha-adaptive-spiral");
+    g.app.document.undo();
+    assert!(g.app.document.geometry_snapshot() == before);
+    click_guide_label(&mut g, "Remove stencil");
+    g.app.camera = Default::default();
+    click_guide_label(&mut g, "Weathered bricks");
+    click_guide_label(&mut g, "Place stencil");
+    review_stencil_controls(&mut g);
+}
+
+#[test]
+#[ignore = "renders on-canvas stencil controls; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn stencil_controls_offscreen_review() {
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
+    std::fs::create_dir_all(&directory).unwrap();
+    // A short sidebar overflows, reproducing the parent scrollbar obstruction.
+    let mut g = Guide::new(std::path::Path::new(&directory), [1300, 860]);
+    g.interactive = true;
+    let cube = Primitive::for_kind(PrimitiveKind::Cube);
+    g.app
+        .document
+        .replace_geometry(crate::sculpt::Geometry::new(cube.mesh().unwrap()))
+        .unwrap();
+    g.app
+        .document
+        .set_stencil(Some(crate::sculpt::alpha::Stencil::new(
+            crate::sculpt::alpha::builtins()[7].clone(),
+        )))
+        .unwrap();
+    review_stencil_controls(&mut g);
+    g.panel(Tool::Alpha, Dock::Right);
+    g.app.ui.alphas.selected = Some(crate::ui::alphas::Selection::Builtin(7));
+    click_guide_label(&mut g, "Place stencil");
+    g.save("alpha-library-expanded");
+    let handle = g
+        .text_positions
+        .iter()
+        .find(|(text, _)| text == "Resize library")
+        .unwrap()
+        .1;
+    let geometry = g.app.document.geometry_snapshot();
+    // Wake the parent's floating scrollbar before reaching for the handle.
+    g.frame(vec![egui::Event::PointerMoved(Pos2::new(1294., handle.y))]);
+    g.frame(vec![
+        egui::Event::PointerMoved(handle),
+        primary_event(handle, true),
+    ]);
+    let end = handle + Vec2::new(0., 70.);
+    g.frame(vec![egui::Event::PointerMoved(end)]);
+    g.frame(vec![primary_event(end, false)]);
+    g.frame(vec![]);
+    let resized = g
+        .text_positions
+        .iter()
+        .find(|(text, _)| text == "Resize library")
+        .unwrap()
+        .1;
+    assert!(
+        (resized.y - handle.y - 70.).abs() < 2.,
+        "the centered handle resizes despite the parent scrollbar"
+    );
+    assert!(g.app.document.geometry_snapshot() == geometry);
+    g.save("alpha-library-resized");
+}
+
+fn review_stencil_controls(g: &mut Guide) {
+    let before = g.app.document.geometry_snapshot();
+    g.panel(Tool::Alpha, Dock::Hidden);
+    let (rect, _) = g.frame(vec![]);
+    g.frame(vec![]);
+    let unit = rect.width().min(rect.height());
+    let start = rect.center() - Vec2::new(0., unit * 0.25 + 19.);
+    let end = start + Vec2::new(60., 30.);
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    g.frame(vec![egui::Event::PointerMoved(end)]);
+    g.frame(vec![primary_event(end, false)]);
+    assert!((g.app.document.stencil().unwrap().position[0] - 60. / unit).abs() < 1e-5);
+    g.save("alpha-stencil-controls");
+    click_guide_label(g, "Reset placement");
+    assert_eq!(g.app.document.stencil().unwrap().position, [0.; 2]);
+    click_guide_label(g, "Stencil enabled");
+    assert!(!g.app.document.stencil().unwrap().enabled);
+    click_guide_label(g, "Remove stencil");
+    assert!(g.app.document.stencil().is_none());
+    assert!(g.app.document.geometry_snapshot() == before);
 }

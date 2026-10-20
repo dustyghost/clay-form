@@ -30,31 +30,56 @@ impl Document {
         Ok(())
     }
     pub fn apply_dab(&mut self, brush: &Brush, dab: Dab) -> bool {
+        self.apply_dab_stenciled(brush, dab, None)
+    }
+    pub(crate) fn apply_dab_stenciled(
+        &mut self,
+        brush: &Brush,
+        dab: Dab,
+        stencil: Option<&crate::sculpt::alpha::Projection>,
+    ) -> bool {
         if !self.active_visible() || self.primitive().is_some() {
+            return false;
+        }
+        if stencil.is_some() && matches!(brush.kind, Kind::Grab | Kind::Snake | Kind::Detail) {
             return false;
         }
         self.begin_stroke();
         let dabs = self.symmetry.dabs(dab);
         let settings = &self.geometry.settings.adaptive;
-        let mut before_topology =
-            self.geometry
-                .mesh
-                .adapt(brush, &dabs, settings, &mut self.adaptive_budget, true);
+        let stencils = stencil.map_or_else(Vec::new, |s| s.copies(&self.symmetry));
+        let region = crate::sculpt::AdaptiveRegion {
+            dabs: &dabs,
+            stencils: &stencils,
+        };
+        let mut before_topology = self.geometry.mesh.adapt_stenciled(
+            brush,
+            region,
+            settings,
+            &mut self.adaptive_budget,
+            true,
+        );
         before_topology |= self
             .geometry
             .mesh
-            .prepare_drag_stamp(brush, &dabs, settings);
+            .prepare_stenciled_stamp(brush, &dabs, &stencils, settings);
         let old_mask = (brush.kind == Kind::Mask).then(|| self.geometry.mesh.mask.clone());
-        let deformed = self.geometry.mesh.stamp_many(brush, &dabs);
+        let deformed = self
+            .geometry
+            .mesh
+            .stamp_many_stenciled(brush, &dabs, &stencils);
         let mut after_dabs = dabs.clone();
         if brush.kind == Kind::Snake {
             for dab in &mut after_dabs {
                 dab.center = dab.center + brush.snake_motion(*dab);
             }
         }
-        let after_topology = self.geometry.mesh.adapt(
+        let after_topology = self.geometry.mesh.adapt_stenciled(
             brush,
-            &after_dabs,
+            crate::sculpt::AdaptiveRegion {
+                dabs: &after_dabs,
+                stencils: &stencils,
+            },
             settings,
             &mut self.adaptive_budget,
             false,

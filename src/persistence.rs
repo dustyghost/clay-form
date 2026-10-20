@@ -132,26 +132,65 @@ pub fn load_brush_library(path: &str) -> Result<Vec<Brush>, String> {
     Ok(library.brushes)
 }
 pub fn load_alpha(path: &str) -> Result<Alpha, String> {
+    if std::fs::metadata(path).map_err(|e| e.to_string())?.len() > 32 * 1024 * 1024 {
+        return Err("Alpha image exceeds 32 MB limit".into());
+    }
     let reader = image::ImageReader::open(path).map_err(|e| e.to_string())?;
     let mut reader = reader.with_guessed_format().map_err(|e| e.to_string())?;
     let mut limits = image::Limits::default();
     limits.max_image_width = Some(2048);
     limits.max_image_height = Some(2048);
     reader.limits(limits);
-    let image = reader.decode().map_err(|e| e.to_string())?.to_rgba8();
+    let image = reader.decode().map_err(|e| e.to_string())?.to_rgba16();
     Ok::<_, String>(Alpha::Image {
         width: image.width() as usize,
         height: image.height() as usize,
         pixels: image
             .pixels()
             .map(|p| {
-                ((p[0] as f32 * 0.2126 + p[1] as f32 * 0.7152 + p[2] as f32 * 0.0722) / 255.)
-                    * (p[3] as f32 / 255.)
+                ((p[0] as f32 * 0.2126 + p[1] as f32 * 0.7152 + p[2] as f32 * 0.0722) / 65535.)
+                    * (p[3] as f32 / 65535.)
             })
             .collect::<Vec<_>>()
             .into(),
     })
 }
+/// PNG height export at 16-bit precision. Source images and brushes are untouched.
+pub fn save_alpha(path: &str, alpha: &Alpha) -> Result<(), String> {
+    use image::ImageEncoder;
+    if !std::path::Path::new(path)
+        .extension()
+        .is_some_and(|s| s.eq_ignore_ascii_case("png"))
+    {
+        return Err("Choose a .png file for alpha export".into());
+    }
+    alpha.validate()?;
+    let (width, height) = match alpha {
+        Alpha::Image { width, height, .. } => (*width, *height),
+        _ => (256, 256),
+    };
+    let mut pixels = Vec::with_capacity(width * height * 2);
+    for y in 0..height {
+        for x in 0..width {
+            let v = alpha.sample(
+                x as f32 / (width - 1).max(1) as f32,
+                y as f32 / (height - 1).max(1) as f32,
+            );
+            pixels.extend_from_slice(&((v * 65535.).round() as u16).to_ne_bytes());
+        }
+    }
+    let mut bytes = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut bytes)
+        .write_image(
+            &pixels,
+            width as u32,
+            height as u32,
+            image::ExtendedColorType::L16,
+        )
+        .map_err(|e| e.to_string())?;
+    write_bytes(std::path::Path::new(path), &bytes)
+}
+
 pub fn export_obj(path: &str, mesh: &Mesh) -> Result<(), String> {
     mesh.validate()?;
     let mut text = String::from("# Clay Form mesh\n");
@@ -316,6 +355,8 @@ mod tests {
         mesh.mask[7] = 0.75;
         mesh.vertices[7].0 += 0.05;
         let project = Project {
+            alphas: Vec::new(),
+            stencil: None,
             references: Vec::new(),
             scene: Default::default(),
             model_name: "Model".into(),
@@ -391,6 +432,8 @@ mod mesh_storage_tests {
         geometry.settings.resolution = 32;
         geometry.settings.auto_remesh = true;
         let project = Project {
+            alphas: Vec::new(),
+            stencil: None,
             references: Vec::new(),
             scene: Default::default(),
             model_name: "Model".into(),

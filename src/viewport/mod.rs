@@ -18,6 +18,7 @@ mod references;
 mod scene;
 mod slice;
 mod stabilizer;
+mod stencil;
 mod stroke;
 mod transform;
 mod visibility;
@@ -52,6 +53,8 @@ struct SnakeStroke {
 }
 #[derive(Default)]
 pub(crate) struct Viewport {
+    pub(crate) attach_stencil: bool,
+    stencil_overlay: stencil::Overlay,
     pub(crate) projection_preview: Option<std::sync::Arc<crate::sculpt::Mesh>>,
     pub(crate) projection_mode: bool,
     pub(crate) modeling: modeling::ModelingState,
@@ -140,7 +143,9 @@ impl Viewport {
         let mut modeling = std::mem::take(&mut self.modeling);
         modeling.cancel();
         let edge_revision = self.edge_revision;
-        let blocked_until_release = self.blocked_until_release || self.references.dragging();
+        let blocked_until_release = self.blocked_until_release
+            || self.references.dragging()
+            || self.stencil_overlay.controls.capturing();
         let mut references = std::mem::take(&mut self.references);
         references.cancel_drag();
         *self = Self {
@@ -278,6 +283,57 @@ impl Viewport {
             draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
             return;
         }
+        if self.attach_stencil {
+            self.stencil_overlay
+                .paint(document.stencil(), &scene, &painter);
+            if !options.enabled || ui.input(|i| i.key_pressed(egui::Key::Escape) || !i.focused) {
+                self.attach_stencil = false;
+                self.wait_for_release();
+            } else if response.clicked_by(egui::PointerButton::Primary)
+                && let Some(pos) = response.interact_pointer_pos()
+            {
+                match stencil::attach(document, &scene, pos) {
+                    Ok(()) => {
+                        self.attach_stencil = false;
+                    }
+                    Err(error) => self.status = Some(error),
+                }
+            }
+            painter.text(
+                rect.center_top() + Vec2::new(0., 24.),
+                egui::Align2::CENTER_TOP,
+                "Click the model to anchor the stencil · Esc cancels",
+                egui::FontId::proportional(14.),
+                controls::NEUTRAL,
+            );
+            return;
+        }
+        let displayed_stencil = self
+            .stencil_overlay
+            .controls
+            .preview()
+            .cloned()
+            .or_else(|| document.stencil().cloned());
+        self.stencil_overlay
+            .paint(displayed_stencil.as_ref(), &scene, &painter);
+        let stencil_controls = self.stencil_overlay.controls.show(
+            ui,
+            document,
+            &scene,
+            options.enabled
+                && !self.stroke
+                && self.pending_stroke.is_none()
+                && self.gesture.is_none(),
+        );
+        if stencil_controls {
+            draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
+            draw_mesh_counts(document, &painter, rect);
+            return;
+        }
+        let stencil = document
+            .stencil()
+            .filter(|s| s.enabled)
+            .map(|s| stencil::project(s, &scene));
         self.paint_edges(document, &scene, &painter);
         self.references
             .show(ui, &response, &painter, document, options);
@@ -720,6 +776,17 @@ impl Viewport {
             );
             return;
         }
+        if stencil.is_some() && matches!(brush.kind, Kind::Grab | Kind::Snake | Kind::Detail) {
+            painter.text(
+                rect.center_bottom() - Vec2::new(0., 24.),
+                egui::Align2::CENTER_BOTTOM,
+                "Disable the stencil to use Grab, Snake or Detail",
+                egui::FontId::proportional(14.),
+                controls::NEUTRAL,
+            );
+            document.end_stroke();
+            return;
+        }
         let drawing = primary && self.gesture == Some(Gesture::Sculpt) && options.enabled;
         let patterned_click = options.enabled
             && options.select.is_none()
@@ -752,6 +819,7 @@ impl Viewport {
                     start,
                     end: start,
                     brush,
+                    stencil: stencil.clone(),
                     pressure: options.pressure,
                     invert: options.reverse.active(modifiers),
                     anchor,
@@ -945,7 +1013,8 @@ impl Viewport {
                                 document.mesh().vertices.len(),
                                 document.mesh().triangles.len(),
                             );
-                            let deformed = document.apply_dab(&brush, dab);
+                            let deformed =
+                                document.apply_dab_stenciled(&brush, dab, stencil.as_ref());
                             if brush.kind == Kind::Smooth {
                                 self.record_cleanup(document, before);
                             }
@@ -965,19 +1034,23 @@ impl Viewport {
             }
         }
         draw_gizmo(camera, &painter, gizmo_rect, pointer);
-        painter.text(
-            navigation::inner(rect).left_top() + Vec2::splat(8.),
-            egui::Align2::LEFT_TOP,
-            format!(
-                "{} vertices • {} faces • {} hidden",
-                document.mesh().vertices.len(),
-                document.mesh().triangles.len(),
-                document.mesh().hidden_face_count()
-            ),
-            egui::FontId::monospace(12.),
-            Color32::GRAY,
-        );
+        draw_mesh_counts(document, &painter, rect);
     }
+}
+
+fn draw_mesh_counts(document: &Document, painter: &egui::Painter, rect: egui::Rect) {
+    painter.text(
+        navigation::inner(rect).left_top() + Vec2::splat(8.),
+        egui::Align2::LEFT_TOP,
+        format!(
+            "{} vertices • {} faces • {} hidden",
+            document.mesh().vertices.len(),
+            document.mesh().triangles.len(),
+            document.mesh().hidden_face_count()
+        ),
+        egui::FontId::monospace(12.),
+        Color32::GRAY,
+    );
 }
 
 #[derive(Clone, Copy, Default, PartialEq)]

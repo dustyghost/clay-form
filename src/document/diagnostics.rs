@@ -76,6 +76,8 @@ impl Document {
                 } else {
                     Project {
                         version: Project::VERSION,
+                        alphas: Vec::new(),
+                        stencil: None,
                         references: Vec::new(),
                         scene: geometry.scene.clone(),
                         model_name: geometry.name.clone(),

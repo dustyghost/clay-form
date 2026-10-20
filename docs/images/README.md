@@ -24,6 +24,7 @@ See [Development](../development.md#update-guide-screenshots) for prerequisites 
 
 | Images | What they explain | Capture test |
 | --- | --- | --- |
+| `alpha-library.png`, `alpha-editor.png`, `alpha-surface-stencil.png`, `alpha-adaptive-spiral.png`, `alpha-stencil-controls.png` | [Reusable image alphas and a placed surface stencil](../guide/sculpting.md#create-and-reuse-an-image-alpha) | `alpha_library_stencil_offscreen_review` |
 | `submodel-delete.png` | [Deleting a selected hidden reference submodel](../guide/modeling.md#delete-a-submodel) | `delete_submodel_offscreen_review` |
 | `detail-projection-preview.png` | [Reference-to-target detail transfer with match feedback before Apply](../guide/modeling.md#recover-detail-after-remeshing) | `detail_projection_offscreen_review` |
 | `modeling-separate-fuse-result.png` | [Nonadjacent faces fused into separate tunnels in one edit](../guide/modeling.md#construct-a-region) | `modeling_region_fuse_offscreen_review` |

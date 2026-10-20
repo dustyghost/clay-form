@@ -222,6 +222,8 @@ impl UiState {
         if self.pending.is_some()
             || self.primitive_warning.is_some()
             || self.mesh_busy
+            || self.alphas.draft.is_some()
+            || self.alphas.overwrite.is_some()
             || self.icon_capture_open()
         {
             return false;
@@ -240,6 +242,8 @@ impl UiState {
                     && document.active_visible()
                     && !document.mesh().vertices.is_empty()
             }
+            Action::ToggleStencil | Action::RemoveStencil => document.stencil().is_some(),
+            Action::AttachStencil => sculpt && document.stencil().is_some(),
             Action::ImportObj => document.model_count() < 64,
             Action::AddReference => {
                 document.references().len() < crate::reference::MAX_REFERENCES
@@ -432,6 +436,7 @@ impl UiState {
         let active = self.brush_index_for_context(document, ctx);
         let brush = active.map(|index| &document.brushes()[index]);
         match action {
+            Action::ToggleStencil => document.stencil().is_some_and(|s| s.enabled),
             Action::SelectBrush(id) => brush.is_some_and(|b| b.identity() == *id),
             Action::ModelTool(tool) => self.modeling.active && self.modeling.tool == *tool,
             Action::ModelTarget(span) => self.modeling.active && self.modeling.span == *span,
