@@ -152,73 +152,82 @@ impl UiState {
                 .desired_width(f32::INFINITY),
         );
         let query = self.alphas.search.to_lowercase();
-        let library_width = ui.available_width();
-        egui::Resize::default()
-            .id_salt("alpha_library_size")
-            .default_height(352.)
-            .min_height(258.)
-            .max_height(704.)
-            .min_width(library_width)
-            .max_width(library_width)
-            .resizable([false, true])
+        let height_id = ui.make_persistent_id("alpha_library_height");
+        let mut library_height = ui
+            .ctx()
+            .data_mut(|data| data.get_persisted::<f32>(height_id).unwrap_or(352.));
+        egui::ScrollArea::vertical()
+            .id_salt("alpha_library_thumbnails")
+            .max_height(library_height)
+            .auto_shrink([false, false])
             .show(ui, |ui| {
-                egui::ScrollArea::vertical()
-                    .id_salt("alpha_library_thumbnails")
-                    .max_height(ui.available_height())
-                    .auto_shrink([false, false])
+                let columns = ((ui.available_width() / 100.).floor() as usize).clamp(1, 4);
+                let width = (ui.available_width() - (columns - 1) as f32 * 6.) / columns as f32;
+                egui::Grid::new("alpha_library")
+                    .spacing(Vec2::splat(6.))
                     .show(ui, |ui| {
-                        let columns = ((ui.available_width() / 100.).floor() as usize).clamp(1, 4);
-                        let width =
-                            (ui.available_width() - (columns - 1) as f32 * 6.) / columns as f32;
-                        egui::Grid::new("alpha_library")
-                            .spacing(Vec2::splat(6.))
-                            .show(ui, |ui| {
-                                let mut count = 0;
-                                for selection in (0..builtins().len())
-                                    .map(Selection::Builtin)
-                                    .chain((0..document.alphas().len()).map(Selection::Project))
-                                {
-                                    let asset =
-                                        selection.asset(document).expect("existing library entry");
-                                    if !format!("{} {}", asset.name, asset.category)
-                                        .to_lowercase()
-                                        .contains(&query)
-                                    {
-                                        continue;
-                                    }
-                                    let id = self.alphas.texture(ui.ctx(), &asset.image);
-                                    let response = design::brush_tile(
-                                        ui,
-                                        id,
-                                        &asset.name,
-                                        self.alphas.selected == Some(selection),
-                                        width,
-                                    )
-                                    .on_hover_text(&asset.category);
-                                    let response = match (&selection, &asset.image) {
-                                        (Selection::Builtin(_), Alpha::Soft) => {
-                                            response.customize(Action::AlphaSoft)
-                                        }
-                                        (Selection::Builtin(_), Alpha::Hard) => {
-                                            response.customize(Action::AlphaHard)
-                                        }
-                                        (Selection::Builtin(_), Alpha::Square) => {
-                                            response.customize(Action::AlphaSquare)
-                                        }
-                                        _ => response,
-                                    };
-                                    if response.clicked() {
-                                        self.alphas.selected = Some(selection);
-                                    }
-                                    count += 1;
-                                    if count % columns == 0 {
-                                        ui.end_row();
-                                    }
+                        let mut count = 0;
+                        for selection in (0..builtins().len())
+                            .map(Selection::Builtin)
+                            .chain((0..document.alphas().len()).map(Selection::Project))
+                        {
+                            let asset = selection.asset(document).expect("existing library entry");
+                            if !format!("{} {}", asset.name, asset.category)
+                                .to_lowercase()
+                                .contains(&query)
+                            {
+                                continue;
+                            }
+                            let id = self.alphas.texture(ui.ctx(), &asset.image);
+                            let response = design::brush_tile(
+                                ui,
+                                id,
+                                &asset.name,
+                                self.alphas.selected == Some(selection),
+                                width,
+                            )
+                            .on_hover_text(&asset.category);
+                            let response = match (&selection, &asset.image) {
+                                (Selection::Builtin(_), Alpha::Soft) => {
+                                    response.customize(Action::AlphaSoft)
                                 }
-                            });
+                                (Selection::Builtin(_), Alpha::Hard) => {
+                                    response.customize(Action::AlphaHard)
+                                }
+                                (Selection::Builtin(_), Alpha::Square) => {
+                                    response.customize(Action::AlphaSquare)
+                                }
+                                _ => response,
+                            };
+                            if response.clicked() {
+                                self.alphas.selected = Some(selection);
+                            }
+                            count += 1;
+                            if count % columns == 0 {
+                                ui.end_row();
+                            }
+                        }
                     });
             });
-        ui.weak("Drag the lower-right corner to resize the library.");
+        // Keep the grab area in the middle, clear of both nested scrollbars.
+        let resize = ui
+            .horizontal(|ui| {
+                let width = (ui.available_width() - 32.).clamp(64., 140.);
+                ui.add_space(((ui.available_width() - width) * 0.5).max(0.));
+                ui.add_sized(
+                    [width, 22.],
+                    egui::Button::new("Resize library").sense(egui::Sense::drag()),
+                )
+                .on_hover_cursor(egui::CursorIcon::ResizeVertical)
+                .on_hover_text("Drag up or down to change the library height")
+            })
+            .inner;
+        if resize.dragged() {
+            library_height = (library_height + resize.drag_delta().y).clamp(258., 704.);
+            ui.ctx()
+                .data_mut(|data| data.insert_persisted(height_id, library_height));
+            ui.ctx().request_repaint();
+        }
         if let Some((selection, asset)) = self
             .alphas
             .selected

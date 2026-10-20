@@ -1758,7 +1758,8 @@ fn alpha_library_stencil_offscreen_review() {
 fn stencil_controls_offscreen_review() {
     let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
     std::fs::create_dir_all(&directory).unwrap();
-    let mut g = Guide::new(std::path::Path::new(&directory), [1300, 1000]);
+    // A short sidebar overflows, reproducing the parent scrollbar obstruction.
+    let mut g = Guide::new(std::path::Path::new(&directory), [1300, 860]);
     g.interactive = true;
     let cube = Primitive::for_kind(PrimitiveKind::Cube);
     g.app
@@ -1776,6 +1777,35 @@ fn stencil_controls_offscreen_review() {
     g.app.ui.alphas.selected = Some(crate::ui::alphas::Selection::Builtin(7));
     click_guide_label(&mut g, "Place stencil");
     g.save("alpha-library-expanded");
+    let handle = g
+        .text_positions
+        .iter()
+        .find(|(text, _)| text == "Resize library")
+        .unwrap()
+        .1;
+    let geometry = g.app.document.geometry_snapshot();
+    // Wake the parent's floating scrollbar before reaching for the handle.
+    g.frame(vec![egui::Event::PointerMoved(Pos2::new(1294., handle.y))]);
+    g.frame(vec![
+        egui::Event::PointerMoved(handle),
+        primary_event(handle, true),
+    ]);
+    let end = handle + Vec2::new(0., 70.);
+    g.frame(vec![egui::Event::PointerMoved(end)]);
+    g.frame(vec![primary_event(end, false)]);
+    g.frame(vec![]);
+    let resized = g
+        .text_positions
+        .iter()
+        .find(|(text, _)| text == "Resize library")
+        .unwrap()
+        .1;
+    assert!(
+        (resized.y - handle.y - 70.).abs() < 2.,
+        "the centered handle resizes despite the parent scrollbar"
+    );
+    assert!(g.app.document.geometry_snapshot() == geometry);
+    g.save("alpha-library-resized");
 }
 
 fn review_stencil_controls(g: &mut Guide) {
