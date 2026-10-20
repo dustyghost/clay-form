@@ -262,3 +262,18 @@ fn alpha_black_stencil_creates_no_history_or_adaptive_topology_and_invalid_libra
     assert_eq!(d.alphas().len(), 64);
     assert!(!d.is_dirty());
 }
+
+#[test]
+fn builtin_alpha_samples_preserve_circle_and_square_shapes_when_baked() {
+    for (alpha, edge, corner) in [(Alpha::Hard, 1., 0.), (Alpha::Square, 0., 0.)] {
+        // The hard circle reaches beyond the square, but both exclude outer corners.
+        let baked = Adjustments::default().apply(&alpha).unwrap();
+        for image in [&alpha, &baked] {
+            assert_eq!(image.sample(0.5, 0.5), 1.);
+            assert_eq!(image.sample(0.9, 0.5), edge);
+            assert_eq!(image.sample(0.9, 0.9), corner);
+            assert_eq!(image.sample(0., 0.), 0.);
+            assert_eq!(image.sample(-0.1, 0.5), 0.);
+        }
+    }
+}

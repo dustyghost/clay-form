@@ -5,6 +5,39 @@ use crate::sculpt::{
     alpha::{Adjustments, Asset, Stencil},
 };
 
+/// Built-ins are always available without adding assets to the saved project.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Selection {
+    Soft,
+    Hard,
+    Square,
+    Project(usize),
+}
+impl Selection {
+    const BUILT_INS: [Self; 3] = [Self::Soft, Self::Hard, Self::Square];
+
+    fn project_index(self) -> Option<usize> {
+        match self {
+            Self::Project(index) => Some(index),
+            _ => None,
+        }
+    }
+
+    fn asset(self, document: &Document) -> Option<Asset> {
+        let (name, image) = match self {
+            Self::Soft => ("Soft", Alpha::Soft),
+            Self::Hard => ("Hard", Alpha::Hard),
+            Self::Square => ("Square", Alpha::Square),
+            Self::Project(index) => return document.alphas().get(index).cloned(),
+        };
+        Some(Asset {
+            name: name.into(),
+            category: "Built-in".into(),
+            image,
+        })
+    }
+}
+
 pub(crate) struct Draft {
     index: Option<usize>,
     asset: Asset,
@@ -12,7 +45,7 @@ pub(crate) struct Draft {
     preview: Result<Alpha, String>,
 }
 pub(crate) struct AlphaControls {
-    pub selected: Option<usize>,
+    pub selected: Option<Selection>,
     pub draft: Option<Draft>,
     pub export_path: String,
     pub overwrite: Option<(usize, String)>,
@@ -100,14 +133,6 @@ impl UiState {
                 ui.weak(match brush.alpha { Alpha::Soft => "Soft alpha", Alpha::Hard => "Hard alpha", Alpha::Square => "Square alpha", Alpha::Image { .. } => "Image alpha" });
             });
         });
-        ui.horizontal_wrapped(|ui| {
-            ui.selectable_value(&mut brush.alpha, Alpha::Soft, "Soft")
-                .customize(Action::AlphaSoft);
-            ui.selectable_value(&mut brush.alpha, Alpha::Hard, "Hard")
-                .customize(Action::AlphaHard);
-            ui.selectable_value(&mut brush.alpha, Alpha::Square, "Square")
-                .customize(Action::AlphaSquare);
-        });
         if ui
             .add(design::button(
                 ui,
@@ -127,7 +152,7 @@ impl UiState {
         }
         self.stencil_controls(ui, document, commands);
         ui.separator();
-        ui.label("Project alpha library");
+        ui.label("Alpha library");
         ui.add(
             egui::TextEdit::singleline(&mut self.alphas.search)
                 .hint_text("Search names or categories")
@@ -140,7 +165,11 @@ impl UiState {
             .spacing(Vec2::splat(6.))
             .show(ui, |ui| {
                 let mut count = 0;
-                for (i, asset) in document.alphas().iter().enumerate() {
+                for selection in Selection::BUILT_INS
+                    .into_iter()
+                    .chain((0..document.alphas().len()).map(Selection::Project))
+                {
+                    let asset = selection.asset(document).expect("existing library entry");
                     if !format!("{} {}", asset.name, asset.category)
                         .to_lowercase()
                         .contains(&query)
@@ -148,17 +177,22 @@ impl UiState {
                         continue;
                     }
                     let id = self.alphas.texture(ui.ctx(), &asset.image);
-                    if design::brush_tile(
+                    let response = design::brush_tile(
                         ui,
                         id,
                         &asset.name,
-                        self.alphas.selected == Some(i),
+                        self.alphas.selected == Some(selection),
                         width,
                     )
-                    .on_hover_text(&asset.category)
-                    .clicked()
-                    {
-                        self.alphas.selected = Some(i);
+                    .on_hover_text(&asset.category);
+                    let response = match selection {
+                        Selection::Soft => response.customize(Action::AlphaSoft),
+                        Selection::Hard => response.customize(Action::AlphaHard),
+                        Selection::Square => response.customize(Action::AlphaSquare),
+                        Selection::Project(_) => response,
+                    };
+                    if response.clicked() {
+                        self.alphas.selected = Some(selection);
                     }
                     count += 1;
                     if count % columns == 0 {
@@ -166,14 +200,12 @@ impl UiState {
                     }
                 }
             });
-        if document.alphas().is_empty() {
-            ui.weak("Import an image or copy a brush alpha to start.");
-        }
-        if let Some((i, asset)) = self
+        if let Some((selection, asset)) = self
             .alphas
             .selected
-            .and_then(|i| document.alphas().get(i).map(|a| (i, a)))
+            .and_then(|selection| selection.asset(document).map(|asset| (selection, asset)))
         {
+            let project_index = selection.project_index();
             ui.label(format!(
                 "{} · {}",
                 asset.name,
@@ -188,7 +220,11 @@ impl UiState {
                     .add(design::button(ui, Glyph::Edit, "Use on brush"))
                     .clicked()
                 {
-                    commands.push(Command::UseAlpha(i, selected));
+                    if let Some(i) = project_index {
+                        commands.push(Command::UseAlpha(i, selected));
+                    } else {
+                        brush.alpha = asset.image.clone();
+                    }
                 }
                 if ui
                     .add(design::button(ui, Glyph::Pin, "Place stencil"))
@@ -196,9 +232,10 @@ impl UiState {
                 {
                     commands.push(Command::SetStencil(Some(Stencil::new(asset.clone()))));
                 }
-                if ui
-                    .add(design::button(ui, Glyph::Edit, "Edit alpha"))
-                    .clicked()
+                if let Some(i) = project_index
+                    && ui
+                        .add(design::button(ui, Glyph::Edit, "Edit alpha"))
+                        .clicked()
                 {
                     self.alphas.edit(Some(i), asset.clone());
                 }
@@ -210,23 +247,32 @@ impl UiState {
                     copy.name = format!("{} copy", copy.name);
                     self.alphas.edit(None, copy);
                 }
-                if ui
-                    .add(design::button(ui, Glyph::Delete, "Remove alpha"))
-                    .clicked()
+                if let Some(i) = project_index
+                    && ui
+                        .add(design::button(ui, Glyph::Delete, "Remove alpha"))
+                        .clicked()
                 {
                     commands.push(Command::RemoveAlpha(i));
                 }
             });
-            ui.weak("Brushes and stencils keep independent copies when a library asset changes.");
-            ui.collapsing("Export selected alpha", |ui| {
-                ui.text_edit_singleline(&mut self.alphas.export_path);
-                if ui
-                    .add(design::button(ui, Glyph::Export, "Export PNG"))
-                    .clicked()
-                {
-                    commands.push(Command::ExportAlpha(i, false));
-                }
-            });
+            if project_index.is_none() {
+                ui.weak("Built-in alpha. Duplicate it to edit and save a variation.");
+            } else {
+                ui.weak(
+                    "Brushes and stencils keep independent copies when a library asset changes.",
+                );
+            }
+            if let Some(i) = project_index {
+                ui.collapsing("Export selected alpha", |ui| {
+                    ui.text_edit_singleline(&mut self.alphas.export_path);
+                    if ui
+                        .add(design::button(ui, Glyph::Export, "Export PNG"))
+                        .clicked()
+                    {
+                        commands.push(Command::ExportAlpha(i, false));
+                    }
+                });
+            }
         }
         ui.collapsing("Import image", |ui| {
             ui.label("Image path (PNG/JPEG, up to 2048 × 2048)");
@@ -251,8 +297,18 @@ impl UiState {
             ui.separator();
             ui.label(format!("Stencil: {}", original.asset.name));
             let mut stencil = original.clone();
-            ui.checkbox(&mut stencil.enabled, "Stencil enabled")
-                .customize(Action::ToggleStencil);
+            let mut remove = false;
+            ui.horizontal_wrapped(|ui| {
+                ui.checkbox(&mut stencil.enabled, "Stencil enabled")
+                    .customize(Action::ToggleStencil);
+                if ui
+                    .add(design::button(ui, Glyph::Close, "Remove stencil"))
+                    .customize(Action::RemoveStencil)
+                    .clicked()
+                {
+                    remove = true;
+                }
+            });
             ui.add(
                 egui::Label::new(if stencil.surface.is_some() {
                     "Surface plane · model units"
@@ -307,15 +363,10 @@ impl UiState {
             ui.collapsing("Stencil help", |ui| {
                 ui.weak("Brush through the stencil using Freehand, Line or stamps. Brush alpha, strength and pressure multiply its coverage. Symmetry copies the stencil. Topology stays fixed while stenciling. Grab, Snake and Detail require disabling the stencil.");
             });
-            if stencil != *original {
-                commands.push(Command::SetStencil(Some(stencil)));
-            }
-            if ui
-                .add(design::button(ui, Glyph::Close, "Remove stencil"))
-                .customize(Action::RemoveStencil)
-                .clicked()
-            {
+            if remove {
                 commands.push(Command::SetStencil(None));
+            } else if stencil != *original {
+                commands.push(Command::SetStencil(Some(stencil)));
             }
         }
     }

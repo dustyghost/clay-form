@@ -44,7 +44,8 @@ impl Alpha {
                 (pixels[iy * width + ix] * (1. - tx) + pixels[iy * width + nx] * tx) * (1. - ty)
                     + (pixels[ny * width + ix] * (1. - tx) + pixels[ny * width + nx] * tx) * ty
             }
-            Self::Hard | Self::Square => 1.,
+            Self::Hard => f32::from((u * 2. - 1.).powi(2) + (v * 2. - 1.).powi(2) < 1.),
+            Self::Square => f32::from((u * 2. - 1.).abs().max((v * 2. - 1.).abs()) < 0.7),
             Self::Soft => (1. - ((u * 2. - 1.).powi(2) + (v * 2. - 1.).powi(2)).sqrt()).max(0.),
         }
     }

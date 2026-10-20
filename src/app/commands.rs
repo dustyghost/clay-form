@@ -928,7 +928,7 @@ impl App {
                 );
             }),
             Command::SaveAlpha(index, asset) => self.document.save_alpha(index, asset).map(|i| {
-                self.ui.alphas.selected = Some(i);
+                self.ui.alphas.selected = Some(crate::ui::alphas::Selection::Project(i));
                 self.ui.alphas.draft = None;
                 self.ui.status =
                     "Alpha saved in project library; choose Use on brush or Place stencil".into();

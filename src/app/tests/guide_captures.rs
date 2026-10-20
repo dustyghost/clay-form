@@ -1592,6 +1592,31 @@ fn alpha_library_stencil_offscreen_review() {
         .document
         .replace_geometry(Geometry::new(primitive.mesh().unwrap()))
         .unwrap();
+    // Built-ins also exist in projects with no saved library assets.
+    assert!(g.app.document.alphas().is_empty());
+    for (name, alpha) in [
+        ("Hard", Alpha::Hard),
+        ("Square", Alpha::Square),
+        ("Soft", Alpha::Soft),
+    ] {
+        g.app.document.mark_saved("alpha-builtins.clay");
+        let previous = g.app.document.brushes()[0].alpha.clone();
+        click_guide_label(&mut g, name);
+        assert_eq!(g.app.document.brushes()[0].alpha, previous);
+        assert!(!g.app.document.is_dirty());
+        click_guide_label(&mut g, "Use on brush");
+        assert_eq!(g.app.document.brushes()[0].alpha, alpha);
+        click_guide_label(&mut g, "Place stencil");
+        assert_eq!(g.app.document.stencil().unwrap().asset.image, alpha);
+        click_guide_label(&mut g, "Remove stencil");
+        assert!(g.app.document.stencil().is_none());
+    }
+    click_guide_label(&mut g, "Duplicate alpha");
+    assert!(g.app.ui.alphas.draft.is_some());
+    click_guide_label(&mut g, "Save alpha");
+    assert_eq!(g.app.document.alphas()[0].name, "Soft copy");
+    click_guide_label(&mut g, "Remove alpha");
+    assert!(g.app.document.alphas().is_empty());
     let image = Alpha::Image {
         width: 128,
         height: 128,
@@ -1614,7 +1639,7 @@ fn alpha_library_stencil_offscreen_review() {
         image,
     };
     g.app.document.save_alpha(None, asset.clone()).unwrap();
-    g.app.ui.alphas.selected = Some(0);
+    g.app.ui.alphas.selected = Some(crate::ui::alphas::Selection::Project(0));
     g.save("alpha-library");
     click_guide_label(&mut g, "Edit alpha");
     assert!(g.app.ui.alphas.draft.is_some());
@@ -1653,4 +1678,12 @@ fn alpha_library_stencil_offscreen_review() {
     g.app.camera.yaw = 0.45;
     g.app.camera.pitch = -0.25;
     g.save("alpha-surface-stencil");
+    let geometry = g.app.document.geometry_snapshot();
+    let alphas = g.app.document.alphas().to_vec();
+    let brush_alpha = g.app.document.brushes()[0].alpha.clone();
+    click_guide_label(&mut g, "Remove stencil");
+    assert!(g.app.document.stencil().is_none());
+    assert_eq!(g.app.document.geometry_snapshot(), geometry);
+    assert_eq!(g.app.document.alphas(), alphas);
+    assert_eq!(g.app.document.brushes()[0].alpha, brush_alpha);
 }

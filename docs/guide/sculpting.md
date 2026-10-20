@@ -59,7 +59,9 @@ Grab follows pointer movement; spacing does not affect it. Subtracting Smooth sh
 
 ### Choose an alpha
 
-An alpha shapes each dab. Choose **Soft**, **Hard**, or **Square**, or build a reusable image alpha in the **Alpha** panel.
+An alpha shapes each dab. Open the **Alpha** panel, select **Soft**, **Hard**, or **Square** in the **Alpha library**, then choose **Use on brush**. These built-ins are always available, including in older projects. You can also **Place stencil** with them or **Duplicate alpha** to edit a variation. Built-ins cannot be removed; saved copies can.
+
+![Soft, Hard and Square alongside an imported alpha in the library](../images/alpha-library.png)
 
 ### Create and reuse an image alpha
 
@@ -84,7 +86,7 @@ The project saves the library, categories, brush images, and stencil settings. L
 2. Set **Horizontal**, **Vertical**, **Width**, **Height**, and **Rotation** in the stencil controls. View-attached positions and sizes use fractions of the viewport's shorter side. Positive vertical moves up; positive rotation turns counterclockwise.
 3. Brush back and forth through the guide. White areas permit the brush, black areas and everything outside the rectangle protect the surface. Brush alpha, falloff, pressure, strength, existing masks, and hidden geometry still apply.
 4. Choose **Attach to surface…**, then click the model. Orbit to inspect it: the stencil now stays on that surface plane. Its position and size controls use model units. **Follow view** returns to a centered view stencil. Escape cancels attachment without painting.
-5. Set **Overlay opacity** to zero to inspect your result while continuing to stencil. Disable **Stencil enabled** to sculpt freely, or **Remove stencil** to clear it.
+5. Set **Overlay opacity** to zero to inspect your result while continuing to stencil. Disable **Stencil enabled** to sculpt freely, or choose **Remove stencil** beside that checkbox to clear it. Removing the stencil keeps the library alpha and existing sculpted strokes.
 
 ![Surface stencil stays on its plane as the camera orbits, with placement controls visible](../images/alpha-surface-stencil.png)
 
