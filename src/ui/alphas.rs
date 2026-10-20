@@ -148,52 +148,59 @@ impl UiState {
                 .desired_width(f32::INFINITY),
         );
         let query = self.alphas.search.to_lowercase();
-        let columns = ((ui.available_width() / 100.).floor() as usize).clamp(1, 4);
-        let width = (ui.available_width() - (columns - 1) as f32 * 6.) / columns as f32;
-        egui::Grid::new("alpha_library")
-            .spacing(Vec2::splat(6.))
+        let library_height = (ui.clip_rect().bottom() - ui.cursor().top() - 190.).clamp(120., 352.);
+        egui::ScrollArea::vertical()
+            .id_salt("alpha_library_thumbnails")
+            .max_height(library_height)
+            .auto_shrink([false, true])
             .show(ui, |ui| {
-                let mut count = 0;
-                for selection in (0..builtins().len())
-                    .map(Selection::Builtin)
-                    .chain((0..document.alphas().len()).map(Selection::Project))
-                {
-                    let asset = selection.asset(document).expect("existing library entry");
-                    if !format!("{} {}", asset.name, asset.category)
-                        .to_lowercase()
-                        .contains(&query)
-                    {
-                        continue;
-                    }
-                    let id = self.alphas.texture(ui.ctx(), &asset.image);
-                    let response = design::brush_tile(
-                        ui,
-                        id,
-                        &asset.name,
-                        self.alphas.selected == Some(selection),
-                        width,
-                    )
-                    .on_hover_text(&asset.category);
-                    let response = match (&selection, &asset.image) {
-                        (Selection::Builtin(_), Alpha::Soft) => {
-                            response.customize(Action::AlphaSoft)
+                let columns = ((ui.available_width() / 100.).floor() as usize).clamp(1, 4);
+                let width = (ui.available_width() - (columns - 1) as f32 * 6.) / columns as f32;
+                egui::Grid::new("alpha_library")
+                    .spacing(Vec2::splat(6.))
+                    .show(ui, |ui| {
+                        let mut count = 0;
+                        for selection in (0..builtins().len())
+                            .map(Selection::Builtin)
+                            .chain((0..document.alphas().len()).map(Selection::Project))
+                        {
+                            let asset = selection.asset(document).expect("existing library entry");
+                            if !format!("{} {}", asset.name, asset.category)
+                                .to_lowercase()
+                                .contains(&query)
+                            {
+                                continue;
+                            }
+                            let id = self.alphas.texture(ui.ctx(), &asset.image);
+                            let response = design::brush_tile(
+                                ui,
+                                id,
+                                &asset.name,
+                                self.alphas.selected == Some(selection),
+                                width,
+                            )
+                            .on_hover_text(&asset.category);
+                            let response = match (&selection, &asset.image) {
+                                (Selection::Builtin(_), Alpha::Soft) => {
+                                    response.customize(Action::AlphaSoft)
+                                }
+                                (Selection::Builtin(_), Alpha::Hard) => {
+                                    response.customize(Action::AlphaHard)
+                                }
+                                (Selection::Builtin(_), Alpha::Square) => {
+                                    response.customize(Action::AlphaSquare)
+                                }
+                                _ => response,
+                            };
+                            if response.clicked() {
+                                self.alphas.selected = Some(selection);
+                            }
+                            count += 1;
+                            if count % columns == 0 {
+                                ui.end_row();
+                            }
                         }
-                        (Selection::Builtin(_), Alpha::Hard) => {
-                            response.customize(Action::AlphaHard)
-                        }
-                        (Selection::Builtin(_), Alpha::Square) => {
-                            response.customize(Action::AlphaSquare)
-                        }
-                        _ => response,
-                    };
-                    if response.clicked() {
-                        self.alphas.selected = Some(selection);
-                    }
-                    count += 1;
-                    if count % columns == 0 {
-                        ui.end_row();
-                    }
-                }
+                    });
             });
         if let Some((selection, asset)) = self
             .alphas

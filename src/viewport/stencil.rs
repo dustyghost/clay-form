@@ -1,5 +1,6 @@
-//! View-fixed and planar surface stencil projection. Guides do not intercept sculpt input.
+//! View-fixed and planar surface stencil projection and placement controls.
 use super::scene::Scene;
+mod interaction;
 use crate::{
     document::Document,
     sculpt::{
@@ -69,6 +70,7 @@ pub(super) fn attach(document: &mut Document, scene: &Scene, pos: Pos2) -> Resul
 }
 #[derive(Default)]
 pub(super) struct Overlay {
+    pub controls: interaction::Controls,
     texture: Option<(Alpha, egui::TextureHandle)>,
 }
 impl Overlay {

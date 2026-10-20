@@ -143,7 +143,9 @@ impl Viewport {
         let mut modeling = std::mem::take(&mut self.modeling);
         modeling.cancel();
         let edge_revision = self.edge_revision;
-        let blocked_until_release = self.blocked_until_release || self.references.dragging();
+        let blocked_until_release = self.blocked_until_release
+            || self.references.dragging()
+            || self.stencil_overlay.controls.capturing();
         let mut references = std::mem::take(&mut self.references);
         references.cancel_drag();
         *self = Self {
@@ -281,9 +283,9 @@ impl Viewport {
             draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
             return;
         }
-        self.stencil_overlay
-            .paint(document.stencil(), &scene, &painter);
         if self.attach_stencil {
+            self.stencil_overlay
+                .paint(document.stencil(), &scene, &painter);
             if !options.enabled || ui.input(|i| i.key_pressed(egui::Key::Escape) || !i.focused) {
                 self.attach_stencil = false;
                 self.wait_for_release();
@@ -304,6 +306,28 @@ impl Viewport {
                 egui::FontId::proportional(14.),
                 controls::NEUTRAL,
             );
+            return;
+        }
+        let displayed_stencil = self
+            .stencil_overlay
+            .controls
+            .preview()
+            .cloned()
+            .or_else(|| document.stencil().cloned());
+        self.stencil_overlay
+            .paint(displayed_stencil.as_ref(), &scene, &painter);
+        let stencil_controls = self.stencil_overlay.controls.show(
+            ui,
+            document,
+            &scene,
+            options.enabled
+                && !self.stroke
+                && self.pending_stroke.is_none()
+                && self.gesture.is_none(),
+        );
+        if stencil_controls {
+            draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
+            draw_mesh_counts(document, &painter, rect);
             return;
         }
         let stencil = document
@@ -1010,19 +1034,23 @@ impl Viewport {
             }
         }
         draw_gizmo(camera, &painter, gizmo_rect, pointer);
-        painter.text(
-            navigation::inner(rect).left_top() + Vec2::splat(8.),
-            egui::Align2::LEFT_TOP,
-            format!(
-                "{} vertices • {} faces • {} hidden",
-                document.mesh().vertices.len(),
-                document.mesh().triangles.len(),
-                document.mesh().hidden_face_count()
-            ),
-            egui::FontId::monospace(12.),
-            Color32::GRAY,
-        );
+        draw_mesh_counts(document, &painter, rect);
     }
+}
+
+fn draw_mesh_counts(document: &Document, painter: &egui::Painter, rect: egui::Rect) {
+    painter.text(
+        navigation::inner(rect).left_top() + Vec2::splat(8.),
+        egui::Align2::LEFT_TOP,
+        format!(
+            "{} vertices • {} faces • {} hidden",
+            document.mesh().vertices.len(),
+            document.mesh().triangles.len(),
+            document.mesh().hidden_face_count()
+        ),
+        egui::FontId::monospace(12.),
+        Color32::GRAY,
+    );
 }
 
 #[derive(Clone, Copy, Default, PartialEq)]

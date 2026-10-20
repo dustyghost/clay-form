@@ -1608,6 +1608,11 @@ fn alpha_library_stencil_offscreen_review() {
         assert_eq!(g.app.document.brushes()[0].alpha, alpha);
         click_guide_label(&mut g, "Place stencil");
         assert_eq!(g.app.document.stencil().unwrap().asset.image, alpha);
+        // Allow the new floating Area to finish its initial sizing pass before
+        // locating a label that also appears in the sidebar.
+        g.frame(vec![]);
+        g.frame(vec![]);
+        g.frame(vec![]);
         click_guide_label(&mut g, "Remove stencil");
         assert!(g.app.document.stencil().is_none());
     }
@@ -1739,5 +1744,56 @@ fn alpha_library_stencil_offscreen_review() {
     g.app.camera.pitch = -0.2;
     g.save("alpha-adaptive-spiral");
     g.app.document.undo();
+    assert!(g.app.document.geometry_snapshot() == before);
+    click_guide_label(&mut g, "Remove stencil");
+    g.app.camera = Default::default();
+    click_guide_label(&mut g, "Weathered bricks");
+    click_guide_label(&mut g, "Place stencil");
+    review_stencil_controls(&mut g);
+}
+
+#[test]
+#[ignore = "renders on-canvas stencil controls; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn stencil_controls_offscreen_review() {
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(std::path::Path::new(&directory), [1300, 1000]);
+    g.interactive = true;
+    let cube = Primitive::for_kind(PrimitiveKind::Cube);
+    g.app
+        .document
+        .replace_geometry(crate::sculpt::Geometry::new(cube.mesh().unwrap()))
+        .unwrap();
+    g.app
+        .document
+        .set_stencil(Some(crate::sculpt::alpha::Stencil::new(
+            crate::sculpt::alpha::builtins()[7].clone(),
+        )))
+        .unwrap();
+    review_stencil_controls(&mut g);
+}
+
+fn review_stencil_controls(g: &mut Guide) {
+    let before = g.app.document.geometry_snapshot();
+    g.panel(Tool::Alpha, Dock::Hidden);
+    let (rect, _) = g.frame(vec![]);
+    g.frame(vec![]);
+    let unit = rect.width().min(rect.height());
+    let start = rect.center() - Vec2::new(0., unit * 0.25 + 19.);
+    let end = start + Vec2::new(60., 30.);
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    g.frame(vec![egui::Event::PointerMoved(end)]);
+    g.frame(vec![primary_event(end, false)]);
+    assert!((g.app.document.stencil().unwrap().position[0] - 60. / unit).abs() < 1e-5);
+    g.save("alpha-stencil-controls");
+    click_guide_label(g, "Reset placement");
+    assert_eq!(g.app.document.stencil().unwrap().position, [0.; 2]);
+    click_guide_label(g, "Stencil enabled");
+    assert!(!g.app.document.stencil().unwrap().enabled);
+    click_guide_label(g, "Remove stencil");
+    assert!(g.app.document.stencil().is_none());
     assert!(g.app.document.geometry_snapshot() == before);
 }

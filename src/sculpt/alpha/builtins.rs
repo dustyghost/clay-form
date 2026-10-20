@@ -1,6 +1,7 @@
 //! Small deterministic height patterns, cached once and embedded when used.
 use super::{Alpha, Asset};
 use std::sync::OnceLock;
+mod catalog;
 
 pub fn builtins() -> &'static [Asset] {
     static ASSETS: OnceLock<Vec<Asset>> = OnceLock::new();
@@ -81,6 +82,7 @@ pub fn builtins() -> &'static [Asset] {
             }
             value * border(x, y)
         }));
+        catalog::append(&mut assets);
         assets
     })
 }

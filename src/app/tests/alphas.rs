@@ -137,3 +137,75 @@ fn alpha_stencil_stamp_escape_and_attachment_escape_leave_geometry_untouched() {
     assert!(app.document.stencil().is_none());
     assert!(!app.ui.action_enabled(&Action::AttachStencil, &app.document));
 }
+
+#[test]
+fn stencil_controls_move_resize_rotate_cancel_without_sculpting() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.dispatch(Command::SetStencil(Some(Stencil::new(asset()))), &ctx);
+    let rect = navigation_frame(&mut app, &ctx, vec![]);
+    navigation_frame(&mut app, &ctx, vec![]);
+    let unit = rect.width().min(rect.height());
+    let before = app.document.geometry_snapshot();
+    let history = app.document.history_counts();
+    let drag = |app: &mut App, start: Pos2, end: Pos2, cancel: bool| {
+        navigation_frame(
+            app,
+            &ctx,
+            vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+        );
+        navigation_frame(app, &ctx, vec![egui::Event::PointerMoved(end)]);
+        if cancel {
+            navigation_frame(
+                app,
+                &ctx,
+                vec![egui::Event::Key {
+                    key: egui::Key::Escape,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: Default::default(),
+                }],
+            );
+        }
+        navigation_frame(
+            app,
+            &ctx,
+            vec![primary_event(end, false), egui::Event::PointerGone],
+        );
+    };
+    let move_handle = rect.center() + Vec2::new(0., -unit * 0.25 - 19.);
+    app.document.mark_saved("stencil-controls.clay");
+    drag(
+        &mut app,
+        move_handle,
+        move_handle + Vec2::new(35., 25.),
+        true,
+    );
+    assert_eq!(app.document.stencil().unwrap().position, [0.; 2]);
+    assert!(!app.document.is_dirty());
+    drag(
+        &mut app,
+        move_handle,
+        move_handle + Vec2::new(35., 25.),
+        false,
+    );
+    let stencil = app.document.stencil().unwrap();
+    assert!((stencil.position[0] - 35. / unit).abs() < 1e-5);
+    assert!((stencil.position[1] + 25. / unit).abs() < 1e-5);
+    let center = rect.center() + Vec2::new(35., 25.);
+    let corner = center + Vec2::splat(unit * 0.25);
+    drag(&mut app, corner, center + (corner - center) * 1.3, false);
+    assert!((app.document.stencil().unwrap().size[0] - 0.65).abs() < 1e-5);
+    assert!((app.document.stencil().unwrap().size[1] - 0.65).abs() < 1e-5);
+    let radius = unit * 0.325 + 49.;
+    drag(
+        &mut app,
+        center - Vec2::new(0., radius),
+        center - Vec2::new(radius, 0.),
+        false,
+    );
+    assert!((app.document.stencil().unwrap().rotation - 90.).abs() < 1e-4);
+    assert!(app.document.geometry_snapshot() == before);
+    assert_eq!(app.document.history_counts(), history);
+}
