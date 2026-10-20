@@ -123,3 +123,13 @@ Parameter editing and conversion are persistent document operations, while secti
 Brush icons use bounded square RGBA buffers shared through `Arc`, stored as compressed PNG data in optional brush fields. `brush_icon.rs` generates default illustrations and renders an auto-fitted capture of the active mesh using the camera basis, interpolated lighting and a depth buffer. The capture modal previews the snapshot before assigning it; it blocks viewport gestures and shortcuts while open.
 
 Brush IDs persist across edits and file exports. Built-in brushes have stable IDs, duplicates receive new random IDs, and legacy brushes derive deterministic IDs from their contents. `Document::import_brushes` validates a complete batch and merges by identity before committing, so errors leave the library intact and repeated imports do not add copies. `.brushes.json` libraries use a versioned wrapper around the same brush schema.
+
+## Alpha library and stencil projection
+
+`sculpt/alpha.rs` owns bounded assets, image adjustments, validated stencil settings, and projection sampling. Optional `Project.alphas` and `Project.stencil` preserve version 1 compatibility; `Document` owns them separately from geometry history, like brushes. Library changes mark the project dirty. Brush and stencil images are independent shared-buffer snapshots, so asset deletion cannot leave dangling references. A fresh scene retains the library like the existing brush library and clears the stencil. Project Open replaces both.
+
+The Alpha panel uses private drafts; controller commands perform image IO and validated commits. PNG export uses 16-bit grayscale and the atomic writer. Import bounds image dimensions and file size. Export requests confirmation before replacing a file. Texture caches are bounded.
+
+`viewport/stencil.rs` converts view coordinates (fractions of the shorter viewport side) or a fixed surface plane (model units) into a projector. Perspective sampling agrees with screen projection. Each original dab and its stencil produce corresponding symmetry copies before `stamp_many_stenciled` blends influence. This keeps mask, hidden-face and overlap behavior in the existing sculpt path. Soft seam joining is disabled for stencils so it cannot fill protected pattern gaps. Adaptive changes and automatic remeshing are suspended while stenciling; Grab/Snake/Detail are explicitly unavailable. Pending stamps snapshot the projector and share sampling with committed edits.
+
+Run `cargo test --locked --lib alpha` for focused coverage. For a rendered UI and gesture review, set `CLAY_GUIDE_PREVIEW` and run `alpha_library_stencil_offscreen_review` with `--ignored`; it uses real controls, GPU rendering, synthetic mouse strokes, and a surface attachment click.

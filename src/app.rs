@@ -125,6 +125,8 @@ impl App {
             || self.ui.diagnostics_open
             || self.ui.settings_open
             || self.ui.layout_open
+            || self.ui.alphas.draft.is_some()
+            || self.ui.alphas.overwrite.is_some()
             || self.ui.icon_capture_open()
         {
             return;
@@ -168,7 +170,9 @@ impl App {
         for command in primitive_commands {
             self.dispatch(command, ui.ctx());
         }
-        let enabled = !self.ui.icon_capture_open()
+        let enabled = self.ui.alphas.draft.is_none()
+            && self.ui.alphas.overwrite.is_none()
+            && !self.ui.icon_capture_open()
             && self.ui.primitive_warning.is_none()
             && self.ui.pending.is_none()
             && self.ui.file_picker.is_none()
@@ -287,6 +291,7 @@ impl App {
             self.ui.status = status;
         }
         if self.viewport.completed_stroke
+            && !self.document.stencil().is_some_and(|s| s.enabled)
             && self.document.mesh_settings().dynamic
             && self.document.mesh_settings().auto_remesh
             && !self.document.mesh().has_hidden_faces()
@@ -363,6 +368,9 @@ impl eframe::App for App {
         }
         self.ui.status_bar(ctx);
         egui::CentralPanel::default().show(ctx, |ui| self.show_viewport(ui));
+        if let Some(command) = self.ui.alpha_popup(ctx) {
+            self.dispatch(command, ctx);
+        }
         if let Some(command) = self.ui.icon_capture_popup(ctx, &self.document) {
             self.dispatch(command, ctx);
         }

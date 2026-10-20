@@ -83,3 +83,4 @@ jobs:
           cargo test --locked --lib detail_groove_offscreen_preview -- --ignored
           cargo test --locked --lib clay_buildup_offscreen_preview -- --ignored
           cargo test --locked --lib perspective_view_offscreen_preview -- --ignored
+          CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-alpha" cargo test --locked --lib alpha_library_stencil_offscreen_review -- --ignored

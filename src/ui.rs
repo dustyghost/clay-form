@@ -6,6 +6,7 @@ use crate::{
     sculpt::{Alpha, Axis, Kind},
 };
 use eframe::egui::{self, Color32, Sense, Vec2};
+pub(crate) mod alphas;
 mod design;
 use design::Glyph;
 mod customization;
@@ -67,6 +68,7 @@ pub(crate) struct UiState {
     pub selected_reference: usize,
     pub preset_path: String,
     pub alpha_path: String,
+    pub alphas: alphas::AlphaControls,
     pub status: String,
     pub pending: Option<PendingAction>,
     pub pending_save_path: String,
@@ -134,6 +136,7 @@ impl Default for UiState {
             selected_reference: 0,
             preset_path: "brush.brush.json".into(),
             alpha_path: String::new(),
+            alphas: Default::default(),
             status: "Ready • Drag clay to sculpt; Alt-drag empty space to pan; Shift smooths"
                 .into(),
             pending: None,
@@ -782,43 +785,7 @@ impl UiState {
                 ui.add(egui::Slider::new(&mut b.pressure_curve, 0.1..=4.).text("Pressure curve"));
             }
             Tool::Alpha => {
-                ui.label("Alpha");
-                ui.horizontal(|ui| {
-                    ui.selectable_value(&mut b.alpha, Alpha::Soft, "Soft")
-                        .customize(Action::AlphaSoft);
-                    ui.selectable_value(&mut b.alpha, Alpha::Hard, "Hard")
-                        .customize(Action::AlphaHard);
-                    ui.selectable_value(&mut b.alpha, Alpha::Square, "Square")
-                        .customize(Action::AlphaSquare);
-                });
-                if matches!(b.alpha, Alpha::Image { .. }) {
-                    ui.label("Custom image alpha loaded");
-                }
-                let (r, p) = ui.allocate_painter(Vec2::splat(100.), Sense::hover());
-
-                for y in 0..32 {
-                    for x in 0..32 {
-                        let value =
-                            (255. * b.weight(x as f32 / 15.5 - 1., 1. - y as f32 / 15.5)) as u8;
-                        p.rect_filled(
-                            egui::Rect::from_min_size(
-                                r.rect.min + Vec2::new(x as f32, y as f32) * 3.125,
-                                Vec2::splat(3.125),
-                            ),
-                            0.,
-                            Color32::from_gray(value),
-                        );
-                    }
-                }
-                ui.label("Image path (PNG/JPEG)");
-                ui.text_edit_singleline(&mut self.alpha_path);
-                if ui
-                    .add(design::button(ui, Glyph::Open, "Load alpha"))
-                    .customize(Action::LoadAlpha)
-                    .clicked()
-                {
-                    commands.push(Command::LoadAlpha(selected));
-                }
+                self.alpha_panel(ui, document, selected, b, commands);
             }
             Tool::Presets => {
                 ui.label("Preset path");

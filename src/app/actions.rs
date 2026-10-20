@@ -480,7 +480,13 @@ impl App {
             }
             Action::DuplicateBrush => active_brush.map(Command::DuplicateBrush),
             Action::CaptureBrushIcon => active_brush.map(Command::CaptureBrushIcon),
-            Action::LoadAlpha => active_brush.map(Command::LoadAlpha),
+            Action::ToggleStencil => self.document.stencil().cloned().map(|mut s| {
+                s.enabled = !s.enabled;
+                Command::SetStencil(Some(s))
+            }),
+            Action::AttachStencil => Some(Command::AttachStencil),
+            Action::RemoveStencil => Some(Command::SetStencil(None)),
+            Action::LoadAlpha => Some(Command::LoadAlpha),
             Action::SavePreset => active_brush.map(Command::SavePreset),
             Action::LoadPreset => Some(Command::LoadPreset),
             Action::ExportLibrary => Some(Command::ExportBrushLibrary),

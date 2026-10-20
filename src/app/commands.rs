@@ -911,9 +911,65 @@ impl App {
                 .duplicate_brush(index)
                 .map(|index| self.ui.select_brush(index, &self.document)),
             Command::UpdateBrush(index, brush) => self.document.update_brush(index, brush),
-            Command::LoadAlpha(index) => persistence::load_alpha(&self.ui.alpha_path)
-                .and_then(|alpha| self.document.set_alpha(index, alpha))
-                .map(|()| self.ui.status = "Alpha loaded (white applies; black protects)".into()),
+            Command::LoadAlpha => persistence::load_alpha(&self.ui.alpha_path).map(|image| {
+                self.viewport.cancel(&mut self.document);
+                let name = std::path::Path::new(&self.ui.alpha_path)
+                    .file_stem()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string();
+                self.ui.alphas.edit(
+                    None,
+                    crate::sculpt::alpha::Asset {
+                        name,
+                        category: String::new(),
+                        image,
+                    },
+                );
+            }),
+            Command::SaveAlpha(index, asset) => self.document.save_alpha(index, asset).map(|i| {
+                self.ui.alphas.selected = Some(i);
+                self.ui.alphas.draft = None;
+                self.ui.status =
+                    "Alpha saved in project library; choose Use on brush or Place stencil".into();
+            }),
+            Command::RemoveAlpha(index) => self
+                .document
+                .remove_alpha(index)
+                .map(|()| self.ui.alphas.selected = None),
+            Command::UseAlpha(index, brush) => self
+                .document
+                .alphas()
+                .get(index)
+                .cloned()
+                .ok_or("Alpha no longer exists".to_string())
+                .and_then(|asset| self.document.set_alpha(brush, asset.image)),
+            Command::ExportAlpha(index, replace) => {
+                let path = self.ui.alphas.export_path.clone();
+                if std::path::Path::new(&path).exists() && !replace {
+                    self.ui.alphas.overwrite = Some((index, path));
+                    Ok(())
+                } else {
+                    self.document
+                        .alphas()
+                        .get(index)
+                        .ok_or("Alpha no longer exists".to_string())
+                        .and_then(|asset| persistence::save_alpha(&path, &asset.image))
+                        .map(|()| {
+                            self.ui.alphas.overwrite = None;
+                            self.ui.status = format!("Exported 16-bit alpha: {path}");
+                        })
+                }
+            }
+            Command::SetStencil(stencil) => {
+                self.viewport.cancel(&mut self.document);
+                self.document.set_stencil(stencil)
+            }
+            Command::AttachStencil => {
+                self.viewport.cancel(&mut self.document);
+                self.viewport.attach_stencil = true;
+                Ok(())
+            }
             Command::SavePreset(index) => {
                 persistence::save_brush(&self.ui.preset_path, &self.document.brushes()[index])
                     .map(|()| self.ui.status = "Brush saved".into())

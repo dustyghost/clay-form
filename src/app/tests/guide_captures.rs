@@ -182,6 +182,7 @@ impl Guide {
                 });
                 self.app.show_recovery(ctx);
                 commands.extend(self.app.ui.project_file_dialog(ctx));
+                commands.extend(self.app.ui.alpha_popup(ctx));
                 commands.extend(self.app.ui.projection_window(ctx, &self.app.document));
             },
         );
@@ -1571,4 +1572,85 @@ fn delete_submodel_offscreen_review() {
     g.save("submodel-delete-empty");
     g.app.dispatch(Command::Undo, &g.ctx);
     assert_eq!(g.app.document.geometry_snapshot(), after);
+}
+
+#[test]
+#[ignore = "renders alpha library and stencil workflows; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn alpha_library_stencil_offscreen_review() {
+    use crate::sculpt::{
+        Alpha, Geometry,
+        alpha::{Asset, Stencil},
+    };
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(std::path::Path::new(&directory), [1300, 1000]);
+    g.interactive = true;
+    g.panel(Tool::Alpha, Dock::Right);
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Plane);
+    primitive.divisions = [128, 128, 1];
+    g.app
+        .document
+        .replace_geometry(Geometry::new(primitive.mesh().unwrap()))
+        .unwrap();
+    let image = Alpha::Image {
+        width: 128,
+        height: 128,
+        pixels: (0..128 * 128)
+            .map(|i| {
+                let x = (i % 128) as f32 / 127. * 2. - 1.;
+                let y = (i / 128) as f32 / 127. * 2. - 1.;
+                if x.abs() < 0.72 && y.abs() < 0.72 {
+                    ((x * 12.).sin() * 2.).clamp(0., 1.)
+                } else {
+                    0.
+                }
+            })
+            .collect::<Vec<_>>()
+            .into(),
+    };
+    let asset = Asset {
+        name: "Carved stripes".into(),
+        category: "Relief".into(),
+        image,
+    };
+    g.app.document.save_alpha(None, asset.clone()).unwrap();
+    g.app.ui.alphas.selected = Some(0);
+    g.save("alpha-library");
+    click_guide_label(&mut g, "Edit alpha");
+    assert!(g.app.ui.alphas.draft.is_some());
+    g.save("alpha-editor");
+    click_guide_label(&mut g, "Cancel");
+    assert!(g.app.ui.alphas.draft.is_none());
+    click_guide_label(&mut g, "Use on brush");
+    assert_eq!(g.app.document.brushes()[0].alpha, asset.image);
+    // Use a soft brush to brush through the placed pattern, rather than stamp it twice.
+    g.app.document.set_alpha(0, Alpha::Soft).unwrap();
+    let mut stencil = Stencil::new(asset);
+    stencil.rotation = 20.;
+    g.app.dispatch(Command::SetStencil(Some(stencil)), &g.ctx);
+    g.save("alpha-view-stencil");
+    let (rect, _) = g.frame(vec![]);
+    g.app.dispatch(Command::AttachStencil, &g.ctx);
+    g.frame(vec![
+        egui::Event::PointerMoved(rect.center()),
+        primary_event(rect.center(), true),
+    ]);
+    g.frame(vec![primary_event(rect.center(), false)]);
+    assert!(g.app.document.stencil().unwrap().surface.is_some());
+    let before = g.app.document.geometry_snapshot();
+    g.stroke(
+        rect.center() + Vec2::new(-140., 0.),
+        rect.center() + Vec2::new(140., 0.),
+    );
+    assert!(g.app.document.geometry_snapshot() != before);
+    let mut stencil = g.app.document.stencil().unwrap().clone();
+    stencil.opacity = 0.;
+    g.app.dispatch(Command::SetStencil(Some(stencil)), &g.ctx);
+    g.save("alpha-sculpt-through");
+    let mut stencil = g.app.document.stencil().unwrap().clone();
+    stencil.opacity = 0.3;
+    g.app.dispatch(Command::SetStencil(Some(stencil)), &g.ctx);
+    g.app.camera.yaw = 0.45;
+    g.app.camera.pitch = -0.25;
+    g.save("alpha-surface-stencil");
 }

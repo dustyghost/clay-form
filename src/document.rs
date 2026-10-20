@@ -6,6 +6,7 @@ use crate::{
         Project, Symmetry, validate_brush,
     },
 };
+mod alphas;
 mod attributes;
 mod brushes;
 mod diagnostics;
@@ -42,6 +43,8 @@ impl ModelRef<'_> {
     }
 }
 pub struct Document {
+    alphas: Vec<crate::sculpt::alpha::Asset>,
+    stencil: Option<crate::sculpt::alpha::Stencil>,
     references: Vec<crate::reference::ReferenceImage>,
     geometry: Geometry,
     display_revision: u64,
@@ -61,6 +64,8 @@ pub struct Document {
 impl Default for Document {
     fn default() -> Self {
         Self {
+            alphas: Vec::new(),
+            stencil: None,
             references: Vec::new(),
             geometry: Geometry::new(Mesh::starting_sphere()),
             display_revision: 0,
@@ -121,6 +126,8 @@ impl Document {
     }
     pub fn project(&self) -> Project {
         Project {
+            alphas: self.alphas.clone(),
+            stencil: self.stencil.clone(),
             references: self.references.clone(),
             version: Project::VERSION,
             scene: self.geometry.scene.clone(),
@@ -143,6 +150,7 @@ impl Document {
     pub fn new_sphere(&mut self) {
         self.end_edit();
         self.references.clear();
+        self.stencil = None;
         self.geometry = Geometry::new(Mesh::starting_sphere());
         self.display_changed();
         self.history.reset();
@@ -163,6 +171,8 @@ impl Document {
             settings: project.mesh_settings,
         };
         self.display_changed();
+        self.alphas = project.alphas;
+        self.stencil = project.stencil;
         self.references = project.references;
         self.brushes = project.brushes;
         self.symmetry = project.symmetry;

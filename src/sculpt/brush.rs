@@ -439,22 +439,7 @@ pub fn validate_brush(b: &Brush) -> Result<(), String> {
     if let Some(icon) = &b.icon {
         icon.validate()?;
     }
-    if let Alpha::Image {
-        width,
-        height,
-        pixels,
-    } = &b.alpha
-        && (*width == 0
-            || *height == 0
-            || *width > 2048
-            || *height > 2048
-            || pixels.len() != width * height
-            || pixels
-                .iter()
-                .any(|x| !x.is_finite() || !(0. ..=1.).contains(x)))
-    {
-        return Err("Invalid alpha".into());
-    }
+    b.alpha.validate()?;
     Ok(())
 }
 

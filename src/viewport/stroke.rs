@@ -9,6 +9,7 @@ pub(super) struct PendingStroke {
     pub start: Pos2,
     pub end: Pos2,
     pub brush: Brush,
+    pub stencil: Option<crate::sculpt::alpha::Projection>,
     pub pressure: f32,
     pub invert: bool,
     pub anchor: (Vec3, Vec3),
@@ -93,14 +94,33 @@ impl PendingStroke {
     }
     pub fn preview_mesh(&self, document: &Document, scene: &Scene) -> Mesh {
         let mut mesh = document.mesh().clone();
+        if self.stencil.is_some()
+            && matches!(
+                self.brush.kind,
+                crate::sculpt::Kind::Grab
+                    | crate::sculpt::Kind::Snake
+                    | crate::sculpt::Kind::Detail
+            )
+        {
+            return mesh;
+        }
         let brush = self.posed_brush();
         let mut budget = AdaptiveBudget::default();
-        let settings = &document.mesh_settings().adaptive;
+        let disabled = crate::sculpt::AdaptiveSettings::default();
+        let settings = if self.stencil.is_some() {
+            &disabled
+        } else {
+            &document.mesh_settings().adaptive
+        };
+        let stencils = self
+            .stencil
+            .as_ref()
+            .map_or_else(Vec::new, |s| s.copies(document.symmetry()));
         for dab in self.dabs(scene) {
             let dabs = document.symmetry().dabs(dab);
             mesh.adapt(&brush, &dabs, settings, &mut budget, true);
             mesh.prepare_drag_stamp(&brush, &dabs, settings);
-            mesh.stamp_many(&brush, &dabs);
+            mesh.stamp_many_stenciled(&brush, &dabs, &stencils);
             mesh.adapt(&brush, &dabs, settings, &mut budget, false);
         }
         mesh
@@ -108,7 +128,7 @@ impl PendingStroke {
     pub fn commit(self, document: &mut Document, scene: &Scene) {
         let brush = self.posed_brush();
         for dab in self.dabs(scene) {
-            document.apply_dab(&brush, dab);
+            document.apply_dab_stenciled(&brush, dab, self.stencil.as_ref());
         }
     }
     fn dabs(&self, scene: &Scene) -> Vec<Dab> {
@@ -179,6 +199,7 @@ mod tests {
             brush,
             pressure: 1.,
             invert: false,
+            stencil: None,
             anchor: (Vec3::default(), Vec3(0., 0., 1.)),
         };
         let ctx = egui::Context::default();
@@ -277,6 +298,7 @@ mod tests {
                     let stroke = PendingStroke {
                         start: rect.center(),
                         end: rect.center() + egui::vec2(60., 0.),
+                        stencil: None,
                         anchor: scene.pick(rect.center()).unwrap(),
                         brush,
                         pressure: 0.75,

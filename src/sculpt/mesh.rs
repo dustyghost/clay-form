@@ -284,6 +284,14 @@ impl Mesh {
     /// Blend symmetry copies against the same geometry without doubling strength.
     /// Soft Standard footprints join near the seam, bounded by the normal brush peak.
     pub fn stamp_many(&mut self, b: &Brush, dabs: &[Dab]) -> bool {
+        self.stamp_many_stenciled(b, dabs, &[])
+    }
+    pub(crate) fn stamp_many_stenciled(
+        &mut self,
+        b: &Brush,
+        dabs: &[Dab],
+        stencils: &[super::alpha::Projection],
+    ) -> bool {
         let stable_dabs = (b.kind == Kind::Detail).then(|| self.detail_dabs(dabs));
         let dabs = stable_dabs.as_deref().unwrap_or(dabs);
         let mut deformed = false;
@@ -310,8 +318,10 @@ impl Mesh {
         let polish = (b.kind == Kind::Polish)
             .then(|| self.polish_planes(b, dabs, &normals, &mut sculptable));
         let clay = (b.kind == Kind::Clay).then(|| self.clay_planes(dabs));
-        let join_soft =
-            b.kind == Kind::Standard && matches!(b.alpha, super::Alpha::Soft) && dabs.len() > 1;
+        let join_soft = b.kind == Kind::Standard
+            && matches!(b.alpha, super::Alpha::Soft)
+            && dabs.len() > 1
+            && stencils.is_empty();
         let origin = dabs.first().map_or(Vec3::default(), |dab| dab.center);
         for i in 0..old.len() {
             if !sculptable[i] {
@@ -351,7 +361,8 @@ impl Mesh {
                     } else {
                         1.
                     };
-                let influence = weight * strength;
+                let influence =
+                    weight * strength * stencils.get(dab_index).map_or(1., |s| s.weight(old[i]));
                 if influence <= 0. {
                     continue;
                 }

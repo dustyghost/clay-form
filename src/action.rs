@@ -139,6 +139,9 @@ pub(crate) enum Action {
     RestoreBrushIcon,
     ResetBrushSettings,
     LoadAlpha,
+    ToggleStencil,
+    AttachStencil,
+    RemoveStencil,
     SavePreset,
     LoadPreset,
     ExportLibrary,
@@ -345,6 +348,9 @@ impl Action {
         Self::ProjectDetails,
         Self::KeepProjectionReference,
         Self::DeleteSubmodel,
+        Self::ToggleStencil,
+        Self::AttachStencil,
+        Self::RemoveStencil,
     ];
     /// Help shared by the built-in controls, custom menus, and shelves.
     pub fn help(&self) -> Option<&'static str> {
@@ -539,7 +545,10 @@ impl Action {
             Self::CaptureBrushIcon => "Capture model icon",
             Self::RestoreBrushIcon => "Restore default brush icon",
             Self::ResetBrushSettings => "Reset brush settings",
-            Self::LoadAlpha => "Load alpha at path",
+            Self::LoadAlpha => "Preview alpha image at path",
+            Self::ToggleStencil => "Toggle stencil",
+            Self::AttachStencil => "Attach stencil to surface",
+            Self::RemoveStencil => "Remove stencil",
             Self::SavePreset => "Export current brush",
             Self::LoadPreset => "Import brush at path",
             Self::ExportLibrary => "Export brush library",

@@ -59,9 +59,42 @@ Grab follows pointer movement; spacing does not affect it. Subtracting Smooth sh
 
 ### Choose an alpha
 
-An alpha shapes each dab. Choose **Soft**, **Hard**, or **Square**, or load a PNG/JPEG up to **2048 × 2048**.
+An alpha shapes each dab. Choose **Soft**, **Hard**, or **Square**, or build a reusable image alpha in the **Alpha** panel.
 
-White affects the surface; black protects it. Transparency reduces influence. Rotation turns the pattern, and inner radius gives Soft/image alphas a stronger core. Custom images are embedded in brushes and projects.
+### Create and reuse an image alpha
+
+1. Open **Alpha → Import image**, enter a PNG/JPEG path, and choose **Preview image**. Images can be up to **2048 × 2048** and **32 MB**.
+2. Name the alpha and give it a category such as *Stone*. Compare **Source** with **Result** while adjusting the crop, black/white levels, gamma, inversion, and **Edge fade**.
+3. Choose **Save alpha**. Select its thumbnail in the project library, then choose **Use on brush**. Switch brushes and choose **Use on brush** again to reuse the same image.
+4. Search by name or category. Use **Edit alpha** to adjust an asset, **Duplicate alpha** for a variation, or **Export selected alpha → Export PNG** to share a 16-bit height image. Import that PNG to use it in another project.
+
+![Source and result previews beside crop and tonal controls](../images/alpha-editor.png)
+
+*Adjust the image privately, then save it to the project alpha library.*
+
+White affects the surface; black protects it. Imported transparency reduces influence. Image inversion happens after transparency is combined with brightness. **Alpha rotation** turns each dab; brush falloff and inner radius soften its circular footprint. **Spacing** controls freehand and Line dab spacing, and strength and pressure control depth. Drag Rect adds its drag angle to the brush rotation; Drag Dot keeps the preset's angle.
+
+**Copy brush alpha to library** brings an existing embedded alpha into the editor. Cancel leaves the library and brush unchanged. Brushes and stencils keep independent copies: editing or removing a library asset does not change existing strokes, brush presets, or a placed stencil. Use **Use on brush** again to adopt an edited image.
+
+The project saves the library, categories, brush images, and stencil settings. Library edits are outside sculpt Undo/Redo, like brush settings. Exported PNGs contain the adjusted heights; names and categories stay in the project. The library holds up to 64 assets and 16 million pixels in total.
+
+### Brush through a placed stencil
+
+1. Select an alpha thumbnail and choose **Place stencil**. A translucent guide appears over the model. Start with **Standard**, a **Soft** brush alpha, and a finely subdivided mesh.
+2. Set **Horizontal**, **Vertical**, **Width**, **Height**, and **Rotation** in the stencil controls. View-attached positions and sizes use fractions of the viewport's shorter side. Positive vertical moves up; positive rotation turns counterclockwise.
+3. Brush back and forth through the guide. White areas permit the brush, black areas and everything outside the rectangle protect the surface. Brush alpha, falloff, pressure, strength, existing masks, and hidden geometry still apply.
+4. Choose **Attach to surface…**, then click the model. Orbit to inspect it: the stencil now stays on that surface plane. Its position and size controls use model units. **Follow view** returns to a centered view stencil. Escape cancels attachment without painting.
+5. Set **Overlay opacity** to zero to inspect your result while continuing to stencil. Disable **Stencil enabled** to sculpt freely, or **Remove stencil** to clear it.
+
+![Surface stencil stays on its plane as the camera orbits, with placement controls visible](../images/alpha-surface-stencil.png)
+
+*The guide follows the surface plane; brush strokes only affect its bright regions.*
+
+A view stencil stays in the viewport while you orbit, pan, or zoom. A surface stencil is a fixed planar projection in model coordinates: it follows camera changes but does not track later mesh transforms, deformations, or remeshing. Reattach it after moving the model. It projects through curved surfaces rather than wrapping along them.
+
+Freehand, Line, Drag Rect, and Drag Dot work through the placed stencil. Dragging a stamp changes the brush footprint; the stencil stays placed. Stamp previews are private, release creates one undoable edit, and Escape cancels. Completed freehand strokes use the usual one-step Undo. Symmetry mirrors or rotates the stencil with each brush copy.
+
+Stenciling keeps topology fixed, including when adaptive sculpting or automatic remeshing is enabled. Subdivide first for fine patterns. **Grab**, **Snake**, and **Detail** require the stencil to be disabled. The viewport explains this restriction. Toggle, attachment, and removal actions can be assigned in **Settings → Key settings** or added to custom controls.
 
 ### Example: reset an experimental brush
 
