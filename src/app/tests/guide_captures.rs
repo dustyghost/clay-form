@@ -1658,6 +1658,7 @@ fn alpha_library_stencil_offscreen_review() {
     let mut stencil = Stencil::new(asset);
     stencil.rotation = 20.;
     g.app.dispatch(Command::SetStencil(Some(stencil)), &g.ctx);
+    click_guide_label(&mut g, "Stencil placement");
     g.save("alpha-view-stencil");
     let (rect, _) = g.frame(vec![]);
     g.app.dispatch(Command::AttachStencil, &g.ctx);
@@ -1771,6 +1772,10 @@ fn stencil_controls_offscreen_review() {
         )))
         .unwrap();
     review_stencil_controls(&mut g);
+    g.panel(Tool::Alpha, Dock::Right);
+    g.app.ui.alphas.selected = Some(crate::ui::alphas::Selection::Builtin(7));
+    click_guide_label(&mut g, "Place stencil");
+    g.save("alpha-library-expanded");
 }
 
 fn review_stencil_controls(g: &mut Guide) {
