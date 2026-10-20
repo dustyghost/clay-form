@@ -79,7 +79,7 @@ impl Overlay {
         super::controls::label(
             painter,
             scene.rect.left_bottom() + Vec2::new(12., -40.),
-            &format!("Stencil: {} · fixed topology", stencil.asset.name),
+            &format!("Stencil: {}", stencil.asset.name),
             Color32::from_rgb(160, 225, 215),
         );
         if stencil.opacity <= 0. {
@@ -284,6 +284,59 @@ mod tests {
             assert_eq!(d.history_counts().0, history.0 + 1);
             d.undo();
             assert!(d.geometry_snapshot() == before);
+        }
+    }
+    #[test]
+    fn alpha_adaptive_stencil_preview_matches_commit_and_undo_in_both_projections() {
+        for perspective in [false, true] {
+            for mode in [StrokeMode::DragRect, StrokeMode::DragDot, StrokeMode::Line] {
+                let mut d = Document::default();
+                let mut cube = Primitive::for_kind(PrimitiveKind::Cube);
+                cube.divisions = [8, 8, 8];
+                d.replace_geometry(Geometry::new(cube.mesh().unwrap()))
+                    .unwrap();
+                d.set_adaptive(crate::sculpt::AdaptiveSettings {
+                    enabled: true,
+                    relative: true,
+                    detail: 12.,
+                    ..Default::default()
+                })
+                .unwrap();
+                d.set_symmetry(crate::sculpt::Symmetry {
+                    enabled: true,
+                    ..Default::default()
+                })
+                .unwrap();
+                let scene = scene(
+                    &d,
+                    &Camera {
+                        perspective,
+                        ..Default::default()
+                    },
+                );
+                let before = d.geometry_snapshot();
+                let mut brush = Brush::new(Kind::Standard);
+                brush.stroke_mode = mode;
+                let start = scene.rect.center() + Vec2::new(25., 0.);
+                let stroke = PendingStroke {
+                    start,
+                    end: start + Vec2::new(65., 0.),
+                    anchor: scene.pick(start).unwrap(),
+                    brush,
+                    stencil: Some(project(&stencil(), &scene)),
+                    pressure: 0.7,
+                    invert: false,
+                };
+                let preview = stroke.preview_mesh(&d, &scene);
+                assert!(d.geometry_snapshot() == before);
+                assert!(preview.vertices.len() > before.mesh.vertices.len());
+                stroke.commit(&mut d, &scene);
+                d.end_stroke();
+                assert_eq!(*d.mesh(), preview);
+                d.mesh().validate_closed().unwrap();
+                d.undo();
+                assert!(d.geometry_snapshot() == before);
+            }
         }
     }
 }

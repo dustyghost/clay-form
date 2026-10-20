@@ -46,22 +46,24 @@ impl Document {
         }
         self.begin_stroke();
         let dabs = self.symmetry.dabs(dab);
-        let disabled = AdaptiveSettings::default();
-        let settings = if stencil.is_some() {
-            &disabled
-        } else {
-            &self.geometry.settings.adaptive
+        let settings = &self.geometry.settings.adaptive;
+        let stencils = stencil.map_or_else(Vec::new, |s| s.copies(&self.symmetry));
+        let region = crate::sculpt::AdaptiveRegion {
+            dabs: &dabs,
+            stencils: &stencils,
         };
-        let mut before_topology =
-            self.geometry
-                .mesh
-                .adapt(brush, &dabs, settings, &mut self.adaptive_budget, true);
+        let mut before_topology = self.geometry.mesh.adapt_stenciled(
+            brush,
+            region,
+            settings,
+            &mut self.adaptive_budget,
+            true,
+        );
         before_topology |= self
             .geometry
             .mesh
-            .prepare_drag_stamp(brush, &dabs, settings);
+            .prepare_stenciled_stamp(brush, &dabs, &stencils, settings);
         let old_mask = (brush.kind == Kind::Mask).then(|| self.geometry.mesh.mask.clone());
-        let stencils = stencil.map_or_else(Vec::new, |s| s.copies(&self.symmetry));
         let deformed = self
             .geometry
             .mesh
@@ -72,9 +74,12 @@ impl Document {
                 dab.center = dab.center + brush.snake_motion(*dab);
             }
         }
-        let after_topology = self.geometry.mesh.adapt(
+        let after_topology = self.geometry.mesh.adapt_stenciled(
             brush,
-            &after_dabs,
+            crate::sculpt::AdaptiveRegion {
+                dabs: &after_dabs,
+                stencils: &stencils,
+            },
             settings,
             &mut self.adaptive_budget,
             false,

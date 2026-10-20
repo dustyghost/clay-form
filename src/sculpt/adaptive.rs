@@ -1,6 +1,7 @@
 //! Local, conforming edge splits and conservative manifold edge collapses.
 use super::{
     Alpha, Brush, Dab, Kind, Mesh, Vec3,
+    alpha::Projection,
     math::closest_triangle,
     subdivision::{MAX_TRIANGLES, MAX_VERTICES},
 };
@@ -89,14 +90,50 @@ impl Default for Budget {
     }
 }
 
+/// Symmetry dabs and their matching projected masks, in the same order.
+#[derive(Clone, Copy)]
+pub(crate) struct Region<'a> {
+    pub dabs: &'a [Dab],
+    pub stencils: &'a [Projection],
+}
+impl Region<'_> {
+    fn permits_reconnection(&self, brush: &Brush, points: &[Vec3]) -> bool {
+        self.stencils.is_empty()
+            || self.stencils.iter().zip(self.dabs).any(|(stencil, dab)| {
+                // A different symmetry projector must not grant permission unless
+                // its corresponding brush dab actually covers the same region.
+                (!brush.pressure || dab.pressure > 0.)
+                    && points.iter().all(|p| {
+                        let offset = *p - dab.center;
+                        offset.len() <= dab.radius * 1.5
+                            && brush.weight(
+                                offset.dot(dab.right) / dab.radius,
+                                offset.dot(dab.up) / dab.radius,
+                            ) > 0.001
+                    })
+                    && stencil.coverage_bounds(points).0 >= 0.999
+            })
+    }
+}
+
 impl Mesh {
     /// A placed stamp has no later dabs to finish refinement. Resolve its footprint
     /// on the undeformed surface so new vertices sample the alpha, rather than
     /// merely subdividing an already jagged displacement afterwards.
+    #[cfg(test)]
     pub(crate) fn prepare_drag_stamp(
         &mut self,
         brush: &Brush,
         dabs: &[Dab],
+        settings: &AdaptiveSettings,
+    ) -> bool {
+        self.prepare_stenciled_stamp(brush, dabs, &[], settings)
+    }
+    pub(crate) fn prepare_stenciled_stamp(
+        &mut self,
+        brush: &Brush,
+        dabs: &[Dab],
+        stencils: &[Projection],
         settings: &AdaptiveSettings,
     ) -> bool {
         if !self.creases.is_empty()
@@ -119,7 +156,7 @@ impl Mesh {
         let mut remaining = 8192;
         let mut changed = false;
         for _ in 0..32 {
-            let count = self.split_local(brush, dabs, target, remaining.min(512));
+            let count = self.split_local(brush, dabs, stencils, target, remaining.min(512));
             changed |= count > 0;
             remaining -= count;
             if count == 0 || remaining == 0 {
@@ -128,6 +165,7 @@ impl Mesh {
         }
         changed
     }
+    #[cfg(test)]
     pub(crate) fn adapt(
         &mut self,
         brush: &Brush,
@@ -136,6 +174,26 @@ impl Mesh {
         budget: &mut Budget,
         collapse: bool,
     ) -> bool {
+        self.adapt_stenciled(
+            brush,
+            Region {
+                dabs,
+                stencils: &[],
+            },
+            settings,
+            budget,
+            collapse,
+        )
+    }
+    pub(crate) fn adapt_stenciled(
+        &mut self,
+        brush: &Brush,
+        region: Region<'_>,
+        settings: &AdaptiveSettings,
+        budget: &mut Budget,
+        collapse: bool,
+    ) -> bool {
+        let Region { dabs, stencils } = region;
         if !self.creases.is_empty()
             || !settings.enabled
             || brush.kind == Kind::Mask
@@ -155,6 +213,7 @@ impl Mesh {
             let count = self.collapse_local(
                 brush,
                 dabs,
+                stencils,
                 (if brush.kind == Kind::Detail {
                     target.min(dabs[0].radius * super::detail::CORE_EDGE_FRACTION)
                 } else {
@@ -173,7 +232,7 @@ impl Mesh {
                     break;
                 }
                 budget.passes -= 1;
-                let count = self.split_local(brush, dabs, target, budget.splits.min(64));
+                let count = self.split_local(brush, dabs, stencils, target, budget.splits.min(64));
                 budget.splits -= count;
                 changed |= count > 0;
                 if count == 0 || budget.splits == 0 {
@@ -183,7 +242,7 @@ impl Mesh {
         }
         if settings.refine && budget.flips > 0 && budget.flip_passes > 0 {
             budget.flip_passes -= 1;
-            let count = self.improve_edges(brush, dabs, budget.flips.min(64));
+            let count = self.improve_edges(brush, dabs, stencils, budget.flips.min(64));
             budget.flips -= count;
             changed |= count > 0;
         }
@@ -193,13 +252,19 @@ impl Mesh {
             && budget.relax
         {
             budget.relax = false;
-            changed |= self.relax_surface(brush, dabs, target);
+            changed |= self.relax_surface(brush, dabs, stencils, target);
         }
         changed
     }
     // Redistribute vertices compressed by dragging or pinching. Snake retains
     // its depth; Detail also damps small normal ripples between fresh triangles.
-    fn relax_surface(&mut self, brush: &Brush, dabs: &[Dab], target: f32) -> bool {
+    fn relax_surface(
+        &mut self,
+        brush: &Brush,
+        dabs: &[Dab],
+        stencils: &[Projection],
+        target: f32,
+    ) -> bool {
         let mut changed = false;
         let sculptable = self.sculptable_vertices();
         for _ in 0..2 {
@@ -208,7 +273,7 @@ impl Mesh {
             let mut counts = vec![0.; self.vertices.len()];
             let mut active = vec![false; self.vertices.len()];
             for (fi, &t @ [a, b, c]) in self.triangles.iter().enumerate() {
-                if self.in_patch(fi, t, brush, dabs) {
+                if self.in_patch(fi, t, brush, dabs, stencils) {
                     for i in t {
                         active[i] = true;
                     }
@@ -295,11 +360,17 @@ impl Mesh {
     }
     // Reconnect diagonals instead of repeatedly subdividing skinny triangles.
     // No vertex positions or mask values change, and distant faces stay intact.
-    fn improve_edges(&mut self, brush: &Brush, dabs: &[Dab], limit: usize) -> usize {
+    fn improve_edges(
+        &mut self,
+        brush: &Brush,
+        dabs: &[Dab],
+        stencils: &[Projection],
+        limit: usize,
+    ) -> usize {
         let mut edges: BTreeMap<(usize, usize), Vec<OrientedFaceEdge>> = BTreeMap::new();
         let mut existing = HashSet::new();
         for (i, &[a, b, c]) in self.triangles.iter().enumerate() {
-            let local = self.in_patch(i, [a, b, c], brush, dabs);
+            let local = self.in_patch(i, [a, b, c], brush, dabs, stencils);
             for (a, b, c) in [(a, b, c), (b, c, a), (c, a, b)] {
                 existing.insert(edge(a, b));
                 if local {
@@ -340,6 +411,11 @@ impl Mesh {
             {
                 continue;
             }
+            if !(Region { dabs, stencils })
+                .permits_reconnection(brush, &[*a, *b, *c, *d].map(|v| self.vertices[v]))
+            {
+                continue;
+            }
             let old = [self.triangles[*i], self.triangles[*j]];
             let new = [[*c, *d, *b], [*d, *c, *a]];
             let n = normal(old[0]);
@@ -372,13 +448,20 @@ impl Mesh {
         }
         count
     }
-    fn split_local(&mut self, brush: &Brush, dabs: &[Dab], target: f32, limit: usize) -> usize {
+    fn split_local(
+        &mut self,
+        brush: &Brush,
+        dabs: &[Dab],
+        stencils: &[Projection],
+        target: f32,
+        limit: usize,
+    ) -> usize {
         if limit == 0 {
             return 0;
         }
         let mut candidates = BTreeMap::new();
         for (fi, &t) in self.triangles.iter().enumerate() {
-            if !self.in_patch(fi, t, brush, dabs) {
+            if !self.in_patch(fi, t, brush, dabs, stencils) {
                 continue;
             }
             let [a, b, c] = t;
@@ -391,8 +474,8 @@ impl Mesh {
                     brush.effective_stroke_mode(),
                     super::StrokeMode::DragRect | super::StrokeMode::DragDot
                 );
-                let boundary = stamp
-                    && dabs.iter().any(|dab| {
+                let boundary = (stamp || !stencils.is_empty())
+                    && dabs.iter().enumerate().any(|(index, dab)| {
                         let weights = [
                             self.vertices[x],
                             self.vertices[y],
@@ -401,6 +484,7 @@ impl Mesh {
                         .map(|p| {
                             let d = p - dab.center;
                             brush.weight(d.dot(dab.right) / dab.radius, d.dot(dab.up) / dab.radius)
+                                * stencils.get(index).map_or(1., |s| s.weight(p))
                         });
                         let low = weights.into_iter().fold(f32::INFINITY, f32::min);
                         let high = weights.into_iter().fold(0_f32, f32::max);
@@ -511,13 +595,14 @@ impl Mesh {
         &mut self,
         brush: &Brush,
         dabs: &[Dab],
+        stencils: &[Projection],
         threshold: f32,
         limit: usize,
     ) -> usize {
         let mut candidates = BTreeMap::new();
         for (fi, &t) in self.triangles.iter().enumerate() {
             let [a, b, c] = t;
-            if self.in_patch(fi, t, brush, dabs) {
+            if self.in_patch(fi, t, brush, dabs, stencils) {
                 for (a, b) in [(a, b), (b, c), (c, a)] {
                     let length = (self.vertices[a] - self.vertices[b]).len();
                     if length < threshold {
@@ -571,6 +656,16 @@ impl Mesh {
                 .any(|&i| !self.face_visible(i))
             {
                 continue;
+            }
+            if !stencils.is_empty() {
+                let points: Vec<_> = incident[a]
+                    .iter()
+                    .chain(&incident[b])
+                    .flat_map(|&i| self.triangles[i].map(|v| self.vertices[v]))
+                    .collect();
+                if !(Region { dabs, stencils }).permits_reconnection(brush, &points) {
+                    continue;
+                }
             }
             let shared: Vec<_> = incident[a]
                 .iter()
@@ -722,13 +817,20 @@ impl Mesh {
         self.triangles = triangles;
         merged.len()
     }
-    fn in_patch(&self, face: usize, t: [usize; 3], brush: &Brush, dabs: &[Dab]) -> bool {
+    fn in_patch(
+        &self,
+        face: usize,
+        t: [usize; 3],
+        brush: &Brush,
+        dabs: &[Dab],
+        stencils: &[Projection],
+    ) -> bool {
         if !self.face_visible(face) || t.iter().all(|&i| self.mask[i] >= 0.999) {
             return false;
         }
         let [a, b, c] = t.map(|i| self.vertices[i]);
         let normal = (b - a).cross(c - a).norm();
-        dabs.iter().any(|dab| {
+        dabs.iter().enumerate().any(|(index, dab)| {
             if brush.pressure && dab.pressure <= 0. {
                 return false;
             }
@@ -748,6 +850,12 @@ impl Mesh {
                 1.
             };
             if offset.len() > dab.radius * reach {
+                return false;
+            }
+            if stencils
+                .get(index)
+                .is_some_and(|s| s.coverage_bounds(&[a, b, c]).1 <= 0.001)
+            {
                 return false;
             }
             [p, a, b, c, (a + b + c) * (1. / 3.)].into_iter().any(|p| {
@@ -822,7 +930,7 @@ mod tests {
             let target = settings.edge_length(&brush, d);
             let mut boundary_edges = 0;
             for (fi, &t) in mesh.triangles.iter().enumerate() {
-                if !mesh.in_patch(fi, t, &brush, &[d]) {
+                if !mesh.in_patch(fi, t, &brush, &[d], &[]) {
                     continue;
                 }
                 for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
@@ -1073,10 +1181,10 @@ mod group_tests {
             delta: Vec3::default(),
             invert: false,
         };
-        assert!(m.split_local(&brush, &[dab], 0.02, 16) > 0);
+        assert!(m.split_local(&brush, &[dab], &[], 0.02, 16) > 0);
         m.validate_closed().unwrap();
         assert!(m.hidden_face_count() > 0);
-        m.collapse_local(&brush, &[dab], 0.3, 16);
+        m.collapse_local(&brush, &[dab], &[], 0.3, 16);
         m.validate_closed().unwrap();
         assert!(m.hidden_face_count() > 0);
         for p in hidden_points {
@@ -1100,11 +1208,11 @@ mod group_tests {
             delta: Vec3::default(),
             invert: false,
         };
-        assert!(m.split_local(&brush, &[dab], 0.1, 16) > 0);
+        assert!(m.split_local(&brush, &[dab], &[], 0.1, 16) > 0);
         m.validate_closed().unwrap();
         assert_eq!(m.polygroups, vec![1; m.triangles.len()]);
         assert!(m.vertex_groups[0].weights.iter().all(|&w| w == 1.));
-        let count = m.collapse_local(&brush, &[dab], 3., 16);
+        let count = m.collapse_local(&brush, &[dab], &[], 3., 16);
         assert!(count > 0);
         m.validate_closed().unwrap();
         assert_eq!(m.polygroups, vec![1; m.triangles.len()]);

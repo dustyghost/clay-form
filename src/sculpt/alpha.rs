@@ -1,6 +1,8 @@
 //! Reusable image alphas and placed projection masks. No UI or filesystem dependencies.
 use super::{Alpha, Dab, Symmetry, Vec3};
 use serde::{Deserialize, Serialize};
+mod builtins;
+pub use builtins::builtins;
 
 impl Alpha {
     pub fn validate(&self) -> Result<(), String> {
@@ -249,6 +251,10 @@ pub struct Projection {
 }
 impl Projection {
     pub fn weight(&self, point: Vec3) -> f32 {
+        self.coordinates(point)
+            .map_or(0., |[u, v]| self.image.sample(u, v))
+    }
+    fn coordinates(&self, point: Vec3) -> Option<[f32; 2]> {
         let p = point - self.frame.origin;
         let divisor = if self.distance == 0. {
             1.
@@ -256,15 +262,93 @@ impl Projection {
             1. - p.dot(self.view) / self.distance
         };
         if divisor <= 0.001 {
-            return 0.;
+            return None;
         }
         let x = p.dot(self.frame.right) / divisor - self.position[0];
         let y = p.dot(self.frame.up) / divisor - self.position[1];
         let (s, c) = self.rotation.to_radians().sin_cos();
-        self.image.sample(
+        Some([
             (x * c + y * s) / self.size[0] + 0.5,
             0.5 - (-x * s + y * c) / self.size[1],
-        )
+        ])
+    }
+    /// Conservative bounds over the projected polygon. Looking inside its image
+    /// bounds finds narrow bright features even when all existing vertices are black.
+    /// A white lower bound permits simplification without crossing a protected gap.
+    pub(crate) fn coverage_bounds(&self, points: &[Vec3]) -> (f32, f32) {
+        let mut low = [f32::INFINITY; 2];
+        let mut high = [f32::NEG_INFINITY; 2];
+        let mut visible = 0;
+        for &point in points {
+            if let Some(uv) = self.coordinates(point) {
+                visible += 1;
+                for axis in 0..2 {
+                    low[axis] = low[axis].min(uv[axis]);
+                    high[axis] = high[axis].max(uv[axis]);
+                }
+            }
+        }
+        if visible == 0 {
+            return (0., 0.);
+        }
+        if visible != points.len() {
+            return (0., 1.);
+        }
+        if (0..2).any(|i| high[i] < 0. || low[i] > 1.) {
+            return (0., 0.);
+        }
+        let outside = (0..2).any(|i| low[i] < 0. || high[i] > 1.);
+        let low = low.map(|v| v.clamp(0., 1.));
+        let high = high.map(|v| v.clamp(0., 1.));
+        let (minimum, maximum) = match &self.image {
+            Alpha::Image {
+                width,
+                height,
+                pixels,
+            } => {
+                let x0 = (low[0] * (*width - 1) as f32).floor() as usize;
+                let x1 = (high[0] * (*width - 1) as f32).ceil() as usize;
+                let y0 = (low[1] * (*height - 1) as f32).floor() as usize;
+                let y1 = (high[1] * (*height - 1) as f32).ceil() as usize;
+                let mut minimum = 1_f32;
+                let mut maximum = 0_f32;
+                for y in y0..=y1 {
+                    for &pixel in &pixels[y * width + x0..=y * width + x1] {
+                        minimum = minimum.min(pixel);
+                        maximum = maximum.max(pixel);
+                    }
+                    if minimum == 0. && maximum == 1. {
+                        break;
+                    }
+                }
+                (minimum, maximum)
+            }
+            Alpha::Square => (
+                f32::from((0..2).all(|i| low[i] > 0.15 && high[i] < 0.85)),
+                f32::from((0..2).all(|i| high[i] > 0.15 && low[i] < 0.85)),
+            ),
+            Alpha::Soft | Alpha::Hard => {
+                let nearest = (0..2)
+                    .map(|i| (0.5_f32.clamp(low[i], high[i]) * 2. - 1.).powi(2))
+                    .sum::<f32>()
+                    .sqrt();
+                let farthest = (0..2)
+                    .map(|i| {
+                        (low[i] * 2. - 1.)
+                            .abs()
+                            .max((high[i] * 2. - 1.).abs())
+                            .powi(2)
+                    })
+                    .sum::<f32>()
+                    .sqrt();
+                if self.image == Alpha::Hard {
+                    (f32::from(farthest < 1.), f32::from(nearest < 1.))
+                } else {
+                    ((1. - farthest).max(0.), (1. - nearest).max(0.))
+                }
+            }
+        };
+        (if outside { 0. } else { minimum }, maximum)
     }
     pub fn copies(&self, symmetry: &Symmetry) -> Vec<Self> {
         symmetry

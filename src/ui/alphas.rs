@@ -2,20 +2,16 @@
 use super::*;
 use crate::sculpt::{
     Brush,
-    alpha::{Adjustments, Asset, Stencil},
+    alpha::{Adjustments, Asset, Stencil, builtins},
 };
 
 /// Built-ins are always available without adding assets to the saved project.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Selection {
-    Soft,
-    Hard,
-    Square,
+    Builtin(usize),
     Project(usize),
 }
 impl Selection {
-    const BUILT_INS: [Self; 3] = [Self::Soft, Self::Hard, Self::Square];
-
     fn project_index(self) -> Option<usize> {
         match self {
             Self::Project(index) => Some(index),
@@ -24,17 +20,10 @@ impl Selection {
     }
 
     fn asset(self, document: &Document) -> Option<Asset> {
-        let (name, image) = match self {
-            Self::Soft => ("Soft", Alpha::Soft),
-            Self::Hard => ("Hard", Alpha::Hard),
-            Self::Square => ("Square", Alpha::Square),
-            Self::Project(index) => return document.alphas().get(index).cloned(),
-        };
-        Some(Asset {
-            name: name.into(),
-            category: "Built-in".into(),
-            image,
-        })
+        match self {
+            Self::Builtin(index) => builtins().get(index).cloned(),
+            Self::Project(index) => document.alphas().get(index).cloned(),
+        }
     }
 }
 
@@ -165,8 +154,8 @@ impl UiState {
             .spacing(Vec2::splat(6.))
             .show(ui, |ui| {
                 let mut count = 0;
-                for selection in Selection::BUILT_INS
-                    .into_iter()
+                for selection in (0..builtins().len())
+                    .map(Selection::Builtin)
                     .chain((0..document.alphas().len()).map(Selection::Project))
                 {
                     let asset = selection.asset(document).expect("existing library entry");
@@ -185,11 +174,17 @@ impl UiState {
                         width,
                     )
                     .on_hover_text(&asset.category);
-                    let response = match selection {
-                        Selection::Soft => response.customize(Action::AlphaSoft),
-                        Selection::Hard => response.customize(Action::AlphaHard),
-                        Selection::Square => response.customize(Action::AlphaSquare),
-                        Selection::Project(_) => response,
+                    let response = match (&selection, &asset.image) {
+                        (Selection::Builtin(_), Alpha::Soft) => {
+                            response.customize(Action::AlphaSoft)
+                        }
+                        (Selection::Builtin(_), Alpha::Hard) => {
+                            response.customize(Action::AlphaHard)
+                        }
+                        (Selection::Builtin(_), Alpha::Square) => {
+                            response.customize(Action::AlphaSquare)
+                        }
+                        _ => response,
                     };
                     if response.clicked() {
                         self.alphas.selected = Some(selection);
@@ -361,7 +356,7 @@ impl UiState {
                 "Changes the guide only, not sculpt strength. Use zero to inspect the sculpt while keeping the stencil active.",
             );
             ui.collapsing("Stencil help", |ui| {
-                ui.weak("Brush through the stencil using Freehand, Line or stamps. Brush alpha, strength and pressure multiply its coverage. Symmetry copies the stencil. Topology stays fixed while stenciling. Grab, Snake and Detail require disabling the stencil.");
+                ui.weak("Brush through the stencil using Freehand, Line or stamps. Brush alpha, strength and pressure multiply its coverage. Symmetry copies the stencil. Adaptive sculpting refines through the stencil; automatic remeshing stays paused. Grab, Snake and Detail require disabling the stencil.");
             });
             if remove {
                 commands.push(Command::SetStencil(None));

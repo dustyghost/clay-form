@@ -13,7 +13,7 @@ mod remesh;
 mod subdivision;
 mod symmetry;
 pub use adaptive::AdaptiveSettings;
-pub(crate) use adaptive::Budget as AdaptiveBudget;
+pub(crate) use adaptive::{Budget as AdaptiveBudget, Region as AdaptiveRegion};
 pub use brush::{Alpha, Brush, BrushIcon, Kind, StrokeMode, validate_brush};
 pub use math::Vec3;
 pub use mesh::{Dab, Mesh};

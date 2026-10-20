@@ -59,7 +59,7 @@ Grab follows pointer movement; spacing does not affect it. Subtracting Smooth sh
 
 ### Choose an alpha
 
-An alpha shapes each dab. Open the **Alpha** panel, select **Soft**, **Hard**, or **Square** in the **Alpha library**, then choose **Use on brush**. These built-ins are always available, including in older projects. You can also **Place stencil** with them or **Duplicate alpha** to edit a variation. Built-ins cannot be removed; saved copies can.
+An alpha shapes each dab. Open the **Alpha** panel, select **Soft**, **Hard**, or **Square** in the **Alpha library**, then choose **Use on brush**. The library also includes **Nature’s curve** (a flowing spiral), **Leaf veins**, **Wood grain**, and **Pebbles**. These built-ins are always available, including in older projects. You can also **Place stencil** with them or **Duplicate alpha** to edit a variation. Built-ins cannot be removed; saved copies can.
 
 ![Soft, Hard and Square alongside an imported alpha in the library](../images/alpha-library.png)
 
@@ -82,7 +82,7 @@ The project saves the library, categories, brush images, and stencil settings. L
 
 ### Brush through a placed stencil
 
-1. Select an alpha thumbnail and choose **Place stencil**. A translucent guide appears over the model. Start with **Standard**, a **Soft** brush alpha, and a finely subdivided mesh.
+1. Select an alpha thumbnail and choose **Place stencil**. A translucent guide appears over the model. Start with **Standard**, a **Soft** brush alpha, and either adaptive sculpting or a finely subdivided mesh.
 2. Set **Horizontal**, **Vertical**, **Width**, **Height**, and **Rotation** in the stencil controls. View-attached positions and sizes use fractions of the viewport's shorter side. Positive vertical moves up; positive rotation turns counterclockwise.
 3. Brush back and forth through the guide. White areas permit the brush, black areas and everything outside the rectangle protect the surface. Brush alpha, falloff, pressure, strength, existing masks, and hidden geometry still apply.
 4. Choose **Attach to surface…**, then click the model. Orbit to inspect it: the stencil now stays on that surface plane. Its position and size controls use model units. **Follow view** returns to a centered view stencil. Escape cancels attachment without painting.
@@ -96,7 +96,11 @@ A view stencil stays in the viewport while you orbit, pan, or zoom. A surface st
 
 Freehand, Line, Drag Rect, and Drag Dot work through the placed stencil. Dragging a stamp changes the brush footprint; the stencil stays placed. Stamp previews are private, release creates one undoable edit, and Escape cancels. Completed freehand strokes use the usual one-step Undo. Symmetry mirrors or rotates the stencil with each brush copy.
 
-Stenciling keeps topology fixed, including when adaptive sculpting or automatic remeshing is enabled. Subdivide first for fine patterns. **Grab**, **Snake**, and **Detail** require the stencil to be disabled. The viewport explains this restriction. Toggle, attachment, and removal actions can be assigned in **Settings → Key settings** or added to custom controls.
+Adaptive sculpting works through stencils on closed meshes: refinement samples the projected pattern, and simplification stays inside fully white regions to protect dark gaps and edges. Lower adaptive **Edge size** for finer patterns. Stamp preview and release use the same refinement. Automatic remeshing stays paused while a stencil is enabled because it would rebuild the whole surface. **Grab**, **Snake**, and **Detail** require the stencil to be disabled. The viewport explains this restriction. Toggle, attachment, and removal actions can be assigned in **Settings → Key settings** or added to custom controls.
+
+![Adaptive sculpting adds a spiral relief to a coarse cube through Nature’s curve](../images/alpha-adaptive-spiral.png)
+
+*Nature’s curve applied through a stencil with adaptive sculpting enabled; the overlay is hidden to show the relief.*
 
 ### Example: reset an experimental brush
 
@@ -218,4 +222,3 @@ History defaults to **24 edits** within an estimated **128 MiB**, shared by undo
 ## Related guides
 
 [Navigation](navigation.md) · [Masks and selection](selection.md) · [Mesh management](modeling.md#mesh-management) · [Files and presets](files.md)
-

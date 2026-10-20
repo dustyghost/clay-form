@@ -106,22 +106,21 @@ impl PendingStroke {
         }
         let brush = self.posed_brush();
         let mut budget = AdaptiveBudget::default();
-        let disabled = crate::sculpt::AdaptiveSettings::default();
-        let settings = if self.stencil.is_some() {
-            &disabled
-        } else {
-            &document.mesh_settings().adaptive
-        };
+        let settings = &document.mesh_settings().adaptive;
         let stencils = self
             .stencil
             .as_ref()
             .map_or_else(Vec::new, |s| s.copies(document.symmetry()));
         for dab in self.dabs(scene) {
             let dabs = document.symmetry().dabs(dab);
-            mesh.adapt(&brush, &dabs, settings, &mut budget, true);
-            mesh.prepare_drag_stamp(&brush, &dabs, settings);
+            let region = crate::sculpt::AdaptiveRegion {
+                dabs: &dabs,
+                stencils: &stencils,
+            };
+            mesh.adapt_stenciled(&brush, region, settings, &mut budget, true);
+            mesh.prepare_stenciled_stamp(&brush, &dabs, &stencils, settings);
             mesh.stamp_many_stenciled(&brush, &dabs, &stencils);
-            mesh.adapt(&brush, &dabs, settings, &mut budget, false);
+            mesh.adapt_stenciled(&brush, region, settings, &mut budget, false);
         }
         mesh
     }

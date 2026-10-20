@@ -277,3 +277,227 @@ fn builtin_alpha_samples_preserve_circle_and_square_shapes_when_baked() {
         }
     }
 }
+
+#[test]
+fn adaptive_stencil_refines_coarse_surface_preserves_black_regions_and_undo() {
+    for mode in [
+        StrokeMode::Freehand,
+        StrokeMode::DragRect,
+        StrokeMode::DragDot,
+    ] {
+        let mut plane = Primitive::for_kind(PrimitiveKind::Cube);
+        plane.divisions = [8, 8, 8];
+        let mut d = Document::default();
+        d.replace_geometry(Geometry::new(plane.mesh().unwrap()))
+            .unwrap();
+        d.set_adaptive(crate::sculpt::AdaptiveSettings {
+            enabled: true,
+            detail: 10.,
+            relative: true,
+            ..Default::default()
+        })
+        .unwrap();
+        let before = d.geometry_snapshot();
+        let history = d.history_counts();
+        let stencil = projection(image(vec![0., 0., 1., 1., 0., 0., 1., 1.], 4));
+        let mut brush = Brush::new(Kind::Standard);
+        brush.stroke_mode = mode;
+        let dab = Dab {
+            center: Vec3(0., 0., 1.),
+            normal: Vec3(0., 0., 1.),
+            right: Vec3(1., 0., 0.),
+            up: Vec3(0., 1., 0.),
+            radius: 0.8,
+            pressure: 0.7,
+            delta: Vec3::default(),
+            invert: false,
+        };
+        d.apply_dab_stenciled(&brush, dab, Some(&stencil));
+        d.end_stroke();
+        assert!(
+            d.mesh().vertices.len() > before.mesh.vertices.len(),
+            "{mode:?} must refine under a stencil"
+        );
+        assert!(d.mesh().vertices.iter().any(|p| p.2 > 1.));
+        for p in &d.mesh().vertices {
+            if stencil.weight(*p) == 0. {
+                assert!(
+                    (p.0.abs().max(p.1.abs()).max(p.2.abs()) - 1.).abs() < 1e-6,
+                    "black stencil areas must stay on the original cube"
+                );
+            }
+        }
+        assert_eq!(d.history_counts().0, history.0 + 1);
+        let after = d.geometry_snapshot();
+        d.undo();
+        assert!(d.geometry_snapshot() == before);
+        d.redo();
+        assert!(d.geometry_snapshot() == after);
+    }
+}
+
+#[test]
+fn adaptive_stencil_detects_thin_features_between_coarse_vertices() {
+    let mut pixels = vec![0.; 256 * 256];
+    for row in pixels.chunks_mut(256) {
+        row[139..143].fill(1.);
+    }
+    let stencil = projection(image(pixels, 256));
+    let points = [Vec3(0., 0., 1.), Vec3(0.5, 0., 1.), Vec3(0., 0.5, 1.)];
+    assert!(points.iter().all(|p| stencil.weight(*p) == 0.));
+    assert_eq!(stencil.coverage_bounds(&points), (0., 1.));
+    let mut cube = Primitive::for_kind(PrimitiveKind::Cube);
+    cube.divisions = [4, 4, 4];
+    let mut d = Document::default();
+    d.replace_geometry(Geometry::new(cube.mesh().unwrap()))
+        .unwrap();
+    d.set_adaptive(crate::sculpt::AdaptiveSettings {
+        enabled: true,
+        detail: 4.,
+        relative: true,
+        simplify: false,
+        ..Default::default()
+    })
+    .unwrap();
+    let mut brush = Brush::new(Kind::Standard);
+    brush.stroke_mode = StrokeMode::DragDot;
+    let dab = Dab {
+        center: Vec3(0., 0., 1.),
+        normal: Vec3(0., 0., 1.),
+        right: Vec3(1., 0., 0.),
+        up: Vec3(0., 1., 0.),
+        radius: 0.7,
+        pressure: 1.,
+        delta: Vec3::default(),
+        invert: false,
+    };
+    assert!(d.apply_dab_stenciled(&brush, dab, Some(&stencil)));
+    assert!(d.mesh().vertices.iter().any(|p| p.2 > 1.001));
+    d.mesh().validate_closed().unwrap();
+}
+
+#[test]
+fn adaptive_stencil_simplifies_white_interiors_without_moving_protected_vertices() {
+    let mut cube = Primitive::for_kind(PrimitiveKind::Cube);
+    cube.divisions = [24, 24, 24];
+    let original = cube.mesh().unwrap();
+    let stencil = projection(image(vec![0., 0., 1., 1., 0., 0., 1., 1.], 4));
+    let protected: Vec<_> = original
+        .vertices
+        .iter()
+        .copied()
+        .filter(|p| stencil.weight(*p) < 0.999)
+        .collect();
+    let mut d = Document::default();
+    d.replace_geometry(Geometry::new(original.clone())).unwrap();
+    d.set_adaptive(crate::sculpt::AdaptiveSettings {
+        enabled: true,
+        detail: 32.,
+        relative: true,
+        refine: false,
+        ..Default::default()
+    })
+    .unwrap();
+    let brush = Brush::new(Kind::Smooth);
+    let dab = Dab {
+        center: Vec3(0.5, 0., 1.),
+        normal: Vec3(0., 0., 1.),
+        right: Vec3(1., 0., 0.),
+        up: Vec3(0., 1., 0.),
+        radius: 0.45,
+        pressure: 1.,
+        delta: Vec3::default(),
+        invert: false,
+    };
+    d.apply_dab_stenciled(&brush, dab, Some(&stencil));
+    assert!(d.mesh().vertices.len() < original.vertices.len());
+    // None of these vertices are in this dab's nonzero footprint, and collapse
+    // must not replace them with a midpoint across the stencil boundary.
+    for p in protected.into_iter().filter(|p| p.0 < 0.) {
+        assert!(d.mesh().vertices.contains(&p));
+    }
+    d.mesh().validate_closed().unwrap();
+}
+
+#[test]
+fn builtin_nature_stencils_are_valid_distinct_height_images_with_protected_borders() {
+    let patterns: Vec<_> = builtins()
+        .iter()
+        .filter(|asset| matches!(asset.image, Alpha::Image { .. }))
+        .collect();
+    assert!(patterns.len() >= 4);
+    for (i, asset) in patterns.iter().enumerate() {
+        asset.validate().unwrap();
+        let Alpha::Image { width, pixels, .. } = &asset.image else {
+            unreachable!()
+        };
+        assert!(
+            pixels.iter().any(|v| *v > 0.9),
+            "{} needs bright relief",
+            asset.name
+        );
+        assert!(pixels[..*width].iter().all(|v| *v == 0.));
+        assert!(
+            patterns[..i]
+                .iter()
+                .all(|previous| previous.image != asset.image)
+        );
+    }
+}
+
+#[test]
+fn adaptive_stencil_simplification_requires_the_matching_symmetry_dab() {
+    let mut cube = Primitive::for_kind(PrimitiveKind::Cube);
+    cube.divisions = [24, 24, 24];
+    let mut mesh = cube.mesh().unwrap();
+    let before = mesh.clone();
+    let brush = Brush::new(Kind::Smooth);
+    let dab = Dab {
+        center: Vec3(0., 0., 1.),
+        normal: Vec3(0., 0., 1.),
+        right: Vec3(1., 0., 0.),
+        up: Vec3(0., 1., 0.),
+        radius: 0.7,
+        pressure: 1.,
+        delta: Vec3::default(),
+        invert: false,
+    };
+    let settings = crate::sculpt::AdaptiveSettings {
+        enabled: true,
+        detail: 32.,
+        relative: true,
+        refine: false,
+        ..Default::default()
+    };
+    let stencils = [
+        projection(image(vec![0.5], 1)),
+        projection(image(vec![1.], 1)),
+    ];
+    let mut dabs = [
+        dab,
+        Dab {
+            center: Vec3(10., 0., 1.),
+            ..dab
+        },
+    ];
+    let apply = |mesh: &mut crate::sculpt::Mesh, dabs: &[Dab]| {
+        mesh.adapt_stenciled(
+            &brush,
+            crate::sculpt::AdaptiveRegion {
+                dabs,
+                stencils: &stencils,
+            },
+            &settings,
+            &mut crate::sculpt::AdaptiveBudget::default(),
+            true,
+        )
+    };
+    assert!(
+        !apply(&mut mesh, &dabs),
+        "a distant dab's white mask cannot allow collapse under a local gray mask"
+    );
+    assert_eq!(mesh, before);
+    dabs[1] = dab;
+    assert!(apply(&mut mesh, &dabs));
+    assert!(mesh.vertices.len() < before.vertices.len());
+}

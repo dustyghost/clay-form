@@ -1686,4 +1686,58 @@ fn alpha_library_stencil_offscreen_review() {
     assert_eq!(g.app.document.geometry_snapshot(), geometry);
     assert_eq!(g.app.document.alphas(), alphas);
     assert_eq!(g.app.document.brushes()[0].alpha, brush_alpha);
+    // A coarse closed surface must gain real geometry beneath a built-in stencil.
+    let mut cube = Primitive::for_kind(PrimitiveKind::Cube);
+    cube.divisions = [10, 10, 10];
+    g.app
+        .document
+        .replace_geometry(Geometry::new(cube.mesh().unwrap()))
+        .unwrap();
+    g.app
+        .document
+        .set_adaptive(AdaptiveSettings {
+            enabled: true,
+            detail: 4.,
+            simplify: true,
+            ..Default::default()
+        })
+        .unwrap();
+    g.app.camera = Default::default();
+    let mut brush = g.app.document.brushes()[0].clone();
+    brush.stroke_mode = crate::sculpt::StrokeMode::DragRect;
+    brush.alpha = Alpha::Soft;
+    brush.inner_radius = 0.7;
+    brush.strength = 0.15;
+    g.app.document.update_brush(0, brush).unwrap();
+    click_guide_label(&mut g, "Nature's curve");
+    click_guide_label(&mut g, "Place stencil");
+    g.app.ui.wire = true;
+    g.app.ui.wire_triangles = true;
+    let before = g.app.document.geometry_snapshot();
+    let (rect, _) = g.frame(vec![]);
+    g.save("alpha-adaptive-before");
+    let start = rect.center();
+    let end = start + Vec2::new(270., 0.);
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    g.frame(vec![egui::Event::PointerMoved(end)]);
+    assert!(
+        g.app.document.geometry_snapshot() == before,
+        "stamp preview stays private"
+    );
+    g.frame(vec![primary_event(end, false), egui::Event::PointerGone]);
+    assert!(g.app.document.mesh().vertices.len() > before.mesh.vertices.len());
+    assert!(g.app.document.mesh().vertices.iter().any(|p| p.2 > 1.01));
+    let mut stencil = g.app.document.stencil().unwrap().clone();
+    stencil.opacity = 0.;
+    g.app.dispatch(Command::SetStencil(Some(stencil)), &g.ctx);
+    g.save("alpha-adaptive-wire");
+    g.app.ui.wire = false;
+    g.app.camera.yaw = 0.3;
+    g.app.camera.pitch = -0.2;
+    g.save("alpha-adaptive-spiral");
+    g.app.document.undo();
+    assert!(g.app.document.geometry_snapshot() == before);
 }
