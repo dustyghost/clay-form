@@ -52,6 +52,8 @@ struct SnakeStroke {
 }
 #[derive(Default)]
 pub(crate) struct Viewport {
+    pub(crate) projection_preview: Option<std::sync::Arc<crate::sculpt::Mesh>>,
+    pub(crate) projection_mode: bool,
     pub(crate) modeling: modeling::ModelingState,
     edge_selection: Vec<[usize; 2]>,
     edge_revision: u64,
@@ -220,6 +222,7 @@ impl Viewport {
             self.stroke = false;
         }
         let previewing = options.enabled
+            && !self.projection_mode
             && ui.input(|i| i.pointer.primary_down() && !i.key_pressed(egui::Key::Escape));
         if previewing && let Some(pending) = self.pending_stroke.as_mut() {
             if let Some(end) = response.interact_pointer_pos() {
@@ -232,7 +235,7 @@ impl Viewport {
             document,
             ui.input(|i| i.pointer.interact_pos()),
             options.modeling,
-            options.enabled,
+            options.enabled && !self.projection_mode,
             ui.input(|i| i.key_pressed(egui::Key::Escape)),
         );
         let scene = Scene::paint_with_stroke(
@@ -248,11 +251,32 @@ impl Viewport {
             options.wire_triangles,
             self.renderer.as_mut(),
             self.pending_stroke.as_ref().filter(|_| previewing),
-            self.modeling.preview(),
+            self.projection_preview
+                .as_deref()
+                .or_else(|| self.modeling.preview()),
         );
         if let Some(renderer) = &self.renderer {
             renderer.set_backfaces(options.backface_opacity);
             renderer.set_polygroups(options.show_polygroups);
+        }
+        if self.projection_mode {
+            if options.enabled && response.hovered() {
+                camera.zoom_by(ui.input(|i| i.smooth_scroll_delta.y));
+            }
+            if options.enabled && response.dragged() {
+                let delta = ui.input(|i| i.pointer.delta());
+                if options.zoom_hold.active(modifiers) {
+                    camera.zoom_drag(delta);
+                } else if options.pan_hold.active(modifiers)
+                    || response.dragged_by(egui::PointerButton::Middle)
+                {
+                    camera.pan += delta;
+                } else {
+                    camera.orbit(delta);
+                }
+            }
+            draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
+            return;
         }
         self.paint_edges(document, &scene, &painter);
         self.references

@@ -464,6 +464,29 @@ Lower-level edits carry upward while retaining finer detail. Subdivision is line
 
 Mesh operations run in the background. Cancel keeps the original surface; Undo restores prior geometry and settings. A failed automatic remesh disables the automatic option so you can adjust it.
 
+## Recover detail after remeshing
+
+Keep an unchanged reference before rebuilding topology, then move the remeshed vertices back toward that surface.
+
+1. In **Mesh → Detail projection**, select **Keep reference copy**. This adds a hidden reference submodel immediately below the active model and saves it with the project.
+2. Remesh or adaptively sculpt the active target. The reference keeps its original surface and subdivision levels. Add resolution if the target is too coarse to represent the details you want back.
+3. Open **Mesh → Detail projection → Project details…**. Choose the reference, or select **Use model below**. The dialog names the reference and the active target; only the target moves.
+4. Set **Maximum distance** in model units. Start small near thin walls or nearby parts. Use **Strength** below 1 for a partial blend; target masks reduce movement further.
+5. Select **Preview projection**. Drag the viewport to orbit and scroll to zoom. Read the counts of moved, protected, out-of-range, opposing, ambiguous and safety-limited vertices.
+6. Select **Apply projection** to commit one undoable edit. **Cancel**, closing the window or **Escape** discards the preview. Changing reference or settings requires another preview.
+
+![Detail projection preview with source, target, distance, strength and match counts beside the remeshed model](../images/detail-projection-preview.png)
+
+The hidden reference stays unchanged while the active model previews the recovered surface.
+
+You can select any other submodel as a reference, including one lower in the Submodels panel. **Use model below** follows the panel's grouped order. To project a lower submodel *from* an upper one, cancel, activate the lower target, reopen Project details, and choose the upper reference. Submodels are the supported “layers” in this workflow; sculpt layers are separate future work.
+
+The reference uses its stored active surface, even when inactive models display a coarser level. A different stored subdivision level of the target is also available as a reference. Projection preserves target topology and its existing compatible level stack; switching levels uses the normal detail-preserving level behavior. Incompatible stacks are rejected. Reference and target must already line up in space. Convert a target primitive and apply or remove temporary Thickness modifiers before projecting.
+
+Whole-model hiding keeps a reference out of the way without disabling it. Individually hidden reference faces are excluded. Hidden target faces and their boundary vertices remain fixed; fully masked vertices stay fixed too. Target masks, groups, creases and quads are retained.
+
+Out-of-range vertices stay in place. The closest opposing sheet is skipped rather than searching through it; near-equal matches on disconnected parts are skipped as ambiguous. Triangle safety can reduce movement. These checks cannot infer which overlapping surface you intended, so inspect folds and thin walls before applying. Projection moves existing vertices; it cannot restore detail finer than the target topology can represent.
+
 ## Thickness modifier
 
 ### Preview a shell

@@ -76,6 +76,8 @@ pub(crate) enum Action {
     ZoomOut,
     Export,
     ImportObj,
+    ProjectDetails,
+    KeepProjectionReference,
     AddReference,
     ArrangeReferences,
     ShowReferences,
@@ -339,10 +341,18 @@ impl Action {
         Self::AddSupportLoops,
         Self::RelaxBorders,
         Self::SmoothSubdivide,
+        Self::ProjectDetails,
+        Self::KeepProjectionReference,
     ];
     /// Help shared by the built-in controls, custom menus, and shelves.
     pub fn help(&self) -> Option<&'static str> {
         Some(match self {
+            Self::ProjectDetails => {
+                "Preview detail transfer from a reference submodel or stored subdivision level onto the active target. Choose the model below, strength and distance; Apply is one undoable edit."
+            }
+            Self::KeepProjectionReference => {
+                "Keep an unchanged, hidden reference submodel before remeshing or adaptive sculpting. Saved with the project."
+            }
             Self::PenModeling => {
                 "Select faces, edges, or vertices with a pen or mouse. Modeling controls are in Mesh. Escape cancels a preview, or exits when idle."
             }
@@ -455,6 +465,8 @@ impl Action {
             Self::PreviousBrush => "Previous brush",
             Self::NextBrush => "Next brush",
             Self::Subdivide => "Subdivide mesh",
+            Self::ProjectDetails => "Project details",
+            Self::KeepProjectionReference => "Keep projection reference",
             Self::LowerLevel => "Lower subdivision level",
             Self::HigherLevel => "Higher subdivision level",
             Self::Remesh => "Remesh dynamic mesh",

@@ -25,6 +25,14 @@ Surface crossings interpolate these distances instead of using grid-edge midpoin
 
 For background on tetrahedral isosurface extraction, see [Paul Bourke's polygonisation reference](https://www.paulbourke.net/geometry/polygonise/); for multiresolution editing concepts, see [Zorin, Schröder, and Sweldens](https://graphics.stanford.edu/~dzorin/multires/meshed/). The implementation here is a simpler linear refinement and world-space detail scheme.
 
+### Detail projection
+
+`sculpt/projection.rs` builds a median-split triangle AABB tree over visible reference faces. Queries use closest points on triangles, a world-distance bound, and a 30-million-node visit budget per operation. The nearest opposing face (normal agreement below 0.2) is rejected without looking through it. A second query excludes the first connected component and rejects another component within 1.25 times the closest distance plus a small tolerance, capped by the requested distance. This is a conservative ambiguity heuristic, not global collision detection. Mask-weighted proposals pass through the existing triangle-deformation limiter; reports distinguish misses, protection, orientation rejection, ambiguity, and limited movement.
+
+`document/projection.rs` preserves references as ordinary hidden submodels, so the version 1 project format needs no new fields. Submodel references use the stored active mesh, not the low-detail display. A level reference is materialized through `Geometry::set_level` on a private copy after validating correspondence. Position-only commits retain attributes and the compatible subdivision stack.
+
+`app/projection.rs` owns a cancellable worker and an immutable draft. The projection dialog blocks scene edits while retaining viewport navigation. Apply checks the display revision and exact topology/attribute compatibility, then commits one history entry with launch settings; no-op results preserve redo and dirty state. Cancel, Escape and dialog close discard the draft without editing the document. The separate Keep reference copy command is itself an undoable scene edit.
+
 ### Worker and history boundaries
 
 The controller locks geometry edits while a worker holds its snapshot. New/Open/Quit and explicit cancellation discard the in-flight result. Mode changes, level changes, and worker completions record the entire geometry stack in history. Brush, symmetry, camera, and file actions retain their existing separate responsibilities. Automatic remeshing is triggered by a completed deformation stroke, never a mask-only stroke, and waits for release before sculpting can resume after an in-flight topology change.

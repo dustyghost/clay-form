@@ -213,6 +213,9 @@ impl UiState {
         actions
     }
     pub fn action_enabled(&self, action: &Action, document: &Document) -> bool {
+        if self.projection.open {
+            return false;
+        }
         if *action == Action::CancelMeshOperation {
             return self.mesh_busy;
         }
@@ -379,6 +382,10 @@ impl UiState {
             }
             Action::HigherLevel | Action::DeleteHigherLevels => {
                 sculpt && document.mesh_settings().level() < document.mesh_settings().levels()
+            }
+            Action::ProjectDetails => document.require_projection_target().is_ok(),
+            Action::KeepProjectionReference => {
+                document.model_count() < 64 && document.require_projection_target().is_ok()
             }
             Action::Subdivide => {
                 sculpt

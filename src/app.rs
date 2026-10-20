@@ -17,6 +17,7 @@ mod commands;
 mod diagnostics;
 mod files;
 mod jobs;
+mod projection;
 mod recovery;
 mod references;
 
@@ -29,6 +30,7 @@ pub struct App {
     pressure: f32,
     diagnostic_environment: crate::diagnostics::Environment,
     job_settings: Option<crate::diagnostics::EditSettings>,
+    projection: projection::ProjectionState,
     closing: bool,
     mesh_job: Option<MeshJob>,
     recovery: Option<crate::recovery::Recovery>,
@@ -49,6 +51,7 @@ impl Default for App {
             pressure: 1.,
             diagnostic_environment: Default::default(),
             job_settings: None,
+            projection: Default::default(),
             closing: false,
             mesh_job: None,
             recovery: None,
@@ -135,6 +138,9 @@ impl App {
     }
 
     pub(crate) fn show_viewport(&mut self, ui: &mut egui::Ui) {
+        if self.ui.projection.open && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.cancel_projection();
+        }
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         if self.ui.file_picker.is_none()
             && self.ui.edges.selecting
@@ -207,6 +213,8 @@ impl App {
         });
         let selected = self.ui.brush_index_for_context(&self.document, ui.ctx());
         self.capture_diagnostic_context(ui.ctx());
+        self.viewport.projection_preview = self.projection.draft.as_ref().map(|d| d.mesh.clone());
+        self.viewport.projection_mode = self.ui.projection.open;
         self.viewport.show(
             ui,
             &mut self.document,
@@ -299,6 +307,7 @@ impl eframe::App for App {
     }
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         self.poll_mesh_job();
+        self.poll_projection();
         let native_pressure = ctx.input(|i| {
             i.events.iter().rev().find_map(|event| match event {
                 egui::Event::Touch { force: Some(p), .. } => Some(*p),
@@ -306,6 +315,9 @@ impl eframe::App for App {
             })
         });
         self.pressure = self.tablet.pressure().or(native_pressure).unwrap_or(1.);
+        if ctx.input(|i| i.viewport().close_requested()) && self.ui.projection.open {
+            self.cancel_projection();
+        }
         if ctx.input(|i| i.viewport().close_requested())
             && self.document.is_dirty()
             && !self.closing
@@ -326,6 +338,9 @@ impl eframe::App for App {
             self.pressure,
             &self.camera,
         ) {
+            self.dispatch(command, ctx);
+        }
+        for command in self.ui.projection_window(ctx, &self.document) {
             self.dispatch(command, ctx);
         }
         self.ui.settings(ctx, &self.document);

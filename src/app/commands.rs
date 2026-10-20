@@ -70,6 +70,33 @@ impl App {
             self.execute_action(action, ctx);
             return;
         }
+        if self.ui.projection.open
+            && !matches!(
+                command,
+                Command::PreviewProjection
+                    | Command::ClearProjectionPreview
+                    | Command::ApplyProjection
+                    | Command::CancelProjection
+                    | Command::ResetView
+                    | Command::ZoomIn
+                    | Command::ZoomOut
+                    | Command::SetZoom(_)
+                    | Command::SetPerspective(_)
+                    | Command::SetFieldOfView(_)
+            )
+        {
+            self.ui.status = "Apply or cancel the projection before editing the scene".into();
+            return;
+        }
+        if self.mesh_job.is_some()
+            && matches!(
+                command,
+                Command::OpenProjection | Command::KeepProjectionReference
+            )
+        {
+            self.ui.status = "Wait for the mesh operation first".into();
+            return;
+        }
         if self.ui.file_picker.is_some()
             && !matches!(
                 command,
@@ -82,7 +109,9 @@ impl App {
         }
         if matches!(
             command,
-            Command::AddReference(_)
+            Command::OpenProjection
+                | Command::KeepProjectionReference
+                | Command::AddReference(_)
                 | Command::PlaceReference(..)
                 | Command::RemoveReference(_)
                 | Command::ArrangeReferences(_)
@@ -765,6 +794,24 @@ impl App {
             Command::ClearMask => {
                 self.viewport.cancel(&mut self.document);
                 self.document.clear_mask();
+                Ok(())
+            }
+            Command::OpenProjection => self.open_projection(),
+            Command::KeepProjectionReference => {
+                self.viewport.cancel(&mut self.document);
+                self.document.preserve_projection_reference().map(|index| {
+                    self.ui.projection.source = Some(crate::document::ProjectionSource::Submodel(index));
+                    self.ui.status = "Reference copy saved below the active model. Remesh or sculpt the target, then choose Project details.".into();
+                })
+            }
+            Command::PreviewProjection => self.start_projection(),
+            Command::ClearProjectionPreview => {
+                self.clear_projection_preview();
+                Ok(())
+            }
+            Command::ApplyProjection => self.apply_projection(),
+            Command::CancelProjection => {
+                self.cancel_projection();
                 Ok(())
             }
             Command::Subdivide => self.start_mesh_job(Operation::Subdivide),

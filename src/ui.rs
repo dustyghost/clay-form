@@ -17,6 +17,7 @@ mod menus;
 mod mirror;
 mod modeling;
 mod primitive;
+mod projection;
 mod references;
 mod sidebar;
 mod transform;
@@ -30,6 +31,7 @@ pub(crate) struct UiState {
     pub(crate) modeling_primitive: Option<(crate::sculpt::Primitive, u64)>,
     pub transform_mode: crate::viewport::TransformMode,
     pub edges: edges::EdgeControls,
+    pub projection: projection::ProjectionControls,
     pub modeling: modeling::ModelingControls,
     pub mirror_axis: Axis,
     pub slice_active: bool,
@@ -88,6 +90,7 @@ impl Default for UiState {
             modeling_primitive: None,
             transform_mode: crate::viewport::TransformMode::Sculpt,
             edges: Default::default(),
+            projection: Default::default(),
             modeling: modeling::ModelingControls {
                 amount: 0.1,
                 snap: 0.04,
@@ -1144,6 +1147,7 @@ impl UiState {
             }
         });
         ui.separator();
+        self.projection_buttons(ui, document, commands);
         self.edge_controls(ui, document, commands);
         if self.mesh_busy {
             ui.spinner();

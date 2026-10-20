@@ -24,6 +24,7 @@ See [Development](../development.md#update-guide-screenshots) for prerequisites 
 
 | Images | What they explain | Capture test |
 | --- | --- | --- |
+| `detail-projection-preview.png` | [Reference-to-target detail transfer with match feedback before Apply](../guide/modeling.md#recover-detail-after-remeshing) | `detail_projection_offscreen_review` |
 | `modeling-separate-fuse-result.png` | [Nonadjacent faces fused into separate tunnels in one edit](../guide/modeling.md#construct-a-region) | `modeling_region_fuse_offscreen_review` |
 | `modeling-region-fuse-result.png` | [Connected faces fused into one open tunnel](../guide/modeling.md#construct-a-region) | `modeling_region_fuse_offscreen_review` |
 | `modeling-boundary-join.png` | [Joining adjacent holes and opening exterior notches across depth loops](../guide/modeling.md#push-through-to-make-a-tunnel) | `modeling_boundary_join_offscreen_review` |

@@ -151,6 +151,7 @@ impl Guide {
                 });
                 self.app.show_recovery(ctx);
                 commands.extend(self.app.ui.project_file_dialog(ctx));
+                commands.extend(self.app.ui.projection_window(ctx, &self.app.document));
             },
         );
         self.text_positions = output
@@ -1448,4 +1449,64 @@ fn modeling_region_fuse_offscreen_review() {
         click_guide_label(&mut g, "Undo");
         assert_eq!(g.app.document.geometry_snapshot(), before);
     }
+}
+
+#[test]
+#[ignore = "renders projection controls; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn detail_projection_offscreen_review() {
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
+    let directory = std::path::Path::new(&directory);
+    std::fs::create_dir_all(directory).unwrap();
+    let mut g = Guide::new(directory, [1200, 850]);
+    g.interactive = true;
+    let mut source = crate::sculpt::Mesh::sphere();
+    for p in &mut source.vertices {
+        *p = *p * (1. + 0.07 * (p.0 * 12.).cos() * (p.1 * 12.).cos());
+    }
+    g.app
+        .document
+        .replace_geometry(crate::sculpt::Geometry::new(source))
+        .unwrap();
+    g.app.dispatch(Command::KeepProjectionReference, &g.ctx);
+    g.app.dispatch(Command::SetDynamicMesh(true), &g.ctx);
+    g.app
+        .dispatch(Command::SetRemeshSettings(24, false), &g.ctx);
+    g.app.dispatch(Command::Remesh, &g.ctx);
+    finish_mesh_job(&mut g.app);
+    g.app.camera.zoom = 0.85;
+    g.app.camera.pan = Vec2::new(200., 0.);
+    let before = g.app.document.geometry_snapshot();
+    g.app.document.mark_saved("projection-review.clay");
+    g.app.dispatch(Command::OpenProjection, &g.ctx);
+    g.app.ui.projection.options.max_distance = 0.2;
+    g.save("detail-projection-before");
+    click_guide_label(&mut g, "Use model below");
+    click_guide_label(&mut g, "Preview projection");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    while g.app.ui.projection.busy {
+        g.app.poll_projection();
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(g.app.ui.projection.report.as_ref().unwrap().moved > 0);
+    let preview = g.app.projection.draft.as_ref().unwrap().mesh.clone();
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    assert!(!g.app.document.is_dirty());
+    g.save("detail-projection-preview");
+    click_guide_label(&mut g, "Cancel");
+    assert!(!g.app.ui.projection.open);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.app.dispatch(Command::OpenProjection, &g.ctx);
+    click_guide_label(&mut g, "Preview projection");
+    while g.app.ui.projection.busy {
+        g.app.poll_projection();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    click_guide_label(&mut g, "Apply projection");
+    assert_eq!(g.app.document.mesh(), preview.as_ref());
+    assert_eq!(g.app.document.undo_label(), Some("Project details"));
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.app.dispatch(Command::Redo, &g.ctx);
+    assert_eq!(g.app.document.mesh(), preview.as_ref());
 }
