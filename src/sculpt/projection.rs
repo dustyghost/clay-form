@@ -1,4 +1,4 @@
-//! Bounded closest-surface detail transfer. The source and topology stay intact.
+//! Bounded detail transfer along a coherent normal field. Topology stays intact.
 use super::{Mesh, Vec3, math::closest_triangle};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -212,6 +212,107 @@ impl<'a> Surface<'a> {
         Ok(hit)
     }
 }
+impl Surface<'_> {
+    fn along_normal(
+        &self,
+        p: Vec3,
+        normal: Vec3,
+        distance: f32,
+        budget: &mut usize,
+    ) -> Result<Option<(usize, Vec3, f32)>, String> {
+        let mut stack = vec![0];
+        let mut best = distance as f64;
+        let mut hit = None;
+        let origin = xyz(p).map(f64::from);
+        let direction = xyz(normal).map(f64::from);
+        let sub = |a: [f64; 3], b: [f64; 3]| std::array::from_fn(|i| a[i] - b[i]);
+        let cross = |a: [f64; 3], b: [f64; 3]| {
+            [
+                a[1] * b[2] - a[2] * b[1],
+                a[2] * b[0] - a[0] * b[2],
+                a[0] * b[1] - a[1] * b[0],
+            ]
+        };
+        let dot = |a: [f64; 3], b: [f64; 3]| a.into_iter().zip(b).map(|(a, b)| a * b).sum::<f64>();
+        while let Some(i) = stack.pop() {
+            if *budget == 0 {
+                return Err("Projection search budget exceeded; reduce the distance or simplify the reference".into());
+            }
+            *budget -= 1;
+            let node = &self.nodes[i];
+            let mut low = -best;
+            let mut high = best;
+            for axis in 0..3 {
+                let a = node.min[axis] as f64 - origin[axis];
+                let b = node.max[axis] as f64 - origin[axis];
+                if direction[axis] == 0. {
+                    if a > 0. || b < 0. {
+                        low = f64::INFINITY;
+                    }
+                } else {
+                    let a = a / direction[axis];
+                    let b = b / direction[axis];
+                    low = low.max(a.min(b));
+                    high = high.min(a.max(b));
+                }
+            }
+            if low > high {
+                continue;
+            }
+            if let Some(c) = node.children {
+                stack.extend(c);
+                continue;
+            }
+            for &face in &self.faces[node.range.clone()] {
+                let [a, b, c] =
+                    self.mesh.triangles[face].map(|i| xyz(self.mesh.vertices[i]).map(f64::from));
+                let ab = sub(b, a);
+                let ac = sub(c, a);
+                let h = cross(direction, ac);
+                let det = dot(ab, h);
+                if det == 0. {
+                    continue;
+                }
+                let s = sub(origin, a);
+                let u = dot(s, h) / det;
+                let q = cross(s, ab);
+                let v = dot(direction, q) / det;
+                if u < -1e-8 || v < -1e-8 || u + v > 1. + 1e-8 {
+                    continue;
+                }
+                let t = dot(ac, q) / det;
+                if t.abs() <= best {
+                    best = t.abs();
+                    hit = Some((face, p + normal * t as f32, best as f32));
+                }
+            }
+        }
+        Ok(hit)
+    }
+}
+
+// Average directions without smoothing vertex positions. A raw vertex normal
+// can point to a different side of a steep rim than its neighbour; using a
+// local direction field keeps correspondence stable through subdivision.
+fn projection_directions(mesh: &Mesh, cancel: &impl Fn() -> bool) -> Result<Vec<Vec3>, String> {
+    let mut normals = mesh.normals();
+    for _ in 0..8 {
+        if cancel() {
+            return Err("Projection cancelled".into());
+        }
+        let old = normals.clone();
+        for &[a, b, c] in &mesh.triangles {
+            for (v, x, y) in [(a, b, c), (b, a, c), (c, a, b)] {
+                normals[v] = normals[v] + old[x] + old[y];
+            }
+        }
+        for normal in &mut normals {
+            *normal = normal.norm();
+        }
+    }
+    Ok(normals)
+}
+
 impl Mesh {
     pub fn project_details(
         &self,
@@ -226,7 +327,7 @@ impl Mesh {
             return Err("Projection cancelled".into());
         }
         let surface = Surface::new(source, cancel)?;
-        let normals = self.normals();
+        let normals = projection_directions(self, cancel)?;
         let editable = self.sculptable_vertices();
         let mut mesh = self.clone();
         let mut report = ProjectionReport::default();
@@ -240,7 +341,7 @@ impl Mesh {
                 continue;
             }
             let Some((face, q, distance)) =
-                surface.nearest(p, options.max_distance, None, &mut budget)?
+                surface.along_normal(p, normals[i], options.max_distance, &mut budget)?
             else {
                 report.missed += 1;
                 continue;
@@ -272,7 +373,7 @@ impl Mesh {
             return Err("Projection cancelled".into());
         }
         let proposed = mesh.vertices.clone();
-        mesh.limit_sculpt_deformation(&self.vertices);
+        mesh.limit_projection_deformation(&self.vertices);
         report.limited = mesh
             .vertices
             .iter()
@@ -311,6 +412,122 @@ mod tests {
         ProjectionOptions {
             strength: 1.,
             max_distance: 0.3,
+        }
+    }
+
+    #[test]
+    fn projection_of_a_steep_bowl_stays_stable_through_subdivision() {
+        fn bowl(divisions: usize, depth: f32, rim: f32) -> Mesh {
+            let mut mesh = Mesh::default();
+            for y in 0..=divisions {
+                for x in 0..=divisions {
+                    let x = 2. * x as f32 / divisions as f32 - 1.;
+                    let y = 2. * y as f32 / divisions as f32 - 1.;
+                    let t = ((x.hypot(y) - 0.28) / rim).clamp(0., 1.);
+                    mesh.vertices
+                        .push(Vec3(x, y, -depth * (1. - t * t * (3. - 2. * t))));
+                    mesh.mask.push(0.);
+                }
+            }
+            for y in 0..divisions {
+                for x in 0..divisions {
+                    let a = y * (divisions + 1) + x;
+                    mesh.triangles.extend([
+                        [a, a + 1, a + divisions + 2],
+                        [a, a + divisions + 2, a + divisions + 1],
+                    ]);
+                }
+            }
+            mesh
+        }
+        let reference = bowl(56, 0.25, 0.08);
+        let mut target = bowl(28, 0.2, 0.15);
+        for level in 0..3 {
+            if level > 0 {
+                target = target.subdivide().unwrap();
+            }
+            let (result, report) = target
+                .project_details(&reference, ProjectionOptions::default(), &|| false)
+                .unwrap();
+            assert!(report.moved > 0, "{report:?}");
+            assert_eq!(
+                report.limited, 0,
+                "Correspondence should stay coherent: {report:?}"
+            );
+            assert_eq!(report.missed + report.opposed, 0, "{report:?}");
+            target = result;
+        }
+        // Independent closest points produced folded, jagged rim faces here,
+        // and projecting again kept moving them. The result should be stable.
+        let mut edges = std::collections::HashMap::new();
+        for &[a, b, c] in &target.triangles {
+            let normal = (target.vertices[b] - target.vertices[a])
+                .cross(target.vertices[c] - target.vertices[a])
+                .norm();
+            for (a, b) in [(a, b), (b, c), (c, a)] {
+                let edge = if a < b { (a, b) } else { (b, a) };
+                if let Some(other) = edges.insert(edge, normal) {
+                    assert!(
+                        normal.dot(other) > 0.1,
+                        "Projection introduced a sharp rim fold"
+                    );
+                }
+            }
+        }
+        let (repeated, _) = target
+            .project_details(&reference, ProjectionOptions::default(), &|| false)
+            .unwrap();
+        assert!(
+            repeated
+                .vertices
+                .iter()
+                .zip(&target.vertices)
+                .all(|(&a, &b)| (a - b).len() < 1e-6)
+        );
+    }
+
+    #[test]
+    fn projection_cannot_fold_neighbouring_faces_back_against_each_other() {
+        // Each face can keep its winding while the pair folds into a spike.
+        // This used to pass the individual triangle safety checks.
+        for scale in [0.01, 1., 100.] {
+            let target = Mesh {
+                vertices: [
+                    Vec3(0., -1., 0.),
+                    Vec3(0., 1., 0.),
+                    Vec3(-1., 0., 0.),
+                    Vec3(1., 0., 0.),
+                ]
+                .map(|p| p * scale)
+                .into(),
+                triangles: vec![[0, 1, 2], [1, 0, 3]],
+                mask: vec![0.; 4],
+                ..Mesh::default()
+            };
+            let mut source = target.clone();
+            source.vertices[2] = Vec3(-1., 0., 4.) * scale;
+            source.vertices[3] = Vec3(1., 0., 4.) * scale;
+            let (result, report) = target
+                .project_details(
+                    &source,
+                    ProjectionOptions {
+                        max_distance: 5. * scale,
+                        ..options()
+                    },
+                    &|| false,
+                )
+                .unwrap();
+            let normals: Vec<_> = result
+                .triangles
+                .iter()
+                .map(|t| {
+                    let [a, b, c] = t.map(|v| result.vertices[v]);
+                    (b - a).cross(c - a).norm()
+                })
+                .collect();
+            assert!(normals[0].dot(normals[1]) >= 0., "{report:?}");
+            assert!(report.moved > 0 && report.limited > 0, "{report:?}");
+            assert_eq!(result.triangles, target.triangles);
         }
     }
 

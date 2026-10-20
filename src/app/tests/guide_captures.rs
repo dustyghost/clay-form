@@ -20,6 +20,37 @@ struct Guide {
 }
 
 #[test]
+#[ignore = "local project review; requires Vulkan, CLAY_REVIEW_PROJECT and CLAY_GUIDE_PREVIEW"]
+fn project_file_offscreen_review() {
+    let path = std::env::var("CLAY_REVIEW_PROJECT").expect("Set CLAY_REVIEW_PROJECT");
+    let directory = std::path::PathBuf::from(
+        std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW"),
+    );
+    std::fs::create_dir_all(&directory).unwrap();
+    let project = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    let mut g = Guide::new(&directory, [1000, 1000]);
+    g.toolbar = false;
+    g.app.document.replace_project(project, &path).unwrap();
+    if let Ok(manifest) = std::env::var("CLAY_REVIEW_MANIFEST") {
+        let manifest: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(manifest).unwrap()).unwrap();
+        let camera = &manifest["current_settings"]["view_input"]["camera"];
+        let value = |key: &str| camera[key].as_f64().unwrap() as f32;
+        g.app.camera.yaw = value("yaw");
+        g.app.camera.pitch = value("pitch");
+        g.app.camera.zoom = value("zoom");
+        g.app.camera.pan = Vec2::new(
+            camera["pan"][0].as_f64().unwrap() as f32,
+            camera["pan"][1].as_f64().unwrap() as f32,
+        );
+        g.app.camera.perspective = camera["perspective"].as_bool().unwrap();
+        g.app.camera.field_of_view = value("field_of_view");
+        g.app.camera.perspective_radius = value("perspective_radius");
+    }
+    g.save("project-review");
+}
+
+#[test]
 #[ignore = "renders Polish cleanup; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn polish_brush_offscreen_review() {
     use crate::sculpt::{Brush, Dab, Geometry, Kind, Vec3};

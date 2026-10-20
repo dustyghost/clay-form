@@ -239,7 +239,7 @@ Curve/mesh instancing authoring, arbitrary Boolean fusion and full component mod
 
 The Mesh panel can preserve a hidden reference copy and preview detail transfer onto the active target from another submodel or a stored subdivision level. Source/target direction is explicit, with a shortcut to the model below in grouped panel order. Distance, strength, masks, hidden-face protection, opposing-surface rejection, disconnected-part ambiguity checks and triangle safety limit movement. Apply is one undoable position edit; cancel leaves geometry intact. References use ordinary saved submodels and compatible target subdivision stacks are retained. See [Recover detail after remeshing](guide/modeling.md#recover-detail-after-remeshing).
 
-Projection is closest-surface transfer, not a new sculpt-layer system, topology generator or global intersection solver. Fine detail needs enough target vertices. Automated and rendered validation accompanies the implementation; physical tablet review remains a hands-on check.
+Projection transfers detail along locally averaged surface directions, with nearest-hit, distance and fold safeguards. Fine detail needs enough target vertices. It preserves topology and does not provide sculpt layers or global intersection repair. Automated and rendered validation accompanies the implementation; physical tablet review remains a hands-on check.
 
 ## Longer term candidates
 

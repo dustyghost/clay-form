@@ -500,7 +500,7 @@ The reference uses its stored active surface, even when inactive models display 
 
 Whole-model hiding keeps a reference out of the way without disabling it. Individually hidden reference faces are excluded. Hidden target faces and their boundary vertices remain fixed; fully masked vertices stay fixed too. Target masks, groups, creases and quads are retained.
 
-Out-of-range vertices stay in place. The closest opposing sheet is skipped rather than searching through it; near-equal matches on disconnected parts are skipped as ambiguous. Triangle safety can reduce movement. These checks cannot infer which overlapping surface you intended, so inspect folds and thin walls before applying. Projection moves existing vertices; it cannot restore detail finer than the target topology can represent.
+Projection follows locally averaged surface directions to keep neighbouring vertices from bunching around steep rims. It does not smooth the target's positions. Vertices with no reference hit within the distance stay in place. The closest opposing sheet is skipped rather than searching through it; near-equal matches on disconnected parts are skipped as ambiguous. Triangle safety can reduce movement to prevent neighbouring faces folding back against each other. Very sharp details may need a denser target mesh. These checks cannot infer which overlapping surface you intended, so inspect folds and thin walls before applying. Projection moves existing vertices; it cannot restore detail finer than the target topology can represent.
 
 ## Thickness modifier
 

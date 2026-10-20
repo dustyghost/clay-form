@@ -42,6 +42,8 @@ The script captures the real app UI and wgpu renderer offscreen using synthetic 
 
 The edge workflow review also clicks the real controls: selection, navigation, crease removal, both subdivision operations, loop targets, thickness application and Undo. These captures check appearance and behavior; use the profiling tools for performance measurements.
 
+To render a local `.clay` project for a bug investigation, set `CLAY_REVIEW_PROJECT` to its path and `CLAY_GUIDE_PREVIEW` to an output directory, then run the ignored `project_file_offscreen_review` test. Optionally set `CLAY_REVIEW_MANIFEST` to a diagnostic bundle's `manifest.json` to restore its current camera. This writes `project-review.png` using the real renderer without editing the project.
+
 ## Architecture and roadmap
 
 - [Architecture](architecture.md): document ownership, sculpting algorithms, UI commands, camera/navigation, rendering/picking, persistence and tablet input.
