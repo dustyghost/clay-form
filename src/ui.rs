@@ -908,6 +908,17 @@ impl UiState {
                 if ui.add_enabled(merge_target.is_some(), design::button(ui, Glyph::Layers, "Merge down")).on_hover_text(merge_hint).customize(Action::MergeDown).clicked() { commands.push(Command::MergeDown); }
                 if ui.add(design::button(ui, Glyph::Mask, "Extract masked")).on_hover_text("Copy faces meeting the mask threshold at every vertex; keep the source. Boundaries remain open.").customize(Action::ExtractMasked).clicked() { commands.push(Command::ExtractMasked); }
             });
+            let active_name = document.model(document.active_model_index()).unwrap().name;
+            ui.label(format!("Selected: {active_name}"));
+            if document.model_count() == 1 {
+                ui.weak("Deleting the last submodel leaves an empty model slot.");
+            }
+            if design::help(
+                ui.add_enabled(self.action_enabled(&Action::DeleteSubmodel, document), design::button(ui, Glyph::Delete, "Delete submodel")),
+                Action::DeleteSubmodel.help().unwrap(),
+            ).customize(Action::DeleteSubmodel).clicked() {
+                commands.push(Command::DeleteSubmodel);
+            }
             ui.horizontal(|ui| {
                 ui.add(egui::TextEdit::singleline(&mut self.group_name).desired_width(120.).hint_text("New submodel group"));
                 if ui.add(design::button(ui, Glyph::Layers, "+ Group")).clicked() { commands.push(Command::AddGroup(std::mem::take(&mut self.group_name))); }

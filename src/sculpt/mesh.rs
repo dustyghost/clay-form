@@ -12,7 +12,7 @@ pub struct Dab {
     pub invert: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Mesh {
     /// Persistent hard polygon edges, sorted and unique.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

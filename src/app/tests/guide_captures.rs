@@ -1510,3 +1510,34 @@ fn detail_projection_offscreen_review() {
     g.app.dispatch(Command::Redo, &g.ctx);
     assert_eq!(g.app.document.mesh(), preview.as_ref());
 }
+
+#[test]
+#[ignore = "renders submodel deletion; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn delete_submodel_offscreen_review() {
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
+    let directory = std::path::Path::new(&directory);
+    std::fs::create_dir_all(directory).unwrap();
+    let mut g = Guide::new(directory, [1100, 850]);
+    g.interactive = true;
+    g.panel(Tool::Submodels, Dock::Left);
+    g.app.dispatch(Command::KeepProjectionReference, &g.ctx);
+    g.app.dispatch(Command::SelectSubmodel(1), &g.ctx);
+    let before = g.app.document.geometry_snapshot();
+    let counts = g.app.document.history_counts();
+    g.save("submodel-delete");
+    click_guide_label(&mut g, "Delete submodel");
+    assert_eq!(g.app.document.model_count(), 1);
+    assert_eq!(g.app.document.history_counts().0, counts.0 + 1);
+    assert_eq!(g.app.document.undo_label(), Some("Delete submodel"));
+    let after = g.app.document.geometry_snapshot();
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.app.dispatch(Command::Redo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), after);
+    click_guide_label(&mut g, "Delete submodel");
+    assert_eq!(g.app.document.model_count(), 1);
+    assert!(g.app.document.mesh().vertices.is_empty());
+    g.save("submodel-delete-empty");
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), after);
+}

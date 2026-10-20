@@ -28,6 +28,7 @@ Open **Submodels**. Click a row or click an inactive surface in Sculpt mode to s
 | Eye | Hide/show a model |
 | Up / down | Reorder models |
 | Duplicate | Copy the active surface, mask, and subdivision levels |
+| Delete submodel | Remove the selected model, including hidden geometry and stored levels; Undo restores it |
 | Extract masked | Copy fully selected faces into a new unmasked model |
 | Group selector | Assign the model to an organizational group |
 | Ungroup | Remove the folder while keeping its models |
@@ -35,6 +36,20 @@ Open **Submodels**. Click a row or click an inactive surface in Sculpt mode to s
 The active model is clay-colored and inactive models blue-gray unless vertex-group colors override them. Hidden models cannot be sculpted or transformed. Inactive models display their lowest stored level without losing higher detail.
 
 Extracted boundaries stay open and use a fresh subdivision stack. The selection threshold defaults to 50%. Add an existing mesh through [OBJ import](files.md#obj-import).
+
+### Delete a submodel
+
+1. Open **Submodels** and select the row you want to remove. Hidden models can be selected from the list too.
+2. Check the **Selected** name above **Delete submodel**, then click that button.
+3. Use **Undo** if you need to restore it. Save the project to keep the removal after reopening.
+
+Deletion removes the whole model, including masks, subdivision levels, primitive settings and modifiers. The next model in the panel becomes active, or the previous one if you removed the last row. Other models retain their geometry and visibility.
+
+Deleting the final submodel leaves a visible **Empty model** slot. You can create a primitive there or import another model; Undo restores the deleted model. Deleting an already empty, reset slot does nothing. Reference images and brush presets stay in the project.
+
+![The selected hidden reference with the Delete submodel button above the model list](../images/submodel-delete.png)
+
+The eye only hides a model; **Delete submodel** removes it from the project. After projecting detail, use this control to remove an unwanted reference copy. Deletion is unavailable during mesh jobs and projection previews; finish or cancel those first. You can also right-click **Delete submodel** to assign a shortcut or add it to a custom menu.
 
 ## Parametric primitives
 

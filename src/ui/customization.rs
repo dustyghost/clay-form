@@ -348,6 +348,13 @@ impl UiState {
             | Action::RelaxBorders
             | Action::SmoothSubdivide => self.edge_unavailable(action, document).is_none(),
             Action::Mirror(..) => self.mirror_unavailable(document).is_none(),
+            Action::DeleteSubmodel => {
+                !self.recovery_open
+                    && !self.diagnostics_open
+                    && !self.settings_open
+                    && !self.layout_open
+                    && self.file_picker.is_none()
+            }
             Action::MergeDown => document.merge_down_target().is_some(),
             Action::ConvertPrimitive => {
                 document.primitive().is_some() && !document.mesh().triangles.is_empty()

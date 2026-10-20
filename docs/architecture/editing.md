@@ -77,6 +77,10 @@ For the manifold safety principle, see [CGAL's edge-collapse reference](https://
 Adaptive Smooth with simplification enabled skips edge splits and doubles the ordinary collapse ratio, capped at 95% of the target edge length. Smooth collapses also check resulting triangle quality (a 0.2–0.35 quality floor based on the original face). Quality flips remain available. This prevents cleanup strokes from replacing removed vertices with newly split ones, while preserving the shared work budget and conservative manifold/mask checks. Shift smoothing uses the same path.
 
 
+## Submodel deletion
+
+`Document::delete_submodel` removes the active model as one scene history entry and selects the next row in grouped panel order, falling back to the previous row. Other model data and visibility remain exact. The final model becomes an empty mesh with default metadata/settings, retaining the required active-model slot and version 1 file compatibility. Repeating deletion on the reset empty slot preserves history, redo and dirty state. The controller cancels gestures, clears component/group selections and the index-based projection source, and blocks deletion while jobs or modal workflows own the scene.
+
 ## Model scenes and transforms
 
 Transforms prepare new vertex coordinates for the active surface and its stored levels without cloning inactive submodels or rebuilding unchanged topology. Every resulting coordinate is checked before any mutation. The first changed update captures a complete scene snapshot for undo; later updates in the same drag retain the existing face, mask, and group buffers. Parametric primitives still regenerate and validate their recipe before commit. Invalid updates leave geometry, dirty state, and history intact.

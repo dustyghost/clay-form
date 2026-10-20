@@ -109,7 +109,8 @@ impl App {
         }
         if matches!(
             command,
-            Command::OpenProjection
+            Command::DeleteSubmodel
+                | Command::OpenProjection
                 | Command::KeepProjectionReference
                 | Command::AddReference(_)
                 | Command::PlaceReference(..)
@@ -130,6 +131,7 @@ impl App {
                 | Command::GroupModelSelection(..)
         ) && (self.ui.pending.is_some()
             || self.ui.recovery_open
+            || self.ui.diagnostics_open
             || self.ui.settings_open
             || self.ui.layout_open
             || self.ui.icon_capture_open())
@@ -171,6 +173,7 @@ impl App {
                     | Command::ResetTransformPivot
                     | Command::SelectSubmodel(_)
                     | Command::DuplicateModel
+                    | Command::DeleteSubmodel
                     | Command::MergeDown
                     | Command::ExtractMasked
                     | Command::ClearMask
@@ -687,6 +690,28 @@ impl App {
             Command::SelectSubmodel(index) => {
                 self.viewport.cancel(&mut self.document);
                 self.document.select_submodel(index)
+            }
+            Command::DeleteSubmodel => {
+                self.viewport.cancel(&mut self.document);
+                let name = self
+                    .document
+                    .model(self.document.active_model_index())
+                    .unwrap()
+                    .name
+                    .to_owned();
+                if self.document.delete_submodel() {
+                    self.ui.selected_vertex_group = None;
+                    self.ui.projection.source = None;
+                    self.viewport.set_edge_selection(Vec::new(), &self.document);
+                    self.viewport.modeling.sync(&self.document);
+                    self.viewport
+                        .reset_transform_pivot(&self.document, self.ui.transform_mode);
+                    self.viewport.wait_for_release();
+                    self.ui.status = format!("Deleted {name}. Undo restores the submodel.");
+                } else {
+                    self.ui.status = "The last model slot is already empty".into();
+                }
+                Ok(())
             }
             Command::MergeDown => {
                 self.viewport.cancel(&mut self.document);

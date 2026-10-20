@@ -79,6 +79,7 @@ pub(crate) enum Command {
     RespectTransformMask(bool),
     ResetTransformPivot,
     DuplicateModel,
+    DeleteSubmodel,
     MergeDown,
     ExtractMasked,
     ResetView,

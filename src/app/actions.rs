@@ -370,6 +370,7 @@ impl App {
             Action::Primitive => Some(Command::RequestPrimitive),
             Action::ConvertPrimitive => Some(Command::ConvertPrimitive),
             Action::DuplicateModel => Some(Command::DuplicateModel),
+            Action::DeleteSubmodel => Some(Command::DeleteSubmodel),
             Action::MergeDown => Some(Command::MergeDown),
             Action::ExtractMasked => Some(Command::ExtractMasked),
             Action::ApplyThickness => Some(Command::ApplyThickness),

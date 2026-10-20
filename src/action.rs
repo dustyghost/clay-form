@@ -99,6 +99,7 @@ pub(crate) enum Action {
     Primitive,
     ConvertPrimitive,
     DuplicateModel,
+    DeleteSubmodel,
     MergeDown,
     ExtractMasked,
     ApplyThickness,
@@ -343,10 +344,14 @@ impl Action {
         Self::SmoothSubdivide,
         Self::ProjectDetails,
         Self::KeepProjectionReference,
+        Self::DeleteSubmodel,
     ];
     /// Help shared by the built-in controls, custom menus, and shelves.
     pub fn help(&self) -> Option<&'static str> {
         Some(match self {
+            Self::DeleteSubmodel => {
+                "Remove the selected submodel, including hidden geometry, masks, levels and modifiers. Undo restores it. Deleting the last model leaves an empty model slot."
+            }
             Self::ProjectDetails => {
                 "Preview detail transfer from a reference submodel or stored subdivision level onto the active target. Choose the model below, strength and distance; Apply is one undoable edit."
             }
@@ -495,6 +500,7 @@ impl Action {
             Self::Primitive => "Create / edit primitive",
             Self::ConvertPrimitive => "Convert to sculpting mesh",
             Self::DuplicateModel => "Duplicate submodel",
+            Self::DeleteSubmodel => "Delete submodel",
             Self::MergeDown => "Merge down",
             Self::ExtractMasked => "Extract masked",
             Self::ApplyThickness => "Apply Thickness modifier",

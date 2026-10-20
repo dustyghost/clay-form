@@ -84,6 +84,44 @@ impl Document {
         self.install_models(self.ordered_models(), index);
         Ok(())
     }
+    /// Delete the active model as one scene edit. The final model becomes an
+    /// empty, ordinary mesh slot because projects always own one active model.
+    /// Returns false when that slot is already empty and reset.
+    pub fn delete_submodel(&mut self) -> bool {
+        let active = self.active_model_index();
+        let mut models = self.ordered_models();
+        let next = if models.len() == 1 {
+            let empty = crate::sculpt::Submodel {
+                name: "Empty model".into(),
+                metadata: Default::default(),
+                mesh: Mesh::default(),
+                mesh_settings: Default::default(),
+            };
+            if models[0] == empty {
+                return false;
+            }
+            models[0] = empty;
+            0
+        } else {
+            let order = self.submodel_panel_order();
+            let position = order
+                .iter()
+                .position(|&i| i == active)
+                .expect("active model is in panel");
+            let neighbor = order
+                .get(position + 1)
+                .copied()
+                .unwrap_or_else(|| order[position - 1]);
+            models.remove(active);
+            neighbor - usize::from(neighbor > active)
+        };
+        self.end_edit();
+        self.end_stroke();
+        self.record_edit("Delete submodel");
+        self.install_models(models, next);
+        true
+    }
+
     pub fn duplicate_model(&mut self, extract: bool) -> Result<(), String> {
         if self.model_count() >= 64 {
             return Err("Submodels are limited to 64".into());
@@ -137,14 +175,17 @@ impl Document {
     }
     /// Match the grouped order displayed by the Submodels panel, even when
     /// folder order differs from the underlying scene indices.
-    pub fn merge_down_target(&self) -> Option<usize> {
-        let order: Vec<_> = std::iter::once("")
+    fn submodel_panel_order(&self) -> Vec<usize> {
+        std::iter::once("")
             .chain(self.groups().iter().map(String::as_str))
             .flat_map(|group| {
                 (0..self.model_count())
                     .filter(move |&i| self.model(i).unwrap().metadata.group == group)
             })
-            .collect();
+            .collect()
+    }
+    pub fn merge_down_target(&self) -> Option<usize> {
+        let order = self.submodel_panel_order();
         let position = order.iter().position(|&i| i == self.active_model_index())?;
         order.get(position + 1).copied()
     }
