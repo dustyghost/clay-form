@@ -131,6 +131,15 @@ impl History {
 }
 
 fn geometry_bytes(geometry: &Geometry) -> usize {
+    let path_bytes: usize = geometry
+        .paths
+        .iter()
+        .map(|p| {
+            std::mem::size_of::<crate::sculpt::paths::SurfacePath>()
+                + p.name.len()
+                + p.points.len() * std::mem::size_of::<crate::sculpt::paths::PathPoint>()
+        })
+        .sum();
     std::iter::once(&geometry.mesh)
         .chain(geometry.settings.lower.iter())
         .chain(geometry.settings.upper.iter())
@@ -153,7 +162,8 @@ fn geometry_bytes(geometry: &Geometry) -> usize {
                     .map(|g| g.weights.len() * 4 + g.name.len())
                     .sum::<usize>()
         })
-        .sum()
+        .sum::<usize>()
+        + path_bytes
 }
 
 #[cfg(test)]

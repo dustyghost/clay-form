@@ -23,11 +23,17 @@ fn disabled(value: &bool) -> bool {
 fn zero_thickness(value: &f32) -> bool {
     *value == 0.
 }
+fn is_zero_id(value: &u64) -> bool {
+    *value == 0
+}
 fn visible_default() -> bool {
     true
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ModelMetadata {
+    /// Persistent path target identity; zero means no path has bound this model yet.
+    #[serde(default, skip_serializing_if = "is_zero_id")]
+    pub model_id: u64,
     #[serde(default = "visible_default")]
     pub visible: bool,
     #[serde(default)]
@@ -53,6 +59,7 @@ pub struct ModelMetadata {
 impl Default for ModelMetadata {
     fn default() -> Self {
         Self {
+            model_id: 0,
             visible: true,
             group: String::new(),
             temporary_thickness: 0.,
@@ -105,6 +112,8 @@ fn default_model_name() -> String {
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Project {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub paths: Vec<super::paths::SurfacePath>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub alphas: Vec<super::alpha::Asset>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stencil: Option<super::alpha::Stencil>,
@@ -134,6 +143,15 @@ pub struct Project {
 impl Project {
     pub const VERSION: u32 = 1;
     pub fn validate(&self) -> Result<(), String> {
+        super::paths::validate_library(&self.paths)?;
+        let mut model_ids = std::collections::HashSet::new();
+        for metadata in std::iter::once(&self.scene.active_metadata)
+            .chain(self.submodels.iter().map(|m| &m.metadata))
+        {
+            if metadata.model_id != 0 && !model_ids.insert(metadata.model_id) {
+                return Err("Duplicate model identity".into());
+            }
+        }
         super::alpha::validate_library(&self.alphas)?;
         if let Some(stencil) = &self.stencil {
             stencil.validate()?;

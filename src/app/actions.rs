@@ -9,6 +9,20 @@ impl App {
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         let active_brush = self.ui.brush_index_for_context(&self.document, ctx);
         let command = match action {
+            Action::EditPaths => Some(Command::Path(paths::PathCommand::Open)),
+            Action::StrokeEntirePath => Some(Command::Path(paths::PathCommand::StrokeEntirePath)),
+            Action::TogglePathOnlyStrokes => {
+                self.viewport.cancel(&mut self.document);
+                self.ui.path_starts_only = !self.ui.path_starts_only;
+                self.viewport.guided.path_starts_only = self.ui.path_starts_only;
+                None
+            }
+            Action::TogglePathGuides => {
+                self.viewport.cancel(&mut self.document);
+                self.ui.guide_paths = !self.ui.guide_paths;
+                self.viewport.guided.enabled = self.ui.guide_paths;
+                None
+            }
             Action::PenModeling => Some(Command::ModelingMode(!self.ui.modeling.active)),
             Action::ModelFaces
             | Action::ModelEdges

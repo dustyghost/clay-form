@@ -46,6 +46,11 @@ CLAY_GPU_SOFTWARE=1 cargo test --locked --lib navigation_and_smooth_offscreen_pr
 CLAY_GPU_SOFTWARE=1 cargo test --locked --lib detail_groove_offscreen_preview -- --ignored
 CLAY_GPU_SOFTWARE=1 cargo test --locked --lib clay_buildup_offscreen_preview -- --ignored
 CLAY_GPU_SOFTWARE=1 cargo test --locked --lib perspective_view_offscreen_preview -- --ignored
+CLAY_GPU_SOFTWARE=1 cargo test --locked --lib closed_cylinder_path_offscreen_preview -- --ignored
+CLAY_GPU_SOFTWARE=1 cargo test --locked --lib live_detail_path_offscreen_preview -- --ignored
+CLAY_GPU_SOFTWARE=1 cargo test --locked --lib one_drag_ring_authoring_offscreen_preview -- --ignored
+CLAY_GPU_SOFTWARE=1 cargo test --locked --lib rounded_path_corners_offscreen_preview -- --ignored
+CLAY_GPU_SOFTWARE=1 cargo test --locked --lib automatic_path_settings_offscreen_preview -- --ignored
 ```
 
 Only the manual load profile is excluded. Software rendering checks shader, framebuffer, picking/display, and UI composition correctness; it is not a hardware performance measurement.
@@ -67,6 +72,14 @@ CLAY_GPU_PREVIEW=/tmp/clay-gpu-preview.png cargo test --locked gpu_offscreen -- 
 ### Preview images
 
 The perspective regression compares real framebuffer coverage against CPU picking, checks brush-alpha agreement, wireframe, symmetry guides and camera-only cache reuse, and exercises near-plane crossings and distant geometry. `perspective_view_offscreen_preview` renders the View controls in both projections, exporting `/tmp/clay-perspective-orthographic.png` and `/tmp/clay-perspective-ui.png` for visual inspection. Set `CLAY_PERSPECTIVE_PREVIEW` to change the output prefix.
+
+`closed_cylinder_path_offscreen_preview` renders an editable surface loop on a cylinder from front and back views. It checks that the path overlay appears over the real GPU-rendered model while camera changes preserve the document, and exports `/tmp/clay-paths-front.png` and `/tmp/clay-paths-back.png`. Set `CLAY_PATHS_PREVIEW` to change the output prefix. Inspect the solid front-facing guide, dim dashed rear-facing guide, seam marker, and path controls in these images.
+
+`live_detail_path_offscreen_preview` checks full trajectory coverage over three Detail passes and exports `/tmp/clay-live-path-*.png` for visual review. `one_drag_ring_authoring_offscreen_preview` exercises pen-drag authoring in both loop modes and exports `/tmp/clay-ring-level.png` and `/tmp/clay-ring-shortest.png`, including the ring controls. `rounded_path_corners_offscreen_preview` exports `/tmp/clay-rounded-path-corners.png` with a rounded surface guide, selected-corner controls, and draggable rounding handles.
+
+`automatic_path_settings_offscreen_preview` renders the shared brush settings and Undo/Redo controls, then undoes an automatic stroke with the dialog open. Inspect `/tmp/clay-automatic-path-settings.png` and `/tmp/clay-automatic-path-undone.png`.
+
+When the local ring diagnostic export is available, `CLAY_GPU_SOFTWARE=1 CLAY_RING_DIAGNOSTICS=stroke-along-ring-path cargo test --release --locked --lib exported_ring_automatic_stroke_offscreen_preview -- --ignored --nocapture` replays its final stroke with the recorded brush and adaptive settings. It writes `/tmp/clay-ring-exported.png` and `/tmp/clay-ring-fixed.png`, plus `-wire.png` versions, without changing the export. These images compare the seam and refinement around the ring; the private diagnostic files are not required by CI.
 
 For the recent brush previews, set `CLAY_DETAIL_PREVIEW=/tmp/clay-detail` when running `detail_groove_offscreen_preview` to save `-solid.png` and `-wire.png` images. Set `CLAY_NAVIGATION_PREVIEW=/tmp/clay-navigation` when running `navigation_and_smooth_offscreen_preview` to save `-standard.png` and `-smooth.png` images at 800% zoom, plus `-brush-settings.png` at 100%. These tests still run without the variables; only the image export is optional.
 
@@ -91,6 +104,29 @@ Use those measurements to choose the next optimization. Likely candidates to inv
 ### Software Vulkan validation sample
 
 The [2026-10-19 CSV](validation/wgpu-lavapipe-2026-10-19.csv) records a release run on Arch Linux, Rust 1.99.0 and Mesa 26.2.4 lavapipe (LLVM 23.1.1), at 256 × 256 pixels with two Mesa worker threads. Solid-frame medians were 4.003 ms for 4,706 vertices and 105.177 ms for 301,058 vertices; visible-wireframe medians were 8.737 ms and 261.962 ms respectively. This replaces the initial 2026-10-18 sample, whose upload timing omitted pending GPU copies. Upload measurements now include submission and completion, with renderer initialization completed beforehand. The environment also changed, so the two runs are not a performance comparison. These CPU software-renderer timings are diagnostic and do not establish hardware performance parity with glow. The profile excludes surface presentation and real input latency.
+
+## Adaptive Detail path profile
+
+Use a project containing a saved surface path to profile adaptive sculpting without rendering. Build once, then run the executable while other CPU-intensive work is idle:
+
+```sh
+cargo build --release --locked --example path_profile
+target/release/examples/path_profile before-stroke.clay 0.21 96
+target/release/examples/path_profile before-stroke.clay 0.21 0 /tmp/detail-result.clay
+```
+
+The arguments are the source project, brush radius in model units, dab limit (`0` for the complete path), and an optional output project. The profile uses the first saved path, the default Detail brush (strength 0.35, spacing 0.08), constant full pressure, and the project's adaptive and symmetry settings. It refreshes the adaptive budget for each dab, matching automatic path refinement, and reports sampling, each 32-dab interval, vertex growth, and final path reattachment separately. Its streaming session resets the live work counter between dabs; automatic whole-path strokes additionally enforce a cumulative work limit. The input project is never modified.
+
+Compare the same project, radius and dab count across builds. Check resulting projects as well as elapsed time: reducing refinement or skipping relaxation can make a run faster while changing the sculpt. These timings exclude viewport rendering and pen input latency.
+
+A local release comparison on 2026-10-21 (Intel Core i7-7500U) used the exported cylinder ring, radius 0.21, and the default Detail brush. The 430-dab loop grew from 1,056 to 61,223 vertices. Measured stroke times, excluding project loading/saving and final path reattachment:
+
+| Detail workload | Before | After |
+| --- | ---: | ---: |
+| Complete 430-dab loop | 72.58 s | 28.23 s |
+| Another 32 dabs on the completed, dense ring | 7.87 s | 2.76 s |
+
+The resulting projects matched byte for byte, including an intermediate 96-dab replay. Adaptive processing now rejects distant triangles early, builds collapse neighborhoods only for candidate endpoints, accumulates relaxation data only for active vertices, and avoids global edge hashing and unnecessary edge allocations/sorting. Off-patch incident faces still participate in safety checks; refinement limits and brush calculations are unchanged. These are shared adaptive routines, but the measured speedups above apply to this Detail workload, not every brush or mesh density.
 
 ## Document edit profile
 

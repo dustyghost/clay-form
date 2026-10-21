@@ -75,6 +75,7 @@ impl Document {
                     self.project()
                 } else {
                     Project {
+                        paths: geometry.paths.clone(),
                         version: Project::VERSION,
                         alphas: Vec::new(),
                         stencil: None,

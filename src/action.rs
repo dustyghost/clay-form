@@ -78,6 +78,10 @@ pub(crate) enum Action {
     ImportObj,
     ProjectDetails,
     KeepProjectionReference,
+    EditPaths,
+    TogglePathGuides,
+    TogglePathOnlyStrokes,
+    StrokeEntirePath,
     AddReference,
     ArrangeReferences,
     ShowReferences,
@@ -351,10 +355,26 @@ impl Action {
         Self::ToggleStencil,
         Self::AttachStencil,
         Self::RemoveStencil,
+        Self::EditPaths,
+        Self::TogglePathGuides,
+        Self::TogglePathOnlyStrokes,
+        Self::StrokeEntirePath,
     ];
     /// Help shared by the built-in controls, custom menus, and shelves.
     pub fn help(&self) -> Option<&'static str> {
         Some(match self {
+            Self::EditPaths => {
+                "Draw and edit saved surface or free-space paths. Orbit while drawing, close loops, then save and sculpt near a surface path to follow it."
+            }
+            Self::TogglePathOnlyStrokes => {
+                "While path guidance is enabled, ignore brush strokes that start away from a saved surface path. Turn off to allow ordinary strokes away from paths."
+            }
+            Self::StrokeEntirePath => {
+                "Automatically sculpt the last selected saved surface path with the active brush size and settings, current adaptive sculpt settings, and constant pressure. Undo is available in the path dialog."
+            }
+            Self::TogglePathGuides => {
+                "Start a brush stroke near a saved surface path to guide the section you draw. Turn off to sculpt freely near paths."
+            }
             Self::DeleteSubmodel => {
                 "Remove the selected submodel, including hidden geometry, masks, levels and modifiers. Undo restores it. Deleting the last model leaves an empty model slot."
             }
@@ -405,6 +425,10 @@ impl Action {
     }
     pub fn label(&self) -> &'static str {
         match self {
+            Self::EditPaths => "Editable paths",
+            Self::TogglePathGuides => "Guide brush strokes with paths",
+            Self::TogglePathOnlyStrokes => "Only start strokes on paths",
+            Self::StrokeEntirePath => "Stroke entire path",
             Self::PenModeling => "Modeling",
             Self::ModelFaces => "Modeling: Faces",
             Self::ModelEdges => "Modeling: Edges",

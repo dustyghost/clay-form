@@ -116,7 +116,10 @@ impl Geometry {
                 self.scene.active_index,
                 Submodel {
                     name,
-                    metadata: self.scene.active_metadata.clone(),
+                    metadata: super::ModelMetadata {
+                        model_id: 0,
+                        ..self.scene.active_metadata.clone()
+                    },
                     mesh: other,
                     mesh_settings: settings.clone(),
                 },

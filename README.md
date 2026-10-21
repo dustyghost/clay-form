@@ -19,6 +19,7 @@ Linux needs a working Wayland or X11 desktop and a Vulkan-capable GPU and driver
 | Guide | Topics |
 | --- | --- |
 | [Sculpting and brushes](docs/guide/sculpting.md) | Brushes, alphas, symmetry, stroke modes, adaptive sculpting, undo/redo |
+| [Editable 3D paths](docs/guide/paths.md) | Surface and free paths, one-drag rings, live brush guidance, automatic strokes, seam control |
 | [Models and mesh tools](docs/guide/modeling.md) | Modeling, face extrusion, tunnels, component selection, submodels, primitives, transforms, remeshing and detail projection |
 | [Edge loops and creases](docs/guide/edges.md) | Hole borders, support loops, edge selection, creasing, smooth subdivision, thickness rims |
 | [Masks and selection](docs/guide/selection.md) | Mask editing, vertex groups, rectangle/lasso selection, visibility, split hidden |

@@ -8,11 +8,14 @@ pub(crate) use modeling::{
 };
 mod gizmo;
 mod gpu;
+pub(crate) mod paths;
 mod projection;
 #[cfg(all(test, target_os = "linux"))]
 pub(crate) use gpu::ui_capture::UiCapture;
+mod guided;
 mod guides;
 mod navigation;
+mod path_follow;
 mod primitive;
 mod references;
 mod scene;
@@ -53,6 +56,8 @@ struct SnakeStroke {
 }
 #[derive(Default)]
 pub(crate) struct Viewport {
+    pub(crate) paths: paths::PathEditor,
+    pub(crate) guided: guided::GuidedPaths,
     pub(crate) attach_stencil: bool,
     stencil_overlay: stencil::Overlay,
     pub(crate) projection_preview: Option<std::sync::Arc<crate::sculpt::Mesh>>,
@@ -139,16 +144,19 @@ impl Viewport {
     }
     pub(crate) fn cancel(&mut self, document: &mut Document) {
         let renderer = self.renderer.take();
+        let paths = std::mem::take(&mut self.paths);
         let edge_selection = std::mem::take(&mut self.edge_selection);
         let mut modeling = std::mem::take(&mut self.modeling);
         modeling.cancel();
         let edge_revision = self.edge_revision;
         let blocked_until_release = self.blocked_until_release
+            || self.guided.dragging()
             || self.references.dragging()
             || self.stencil_overlay.controls.capturing();
         let mut references = std::mem::take(&mut self.references);
         references.cancel_drag();
         *self = Self {
+            paths,
             edge_selection,
             modeling,
             edge_revision,
@@ -226,6 +234,13 @@ impl Viewport {
             self.snake = None;
             self.stroke = false;
         }
+        if (!options.enabled
+            || !self.guided.enabled
+            || ui.input(|i| i.key_pressed(egui::Key::Escape)))
+            && self.guided.dragging()
+        {
+            self.guided.cancel();
+        }
         let previewing = options.enabled
             && !self.projection_mode
             && ui.input(|i| i.pointer.primary_down() && !i.key_pressed(egui::Key::Escape));
@@ -258,7 +273,8 @@ impl Viewport {
             self.pending_stroke.as_ref().filter(|_| previewing),
             self.projection_preview
                 .as_deref()
-                .or_else(|| self.modeling.preview()),
+                .or_else(|| self.modeling.preview())
+                .or_else(|| self.guided.preview()),
         );
         if let Some(renderer) = &self.renderer {
             renderer.set_backfaces(options.backface_opacity);
@@ -283,6 +299,13 @@ impl Viewport {
             draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
             return;
         }
+        if self.paths.active {
+            self.paths
+                .show(ui, &response, &painter, &scene, camera, document, options);
+            draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
+            return;
+        }
+        self.guided.paint(document, &scene, &painter);
         if self.attach_stencil {
             self.stencil_overlay
                 .paint(document.stencil(), &scene, &painter);
@@ -323,6 +346,7 @@ impl Viewport {
             options.enabled
                 && !self.stroke
                 && self.pending_stroke.is_none()
+                && !self.guided.dragging()
                 && self.gesture.is_none(),
         );
         if stencil_controls {
@@ -455,6 +479,7 @@ impl Viewport {
         if options.enabled
             && self.gesture != Some(Gesture::Transform)
             && self.pending_stroke.is_none()
+            && !self.guided.dragging()
             && !self.modeling.dragging()
             && self.slice.is_none()
             && self.slice_path.is_none()
@@ -466,6 +491,7 @@ impl Viewport {
         if options.enabled
             && self.gesture != Some(Gesture::Transform)
             && self.pending_stroke.is_none()
+            && !self.guided.dragging()
             && !self.modeling.dragging()
             && self.slice.is_none()
             && self.slice_path.is_none()
@@ -483,6 +509,7 @@ impl Viewport {
         if options.enabled
             && self.gesture != Some(Gesture::Transform)
             && self.pending_stroke.is_none()
+            && !self.guided.dragging()
             && !self.modeling.dragging()
             && self.slice.is_none()
             && self.slice_path.is_none()
@@ -777,6 +804,12 @@ impl Viewport {
             return;
         }
         if stencil.is_some() && matches!(brush.kind, Kind::Grab | Kind::Snake | Kind::Detail) {
+            if self.guided.dragging() {
+                self.guided.cancel();
+                self.status = Some(
+                    "Guided stroke cancelled; disable the stencil before using this brush".into(),
+                );
+            }
             painter.text(
                 rect.center_bottom() - Vec2::new(0., 24.),
                 egui::Align2::CENTER_BOTTOM,
@@ -788,6 +821,40 @@ impl Viewport {
             return;
         }
         let drawing = primary && self.gesture == Some(Gesture::Sculpt) && options.enabled;
+        let guide_start = (options.enabled
+            && !self.stroke
+            && !zoom_held
+            && !pan_held
+            && options.select.is_none()
+            && !matches!(previous_gesture, Some(Gesture::Orbit | Gesture::Gizmo)))
+        .then_some(frame_start)
+        .flatten()
+        .filter(|p| {
+            !gizmo_rect.contains(*p)
+                && !navigation::contains(rect, *p)
+                && ui.ctx().layer_id_at(*p) == Some(response.layer_id)
+        });
+        if let Some(result) = self.guided.update(
+            document,
+            &scene,
+            &brush,
+            pointer,
+            guide_start,
+            primary,
+            ui.input(|i| i.pointer.button_released(egui::PointerButton::Primary)),
+            options.pressure,
+            options.reverse.active(modifiers),
+            stencil.clone(),
+        ) {
+            match result {
+                Ok(completed) => self.completed_stroke = completed,
+                Err(error) => self.status = Some(error),
+            }
+            ui.ctx().request_repaint();
+            draw_gizmo(camera, &painter, gizmo_rect, pointer);
+            draw_mesh_counts(document, &painter, rect);
+            return;
+        }
         let patterned_click = options.enabled
             && options.select.is_none()
             && !zoom_held

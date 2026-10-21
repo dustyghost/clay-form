@@ -3508,3 +3508,7 @@ fn delete_submodel_action_removes_hidden_reference_clears_targets_and_locks_duri
 }
 
 mod alphas;
+mod path_brush;
+mod paths;
+#[cfg(target_os = "linux")]
+mod ring_diagnostics;

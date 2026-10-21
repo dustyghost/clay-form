@@ -69,3 +69,6 @@ mod projection;
 pub use projection::{ProjectionOptions, ProjectionReport};
 
 pub mod alpha;
+
+pub mod path_geometry;
+pub mod paths;
