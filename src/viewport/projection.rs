@@ -11,12 +11,7 @@ impl Scene {
         self.eye_distance * 0.001
     }
     pub fn scale_at(&self, point: Vec3) -> f32 {
-        if self.eye_distance == 0. {
-            self.scale
-        } else {
-            self.scale * self.eye_distance
-                / (self.eye_distance - point.dot(self.view)).max(self.near())
-        }
+        crate::camera::Camera::projection_scale(self.scale, self.eye_distance, point.dot(self.view))
     }
     pub fn project(&self, point: Vec3) -> Pos2 {
         let scale = self.scale_at(point);

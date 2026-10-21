@@ -290,6 +290,7 @@ impl Document {
         models[active].mesh = visible_mesh;
         models[active].mesh_settings = MeshSettings::default();
         let mut metadata = models[active].metadata.clone();
+        metadata.model_id = 0;
         metadata.visible = true;
         models.insert(
             active + 1,

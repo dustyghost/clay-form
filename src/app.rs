@@ -17,6 +17,7 @@ mod commands;
 mod diagnostics;
 mod files;
 mod jobs;
+pub(crate) mod paths;
 mod projection;
 mod recovery;
 mod references;
@@ -31,6 +32,7 @@ pub struct App {
     diagnostic_environment: crate::diagnostics::Environment,
     job_settings: Option<crate::diagnostics::EditSettings>,
     projection: projection::ProjectionState,
+    paths: paths::PathState,
     closing: bool,
     mesh_job: Option<MeshJob>,
     recovery: Option<crate::recovery::Recovery>,
@@ -52,6 +54,7 @@ impl Default for App {
             diagnostic_environment: Default::default(),
             job_settings: None,
             projection: Default::default(),
+            paths: Default::default(),
             closing: false,
             mesh_job: None,
             recovery: None,
@@ -140,8 +143,14 @@ impl App {
     }
 
     pub(crate) fn show_viewport(&mut self, ui: &mut egui::Ui) {
+        self.paths.viewport_size = Some(ui.available_size());
+        self.sync_path_brush_radius();
+        self.show_paths(ui.ctx());
         if self.ui.projection.open && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.cancel_projection();
+        }
+        if let Some(id) = self.viewport.guided.used_path.take() {
+            self.paths.selected_path = Some(id);
         }
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         if self.ui.file_picker.is_none()
@@ -217,8 +226,14 @@ impl App {
         });
         let selected = self.ui.brush_index_for_context(&self.document, ui.ctx());
         self.capture_diagnostic_context(ui.ctx());
-        self.viewport.projection_preview = self.projection.draft.as_ref().map(|d| d.mesh.clone());
+        self.viewport.projection_preview = self
+            .paths
+            .preview_mesh
+            .clone()
+            .or_else(|| self.projection.draft.as_ref().map(|d| d.mesh.clone()));
         self.viewport.projection_mode = self.ui.projection.open;
+        self.viewport.guided.enabled = self.ui.guide_paths;
+        self.viewport.guided.path_starts_only = self.ui.path_starts_only;
         self.viewport.show(
             ui,
             &mut self.document,
@@ -252,9 +267,10 @@ impl App {
                 show_guides: self.ui.show_symmetry_guides,
                 guide_opacity: self.ui.guide_opacity,
                 enabled: enabled
-                    && !over_toolbar
-                    && !over_editor
-                    && !self.ui.pointer_over_pinned_menu(ui.ctx()),
+                    && (self.viewport.guided.dragging()
+                        || (!over_toolbar
+                            && !over_editor
+                            && !self.ui.pointer_over_pinned_menu(ui.ctx()))),
                 reverse: self.ui.preferences.reverse,
                 zoom_hold: self.ui.preferences.zoom_hold,
                 pan_hold: self.ui.preferences.pan_hold,
@@ -313,6 +329,7 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         self.poll_mesh_job();
         self.poll_projection();
+        self.poll_paths();
         let native_pressure = ctx.input(|i| {
             i.events.iter().rev().find_map(|event| match event {
                 egui::Event::Touch { force: Some(p), .. } => Some(*p),
@@ -322,6 +339,9 @@ impl eframe::App for App {
         self.pressure = self.tablet.pressure().or(native_pressure).unwrap_or(1.);
         if ctx.input(|i| i.viewport().close_requested()) && self.ui.projection.open {
             self.cancel_projection();
+        }
+        if ctx.input(|i| i.viewport().close_requested()) && self.viewport.paths.active {
+            let _ = self.dispatch_path(paths::PathCommand::Close);
         }
         if ctx.input(|i| i.viewport().close_requested())
             && self.document.is_dirty()

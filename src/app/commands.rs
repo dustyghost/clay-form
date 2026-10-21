@@ -66,8 +66,46 @@ impl App {
     }
     pub(crate) fn dispatch(&mut self, command: Command, ctx: &egui::Context) {
         self.capture_diagnostic_context(ctx);
+        self.sync_path_history_state();
         if let Command::Action(action) = command {
             self.execute_action(action, ctx);
+            return;
+        }
+        if let Command::Path(command) = command {
+            if let Err(error) = self.dispatch_path(command) {
+                self.ui.status = error;
+            }
+            self.sync_path_history_state();
+            return;
+        }
+        if self.viewport.paths.active
+            && !matches!(
+                command,
+                Command::UpdateBrush(..)
+                    | Command::Undo
+                    | Command::Redo
+                    | Command::ResetView
+                    | Command::ZoomIn
+                    | Command::ZoomOut
+                    | Command::SetZoom(_)
+                    | Command::SetPerspective(_)
+                    | Command::SetFieldOfView(_)
+            )
+        {
+            self.ui.status = "Finish editing paths before using another tool".into();
+            return;
+        }
+        if matches!(command, Command::Undo | Command::Redo)
+            && let Err(error) = self.prepare_path_history()
+        {
+            self.ui.status = error;
+            return;
+        }
+        if self.viewport.paths.active
+            && (self.paths.busy() || self.paths.has_preview())
+            && matches!(command, Command::UpdateBrush(..))
+        {
+            self.ui.status = "Apply or cancel the path preview before changing the brush".into();
             return;
         }
         if self.ui.projection.open
@@ -239,7 +277,8 @@ impl App {
         if matches!(
             command,
             Command::ZoomIn | Command::ZoomOut | Command::SetZoom(_) | Command::ResetView
-        ) && self.viewport.gesture == Some(crate::viewport::Gesture::Transform)
+        ) && (self.viewport.gesture == Some(crate::viewport::Gesture::Transform)
+            || self.viewport.guided.dragging())
         {
             self.viewport.finish_transform_drag(&mut self.document);
         }
@@ -262,6 +301,7 @@ impl App {
         }
         self.document.prepare_edit(command.edit_kind());
         let result: Result<(), String> = match command {
+            Command::Path(_) => unreachable!(),
             Command::ModelingMode(active) => if active {
                 self.document.require_modeling()
             } else {
@@ -533,6 +573,7 @@ impl App {
                 }
                 let label = self.document.undo_label();
                 self.document.undo();
+                self.refresh_path_after_history();
                 self.ui.status =
                     label.map_or("Nothing to undo".into(), |label| format!("Undid: {label}"));
                 Ok(())
@@ -545,6 +586,7 @@ impl App {
                 }
                 let label = self.document.redo_label();
                 self.document.redo();
+                self.refresh_path_after_history();
                 self.ui.status =
                     label.map_or("Nothing to redo".into(), |label| format!("Redid: {label}"));
                 Ok(())

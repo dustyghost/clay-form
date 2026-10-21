@@ -8,6 +8,7 @@ Build a rounded form, cut a fold, or pull out a horn: choose the brush for the s
 - [Reset a brush](#example-reset-an-experimental-brush)
 - [Cut a fine fold](#detail-brush)
 - [Choose a stroke mode](#stroke-modes)
+- [Guide a live brush stroke with an editable 3D path](paths.md#sculpt-along-a-saved-guide)
 - [Mirror a stroke](#symmetry)
 - [Add local detail](#snake-brush-and-adaptive-sculpting)
 - [Undo an edit](#undo-and-redo)
@@ -157,6 +158,8 @@ Use subdivision or adaptive sculpting if a fine crease looks faceted. Detail's a
 ## Stroke modes
 
 Choose **Brush settings → Stroke mode**. Each preset remembers its own mode.
+
+For a reusable surface guide, open **Mesh → Editable paths**, draw the route, and choose **Save & sculpt**. With **Guide brush strokes with paths** enabled, start a stroke near the saved guide and draw along it: only the section you traverse is sculpted. Pressure, masks, symmetry, and the active brush still apply, including Detail, Grab, and Snake with their usual stencil restrictions. The captured guide reattaches after its own stroke; unrelated surface edits require reprojection. Enable **Only start strokes on paths** to ignore off-guide starts, or use **Stroke entire path** to apply the brush automatically. **New ring** creates a complete level or shortest-surface loop with one pen drag. See [editable 3D paths](paths.md) for editing and application settings.
 
 | Mode | Gesture | Useful for |
 | --- | --- | --- |

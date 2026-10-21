@@ -27,6 +27,7 @@ impl Document {
             }
             number += 1;
         }
+        reference.metadata.model_id = 0;
         reference.metadata.visible = false;
         models.insert(active + 1, reference);
         self.record_edit("Keep projection reference");

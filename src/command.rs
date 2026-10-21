@@ -8,6 +8,7 @@ pub(crate) enum PendingAction {
     Quit,
 }
 pub(crate) enum Command {
+    Path(crate::app::paths::PathCommand),
     Action(crate::action::Action),
     Request(PendingAction),
     Save,

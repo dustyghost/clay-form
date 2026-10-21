@@ -268,21 +268,15 @@ impl Mesh {
         let mut changed = false;
         let sculptable = self.sculptable_vertices();
         for _ in 0..2 {
-            let normals = self.normals();
-            let mut sums = vec![Vec3::default(); self.vertices.len()];
-            let mut counts = vec![0.; self.vertices.len()];
             let mut active = vec![false; self.vertices.len()];
-            for (fi, &t @ [a, b, c]) in self.triangles.iter().enumerate() {
+            for (fi, &t) in self.triangles.iter().enumerate() {
                 if self.in_patch(fi, t, brush, dabs, stencils) {
                     for i in t {
                         active[i] = true;
                     }
                 }
-                for (i, j, k) in [(a, b, c), (b, c, a), (c, a, b)] {
-                    sums[i] = sums[i] + self.vertices[j] + self.vertices[k];
-                    counts[i] += 2.;
-                }
             }
+            let (normals, sums, counts) = self.relaxation_neighborhood(&active);
             let mut moves = vec![Vec3::default(); self.vertices.len()];
             for i in 0..moves.len() {
                 if !sculptable[i]
@@ -325,38 +319,76 @@ impl Mesh {
                     moves[i] = moves[i] * (target * 0.5 / length);
                 }
             }
-            // Simultaneous proposals must not invert or flatten any incident face.
-            for pass in 0..5 {
-                let mut unsafe_vertices = HashSet::new();
-                for &t in &self.triangles {
-                    if t.iter().all(|&i| moves[i].len() == 0.) {
-                        continue;
-                    }
-                    let [a, b, c] = t.map(|i| self.vertices[i]);
-                    let [x, y, z] = t.map(|i| self.vertices[i] + moves[i]);
-                    let old = (b - a).cross(c - a);
-                    let new = (y - x).cross(z - x);
-                    if new.len() < old.len() * 0.3 || new.norm().dot(old.norm()) < 0.8 {
-                        unsafe_vertices.extend(t);
-                    }
-                }
-                if unsafe_vertices.is_empty() {
-                    break;
-                }
-                if pass == 4 {
-                    moves.fill(Vec3::default());
-                    break;
-                }
-                for i in unsafe_vertices {
-                    moves[i] = Vec3::default();
-                }
-            }
+            self.constrain_surface_moves::<true>(&mut moves);
             for (position, delta) in self.vertices.iter_mut().zip(moves) {
                 changed |= delta.len() > 0.;
                 *position = *position + delta;
             }
         }
         changed
+    }
+    fn relaxation_neighborhood(&self, active: &[bool]) -> (Vec<Vec3>, Vec<Vec3>, Vec<f32>) {
+        let mut normals = vec![Vec3::default(); self.vertices.len()];
+        let mut sums = vec![Vec3::default(); self.vertices.len()];
+        let mut counts = vec![0.; self.vertices.len()];
+        // Include all incident faces, even outside the brush. Retain the exact
+        // face/addition order used by Mesh::normals and the full neighbor scan.
+        for &[a, b, c] in &self.triangles {
+            if !active[a] && !active[b] && !active[c] {
+                continue;
+            }
+            let normal =
+                (self.vertices[b] - self.vertices[a]).cross(self.vertices[c] - self.vertices[a]);
+            for (i, j, k) in [(a, b, c), (b, c, a), (c, a, b)] {
+                if active[i] {
+                    normals[i] = normals[i] + normal;
+                    sums[i] = sums[i] + self.vertices[j] + self.vertices[k];
+                    counts[i] += 2.;
+                }
+            }
+        }
+        for (i, normal) in normals.iter_mut().enumerate() {
+            if active[i] {
+                *normal = normal.norm();
+            }
+        }
+        (normals, sums, counts)
+    }
+    fn constrain_surface_moves<const LOCAL: bool>(&self, moves: &mut [Vec3]) {
+        // Simultaneous proposals must not invert or flatten any incident face.
+        // Later passes only zero proposals, so no additional face can become
+        // affected. Preserve face order while avoiding repeated remote scans.
+        let affected: Vec<_> = self
+            .triangles
+            .iter()
+            .copied()
+            .filter(|t| !LOCAL || t.iter().any(|&i| moves[i].len() != 0.))
+            .collect();
+        for pass in 0..5 {
+            let mut unsafe_vertices = HashSet::new();
+            for &t in &affected {
+                if t.iter().all(|&i| moves[i].len() == 0.) {
+                    continue;
+                }
+                let [a, b, c] = t.map(|i| self.vertices[i]);
+                let [x, y, z] = t.map(|i| self.vertices[i] + moves[i]);
+                let old = (b - a).cross(c - a);
+                let new = (y - x).cross(z - x);
+                if new.len() < old.len() * 0.3 || new.norm().dot(old.norm()) < 0.8 {
+                    unsafe_vertices.extend(t);
+                }
+            }
+            if unsafe_vertices.is_empty() {
+                break;
+            }
+            if pass == 4 {
+                moves.fill(Vec3::default());
+                break;
+            }
+            for i in unsafe_vertices {
+                moves[i] = Vec3::default();
+            }
+        }
     }
     // Reconnect diagonals instead of repeatedly subdividing skinny triangles.
     // No vertex positions or mask values change, and distant faces stay intact.
@@ -367,17 +399,44 @@ impl Mesh {
         stencils: &[Projection],
         limit: usize,
     ) -> usize {
-        let mut edges: BTreeMap<(usize, usize), Vec<OrientedFaceEdge>> = BTreeMap::new();
-        let mut existing = HashSet::new();
+        self.improve_edges_impl::<true>(brush, dabs, stencils, limit)
+    }
+    fn improve_edges_impl<const FLAT: bool>(
+        &mut self,
+        brush: &Brush,
+        dabs: &[Dab],
+        stencils: &[Projection],
+        limit: usize,
+    ) -> usize {
+        let mut edges: Vec<((usize, usize), OrientedFaceEdge)> = Vec::new();
+        let mut local_vertices = vec![false; self.vertices.len()];
         for (i, &[a, b, c]) in self.triangles.iter().enumerate() {
-            let local = self.in_patch(i, [a, b, c], brush, dabs, stencils);
+            if !self.in_patch(i, [a, b, c], brush, dabs, stencils) {
+                continue;
+            }
             for (a, b, c) in [(a, b, c), (b, c, a), (c, a, b)] {
-                existing.insert(edge(a, b));
-                if local {
-                    edges.entry(edge(a, b)).or_default().push((i, a, b, c));
-                }
+                local_vertices[a] = true;
+                edges.push((edge(a, b), (i, a, b, c)));
             }
         }
+        // Stable sorting retains the original face order within each edge,
+        // matching the former ordered map without per-edge vector allocations.
+        if FLAT {
+            edges.sort_by_key(|(key, _)| *key);
+        } else {
+            let mut reference: BTreeMap<_, Vec<_>> = BTreeMap::new();
+            for (key, record) in edges {
+                reference.entry(key).or_default().push(record);
+            }
+            edges = reference
+                .into_iter()
+                .flat_map(|(key, records)| records.into_iter().map(move |record| (key, record)))
+                .collect();
+        }
+        // Every queried replacement diagonal has two local endpoints. Scan all
+        // faces so an edge outside the patch still prevents a duplicate, but do
+        // not populate the hash table with unrelated distant edges.
+        let existing = self.existing_patch_edges(&local_vertices);
         let quality = |t: [usize; 3]| {
             let [a, b, c] = t.map(|i| self.vertices[i]);
             let sum = (b - a).dot(b - a) + (c - b).dot(c - b) + (a - c).dot(a - c);
@@ -389,8 +448,8 @@ impl Mesh {
         };
         let mut used = HashSet::new();
         let mut replacements = Vec::new();
-        for pair in edges.values() {
-            let [(i, a, b, c), (j, x, y, d)] = pair.as_slice() else {
+        for pair in edges.chunk_by(|a, b| a.0 == b.0) {
+            let [(_, (i, a, b, c)), (_, (j, x, y, d))] = pair else {
                 continue;
             };
             if !self.polygroups.is_empty() && self.polygroups[*i] != self.polygroups[*j] {
@@ -448,7 +507,28 @@ impl Mesh {
         }
         count
     }
+    fn existing_patch_edges(&self, local_vertices: &[bool]) -> HashSet<(usize, usize)> {
+        let mut existing = HashSet::new();
+        for &[a, b, c] in &self.triangles {
+            for (a, b) in [(a, b), (b, c), (c, a)] {
+                if local_vertices[a] && local_vertices[b] {
+                    existing.insert(edge(a, b));
+                }
+            }
+        }
+        existing
+    }
     fn split_local(
+        &mut self,
+        brush: &Brush,
+        dabs: &[Dab],
+        stencils: &[Projection],
+        target: f32,
+        limit: usize,
+    ) -> usize {
+        self.split_local_impl::<true>(brush, dabs, stencils, target, limit)
+    }
+    fn split_local_impl<const LOCAL_MIDPOINTS: bool>(
         &mut self,
         brush: &Brush,
         dabs: &[Dab],
@@ -512,19 +592,21 @@ impl Mesh {
             }
         }
         let mut candidates: Vec<_> = candidates.into_iter().collect();
-        candidates.sort_by(|(a, x), (b, y)| y.total_cmp(x).then(a.cmp(b)));
         // Each manifold edge adds one vertex and two faces. Leave headroom for
         // malformed/nonmanifold inputs as well; adaptive mode validates closure.
         let capacity = limit
             .min(MAX_VERTICES.saturating_sub(self.vertices.len()))
             .min(MAX_TRIANGLES.saturating_sub(self.triangles.len()) / 2);
-        candidates.truncate(capacity);
+        retain_split_candidates(&mut candidates, capacity);
         if candidates.is_empty() {
             return 0;
         }
         candidates.sort_by_key(|(edge, _)| *edge);
         let mut mids = HashMap::new();
+        let mut split_vertices = vec![false; self.vertices.len()];
         for &((a, b), _) in &candidates {
+            split_vertices[a] = true;
+            split_vertices[b] = true;
             let index = self.vertices.len();
             self.vertices
                 .push((self.vertices[a] + self.vertices[b]) * 0.5);
@@ -539,11 +621,13 @@ impl Mesh {
         let mut new_hidden = Vec::new();
         for (fi, &[a, b, c]) in self.triangles.iter().enumerate() {
             let start = faces.len();
-            let m = [
-                mids.get(&edge(a, b)).copied(),
-                mids.get(&edge(b, c)).copied(),
-                mids.get(&edge(c, a)).copied(),
-            ];
+            let m = [(a, b), (b, c), (c, a)].map(|(a, b)| {
+                if !LOCAL_MIDPOINTS || (split_vertices[a] && split_vertices[b]) {
+                    mids.get(&edge(a, b)).copied()
+                } else {
+                    None
+                }
+            });
             match m.iter().flatten().count() {
                 0 => faces.push([a, b, c]),
                 1 => {
@@ -614,18 +698,12 @@ impl Mesh {
         if candidates.is_empty() {
             return 0;
         }
-        let mut neighbors = vec![Vec::new(); self.vertices.len()];
-        let mut incident = vec![Vec::new(); self.vertices.len()];
-        for (index, &[a, b, c]) in self.triangles.iter().enumerate() {
-            for (i, j, k) in [(a, b, c), (b, c, a), (c, a, b)] {
-                neighbors[i].extend([j, k]);
-                incident[i].push(index);
-            }
+        let mut relevant = vec![false; self.vertices.len()];
+        for &(a, b) in candidates.keys() {
+            relevant[a] = true;
+            relevant[b] = true;
         }
-        for ns in &mut neighbors {
-            ns.sort_unstable();
-            ns.dedup();
-        }
+        let (neighbors, incident) = self.collapse_adjacency(&relevant);
         let mut candidates: Vec<_> = candidates.into_iter().collect();
         candidates.sort_by(|(a, x), (b, y)| x.total_cmp(y).then(a.cmp(b)));
         let mut blocked = HashSet::new();
@@ -817,7 +895,36 @@ impl Mesh {
         self.triangles = triangles;
         merged.len()
     }
+    fn collapse_adjacency(&self, relevant: &[bool]) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
+        let mut neighbors = vec![Vec::new(); self.vertices.len()];
+        let mut incident = vec![Vec::new(); self.vertices.len()];
+        for (index, &[a, b, c]) in self.triangles.iter().enumerate() {
+            for (i, j, k) in [(a, b, c), (b, c, a), (c, a, b)] {
+                if relevant[i] {
+                    neighbors[i].extend([j, k]);
+                    incident[i].push(index);
+                }
+            }
+        }
+        for (i, ns) in neighbors.iter_mut().enumerate() {
+            if relevant[i] {
+                ns.sort_unstable();
+                ns.dedup();
+            }
+        }
+        (neighbors, incident)
+    }
     fn in_patch(
+        &self,
+        face: usize,
+        t: [usize; 3],
+        brush: &Brush,
+        dabs: &[Dab],
+        stencils: &[Projection],
+    ) -> bool {
+        self.in_patch_impl::<true>(face, t, brush, dabs, stencils)
+    }
+    fn in_patch_impl<const BROAD_PHASE: bool>(
         &self,
         face: usize,
         t: [usize; 3],
@@ -829,26 +936,52 @@ impl Mesh {
             return false;
         }
         let [a, b, c] = t.map(|i| self.vertices[i]);
-        let normal = (b - a).cross(c - a).norm();
+        let bounds = [
+            (a.0.min(b.0).min(c.0), a.0.max(b.0).max(c.0)),
+            (a.1.min(b.1).min(c.1), a.1.max(b.1).max(c.1)),
+            (a.2.min(b.2).min(c.2), a.2.max(b.2).max(c.2)),
+        ];
+        // Drag stamps use the same depth reach as the displacement sampler;
+        // on curved surfaces the projected alpha edge can lie beyond radius.
+        let reach = if matches!(
+            brush.effective_stroke_mode(),
+            super::StrokeMode::DragRect | super::StrokeMode::DragDot
+        ) {
+            1.5
+        } else {
+            1.
+        };
+        let mut normal = None;
         dabs.iter().enumerate().any(|(index, dab)| {
             if brush.pressure && dab.pressure <= 0. {
                 return false;
             }
-            if brush.kind != Kind::Snake && normal.dot(dab.normal) < 0.1 {
+            if BROAD_PHASE
+                && bounds
+                    .iter()
+                    .zip([dab.center.0, dab.center.1, dab.center.2])
+                    .any(|(&(low, high), center)| {
+                        // Expand conservatively for the arithmetic in the exact
+                        // closest-point test, including large translated models.
+                        let padding = 16.
+                            * f32::EPSILON
+                            * (low.abs().max(high.abs()).max(center.abs()) + dab.radius + 1.);
+                        let radius = dab.radius * reach + padding;
+                        center < low - radius || center > high + radius
+                    })
+            {
+                return false;
+            }
+            if brush.kind != Kind::Snake
+                && normal
+                    .get_or_insert_with(|| (b - a).cross(c - a).norm())
+                    .dot(dab.normal)
+                    < 0.1
+            {
                 return false;
             }
             let p = closest_triangle(dab.center, a, b, c);
             let offset = p - dab.center;
-            // Drag stamps use the same depth reach as the displacement sampler;
-            // on curved surfaces the projected alpha edge can lie beyond radius.
-            let reach = if matches!(
-                brush.effective_stroke_mode(),
-                super::StrokeMode::DragRect | super::StrokeMode::DragDot
-            ) {
-                1.5
-            } else {
-                1.
-            };
             if offset.len() > dab.radius * reach {
                 return false;
             }
@@ -863,6 +996,14 @@ impl Mesh {
                 brush.weight(d.dot(dab.right) / dab.radius, d.dot(dab.up) / dab.radius) > 0.001
             })
         })
+    }
+}
+fn retain_split_candidates(candidates: &mut Vec<((usize, usize), f32)>, capacity: usize) {
+    if capacity < candidates.len() {
+        // Edge keys break every ratio tie, giving precisely the same retained
+        // edges as a full sort, without sorting discarded candidates.
+        candidates.select_nth_unstable_by(capacity, |(a, x), (b, y)| y.total_cmp(x).then(a.cmp(b)));
+        candidates.truncate(capacity);
     }
 }
 fn edge(a: usize, b: usize) -> (usize, usize) {
@@ -884,6 +1025,335 @@ mod tests {
             invert: false,
         }
     }
+    #[test]
+    fn adaptive_patch_broad_phase_matches_precise_membership() {
+        use crate::sculpt::{StrokeMode, Symmetry, alpha::Frame};
+        let mut primitive =
+            crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Icosphere);
+        primitive.subdivisions = 1;
+        let mut mesh = primitive.mesh().unwrap();
+        let stencil = Projection {
+            image: Alpha::Image {
+                width: 2,
+                height: 1,
+                pixels: vec![0., 1.].into(),
+            },
+            frame: Frame {
+                origin: Vec3::default(),
+                right: Vec3(1., 0., 0.),
+                up: Vec3(0., 1., 0.),
+            },
+            view: Vec3(0., 0., 1.),
+            distance: 0.,
+            position: [0., 0.],
+            size: [1., 1.],
+            rotation: 20.,
+        };
+        let symmetry = Symmetry {
+            enabled: true,
+            mirror: [true, true, false],
+            ..Default::default()
+        };
+        let stencils = stencil.copies(&symmetry);
+        let mut accepted = 0;
+        let mut rejected = 0;
+        for protection in 0..3 {
+            mesh.hidden_faces = vec![false; mesh.triangles.len()];
+            mesh.mask.fill(0.);
+            if protection == 1 {
+                mesh.hidden_faces
+                    .iter_mut()
+                    .step_by(3)
+                    .for_each(|v| *v = true);
+            }
+            if protection == 2 {
+                mesh.mask.iter_mut().step_by(2).for_each(|v| *v = 1.);
+            }
+            for kind in [Kind::Detail, Kind::Standard, Kind::Snake] {
+                for stroke_mode in [
+                    StrokeMode::Freehand,
+                    StrokeMode::DragDot,
+                    StrokeMode::DragRect,
+                ] {
+                    let brush = Brush {
+                        stroke_mode,
+                        ..Brush::new(kind)
+                    };
+                    for center in [Vec3(0.2, 0.1, 1.), Vec3(2., -0.2, 0.), Vec3(0., 0., 0.)] {
+                        for radius in [0.05, 0.35, 2.] {
+                            let dabs = symmetry.dabs(Dab {
+                                center,
+                                radius,
+                                ..dab()
+                            });
+                            for projected in [&[][..], stencils.as_slice()] {
+                                for (face, &t) in mesh.triangles.iter().enumerate() {
+                                    let precise = mesh
+                                        .in_patch_impl::<false>(face, t, &brush, &dabs, projected);
+                                    assert_eq!(
+                                        mesh.in_patch(face, t, &brush, &dabs, projected),
+                                        precise
+                                    );
+                                    accepted += usize::from(precise);
+                                    rejected += usize::from(!precise);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(accepted > 0 && rejected > 0);
+    }
+
+    #[test]
+    fn adaptive_patch_broad_phase_preserves_reach_boundaries_and_translations() {
+        use crate::sculpt::StrokeMode;
+        for shift in [Vec3::default(), Vec3(10000., -10000., 10000.)] {
+            let mesh = Mesh {
+                vertices: vec![
+                    Vec3(-1., -1., 0.) + shift,
+                    Vec3(1., -1., 0.) + shift,
+                    Vec3(0., 1., 0.) + shift,
+                ],
+                triangles: vec![[0, 1, 2]],
+                mask: vec![0.; 3],
+                ..Default::default()
+            };
+            for stroke_mode in [StrokeMode::Freehand, StrokeMode::DragDot] {
+                let brush = Brush {
+                    alpha: Alpha::Hard,
+                    stroke_mode,
+                    ..Brush::new(Kind::Standard)
+                };
+                let reach = if stroke_mode == StrokeMode::Freehand {
+                    1.
+                } else {
+                    1.5
+                };
+                for delta in [-0.001, -f32::EPSILON, 0., f32::EPSILON, 0.001] {
+                    for pressure in [0., 1.] {
+                        let d = Dab {
+                            center: Vec3(0., 0., 0.35 * reach + delta) + shift,
+                            pressure,
+                            ..dab()
+                        };
+                        assert_eq!(
+                            mesh.in_patch(0, [0, 1, 2], &brush, &[d], &[]),
+                            mesh.in_patch_impl::<false>(0, [0, 1, 2], &brush, &[d], &[])
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn partial_split_selection_matches_full_sort_including_ratio_ties() {
+        let candidates: Vec<_> = (0..257)
+            .rev()
+            .map(|i| {
+                (
+                    (i, i + 1),
+                    if i % 31 == 0 {
+                        f32::INFINITY
+                    } else {
+                        (i % 7) as f32
+                    },
+                )
+            })
+            .collect();
+        for capacity in [0, 1, 23, 64, 256, 257, 300] {
+            let mut expected = candidates.clone();
+            expected.sort_by(|(a, x), (b, y)| y.total_cmp(x).then(a.cmp(b)));
+            expected.truncate(capacity);
+            expected.sort_by_key(|(edge, _)| *edge);
+            let mut actual = candidates.clone();
+            retain_split_candidates(&mut actual, capacity);
+            actual.sort_by_key(|(edge, _)| *edge);
+            assert_eq!(actual, expected);
+        }
+    }
+
+    #[test]
+    fn local_relaxation_safety_matches_full_face_passes() {
+        let mesh = Mesh::sphere();
+        for scale in [0., 0.01, 0.2, 2.] {
+            let moves: Vec<_> = mesh
+                .vertices
+                .iter()
+                .enumerate()
+                .map(|(i, p)| {
+                    if p.2 < 0.3 {
+                        Vec3::default()
+                    } else {
+                        Vec3((i % 3) as f32 - 1., 0.3, -1.) * scale
+                    }
+                })
+                .collect();
+            let mut expected = moves.clone();
+            mesh.constrain_surface_moves::<false>(&mut expected);
+            let mut actual = moves;
+            mesh.constrain_surface_moves::<true>(&mut actual);
+            assert_eq!(actual, expected);
+        }
+    }
+
+    #[test]
+    fn active_relaxation_neighborhood_matches_full_accumulation_exactly() {
+        let mesh = Mesh::sphere();
+        let normals = mesh.normals();
+        let mut sums = vec![Vec3::default(); mesh.vertices.len()];
+        let mut counts = vec![0.; mesh.vertices.len()];
+        for &[a, b, c] in &mesh.triangles {
+            for (i, j, k) in [(a, b, c), (b, c, a), (c, a, b)] {
+                sums[i] = sums[i] + mesh.vertices[j] + mesh.vertices[k];
+                counts[i] += 2.;
+            }
+        }
+        for divisor in [1, 7, 23] {
+            let active: Vec<_> = (0..mesh.vertices.len()).map(|i| i % divisor == 0).collect();
+            let (local_normals, local_sums, local_counts) = mesh.relaxation_neighborhood(&active);
+            for i in 0..active.len() {
+                if active[i] {
+                    assert_eq!(local_normals[i], normals[i]);
+                    assert_eq!(local_sums[i], sums[i]);
+                    assert_eq!(local_counts[i], counts[i]);
+                } else {
+                    assert_eq!(local_normals[i], Vec3::default());
+                    assert_eq!(local_sums[i], Vec3::default());
+                    assert_eq!(local_counts[i], 0.);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn candidate_collapse_adjacency_includes_every_incident_face() {
+        let mesh = Mesh::sphere();
+        let mut neighbors = vec![Vec::new(); mesh.vertices.len()];
+        let mut incident = vec![Vec::new(); mesh.vertices.len()];
+        for (face, &[a, b, c]) in mesh.triangles.iter().enumerate() {
+            for (i, j, k) in [(a, b, c), (b, c, a), (c, a, b)] {
+                neighbors[i].extend([j, k]);
+                incident[i].push(face);
+            }
+        }
+        for ns in &mut neighbors {
+            ns.sort_unstable();
+            ns.dedup();
+        }
+        let relevant: Vec<_> = mesh.vertices.iter().map(|p| p.2 > 0.7).collect();
+        let (local_neighbors, local_incident) = mesh.collapse_adjacency(&relevant);
+        for i in 0..relevant.len() {
+            if relevant[i] {
+                assert_eq!(local_neighbors[i], neighbors[i]);
+                assert_eq!(local_incident[i], incident[i]);
+            } else {
+                assert!(local_neighbors[i].is_empty());
+                assert!(local_incident[i].is_empty());
+            }
+        }
+        assert!(
+            local_neighbors.iter().flatten().any(|&i| !relevant[i]),
+            "candidate neighborhoods must include off-patch neighbors"
+        );
+    }
+
+    #[test]
+    fn flat_flip_records_match_ordered_map_geometry() {
+        let original = Mesh {
+            vertices: vec![
+                Vec3(0., 0., 1.),
+                Vec3(0.6, 0., 1.),
+                Vec3(0.6, 0.2, 1.),
+                Vec3(0., 0.4, 1.),
+            ],
+            triangles: vec![[0, 1, 3], [1, 2, 3]],
+            mask: vec![0.; 4],
+            ..Default::default()
+        };
+        let brush = Brush::new(Kind::Detail);
+        let d = Dab {
+            radius: 2.,
+            ..dab()
+        };
+        let mut actual = original.clone();
+        let mut expected = original.clone();
+        let count = actual.improve_edges_impl::<true>(&brush, &[d], &[], 64);
+        assert_eq!(
+            count,
+            expected.improve_edges_impl::<false>(&brush, &[d], &[], 64)
+        );
+        assert_eq!(
+            count, 1,
+            "fixture must exercise a successful diagonal replacement"
+        );
+        assert_eq!(actual, expected);
+
+        let mut original = Mesh::sphere();
+        original.split_local(&brush, &[dab()], &[], 0.02, 64);
+        for protected in [false, true] {
+            let mut actual = original.clone();
+            if protected {
+                actual.mask.iter_mut().step_by(7).for_each(|m| *m = 1.);
+            }
+            let mut expected = actual.clone();
+            for limit in [1, 16, 64] {
+                assert_eq!(
+                    actual.improve_edges_impl::<true>(&brush, &[dab()], &[], limit),
+                    expected.improve_edges_impl::<false>(&brush, &[dab()], &[], limit)
+                );
+                assert_eq!(actual, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn split_endpoint_filter_preserves_exact_mesh_and_attributes() {
+        let mut original = Mesh::sphere();
+        original
+            .create_vertex_group("Surface".into(), 0.5, true)
+            .unwrap();
+        original.mask.iter_mut().step_by(7).for_each(|m| *m = 0.4);
+        let brush = Brush::new(Kind::Detail);
+        let mut actual = original.clone();
+        let mut expected = original;
+        for limit in [1, 23, 64] {
+            assert_eq!(
+                actual.split_local_impl::<true>(&brush, &[dab()], &[], 0.02, limit),
+                expected.split_local_impl::<false>(&brush, &[dab()], &[], 0.02, limit)
+            );
+            assert_eq!(actual, expected);
+        }
+    }
+
+    #[test]
+    fn local_edge_membership_still_finds_a_diagonal_in_a_remote_face() {
+        // The first two faces propose diagonal (2,3). Its existing face has a
+        // remote third vertex and is not among the local oriented-face pairs.
+        let mesh = Mesh {
+            vertices: vec![Vec3::default(); 6],
+            triangles: vec![[0, 1, 2], [1, 0, 3], [2, 3, 4], [3, 4, 5]],
+            mask: vec![0.; 6],
+            ..Default::default()
+        };
+        let local = [true, true, true, true, false, false];
+        let filtered = mesh.existing_patch_edges(&local);
+        let all: HashSet<_> = mesh
+            .triangles
+            .iter()
+            .flat_map(|&[a, b, c]| [edge(a, b), edge(b, c), edge(c, a)])
+            .collect();
+        assert!(filtered.contains(&edge(2, 3)));
+        for a in 0..4 {
+            for b in a + 1..4 {
+                assert_eq!(filtered.contains(&edge(a, b)), all.contains(&edge(a, b)));
+            }
+        }
+        assert!(!filtered.contains(&edge(4, 5)));
+    }
+
     #[test]
     fn drag_stamp_refines_alpha_boundary_before_displacement_and_preserves_protection() {
         for alpha in [

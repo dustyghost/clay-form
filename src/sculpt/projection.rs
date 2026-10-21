@@ -54,10 +54,10 @@ struct Node {
     children: Option<[usize; 2]>,
     component: Option<usize>,
 }
-struct Surface<'a> {
+pub(crate) struct Surface<'a> {
     mesh: &'a Mesh,
     faces: Vec<usize>,
-    components: Vec<usize>,
+    pub(crate) components: Vec<usize>,
     nodes: Vec<Node>,
 }
 fn xyz(v: Vec3) -> [f32; 3] {
@@ -71,7 +71,7 @@ fn root(parents: &mut [usize], mut i: usize) -> usize {
     i
 }
 impl<'a> Surface<'a> {
-    fn new(mesh: &'a Mesh, cancel: &impl Fn() -> bool) -> Result<Self, String> {
+    pub(crate) fn new(mesh: &'a Mesh, cancel: &impl Fn() -> bool) -> Result<Self, String> {
         let mut parents: Vec<_> = (0..mesh.vertices.len()).collect();
         for (i, &[a, b, c]) in mesh.triangles.iter().enumerate() {
             if i % 1024 == 0 && cancel() {
@@ -159,7 +159,7 @@ impl<'a> Surface<'a> {
         }
         Ok(index)
     }
-    fn nearest(
+    pub(crate) fn nearest(
         &self,
         p: Vec3,
         distance: f32,
@@ -213,7 +213,7 @@ impl<'a> Surface<'a> {
     }
 }
 impl Surface<'_> {
-    fn along_normal(
+    pub(crate) fn along_normal(
         &self,
         p: Vec3,
         normal: Vec3,

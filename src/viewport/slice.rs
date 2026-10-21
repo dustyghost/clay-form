@@ -2,7 +2,7 @@
 use super::{Gesture, Viewport, controls, scene::Scene};
 use crate::{
     document::Document,
-    sculpt::{SliceMode, SliceOptions, SlicePlane, Vec3},
+    sculpt::{SliceMode, SliceOptions, SlicePlane, Vec3, path_geometry},
 };
 use eframe::egui::{self, Color32, Pos2, Vec2};
 
@@ -192,15 +192,11 @@ impl SlicePathDraft {
         if i == 0 || i + 1 >= self.points.len() {
             return 0.;
         }
-        self.points[i]
-            .position
-            .distance(self.points[i - 1].position)
-            .min(
-                self.points[i]
-                    .position
-                    .distance(self.points[i + 1].position),
-            )
-            * 0.45
+        let point = |index: usize| {
+            let p = self.points[index].position;
+            Vec3(p.x, p.y, 0.)
+        };
+        path_geometry::corner_limit(point(i - 1), point(i), point(i + 1))
     }
     fn corner_handles(&self) -> Vec<CornerHandle> {
         let Some(i) = self.selected else {
@@ -263,25 +259,28 @@ impl SlicePathDraft {
                 out.push(p.position);
                 continue;
             }
-            let incoming = self.points[i - 1].position - p.position;
-            let outgoing = self.points[i + 1].position - p.position;
-            let distance = p
-                .rounding
-                .min(incoming.length() * 0.45)
-                .min(outgoing.length() * 0.45);
-            let a = p.position + incoming.normalized() * distance;
-            let b = p.position + outgoing.normalized() * distance;
+            let distance = p.rounding.min(self.corner_limit(i));
             let steps = ((distance.sqrt() * 1.5).ceil() as usize).clamp(2, 8);
-            for j in 0..=steps {
-                let t = j as f32 / steps as f32;
-                let v = a.to_vec2() * (1. - t).powi(2)
-                    + p.position.to_vec2() * 2. * t * (1. - t)
-                    + b.to_vec2() * t * t;
+            let point = |position: Pos2| Vec3(position.x, position.y, 0.);
+            let Some(samples) = path_geometry::rounded_corner(
+                point(self.points[i - 1].position),
+                point(p.position),
+                point(self.points[i + 1].position),
+                distance,
+                steps,
+            ) else {
                 if out
                     .last()
-                    .is_none_or(|last: &Pos2| last.distance(v.to_pos2()) > 0.01)
+                    .is_none_or(|last: &Pos2| last.distance(p.position) > 0.01)
                 {
-                    out.push(v.to_pos2());
+                    out.push(p.position);
+                }
+                continue;
+            };
+            for sample in samples {
+                let v = Pos2::new(sample.position.0, sample.position.1);
+                if out.last().is_none_or(|last: &Pos2| last.distance(v) > 0.01) {
+                    out.push(v);
                 }
             }
         }
@@ -643,6 +642,43 @@ impl Viewport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn shared_corner_keeps_slice_pixel_thresholds_tessellation_and_open_ends() {
+        let mut draft = SlicePathDraft {
+            points: [Pos2::new(-100., 0.), Pos2::ZERO, Pos2::new(0., 100.)]
+                .into_iter()
+                .map(|position| PathPoint {
+                    position,
+                    rounding: 32.,
+                })
+                .collect(),
+            selected: Some(1),
+            dragging: false,
+            corner_drag: None,
+            last: Pos2::ZERO,
+            revision: 0,
+            projection: (Vec3::default(), Vec3::default(), Pos2::ZERO, 1., 0.),
+        };
+        let points = draft.sampled();
+        assert_eq!(points.len(), 11); // Open endpoints plus the existing eight-step curve.
+        assert_eq!(points.first(), Some(&draft.points[0].position));
+        assert_eq!(points.last(), Some(&draft.points[2].position));
+        assert_eq!(draft.corner_limit(0), 0.);
+        assert_eq!(draft.corner_limit(1), 45.);
+        assert_eq!(draft.corner_limit(2), 0.);
+        for j in 0..=8 {
+            let t = j as f32 / 8.;
+            let legacy = Vec2::new(-32., 0.) * (1. - t).powi(2) + Vec2::new(0., 32.) * t * t;
+            assert!(points[j + 1].distance(legacy.to_pos2()) < 1e-4);
+        }
+        draft.points[1].rounding = 0.49;
+        assert_eq!(
+            draft.sampled(),
+            draft.points.iter().map(|p| p.position).collect::<Vec<_>>()
+        );
+        draft.points[1].rounding = 0.5;
+        assert_eq!(draft.sampled().len(), 5); // Two-step subpixel curve, still sharp open ends.
+    }
     #[test]
     fn rounded_editor_path_matches_a_closed_cut_with_interpolated_weights() {
         let draft = SlicePathDraft {

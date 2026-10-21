@@ -14,7 +14,10 @@ mod edit;
 mod mask;
 mod mesh;
 mod modeling;
+mod path_stroke;
+mod paths;
 mod primitive;
+pub use path_stroke::{PathStrokeOptions, PathStrokePreview, PathStrokeRequest, PathStrokeSession};
 mod projection;
 pub use projection::ProjectionSource;
 mod references;
@@ -126,6 +129,7 @@ impl Document {
     }
     pub fn project(&self) -> Project {
         Project {
+            paths: self.geometry.paths.clone(),
             alphas: self.alphas.clone(),
             stencil: self.stencil.clone(),
             references: self.references.clone(),
@@ -164,6 +168,7 @@ impl Document {
         project.validate()?;
         self.end_edit();
         self.geometry = Geometry {
+            paths: project.paths,
             scene: project.scene,
             name: project.model_name,
             submodels: project.submodels,

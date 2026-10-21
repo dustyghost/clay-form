@@ -213,7 +213,22 @@ impl UiState {
         actions
     }
     pub fn action_enabled(&self, action: &Action, document: &Document) -> bool {
-        if self.projection.open {
+        if self.projection.open
+            || (self.paths_active
+                && !matches!(
+                    action,
+                    Action::TogglePathGuides
+                        | Action::TogglePathOnlyStrokes
+                        | Action::Undo
+                        | Action::Redo
+                ))
+        {
+            return false;
+        }
+        if self.paths_active
+            && matches!(action, Action::Undo | Action::Redo)
+            && !self.paths_history_ready
+        {
             return false;
         }
         if *action == Action::CancelMeshOperation {
@@ -395,6 +410,15 @@ impl UiState {
                 sculpt && document.mesh_settings().level() < document.mesh_settings().levels()
             }
             Action::ProjectDetails => document.require_projection_target().is_ok(),
+            Action::EditPaths => document.active_visible(),
+            Action::StrokeEntirePath => {
+                sculpt
+                    && document.active_visible()
+                    && document.paths().iter().any(|p| {
+                        p.target == document.active_model_id()
+                            && p.mode == crate::sculpt::paths::PathMode::Surface
+                    })
+            }
             Action::KeepProjectionReference => {
                 document.model_count() < 64 && document.require_projection_target().is_ok()
             }
@@ -497,6 +521,8 @@ impl UiState {
             Action::Wireframe => self.wire,
             Action::Symmetry => document.symmetry().enabled,
             Action::Guides => self.show_symmetry_guides,
+            Action::TogglePathGuides => self.guide_paths,
+            Action::TogglePathOnlyStrokes => self.path_starts_only,
             Action::PolygroupColors => self.show_polygroups,
             Action::Backfaces => self.show_backfaces,
             Action::ArrangeReferences => self.arrange_references,

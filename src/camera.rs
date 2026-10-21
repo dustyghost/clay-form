@@ -25,6 +25,21 @@ impl Default for Camera {
     }
 }
 impl Camera {
+    /// The same local pixel scale used by surface picking and manual brushes.
+    pub fn scale_at(&self, viewport_size: Vec2, point: Vec3) -> f32 {
+        Self::projection_scale(
+            viewport_size.x.min(viewport_size.y) * 0.35 * self.zoom,
+            self.eye_distance(),
+            point.dot(self.basis().2),
+        )
+    }
+    pub(crate) fn projection_scale(base: f32, eye_distance: f32, depth: f32) -> f32 {
+        if eye_distance == 0. {
+            base
+        } else {
+            base * eye_distance / (eye_distance - depth).max(eye_distance * 0.001)
+        }
+    }
     pub fn projected_extent(&self, points: impl Iterator<Item = Vec3>) -> f32 {
         let (right, up, view) = self.basis();
         let distance = self.eye_distance();

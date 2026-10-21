@@ -17,6 +17,7 @@ mod icons;
 mod menus;
 mod mirror;
 mod modeling;
+pub(crate) mod paths;
 mod primitive;
 mod projection;
 mod references;
@@ -33,6 +34,10 @@ pub(crate) struct UiState {
     pub transform_mode: crate::viewport::TransformMode,
     pub edges: edges::EdgeControls,
     pub projection: projection::ProjectionControls,
+    pub paths_active: bool,
+    pub paths_history_ready: bool,
+    pub guide_paths: bool,
+    pub path_starts_only: bool,
     pub modeling: modeling::ModelingControls,
     pub mirror_axis: Axis,
     pub slice_active: bool,
@@ -93,6 +98,10 @@ impl Default for UiState {
             transform_mode: crate::viewport::TransformMode::Sculpt,
             edges: Default::default(),
             projection: Default::default(),
+            paths_active: false,
+            paths_history_ready: true,
+            guide_paths: true,
+            path_starts_only: false,
             modeling: modeling::ModelingControls {
                 amount: 0.1,
                 snap: 0.04,
@@ -1126,6 +1135,45 @@ impl UiState {
         });
         ui.separator();
         self.projection_buttons(ui, document, commands);
+        if ui
+            .add_enabled(
+                !self.mesh_busy,
+                design::button(ui, Glyph::Edit, "Editable paths"),
+            )
+            .customize(Action::EditPaths)
+            .clicked()
+        {
+            commands.push(Command::Path(crate::app::paths::PathCommand::Open));
+        }
+        let mut guide_paths = self.guide_paths;
+        if ui.checkbox(&mut guide_paths, "Guide brush strokes with paths")
+            .on_hover_text("Start a stroke near a saved surface path to follow only the section you draw. Turn off for freehand strokes near paths.")
+            .customize(Action::TogglePathGuides).changed() {
+            commands.push(Command::Action(Action::TogglePathGuides));
+        }
+        let mut path_starts_only = self.path_starts_only;
+        if ui
+            .add_enabled(
+                self.guide_paths,
+                egui::Checkbox::new(&mut path_starts_only, "Only start strokes on paths"),
+            )
+            .on_hover_text(Action::TogglePathOnlyStrokes.help().unwrap())
+            .customize(Action::TogglePathOnlyStrokes)
+            .changed()
+        {
+            commands.push(Command::Action(Action::TogglePathOnlyStrokes));
+        }
+        if ui
+            .add_enabled(
+                self.action_enabled(&Action::StrokeEntirePath, document),
+                egui::Button::new("Stroke entire path"),
+            )
+            .on_hover_text(Action::StrokeEntirePath.help().unwrap())
+            .customize(Action::StrokeEntirePath)
+            .clicked()
+        {
+            commands.push(Command::Action(Action::StrokeEntirePath));
+        }
         self.edge_controls(ui, document, commands);
         if self.mesh_busy {
             ui.spinner();

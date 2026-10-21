@@ -160,6 +160,7 @@ impl Document {
         let mut models = self.ordered_models();
         let index = self.active_model_index();
         let mut metadata = self.geometry.scene.active_metadata.clone();
+        metadata.model_id = 0;
         metadata.visible = true;
         models.insert(
             index,
@@ -226,7 +227,7 @@ impl Document {
         &mut self,
         index: usize,
         name: String,
-        metadata: crate::sculpt::ModelMetadata,
+        mut metadata: crate::sculpt::ModelMetadata,
     ) -> Result<(), String> {
         metadata.validate()?;
         self.end_edit();
@@ -239,6 +240,7 @@ impl Document {
         }
         let model = self.model(index).unwrap();
         let old = model.metadata;
+        metadata.model_id = old.model_id;
         if metadata.temporary_thickness > 0.
             && (old.temporary_thickness != metadata.temporary_thickness
                 || old.thickness_loops != metadata.thickness_loops
