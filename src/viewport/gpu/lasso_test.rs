@@ -18,38 +18,32 @@ fn gpu_lasso_preview_and_commit() {
         let mut controls = UiState::default();
         controls.selection_tool = Some(tool);
         let before = app.document.geometry_snapshot();
-        let points = [
-            egui::pos2(500., 240.),
-            egui::pos2(760., 240.),
-            egui::pos2(760., 430.),
-            egui::pos2(630., 430.),
-            egui::pos2(630., 660.),
-            egui::pos2(500., 660.),
-            egui::pos2(500., 240.),
-        ];
+        let mut points = [egui::Pos2::ZERO; 7];
         let modifiers = if alt {
             egui::Modifiers::ALT
         } else {
             egui::Modifiers::NONE
         };
-        let button = |pressed| egui::Event::PointerButton {
-            pos: points[0],
-            button: egui::PointerButton::Primary,
-            pressed,
-            modifiers,
-        };
         let mut preview = Vec::new();
-        for frame in 0..6 {
+        // Two idle frames settle egui's wrapped toolbar before positioning the gesture.
+        for frame in 0..7 {
+            let button = |pressed| egui::Event::PointerButton {
+                pos: points[0],
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers,
+            };
             let events = match frame {
-                1 => vec![egui::Event::PointerMoved(points[0]), button(true)],
-                2 => points[1..]
+                2 => vec![egui::Event::PointerMoved(points[0]), button(true)],
+                3 => points[1..]
                     .iter()
                     .copied()
                     .map(egui::Event::PointerMoved)
                     .collect(),
-                4 => vec![button(false)],
+                5 => vec![button(false)],
                 _ => vec![],
             };
+            let mut viewport_rect = egui::Rect::NOTHING;
             let output = ctx.run(
                 egui::RawInput {
                     screen_rect: Some(egui::Rect::from_min_size(
@@ -62,12 +56,31 @@ fn gpu_lasso_preview_and_commit() {
                 },
                 |ctx| {
                     controls.toolbar(ctx, &app.document, &app.camera);
-                    egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        viewport_rect = ui.available_rect_before_wrap();
+                        app.show_viewport(ui);
+                    });
                 },
             );
+            if frame == 1 {
+                points = [
+                    [0.50, 0.12],
+                    [0.76, 0.12],
+                    [0.76, 0.48],
+                    [0.63, 0.48],
+                    [0.63, 0.80],
+                    [0.50, 0.80],
+                    [0.50, 0.12],
+                ]
+                .map(|[x, y]| viewport_rect.lerp_inside(egui::vec2(x, y)));
+            }
             let rgba = capture.render(&ctx, output);
-            if frame == 3 || frame == 5 {
-                if frame == 3 {
+            if frame == 4 || frame == 6 {
+                if frame == 4 {
+                    assert!(
+                        app.viewport.selection.is_some(),
+                        "lasso must be active before release"
+                    );
                     assert_eq!(app.document.geometry_snapshot(), before);
                     preview = rgba.clone();
                 } else {
