@@ -327,7 +327,7 @@ impl UiState {
             let mut stencil = original.clone();
             let mut remove = false;
             ui.horizontal_wrapped(|ui| {
-                ui.checkbox(&mut stencil.enabled, "Stencil enabled")
+                design::checkbox(ui, &mut stencil.enabled, "Stencil enabled")
                     .customize(Action::ToggleStencil);
                 if ui
                     .add(design::button(ui, Glyph::Close, "Remove stencil"))

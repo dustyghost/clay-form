@@ -30,7 +30,8 @@ Use `src/ui/design.rs` for shared action buttons, menus, icons, brush tiles and 
 | Element | Requirement |
 | --- | --- |
 | Icons | One monochrome line-icon family at 16 pixels; use the current text colour and support disabled controls. |
-| Buttons | Minimum height 28 pixels; padding 8 × 5 pixels; corner radius 4 pixels; spacing 6 pixels. |
+| Buttons | Minimum height 32 pixels; padding 8 × 5 pixels; corner radius 4 pixels; spacing 6 pixels. |
+| Checkboxes | Native keyboard and accessibility behavior; 20-pixel indicators, 32-pixel targets, full clickable rows in vertical settings panels. |
 | Toolbar | Separate project/file actions from editing and view actions. Wrap rows in narrow windows; constrain path fields to leave room for actions. |
 | Brush tiles | Height 82 pixels; square preview 48 pixels. Use one to four equal-width columns, as space allows. Put names below previews and show full names on hover. |
 | Selection | Teal fill and outlines identify selected tools and brushes. Do not use the selected-state colour to decorate immediate actions. |

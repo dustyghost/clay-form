@@ -79,7 +79,7 @@ Assign **Toggle perspective view** in Key settings or add it to a custom menu; i
 
 ### Choose a wireframe mode
 
-Open **Wireframe options** beside the Wireframe button.
+Open **Wire settings** beside **Show wireframe**.
 
 | Mode | Shows |
 | --- | --- |

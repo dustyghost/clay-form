@@ -192,7 +192,7 @@ impl UiState {
                 ui.add(egui::Slider::new(&mut self.modeling.flat_angle,0. ..=180.).text("Island angle").suffix("°"));
                 ui.weak("Connected faces within this angle of the first face");
             }
-            ui.checkbox(&mut self.modeling.protect_mask,"Protect mask").customize(Action::ModelProtectMask);
+            design::checkbox(ui, &mut self.modeling.protect_mask,"Protect mask").customize(Action::ModelProtectMask);
             ui.weak("Hidden faces are protected · topology edits replace stored levels");
             match self.modeling.tool {
                 ModelTool::EdgeExtrude | ModelTool::EdgeSplit | ModelTool::EdgeCollapse | ModelTool::PointExtrude | ModelTool::PointSplit | ModelTool::FacePoint | ModelTool::FaceSplit => {
@@ -209,16 +209,16 @@ impl UiState {
                         ui.weak("Drag up/down to adjust · release applies · Esc cancels");
                     }
                     if tool==ModelTool::EdgeExtrude {
-                        ui.checkbox(&mut self.modeling.construction.other_side,"Other adjacent side");
+                        design::checkbox(ui, &mut self.modeling.construction.other_side,"Other adjacent side");
                         ui.weak("Border: extend outward · surface: extrude the highlighted side");
                     }
                     if tool==ModelTool::PointExtrude {
                         ui.add(egui::DragValue::new(&mut self.modeling.construction.width).prefix("Base radius ").range(0.0001..=1000.).speed(0.01));
                     }
                     if matches!(tool,ModelTool::PointSplit|ModelTool::PointExtrude) {
-                        ui.checkbox(&mut self.modeling.construction.round,"Circularize ring");
-                        ui.checkbox(&mut self.modeling.construction.crease,"Crease ring");
-                        if tool==ModelTool::PointSplit {ui.checkbox(&mut self.modeling.construction.triangulate,"Triangulate center");}
+                        design::checkbox(ui, &mut self.modeling.construction.round,"Circularize ring");
+                        design::checkbox(ui, &mut self.modeling.construction.crease,"Crease ring");
+                        if tool==ModelTool::PointSplit {design::checkbox(ui, &mut self.modeling.construction.triangulate,"Triangulate center");}
                         ui.weak("Closed point fan · radius below half the shortest edge");
                     }
                     if tool.instant(){ui.weak(if tool==ModelTool::FacePoint {"Tap: connect a center point to each corner"}else{"Tap: split into quads and connect neighboring edges"});}
@@ -253,12 +253,12 @@ impl UiState {
                         ui.add(egui::DragValue::new(&mut self.modeling.snap).range(0.0..=0.25).speed(0.005));
                         ui.weak("Each separate flat region snaps to its own compatible loop or cap.");
                     }
-                    if self.modeling.tool==ModelTool::Extrude {ui.checkbox(&mut self.modeling.individual,"Individual faces");}
+                    if self.modeling.tool==ModelTool::Extrude {design::checkbox(ui, &mut self.modeling.individual,"Individual faces");}
                     ui.add(egui::DragValue::new(&mut self.modeling.amount).prefix("Distance ").speed(0.01));
                     if ui.add_enabled(self.modeling.count>0,egui::Button::new("Apply amount")).customize(Action::ModelApply).clicked(){commands.push(Command::ModelApply);}
 
                     design::help(
-                        ui.checkbox(&mut self.modeling.join, "Join matching faces").customize(Action::ModelJoin),
+                        design::checkbox(ui, &mut self.modeling.join, "Join matching faces").customize(Action::ModelJoin),
                         "Snap to an aligned opposite cap with matching face layout and remove both caps to open a tunnel.",
                     );
                     ui.weak("Drag up: out · down: in · release: apply · Esc: cancel");
@@ -269,7 +269,7 @@ impl UiState {
                     }
                 }
                 ModelTool::Inset | ModelTool::Bevel => {
-                    ui.checkbox(&mut self.modeling.individual,"Individual faces");
+                    design::checkbox(ui, &mut self.modeling.individual,"Individual faces");
                     ui.add(egui::DragValue::new(&mut self.modeling.amount).prefix("Width ").range(0.0..=1000.).speed(0.01));
                     if ui.add_enabled(self.modeling.count>0,egui::Button::new("Apply amount")).customize(Action::ModelApply).clicked(){commands.push(Command::ModelApply);}
                     ui.weak("Drag up to increase width · release applies · Esc cancels");
@@ -325,7 +325,7 @@ impl UiState {
                 }
             }
             if ((self.modeling.tool.is_edit() && !self.modeling.tool.instant()) || self.modeling.tool==ModelTool::Extrude) && !(self.modeling.tool.is_transform() && self.modeling.interaction==crate::viewport::ModelInteraction::Gizmo) {
-                ui.checkbox(&mut self.modeling.tap_repeat,"Tap to repeat").customize(Action::ModelTapRepeat)
+                design::checkbox(ui, &mut self.modeling.tap_repeat,"Tap to repeat").customize(Action::ModelTapRepeat)
                     .on_hover_text("Tap a target to apply the displayed amount and options. Drag to set a new amount. Select and centered loop cuts are unchanged.");
                 if self.modeling.tap_repeat {ui.weak(format!("Tap applies {:.3} · drag sets a new amount",self.modeling.amount));}
             }
@@ -348,7 +348,7 @@ impl UiState {
             }
             ui.horizontal_wrapped(|ui|{
                 if ui.add_enabled(self.modeling.can_repeat && self.modeling.count>0,egui::Button::new("Repeat last edit")).customize(Action::ModelRepeat).on_hover_text(&self.modeling.repeat_label).clicked(){commands.push(Command::ModelRepeat);}
-                ui.checkbox(&mut self.modeling.smooth_preview,"Smooth preview").customize(Action::ModelSmoothPreview);
+                design::checkbox(ui, &mut self.modeling.smooth_preview,"Smooth preview").customize(Action::ModelSmoothPreview);
             });
             if self.modeling.smooth_preview {ui.weak("One smooth level · cage stays editable · preview pauses during a drag");}
             ui.collapsing("Tool presets",|ui|{

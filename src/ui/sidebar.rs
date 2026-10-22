@@ -40,6 +40,8 @@ impl UiState {
             .id_salt(("builtin_section", menu))
             .open(Some(open))
             .show(ui, |ui| {
+                self.menu_placement_controls(ui, menu, false);
+                ui.separator();
                 self.builtin_menu_contents(menu, ui, document, camera, commands)
             });
         if header.header_response.clicked() {

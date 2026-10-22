@@ -121,7 +121,7 @@ Pivot/line placement does not change geometry or consume undo. These controls ar
 
 ### Replace the opposite half
 
-1. Open **Symmetry settings → Mirror one side**.
+1. Open **Symmetry → Mirror one side**.
 2. Choose **X**, **Y**, or **Z**. The displayed plane uses that axis of the symmetry center below.
 3. Choose the source direction: **-X to +X**, for example, keeps the negative-X half and replaces the positive-X half.
 
@@ -375,7 +375,7 @@ Use **Target → Boundary** to select a complete hole. For two boundaries or ver
 
 ### Model with symmetry
 
-Enable **Symmetry** and choose mirror axes or radial settings in **Symmetry settings**. Modeling uses the same center and axes for component selection, loop/ring selection, group assignment, extrusion/tunnels, loop cuts, and dissolve.
+Open **Symmetry**, check **Enable symmetry**, and choose mirror axes or radial settings. Modeling uses the same center and axes for component selection, loop/ring selection, group assignment, extrusion/tunnels, loop cuts, and dissolve.
 
 Every enabled copy must match the active mesh's vertex positions, polygon connectivity, winding, and face visibility. A small automatic tolerance accommodates floating-point rounding; it does not approximate asymmetric shapes or remesh mismatched sides. If correspondence fails, the tool displays an explanation and leaves geometry unchanged. Disable symmetry to work on unmatched geometry.
 

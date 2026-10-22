@@ -286,17 +286,6 @@ impl UiState {
                 {
                     commands.push(Command::Export);
                 }
-                if ui
-                    .add(design::button(
-                        ui,
-                        Glyph::Export,
-                        "Export diagnostic bundle…",
-                    ))
-                    .clicked()
-                {
-                    self.diagnostics_open = true;
-                    ui.close_kind(egui::UiKind::Menu);
-                }
 
                 if self.mesh_busy {
                     ui.spinner();
@@ -312,7 +301,9 @@ impl UiState {
                 }
             });
             if !self.preferences.compact_toolbar {
+                ui.separator();
                 ui.horizontal_wrapped(|ui| {
+                    ui.weak("Model");
                     if ui
                         .add_enabled(
                             document.can_undo() && !self.mesh_busy && self.pending.is_none(),
@@ -342,33 +333,48 @@ impl UiState {
                     self.builtin_menu(ui, BuiltinMenu::Transform, document, camera, &mut commands);
                     self.builtin_menu(ui, BuiltinMenu::Primitive, document, camera, &mut commands);
                     self.builtin_menu(ui, BuiltinMenu::Submodels, document, camera, &mut commands);
-                    ui.separator();
+                    self.builtin_menu(ui, BuiltinMenu::Symmetry, document, camera, &mut commands);
+                    self.builtin_menu(ui, BuiltinMenu::Mask, document, camera, &mut commands);
                     if ui
-                        .add(design::button(ui, Glyph::Wire, "Wireframe").selected(self.wire))
+                        .add_enabled(
+                            !self.mesh_busy && document.primitive().is_none(),
+                            design::button(ui, Glyph::Mask, "Clear active mask"),
+                        )
+                        .customize(Action::ClearMask)
+                        .clicked()
+                    {
+                        commands.push(Command::ClearMask);
+                    }
+                    if ui
+                        .add_enabled(
+                            !self.mesh_busy,
+                            design::button(ui, Glyph::Edit, "Editable paths"),
+                        )
+                        .customize(Action::EditPaths)
+                        .clicked()
+                    {
+                        commands.push(Command::Path(crate::app::paths::PathCommand::Open));
+                    }
+                });
+                ui.horizontal_wrapped(|ui| {
+                    ui.weak("Display");
+                    if ui
+                        .add(design::button(ui, Glyph::Wire, "Show wireframe").selected(self.wire))
                         .customize(Action::Wireframe)
                         .clicked()
                     {
                         self.wire = !self.wire;
                     }
                     self.builtin_menu(ui, BuiltinMenu::Wireframe, document, camera, &mut commands);
-                    let mut symmetry = document.symmetry().clone();
-                    if ui
-                        .add(
-                            design::button(ui, Glyph::Symmetry, "Symmetry")
-                                .selected(symmetry.enabled),
-                        )
-                        .customize(Action::Symmetry)
-                        .clicked()
-                    {
-                        symmetry.enabled = !symmetry.enabled;
-                    }
-                    if symmetry != *document.symmetry() {
-                        commands.push(Command::SetSymmetry(symmetry));
-                    }
-                    self.builtin_menu(ui, BuiltinMenu::Symmetry, document, camera, &mut commands);
-                    self.builtin_menu(ui, BuiltinMenu::Mask, document, camera, &mut commands);
                     self.builtin_menu(ui, BuiltinMenu::View, document, camera, &mut commands);
                     self.builtin_menu(ui, BuiltinMenu::References, document, camera, &mut commands);
+                    if ui
+                        .add(design::button(ui, Glyph::Restore, "Reset view"))
+                        .customize(Action::ResetView)
+                        .clicked()
+                    {
+                        commands.push(Command::ResetView);
+                    }
                     if ui
                         .add_enabled(camera.zoom > 0.2, design::button(ui, Glyph::Minus, ""))
                         .on_hover_text("Zoom out")
@@ -751,7 +757,7 @@ impl UiState {
                 });
                 ui.add(egui::Slider::new(&mut b.radius, 1. ..=500.).text("Radius (px)"));
                 ui.add(egui::Slider::new(&mut b.inner_radius, 0. ..=1.).text("Inner radius (fraction)")).on_hover_text("Full-strength core; falloff fades from here to the outer radius. Applies to Soft and image alphas.");
-                ui.checkbox(&mut b.surface_cursor, "Surface footprint and normal");
+                design::checkbox(ui, &mut b.surface_cursor, "Surface footprint and normal");
                 ui.add(egui::Slider::new(&mut b.strength, 0. ..=1.).text("Strength"));
                 ui.label("Stroke mode");
                 let supported = !matches!(b.kind, Kind::Grab | Kind::Snake);
@@ -782,15 +788,15 @@ impl UiState {
                 }
                 ui.add(egui::Slider::new(&mut b.spacing, 0.01..=1.).text("Spacing"));
                 ui.add_enabled_ui(b.supports_stabilization(), |ui| {
-                    ui.checkbox(&mut b.stabilize, "Stroke stabilisation")
+                    design::checkbox(ui, &mut b.stabilize, "Stroke stabilisation")
                         .customize(Action::StrokeStabilisation)
                         .on_hover_text("Freehand brush trails the pointer to smooth small movements. Settings apply to the next stroke. Grab and Snake are unaffected.");
                     ui.add_enabled(b.stabilize, egui::Slider::new(&mut b.stabilizer_distance, 1. ..=200.).text("Trailing distance (px)"));
                 });
                 ui.add(egui::Slider::new(&mut b.falloff, 0.1..=8.).text("Falloff"));
                 ui.add(egui::Slider::new(&mut b.rotation, 0. ..=360.).text("Alpha rotation"));
-                ui.checkbox(&mut b.pressure, "Pressure → strength");
-                ui.checkbox(&mut b.pressure_radius, "Pressure → radius");
+                design::checkbox(ui, &mut b.pressure, "Pressure → strength");
+                design::checkbox(ui, &mut b.pressure_radius, "Pressure → radius");
                 ui.add(egui::Slider::new(&mut b.pressure_curve, 0.1..=4.).text("Pressure curve"));
             }
             Tool::Alpha => {
@@ -1026,7 +1032,7 @@ impl UiState {
             let mut thickness=model.metadata.temporary_thickness;
             let mut enabled=thickness>0.;
             ui.add_enabled_ui(!model.mesh.triangles.is_empty(),|ui| {
-                if ui.checkbox(&mut enabled,"Thickness modifier").on_hover_text("Preview a centered shell with closed edges. The sculpting surface stays unchanged until Apply.").changed() {
+                if design::checkbox(ui, &mut enabled,"Thickness modifier").on_hover_text("Preview a centered shell with closed edges. The sculpting surface stays unchanged until Apply.").changed() {
                     commands.push(Command::SetTemporaryThickness(if enabled {0.05}else{0.}));
                 }
                 if thickness>0. {
@@ -1035,10 +1041,10 @@ impl UiState {
                     }
                     let mut metadata = model.metadata.clone();
                     design::help(ui.add(egui::Slider::new(&mut metadata.thickness_loops,0..=8).text("Rim loops")), "Add loops through the shell wall. Updates the preview immediately; set to 0 to remove them before applying.");
-                    design::help(ui.checkbox(&mut metadata.thickness_crease,"Crease rim edges"), "Keep the front/rim and back/rim joins sharp during later smooth subdivision. Updates the preview immediately; turn off to remove these marks before applying.");
-                    ui.checkbox(&mut metadata.thickness_groups, "Group front / back / rim");
-                    ui.checkbox(&mut metadata.thickness_mask_rim, "Mask rim vertices");
-                    ui.checkbox(&mut metadata.thickness_group_mask, "Group masked vertices");
+                    design::help(design::checkbox(ui, &mut metadata.thickness_crease,"Crease rim edges"), "Keep the front/rim and back/rim joins sharp during later smooth subdivision. Updates the preview immediately; turn off to remove these marks before applying.");
+                    design::checkbox(ui, &mut metadata.thickness_groups, "Group front / back / rim");
+                    design::checkbox(ui, &mut metadata.thickness_mask_rim, "Mask rim vertices");
+                    design::checkbox(ui, &mut metadata.thickness_group_mask, "Group masked vertices");
                     if metadata != *model.metadata { commands.push(Command::EditSubmodel(index, model.name.into(), metadata)); }
                     if ui.add_enabled(model.metadata.visible,design::button(ui,Glyph::Mesh,"Apply Thickness modifier")).on_hover_text("Bake the preview into a closed mesh. Resets subdivision levels and converts primitives to a sculpting mesh. Undo restores the original.").customize(Action::ApplyThickness).clicked() {
                         commands.push(Command::ApplyThickness);
@@ -1089,11 +1095,11 @@ impl UiState {
             if settings.adaptive.enabled {
                 ui.label("Add detail or simplify locally as you sculpt.");
                 let mut adaptive=settings.adaptive.clone();
-                ui.checkbox(&mut adaptive.relative,"Detail relative to brush size");
+                design::checkbox(ui, &mut adaptive.relative,"Detail relative to brush size");
                 let label=if adaptive.relative { "Edge size (% of radius)" } else { "Edge size (px)" };
                 ui.add(egui::Slider::new(&mut adaptive.detail,1. ..=32.).text(label));
-                ui.checkbox(&mut adaptive.refine,"Refine stretched edges");
-                ui.checkbox(&mut adaptive.simplify,"Simplify dense areas");
+                design::checkbox(ui, &mut adaptive.refine,"Refine stretched edges");
+                design::checkbox(ui, &mut adaptive.simplify,"Simplify dense areas");
                 ui.add_enabled(adaptive.simplify,egui::Slider::new(&mut adaptive.collapse_ratio,0.1..=0.8).text("Simplify ratio"));
                 if adaptive!=settings.adaptive { commands.push(Command::SetAdaptive(adaptive.clone())); }
                 ui.label("Smaller edge sizes add detail. Masks are preserved; Mask brush keeps topology fixed.");
@@ -1109,7 +1115,7 @@ impl UiState {
                 let mut auto=settings.auto_remesh;
                 ui.add(egui::Slider::new(&mut resolution,16..=96).text("Resolution"));
                 ui.label("Voxels along the longest bounding-box axis.");
-                ui.checkbox(&mut auto,"Remesh after each stroke");
+                design::checkbox(ui, &mut auto,"Remesh after each stroke");
                 if resolution!=settings.resolution || auto!=settings.auto_remesh { commands.push(Command::SetRemeshSettings(resolution,auto)); }
                 if ui.add(design::button(ui, Glyph::Restore, "Remesh now")).customize(Action::Remesh).clicked() { commands.push(Command::Remesh); }
             } else {
@@ -1146,7 +1152,7 @@ impl UiState {
             commands.push(Command::Path(crate::app::paths::PathCommand::Open));
         }
         let mut guide_paths = self.guide_paths;
-        if ui.checkbox(&mut guide_paths, "Guide brush strokes with paths")
+        if design::checkbox(ui, &mut guide_paths, "Guide brush strokes with paths")
             .on_hover_text("Start a stroke near a saved surface path to follow only the section you draw. Turn off for freehand strokes near paths.")
             .customize(Action::TogglePathGuides).changed() {
             commands.push(Command::Action(Action::TogglePathGuides));

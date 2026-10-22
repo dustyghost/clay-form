@@ -87,7 +87,7 @@ pub(crate) fn show(
             let brush=&document.brushes()[*selected_brush];
             ui.label(format!("Strength {:.0}% · Spacing {:.0}% of radius",brush.strength*100.,brush.spacing*100.));
             let linked=state.use_brush_size;
-            if ui.checkbox(&mut state.use_brush_size,"Use active brush size").changed()
+            if design::checkbox(ui, &mut state.use_brush_size,"Use active brush size").changed()
                 && linked && !state.use_brush_size
                 && let Some(radius)=state.brush_radius_world { state.options.radius=radius; }
             if state.use_brush_size {
@@ -112,8 +112,8 @@ pub(crate) fn show(
             ui.add(egui::Slider::new(&mut state.options.pressure,0. ..=1.).text("Automatic pressure"));
             ui.weak("Pressure stays constant. Reduce it to match a lighter pen stroke; the brush pressure curve still applies.");
             ui.horizontal_wrapped(|ui| {
-                ui.checkbox(&mut state.options.reverse,"Run in reverse");
-                ui.checkbox(&mut state.options.invert,"Invert brush effect");
+                design::checkbox(ui, &mut state.options.reverse,"Run in reverse");
+                design::checkbox(ui, &mut state.options.invert,"Invert brush effect");
             });
             });
             let ready=editor.draft.as_ref().is_some_and(|p|p.id!=0 && p.mode==PathMode::Surface && !p.is_stale(document.mesh())) && !editor.dirty(document);

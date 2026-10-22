@@ -287,8 +287,8 @@ impl BuiltinMenu {
             Self::Visibility => "Visibility",
             Self::Mesh => "Mesh",
             Self::Submodels => "Submodels",
-            Self::Wireframe => "Wireframe options",
-            Self::Symmetry => "Symmetry settings",
+            Self::Wireframe => "Wire settings",
+            Self::Symmetry => "Symmetry",
             Self::Mask => "Mask",
             Self::View => "View",
         }

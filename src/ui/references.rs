@@ -39,8 +39,7 @@ impl UiState {
                 commands.push(Command::Action(Action::ArrangeReferences));
                 ui.close_kind(egui::UiKind::Menu);
             }
-            if ui
-                .checkbox(&mut self.references_visible, "Show references")
+            if design::checkbox(ui, &mut self.references_visible, "Show references")
                 .customize(Action::ShowReferences)
                 .changed()
                 && !self.references_visible
@@ -60,7 +59,7 @@ impl UiState {
                 for (index, image) in document.references().iter().enumerate() {
                     ui.horizontal(|ui| {
                         let mut placement = image.placement;
-                        ui.checkbox(&mut placement.visible, "")
+                        design::checkbox(ui, &mut placement.visible, "")
                             .on_hover_text("Show image");
                         ui.selectable_value(
                             &mut self.selected_reference,
@@ -83,7 +82,7 @@ impl UiState {
         ui.separator();
         ui.label(&image.name);
         let mut placement = image.placement;
-        ui.checkbox(&mut placement.locked, "Lock position and size");
+        design::checkbox(ui, &mut placement.locked, "Lock position and size");
         ui.add(
             egui::Slider::new(&mut placement.opacity, 0.05..=1.)
                 .text("Opacity")

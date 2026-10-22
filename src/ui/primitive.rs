@@ -1,4 +1,5 @@
 //! Primitive replacement warning and inline submodel parameter controls.
+use super::design;
 use super::{Action, ActionResponse, UiState};
 use crate::{
     command::Command,
@@ -108,7 +109,7 @@ impl UiState {
                         Kind::Circle=>{
                             ui.add(egui::Slider::new(&mut params.radius,0.05..=10.).text("Radius"));
                             resolution_control(ui,"Vertices",&mut params.segments,3,256);
-                            ui.checkbox(&mut params.filled,"Fill circle");
+                            design::checkbox(ui, &mut params.filled,"Fill circle");
                         }
                         Kind::Cylinder|Kind::Cone=>{
                             ui.add(egui::Slider::new(&mut params.radius,0.05..=10.).text(if kind==Kind::Cone {"Base radius"} else {"Radius"}));
@@ -116,7 +117,7 @@ impl UiState {
                             axis_control(ui, 1, |ui| { ui.add(egui::Slider::new(&mut params.size.1,0.05..=10.).text("Height")); });
                             resolution_control(ui,"Sides",&mut params.segments,3,256);
                             axis_control(ui, 1, |ui| { resolution_control(ui,"Height spans",&mut params.divisions[1],1,128); });
-                            ui.checkbox(&mut params.filled,"Cap ends");
+                            design::checkbox(ui, &mut params.filled,"Cap ends");
                         }
                         Kind::Torus=>{
                             ui.add(egui::Slider::new(&mut params.radius,0.05..=10.).text("Major radius"));
@@ -128,8 +129,8 @@ impl UiState {
                     }
 
                     ui.separator();
-                    ui.checkbox(&mut params.triangulated,"Triangle topology");
-                    ui.checkbox(&mut self.wire,"Show wireframe");
+                    design::checkbox(ui, &mut params.triangulated,"Triangle topology");
+                    design::checkbox(ui, &mut self.wire,"Show wireframe");
                     ui.label(format!("{} vertices · {} triangles",document.mesh().vertices.len(),document.mesh().triangles.len()));
                     if params!=*current {commands.push(Command::UpdatePrimitive(params.clone()));}
                     if ui.add_enabled(!document.mesh().triangles.is_empty(),egui::Button::new("Convert to sculpting mesh")).customize(Action::ConvertPrimitive).clicked() {commands.push(Command::ConvertPrimitive);}

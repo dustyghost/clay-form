@@ -10,6 +10,22 @@ Keep the controls you reach for visible and give the rest of the screen to your 
 - [Change shortcuts](#shortcuts)
 - [Find default keys](#default-shortcuts)
 
+## Finding controls
+
+The toolbar separates project actions from **Model** tools and **Display** controls.
+Clear active mask and Editable paths are available directly in the Model row; Reset view
+is in Display. Show wireframe toggles the overlay, while Wire settings opens its
+options. Symmetry has one menu with its enabled state and settings together.
+
+Checkbox settings use larger indicators and 32-pixel click targets. In vertical
+panels you can click anywhere in the checkbox row, including beside its label.
+Menus scroll when their contents exceed the available window height.
+
+Built-in menus share the same controls whether opened from the toolbar, floated,
+or docked in a sidebar. The **Panel** strip offers pin, dock left and dock right
+controls in each location. Hover an icon for its name. Existing saved workspace
+placements and shortcuts continue to apply.
+
 ## Key settings and workspace
 
 ### Pin a menu open
