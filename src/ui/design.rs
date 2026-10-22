@@ -365,7 +365,9 @@ pub(super) fn checkbox(
     };
     ui.allocate_ui_with_layout(
         egui::vec2(width, 32.),
-        egui::Layout::left_to_right(egui::Align::Center).with_main_justify(true),
+        egui::Layout::left_to_right(egui::Align::Center)
+            .with_main_align(egui::Align::Min)
+            .with_main_justify(true),
         |ui| ui.add(egui::Checkbox::new(value, label)),
     )
     .inner
