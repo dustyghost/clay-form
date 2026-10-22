@@ -1,4 +1,5 @@
 //! One set of transform controls reused by the sidebar and floating toolbar.
+use super::design;
 use super::{UiState, customization::ActionResponse};
 use crate::preferences::BuiltinMenu;
 use crate::{
@@ -36,7 +37,7 @@ impl UiState {
             }
         });
         let mut respect = self.respect_transform_mask;
-        if ui.checkbox(&mut respect, "Respect mask").customize(Action::RespectMask)
+        if design::checkbox(ui, &mut respect, "Respect mask").customize(Action::RespectMask)
             .on_hover_text("Protect masked vertices; soft masks reduce the rotation angle. Turn off to transform the whole model").changed() {
             commands.push(Command::RespectTransformMask(respect));
         }

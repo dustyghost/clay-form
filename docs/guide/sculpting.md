@@ -60,7 +60,7 @@ Grab follows pointer movement; spacing does not affect it. Subtracting Smooth sh
 
 ### Choose an alpha
 
-An alpha shapes each dab. Open the **Alpha** panel, select **Soft**, **Hard**, or **Square** in the **Alpha library**, then choose **Use on brush**. The library includes **39 built-ins**, with **Nature’s curve** (a flowing spiral), **Leaf veins**, **Wood grain**, and **Pebbles** alongside the following collections. These built-ins are always available, including in older projects. You can also **Place stencil** with them or **Duplicate alpha** to edit a variation. Built-ins cannot be removed; saved copies can. Search by name or category to find a pattern. The library starts four rows tall; drag **Resize library** up or down to change its height. This centered handle stays clear of the sidebar scrollbar.
+An alpha shapes each dab. Open the **Alpha** panel, select **Soft**, **Hard**, or **Square** in the **Alpha library**, then choose **Use on brush**. The library includes **39 built-ins**, with **Nature’s curve** (a flowing spiral), **Leaf veins**, **Wood grain**, and **Pebbles** alongside the following collections. These built-ins are always available, including in older projects. You can also **Place stencil** with them or **Duplicate alpha** to edit a variation. Built-ins cannot be removed; saved copies can. Search by name or category to find a pattern. The library starts four rows tall; hold and drag **Drag to resize library** up or down to change its height. Clicking the handle alone does not resize it. The library keeps its chosen height even below other open panels; use the outer sidebar scrollbar to bring it into view. This centered handle stays clear of the sidebar scrollbar.
 
 | Category | Examples |
 | --- | --- |
@@ -186,8 +186,8 @@ Each completed stroke is one undo step. Switching tool or view cancels an unappl
 
 To copy an existing half and replace the other, use [Mirror one side](modeling.md#mirror-one-side). The controls below repeat new brush strokes.
 
-1. Enable **Symmetry** in the toolbar.
-2. Open **Symmetry settings** and choose X, Y, or Z mirrors.
+1. Open **Symmetry** in the Model toolbar row and check **Enable symmetry**.
+2. Choose X, Y, or Z mirror planes.
 3. Draw on one side of the model. The stroke repeats across the selected planes.
 
 ![Symmetry settings with X enabled and matching strokes on the left and right of a sphere](../images/symmetry-stroke.png)

@@ -320,7 +320,7 @@ pub(super) fn button(
         egui::Image::new((icon(ui.ctx(), glyph), Vec2::splat(16.))).tint(ui.visuals().text_color()),
         label.into(),
     )
-    .min_size(egui::vec2(0., 28.))
+    .min_size(egui::vec2(0., 32.))
 }
 /// Compact, font-independent control with a readable accessibility label and tooltip.
 pub(super) fn icon_button(ui: &mut egui::Ui, glyph: Glyph, label: &str) -> egui::Response {
@@ -329,7 +329,7 @@ pub(super) fn icon_button(ui: &mut egui::Ui, glyph: Glyph, label: &str) -> egui:
             egui::Image::new((icon(ui.ctx(), glyph), Vec2::splat(16.)))
                 .tint(ui.visuals().text_color()),
         )
-        .min_size(Vec2::splat(26.)),
+        .min_size(Vec2::splat(32.)),
     );
     response.widget_info(|| {
         egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label)
@@ -343,13 +343,36 @@ pub(super) fn menu(
     ui: &mut egui::Ui,
     glyph: Glyph,
     label: &str,
+    selected: bool,
     contents: impl FnOnce(&mut egui::Ui),
 ) -> bool {
-    egui::containers::menu::MenuButton::from_button(button(ui, glyph, label))
+    egui::containers::menu::MenuButton::from_button(button(ui, glyph, label).selected(selected))
         .ui(ui, contents)
         .0
         .clicked()
 }
+/// Keep native checkbox semantics while making the whole settings row clickable.
+/// Horizontal groups (for example X/Y/Z) retain their natural width.
+pub(super) fn checkbox(
+    ui: &mut egui::Ui,
+    value: &mut bool,
+    label: impl Into<egui::WidgetText>,
+) -> egui::Response {
+    let width = if ui.layout().main_dir().is_horizontal() {
+        0.
+    } else {
+        ui.available_width()
+    };
+    ui.allocate_ui_with_layout(
+        egui::vec2(width, 32.),
+        egui::Layout::left_to_right(egui::Align::Center)
+            .with_main_align(egui::Align::Min)
+            .with_main_justify(true),
+        |ui| ui.add(egui::Checkbox::new(value, label)),
+    )
+    .inner
+}
+
 pub(super) fn theme(ctx: &egui::Context) {
     let key = egui::Id::new("clay-design-installed");
     if ctx.data(|d| d.get_temp::<bool>(key)).unwrap_or(false) {
@@ -358,7 +381,9 @@ pub(super) fn theme(ctx: &egui::Context) {
     ctx.style_mut(|style| {
         style.spacing.button_padding = egui::vec2(8., 5.);
         style.spacing.item_spacing = egui::vec2(6., 6.);
-        style.spacing.interact_size.y = 28.;
+        style.spacing.interact_size.y = 32.;
+        style.spacing.icon_width = 20.;
+        style.spacing.icon_width_inner = 12.;
         let v = &mut style.visuals;
         v.panel_fill = Color32::from_rgb(26, 29, 34);
         v.window_fill = v.panel_fill;
@@ -507,5 +532,95 @@ pub(super) fn help(response: egui::Response, text: impl Into<String>) -> egui::R
         response
             .on_hover_ui(contents)
             .on_disabled_hover_ui(contents)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn checkbox_row_accepts_mouse_and_keyboard_and_respects_disabled_state() {
+        let ctx = egui::Context::default();
+        let mut checked = false;
+        let mut rect = egui::Rect::NOTHING;
+        let mut frame = |events: Vec<egui::Event>, enabled: bool| {
+            let _ = ctx.run(
+                egui::RawInput {
+                    events,
+                    ..Default::default()
+                },
+                |ctx| {
+                    theme(ctx);
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        ui.set_width(300.);
+                        ui.add_enabled_ui(enabled, |ui| {
+                            let response = checkbox(ui, &mut checked, "Enabled");
+                            rect = response.rect;
+                        });
+                    });
+                },
+            );
+            (checked, rect)
+        };
+        frame(vec![], true);
+        let (_, row) = frame(vec![], true);
+        assert!(row.width() >= 300. && row.height() >= 32.);
+        let point = row.right_center() - egui::vec2(4., 0.);
+        for pressed in [true, false] {
+            frame(
+                vec![
+                    egui::Event::PointerMoved(point),
+                    egui::Event::PointerButton {
+                        pos: point,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+                true,
+            );
+        }
+        assert!(
+            frame(vec![], true).0,
+            "the blank end of the row must toggle"
+        );
+        frame(
+            vec![egui::Event::Key {
+                key: egui::Key::Tab,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            true,
+        );
+        frame(vec![], true);
+        let key = egui::Event::Key {
+            key: egui::Key::Space,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        };
+        assert!(
+            !frame(vec![key], true).0,
+            "Space must toggle the focused checkbox"
+        );
+        for pressed in [true, false] {
+            frame(
+                vec![
+                    egui::Event::PointerMoved(point),
+                    egui::Event::PointerButton {
+                        pos: point,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+                false,
+            );
+        }
+        assert!(!frame(vec![], false).0, "disabled rows must not toggle");
     }
 }

@@ -16,20 +16,23 @@ impl UiState {
             BuiltinMenu::Slice => Glyph::Slice,
             BuiltinMenu::Primitive => Glyph::Primitive,
             BuiltinMenu::Edit => Glyph::Edit,
-            BuiltinMenu::Settings | BuiltinMenu::Symmetry => Glyph::Settings,
+            BuiltinMenu::Settings => Glyph::Settings,
+            BuiltinMenu::Symmetry => Glyph::Symmetry,
             BuiltinMenu::Visibility | BuiltinMenu::Submodels => Glyph::Layers,
             BuiltinMenu::Mesh => Glyph::Mesh,
             BuiltinMenu::Wireframe => Glyph::Wire,
             BuiltinMenu::Mask => Glyph::Mask,
-            BuiltinMenu::View | BuiltinMenu::References => Glyph::View,
+            BuiltinMenu::View => Glyph::Camera,
+            BuiltinMenu::References => Glyph::View,
         };
+        let label = menu.label();
         if self
             .preferences
             .menu_sections
             .iter()
             .any(|s| s.menu == menu)
         {
-            let response = ui.add(design::button(ui, glyph, menu.label()).selected(true))
+            let response = ui.add(design::button(ui, glyph, label).selected(true))
                 .on_hover_text("Docked as a collapsible section. Click to expand; right-click for layout options.");
             if response.clicked() {
                 self.preferences
@@ -44,7 +47,7 @@ impl UiState {
         }
         if self.preferences.pinned_menus.iter().any(|p| p.menu == menu) {
             if ui
-                .add(design::button(ui, glyph, menu.label()).selected(true))
+                .add(design::button(ui, glyph, label).selected(true))
                 .on_hover_text("Pinned open. Click to unpin and return to a drop-down menu.")
                 .clicked()
             {
@@ -52,11 +55,22 @@ impl UiState {
             }
             return;
         }
-        let clicked = design::menu(ui, glyph, menu.label(), |ui| {
-            self.menu_placement_controls(ui, menu, false);
-            ui.separator();
-            self.builtin_menu_contents(menu, ui, document, camera, commands);
-        });
+        let clicked = design::menu(
+            ui,
+            glyph,
+            label,
+            menu == BuiltinMenu::Symmetry && document.symmetry().enabled,
+            |ui| {
+                ui.set_min_width(280.);
+                self.menu_placement_controls(ui, menu, false);
+                ui.separator();
+                egui::ScrollArea::vertical()
+                    .max_height((ui.ctx().content_rect().height() - 180.).max(120.))
+                    .show(ui, |ui| {
+                        self.builtin_menu_contents(menu, ui, document, camera, commands)
+                    });
+            },
+        );
         if clicked && !self.mesh_busy {
             if menu == BuiltinMenu::Transform
                 && self.transform_mode == crate::viewport::TransformMode::Sculpt
@@ -79,6 +93,7 @@ impl UiState {
     ) -> bool {
         let mut unpin = false;
         ui.horizontal(|ui| {
+            ui.weak("Panel");
             if design::icon_button(
                 ui,
                 if pinned { Glyph::Unpin } else { Glyph::Pin },
@@ -239,7 +254,16 @@ impl UiState {
                     if ui
                         .add_enabled(
                             available && !self.mesh_busy && self.pending.is_none(),
-                            egui::Button::new(text).shortcut_text(shortcut),
+                            design::button(
+                                ui,
+                                if action == Action::Undo {
+                                    Glyph::Undo
+                                } else {
+                                    Glyph::Redo
+                                },
+                                text,
+                            )
+                            .shortcut_text(shortcut),
                         )
                         .customize(action.clone())
                         .clicked()
@@ -316,9 +340,9 @@ impl UiState {
                                 if popup { ui.close_kind(egui::UiKind::Menu); }
                             }
                         }
-                        if ui.button("Show all").customize(Action::ShowAllFaces).clicked() { commands.push(Command::ShowAllFaces); }
-                        if ui.button("Invert visibility").customize(Action::InvertVisibility).clicked() { commands.push(Command::InvertVisibility); }
-                        if ui.add_enabled(hidden > 0 && hidden < document.mesh().triangles.len() && document.active_visible(), egui::Button::new("Split hidden"))
+                        if ui.add(design::button(ui, Glyph::View, "Show all")).customize(Action::ShowAllFaces).clicked() { commands.push(Command::ShowAllFaces); }
+                        if ui.add(design::button(ui, Glyph::Restore, "Invert visibility")).customize(Action::InvertVisibility).clicked() { commands.push(Command::InvertVisibility); }
+                        if ui.add_enabled(hidden > 0 && hidden < document.mesh().triangles.len() && document.active_visible(), design::button(ui, Glyph::Layers, "Split hidden"))
                             .on_hover_text("Move hidden faces into a new submodel. Keeps masks and groups; boundaries remain open. Resets subdivision levels. Undo restores the original.").customize(Action::SplitHidden).clicked() {
                             commands.push(Command::SplitHidden);
                         }
@@ -335,8 +359,7 @@ impl UiState {
             BuiltinMenu::Submodels => self.submodel_controls(ui, document, commands),
             BuiltinMenu::Wireframe => {
                 use crate::viewport::WireMode;
-                ui.checkbox(&mut self.wire, "Show wireframe")
-                    .customize(Action::Wireframe);
+                design::checkbox(ui, &mut self.wire, "Show wireframe").customize(Action::Wireframe);
                 ui.radio_value(
                     &mut self.wire_mode,
                     WireMode::Visible,
@@ -355,7 +378,7 @@ impl UiState {
                     "Transparent (all edges)",
                 )
                 .customize(Action::WireTransparent);
-                ui.checkbox(&mut self.wire_triangles, "Show triangle diagonals")
+                design::checkbox(ui, &mut self.wire_triangles, "Show triangle diagonals")
                     .customize(Action::WireTriangles);
             }
             BuiltinMenu::Symmetry => {
@@ -363,16 +386,16 @@ impl UiState {
                 ui.separator();
                 ui.strong("Brush symmetry");
                 let mut symmetry = document.symmetry().clone();
-                ui.checkbox(&mut symmetry.enabled, "Enable symmetry")
+                design::checkbox(ui, &mut symmetry.enabled, "Enable symmetry")
                     .customize(Action::Symmetry);
 
                 ui.label("Mirror planes");
                 ui.horizontal(|ui| {
                     for (i, label) in ["X", "Y", "Z"].iter().enumerate() {
-                        ui.checkbox(&mut symmetry.mirror[i], *label);
+                        design::checkbox(ui, &mut symmetry.mirror[i], *label);
                     }
                 });
-                ui.checkbox(&mut symmetry.radial, "Radial symmetry");
+                design::checkbox(ui, &mut symmetry.radial, "Radial symmetry");
                 ui.add_enabled_ui(symmetry.radial, |ui| {
                     egui::ComboBox::from_label("Radial axis")
                         .selected_text(format!("{:?}", symmetry.radial_axis))
@@ -416,7 +439,7 @@ impl UiState {
                 {
                     symmetry.center = crate::sculpt::Vec3::default();
                 }
-                ui.checkbox(&mut self.show_symmetry_guides, "Show symmetry lines")
+                design::checkbox(ui, &mut self.show_symmetry_guides, "Show symmetry lines")
                     .customize(Action::Guides);
                 ui.add(egui::Slider::new(&mut self.guide_opacity, 0.1..=1.).text("Guide opacity"));
                 ui.label("Mirror planes and radial repeats can be combined.");
@@ -440,8 +463,8 @@ impl UiState {
                         if ui.add(design::button(ui, Glyph::Mask, "Clear mask")).customize(Action::ClearMask).clicked() { commands.push(Command::ClearMask); }
                         if ui.add(design::button(ui, Glyph::Restore, "Invert mask")).on_hover_text("Swap masked and unmasked areas, preserving soft mask values on every subdivision level.").customize(Action::InvertMask).clicked() { commands.push(Command::InvertMask); }
                         ui.horizontal(|ui| {
-                            if ui.button("Expand mask").on_hover_text("Spread soft mask values by one mesh edge per click.").customize(Action::ExpandMask).clicked() { commands.push(Command::GrowMask(true)); }
-                            if ui.button("Contract mask").on_hover_text("Tighten the mask by one mesh edge per click.").customize(Action::ContractMask).clicked() { commands.push(Command::GrowMask(false)); }
+                            if ui.add(design::button(ui, Glyph::Plus, "Expand mask")).on_hover_text("Spread soft mask values by one mesh edge per click.").customize(Action::ExpandMask).clicked() { commands.push(Command::GrowMask(true)); }
+                            if ui.add(design::button(ui, Glyph::Minus, "Contract mask")).on_hover_text("Tighten the mask by one mesh edge per click.").customize(Action::ContractMask).clicked() { commands.push(Command::GrowMask(false)); }
                         });
                         let mut intensity = document.mask_peak();
                         ui.horizontal(|ui| {
@@ -454,7 +477,7 @@ impl UiState {
             }
             BuiltinMenu::View => {
                 let mut perspective = camera.perspective;
-                if ui.checkbox(&mut perspective, "Perspective view")
+                if design::checkbox(ui, &mut perspective, "Perspective view")
                     .customize(Action::Perspective)
                     .on_hover_text("Show depth and foreshortening. Turn off for orthographic comparisons against drawings.")
                     .changed() {
@@ -469,9 +492,9 @@ impl UiState {
                     }
                 }
                 ui.separator();
-                ui.checkbox(&mut self.show_polygroups, "Show vertex group colors")
+                design::checkbox(ui, &mut self.show_polygroups, "Show vertex group colors")
                     .customize(Action::PolygroupColors);
-                ui.checkbox(&mut self.show_backfaces, "Faint back-facing surfaces").customize(Action::Backfaces).on_hover_text("Show the reverse side of open surfaces translucently. Front-facing surfaces stay solid.");
+                design::checkbox(ui, &mut self.show_backfaces, "Faint back-facing surfaces").customize(Action::Backfaces).on_hover_text("Show the reverse side of open surfaces translucently. Front-facing surfaces stay solid.");
                 if self.show_backfaces {
                     ui.add(
                         egui::Slider::new(&mut self.backface_opacity, 0.02..=0.5)
@@ -571,13 +594,12 @@ impl UiState {
                     }
                 });
                 if self.slice_options.mode != crate::sculpt::SliceMode::Polygroups {
-                    ui.checkbox(&mut self.slice_options.cap, "Cap cuts")
-                        .on_hover_text(
-                            "Close the cut with flat faces; requires a closed source surface",
-                        );
+                    design::checkbox(ui, &mut self.slice_options.cap, "Cap cuts").on_hover_text(
+                        "Close the cut with flat faces; requires a closed source surface",
+                    );
                 }
                 if self.slice_options.mode == crate::sculpt::SliceMode::Trim {
-                    ui.checkbox(&mut self.slice_options.flip, "Flip kept side");
+                    design::checkbox(ui, &mut self.slice_options.flip, "Flip kept side");
                 }
                 ui.label("Active model · through all depths · resets subdivision levels");
             },

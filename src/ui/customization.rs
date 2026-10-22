@@ -914,7 +914,7 @@ impl UiState {
             self.custom_editor(ui, document);
             ui.separator();
             egui::CollapsingHeader::new("Built-in panels and toolbar").show(ui, |ui| {
-                ui.checkbox(&mut self.preferences.compact_toolbar, "Compact toolbar (keep Settings and custom menus)");
+                design::checkbox(ui, &mut self.preferences.compact_toolbar, "Compact toolbar (keep Settings and custom menus)");
                 for index in 0..self.preferences.panels.len() {
                     ui.push_id(index, |ui| { ui.horizontal(|ui| {
                         let panel = &mut self.preferences.panels[index];
@@ -922,7 +922,7 @@ impl UiState {
                         egui::ComboBox::from_id_salt("dock").selected_text(format!("{:?}", panel.dock)).show_ui(ui, |ui| {
                             for dock in Dock::ALL { ui.selectable_value(&mut panel.dock, dock, format!("{dock:?}")); }
                         });
-                        ui.checkbox(&mut panel.open, "Expanded");
+                        design::checkbox(ui, &mut panel.open, "Expanded");
                     }); });
                 }
                 self.sidebar_order_editor(ui);
@@ -999,7 +999,7 @@ impl UiState {
             );
             delete = ui.button("Delete menu").clicked();
         });
-        ui.checkbox(&mut menu.collapsible, "Collapsible section");
+        design::checkbox(ui, &mut menu.collapsible, "Collapsible section");
         ui.horizontal(|ui| {
             ui.add(
                 egui::TextEdit::singleline(&mut self.customization.search)
