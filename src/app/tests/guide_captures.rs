@@ -1780,7 +1780,7 @@ fn stencil_controls_offscreen_review() {
     let handle = g
         .text_positions
         .iter()
-        .find(|(text, _)| text == "Resize library")
+        .find(|(text, _)| text == "Drag to resize library")
         .unwrap()
         .1;
     let geometry = g.app.document.geometry_snapshot();
@@ -1797,7 +1797,7 @@ fn stencil_controls_offscreen_review() {
     let resized = g
         .text_positions
         .iter()
-        .find(|(text, _)| text == "Resize library")
+        .find(|(text, _)| text == "Drag to resize library")
         .unwrap()
         .1;
     assert!(
@@ -1806,6 +1806,58 @@ fn stencil_controls_offscreen_review() {
     );
     assert!(g.app.document.geometry_snapshot() == geometry);
     g.save("alpha-library-resized");
+}
+
+#[test]
+#[ignore = "renders a crowded sidebar resize; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn alpha_library_crowded_sidebar_offscreen_review() {
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(std::path::Path::new(&directory), [1300, 860]);
+    g.panel(Tool::Brush, Dock::Right);
+    g.panel(Tool::Alpha, Dock::Right);
+    g.app.ui.alphas.selected = Some(crate::ui::alphas::Selection::Builtin(7));
+    let handle = |g: &Guide| {
+        g.text_positions
+            .iter()
+            .find_map(|(text, pos)| (text == "Drag to resize library").then_some(*pos))
+    };
+    // Scroll the preceding brush controls out of view, keeping room below the handle.
+    for _ in 0..40 {
+        g.frame(vec![]);
+        if handle(&g).is_some_and(|pos| (200. ..720.).contains(&pos.y)) {
+            break;
+        }
+        let sidebar_margin = 1300. - g.app.ui.preferences.right_width + 12.;
+        g.frame(vec![
+            egui::Event::PointerMoved(Pos2::new(sidebar_margin, 500.)),
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: Vec2::new(0., -60.),
+                modifiers: egui::Modifiers::NONE,
+            },
+        ]);
+    }
+    g.save("alpha-library-crowded-before");
+    let start = handle(&g).expect("visible library resize handle");
+    assert!((200. ..720.).contains(&start.y));
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    let end = start + Vec2::new(0., 70.);
+    for step in 1..=10 {
+        g.frame(vec![egui::Event::PointerMoved(
+            start.lerp(end, step as f32 / 10.),
+        )]);
+    }
+    g.frame(vec![primary_event(end, false)]);
+    g.save("alpha-library-crowded-after");
+    let resized = handle(&g).unwrap();
+    assert!(
+        (resized.y - start.y - 70.).abs() < 2.,
+        "the library must grow below the brush panel: {start:?} -> {resized:?}"
+    );
 }
 
 fn review_stencil_controls(g: &mut Guide) {

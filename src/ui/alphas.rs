@@ -1,4 +1,7 @@
 //! Alpha library presentation and private image drafts.
+#[cfg(test)]
+mod tests;
+
 use super::*;
 use crate::sculpt::{
     Brush,
@@ -159,6 +162,9 @@ impl UiState {
         egui::ScrollArea::vertical()
             .id_salt("alpha_library_thumbnails")
             .max_height(library_height)
+            // Earlier panels can exhaust the parent scroll area's suggested height.
+            // Keep the chosen height and let the outer sidebar scroll to fit it.
+            .min_scrolled_height(library_height)
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 let columns = ((ui.available_width() / 100.).floor() as usize).clamp(1, 4);
@@ -212,21 +218,37 @@ impl UiState {
         // Keep the grab area in the middle, clear of both nested scrollbars.
         let resize = ui
             .horizontal(|ui| {
-                let width = (ui.available_width() - 32.).clamp(64., 140.);
+                let width = (ui.available_width() - 32.).clamp(64., 192.);
                 ui.add_space(((ui.available_width() - width) * 0.5).max(0.));
                 ui.add_sized(
-                    [width, 22.],
-                    egui::Button::new("Resize library").sense(egui::Sense::drag()),
+                    [width, 32.],
+                    egui::Button::new("Drag to resize library")
+                        .frame(false)
+                        .sense(egui::Sense::drag()),
                 )
                 .on_hover_cursor(egui::CursorIcon::ResizeVertical)
                 .on_hover_text("Drag up or down to change the library height")
             })
             .inner;
-        if resize.dragged() {
-            library_height = (library_height + resize.drag_delta().y).clamp(258., 704.);
+        let drag_height_id = height_id.with("drag_start");
+        if resize.drag_started() {
+            ui.ctx()
+                .data_mut(|data| data.insert_temp(drag_height_id, library_height));
+        }
+        if let Some(delta) = resize.total_drag_delta() {
+            let start_height = ui
+                .ctx()
+                .data(|data| data.get_temp::<f32>(drag_height_id))
+                .unwrap_or(library_height);
+            // Measure from the press, excluding pointer motion before the button
+            // went down and avoiding repeated accumulation during layout passes.
+            library_height = (start_height + delta.y).clamp(258., 704.);
             ui.ctx()
                 .data_mut(|data| data.insert_persisted(height_id, library_height));
             ui.ctx().request_repaint();
+        }
+        if resize.drag_stopped() {
+            ui.ctx().data_mut(|data| data.remove::<f32>(drag_height_id));
         }
         if let Some((selection, asset)) = self
             .alphas

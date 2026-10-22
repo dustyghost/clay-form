@@ -60,7 +60,7 @@ Grab follows pointer movement; spacing does not affect it. Subtracting Smooth sh
 
 ### Choose an alpha
 
-An alpha shapes each dab. Open the **Alpha** panel, select **Soft**, **Hard**, or **Square** in the **Alpha library**, then choose **Use on brush**. The library includes **39 built-ins**, with **Nature’s curve** (a flowing spiral), **Leaf veins**, **Wood grain**, and **Pebbles** alongside the following collections. These built-ins are always available, including in older projects. You can also **Place stencil** with them or **Duplicate alpha** to edit a variation. Built-ins cannot be removed; saved copies can. Search by name or category to find a pattern. The library starts four rows tall; drag **Resize library** up or down to change its height. This centered handle stays clear of the sidebar scrollbar.
+An alpha shapes each dab. Open the **Alpha** panel, select **Soft**, **Hard**, or **Square** in the **Alpha library**, then choose **Use on brush**. The library includes **39 built-ins**, with **Nature’s curve** (a flowing spiral), **Leaf veins**, **Wood grain**, and **Pebbles** alongside the following collections. These built-ins are always available, including in older projects. You can also **Place stencil** with them or **Duplicate alpha** to edit a variation. Built-ins cannot be removed; saved copies can. Search by name or category to find a pattern. The library starts four rows tall; hold and drag **Drag to resize library** up or down to change its height. Clicking the handle alone does not resize it. The library keeps its chosen height even below other open panels; use the outer sidebar scrollbar to bring it into view. This centered handle stays clear of the sidebar scrollbar.
 
 | Category | Examples |
 | --- | --- |
