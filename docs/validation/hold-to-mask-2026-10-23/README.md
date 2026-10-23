@@ -7,3 +7,5 @@ Nine focused controller tests cover no-op holds, brush settings restoration, mas
 ```sh
 CLAY_GUIDE_PREVIEW=/tmp/clay-temporary-mask-review cargo test --locked --lib temporary_mask_offscreen_review -- --ignored
 ```
+
+CI also exposed a clipped Unpin control after scrolling the larger Mask panel. Pinned menus now keep placement controls above a separate scrolling body. The unchanged pin/move/use/unpin regression and both related pinned-menu tests pass; `recovery_and_menu_placement_offscreen_preview` was rendered and inspected to verify the visible placement row.
