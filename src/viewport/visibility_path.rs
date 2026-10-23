@@ -202,12 +202,12 @@ impl Viewport {
             }
             let color = Color32::from_rgb(110, 220, 210);
             for pair in path.points.windows(2) {
-                painter.line_segment([pair[0], pair[1]], Stroke::new(2., color));
+                painter.line_segment([pair[0], pair[1]], Stroke::new(2_f32, color));
             }
             if path.points.len() > 2 {
                 painter.line_segment(
                     [*path.points.last().unwrap(), path.points[0]],
-                    Stroke::new(2., color),
+                    Stroke::new(2_f32, color),
                 );
             }
             for (i, &pos) in path.points.iter().enumerate() {

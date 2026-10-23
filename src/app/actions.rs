@@ -10,6 +10,27 @@ impl App {
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         let active_brush = self.ui.brush_index_for_context(&self.document, ctx);
         let command = match action {
+            Action::ViewportContextMenu => {
+                self.open_viewport_menu(ctx);
+                None
+            }
+            Action::TemporaryVisibilityRectangle | Action::TemporaryVisibilityLasso => {
+                self.ui.preferences.visibility_selection.shape =
+                    if action == Action::TemporaryVisibilityRectangle {
+                        crate::preferences::VisibilityShape::Rectangle
+                    } else {
+                        crate::preferences::VisibilityShape::Lasso
+                    };
+                if !self.temporary_visibility_active(ctx)
+                    && matches!(
+                        self.ui.selection_tool,
+                        Some(crate::viewport::SelectionTool::Visibility(_))
+                    )
+                {
+                    self.ui.selection_tool = Some(self.ui.preferences.visibility_selection.tool());
+                }
+                None
+            }
             Action::EditPaths => Some(Command::Path(paths::PathCommand::Open)),
             Action::StrokeEntirePath => Some(Command::Path(paths::PathCommand::StrokeEntirePath)),
             Action::TogglePathOnlyStrokes => {
@@ -373,21 +394,28 @@ impl App {
                         VisibilityShape::Path
                     };
                 let tool = self.ui.preferences.visibility_selection.tool();
-                Some(Command::SelectTool(
-                    (self.ui.selection_tool != Some(tool)).then_some(tool),
-                ))
+                if self.temporary_visibility_active(ctx) {
+                    None
+                } else {
+                    Some(Command::SelectTool(
+                        (self.ui.selection_tool != Some(tool)).then_some(tool),
+                    ))
+                }
             }
             Action::VisibilityHide | Action::VisibilityIsolate | Action::FlipVisibilitySide => {
+                let temporary = self.temporary_visibility_active(ctx);
                 let settings = &mut self.ui.preferences.visibility_selection;
                 match action {
                     Action::VisibilityHide => settings.hide = true,
                     Action::VisibilityIsolate => settings.hide = false,
                     _ => settings.flip = !settings.flip,
                 }
-                if matches!(
-                    self.ui.selection_tool,
-                    Some(crate::viewport::SelectionTool::Visibility(_))
-                ) {
+                if !temporary
+                    && matches!(
+                        self.ui.selection_tool,
+                        Some(crate::viewport::SelectionTool::Visibility(_))
+                    )
+                {
                     self.ui.selection_tool = Some(settings.tool());
                 }
                 None

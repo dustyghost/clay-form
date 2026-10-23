@@ -282,8 +282,13 @@ impl Viewport {
         }
         self.visibility_path = None;
         let modifiers = ui.input(|i| i.modifiers);
-        let requested =
-            select.is_some() || ((modifiers.ctrl || modifiers.command) && modifiers.shift);
+        let requested = select.is_some()
+            || ui.input(|i| {
+                self.visibility_hold
+                    .as_ref()
+                    .unwrap_or(&crate::preferences::HoldBinding::visibility_default())
+                    .active(i)
+            });
         let press = ui.input(|i| {
             i.events.iter().find_map(|event| match event {
                 egui::Event::PointerButton {

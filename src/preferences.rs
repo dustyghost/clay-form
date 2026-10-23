@@ -6,6 +6,8 @@ use std::path::PathBuf;
 pub(crate) use crate::action::Action;
 mod visibility;
 pub(crate) use visibility::{VisibilitySettings, VisibilityShape};
+mod hold_binding;
+pub(crate) use hold_binding::HoldBinding;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Shortcut {
     pub key: String,
@@ -350,6 +352,7 @@ pub(crate) struct Preferences {
     pub history_retention: crate::diagnostics::Retention,
     pub version: u32,
     pub bindings: Vec<(Action, Option<Shortcut>)>,
+    pub visibility_hold: HoldBinding,
     pub smooth: Hold,
     pub reverse: Hold,
     pub zoom_hold: Hold,
@@ -409,7 +412,9 @@ impl Default for Preferences {
                 .cloned()
                 .enumerate()
                 .map(|(i, a)| {
-                    let key = if a == Action::SaveAs {
+                    let key = if a == Action::ViewportContextMenu {
+                        Some((Key::Q, none))
+                    } else if a == Action::SaveAs {
                         Some((Key::S, ctrl | Modifiers::SHIFT))
                     } else {
                         keys.get(i).copied()
@@ -418,6 +423,7 @@ impl Default for Preferences {
                 })
                 .map(|(a, key)| (a, key.map(|(k, m)| Shortcut::new(k, m))))
                 .collect(),
+            visibility_hold: HoldBinding::visibility_default(),
             smooth: Hold::Shift,
             reverse: Hold::Alt,
             zoom_hold: Hold::Ctrl,
@@ -453,6 +459,7 @@ impl Default for Preferences {
 }
 impl Preferences {
     pub fn validate(&self) -> Result<(), String> {
+        self.visibility_hold.validate()?;
         if self.modeling_presets.len() > 128 || self.next_modeling_preset_id == 0 {
             return Err("Invalid modeling preset library".into());
         }
