@@ -91,3 +91,4 @@ jobs:
           cargo test --locked --lib automatic_path_settings_offscreen_preview -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-alpha" cargo test --locked --lib alpha_library_stencil_offscreen_review -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-file-pickers" cargo test --locked --lib asset_file_dialog_offscreen_review -- --ignored
+          CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-temporary-mask" cargo test --locked --lib temporary_mask_offscreen_review -- --ignored
