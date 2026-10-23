@@ -2,7 +2,12 @@ use super::*;
 use crate::preferences::MaskShape;
 
 impl UiState {
-    pub(super) fn temporary_mask_controls(&mut self, ui: &mut egui::Ui, document: &Document, commands: &mut Vec<Command>) {
+    pub(super) fn temporary_mask_controls(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &Document,
+        commands: &mut Vec<Command>,
+    ) {
         ui.collapsing("Hold to mask", |ui| {
             ui.label(format!("Hold binding: {}", self.preferences.mask_hold.label()));
             if ui.button("Configure hold and menu keys…").clicked() {
@@ -38,17 +43,41 @@ impl UiState {
 
     pub(super) fn mask_binding_conflicts(&self) -> Vec<String> {
         let hold = &self.preferences.mask_hold;
-        if !hold.enabled() { return Vec::new(); }
+        if !hold.enabled() {
+            return Vec::new();
+        }
         let mut conflicts = Vec::new();
         let visibility = &self.preferences.visibility_hold;
         if visibility.enabled() {
-            conflicts.push(format!("If {} and {} are both held, visibility takes priority.", hold.label(), visibility.label()));
+            conflicts.push(format!(
+                "If {} and {} are both held, visibility takes priority.",
+                hold.label(),
+                visibility.label()
+            ));
         }
-        for (label, modifier) in [("Smooth", self.preferences.smooth), ("Reverse", self.preferences.reverse), ("Zoom", self.preferences.zoom_hold), ("Pan", self.preferences.pan_hold)] {
-            let overlaps = match modifier { Hold::Ctrl => hold.ctrl, Hold::Shift => hold.shift, Hold::Alt => hold.alt, Hold::Disabled => false };
-            if overlaps { conflicts.push(format!("{} overlaps {label}; masking takes priority while held.", hold.label())); }
+        for (label, modifier) in [
+            ("Smooth", self.preferences.smooth),
+            ("Reverse", self.preferences.reverse),
+            ("Zoom", self.preferences.zoom_hold),
+            ("Pan", self.preferences.pan_hold),
+        ] {
+            let overlaps = match modifier {
+                Hold::Ctrl => hold.ctrl,
+                Hold::Shift => hold.shift,
+                Hold::Alt => hold.alt,
+                Hold::Disabled => false,
+            };
+            if overlaps {
+                conflicts.push(format!(
+                    "{} overlaps {label}; masking takes priority while held.",
+                    hold.label()
+                ));
+            }
         }
-        if hold.ctrl || hold.command { conflicts.push("Masking takes priority over Modeling selection removal while held.".into()); }
+        if hold.ctrl || hold.command {
+            conflicts
+                .push("Masking takes priority over Modeling selection removal while held.".into());
+        }
         for (action, binding) in &self.preferences.bindings {
             if let Some(binding) = binding
                 && hold.key.as_ref() == Some(&binding.key)
@@ -65,7 +94,10 @@ impl UiState {
 }
 
 impl UiState {
-    pub(super) fn temporary_mask_menu_entries(&self, document: &Document) -> Vec<super::context_menu::ViewportMenuEntry> {
+    pub(super) fn temporary_mask_menu_entries(
+        &self,
+        document: &Document,
+    ) -> Vec<super::context_menu::ViewportMenuEntry> {
         use super::context_menu::ViewportMenuEntry;
         let preset = &self.preferences.mask_preset;
         let enabled = document.primitive().is_none() && document.active_visible();
@@ -77,11 +109,29 @@ impl UiState {
             (Action::TemporaryMaskErase, "Erase mask", preset.erase, "Erase protection with the temporary mask tool."),
         ].into_iter().map(|(action,label,selected,hint)| ViewportMenuEntry { action, label: label.into(), selected, enabled, hint: hint.into() }).collect::<Vec<_>>();
         if preset.shape == MaskShape::Line {
-            entries.push(ViewportMenuEntry { action: Action::TemporaryMaskFlip, label: "Flip side".into(), selected: preset.flip, enabled, hint: "Mask the opposite side of the dividing line.".into() });
+            entries.push(ViewportMenuEntry {
+                action: Action::TemporaryMaskFlip,
+                label: "Flip side".into(),
+                selected: preset.flip,
+                enabled,
+                hint: "Mask the opposite side of the dividing line.".into(),
+            });
         }
         let index = preset.brush_index(document);
-        for (i, brush) in document.brushes().iter().enumerate().filter(|(_,b)| b.kind == Kind::Mask) {
-            entries.push(ViewportMenuEntry { action: Action::TemporaryMaskPreset(brush.identity()), label: format!("Brush preset: {}", brush.name), selected: index == Some(i), enabled, hint: "Remembers this Mask preset independently of your ordinary sculpt brush.".into() });
+        for (i, brush) in document
+            .brushes()
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| b.kind == Kind::Mask)
+        {
+            entries.push(ViewportMenuEntry {
+                action: Action::TemporaryMaskPreset(brush.identity()),
+                label: format!("Brush preset: {}", brush.name),
+                selected: index == Some(i),
+                enabled,
+                hint: "Remembers this Mask preset independently of your ordinary sculpt brush."
+                    .into(),
+            });
         }
         entries
     }

@@ -9,13 +9,14 @@ use eframe::egui::{self, Color32, Sense, Vec2};
 pub(crate) mod alphas;
 mod design;
 use design::Glyph;
+pub(crate) mod context_menu;
 mod customization;
 mod edges;
 mod files;
 pub(crate) use files::{FileEntry, FilePicker};
 mod icons;
-mod menus;
 mod masking;
+mod menus;
 mod mirror;
 mod modeling;
 pub(crate) mod paths;
@@ -26,6 +27,8 @@ mod sidebar;
 mod transform;
 use customization::ActionResponse;
 pub(crate) struct UiState {
+    pub viewport_menu: context_menu::ViewportMenuState,
+    pub temporary_visibility_tool: crate::viewport::SelectionTool,
     icons: icons::Icons,
     pinned_menu_rects: Vec<egui::Rect>,
     pub library_path: String,
@@ -92,6 +95,8 @@ pub(crate) struct UiState {
 impl Default for UiState {
     fn default() -> Self {
         Self {
+            viewport_menu: Default::default(),
+            temporary_visibility_tool: crate::viewport::SelectionTool::Rectangle,
             icons: Default::default(),
             pinned_menu_rects: Vec::new(),
             library_path: "brush-library.brushes.json".into(),
@@ -245,6 +250,20 @@ impl UiState {
             ui.horizontal_wrapped(|ui| {
                 ui.strong("CLAY FORM");
                 self.workspace_selector(ui);
+                let binding = self
+                    .preferences
+                    .shortcut(&Action::ViewportContextMenu)
+                    .map_or("Unbound".into(), |s| s.label());
+                if ui
+                    .button("Tool menu")
+                    .on_hover_text(format!(
+                        "Viewport functions · {binding} · assign in Key settings"
+                    ))
+                    .customize(Action::ViewportContextMenu)
+                    .clicked()
+                {
+                    commands.push(Command::Action(Action::ViewportContextMenu));
+                }
                 ui.separator();
                 self.builtin_menu(ui, BuiltinMenu::Edit, document, camera, &mut commands);
                 self.builtin_menu(ui, BuiltinMenu::Settings, document, camera, &mut commands);
@@ -670,12 +689,22 @@ impl UiState {
     ) {
         let focus_before = ui.ctx().memory(|m| m.focused());
         let active = self.brush_index_for_context(document, ui.ctx());
-        let fallback = crate::sculpt::Brush::new(if self.mask_active { Kind::Mask } else { Kind::Smooth });
+        let fallback = crate::sculpt::Brush::new(if self.mask_active {
+            Kind::Mask
+        } else {
+            Kind::Smooth
+        });
         let original = active.map_or(&fallback, |index| &document.brushes()[index]);
         let selected = active.unwrap_or(self.selected);
         if active.is_none() && matches!(tool, Tool::Brush | Tool::Alpha | Tool::Presets) {
-            let kind = if self.mask_active { Kind::Mask } else { Kind::Smooth };
-            ui.label(format!("Temporary {kind:?} uses default settings. Add a {kind:?} preset to customize it."));
+            let kind = if self.mask_active {
+                Kind::Mask
+            } else {
+                Kind::Smooth
+            };
+            ui.label(format!(
+                "Temporary {kind:?} uses default settings. Add a {kind:?} preset to customize it."
+            ));
             if ui.button(format!("Add {kind:?} preset")).clicked() {
                 commands.push(Command::AddBrush(kind));
             }

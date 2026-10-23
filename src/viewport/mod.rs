@@ -56,6 +56,7 @@ struct SnakeStroke {
 }
 #[derive(Default)]
 pub(crate) struct Viewport {
+    pub(crate) visibility_hold: Option<crate::preferences::HoldBinding>,
     pub(crate) paths: paths::PathEditor,
     pub(crate) guided: guided::GuidedPaths,
     pub(crate) attach_stencil: bool,
@@ -227,7 +228,13 @@ impl Viewport {
         }
         let modifiers = ui.input(|i| i.modifiers);
         let mut brush = options.selected.map_or_else(
-            || Brush::new(if options.temporary_mask { Kind::Mask } else { Kind::Smooth }),
+            || {
+                Brush::new(if options.temporary_mask {
+                    Kind::Mask
+                } else {
+                    Kind::Smooth
+                })
+            },
             |i| document.brushes()[i].clone(),
         );
         if options.temporary_mask {

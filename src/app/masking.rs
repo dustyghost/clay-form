@@ -3,6 +3,13 @@ use super::*;
 use crate::{preferences::MaskShape, viewport::TransformMode};
 
 impl App {
+    pub(super) fn temporary_mask_requested(&self, ctx: &egui::Context) -> bool {
+        !self.ui.mask_suppressed
+            && !ctx.wants_keyboard_input()
+            && self.temporary_mask_available()
+            && ctx.input(|i| self.ui.preferences.mask_hold.active(i))
+            && !self.temporary_visibility_active(ctx)
+    }
     pub(super) fn temporary_mask_available(&self) -> bool {
         self.document.active_visible()
             && self.document.primitive().is_none()
@@ -43,11 +50,18 @@ impl App {
         if was_active && escape {
             self.ui.mask_suppressed = true;
         }
-        let over_viewport = ctx.input(|i| i.pointer.hover_pos().is_some_and(|p| ui.available_rect_before_wrap().contains(p)));
+        let over_viewport = ctx.input(|i| {
+            i.pointer
+                .hover_pos()
+                .is_some_and(|p| ui.available_rect_before_wrap().contains(p))
+        });
         let eligible = self.temporary_mask_available()
             && ctx.input(|i| i.focused)
             && !ctx.wants_keyboard_input();
-        let active = held && !visibility && !self.ui.mask_suppressed && eligible
+        let active = held
+            && !visibility
+            && !self.ui.mask_suppressed
+            && eligible
             && (was_active || over_viewport);
         if active != was_active {
             // Never mix a mask gesture into an already-started sculpt/modeling edit.
@@ -78,7 +92,12 @@ impl App {
             Action::TemporaryMaskErase => preset.erase = true,
             Action::TemporaryMaskFlip => preset.flip = !preset.flip,
             Action::TemporaryMaskPreset(id) => {
-                if self.document.brushes().iter().any(|b| b.kind == crate::sculpt::Kind::Mask && b.identity() == id) {
+                if self
+                    .document
+                    .brushes()
+                    .iter()
+                    .any(|b| b.kind == crate::sculpt::Kind::Mask && b.identity() == id)
+                {
                     preset.brush_id = Some(id);
                 }
             }
@@ -88,11 +107,19 @@ impl App {
 
     pub(super) fn paint_temporary_mask_status(&self, ui: &egui::Ui) {
         let preset = &self.ui.preferences.mask_preset;
-        let text = format!("Hold to mask · {} · {} · {} · release to restore tool",
-            self.ui.preferences.mask_hold.label(), preset.shape.label(),
-            if preset.erase { "Erase" } else { "Add" });
-        ui.painter().text(ui.max_rect().center_top() + egui::vec2(0., 26.),
-            egui::Align2::CENTER_TOP, text, egui::FontId::proportional(14.), egui::Color32::LIGHT_GREEN);
+        let text = format!(
+            "Hold to mask · {} · {} · {} · release to restore tool",
+            self.ui.preferences.mask_hold.label(),
+            preset.shape.label(),
+            if preset.erase { "Erase" } else { "Add" }
+        );
+        ui.painter().text(
+            ui.max_rect().center_top() + egui::vec2(0., 26.),
+            egui::Align2::CENTER_TOP,
+            text,
+            egui::FontId::proportional(14.),
+            egui::Color32::LIGHT_GREEN,
+        );
     }
 }
 
@@ -104,29 +131,63 @@ mod tests {
     use egui::{Event, Key, Modifiers, Pos2, Vec2};
 
     fn button(pos: Pos2, pressed: bool) -> Event {
-        Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE }
+        Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        }
     }
     fn key(key: Key, pressed: bool) -> Event {
-        Event::Key { key, physical_key: None, pressed, repeat: false, modifiers: Modifiers::NONE }
+        Event::Key {
+            key,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: Modifiers::NONE,
+        }
     }
     fn frame(app: &mut App, ctx: &egui::Context, modifiers: Modifiers, events: Vec<Event>) {
         frame_focused(app, ctx, modifiers, events, true);
     }
-    fn frame_focused(app: &mut App, ctx: &egui::Context, modifiers: Modifiers, events: Vec<Event>, focused: bool) {
-        let _ = ctx.run(egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, Vec2::new(1000., 800.))),
-            modifiers, events, focused, ..Default::default()
-        }, |ctx| {
-            app.shortcuts(ctx);
-            egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
-        });
+    fn frame_focused(
+        app: &mut App,
+        ctx: &egui::Context,
+        modifiers: Modifiers,
+        events: Vec<Event>,
+        focused: bool,
+    ) {
+        let _ = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    Pos2::ZERO,
+                    Vec2::new(1000., 800.),
+                )),
+                modifiers,
+                events,
+                focused,
+                ..Default::default()
+            },
+            |ctx| {
+                app.shortcuts(ctx);
+                egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+            },
+        );
     }
     fn setup() -> (App, egui::Context, Pos2) {
         let mut app = App::default();
-        app.ui.preferences.mask_hold = HoldBinding { key: Some("M".into()), ..Default::default() };
+        app.ui.preferences.mask_hold = HoldBinding {
+            key: Some("M".into()),
+            ..Default::default()
+        };
         let ctx = egui::Context::default();
         let p = Pos2::new(500., 400.);
-        frame(&mut app, &ctx, Modifiers::NONE, vec![Event::PointerMoved(p)]);
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::NONE,
+            vec![Event::PointerMoved(p)],
+        );
         (app, ctx, p)
     }
 
@@ -144,7 +205,12 @@ mod tests {
         assert_eq!(app.document.geometry_snapshot(), before);
         assert_eq!(app.document.history_counts(), (0, 0));
         assert!(app.document.brushes()[selected] == brush);
-        frame(&mut app, &ctx, Modifiers::NONE, vec![button(p, true), Event::PointerMoved(p + Vec2::new(20., 0.))]);
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::NONE,
+            vec![button(p, true), Event::PointerMoved(p + Vec2::new(20., 0.))],
+        );
         frame(&mut app, &ctx, Modifiers::NONE, vec![button(p, false)]);
         assert_ne!(app.document.mesh().vertices, before.mesh.vertices);
     }
@@ -154,13 +220,28 @@ mod tests {
         let (mut app, ctx, p) = setup();
         let before = app.document.geometry_snapshot();
         let original = app.document.brushes()[app.ui.selected].clone();
-        frame(&mut app, &ctx, Modifiers::NONE, vec![key(Key::M, true), button(p, true)]);
-        frame(&mut app, &ctx, Modifiers::NONE, vec![Event::PointerMoved(p + Vec2::new(25., 0.))]);
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::NONE,
+            vec![key(Key::M, true), button(p, true)],
+        );
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::NONE,
+            vec![Event::PointerMoved(p + Vec2::new(25., 0.))],
+        );
         assert!(app.document.mesh().mask.iter().any(|&m| m > 0.));
         frame(&mut app, &ctx, Modifiers::NONE, vec![key(Key::M, false)]);
         assert!(!app.ui.mask_active);
         let masked = app.document.geometry_snapshot();
-        frame(&mut app, &ctx, Modifiers::NONE, vec![Event::PointerMoved(p + Vec2::new(90., 0.))]);
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::NONE,
+            vec![Event::PointerMoved(p + Vec2::new(90., 0.))],
+        );
         frame(&mut app, &ctx, Modifiers::NONE, vec![button(p, false)]);
         assert_eq!(app.document.geometry_snapshot(), masked);
         assert_eq!(app.document.mesh().vertices, before.mesh.vertices);
@@ -182,15 +263,38 @@ mod tests {
     fn temporary_mask_modifier_chords_do_not_zoom_smooth_or_reverse() {
         for modifiers in [Modifiers::CTRL, Modifiers::SHIFT, Modifiers::ALT] {
             let (mut app, ctx, p) = setup();
-            app.ui.preferences.mask_hold = HoldBinding { ctrl: modifiers.ctrl, shift: modifiers.shift, alt: modifiers.alt, ..Default::default() };
+            app.ui.preferences.mask_hold = HoldBinding {
+                ctrl: modifiers.ctrl,
+                shift: modifiers.shift,
+                alt: modifiers.alt,
+                ..Default::default()
+            };
             let vertices = app.document.mesh().vertices.clone();
-            let camera = (app.camera.yaw, app.camera.pitch, app.camera.zoom, app.camera.pan);
+            let camera = (
+                app.camera.yaw,
+                app.camera.pitch,
+                app.camera.zoom,
+                app.camera.pan,
+            );
             frame(&mut app, &ctx, modifiers, vec![button(p, true)]);
-            frame(&mut app, &ctx, modifiers, vec![Event::PointerMoved(p + Vec2::new(0., 30.))]);
+            frame(
+                &mut app,
+                &ctx,
+                modifiers,
+                vec![Event::PointerMoved(p + Vec2::new(0., 30.))],
+            );
             frame(&mut app, &ctx, modifiers, vec![button(p, false)]);
             assert!(app.document.mesh().mask.iter().any(|&m| m > 0.));
             assert_eq!(app.document.mesh().vertices, vertices);
-            assert_eq!((app.camera.yaw, app.camera.pitch, app.camera.zoom, app.camera.pan), camera);
+            assert_eq!(
+                (
+                    app.camera.yaw,
+                    app.camera.pitch,
+                    app.camera.zoom,
+                    app.camera.pan
+                ),
+                camera
+            );
         }
     }
 
@@ -200,25 +304,65 @@ mod tests {
             let (mut app, ctx, _) = setup();
             app.ui.preferences.mask_preset.shape = shape;
             let start = Pos2::new(490., 150.);
-            let points = [Pos2::new(780., 150.), Pos2::new(780., 680.), Pos2::new(490., 680.)];
+            let points = [
+                Pos2::new(780., 150.),
+                Pos2::new(780., 680.),
+                Pos2::new(490., 680.),
+            ];
             let before = app.document.geometry_snapshot();
             for cancel in [true, false] {
-                frame(&mut app, &ctx, Modifiers::NONE, vec![key(Key::M, true), Event::PointerMoved(start), button(start, true)]);
-                frame(&mut app, &ctx, Modifiers::NONE, points.into_iter().map(Event::PointerMoved).collect());
+                frame(
+                    &mut app,
+                    &ctx,
+                    Modifiers::NONE,
+                    vec![
+                        key(Key::M, true),
+                        Event::PointerMoved(start),
+                        button(start, true),
+                    ],
+                );
+                frame(
+                    &mut app,
+                    &ctx,
+                    Modifiers::NONE,
+                    points.into_iter().map(Event::PointerMoved).collect(),
+                );
                 if cancel {
                     frame(&mut app, &ctx, Modifiers::NONE, vec![key(Key::M, false)]);
                 }
-                frame(&mut app, &ctx, Modifiers::NONE, vec![button(points[2], false)]);
-                if cancel { assert_eq!(app.document.geometry_snapshot(), before); }
+                frame(
+                    &mut app,
+                    &ctx,
+                    Modifiers::NONE,
+                    vec![button(points[2], false)],
+                );
+                if cancel {
+                    assert_eq!(app.document.geometry_snapshot(), before);
+                }
             }
             assert!(app.document.mesh().mask.iter().any(|&m| m > 0.));
             assert_eq!(app.document.mesh().vertices, before.mesh.vertices);
             assert_eq!(app.document.history_counts(), (1, 0));
             app.change_temporary_mask(Action::TemporaryMaskErase);
             frame(&mut app, &ctx, Modifiers::NONE, vec![]);
-            frame(&mut app, &ctx, Modifiers::NONE, vec![Event::PointerMoved(start), button(start, true)]);
-            frame(&mut app, &ctx, Modifiers::NONE, points.into_iter().map(Event::PointerMoved).collect());
-            frame(&mut app, &ctx, Modifiers::NONE, vec![button(points[2], false)]);
+            frame(
+                &mut app,
+                &ctx,
+                Modifiers::NONE,
+                vec![Event::PointerMoved(start), button(start, true)],
+            );
+            frame(
+                &mut app,
+                &ctx,
+                Modifiers::NONE,
+                points.into_iter().map(Event::PointerMoved).collect(),
+            );
+            frame(
+                &mut app,
+                &ctx,
+                Modifiers::NONE,
+                vec![button(points[2], false)],
+            );
             assert!(app.document.mesh().mask.iter().all(|&m| m == 0.));
         }
     }
@@ -232,23 +376,56 @@ mod tests {
         let selection = app.viewport.modeling.selection().clone();
         assert!(!selection.is_empty());
         let options = app.ui.modeling.options();
-        frame(&mut app, &ctx, Modifiers::NONE, vec![key(Key::M, true), button(p, true)]);
-        frame(&mut app, &ctx, Modifiers::NONE, vec![Event::PointerMoved(p + Vec2::new(25., 0.))]);
-        frame(&mut app, &ctx, Modifiers::NONE, vec![button(p, false), key(Key::Escape, true)]);
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::NONE,
+            vec![key(Key::M, true), button(p, true)],
+        );
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::NONE,
+            vec![Event::PointerMoved(p + Vec2::new(25., 0.))],
+        );
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::NONE,
+            vec![button(p, false), key(Key::Escape, true)],
+        );
         assert!(!app.ui.mask_active);
         assert!(app.ui.modeling.active);
         assert!(app.ui.modeling.options() == options);
         assert_eq!(app.viewport.modeling.selection(), &selection);
-        frame(&mut app, &ctx, Modifiers::NONE, vec![key(Key::Escape, false)]);
-        assert!(!app.ui.mask_active, "Escape suppresses held mode until its binding is released");
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::NONE,
+            vec![key(Key::Escape, false)],
+        );
+        assert!(
+            !app.ui.mask_active,
+            "Escape suppresses held mode until its binding is released"
+        );
         assert_eq!(app.viewport.modeling.selection(), &selection);
     }
 
     #[test]
     fn temporary_mask_preset_preferences_round_trip_and_legacy_default() {
         let (mut app, _, _) = setup();
-        let brush = app.document.brushes().iter().find(|b| b.kind == Kind::Mask).unwrap();
-        app.ui.preferences.mask_preset = MaskPreset { shape: MaskShape::Line, erase: true, flip: true, brush_id: Some(brush.identity()) };
+        let brush = app
+            .document
+            .brushes()
+            .iter()
+            .find(|b| b.kind == Kind::Mask)
+            .unwrap();
+        app.ui.preferences.mask_preset = MaskPreset {
+            shape: MaskShape::Line,
+            erase: true,
+            flip: true,
+            brush_id: Some(brush.identity()),
+        };
         let encoded = serde_json::to_string(&app.ui.preferences).unwrap();
         let loaded: Preferences = serde_json::from_str(&encoded).unwrap();
         assert_eq!(loaded, app.ui.preferences);
@@ -261,16 +438,42 @@ mod tests {
         let (mut app, ctx, p) = setup();
         app.ui.preferences.mask_preset.shape = MaskShape::Lasso;
         let before = app.document.geometry_snapshot();
-        frame(&mut app, &ctx, Modifiers::NONE, vec![key(Key::M, true), button(p, true)]);
-        frame(&mut app, &ctx, Modifiers::NONE, vec![Event::PointerMoved(p + Vec2::new(100., 100.))]);
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::NONE,
+            vec![key(Key::M, true), button(p, true)],
+        );
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::NONE,
+            vec![Event::PointerMoved(p + Vec2::new(100., 100.))],
+        );
         frame_focused(&mut app, &ctx, Modifiers::NONE, vec![], false);
         assert!(!app.ui.mask_active);
-        frame(&mut app, &ctx, Modifiers::NONE, vec![button(p, false), key(Key::M, false)]);
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::NONE,
+            vec![button(p, false), key(Key::M, false)],
+        );
         assert_eq!(app.document.geometry_snapshot(), before);
-        app.ui.preferences.mask_hold = HoldBinding { ctrl: true, ..Default::default() };
-        frame(&mut app, &ctx, Modifiers::CTRL | Modifiers::SHIFT, vec![Event::PointerMoved(p)]);
+        app.ui.preferences.mask_hold = HoldBinding {
+            ctrl: true,
+            ..Default::default()
+        };
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::CTRL | Modifiers::SHIFT,
+            vec![Event::PointerMoved(p)],
+        );
         assert!(!app.ui.mask_active);
-        assert_eq!(app.viewport_menu_context(&ctx), crate::ui::context_menu::ViewportMenuContext::Visibility);
+        assert_eq!(
+            app.viewport_menu_context(&ctx),
+            crate::ui::context_menu::ViewportMenuContext::Visibility
+        );
         frame(&mut app, &ctx, Modifiers::CTRL, vec![]);
         assert!(app.ui.mask_active);
         app.ui.preferences.mask_hold = HoldBinding::default();
@@ -284,11 +487,15 @@ mod tests {
         let (mut app, ctx, p) = setup();
         app.ui.slice_active = true;
         let before = app.document.geometry_snapshot();
-        frame(&mut app, &ctx, Modifiers::NONE, vec![key(Key::M, true), Event::PointerMoved(p)]);
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::NONE,
+            vec![key(Key::M, true), Event::PointerMoved(p)],
+        );
         assert!(!app.ui.mask_active);
         assert!(app.ui.slice_active);
         assert_eq!(app.document.geometry_snapshot(), before);
         assert!(app.ui.status.contains("Hold to mask is available"));
     }
-
 }

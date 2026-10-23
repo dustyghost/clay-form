@@ -28,15 +28,24 @@ pub(crate) struct MaskPreset {
 }
 impl MaskPreset {
     pub(crate) fn brush_index(&self, document: &Document) -> Option<usize> {
-        self.brush_id.as_ref().and_then(|id| {
-            document.brushes().iter().position(|b| b.kind == Kind::Mask && b.identity() == *id)
-        }).or_else(|| document.brushes().iter().position(|b| b.kind == Kind::Mask))
+        self.brush_id
+            .as_ref()
+            .and_then(|id| {
+                document
+                    .brushes()
+                    .iter()
+                    .position(|b| b.kind == Kind::Mask && b.identity() == *id)
+            })
+            .or_else(|| document.brushes().iter().position(|b| b.kind == Kind::Mask))
     }
     pub(crate) fn selection_tool(&self) -> Option<SelectionTool> {
         match self.shape {
             MaskShape::Brush => None,
             MaskShape::Lasso => Some(SelectionTool::MaskLassoOperation { erase: self.erase }),
-            MaskShape::Line => Some(SelectionTool::MaskLine { erase: self.erase, flip: self.flip }),
+            MaskShape::Line => Some(SelectionTool::MaskLine {
+                erase: self.erase,
+                flip: self.flip,
+            }),
         }
     }
 }

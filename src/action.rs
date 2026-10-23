@@ -10,6 +10,9 @@ pub(crate) enum Action {
     TemporaryMaskErase,
     TemporaryMaskFlip,
     TemporaryMaskPreset(String),
+    ViewportContextMenu,
+    TemporaryVisibilityRectangle,
+    TemporaryVisibilityLasso,
     Save,
     SaveAs,
     Open,
@@ -376,6 +379,9 @@ impl Action {
         Self::TemporaryMaskAdd,
         Self::TemporaryMaskErase,
         Self::TemporaryMaskFlip,
+        Self::ViewportContextMenu,
+        Self::TemporaryVisibilityRectangle,
+        Self::TemporaryVisibilityLasso,
     ];
     /// Help shared by the built-in controls, custom menus, and shelves.
     pub fn help(&self) -> Option<&'static str> {
@@ -449,6 +455,9 @@ impl Action {
             Self::TemporaryMaskErase => "Temporary mask: Erase",
             Self::TemporaryMaskFlip => "Temporary mask: Flip side",
             Self::TemporaryMaskPreset(_) => "Temporary mask brush preset",
+            Self::ViewportContextMenu => "Viewport tool menu",
+            Self::TemporaryVisibilityRectangle => "Temporary visibility: Rectangle",
+            Self::TemporaryVisibilityLasso => "Temporary visibility: Lasso",
             Self::EditPaths => "Editable paths",
             Self::TogglePathGuides => "Guide brush strokes with paths",
             Self::TogglePathOnlyStrokes => "Only start strokes on paths",

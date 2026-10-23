@@ -59,8 +59,12 @@ impl SelectionDrag {
             }
         } else {
             self.end = pos;
-            if matches!(self.tool, SelectionTool::Lasso | SelectionTool::MaskLasso | SelectionTool::MaskLassoOperation { .. })
-                && self.points.last().is_none_or(|p| p.distance(pos) >= 2.)
+            if matches!(
+                self.tool,
+                SelectionTool::Lasso
+                    | SelectionTool::MaskLasso
+                    | SelectionTool::MaskLassoOperation { .. }
+            ) && self.points.last().is_none_or(|p| p.distance(pos) >= 2.)
             {
                 // Reject overlong gestures instead of silently changing their shape.
                 if self.points.len() >= 4096 {
@@ -214,8 +218,13 @@ impl Viewport {
         navigate: bool,
     ) -> bool {
         let modifiers = ui.input(|i| i.modifiers);
-        let requested =
-            select.is_some() || ((modifiers.ctrl || modifiers.command) && modifiers.shift);
+        let requested = select.is_some()
+            || ui.input(|i| {
+                self.visibility_hold
+                    .as_ref()
+                    .unwrap_or(&crate::preferences::HoldBinding::visibility_default())
+                    .active(i)
+            });
         let press = ui.input(|i| {
             i.events.iter().find_map(|event| match event {
                 egui::Event::PointerButton {
@@ -345,7 +354,9 @@ impl Viewport {
         }
         // Alt switches the operation even after Ctrl/Shift are released.
         drag.hide = match drag.tool {
-            SelectionTool::MaskLine { erase, .. } | SelectionTool::MaskLassoOperation { erase } => erase,
+            SelectionTool::MaskLine { erase, .. } | SelectionTool::MaskLassoOperation { erase } => {
+                erase
+            }
             _ => modifiers.alt,
         };
         let color = if drag.hide {
@@ -372,8 +383,18 @@ impl Viewport {
             rect
         };
         let operation = match (drag.tool, drag.hide) {
-            (SelectionTool::MaskLasso | SelectionTool::MaskLassoOperation { .. } | SelectionTool::MaskLine { .. }, false) => "Add mask",
-            (SelectionTool::MaskLasso | SelectionTool::MaskLassoOperation { .. } | SelectionTool::MaskLine { .. }, true) => "Erase mask",
+            (
+                SelectionTool::MaskLasso
+                | SelectionTool::MaskLassoOperation { .. }
+                | SelectionTool::MaskLine { .. },
+                false,
+            ) => "Add mask",
+            (
+                SelectionTool::MaskLasso
+                | SelectionTool::MaskLassoOperation { .. }
+                | SelectionTool::MaskLine { .. },
+                true,
+            ) => "Erase mask",
             (_, false) => "Isolate",
             (_, true) => "Hide",
         };

@@ -20,6 +20,19 @@ impl App {
                 self.change_temporary_mask(action);
                 None
             }
+            Action::ViewportContextMenu => {
+                self.open_viewport_menu(ctx);
+                None
+            }
+            Action::TemporaryVisibilityRectangle | Action::TemporaryVisibilityLasso => {
+                self.ui.temporary_visibility_tool =
+                    if action == Action::TemporaryVisibilityRectangle {
+                        crate::viewport::SelectionTool::Rectangle
+                    } else {
+                        crate::viewport::SelectionTool::Lasso
+                    };
+                None
+            }
             Action::EditPaths => Some(Command::Path(paths::PathCommand::Open)),
             Action::StrokeEntirePath => Some(Command::Path(paths::PathCommand::StrokeEntirePath)),
             Action::TogglePathOnlyStrokes => {

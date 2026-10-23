@@ -916,9 +916,22 @@ impl UiState {
             super::context_menu::hold_binding_editor(ui, "Hold to mask", &mut self.preferences.mask_hold);
             for conflict in self.mask_binding_conflicts() { ui.colored_label(egui::Color32::YELLOW, conflict); }
             ui.weak("Masking takes priority over brush and navigation modifiers while held; visibility wins overlapping holds. Right/middle drag and wheel remain available.");
-            ui.weak("Zoom takes priority over pan with shared modifiers. Pan starts off the model; on the model, brush modifiers apply. Ctrl+Shift selects visibility regions.");
+            super::context_menu::hold_binding_editor(ui, "Hold for visibility", &mut self.preferences.visibility_hold);
+            if self.preferences.visibility_hold.enabled() {
+                let h = &self.preferences.visibility_hold;
+                for (label, hold) in [("Smooth", self.preferences.smooth), ("Reverse", self.preferences.reverse), ("Zoom", self.preferences.zoom_hold), ("Pan", self.preferences.pan_hold)] {
+                    let overlaps = match hold { Hold::Ctrl => h.ctrl || h.command, Hold::Shift => h.shift, Hold::Alt => h.alt, Hold::Disabled => false };
+                    if overlaps { ui.weak(format!("Visibility overrides {label} while its full chord is held.")); }
+                }
+                if h.ctrl || h.command { ui.weak("Visibility overrides Ctrl/Cmd component-selection subtraction while its full chord is held."); }
+                for (action,binding) in &self.preferences.bindings {
+                    if let Some(binding) = binding && self.preferences.visibility_hold.key.as_ref() == Some(&binding.key) { ui.colored_label(egui::Color32::YELLOW, format!("Visibility hold shares a key with {}. Clear or change one binding.", action.label())); }
+                }
+            }
+            ui.weak("Temporary visibility takes priority over tool modifiers and selection. Middle/right-button navigation remains available. Zoom takes priority over pan with shared modifiers. Pan starts off the model; on the model, brush modifiers apply. The configured visibility hold selects regions.");
             if ui.button("Reset keys to defaults").clicked() {
                 let defaults = Preferences::default();
+                self.preferences.visibility_hold = defaults.visibility_hold;
                 self.preferences.mask_hold = defaults.mask_hold;
                 self.preferences.bindings = defaults.bindings; self.preferences.smooth = defaults.smooth;
                 self.preferences.reverse = defaults.reverse; self.preferences.zoom_hold = defaults.zoom_hold; self.preferences.pan_hold = defaults.pan_hold;
