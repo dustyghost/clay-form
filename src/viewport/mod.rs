@@ -56,6 +56,7 @@ struct SnakeStroke {
 }
 #[derive(Default)]
 pub(crate) struct Viewport {
+    pub(crate) visibility_hold: Option<crate::preferences::HoldBinding>,
     pub(crate) paths: paths::PathEditor,
     pub(crate) guided: guided::GuidedPaths,
     pub(crate) attach_stencil: bool,

@@ -2324,3 +2324,40 @@ fn review_stencil_controls(g: &mut Guide) {
     assert!(g.app.document.stencil().is_none());
     assert!(g.app.document.geometry_snapshot() == before);
 }
+
+#[test]
+#[ignore = "renders viewport function menus; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn viewport_context_menu_offscreen_review() {
+    let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    for size in [[1100, 800], [640, 480]] {
+        let mut g = Guide::new(&directory, size);
+        g.interactive = true;
+        g.app
+            .document
+            .replace_geometry(crate::sculpt::Geometry::new(
+                Primitive::for_kind(PrimitiveKind::Cube).mesh().unwrap(),
+            ))
+            .unwrap();
+        g.app.dispatch(Command::ModelingMode(true), &g.ctx);
+        g.frame(vec![]);
+        let history = g.app.document.history_counts();
+        let before = g.app.document.geometry_snapshot();
+        click_guide_label(&mut g, "Tool menu");
+        assert!(g.app.ui.viewport_menu.context.is_some());
+        g.app.ui.viewport_menu.position =
+            Some(egui::pos2(size[0] as f32 - 10., size[1] as f32 - 10.));
+        g.save(&format!("viewport-menu-{}", size[0]));
+        assert!(
+            g.text_positions
+                .iter()
+                .any(|(t, _)| t == "Extrude and fuse")
+        );
+        click_guide_label(&mut g, "Inset");
+        assert_eq!(g.app.ui.modeling.tool, crate::viewport::ModelTool::Inset);
+        assert!(g.app.ui.viewport_menu.context.is_none());
+        assert_eq!(g.app.document.geometry_snapshot(), before);
+        assert_eq!(g.app.document.history_counts(), history);
+        g.app.viewport.destroy_renderer();
+    }
+}

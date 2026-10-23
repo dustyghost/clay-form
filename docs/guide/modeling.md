@@ -587,3 +587,13 @@ Merge bakes primitives and thickness modifier, uses current mesh levels, and res
 
 [Brushes and adaptive detail](sculpting.md) · [Masks and selection](selection.md) · [Import/export](files.md)
 
+
+### Switch functions beside the model
+
+Press **Q** over the viewport, or click **Tool menu** in the toolbar. The menu shows functions for the current face, edge or vertex mode, marks the active function, and keeps the current selection. Choose a function with the mouse/pen or use Up/Down and Enter. Escape, an outside click or focus loss dismisses the menu without editing geometry. Finish the current drag before opening it.
+
+Change or clear **Viewport tool menu** in **Settings → Key settings**. Its displayed tooltip follows the assigned shortcut; the default Q does not replace right-drag orbit or middle-drag pan. Existing custom bindings remain intact when preferences upgrade; if Q is already assigned, the new menu starts unbound.
+
+Holding the configured **Hold for visibility** chord opens the visibility menu instead. Choose Rectangle or Lasso and keep holding to select a region; release the hold to resume the previous Modeling/sculpt tool. Opening or closing the menu never paints or edits geometry, and releasing the hold while the menu is open closes it. Releasing the hold cancels an unfinished selection gesture; completed selections remain. Escape cancels temporary visibility until its hold is released. The selected shape is remembered during the session.
+
+Both the hold and menu invocation can be changed, cleared and reset in Key settings. Modifier-only and key-plus-modifier holds are supported. For example, set the visibility hold to Alt and the tool menu to F2: Alt+F2 opens the visibility chooser. The menu key ignores only the active hold's modifiers; unrelated shortcut modifiers still matter. Visibility takes priority over Smooth, Reverse, zoom/pan holds and Modeling selection subtraction while the full visibility chord is down; middle/right-button navigation remains available. Settings reports overlapping modifiers and action keys. Text entry and modal editors suppress tool shortcuts.

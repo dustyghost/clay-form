@@ -5,7 +5,7 @@ use crate::{
     document::Document,
     mesh_job::{MeshJob, Operation},
     persistence,
-    preferences::{self, Action, Preferences},
+    preferences::{self, Action, Preferences, Shortcut},
     tablet::Tablet,
     ui::UiState,
     viewport::{Viewport, ViewportOptions},
@@ -14,6 +14,7 @@ use eframe::egui;
 
 mod actions;
 mod commands;
+mod context_menu;
 mod diagnostics;
 mod files;
 mod jobs;
@@ -134,6 +135,45 @@ impl App {
         {
             return;
         }
+        if self.ui.viewport_menu.context.is_some() {
+            return;
+        }
+        let visibility = self.temporary_visibility_active(ctx);
+        let menu = self
+            .ui
+            .preferences
+            .shortcut(&Action::ViewportContextMenu)
+            .cloned();
+        let open_menu = menu.is_some_and(|binding| {
+            ctx.input_mut(|input| {
+                let mut found = false;
+                input.events.retain(|event| {
+                    let matches = Shortcut::from_event(event).is_some_and(|shortcut| {
+                        shortcut == binding
+                            || (visibility
+                                && self
+                                    .ui
+                                    .preferences
+                                    .visibility_hold
+                                    .matches_shortcut(&shortcut, &binding))
+                    });
+                    found |= matches;
+                    !matches
+                });
+                found
+            })
+        });
+        if open_menu {
+            self.open_viewport_menu(ctx);
+            return;
+        }
+        if visibility && let Some(key) = &self.ui.preferences.visibility_hold.key {
+            ctx.input_mut(|input| {
+                input.events.retain(|event| {
+                    Shortcut::from_event(event).is_none_or(|shortcut| &shortcut.key != key)
+                })
+            });
+        }
         for action in self.ui.preferences.actions(ctx) {
             self.execute_action(action, ctx);
             if self.ui.pending.is_some() || self.ui.file_picker.is_some() {
@@ -143,6 +183,39 @@ impl App {
     }
 
     pub(crate) fn show_viewport(&mut self, ui: &mut egui::Ui) {
+        self.ui.viewport_menu.viewport_rect = Some(ui.available_rect_before_wrap());
+        if !ui.input(|i| self.ui.preferences.visibility_hold.active(i)) {
+            self.ui.viewport_menu.suppress_visibility = false;
+        }
+        let menu_was_open = self.ui.viewport_menu.context.is_some();
+        self.show_viewport_menu(ui.ctx());
+        let mut temporary_visibility = self.temporary_visibility_active(ui.ctx());
+        if !menu_was_open && temporary_visibility && ui.input(|i| i.key_pressed(egui::Key::Escape))
+        {
+            self.ui.viewport_menu.suppress_visibility = true;
+            temporary_visibility = false;
+            self.viewport.cancel(&mut self.document);
+            self.viewport.wait_for_release();
+            ui.input_mut(|i| {
+                i.events.retain(|event| {
+                    !matches!(
+                        event,
+                        egui::Event::Key {
+                            key: egui::Key::Escape,
+                            ..
+                        }
+                    )
+                });
+            });
+        }
+        if self.ui.viewport_menu.visibility_was_active
+            && !temporary_visibility
+            && self.viewport.gesture == Some(crate::viewport::Gesture::Select)
+        {
+            self.viewport.cancel(&mut self.document);
+            self.viewport.wait_for_release();
+        }
+        self.ui.viewport_menu.visibility_was_active = temporary_visibility;
         self.paths.viewport_size = Some(ui.available_size());
         self.sync_path_brush_radius();
         self.show_paths(ui.ctx());
@@ -179,7 +252,9 @@ impl App {
         for command in primitive_commands {
             self.dispatch(command, ui.ctx());
         }
-        let enabled = self.ui.alphas.draft.is_none()
+        let enabled = !menu_was_open
+            && self.ui.viewport_menu.context.is_none()
+            && self.ui.alphas.draft.is_none()
             && self.ui.alphas.overwrite.is_none()
             && !self.ui.icon_capture_open()
             && self.ui.primitive_warning.is_none()
@@ -237,23 +312,41 @@ impl App {
         self.viewport.projection_mode = self.ui.projection.open;
         self.viewport.guided.enabled = self.ui.guide_paths;
         self.viewport.guided.path_starts_only = self.ui.path_starts_only;
+        self.viewport.visibility_hold = Some(if self.ui.viewport_menu.suppress_visibility {
+            Default::default()
+        } else {
+            self.ui.preferences.visibility_hold.clone()
+        });
         self.viewport.show(
             ui,
             &mut self.document,
             &mut self.camera,
             ViewportOptions {
-                edge_select: self.ui.edges.selecting,
+                edge_select: self.ui.edges.selecting && !temporary_visibility,
                 modeling: self
                     .ui
                     .modeling
                     .active
-                    .then_some(self.ui.modeling.options()),
+                    .then_some(self.ui.modeling.options())
+                    .filter(|_| !temporary_visibility),
                 arrange_references: self.ui.arrange_references,
                 references_visible: self.ui.references_visible,
-                slice: self.ui.slice_active.then_some(self.ui.slice_options),
-                select: self.ui.selection_tool,
+                slice: self
+                    .ui
+                    .slice_active
+                    .then_some(self.ui.slice_options)
+                    .filter(|_| !temporary_visibility),
+                select: if temporary_visibility {
+                    Some(self.ui.temporary_visibility_tool)
+                } else {
+                    self.ui.selection_tool
+                },
                 slice_path_mode: self.ui.slice_path_mode,
-                transform_mode: self.ui.transform_mode,
+                transform_mode: if temporary_visibility {
+                    crate::viewport::TransformMode::Sculpt
+                } else {
+                    self.ui.transform_mode
+                },
                 transform_operation: self.ui.transform_operation,
                 respect_mask: self.ui.respect_transform_mask,
                 selected,
@@ -281,6 +374,24 @@ impl App {
         );
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         self.ui.modeling.count = self.viewport.modeling.selection().len();
+        if temporary_visibility {
+            let rect = self.ui.viewport_menu.viewport_rect.unwrap_or(ui.max_rect());
+            ui.painter().text(
+                rect.left_top() + egui::vec2(12., 12.),
+                egui::Align2::LEFT_TOP,
+                format!(
+                    "Visibility · {} · hold {} · tool menu {}",
+                    self.ui.temporary_visibility_tool.label(),
+                    self.ui.preferences.visibility_hold.label(),
+                    self.ui
+                        .preferences
+                        .shortcut(&Action::ViewportContextMenu)
+                        .map_or("Unbound".into(), |s| s.label())
+                ),
+                egui::FontId::proportional(14.),
+                egui::Color32::WHITE,
+            );
+        }
         self.ui.modeling.can_repeat = self.viewport.modeling.last_edit.is_some();
         self.ui.modeling.repeat_label =
             self.viewport.modeling.last_edit.map_or(String::new(), |o| {
