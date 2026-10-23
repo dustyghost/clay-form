@@ -509,7 +509,13 @@ impl Viewport {
                 }
                 VisibilityShape::Path => false,
             };
-            if drag.start.distance(drag.end) >= 6. || region.is_some() {
+            let valid_preview = match settings.shape {
+                VisibilityShape::Lasso => region.is_some(),
+                VisibilityShape::Rectangle => drag.start.distance(drag.end) >= 4.,
+                VisibilityShape::Line => drag.start.distance(drag.end) >= 6.,
+                VisibilityShape::Path => false,
+            };
+            if valid_preview {
                 paint_visibility_faces(
                     painter,
                     scene,

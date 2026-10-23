@@ -13,25 +13,19 @@ impl App {
     }
     pub(crate) fn viewport_menu_context(&self, ctx: &egui::Context) -> ViewportMenuContext {
         if self.temporary_visibility_active(ctx) {
-            ViewportMenuContext::Visibility
-        } else if self.temporary_mask_requested(ctx) {
-            ViewportMenuContext::Mask
-        } else if matches!(
-            self.ui.selection_tool,
-            Some(crate::viewport::SelectionTool::Visibility(_))
-        ) {
-            ViewportMenuContext::Visibility
-        } else if matches!(
-            self.ui.selection_tool,
+            return ViewportMenuContext::Visibility;
+        }
+        if self.temporary_mask_requested(ctx) {
+            return ViewportMenuContext::Mask;
+        }
+        match self.ui.selection_tool {
+            Some(crate::viewport::SelectionTool::Visibility(_)) => ViewportMenuContext::Visibility,
             Some(
                 crate::viewport::SelectionTool::MaskLasso
-                    | crate::viewport::SelectionTool::MaskLassoOperation { .. }
-                    | crate::viewport::SelectionTool::MaskLine { .. }
-            )
-        ) {
-            ViewportMenuContext::Mask
-        } else {
-            ViewportMenuContext::Modeling
+                | crate::viewport::SelectionTool::MaskLassoOperation { .. }
+                | crate::viewport::SelectionTool::MaskLine { .. },
+            ) => ViewportMenuContext::Mask,
+            _ => ViewportMenuContext::Modeling,
         }
     }
     pub(crate) fn open_viewport_menu(&mut self, ctx: &egui::Context) {
