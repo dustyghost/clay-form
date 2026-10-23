@@ -47,7 +47,8 @@ impl App {
         if was_active && !ctx.input(|i| i.focused) {
             self.ui.mask_suppressed = true;
         }
-        if was_active && escape {
+        let mask_escape = escape && (was_active || (held && self.temporary_mask_available()));
+        if mask_escape {
             self.ui.mask_suppressed = true;
         }
         let over_viewport = ctx.input(|i| {
@@ -75,7 +76,7 @@ impl App {
         if held && !eligible && !ctx.wants_keyboard_input() {
             self.ui.status = "Hold to mask is available on an editable visible model in Sculpt or Modeling. Finish the current editor or transform first.".into();
         }
-        was_active && escape
+        mask_escape
     }
 
     pub(super) fn change_temporary_mask(&mut self, action: Action) {
@@ -113,13 +114,16 @@ impl App {
             preset.shape.label(),
             if preset.erase { "Erase" } else { "Add" }
         );
-        ui.painter().text(
-            ui.max_rect().center_top() + egui::vec2(0., 26.),
-            egui::Align2::CENTER_TOP,
+        let rect = self.ui.viewport_menu.viewport_rect.unwrap_or(ui.max_rect());
+        let color = egui::Color32::LIGHT_GREEN;
+        let galley = ui.painter().layout(
             text,
             egui::FontId::proportional(14.),
-            egui::Color32::LIGHT_GREEN,
+            color,
+            (rect.width() - 172.).max(120.),
         );
+        ui.painter()
+            .galley(rect.left_top() + egui::vec2(12., 42.), galley, color);
     }
 }
 
@@ -409,6 +413,22 @@ mod tests {
             "Escape suppresses held mode until its binding is released"
         );
         assert_eq!(app.viewport.modeling.selection(), &selection);
+        frame(&mut app, &ctx, Modifiers::NONE, vec![key(Key::M, false)]);
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::NONE,
+            vec![key(Key::M, true), key(Key::Escape, true)],
+        );
+        assert!(
+            !app.ui.mask_active,
+            "coalesced hold/Escape must not activate masking"
+        );
+        assert!(
+            app.ui.modeling.active,
+            "coalesced hold/Escape must preserve Modeling"
+        );
+        assert_eq!(app.viewport.modeling.selection(), &selection);
     }
 
     #[test]
@@ -570,6 +590,7 @@ mod tests {
         };
         app.viewport.initialize_renderer(&capture.state).unwrap();
         let ctx = egui::Context::default();
+        ctx.style_mut(|style| style.animation_time = 0.);
         let mut render = |app: &mut App, events| {
             let output = ctx.run(
                 egui::RawInput {
