@@ -311,6 +311,198 @@ fn reference_drop_embeds_the_file_and_focus_loss_discards_a_drag() {
     assert!(!app.document.is_dirty());
 }
 
+fn reference_drop_frame(app: &mut App, ctx: &egui::Context, files: Vec<egui::DroppedFile>) {
+    let _ = ctx.run(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                Pos2::ZERO,
+                Vec2::new(1000., 800.),
+            )),
+            dropped_files: files,
+            ..Default::default()
+        },
+        |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+        },
+    );
+}
+
+#[test]
+fn reference_native_drop_without_pointer_or_with_stale_position_imports_png_and_jpeg() {
+    let (mut app, ctx, _) = setup();
+    let directory = crate::recovery::tests::Directory::new();
+    std::fs::create_dir_all(&directory.0).unwrap();
+    let before = app.document.geometry_snapshot();
+    let history = app.document.history_counts();
+    for (name, events) in [
+        ("native.png", vec![egui::Event::PointerGone]),
+        (
+            "native.jpg",
+            vec![egui::Event::PointerMoved(Pos2::new(-10., -10.))],
+        ),
+    ] {
+        let path = directory.0.join(name);
+        image::RgbImage::from_pixel(16, 24, image::Rgb([30, 100, 180]))
+            .save(&path)
+            .unwrap();
+        navigation_frame(&mut app, &ctx, events);
+        let count = app.document.references().len();
+        reference_drop_frame(
+            &mut app,
+            &ctx,
+            vec![egui::DroppedFile {
+                path: Some(path.clone()),
+                ..Default::default()
+            }],
+        );
+        assert_eq!(
+            app.document.references().len(),
+            count + 1,
+            "{name} drop must not depend on normal pointer events"
+        );
+        assert!(app.ui.arrange_references && app.ui.references_visible);
+        assert_eq!(app.ui.selected_reference, count);
+        assert!(app.document.references()[count].placement.visible);
+        assert!(path.exists());
+    }
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert_eq!(app.document.history_counts(), history);
+}
+
+#[test]
+fn reference_native_drop_respects_modal_guards_and_reports_invalid_files() {
+    let (mut app, ctx, _) = setup();
+    let invalid = || egui::DroppedFile {
+        name: "broken.png".into(),
+        bytes: Some(vec![1, 2, 3].into()),
+        ..Default::default()
+    };
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerGone]);
+    let before = app.document.project();
+    app.ui.settings_open = true;
+    reference_drop_frame(&mut app, &ctx, vec![invalid()]);
+    assert!(app.document.project() == before);
+    assert!(!app.document.is_dirty());
+    app.ui.settings_open = false;
+    reference_drop_frame(&mut app, &ctx, vec![invalid()]);
+    assert!(app.ui.status.contains("PNG or JPEG"), "{}", app.ui.status);
+    assert!(app.document.project() == before);
+    assert!(!app.document.is_dirty());
+}
+
+#[test]
+fn reference_removal_preserves_sources_other_images_and_releases_capacity() {
+    let (mut app, ctx, _) = setup();
+    let directory = crate::recovery::tests::Directory::new();
+    std::fs::create_dir_all(&directory.0).unwrap();
+    let source = directory.0.join("source.png");
+    image::RgbImage::from_pixel(16, 24, image::Rgb([30, 100, 180]))
+        .save(&source)
+        .unwrap();
+    app.add_reference(egui::DroppedFile {
+        path: Some(source.clone()),
+        ..Default::default()
+    })
+    .unwrap();
+    let mut placement = app.document.references()[1].placement;
+    placement.visible = false;
+    placement.locked = true;
+    app.document.place_reference(1, placement).unwrap();
+    for _ in 2..crate::reference::MAX_REFERENCES {
+        app.document.add_reference(image()).unwrap();
+    }
+    let mut expected = app.document.references().to_vec();
+    expected.remove(1);
+    app.document.mark_saved("before-removal.clay");
+    app.dispatch(Command::RemoveReference(1), &ctx);
+    assert_eq!(app.document.references(), expected);
+    assert!(app.document.is_dirty());
+    assert!(
+        source.exists(),
+        "removing a reference must leave the source file intact"
+    );
+    let saved = directory.0.join("removed.clay");
+    assert!(app.save_to(&saved.to_string_lossy()));
+    assert_eq!(
+        persistence::load_project(&saved.to_string_lossy())
+            .unwrap()
+            .references,
+        expected
+    );
+    app.add_reference(egui::DroppedFile {
+        path: Some(source),
+        ..Default::default()
+    })
+    .unwrap();
+    assert_eq!(
+        app.document.references().len(),
+        crate::reference::MAX_REFERENCES
+    );
+}
+
+#[test]
+fn reference_remove_control_is_accessible_for_hidden_locked_image() {
+    use crate::preferences::{BuiltinMenu, Dock};
+    let (mut app, ctx, _) = setup();
+    let mut project = app.document.project();
+    project.references[0].name = "A long reference image study name".into();
+    app.document
+        .replace_project(project, "hidden.clay")
+        .unwrap();
+    let mut placement = app.document.references()[0].placement;
+    placement.visible = false;
+    placement.locked = true;
+    app.document.place_reference(0, placement).unwrap();
+    app.document.mark_saved("hidden.clay");
+    app.ui.references_visible = false;
+    for panel in &mut app.ui.preferences.panels {
+        panel.dock = Dock::Hidden;
+    }
+    app.ui
+        .preferences
+        .dock_menu(BuiltinMenu::References, Dock::Right);
+    let frame = |app: &mut App, events| {
+        ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, Vec2::new(760., 560.))),
+                events,
+                ..Default::default()
+            },
+            |ctx| {
+                for command in app.ui.toolbar(ctx, &app.document, &app.camera) {
+                    app.dispatch(command, ctx);
+                }
+                let commands = app
+                    .ui
+                    .brush_panel(ctx, &app.document, "Preview", 1., &app.camera);
+                for command in commands {
+                    app.dispatch(command, ctx);
+                }
+            },
+        )
+    };
+    frame(&mut app, vec![]);
+    let output = frame(&mut app, vec![]);
+    let point = output
+        .shapes
+        .iter()
+        .find_map(|shape| match &shape.shape {
+            egui::Shape::Text(t) if t.galley.text() == "Remove image" => {
+                let point = t.pos + t.galley.size() * 0.5;
+                shape.clip_rect.contains(point).then_some(point)
+            }
+            _ => None,
+        })
+        .expect("Remove image should be visible without scrolling the reference controls");
+    frame(
+        &mut app,
+        vec![egui::Event::PointerMoved(point), primary_event(point, true)],
+    );
+    frame(&mut app, vec![primary_event(point, false)]);
+    assert!(app.document.references().is_empty());
+    assert!(app.document.is_dirty());
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 #[ignore = "requires a Vulkan adapter (software lavapipe supported)"]

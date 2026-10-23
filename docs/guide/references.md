@@ -15,6 +15,8 @@ Under **References**, choose **Add image…** to browse PNG/JPEG files. Double-c
 
 The picker works inside the application, including on Sway/Wayland where native file drops may not be delivered. **Cancel** or **Escape** leaves the project unchanged. Invalid images show an error in the picker so you can choose another file.
 
+Where the desktop supports file drops, you can also drop a PNG/JPEG anywhere in the application window. Drops do not require a current pointer position. Finish any open modal dialog before dropping. The current native Wayland backend does not deliver file drops; use **Add image…** there. X11/XWayland supports file-manager drops.
+
 Adding enters **Arrange images**. The file is embedded in the project, so moving/deleting its source later will not break it. PNG transparency and JPEG orientation metadata are supported.
 
 ## Example: keep two studies beside the sculpt
@@ -47,7 +49,9 @@ Choose **Arrange images** to edit placements. Primary drags move images; they do
 | Lock position and size | Prevent accidental movement while arranging |
 | Row visibility checkbox | Hide/show one image |
 | Show references | Temporarily hide/show the collection |
-| Remove image | Remove it from the project |
+| Remove image, beside the selected image name | Remove it from the project, including hidden or locked images |
+
+**Remove image** removes the embedded copy and frees its project image allowance. It leaves the original file on disk untouched; save the project to keep the removal. Use the visibility checkboxes when you only want to hide an image.
 
 Choose **Done** before sculpting again. Outside Arrange mode, images let sculpting and navigation gestures pass through them. If images overlap, select the one you need in the list; later images appear on top.
 
