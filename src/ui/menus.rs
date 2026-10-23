@@ -459,6 +459,7 @@ impl UiState {
                 }
             }
             BuiltinMenu::Mask => {
+                self.temporary_mask_controls(ui, document, commands);
                 let mut threshold = document
                     .model(document.active_model_index())
                     .unwrap()

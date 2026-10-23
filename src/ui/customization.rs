@@ -913,9 +913,13 @@ impl UiState {
                     for value in Hold::ALL { ui.selectable_value(hold, value, format!("{value:?}")); }
                 });
             }
+            super::context_menu::hold_binding_editor(ui, "Hold to mask", &mut self.preferences.mask_hold);
+            for conflict in self.mask_binding_conflicts() { ui.colored_label(egui::Color32::YELLOW, conflict); }
+            ui.weak("Masking takes priority over brush and navigation modifiers while held; visibility wins overlapping holds. Right/middle drag and wheel remain available.");
             ui.weak("Zoom takes priority over pan with shared modifiers. Pan starts off the model; on the model, brush modifiers apply. Ctrl+Shift selects visibility regions.");
             if ui.button("Reset keys to defaults").clicked() {
                 let defaults = Preferences::default();
+                self.preferences.mask_hold = defaults.mask_hold;
                 self.preferences.bindings = defaults.bindings; self.preferences.smooth = defaults.smooth;
                 self.preferences.reverse = defaults.reverse; self.preferences.zoom_hold = defaults.zoom_hold; self.preferences.pan_hold = defaults.pan_hold;
                 self.capturing = None; self.settings_message.clear();

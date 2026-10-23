@@ -17,6 +17,7 @@ mod commands;
 mod diagnostics;
 mod files;
 mod jobs;
+mod masking;
 pub(crate) mod paths;
 mod projection;
 mod recovery;
@@ -143,6 +144,7 @@ impl App {
     }
 
     pub(crate) fn show_viewport(&mut self, ui: &mut egui::Ui) {
+        let mask_consumes_escape = self.update_temporary_mask(ui);
         self.paths.viewport_size = Some(ui.available_size());
         self.sync_path_brush_radius();
         self.show_paths(ui.ctx());
@@ -155,6 +157,7 @@ impl App {
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         if self.ui.file_picker.is_none()
             && self.ui.edges.selecting
+            && !mask_consumes_escape
             && !ui.ctx().wants_keyboard_input()
             && ui.input(|i| i.key_pressed(egui::Key::Escape))
         {
@@ -166,6 +169,7 @@ impl App {
         self.ui.modeling.count = self.viewport.modeling.selection().len();
         if self.ui.file_picker.is_none()
             && self.ui.modeling.active
+            && !mask_consumes_escape
             && !ui.ctx().wants_keyboard_input()
             && ui.input(|i| i.key_pressed(egui::Key::Escape))
         {
@@ -235,28 +239,31 @@ impl App {
             .clone()
             .or_else(|| self.projection.draft.as_ref().map(|d| d.mesh.clone()));
         self.viewport.projection_mode = self.ui.projection.open;
-        self.viewport.guided.enabled = self.ui.guide_paths;
+        self.viewport.guided.enabled = self.ui.guide_paths && !self.ui.mask_active;
         self.viewport.guided.path_starts_only = self.ui.path_starts_only;
         self.viewport.show(
             ui,
             &mut self.document,
             &mut self.camera,
             ViewportOptions {
-                edge_select: self.ui.edges.selecting,
+                edge_select: self.ui.edges.selecting && !self.ui.mask_active,
                 modeling: self
                     .ui
                     .modeling
                     .active
-                    .then_some(self.ui.modeling.options()),
+                    .then_some(self.ui.modeling.options())
+                    .filter(|_| !self.ui.mask_active),
                 arrange_references: self.ui.arrange_references,
                 references_visible: self.ui.references_visible,
                 slice: self.ui.slice_active.then_some(self.ui.slice_options),
-                select: self.ui.selection_tool,
+                select: if self.ui.mask_active { self.ui.preferences.mask_preset.selection_tool() } else { self.ui.selection_tool },
                 slice_path_mode: self.ui.slice_path_mode,
                 transform_mode: self.ui.transform_mode,
                 transform_operation: self.ui.transform_operation,
                 respect_mask: self.ui.respect_transform_mask,
                 selected,
+                temporary_mask: self.ui.mask_active,
+                mask_erase: self.ui.preferences.mask_preset.erase,
                 pressure: self.pressure,
                 wire: self.ui.wire,
                 wire_mode: self.ui.wire_mode,
@@ -274,12 +281,16 @@ impl App {
                         || (!over_toolbar
                             && !over_editor
                             && !self.ui.pointer_over_pinned_menu(ui.ctx()))),
-                reverse: self.ui.preferences.reverse,
-                zoom_hold: self.ui.preferences.zoom_hold,
-                pan_hold: self.ui.preferences.pan_hold,
+                reverse: if self.ui.mask_active { preferences::Hold::Disabled } else { self.ui.preferences.reverse },
+                zoom_hold: if self.ui.mask_active { preferences::Hold::Disabled } else { self.ui.preferences.zoom_hold },
+                pan_hold: if self.ui.mask_active { preferences::Hold::Disabled } else { self.ui.preferences.pan_hold },
             },
         );
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
+        if self.ui.mask_active {
+            self.viewport.modeling.accept_mask_revision(&self.document);
+            self.paint_temporary_mask_status(ui);
+        }
         self.ui.modeling.count = self.viewport.modeling.selection().len();
         self.ui.modeling.can_repeat = self.viewport.modeling.last_edit.is_some();
         self.ui.modeling.repeat_label =
