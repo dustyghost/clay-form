@@ -124,6 +124,9 @@ impl App {
                 None
             }
             Action::ModelTarget(span) => {
+                if !self.ui.modeling.active {
+                    self.dispatch(Command::ModelingMode(true), ctx);
+                }
                 self.viewport.cancel(&mut self.document);
                 self.ui.modeling.span = span;
                 None

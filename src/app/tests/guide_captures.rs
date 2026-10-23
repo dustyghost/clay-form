@@ -2422,13 +2422,50 @@ fn viewport_context_menu_offscreen_review() {
         g.app.ui.viewport_menu.position =
             Some(egui::pos2(size[0] as f32 - 10., size[1] as f32 - 10.));
         g.save(&format!("viewport-menu-{}", size[0]));
-        assert!(
-            g.text_positions
-                .iter()
-                .any(|(t, _)| t == "Extrude and fuse")
+        click_guide_label(&mut g, "Edge");
+        assert_eq!(g.app.ui.modeling.mode, crate::viewport::ComponentMode::Edge);
+        assert!(g.app.ui.viewport_menu.context.is_some());
+        click_guide_label(&mut g, "Parallel edges");
+        assert_eq!(g.app.ui.modeling.span, crate::viewport::SelectionSpan::Ring);
+        assert!(g.app.ui.viewport_menu.context.is_some());
+        g.save(&format!("viewport-menu-edge-{}", size[0]));
+        click_guide_label(&mut g, "Vertex");
+        assert_eq!(
+            g.app.ui.modeling.mode,
+            crate::viewport::ComponentMode::Vertex
         );
-        click_guide_label(&mut g, "Inset");
-        assert_eq!(g.app.ui.modeling.tool, crate::viewport::ModelTool::Inset);
+        click_guide_label(&mut g, "Connected");
+        assert_eq!(
+            g.app.ui.modeling.span,
+            crate::viewport::SelectionSpan::Connected
+        );
+        click_guide_label(&mut g, "Face");
+        assert_eq!(g.app.ui.modeling.mode, crate::viewport::ComponentMode::Face);
+        assert_eq!(g.app.ui.viewport_menu.selected, 0);
+        // Up from the first selector wraps to the last function and reveals it,
+        // including when the small-window menu needs to scroll.
+        for pressed in [true, false] {
+            g.frame(vec![egui::Event::Key {
+                key: egui::Key::ArrowUp,
+                physical_key: None,
+                pressed,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }]);
+        }
+        g.save(&format!("viewport-menu-keyboard-{}", size[0]));
+        let point = g
+            .text_positions
+            .iter()
+            .find(|(text, _)| text == "Split face")
+            .expect("last Modeling function remains available")
+            .1;
+        assert!(point.y > 0. && point.y < size[1] as f32 - 10.);
+        click_guide_label(&mut g, "Split face");
+        assert_eq!(
+            g.app.ui.modeling.tool,
+            crate::viewport::ModelTool::FaceSplit
+        );
         assert!(g.app.ui.viewport_menu.context.is_none());
         assert_eq!(g.app.document.geometry_snapshot(), before);
         assert_eq!(g.app.document.history_counts(), history);
