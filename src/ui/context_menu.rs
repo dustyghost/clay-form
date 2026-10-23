@@ -1,6 +1,6 @@
 //! Shared viewport tool chooser. Consumers supply actions; this popup never edits geometry.
 use super::*;
-use crate::viewport::{ModelTool, SelectionTool};
+use crate::viewport::{ComponentMode, ModelTool, SelectionSpan, SelectionTool};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ViewportMenuContext {
@@ -32,6 +32,32 @@ pub(crate) struct ViewportMenuEntry {
     pub selected: bool,
     pub enabled: bool,
     pub hint: String,
+}
+
+fn menu_entry(
+    ui: &mut egui::Ui,
+    entry: &ViewportMenuEntry,
+    keyboard_selected: bool,
+    compact: bool,
+    reveal: bool,
+) -> bool {
+    let label = if entry.selected {
+        format!("{} (active)", entry.label)
+    } else {
+        entry.label.clone()
+    };
+    let response = ui
+        .add_enabled(
+            entry.enabled,
+            egui::Button::new(label)
+                .selected(keyboard_selected)
+                .min_size(egui::vec2(if compact { 0. } else { 230. }, 32.)),
+        )
+        .on_hover_text(&entry.hint);
+    if keyboard_selected && reveal {
+        response.scroll_to_me(Some(egui::Align::Center));
+    }
+    response.clicked()
 }
 
 /// Modifier-only chords and key-plus-modifier chords share one persisted representation.
@@ -79,7 +105,34 @@ impl UiState {
         document: &Document,
     ) -> Vec<ViewportMenuEntry> {
         match context {
-            ViewportMenuContext::Modeling => [
+            ViewportMenuContext::Modeling => {
+                let mut entries: Vec<_> = [
+                    (ComponentMode::Face, Action::ModelFaces, "Face"),
+                    (ComponentMode::Edge, Action::ModelEdges, "Edge"),
+                    (ComponentMode::Vertex, Action::ModelVertices, "Vertex"),
+                ]
+                .into_iter()
+                .map(|(mode, action, label)| ViewportMenuEntry {
+                    enabled: self.action_enabled(&action, document),
+                    action,
+                    label: label.into(),
+                    selected: self.modeling.mode == mode,
+                    hint: "Switch component mode and convert the current selection, without editing geometry.".into(),
+                })
+                .collect();
+                entries.extend(SelectionSpan::ALL.into_iter()
+                    .filter(|span| span.available(self.modeling.mode))
+                    .map(|span| {
+                        let action = Action::ModelTarget(span);
+                        ViewportMenuEntry {
+                            enabled: self.action_enabled(&action, document),
+                            action,
+                            label: span.label().into(),
+                            selected: self.modeling.span == span,
+                            hint: "Choose what the next Modeling gesture targets. Keeps the current tool and selection.".into(),
+                        }
+                    }));
+                entries.extend([
                 ModelTool::Select,
                 ModelTool::Move,
                 ModelTool::Rotate,
@@ -122,7 +175,9 @@ impl UiState {
                     },
                 }
             })
-            .collect(),
+            );
+                entries
+            }
             ViewportMenuContext::Visibility => [
                 (
                     Action::TemporaryVisibilityRectangle,
@@ -190,13 +245,16 @@ impl UiState {
         let mut action = None;
         let count = entries.len();
         let mut index = self.viewport_menu.selected.min(count.saturating_sub(1));
+        let mut navigated = false;
         ctx.input_mut(|i| {
             if count > 0 {
                 if consume_menu_key(i, egui::Key::ArrowDown) {
                     index = (index + 1) % count;
+                    navigated = true;
                 }
                 if consume_menu_key(i, egui::Key::ArrowUp) {
                     index = (index + count - 1) % count;
+                    navigated = true;
                 }
                 if consume_menu_key(i, egui::Key::Enter) && entries[index].enabled {
                     action = Some(entries[index].action.clone());
@@ -233,21 +291,39 @@ impl UiState {
         .order(egui::Order::Foreground)
         .show(ctx, |ui| {
             ui.weak("Up/Down choose · Enter apply · Escape close");
+            if context == ViewportMenuContext::Modeling {
+                ui.strong("Component");
+                ui.horizontal_wrapped(|ui| {
+                    for (i, entry) in entries.iter().take(3).enumerate() {
+                        if menu_entry(ui, entry, i == index, true, navigated) {
+                            self.viewport_menu.selected = i;
+                            action = Some(entry.action.clone());
+                        }
+                    }
+                });
+                ui.strong("Target");
+                ui.horizontal_wrapped(|ui| {
+                    for (i, entry) in entries
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, entry)| matches!(entry.action, Action::ModelTarget(_)))
+                    {
+                        if menu_entry(ui, entry, i == index, true, navigated) {
+                            self.viewport_menu.selected = i;
+                            action = Some(entry.action.clone());
+                        }
+                    }
+                });
+                ui.separator();
+                ui.strong("Function");
+            }
             for (i, entry) in entries.iter().enumerate() {
-                let label = if entry.selected {
-                    format!("{} (active)", entry.label)
-                } else {
-                    entry.label.clone()
-                };
-                let response = ui
-                    .add_enabled(
-                        entry.enabled,
-                        egui::Button::new(label)
-                            .selected(i == index)
-                            .min_size(egui::vec2(230., 32.)),
-                    )
-                    .on_hover_text(&entry.hint);
-                if response.clicked() {
+                if context == ViewportMenuContext::Modeling
+                    && !matches!(entry.action, Action::ModelTool(_))
+                {
+                    continue;
+                }
+                if menu_entry(ui, entry, i == index, false, navigated) {
                     action = Some(entry.action.clone());
                 }
             }
@@ -261,7 +337,16 @@ impl UiState {
                             .is_some_and(|p| !r.response.rect.contains(p))
                 })
             });
-        let closed = !open || outside || action.is_some();
+        let selection_option = matches!(
+            action,
+            Some(
+                Action::ModelFaces
+                    | Action::ModelEdges
+                    | Action::ModelVertices
+                    | Action::ModelTarget(_)
+            )
+        );
+        let closed = !open || outside || (action.is_some() && !selection_option);
         if closed {
             self.viewport_menu.context = None;
         }
