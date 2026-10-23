@@ -76,7 +76,9 @@ fn alpha_weight(input: vec2f) -> f32 {
   let offset=v.position-u.brush_center.xyz;
   if u.brush_normal.w==1. && length(offset)<=u.brush_center.w*1.5 && dot(normalize(v.normal),u.brush_normal.xyz)>=0.1 {
    let weight=alpha_weight(vec2f(dot(offset,u.right.xyz),dot(offset,u.up.xyz))/u.brush_center.w);
-   rgb=mix(rgb,u.brush_color.xyz,weight*(90./255.));
+   // Lift faint image details for placement without changing sculpt strength.
+   let opacity=select(weight*(90./255.),sqrt(clamp(weight,0.,1.))*0.75,u.brush_color.w==3.);
+   rgb=mix(rgb,u.brush_color.xyz,opacity);
   }
  }
  return vec4f(rgb,1.);

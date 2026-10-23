@@ -239,7 +239,7 @@ impl Stencil {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Projection {
     pub image: Alpha,
     pub frame: Frame,

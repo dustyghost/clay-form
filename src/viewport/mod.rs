@@ -115,6 +115,12 @@ pub(crate) struct ViewportOptions {
     pub pan_hold: Hold,
 }
 impl Viewport {
+    #[cfg(test)]
+    pub(crate) fn stamp_preview_pending(&self) -> bool {
+        self.pending_stroke
+            .as_ref()
+            .is_some_and(|stroke| stroke.preview.refining())
+    }
     fn record_cleanup(&mut self, document: &Document, before: (usize, usize)) {
         if let Some((vertices, faces)) = self.smooth_removed.as_mut() {
             *vertices += before.0.saturating_sub(document.mesh().vertices.len());
@@ -883,6 +889,7 @@ impl Viewport {
                 && let Some(anchor) = scene.pick(start)
             {
                 self.pending_stroke = Some(stroke::PendingStroke {
+                    preview: Default::default(),
                     start,
                     end: start,
                     brush,

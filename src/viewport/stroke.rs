@@ -2,10 +2,14 @@
 use super::{gpu::Renderer, scene::Scene};
 use crate::{
     document::Document,
-    sculpt::{AdaptiveBudget, Brush, Dab, Mesh, StrokeMode, Vec3},
+    sculpt::{Brush, Dab, StrokeMode, Vec3},
 };
 use eframe::egui::{self, Color32, Pos2};
+mod preview;
+pub(super) use preview::Preview;
+
 pub(super) struct PendingStroke {
+    pub preview: Preview,
     pub start: Pos2,
     pub end: Pos2,
     pub brush: Brush,
@@ -81,7 +85,7 @@ impl PendingStroke {
         painter.text(
             target + egui::vec2(12., -20.),
             egui::Align2::LEFT_BOTTOM,
-            "Release to apply · Esc to cancel",
+            self.preview.hint(),
             egui::FontId::proportional(12.),
             color,
         );
@@ -92,39 +96,14 @@ impl PendingStroke {
             StrokeMode::DragRect | StrokeMode::DragDot
         )
     }
-    pub fn preview_mesh(&self, document: &Document, scene: &Scene) -> Mesh {
-        let mut mesh = document.mesh().clone();
-        if self.stencil.is_some()
-            && matches!(
-                self.brush.kind,
-                crate::sculpt::Kind::Grab
-                    | crate::sculpt::Kind::Snake
-                    | crate::sculpt::Kind::Detail
-            )
-        {
-            return mesh;
-        }
-        let brush = self.posed_brush();
-        let mut budget = AdaptiveBudget::default();
-        let settings = &document.mesh_settings().adaptive;
-        let stencils = self
-            .stencil
-            .as_ref()
-            .map_or_else(Vec::new, |s| s.copies(document.symmetry()));
-        for dab in self.dabs(scene) {
-            let dabs = document.symmetry().dabs(dab);
-            let region = crate::sculpt::AdaptiveRegion {
-                dabs: &dabs,
-                stencils: &stencils,
-            };
-            mesh.adapt_stenciled(&brush, region, settings, &mut budget, true);
-            mesh.prepare_stenciled_stamp(&brush, &dabs, &stencils, settings);
-            mesh.stamp_many_stenciled(&brush, &dabs, &stencils);
-            mesh.adapt_stenciled(&brush, region, settings, &mut budget, false);
-        }
-        mesh
+    #[cfg(test)]
+    pub fn preview_mesh(&self, document: &Document, scene: &Scene) -> crate::sculpt::Mesh {
+        preview::Request::new(self, document, scene)
+            .render(document.mesh(), true, &|| false)
+            .expect("synchronous preview cannot be cancelled")
     }
     pub fn commit(self, document: &mut Document, scene: &Scene) {
+        self.preview.cancel();
         let brush = self.posed_brush();
         for dab in self.dabs(scene) {
             document.apply_dab_stenciled(&brush, dab, self.stencil.as_ref());
@@ -193,6 +172,7 @@ mod tests {
         brush.stroke_mode = StrokeMode::DragRect;
         brush.strength = 1.;
         let stroke = PendingStroke {
+            preview: Default::default(),
             start: rect.center(),
             end: rect.center() + egui::vec2(80., 0.),
             brush,
@@ -295,6 +275,7 @@ mod tests {
                     brush.stroke_mode = mode;
                     brush.radius = 60.;
                     let stroke = PendingStroke {
+                        preview: Default::default(),
                         start: rect.center(),
                         end: rect.center() + egui::vec2(60., 0.),
                         stencil: None,
