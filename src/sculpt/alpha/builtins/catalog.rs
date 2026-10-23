@@ -1,6 +1,6 @@
 //! Additional sculpting heights: deterministic patterns
 //! with a protected feathered border for stamping.
-use super::{Alpha, Asset, border, pattern, ridge, segment_distance};
+use super::{Alpha, Asset, border, natural, pattern, ridge, segment_distance};
 
 pub(super) fn append(assets: &mut Vec<Asset>) {
     add(assets, "Weathered bricks", "Masonry", |x, y| {
@@ -9,21 +9,12 @@ pub(super) fn append(assets: &mut Vec<Asset>) {
     add(assets, "Broken bricks", "Masonry", |x, y| {
         bricks(x, y, true)
     });
-    add(assets, "Old cobbles", "Masonry", |x, y| {
-        stones(x * 4.5, y * 5., 0.16)
-    });
-    add(assets, "Rough stone blocks", "Masonry", |x, y| {
-        let (u, v, seed) = stagger(x, y, 2.4, 3.3);
-        let edge = u.min(1. - u).min(v.min(1. - v));
-        smooth((edge - 0.045 - 0.045 * grain(x * 36., y * 36., 7)) / 0.10)
-            * (0.55 + 0.30 * grain(x * 12., y * 12., 31) + 0.15 * seed)
-    });
-    add(assets, "Flagstones", "Masonry", |x, y| {
-        stones(x * 2.9, y * 3.1, 0.09)
-    });
+    add(assets, "Old cobbles", "Masonry", natural::cobbles);
+    add(assets, "Rough stone blocks", "Masonry", natural::blocks);
+    add(assets, "Flagstones", "Masonry", natural::flagstones);
+    let cracks = natural::plaster();
     add(assets, "Cracked plaster", "Masonry", |x, y| {
-        let (_, gap) = cells(x * 4., y * 4., 29);
-        smooth((gap - 0.025) / 0.09) * (0.65 + 0.35 * grain(x * 40., y * 40., 11))
+        natural::strokes(&cracks, x, y)
     });
 
     add(assets, "Circuit traces", "Circuits", |x, y| {
@@ -149,68 +140,40 @@ pub(super) fn append(assets: &mut Vec<Asset>) {
         seam.max(ridge((u.abs() - 0.42).abs(), 0.035) * ridge(v.abs(), 0.20))
     });
 
+    let fine = natural::wrinkles(false);
+    let deep = natural::wrinkles(true);
+    let crows = natural::crows_feet();
     add(assets, "Fine wrinkles", "Skin", |x, y| {
-        wrinkles(x, y, 13., 0.045)
+        natural::strokes(&fine, x, y)
     });
     add(assets, "Deep folds", "Skin", |x, y| {
-        wrinkles(x, y, 4.2, 0.15)
+        natural::strokes(&deep, x, y)
     });
     add(assets, "Crow's feet", "Skin", |x, y| {
-        let origin = [-0.65, -0.10];
-        let mut h = 0_f32;
-        for i in 0..7 {
-            let angle = -0.72 + i as f32 * 0.24;
-            let along = (x - origin[0]) * angle.cos() + (y - origin[1]) * angle.sin();
-            let across = -(x - origin[0]) * angle.sin() + (y - origin[1]) * angle.cos();
-            let bend = 0.04 * (along * 7. + i as f32).sin() * along;
-            let fade = smooth(along / 0.18) * smooth((1.45 - along) / 0.4);
-            h = h.max(ridge((across + bend).abs(), 0.018 + 0.017 * along.max(0.)) * fade);
-        }
-        h
+        natural::strokes(&crows, x, y)
     });
+
     add(assets, "Skin pores", "Skin", |x, y| {
         let (r, _) = cells(x * 16., y * 16., 67);
         ridge(r, 0.27) * (0.6 + 0.4 * grain(x * 14., y * 14., 19))
     });
-    add(assets, "Fingerprint", "Skin", |x, y| {
-        let r = (x * x + (y * 0.78 + 0.15).powi(2)).sqrt();
-        let phase = r * 24. + 0.32 * y.atan2(x);
-        ridge((phase.rem_euclid(1.) - 0.5).abs(), 0.28)
-            * smooth((0.85 - (x * x + y * y).sqrt()) / 0.2)
-    });
-    add(assets, "Scar tissue", "Skin", |x, y| {
-        let path = 0.13 * (y * 4.).sin() + 0.025 * (y * 17.).sin();
-        let scar = ridge((x - path).abs(), 0.075) * 0.65;
-        let stitches =
-            ridge(((y * 7.).rem_euclid(1.) - 0.5).abs(), 0.12) * ridge((x - path).abs(), 0.22);
-        scar.max(stitches) * smooth((0.85 - y.abs()) / 0.15)
-    });
+    add(assets, "Fingerprint", "Skin", natural::fingerprint);
+    add(assets, "Scar tissue", "Skin", natural::scar);
 
-    add(assets, "Tree bark", "Organic", |x, y| {
-        let wave = x * 9. + 0.75 * grain(x * 3., y * 3., 41) + 0.15 * (y * 6.).sin();
-        smooth(((wave.rem_euclid(1.) - 0.5).abs() - 0.065) / 0.20)
-            * (0.40 + 0.60 * grain(x * 20., y * 10., 47))
-    });
-    add(assets, "Rock strata", "Organic", |x, y| {
-        let wave = y * 7. + x * 0.8 + 0.55 * grain(x * 3., y * 3., 53);
-        let layer = smooth(wave.rem_euclid(1.) / 0.14) * smooth((1. - wave.rem_euclid(1.)) / 0.5);
-        layer * (0.55 + 0.45 * grain(x * 30., y * 25., 59))
-    });
-    add(assets, "Cracked earth", "Organic", |x, y| {
-        let (r, gap) = cells(x * 4.8, y * 4.8, 79);
-        smooth((gap - 0.035) / 0.10)
-            * (0.40 + 0.35 * r.min(1.) + 0.25 * grain(x * 22., y * 22., 83))
-    });
+    add(assets, "Tree bark", "Organic", natural::bark);
+    add(assets, "Rock strata", "Organic", natural::strata);
+    add(assets, "Cracked earth", "Organic", natural::earth);
+
     add(assets, "Scales", "Organic", |x, y| {
         let (u, v, _) = stagger(x, y, 5., 6.);
         let r = (((u - 0.5) / 0.48).powi(2) + ((v - 0.3) / 0.66).powi(2)).sqrt();
         smooth((1. - r) / 0.15) * (0.35 + 0.65 * (1. - v))
     });
+    let fur = natural::fur();
     add(assets, "Fur strands", "Organic", |x, y| {
-        let phase = x * 22. + 0.7 * (y * 3. + x * 2.).sin() + 0.2 * grain(x * 9., y * 4., 97);
-        ridge((phase.rem_euclid(1.) - 0.5).abs(), 0.22)
-            * (0.45 + 0.55 * grain(x * 15., y * 3., 101))
+        natural::strokes(&fur, x, y)
     });
+
     add(assets, "Woven cloth", "Materials", |x, y| {
         let ix = (x * 11.).floor() as i32;
         let iy = (y * 11.).floor() as i32;
@@ -227,10 +190,7 @@ pub(super) fn append(assets: &mut Vec<Asset>) {
         let (r, gap) = cells(x * 14., y * 14., 107);
         smooth(gap / 0.15) * (0.45 + 0.35 * (1. - r.min(1.)) + 0.20 * grain(x * 50., y * 50., 109))
     });
-    add(assets, "Hammered metal", "Materials", |x, y| {
-        let (r, gap) = cells(x * 7., y * 7., 113);
-        (0.25 + 0.75 * smooth((r / 0.85).min(1.))) * smooth(gap / 0.03)
-    });
+    add(assets, "Hammered metal", "Materials", natural::hammered);
 }
 
 fn add(assets: &mut Vec<Asset>, name: &str, category: &str, sample: impl Fn(f32, f32) -> f32) {
@@ -244,18 +204,18 @@ fn add(assets: &mut Vec<Asset>, name: &str, category: &str, sample: impl Fn(f32,
     }
     assets.push(asset);
 }
-fn smooth(t: f32) -> f32 {
+pub(super) fn smooth(t: f32) -> f32 {
     let t = t.clamp(0., 1.);
     t * t * (3. - 2. * t)
 }
-fn hash(x: i32, y: i32, seed: u32) -> f32 {
+pub(super) fn hash(x: i32, y: i32, seed: u32) -> f32 {
     let mut h = (x as u32).wrapping_mul(374761393)
         ^ (y as u32).wrapping_mul(668265263)
         ^ seed.wrapping_mul(2246822519);
     h = (h ^ (h >> 13)).wrapping_mul(1274126177);
     ((h ^ (h >> 16)) & 0x00ff_ffff) as f32 / 16777215.
 }
-fn noise(x: f32, y: f32, seed: u32) -> f32 {
+pub(super) fn noise(x: f32, y: f32, seed: u32) -> f32 {
     let ix = x.floor() as i32;
     let iy = y.floor() as i32;
     let u = smooth(x - x.floor());
@@ -263,7 +223,7 @@ fn noise(x: f32, y: f32, seed: u32) -> f32 {
     (hash(ix, iy, seed) * (1. - u) + hash(ix + 1, iy, seed) * u) * (1. - v)
         + (hash(ix, iy + 1, seed) * (1. - u) + hash(ix + 1, iy + 1, seed) * u) * v
 }
-fn grain(x: f32, y: f32, seed: u32) -> f32 {
+pub(super) fn grain(x: f32, y: f32, seed: u32) -> f32 {
     0.55 * noise(x, y, seed)
         + 0.30 * noise(x * 2., y * 2., seed + 1)
         + 0.15 * noise(x * 4., y * 4., seed + 2)
@@ -282,16 +242,17 @@ fn bricks(x: f32, y: f32, broken: bool) -> f32 {
     let edge = u.min(1. - u).min(v.min(1. - v) * 0.65);
     let erosion = 0.018 + 0.055 * grain(x * 29., y * 29., 5);
     let face = smooth((edge - erosion) / 0.045);
-    let rough = 0.53 + 0.30 * grain(x * 48., y * 48., 7) + 0.17 * seed;
-    let damage = if broken {
-        let crack = (u - 0.35 - 0.18 * (v * 6. + seed * 9.).sin()).abs();
+    let rough = 0.74 + 0.10 * grain(x * 48., y * 48., 7) + 0.16 * seed;
+    let damage = if broken && seed > 0.36 {
+        let crack =
+            (u - (0.20 + 0.55 * seed) - 0.12 * (v * (5. + seed * 4.) + seed * 9.).sin()).abs();
         smooth((crack - 0.015) / 0.04) * smooth(((u - 0.5).abs() + v - 0.13 * seed) / 0.15)
     } else {
         1.
     };
     face * rough * damage
 }
-fn cells(x: f32, y: f32, seed: u32) -> (f32, f32) {
+pub(super) fn cells(x: f32, y: f32, seed: u32) -> (f32, f32) {
     let mut first = f32::INFINITY;
     let mut second = f32::INFINITY;
     for dy in -1..=1 {
@@ -310,11 +271,6 @@ fn cells(x: f32, y: f32, seed: u32) -> (f32, f32) {
         }
     }
     (first, second - first)
-}
-fn stones(x: f32, y: f32, mortar: f32) -> f32 {
-    let (r, gap) = cells(x, y, 23);
-    smooth((gap - mortar * 0.4) / mortar)
-        * (0.5 + 0.30 * (1. - r).max(0.) + 0.20 * grain(x * 8., y * 8., 27))
 }
 fn rounded_box(x: f32, y: f32, w: f32, h: f32, bevel: f32) -> f32 {
     smooth((w - x.abs()).min(h - y.abs()) / bevel)
@@ -360,9 +316,4 @@ fn circuit(x: f32, y: f32, hub: bool) -> f32 {
         h = h.max(ridge((x.abs().max(y.abs()) - 0.31).abs(), 0.02));
     }
     h
-}
-fn wrinkles(x: f32, y: f32, frequency: f32, width: f32) -> f32 {
-    let wave = y * frequency + 0.4 * (x * 4.).sin() + 0.18 * grain(x * 4., y * 3., 61);
-    let distance = (wave.rem_euclid(1.) - 0.5).abs() / frequency;
-    ridge(distance, width * 0.5) * (0.45 + 0.55 * grain(x * 7., y * 3., 63))
 }

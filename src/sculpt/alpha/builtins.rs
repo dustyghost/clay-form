@@ -2,6 +2,7 @@
 use super::{Alpha, Asset};
 use std::sync::OnceLock;
 mod catalog;
+mod natural;
 
 pub fn builtins() -> &'static [Asset] {
     static ASSETS: OnceLock<Vec<Asset>> = OnceLock::new();
@@ -62,26 +63,8 @@ pub fn builtins() -> &'static [Asset] {
             }
             (0.16 + 0.84 * vein) * edge
         }));
-        assets.push(pattern("Wood grain", |x, y| {
-            let knot = (-((x - 0.2).powi(2) * 7. + (y + 0.15).powi(2) * 2.)).exp();
-            let phase = x * 36. + 2.5 * (y * 3.).sin() + 0.8 * (y * 8.).sin() + 7. * knot;
-            (0.5 + 0.5 * phase.sin()).powf(4.) * border(x, y)
-        }));
-        assets.push(pattern("Pebbles", |x, y| {
-            let mut value = 0_f32;
-            for row in 0..5 {
-                for col in 0..5 {
-                    let seed = (row * 7 + col * 13) as f32;
-                    let cx = -0.78 + col as f32 * 0.39 + if row % 2 == 0 { 0. } else { 0.13 };
-                    let cy = -0.78 + row as f32 * 0.39;
-                    let rx = 0.16 + 0.025 * seed.sin();
-                    let ry = 0.15 + 0.025 * (seed * 1.7).cos();
-                    let r2 = ((x - cx) / rx).powi(2) + ((y - cy) / ry).powi(2);
-                    value = value.max((1. - r2).max(0.).powf(0.65));
-                }
-            }
-            value * border(x, y)
-        }));
+        assets.push(pattern("Wood grain", natural::wood));
+        assets.push(pattern("Pebbles", natural::pebbles()));
         catalog::append(&mut assets);
         assets
     })

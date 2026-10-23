@@ -749,7 +749,10 @@ impl UiState {
                             ui.selectable_value(&mut b.kind, k, format!("{k:?}"));
                         }
                     });
-                ui.horizontal(|ui| {
+                if b.kind == Kind::Decimate {
+                    ui.label("Reduce triangles locally without smoothing. Requires Adaptive sculpt; Edge size and Simplify ratio control reduction.");
+                }
+                ui.add_enabled_ui(b.kind != Kind::Decimate, |ui| {
                     ui.selectable_value(&mut b.subtract, false, "+ Add")
                         .customize(Action::BrushAdd);
                     ui.selectable_value(&mut b.subtract, true, "− Subtract")
@@ -1099,15 +1102,23 @@ impl UiState {
                 let label=if adaptive.relative { "Edge size (% of radius)" } else { "Edge size (px)" };
                 ui.add(egui::Slider::new(&mut adaptive.detail,1. ..=32.).text(label));
                 design::checkbox(ui, &mut adaptive.refine,"Refine stretched edges");
-                design::checkbox(ui, &mut adaptive.simplify,"Simplify dense areas");
-                ui.add_enabled(adaptive.simplify,egui::Slider::new(&mut adaptive.collapse_ratio,0.1..=0.8).text("Simplify ratio"));
+                design::checkbox(ui, &mut adaptive.simplify,"Simplify while sculpting");
+                ui.add(egui::Slider::new(&mut adaptive.collapse_ratio,0.1..=0.8).text("Simplify ratio"));
                 if adaptive!=settings.adaptive { commands.push(Command::SetAdaptive(adaptive.clone())); }
                 ui.label("Smaller edge sizes add detail. Masks are preserved; Mask brush keeps topology fixed.");
-                if adaptive.simplify {
-                    let unit = if adaptive.relative { "% of brush radius" } else { "px" };
-                    ui.label(format!("Smooth removes safe edges shorter than {:.1} {unit} without adding vertices.", adaptive.detail * adaptive.collapse_fraction(Kind::Smooth)));
-                    ui.weak("Increase Edge size for more reduction. Masks, sharp features, and mesh boundaries are protected.");
+                ui.label("Smooth changes shape without changing topology.");
+                let unit = if adaptive.relative { "% of brush radius" } else { "px" };
+                ui.label(format!("Decimate removes edges up to {:.1} {unit}, preserving surface features.", adaptive.detail * adaptive.collapse_fraction(Kind::Decimate)));
+                let decimate = document.brushes().iter().position(|b| b.kind == Kind::Decimate);
+                let action = decimate.map_or_else(|| Action::NewBrush("Decimate".into()), |index| Action::SelectBrush(document.brushes()[index].identity()));
+                if ui.add(design::button(ui, Glyph::Edit, "Decimate brush")).customize(action).clicked() {
+                    if let Some(index) = decimate {
+                        self.select_brush(index, document);
+                    } else {
+                        commands.push(Command::AddBrush(Kind::Decimate));
+                    }
                 }
+                ui.weak("Smooth first, then paint with Decimate to reduce triangles. Increase Edge size for more reduction. Decimate also works with automatic simplification off.");
                 ui.label("Local adaptation preserves separate parts; use voxel remeshing to fuse them.");
             } else if settings.dynamic {
                 ui.label("Voxel remeshing replaces topology and clears masks. Small details below the voxel size may be lost.");

@@ -48,6 +48,7 @@ To render a local `.clay` project for a bug investigation, set `CLAY_REVIEW_PROJ
 
 - [Architecture](architecture.md): document ownership, sculpting algorithms, UI commands, camera/navigation, rendering/picking, persistence and tablet input.
 - [Roadmap](roadmap.md): planned sculpting improvements, priorities and completion criteria.
+- [Adaptive sculpt research review](research/adaptive-sculpt-review.md): smoothing export findings, published methods, and proposed quality and performance work.
 - [UI design rules](ui-design.md): requirements for new or changed controls.
 
 Keep existing version 1 projects and brush presets compatible.

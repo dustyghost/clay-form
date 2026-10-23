@@ -220,6 +220,187 @@ fn polish_brush_offscreen_review() {
     g.app.document.undo();
     assert_eq!(g.app.document.geometry_snapshot(), before);
 }
+
+#[test]
+#[ignore = "smooth/decimate review; requires Vulkan, CLAY_GUIDE_PREVIEW; optional CLAY_REVIEW_PROJECT"]
+fn smooth_decimate_offscreen_review() {
+    use crate::sculpt::{Brush, Dab, Geometry, Kind, Mesh, Vec3};
+    let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1000, 1000]);
+    g.toolbar = false;
+    let exported = std::env::var("CLAY_REVIEW_PROJECT").ok();
+    if let Some(path) = &exported {
+        g.app
+            .document
+            .replace_project(
+                serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap(),
+                path,
+            )
+            .unwrap();
+        g.app.camera.yaw = 0.184723;
+        g.app.camera.pitch = 2.6622775;
+        if let Ok(manifest) = std::env::var("CLAY_REVIEW_MANIFEST") {
+            let manifest: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(manifest).unwrap()).unwrap();
+            let camera = &manifest["current_settings"]["view_input"]["camera"];
+            g.app.camera.yaw = camera["yaw"].as_f64().unwrap() as f32;
+            g.app.camera.pitch = camera["pitch"].as_f64().unwrap() as f32;
+        }
+    } else {
+        let mut mesh = Mesh::sphere().subdivide().unwrap();
+        let pull = Brush::new(Kind::Snake);
+        let mut d = Dab {
+            center: Vec3(0., 0., 1.),
+            normal: Vec3(0., 0., 1.),
+            right: Vec3(1., 0., 0.),
+            up: Vec3(0., 1., 0.),
+            radius: 0.4,
+            pressure: 1.,
+            delta: Vec3(0., 0., 0.012),
+            invert: false,
+        };
+        for _ in 0..12 {
+            mesh.stamp(&pull, d);
+            d.center = d.center + pull.snake_motion(d);
+        }
+        g.app
+            .document
+            .replace_geometry(Geometry::new(mesh))
+            .unwrap();
+        g.app.camera.yaw = 0.45;
+        g.app.camera.pitch = -0.25;
+    }
+    let mut settings = g.app.document.mesh_settings().adaptive.clone();
+    settings.enabled = true;
+    settings.simplify = false; // Dedicated Decimate must work independently.
+    g.app.document.set_adaptive(settings).unwrap();
+    let before = g.app.document.geometry_snapshot();
+    g.save("cleanup-before");
+    let (right, up, view) = g.app.camera.basis();
+    let sweep: [f32; 3] =
+        std::env::var("CLAY_REVIEW_SWEEP").map_or([-0.52, -0.25, 0.35], |value| {
+            value
+                .split(',')
+                .map(|v| v.parse().unwrap())
+                .collect::<Vec<_>>()
+                .try_into()
+                .expect("CLAY_REVIEW_SWEEP needs x,y_start,y_end")
+        });
+    let dabs: Vec<_> = (0..36)
+        .map(|i| {
+            let (center, normal, radius) = if exported.is_some() {
+                let x = sweep[0];
+                let y = sweep[1] + (i % 12) as f32 / 11. * (sweep[2] - sweep[1]);
+                let p = right * x + up * y + view * (1. - x * x - y * y).sqrt();
+                (p, view, 0.24)
+            } else {
+                (Vec3(0., 0., 1.), Vec3(0., 0., 1.), 0.65)
+            };
+            Dab {
+                center,
+                normal,
+                radius,
+                right,
+                up,
+                pressure: 1.,
+                delta: Vec3::default(),
+                invert: false,
+            }
+        })
+        .collect();
+    let opposed = |mesh: &Mesh| {
+        let mut edges = std::collections::HashMap::new();
+        let mut count = 0;
+        for &[a, b, c] in &mesh.triangles {
+            let normal = (mesh.vertices[b] - mesh.vertices[a])
+                .cross(mesh.vertices[c] - mesh.vertices[a])
+                .norm();
+            for (a, b) in [(a, b), (b, c), (c, a)] {
+                if let Some(other) = edges.insert((a.min(b), a.max(b)), normal) {
+                    count += usize::from(normal.dot(other) < -1e-5);
+                }
+            }
+        }
+        count
+    };
+    let mut previous_folds = opposed(g.app.document.mesh());
+    let quality = |[a, b, c]: [Vec3; 3]| {
+        let ab = b - a;
+        let ac = c - a;
+        let bc = c - b;
+        2. * 3f32.sqrt() * ab.cross(ac).len() / (ab.dot(ab) + ac.dot(ac) + bc.dot(bc))
+    };
+    let before_quality: Vec<_> = before
+        .mesh
+        .triangles
+        .iter()
+        .map(|t| quality(t.map(|i| before.mesh.vertices[i])))
+        .collect();
+    for kind in [Kind::Smooth, Kind::Decimate] {
+        let mut brush = Brush::new(kind);
+        brush.radius = if exported.is_some() { 84. } else { 100. };
+        if let Ok(strength) = std::env::var("CLAY_REVIEW_STRENGTH") {
+            brush.strength = strength.parse().unwrap();
+        }
+        let start = std::time::Instant::now();
+        for &dab in &dabs {
+            g.app.document.begin_sculpt_frame();
+            g.app.document.apply_dab(&brush, dab);
+        }
+        g.app.document.end_stroke();
+        eprintln!(
+            "{kind:?}: 36 dabs in {:?}, {} vertices",
+            start.elapsed(),
+            g.app.document.mesh().vertices.len()
+        );
+        let name = if kind == Kind::Smooth {
+            "cleanup-smoothed"
+        } else {
+            "cleanup-decimated"
+        };
+        g.save(name);
+        std::fs::write(
+            directory.join(format!("{name}.clay")),
+            serde_json::to_vec(&g.app.document.project()).unwrap(),
+        )
+        .unwrap();
+        g.app.document.mesh().validate_closed().unwrap();
+        let folds = opposed(g.app.document.mesh());
+        eprintln!("{kind:?}: opposed neighbors {previous_folds} -> {folds}");
+        assert!(
+            folds <= previous_folds,
+            "cleanup must not introduce extra opposing face pairs"
+        );
+        previous_folds = folds;
+        if kind == Kind::Smooth {
+            assert_eq!(g.app.document.mesh().triangles, before.mesh.triangles);
+            assert_ne!(g.app.document.mesh().vertices, before.mesh.vertices);
+            for (t, q) in g.app.document.mesh().triangles.iter().zip(&before_quality) {
+                assert!(
+                    quality(t.map(|i| g.app.document.mesh().vertices[i])) >= q.min(0.02) * 0.999,
+                    "Smooth must respect the collapse floor and protect existing degeneracies"
+                );
+            }
+        } else {
+            assert!(g.app.document.mesh().vertices.len() < before.mesh.vertices.len());
+        }
+    }
+    g.app.document.undo();
+    g.app.document.undo();
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    // Inspect the actual controls, including a legacy project's missing preset.
+    g.panel(Tool::Mesh, Dock::Right);
+    g.panel(Tool::Brush, Dock::Left);
+    g.interactive = true;
+    g.save("cleanup-controls");
+    click_guide_label(&mut g, "Decimate brush");
+    assert_eq!(
+        g.app.document.brushes()[g.app.ui.selected].kind,
+        Kind::Decimate
+    );
+    g.save("cleanup-decimate-controls");
+}
 impl Guide {
     fn new(directory: &std::path::Path, size: [i32; 2]) -> Self {
         let mut capture = UiCapture::new(size);

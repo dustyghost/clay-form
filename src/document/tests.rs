@@ -511,7 +511,7 @@ mod adaptive_smooth_tests {
     use crate::sculpt::Vec3;
 
     #[test]
-    fn smooth_cleanup_reduces_density_preserves_masks_and_undoes_as_one_stroke() {
+    fn smooth_then_decimate_preserves_masks_and_undoes_as_separate_strokes() {
         let mut document = Document::default();
         let mut geometry = document.geometry_snapshot();
         geometry.mesh = geometry.mesh.subdivide().unwrap();
@@ -553,7 +553,8 @@ mod adaptive_smooth_tests {
         }
         document.end_stroke();
         let after = document.mesh().clone();
-        assert!(after.vertices.len() < before.vertices.len() - 50);
+        assert_eq!(after.triangles, before.triangles);
+        assert_eq!(after.vertices.len(), before.vertices.len());
         assert!(
             after
                 .vertices
@@ -583,6 +584,34 @@ mod adaptive_smooth_tests {
         assert_eq!(document.mesh(), &before);
         document.redo();
         assert_eq!(document.mesh(), &after);
+        let mut settings = document.mesh_settings().adaptive.clone();
+        settings.simplify = false;
+        document.set_adaptive(settings).unwrap();
+        let decimate = Brush::new(Kind::Decimate);
+        for _ in 0..6 {
+            document.begin_sculpt_frame();
+            document.apply_dab(&decimate, dab);
+        }
+        document.end_stroke();
+        let reduced = document.mesh().clone();
+        assert!(reduced.vertices.len() < after.vertices.len() - 50);
+        reduced.validate_closed().unwrap();
+        for (i, &mask) in after.mask.iter().enumerate() {
+            if mask == 1. {
+                assert!(
+                    reduced
+                        .vertices
+                        .iter()
+                        .zip(&reduced.mask)
+                        .any(|(p, m)| *p == after.vertices[i] && *m == 1.)
+                );
+            }
+        }
+        assert_eq!(document.history_counts().0, history + 2);
+        document.undo();
+        assert_eq!(document.mesh(), &after);
+        document.redo();
+        assert_eq!(document.mesh(), &reduced);
     }
 }
 

@@ -75,7 +75,7 @@ pub(crate) struct Viewport {
     blocked_until_release: bool,
     stroke: bool,
     stroke_brush: Option<String>,
-    smooth_removed: Option<(usize, usize)>,
+    decimate_removed: Option<(usize, usize)>,
     pending_stroke: Option<stroke::PendingStroke>,
     stabilizer: Option<stabilizer::Stabilizer>,
     last: Option<Pos2>,
@@ -122,7 +122,7 @@ impl Viewport {
             .is_some_and(|stroke| stroke.preview.refining())
     }
     fn record_cleanup(&mut self, document: &Document, before: (usize, usize)) {
-        if let Some((vertices, faces)) = self.smooth_removed.as_mut() {
+        if let Some((vertices, faces)) = self.decimate_removed.as_mut() {
             *vertices += before.0.saturating_sub(document.mesh().vertices.len());
             *faces += before.1.saturating_sub(document.mesh().triangles.len());
         }
@@ -873,11 +873,8 @@ impl Viewport {
                     && scene.pick(pos).is_some()
             });
         if (drawing || patterned_click) && !self.stroke {
-            if brush.kind == Kind::Smooth
-                && document.mesh_settings().adaptive.enabled
-                && document.mesh_settings().adaptive.simplify
-            {
-                self.smooth_removed.get_or_insert((0, 0));
+            if brush.kind == Kind::Decimate && document.mesh_settings().adaptive.enabled {
+                self.decimate_removed.get_or_insert((0, 0));
             }
             let brush = brush.clone();
             if brush.effective_stroke_mode() == StrokeMode::Freehand {
@@ -931,9 +928,9 @@ impl Viewport {
                     document.mesh().vertices.len(),
                     document.mesh().triangles.len(),
                 );
-                let smoothing = pending.brush.kind == Kind::Smooth;
+                let decimating = pending.brush.kind == Kind::Decimate;
                 pending.commit(document, &scene);
-                if smoothing {
+                if decimating {
                     self.record_cleanup(document, before);
                 }
             } else {
@@ -941,11 +938,11 @@ impl Viewport {
             }
         }
         if !drawing {
-            if let Some((vertices, faces)) = self.smooth_removed.take() {
+            if let Some((vertices, faces)) = self.decimate_removed.take() {
                 self.status = Some(if vertices > 0 {
-                    format!("Smooth cleanup: removed {vertices} vertices and {faces} faces")
+                    format!("Decimate: removed {vertices} vertices and {faces} faces")
                 } else {
-                    "Smooth cleanup: no removable edges at this size. Increase Edge size for more reduction; protected features stay intact.".into()
+                    "Decimate: no removable edges at this size. Increase Edge size for more reduction; protected features stay intact.".into()
                 });
             }
             self.completed_stroke = document.end_stroke() && self.stroke;
@@ -1089,7 +1086,7 @@ impl Viewport {
                             );
                             let deformed =
                                 document.apply_dab_stenciled(&brush, dab, stencil.as_ref());
-                            if brush.kind == Kind::Smooth {
+                            if brush.kind == Kind::Decimate {
                                 self.record_cleanup(document, before);
                             }
                             if brush.kind == Kind::Snake

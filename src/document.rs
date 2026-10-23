@@ -72,7 +72,11 @@ impl Default for Document {
             references: Vec::new(),
             geometry: Geometry::new(Mesh::starting_sphere()),
             display_revision: 0,
-            brushes: Kind::ALL.into_iter().map(Brush::new).collect(),
+            brushes: Kind::ALL
+                .into_iter()
+                .map(Brush::new)
+                .chain(std::iter::once(Brush::alpha_drag()))
+                .collect(),
             history: History::default(),
             diagnostic_context: None,
             symmetry: Symmetry::default(),

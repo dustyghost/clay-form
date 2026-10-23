@@ -27,6 +27,7 @@ cargo test --locked --lib modeling_workflow_offscreen_review -- --ignored --test
 cargo test --locked --lib modeling_symmetry_dissolve_offscreen_review -- --ignored --test-threads=1
 cargo test --locked --lib modeling_selection_offscreen_review -- --ignored --test-threads=1
 cargo test --locked --lib modeling_boundary_join_offscreen_review -- --ignored --test-threads=1
+env -u CLAY_REVIEW_PROJECT -u CLAY_REVIEW_MANIFEST -u CLAY_REVIEW_SWEEP -u CLAY_REVIEW_STRENGTH cargo test --locked --lib smooth_decimate_offscreen_review -- --ignored --test-threads=1
 cargo test --locked --lib delete_submodel_offscreen_review -- --ignored --test-threads=1
 cargo test --locked --lib detail_projection_offscreen_review -- --ignored --test-threads=1
 cargo test --locked --lib alpha_library_stencil_offscreen_review -- --ignored --test-threads=1
@@ -44,9 +45,12 @@ cp "$capture_dir/lasso-mask-5.png" docs/images/mask-lasso-result.png
 cp "$capture_dir/lasso-hide-3.png" docs/images/hide-lasso-preview.png
 cp "$capture_dir/lasso-hide-5.png" docs/images/hide-lasso-result.png
 cp "$capture_dir/rotation-4.png" docs/images/rotation-controls.png
-for name in alpha-library alpha-editor alpha-surface-stencil alpha-adaptive-spiral alpha-stencil-controls submodel-delete detail-projection-preview modeling-separate-fuse-result modeling-region-fuse-result modeling-new-mesh-warning modeling-move-gizmo modeling-scale-gizmo modeling-rotate-gizmo modeling-point-split modeling-point-tube modeling-edge-construction-preview modeling-face-split modeling-face-group-gap modeling-tap-repeat modeling-milestone-inset modeling-milestone-smooth modeling-milestone-preset modeling-symmetry-selection modeling-symmetry-extrude modeling-dissolve-before modeling-dissolve-after modeling-paint-selection modeling-face-loop modeling-edge-ring modeling-edge-loop modeling-loop-drag modeling-boundary-join modeling-loop-preview modeling-selection modeling-extrusion-preview modeling-tunnel edge-loops-before edge-loops-after crease-smooth-before crease-smooth-after crease-selection thickness-modifier mirror-before mirror-after brush-reset-before brush-reset-after first-sculpt-before first-sculpt-after symmetry-stroke adaptive-settings primitive-cube slice-trim-preview slice-trim-result reference-images obj-import menu-placement recovery-dialog; do
+for name in alpha-library alpha-editor alpha-surface-stencil alpha-adaptive-spiral alpha-stencil-controls submodel-delete detail-projection-preview modeling-separate-fuse-result modeling-region-fuse-result modeling-new-mesh-warning modeling-move-gizmo modeling-scale-gizmo modeling-rotate-gizmo modeling-point-split modeling-point-tube modeling-edge-construction-preview modeling-face-split modeling-face-group-gap modeling-tap-repeat modeling-milestone-inset modeling-milestone-smooth modeling-milestone-preset modeling-symmetry-selection modeling-symmetry-extrude modeling-dissolve-before modeling-dissolve-after modeling-paint-selection modeling-face-loop modeling-edge-ring modeling-edge-loop modeling-loop-drag modeling-boundary-join modeling-loop-preview modeling-selection modeling-extrusion-preview modeling-tunnel edge-loops-before edge-loops-after crease-smooth-before crease-smooth-after crease-selection thickness-modifier mirror-before mirror-after brush-reset-before brush-reset-after first-sculpt-before first-sculpt-after symmetry-stroke primitive-cube slice-trim-preview slice-trim-result reference-images obj-import menu-placement recovery-dialog; do
     cp "$capture_dir/guides/$name.png" "docs/images/$name.png"
 done
+cp "$capture_dir/guides/cleanup-decimate-controls.png" docs/images/adaptive-settings.png
+cp "$capture_dir/guides/cleanup-before.png" docs/images/smooth-pull-before.png
+cp "$capture_dir/guides/cleanup-smoothed.png" docs/images/smooth-pull-after.png
 cp "$capture_dir/guides/front-study.png" docs/examples/front-study.png
 cp "$capture_dir/guides/side-study.png" docs/examples/side-study.png
 printf 'Documentation screenshots updated. Extra captures remain in %s\n' "$capture_dir"

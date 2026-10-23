@@ -197,6 +197,7 @@ impl UiState {
                 .map(|b| Action::SelectBrush(b.identity())),
         );
         actions.extend(Kind::ALL.iter().map(|k| Action::NewBrush(format!("{k:?}"))));
+        actions.push(Action::NewBrush("Alpha Drag".into()));
         actions.extend(Tool::ALL.into_iter().map(Action::ShowPanel));
         actions.extend(
             self.preferences
@@ -268,7 +269,9 @@ impl UiState {
             Action::Undo => document.can_undo(),
             Action::Redo => document.can_redo(),
             Action::SelectBrush(id) => document.brushes().iter().any(|b| b.identity() == *id),
-            Action::NewBrush(name) => Kind::ALL.iter().any(|k| format!("{k:?}") == *name),
+            Action::NewBrush(name) => {
+                name == "Alpha Drag" || Kind::ALL.iter().any(|k| format!("{k:?}") == *name)
+            }
             Action::OpenMenu(id) => self.preferences.menus.iter().any(|m| m.id == *id),
 
             Action::ModelCreateGroup | Action::ModelAddToGroup | Action::ModelRemoveFromGroup => {

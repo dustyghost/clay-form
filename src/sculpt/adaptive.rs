@@ -49,7 +49,7 @@ impl AdaptiveSettings {
         Ok(())
     }
     pub(crate) fn collapse_fraction(&self, kind: Kind) -> f32 {
-        if kind == Kind::Smooth {
+        if kind == Kind::Decimate {
             (self.collapse_ratio * 2.).min(0.95)
         } else {
             self.collapse_ratio
@@ -154,7 +154,7 @@ impl Mesh {
                 brush.effective_stroke_mode(),
                 super::StrokeMode::DragRect | super::StrokeMode::DragDot
             )
-            || matches!(brush.kind, Kind::Mask | Kind::Smooth)
+            || matches!(brush.kind, Kind::Mask | Kind::Smooth | Kind::Decimate)
             || brush.strength <= 0.
             || dabs.is_empty()
         {
@@ -229,7 +229,7 @@ impl Mesh {
         let Region { dabs, stencils } = region;
         if !self.creases.is_empty()
             || !settings.enabled
-            || brush.kind == Kind::Mask
+            || matches!(brush.kind, Kind::Mask | Kind::Smooth)
             || brush.strength <= 0.
             || dabs.is_empty()
             || matches!(&brush.alpha,Alpha::Image { pixels,.. } if pixels.iter().all(|&p|p==0.))
@@ -240,9 +240,9 @@ impl Mesh {
         if !target.is_finite() || target <= 1e-7 {
             return false;
         }
-        let cleanup = brush.kind == Kind::Smooth && settings.simplify;
+        let cleanup = brush.kind == Kind::Decimate;
         let mut changed = false;
-        if collapse && settings.simplify && budget.collapses > 0 {
+        if collapse && (settings.simplify || cleanup) && budget.collapses > 0 {
             let count = self.collapse_local(
                 brush,
                 dabs,
@@ -273,7 +273,7 @@ impl Mesh {
                 }
             }
         }
-        if settings.refine && budget.flips > 0 && budget.flip_passes > 0 {
+        if !cleanup && settings.refine && budget.flips > 0 && budget.flip_passes > 0 {
             budget.flip_passes -= 1;
             let count = self.improve_edges(brush, dabs, stencils, budget.flips.min(64));
             budget.flips -= count;
@@ -755,6 +755,16 @@ impl Mesh {
             relevant[a] = true;
             relevant[b] = true;
         }
+        if brush.kind == Kind::Decimate {
+            let endpoints = relevant.clone();
+            for t in &self.triangles {
+                if t.iter().any(|&i| endpoints[i]) {
+                    for &i in t {
+                        relevant[i] = true;
+                    }
+                }
+            }
+        }
         let (neighbors, incident) = self.collapse_adjacency(&relevant);
         let mut candidates: Vec<_> = candidates.into_iter().collect();
         candidates.sort_by(|(a, x), (b, y)| x.total_cmp(y).then(a.cmp(b)));
@@ -779,6 +789,40 @@ impl Mesh {
                 || (self.mask[a] - self.mask[b]).abs() > 0.05
             {
                 continue;
+            }
+            if brush.kind == Kind::Decimate {
+                // Both endpoints must be inside the same brush copy. A tiny
+                // falloff/pressure must not remove full-size edges at the rim.
+                let influence = dabs
+                    .iter()
+                    .map(|dab| {
+                        let pressure = if brush.pressure {
+                            dab.pressure.powf(brush.pressure_curve)
+                        } else {
+                            1.
+                        };
+                        [a, b]
+                            .map(|i| {
+                                let offset = self.vertices[i] - dab.center;
+                                if offset.len() > dab.radius {
+                                    return 0.;
+                                }
+                                brush.weight(
+                                    offset.dot(dab.right) / dab.radius,
+                                    offset.dot(dab.up) / dab.radius,
+                                ) * pressure
+                                    * brush.strength
+                                    * (1. - self.mask[i])
+                            })
+                            .into_iter()
+                            .fold(f32::INFINITY, f32::min)
+                    })
+                    .fold(0f32, f32::max);
+                if (self.vertices[a] - self.vertices[b]).len()
+                    >= threshold * (influence * 4.).clamp(0., 1.).sqrt()
+                {
+                    continue;
+                }
             }
             if incident[a]
                 .iter()
@@ -851,6 +895,14 @@ impl Mesh {
             affected.dedup();
             for index in affected {
                 let old = self.triangles[index];
+                if brush.kind == Kind::Decimate
+                    && (position - self.vertices[old[0]]).dot(normal(old)).abs() > threshold * 0.08
+                {
+                    // Local plane-error guard: short edges on a ridge can still
+                    // carry significant shape. This is not a Hausdorff bound.
+                    safe = false;
+                    break;
+                }
                 if old.contains(&a) && old.contains(&b) {
                     continue;
                 }
@@ -863,7 +915,7 @@ impl Mesh {
                 }
                 let [x, y, z] = new.map(|i| if i == a { position } else { self.vertices[i] });
                 let cross = (y - x).cross(z - x);
-                if brush.kind == Kind::Smooth {
+                if brush.kind == Kind::Decimate {
                     let quality = |x: Vec3, y: Vec3, z: Vec3| {
                         let sum = (y - x).dot(y - x) + (z - y).dot(z - y) + (x - z).dot(x - z);
                         2. * 3f32.sqrt() * (y - x).cross(z - x).len() / sum.max(1e-20)
@@ -884,8 +936,20 @@ impl Mesh {
             if !safe {
                 continue;
             }
+            if brush.kind == Kind::Decimate
+                && !self.collapse_preserves_folds(a, b, position, &neighbors, &incident)
+            {
+                continue;
+            }
             blocked.extend(neighbors[a].iter().copied());
             blocked.extend(neighbors[b].iter().copied());
+            if brush.kind == Kind::Decimate {
+                // Adjacent changed faces must not pass the fold guard against
+                // each other's old positions and then fold in combination.
+                for &i in neighbors[a].iter().chain(&neighbors[b]) {
+                    blocked.extend(neighbors[i].iter().copied());
+                }
+            }
             blocked.extend([a, b]);
             merged.insert(b, a);
         }
@@ -946,6 +1010,51 @@ impl Mesh {
         self.quads.clear();
         self.triangles = triangles;
         merged.len()
+    }
+    fn collapse_preserves_folds(
+        &self,
+        a: usize,
+        b: usize,
+        position: Vec3,
+        neighbors: &[Vec<usize>],
+        incident: &[Vec<usize>],
+    ) -> bool {
+        let mut faces: Vec<_> = neighbors[a]
+            .iter()
+            .chain(&neighbors[b])
+            .chain([&a, &b])
+            .flat_map(|&i| incident[i].iter().copied())
+            .collect();
+        faces.sort_unstable();
+        faces.dedup();
+        let mut edges = HashMap::new();
+        for face in faces {
+            let old = self.triangles[face];
+            if old.contains(&a) && old.contains(&b) {
+                continue;
+            }
+            let new = old.map(|i| if i == b { a } else { i });
+            let [x, y, z] = old.map(|i| self.vertices[i]);
+            let old_normal = (y - x).cross(z - x).norm();
+            let [x, y, z] = new.map(|i| if i == a { position } else { self.vertices[i] });
+            let normal = (y - x).cross(z - x).norm();
+            for (u, v) in [(new[0], new[1]), (new[1], new[2]), (new[2], new[0])] {
+                if let Some((other, before, after)) =
+                    edges.insert(edge(u, v), (old, old_normal, normal))
+                {
+                    let were_neighbors = old.iter().filter(|i| other.contains(i)).count() >= 2;
+                    let minimum = if were_neighbors {
+                        old_normal.dot(before).min(0.)
+                    } else {
+                        0.
+                    };
+                    if normal.dot(after) < minimum - 1e-6 {
+                        return false;
+                    }
+                }
+            }
+        }
+        true
     }
     fn collapse_adjacency(&self, relevant: &[bool]) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
         let mut neighbors = vec![Vec::new(); self.vertices.len()];
@@ -1688,10 +1797,10 @@ mod tests {
         ));
     }
     #[test]
-    fn dense_smooth_cleanup_has_a_useful_bounded_frame_budget() {
+    fn dense_decimation_has_a_useful_bounded_frame_budget() {
         let mut mesh = Mesh::sphere().subdivide().unwrap();
         let before = mesh.vertices.len();
-        let brush = Brush::new(Kind::Smooth);
+        let brush = Brush::new(Kind::Decimate);
         let settings = AdaptiveSettings {
             enabled: true,
             detail: 16.,
@@ -1730,7 +1839,7 @@ mod tests {
         };
         let mut budget = Budget::default();
         assert!(mesh.adapt(
-            &Brush::new(Kind::Smooth),
+            &Brush::new(Kind::Decimate),
             &[dab()],
             &settings,
             &mut budget,
@@ -1748,22 +1857,34 @@ mod tests {
         );
     }
     #[test]
-    fn smooth_cleanup_never_refines_and_simplify_off_restores_refinement() {
+    fn smooth_keeps_topology_fixed_and_decimation_never_refines() {
         let original = Mesh::sphere();
-        let mut mesh = original.clone();
-        let mut settings = AdaptiveSettings {
-            enabled: true,
-            detail: 2.,
-            ..Default::default()
-        };
-        let brush = Brush::new(Kind::Smooth);
-        mesh.adapt(&brush, &[dab()], &settings, &mut Budget::default(), true);
-        assert!(mesh.vertices.len() <= original.vertices.len());
-        mesh.validate_closed().unwrap();
-        settings.simplify = false;
-        mesh.adapt(&brush, &[dab()], &settings, &mut Budget::default(), true);
-        assert!(mesh.vertices.len() > original.vertices.len());
-        mesh.validate_closed().unwrap();
+        for simplify in [false, true] {
+            let settings = AdaptiveSettings {
+                enabled: true,
+                detail: 2.,
+                simplify,
+                ..Default::default()
+            };
+            let mut mesh = original.clone();
+            mesh.adapt(
+                &Brush::new(Kind::Smooth),
+                &[dab()],
+                &settings,
+                &mut Budget::default(),
+                true,
+            );
+            assert_eq!(mesh, original);
+            mesh.adapt(
+                &Brush::new(Kind::Decimate),
+                &[dab()],
+                &settings,
+                &mut Budget::default(),
+                true,
+            );
+            assert!(mesh.vertices.len() <= original.vertices.len());
+            mesh.validate_closed().unwrap();
+        }
     }
     #[test]
     fn protected_zero_alpha_and_mask_brush_leave_topology_unchanged() {
@@ -1800,6 +1921,30 @@ mod tests {
         };
         assert!(!mesh.adapt(&brush, &[dab()], &settings, &mut Budget::default(), true));
         assert_eq!(mesh, before);
+    }
+    #[test]
+    fn decimation_respects_zero_pressure_strength_and_masks() {
+        let original = Mesh::sphere();
+        for mode in 0..4 {
+            let mut mesh = original.clone();
+            let mut brush = Brush::new(Kind::Decimate);
+            let mut d = dab();
+            let mut settings = AdaptiveSettings {
+                enabled: true,
+                detail: 32.,
+                ..Default::default()
+            };
+            match mode {
+                0 => d.pressure = 0.,
+                1 => brush.strength = 0.,
+                2 => mesh.mask.fill(1.),
+                _ => settings.enabled = false,
+            }
+            let before = mesh.clone();
+            assert!(!mesh.adapt(&brush, &[d], &settings, &mut Budget::default(), true));
+            assert!(!mesh.stamp_many(&brush, &[d]));
+            assert_eq!(mesh, before);
+        }
     }
     #[test]
     fn density_scales_with_view_and_relative_brush_size() {

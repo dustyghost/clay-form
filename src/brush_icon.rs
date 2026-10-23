@@ -5,6 +5,10 @@ use crate::{
 };
 const SIZE: usize = 256;
 pub(crate) fn capture(mesh: &Mesh, camera: &Camera) -> Result<BrushIcon, String> {
+    render(mesh, camera, false)
+}
+
+fn render(mesh: &Mesh, camera: &Camera, wireframe: bool) -> Result<BrushIcon, String> {
     mesh.validate()?;
     if mesh.triangles.is_empty() {
         return Err("The active model has no surface to capture".into());
@@ -52,6 +56,8 @@ pub(crate) fn capture(mesh: &Mesh, camera: &Camera) -> Result<BrushIcon, String>
         if area >= -1e-7 {
             continue;
         }
+        let altitudes = [(b, c), (c, a), (a, b)]
+            .map(|(p, q)| area.abs() / (p.0 - q.0).hypot(p.1 - q.1).max(1e-7));
         let x0 = a.0.min(b.0).min(c.0).floor().max(0.) as usize;
         let x1 = a.0.max(b.0).max(c.0).ceil().min((SIZE - 1) as f32) as usize;
         let y0 = a.1.min(b.1).min(c.1).floor().max(0.) as usize;
@@ -75,8 +81,18 @@ pub(crate) fn capture(mesh: &Mesh, camera: &Camera) -> Result<BrushIcon, String>
                 let shade = wa * shades[shade_indices[0]]
                     + wb * shades[shade_indices[1]]
                     + wc * shades[shade_indices[2]];
+                let wire = if wireframe {
+                    let distance = (wa * altitudes[0])
+                        .min(wb * altitudes[1])
+                        .min(wc * altitudes[2]);
+                    (3. - distance).clamp(0., 1.)
+                } else {
+                    0.
+                };
                 for (channel, base) in [190., 155., 125.].into_iter().enumerate() {
-                    rgba[i * 4 + channel] = (base * shade).clamp(0., 255.) as u8;
+                    let line = [32., 38., 44.][channel];
+                    rgba[i * 4 + channel] =
+                        (base * shade * (1. - wire) + line * wire).clamp(0., 255.) as u8;
                 }
             }
         }
@@ -87,12 +103,37 @@ pub(crate) fn capture(mesh: &Mesh, camera: &Camera) -> Result<BrushIcon, String>
     })
 }
 pub(crate) fn default_icon(kind: Kind) -> BrushIcon {
+    if kind == Kind::Decimate {
+        // A sparse, rounded triangle mesh shows the topology Decimate produces.
+        let mesh = crate::sculpt::Primitive {
+            kind: crate::sculpt::PrimitiveKind::Icosphere,
+            subdivisions: 2,
+            ..Default::default()
+        }
+        .mesh()
+        .expect("valid Decimate icon geometry");
+        let camera = Camera {
+            yaw: 0.25,
+            pitch: -0.2,
+            ..Default::default()
+        };
+        let icon = render(&mesh, &camera, true).expect("valid Decimate icon surface");
+        let image = image::RgbaImage::from_raw(SIZE as u32, SIZE as u32, icon.rgba.to_vec())
+            .expect("complete icon pixels");
+        return BrushIcon {
+            size: 96,
+            rgba: image::imageops::resize(&image, 96, 96, image::imageops::FilterType::Lanczos3)
+                .into_raw()
+                .into(),
+        };
+    }
     let n = 96;
     let mut rgba = Vec::with_capacity(n * n * 4);
     let height = |x: f32, y: f32| {
         let r = x * x + y * y;
         let stroke = (-((x / 0.65).powi(6) + (y / 0.20).powi(2))).exp();
         match kind {
+            Kind::Decimate => unreachable!("Decimate uses a wireframe mesh thumbnail"),
             Kind::Standard => 0.24 * stroke,
             Kind::Clay => 0.20 * (-((x / 0.65).powi(6) + (y / 0.28).powi(6))).exp(),
             Kind::Inflate => 0.40 * (-r / 0.20).exp(),

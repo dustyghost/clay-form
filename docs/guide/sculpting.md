@@ -21,6 +21,7 @@ Build a rounded form, cut a fold, or pull out a horn: choose the brush for the s
 | --- | --- |
 | Build up or remove clay | Standard, Clay, Inflate |
 | Even out a surface | Smooth, Flatten |
+| Reduce surplus triangles | Decimate (Adaptive sculpt) |
 | Polish bumps into cleaner planes while holding sharp corners | Polish |
 | Tighten a fold | Pinch, Crease, Detail |
 | Move or pull a form | Grab, Snake |
@@ -58,6 +59,10 @@ Make one short stroke before changing several settings at once:
 
 Grab follows pointer movement; spacing does not affect it. Subtracting Smooth sharpens, subtracting Flatten exaggerates relief, and subtracting Mask erases protection.
 
+### Alpha Drag preset
+
+New documents include **Alpha Drag**: Standard behavior with **Drag Rect** and **Wood grain** already selected. Drag to size and rotate one stamp, then release to commit it. In an existing project, use **Brushes → Alpha Drag** to add the preset. The regular Standard preset stays available for freehand work.
+
 ### Choose an alpha
 
 An alpha shapes each dab. Open the **Alpha** panel, select **Soft**, **Hard**, or **Square** in the **Alpha library**, then choose **Use on brush**. The library includes **39 built-ins**, with **Nature’s curve** (a flowing spiral), **Leaf veins**, **Wood grain**, and **Pebbles** alongside the following collections. These built-ins are always available, including in older projects. You can also **Place stencil** with them or **Duplicate alpha** to edit a variation. Built-ins cannot be removed; saved copies can. Search by name or category to find a pattern. The library starts four rows tall; hold and drag **Drag to resize library** up or down to change its height. Clicking the handle alone does not resize it. The library keeps its chosen height even below other open panels; use the outer sidebar scrollbar to bring it into view. This centered handle stays clear of the sidebar scrollbar.
@@ -71,9 +76,11 @@ An alpha shapes each dab. Open the **Alpha** panel, select **Soft**, **Hard**, o
 | Organic | Tree bark, rock strata, cracked earth, scales, fur |
 | Materials | Woven cloth, leather grain, hammered metal |
 
-Use **Subtract** for recessed wrinkles, pores, and engraved details. **Duplicate alpha** lets you invert a copy or adjust its contrast.
+Use **Subtract** for recessed wrinkles, pores, branching plaster cracks, and engraved details. Crow’s feet and other creases taper in width and depth at their ends. Cobbles use rounded stones, flagstones use broad slabs, and cracked earth has curled fracture edges. **Duplicate alpha** lets you invert a copy or adjust its contrast.
 
 ![Built-in patterns in the scrollable alpha library](../images/alpha-library.png)
+
+Saved brushes and project alphas embed their height images. To use a revised built-in in an existing brush, select it in the Alpha library and choose **Use on brush** again. See the [alpha library audit](../validation/alpha-library-audit/README.md) for before/after comparisons.
 
 ### Create and reuse an image alpha
 
@@ -204,11 +211,19 @@ Guides show X in red, Y in green, Z in blue, and other radial boundaries in gold
 
 Select **Snake**, start on the clay, and drag outward. The tip continues to follow you after leaving the original surface. Use **Shift** to smooth the result. Enable adaptive sculpting for stretched forms that need more geometry.
 
+Smooth can gradually soften a pulled-out bump back into the surrounding surface. Use several passes and a brush wide enough to cover its base. For a long protrusion you want to cut off cleanly, use [Slice → Trim](modeling.md#trim-away-one-side) with **Cap cuts** enabled. Trim cuts through the active model; check **Keep / Remove** before releasing.
+
+| Short Snake pull | After smoothing |
+| --- | --- |
+| ![A short round protrusion pulled from a sphere](../images/smooth-pull-before.png) | ![The protrusion smoothed back into the surrounding sphere](../images/smooth-pull-after.png) |
+
+*Smooth changes the shape while keeping the same triangles. Decimate afterward if the area no longer needs its extra density.*
+
 ### Add detail where you sculpt
 
 Enable **Mesh → Adaptive sculpt**. It adds or removes local triangles as you brush, keeping separate parts separate and preserving masks.
 
-![Mesh management beside a wireframe sphere with Adaptive sculpt and its refinement controls enabled](../images/adaptive-settings.png)
+![Adaptive sculpt settings with the separate Decimate brush selected](../images/adaptive-settings.png)
 
 *Edge size controls local density; smaller values add detail.*
 
@@ -217,12 +232,19 @@ Enable **Mesh → Adaptive sculpt**. It adds or removes local triangles as you b
 | Edge size | Target edge length in screen pixels |
 | Detail relative to brush size | Interpret size as a percentage of brush radius |
 | Refine | Split long edges near the brush |
-| Simplify dense areas | Collapse short edges where safe |
+| Simplify while sculpting | Automatically collapse short edges during deformation strokes; Smooth keeps topology fixed |
 | Simplify ratio | Threshold for collapsing edges relative to the target |
 
 **Enabling adaptive sculpt discards stored subdivision levels.** Undo restores them. It requires a closed, consistently oriented surface; Mask strokes do not change topology.
 
-With Simplify enabled, Smooth removes local excess density without adding vertices. Increase Edge size or Simplify ratio for more cleanup. The status bar reports removed vertices/faces; sharp features and masks can limit reduction.
+### Smooth first, then reduce triangles
+
+1. Use **Smooth**, or hold **Shift**, to remove noise or soften the shape. Smooth keeps the same vertices and triangles, including in Adaptive sculpt mode.
+2. In **Mesh → Adaptive sculpt**, choose **Decimate brush**, then paint over the smoothed region. This selects your existing Decimate preset or adds one to older projects.
+3. Increase **Edge size** or **Simplify ratio** for more reduction. Brush strength, pen pressure and falloff control the local reduction threshold. The status bar reports removed vertices and faces.
+4. Inspect the surface with wireframe on and off. Each stroke has its own Undo step, so you can undo decimation while keeping the smoothing.
+
+Decimate works even when **Simplify while sculpting** is off. It removes short edges without applying a smoothing pass or adding vertices. Masks, hidden faces, sharp features and local shape checks can limit reduction. It does not have a reverse operation; use Undo to restore removed triangles.
 
 Adaptive sculpting does not fuse overlapping parts. Use [voxel remeshing](modeling.md#mesh-management) for fusion.
 

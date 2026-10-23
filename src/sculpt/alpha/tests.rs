@@ -398,7 +398,7 @@ fn adaptive_stencil_simplifies_white_interiors_without_moving_protected_vertices
         ..Default::default()
     })
     .unwrap();
-    let brush = Brush::new(Kind::Smooth);
+    let brush = Brush::new(Kind::Decimate);
     let dab = Dab {
         center: Vec3(0.5, 0., 1.),
         normal: Vec3(0., 0., 1.),
@@ -451,7 +451,7 @@ fn adaptive_stencil_simplification_requires_the_matching_symmetry_dab() {
     cube.divisions = [24, 24, 24];
     let mut mesh = cube.mesh().unwrap();
     let before = mesh.clone();
-    let brush = Brush::new(Kind::Smooth);
+    let brush = Brush::new(Kind::Decimate);
     let dab = Dab {
         center: Vec3(0., 0., 1.),
         normal: Vec3(0., 0., 1.),
