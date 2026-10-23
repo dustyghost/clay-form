@@ -520,6 +520,8 @@ Thickness requires consistently oriented open surfaces with nonbranching boundar
 
 ## Slice
 
+For a non-destructive selection, choose **Mask through · Line** in the Slice controls. It switches to [through-depth line masking](selection.md#protect-one-side-through-the-model), with Add/Erase and Flip side controls. This changes mask weights only and retains subdivision levels. The cutting results below remain separate.
+
 ### Trim away one side
 
 Before slicing, convert primitives, apply/remove thickness modifier, and show all faces of the active model.

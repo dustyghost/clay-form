@@ -1,4 +1,4 @@
-//! Latched rectangle/lasso gestures, ahead of sculpt and navigation routing.
+//! Latched rectangle, lasso, and mask-line gestures ahead of sculpt routing.
 use super::{Gesture, Viewport, scene::Scene};
 use crate::document::Document;
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke, StrokeKind};
@@ -8,6 +8,7 @@ pub(crate) enum SelectionTool {
     Rectangle,
     Lasso,
     MaskLasso,
+    MaskLine { erase: bool, flip: bool },
 }
 impl SelectionTool {
     pub(crate) fn label(self) -> &'static str {
@@ -15,10 +16,13 @@ impl SelectionTool {
             Self::Rectangle => "Select rectangle",
             Self::Lasso => "Select lasso",
             Self::MaskLasso => "Mask lasso",
+            Self::MaskLine { .. } => "Mask through · Line",
         }
     }
     pub(crate) fn instructions(self) -> &'static str {
-        if self == Self::MaskLasso {
+        if matches!(self, Self::MaskLine { .. }) {
+            "Drag a dividing line, including from empty space · release to apply"
+        } else if self == Self::MaskLasso {
             "Drag to mask · Alt to erase · release to apply"
         } else {
             "Drag to isolate · Alt to hide · release to apply"
@@ -51,7 +55,7 @@ impl SelectionDrag {
             }
         } else {
             self.end = pos;
-            if self.tool != SelectionTool::Rectangle
+            if matches!(self.tool, SelectionTool::Lasso | SelectionTool::MaskLasso)
                 && self.points.last().is_none_or(|p| p.distance(pos) >= 2.)
             {
                 // Reject overlong gestures instead of silently changing their shape.
@@ -71,6 +75,72 @@ impl SelectionDrag {
         }
         points
     }
+}
+
+// Evaluate the current view's projected half-plane, including rear-facing vertices.
+fn line_distance(start: Pos2, end: Pos2, flip: bool, p: Pos2) -> f32 {
+    let edge = end - start;
+    let d = p - start;
+    (edge.x * d.y - edge.y * d.x) * if flip { -1. } else { 1. }
+}
+fn line_contains(start: Pos2, end: Pos2, flip: bool, p: Pos2) -> bool {
+    line_distance(start, end, flip, p) >= 0.
+}
+fn paint_mask_line(
+    painter: &egui::Painter,
+    rect: Rect,
+    start: Pos2,
+    end: Pos2,
+    flip: bool,
+    color: Color32,
+) {
+    let direction = (end - start).normalized();
+    if direction.length_sq() == 0. {
+        return;
+    }
+    // Clip the viewport rectangle against exactly the half-plane used on commit.
+    let corners = [
+        rect.left_top(),
+        rect.right_top(),
+        rect.right_bottom(),
+        rect.left_bottom(),
+    ];
+    let mut polygon = Vec::new();
+    let mut a = corners[3];
+    let mut da = line_distance(start, end, flip, a);
+    for b in corners {
+        let db = line_distance(start, end, flip, b);
+        if (da >= 0.) != (db >= 0.) {
+            polygon.push(a + (b - a) * (da / (da - db)));
+        }
+        if db >= 0. {
+            polygon.push(b);
+        }
+        a = b;
+        da = db;
+    }
+    if polygon.len() >= 3 {
+        painter.add(egui::Shape::convex_polygon(
+            polygon,
+            color.gamma_multiply(0.10),
+            Stroke::NONE,
+        ));
+    }
+    let reach = rect.width() + rect.height();
+    painter.line_segment(
+        [start - direction * reach, end + direction * reach],
+        Stroke::new(1_f32, color.gamma_multiply(0.5)),
+    );
+    painter.line_segment([start, end], Stroke::new(2_f32, color));
+    for point in [start, end] {
+        painter.circle_filled(point, 4., color);
+    }
+    let side = egui::vec2(-direction.y, direction.x) * if flip { -1. } else { 1. };
+    painter.arrow(
+        start + (end - start) * 0.5,
+        side * 36.,
+        Stroke::new(2_f32, color),
+    );
 }
 
 // Even/odd filling supports concave and crossing outlines. Boundary points are
@@ -137,6 +207,7 @@ impl Viewport {
         gizmo: Rect,
         enabled: bool,
         select: Option<SelectionTool>,
+        navigate: bool,
     ) -> bool {
         let modifiers = ui.input(|i| i.modifiers);
         let requested =
@@ -163,6 +234,7 @@ impl Viewport {
             && self.gesture.is_none()
             && enabled
             && requested
+            && !navigate
             && document.primitive().is_none()
             && document.active_visible()
             && ((response.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_down()))
@@ -196,7 +268,17 @@ impl Viewport {
         let Some(drag) = self.selection.as_mut() else {
             return false;
         };
+        // A configurable flip action may update the side during the drag. Other
+        // tool switches cancel instead of committing a stale selection on release.
+        if matches!(drag.tool, SelectionTool::MaskLine { .. })
+            && let Some(tool @ SelectionTool::MaskLine { .. }) = select
+        {
+            drag.tool = tool;
+        }
         if !enabled
+            || (matches!(drag.tool, SelectionTool::MaskLine { .. })
+                && egui::Popup::is_any_open(ui.ctx()))
+            || (select.is_some() && select != Some(drag.tool))
             || ui.input(|i| {
                 i.key_pressed(egui::Key::Escape)
                     || !i.focused
@@ -258,13 +340,19 @@ impl Viewport {
             return true;
         }
         // Alt switches the operation even after Ctrl/Shift are released.
-        drag.hide = modifiers.alt;
+        drag.hide = match drag.tool {
+            SelectionTool::MaskLine { erase, .. } => erase,
+            _ => modifiers.alt,
+        };
         let color = if drag.hide {
             Color32::LIGHT_RED
         } else {
             Color32::LIGHT_GREEN
         };
-        let rect = if drag.tool == SelectionTool::Rectangle {
+        let rect = if let SelectionTool::MaskLine { flip, .. } = drag.tool {
+            paint_mask_line(painter, scene.rect, drag.start, drag.end, flip, color);
+            Rect::from_two_pos(drag.start, drag.end)
+        } else if drag.tool == SelectionTool::Rectangle {
             let rect = Rect::from_two_pos(drag.start, drag.end);
             painter.rect_filled(rect, 0., color.gamma_multiply(0.13));
             painter.rect_stroke(rect, 0., Stroke::new(1.5_f32, color), StrokeKind::Inside);
@@ -280,8 +368,8 @@ impl Viewport {
             rect
         };
         let operation = match (drag.tool, drag.hide) {
-            (SelectionTool::MaskLasso, false) => "Add mask",
-            (SelectionTool::MaskLasso, true) => "Erase mask",
+            (SelectionTool::MaskLasso | SelectionTool::MaskLine { .. }, false) => "Add mask",
+            (SelectionTool::MaskLasso | SelectionTool::MaskLine { .. }, true) => "Erase mask",
             (_, false) => "Isolate",
             (_, true) => "Hide",
         };
@@ -302,6 +390,30 @@ impl Viewport {
         if ui.input(|i| i.pointer.button_released(egui::PointerButton::Primary)) {
             let drag = self.selection.take().unwrap();
             self.gesture = None;
+            if let SelectionTool::MaskLine { erase, flip } = drag.tool {
+                if drag.start.distance(drag.end) < 6. {
+                    self.status = Some("Draw a longer dividing line".into());
+                    return true;
+                }
+                let result = document.mask_region_named(
+                    |p| {
+                        scene.visible_depth(p)
+                            && line_contains(drag.start, drag.end, flip, scene.project(p))
+                    },
+                    erase,
+                    if erase {
+                        "Erase mask line"
+                    } else {
+                        "Mask line"
+                    },
+                );
+                self.status = Some(
+                    result
+                        .err()
+                        .unwrap_or_else(|| format!("{operation} through line applied")),
+                );
+                return true;
+            }
             if drag.tool != SelectionTool::Rectangle {
                 let Some(region) = LassoRegion::new(drag.polygon()) else {
                     self.status = Some("Draw a lasso enclosing an area".into());
