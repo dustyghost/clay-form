@@ -45,6 +45,8 @@ UI commands are executed between panels so the viewport sees the latest document
 
 Open and first-time Save use a modal project file chooser; Save As always uses it and requires explicit confirmation before overwriting. Directory reads and writes stay in the application controller, while the UI holds listing and draft path state. An unsaved-change continuation can survive the chooser; cancellation leaves both the pending decision and document intact.
 
+Reference images, alpha images, OBJ models, brush presets and brush libraries reuse this chooser with an asset-specific filter. Existing import action identities now open the picker, including from shortcuts and custom menus. The selected path is remembered per asset type for the session after successful import. Validation errors keep the picker open; alpha selection opens the private adjustment draft, and OBJ selection starts the existing cancellable worker. Opening or cancelling a picker does not import anything, and modal input cannot sculpt or trigger another file action.
+
 A session-only document flag distinguishes a suggested filename from an established save destination.
 
 

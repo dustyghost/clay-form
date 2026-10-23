@@ -25,7 +25,8 @@ fn alpha_import_preview_is_private_cancellable_and_blocks_viewport_edits() {
     let before = app.document.project();
     let history = app.document.history_counts();
     app.ui.alpha_path = path.to_string_lossy().into();
-    app.dispatch(Command::LoadAlpha, &ctx);
+    app.dispatch(Command::Action(Action::LoadAlpha), &ctx);
+    app.dispatch(Command::AcceptProjectFile(false), &ctx);
     assert!(app.ui.alphas.draft.is_some());
     assert!(app.document.project() == before);
     let rect = navigation_frame(&mut app, &ctx, vec![]);

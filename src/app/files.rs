@@ -1,15 +1,29 @@
 //! File operations and unsaved-change decisions.
 use super::*;
+use crate::command::AssetKind;
 
 impl App {
     pub(super) fn browse_project(&mut self, save: bool, resume_pending: bool) {
+        let initial = if resume_pending {
+            self.ui.pending_save_path.clone()
+        } else {
+            self.ui.path.clone()
+        };
+        self.browse_files(initial, save, resume_pending, None);
+    }
+    pub(super) fn browse_asset(&mut self, asset: AssetKind) {
+        let initial = self.ui.asset_path_mut(asset).clone();
+        self.browse_files(initial, false, false, Some(asset));
+    }
+    fn browse_files(
+        &mut self,
+        initial: String,
+        save: bool,
+        resume_pending: bool,
+        asset: Option<AssetKind>,
+    ) {
         self.cancel_mesh_job();
         self.viewport.cancel(&mut self.document);
-        let initial = if resume_pending {
-            &self.ui.pending_save_path
-        } else {
-            &self.ui.path
-        };
         let path = std::path::PathBuf::from(initial);
         let directory = if path.is_dir() {
             path.clone()
@@ -28,6 +42,7 @@ impl App {
                 .into_owned()
         };
         self.ui.file_picker = Some(crate::ui::FilePicker {
+            asset,
             save,
             resume_pending,
             directory: std::env::current_dir().unwrap_or_else(|_| ".".into()),
@@ -61,6 +76,13 @@ impl App {
                 if !metadata.is_file() && !metadata.is_dir() {
                     continue;
                 }
+                if metadata.is_file()
+                    && picker
+                        .asset
+                        .is_some_and(|asset| !asset.accepts(&entry.path()))
+                {
+                    continue;
+                }
                 entries.push(crate::ui::FileEntry {
                     path: entry.path(),
                     name: entry.file_name().to_string_lossy().into_owned(),
@@ -92,6 +114,24 @@ impl App {
         let mut path = picker.directory.join(picker.filename.trim());
         if path.is_dir() {
             self.navigate_project_files(&path.to_string_lossy());
+            return;
+        }
+        if let Some(asset) = picker.asset {
+            if !path.is_file() {
+                picker.error = "Choose an existing file".into();
+                return;
+            }
+            if !asset.accepts(&path) {
+                picker.error = format!("Choose {}", asset.filter_label());
+                return;
+            }
+            // Keep the chooser and its selection on validation errors. Alpha
+            // success opens its existing private preview, never applies it here.
+            match self.import_asset(asset, path.to_string_lossy().into_owned()) {
+                Ok(()) => self.ui.file_picker = None,
+                Err(error) => self.ui.file_picker.as_mut().unwrap().error = error,
+            }
+            self.viewport.wait_for_release();
             return;
         }
         if picker.save && path.extension().is_none() {
@@ -132,6 +172,47 @@ impl App {
             );
         }
         self.viewport.wait_for_release();
+    }
+    pub(super) fn import_asset(&mut self, asset: AssetKind, path: String) -> Result<(), String> {
+        match asset {
+            AssetKind::Reference => self.add_reference(egui::DroppedFile {
+                path: Some(path.clone().into()),
+                ..Default::default()
+            })?,
+            AssetKind::Alpha => {
+                let image = persistence::load_alpha(&path)?;
+                self.viewport.cancel(&mut self.document);
+                let name = std::path::Path::new(&path)
+                    .file_stem()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned();
+                self.ui.alphas.edit(
+                    None,
+                    crate::sculpt::alpha::Asset {
+                        name,
+                        category: String::new(),
+                        image,
+                    },
+                );
+            }
+            AssetKind::Obj => self.start_mesh_job(Operation::ImportObj(path.clone()))?,
+            AssetKind::Brush => {
+                let brush = persistence::load_brush(&path)?;
+                let (added, updated, index) = self.document.import_brushes(vec![brush])?;
+                if let Some(index) = index {
+                    self.ui.select_brush(index, &self.document);
+                }
+                self.ui.status = format!("Imported brush: {added} added, {updated} updated");
+            }
+            AssetKind::BrushLibrary => {
+                let brushes = persistence::load_brush_library(&path)?;
+                let (added, updated, _) = self.document.import_brushes(brushes)?;
+                self.ui.status = format!("Imported library: {added} added, {updated} updated");
+            }
+        }
+        *self.ui.asset_path_mut(asset) = path;
+        Ok(())
     }
     pub(super) fn save_to(&mut self, path: &str) -> bool {
         match persistence::save_project(path, &self.document.project()) {

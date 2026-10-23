@@ -11,7 +11,9 @@ Keep a silhouette study, anatomy sketch, or photograph beside your sculpt so you
 
 ## Add a reference
 
-Drop a PNG/JPEG onto the viewport, or enter its path under **References** and choose **Add image**.
+Under **References**, choose **Add image…** to browse PNG/JPEG files. Double-click a folder to open it, then double-click an image or select it and choose **Add reference image**. **Home**, **Up**, and the editable **Folder** field help you navigate. You can still enter an image path before opening the picker.
+
+The picker works inside the application, including on Sway/Wayland where native file drops may not be delivered. **Cancel** or **Escape** leaves the project unchanged. Invalid images show an error in the picker so you can choose another file.
 
 Adding enters **Arrange images**. The file is embedded in the project, so moving/deleting its source later will not break it. PNG transparency and JPEG orientation metadata are supported.
 

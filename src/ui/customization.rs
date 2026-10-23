@@ -236,6 +236,7 @@ impl UiState {
             return self.mesh_busy;
         }
         if self.pending.is_some()
+            || self.file_picker.is_some()
             || self.primitive_warning.is_some()
             || self.mesh_busy
             || self.alphas.draft.is_some()
@@ -261,10 +262,7 @@ impl UiState {
             Action::ToggleStencil | Action::RemoveStencil => document.stencil().is_some(),
             Action::AttachStencil => sculpt && document.stencil().is_some(),
             Action::ImportObj => document.model_count() < 64,
-            Action::AddReference => {
-                document.references().len() < crate::reference::MAX_REFERENCES
-                    && !self.reference_path.trim().is_empty()
-            }
+            Action::AddReference => document.references().len() < crate::reference::MAX_REFERENCES,
             Action::ArrangeReferences => !document.references().is_empty(),
             Action::Undo => document.can_undo(),
             Action::Redo => document.can_redo(),

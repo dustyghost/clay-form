@@ -1,5 +1,6 @@
 //! Resolve reusable actions into concrete application commands.
 use super::*;
+use crate::command::AssetKind;
 
 impl App {
     pub(super) fn execute_action(&mut self, action: Action, ctx: &egui::Context) {
@@ -340,11 +341,8 @@ impl App {
             }
 
             Action::CancelMeshOperation => Some(Command::CancelMeshJob),
-            Action::ImportObj => Some(Command::ImportObj),
-            Action::AddReference => Some(Command::AddReference(egui::DroppedFile {
-                path: Some(self.ui.reference_path.clone().into()),
-                ..Default::default()
-            })),
+            Action::ImportObj => Some(Command::BrowseAsset(AssetKind::Obj)),
+            Action::AddReference => Some(Command::BrowseAsset(AssetKind::Reference)),
             Action::ArrangeReferences => {
                 Some(Command::ArrangeReferences(!self.ui.arrange_references))
             }
@@ -518,11 +516,11 @@ impl App {
             }),
             Action::AttachStencil => Some(Command::AttachStencil),
             Action::RemoveStencil => Some(Command::SetStencil(None)),
-            Action::LoadAlpha => Some(Command::LoadAlpha),
+            Action::LoadAlpha => Some(Command::BrowseAsset(AssetKind::Alpha)),
             Action::SavePreset => active_brush.map(Command::SavePreset),
-            Action::LoadPreset => Some(Command::LoadPreset),
+            Action::LoadPreset => Some(Command::BrowseAsset(AssetKind::Brush)),
             Action::ExportLibrary => Some(Command::ExportBrushLibrary),
-            Action::ImportLibrary => Some(Command::ImportBrushLibrary),
+            Action::ImportLibrary => Some(Command::BrowseAsset(AssetKind::BrushLibrary)),
             Action::RestoreBrushIcon
             | Action::ResetBrushSettings
             | Action::BrushAdd

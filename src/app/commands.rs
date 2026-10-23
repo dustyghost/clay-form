@@ -151,6 +151,7 @@ impl App {
                 | Command::OpenProjection
                 | Command::KeepProjectionReference
                 | Command::AddReference(_)
+                | Command::BrowseAsset(_)
                 | Command::PlaceReference(..)
                 | Command::RemoveReference(_)
                 | Command::ArrangeReferences(_)
@@ -243,7 +244,6 @@ impl App {
                     | Command::SetRemeshSettings(..)
                     | Command::Subdivide
                     | Command::Remesh
-                    | Command::ImportObj
                     | Command::Mirror(..)
                     | Command::EditEdges(_)
                     | Command::ModelingMode(_)
@@ -533,6 +533,10 @@ impl App {
                 }
                 Ok(())
             }
+            Command::BrowseAsset(asset) => {
+                self.browse_asset(asset);
+                Ok(())
+            }
             Command::NavigateProjectFiles(path) => {
                 self.navigate_project_files(&path);
                 Ok(())
@@ -556,9 +560,6 @@ impl App {
                     self.save_to(&path);
                 }
                 Ok(())
-            }
-            Command::ImportObj => {
-                self.start_mesh_job(Operation::ImportObj(self.ui.obj_path.clone()))
             }
             Command::Export => {
                 let path = std::path::Path::new(&self.ui.path).with_extension("obj");
@@ -957,22 +958,6 @@ impl App {
                 .duplicate_brush(index)
                 .map(|index| self.ui.select_brush(index, &self.document)),
             Command::UpdateBrush(index, brush) => self.document.update_brush(index, brush),
-            Command::LoadAlpha => persistence::load_alpha(&self.ui.alpha_path).map(|image| {
-                self.viewport.cancel(&mut self.document);
-                let name = std::path::Path::new(&self.ui.alpha_path)
-                    .file_stem()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string();
-                self.ui.alphas.edit(
-                    None,
-                    crate::sculpt::alpha::Asset {
-                        name,
-                        category: String::new(),
-                        image,
-                    },
-                );
-            }),
             Command::SaveAlpha(index, asset) => self.document.save_alpha(index, asset).map(|i| {
                 self.ui.alphas.selected = Some(crate::ui::alphas::Selection::Project(i));
                 self.ui.alphas.draft = None;
@@ -1020,14 +1005,6 @@ impl App {
                 persistence::save_brush(&self.ui.preset_path, &self.document.brushes()[index])
                     .map(|()| self.ui.status = "Brush saved".into())
             }
-            Command::LoadPreset => persistence::load_brush(&self.ui.preset_path)
-                .and_then(|brush| self.document.import_brushes(vec![brush]))
-                .map(|(added, updated, index)| {
-                    if let Some(index) = index {
-                        self.ui.select_brush(index, &self.document);
-                    }
-                    self.ui.status = format!("Imported brush: {added} added, {updated} updated");
-                }),
             Command::CaptureBrushIcon(index) => {
                 self.viewport.cancel(&mut self.document);
                 crate::brush_icon::capture(self.document.mesh(), &self.camera).and_then(|icon| {
@@ -1054,11 +1031,6 @@ impl App {
                 persistence::save_brush_library(&self.ui.library_path, self.document.brushes())
                     .map(|()| self.ui.status = "Brush library exported".into())
             }
-            Command::ImportBrushLibrary => persistence::load_brush_library(&self.ui.library_path)
-                .and_then(|brushes| self.document.import_brushes(brushes))
-                .map(|(added, updated, _)| {
-                    self.ui.status = format!("Imported library: {added} added, {updated} updated")
-                }),
             Command::SaveAndContinue => {
                 if let Some(action) = self.ui.pending.clone() {
                     let path = self.ui.pending_save_path.clone();
