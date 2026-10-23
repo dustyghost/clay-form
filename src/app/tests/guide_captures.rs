@@ -20,6 +20,74 @@ struct Guide {
 }
 
 #[test]
+#[ignore = "Flatten stroke visual review; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn flatten_stroke_offscreen_review() {
+    use crate::sculpt::{Geometry, Kind};
+    let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1000, 900]);
+    let mut cube = Primitive::for_kind(PrimitiveKind::Cube);
+    cube.divisions = [40, 40, 2];
+    let mut mesh = cube.mesh().unwrap();
+    for p in &mut mesh.vertices {
+        if p.2 > 0.9 && p.0.abs() < 0.95 && p.1.abs() < 0.95 {
+            p.2 += 0.055 * (p.0 * 16.).cos() * (p.1 * 16.).cos();
+        }
+    }
+    g.app
+        .document
+        .replace_geometry(Geometry::new(mesh))
+        .unwrap();
+    g.app.ui.selected = g
+        .app
+        .document
+        .brushes()
+        .iter()
+        .position(|b| b.kind == Kind::Flatten)
+        .unwrap();
+    let mut brush = g.app.document.brushes()[g.app.ui.selected].clone();
+    brush.radius = 170.;
+    brush.strength = 0.4;
+    brush.spacing = 0.12;
+    g.app
+        .document
+        .update_brush(g.app.ui.selected, brush)
+        .unwrap();
+    g.panel(Tool::Brush, Dock::Right);
+    g.app.camera.yaw = 0.35;
+    g.app.camera.pitch = -0.25;
+    g.save("flatten-before");
+    let before = g.app.document.geometry_snapshot();
+    let history = g.app.document.history_counts();
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    let (rect, _) = g.frame(vec![]);
+    let start = rect.center();
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    let mut end = start;
+    for step in 1..=72 {
+        end = start + Vec2::new(90. * (step as f32 * std::f32::consts::PI / 12.).sin(), 0.);
+        g.frame(vec![egui::Event::PointerMoved(end)]);
+    }
+    g.frame(vec![primary_event(end, false), egui::Event::PointerGone]);
+    let after = g.app.document.geometry_snapshot();
+    assert_ne!(before, after);
+    after.mesh.validate_closed().unwrap();
+    assert_eq!(g.app.document.history_counts().0, history.0 + 1);
+    g.app.camera.yaw = 0.35;
+    g.app.camera.pitch = -0.25;
+    g.save("flatten-after");
+    g.app.document.undo();
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.app.document.redo();
+    assert_eq!(g.app.document.geometry_snapshot(), after);
+    g.app.viewport.destroy_renderer();
+}
+
+#[test]
 #[ignore = "renders adaptive Reactor rings drag stamp; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn reactor_ring_stamp_offscreen_review() {
     let directory = std::path::PathBuf::from(
