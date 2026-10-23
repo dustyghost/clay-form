@@ -75,15 +75,19 @@ fn normal_agreement(a: Vector, b: Vector) -> f64 {
 
 impl Mesh {
     pub(super) fn limit_sculpt_deformation(&mut self, before: &[Vec3]) -> bool {
-        self.limit_deformation(before, false, None)
+        self.limit_deformation(before, false, None, false)
     }
 
     pub(super) fn limit_stamp_deformation(&mut self, before: &[Vec3], direction: Vec3) -> bool {
-        self.limit_deformation(before, false, Some(direction))
+        self.limit_deformation(before, false, Some(direction), false)
     }
 
     pub(super) fn limit_projection_deformation(&mut self, before: &[Vec3]) -> bool {
-        self.limit_deformation(before, true, None)
+        self.limit_deformation(before, true, None, false)
+    }
+
+    pub(super) fn limit_smoothing_deformation(&mut self, before: &[Vec3]) -> bool {
+        self.limit_deformation(before, false, None, true)
     }
 
     fn limit_deformation(
@@ -91,6 +95,7 @@ impl Mesh {
         before: &[Vec3],
         prevent_folds: bool,
         direction: Option<Vec3>,
+        local_rejection: bool,
     ) -> bool {
         let active: Vec<_> = self
             .triangles
@@ -135,7 +140,7 @@ impl Mesh {
             ) >= minimum - 1e-6
         };
         let mut reduce = vec![false; self.vertices.len()];
-        for _ in 0..12 {
+        for pass in 0..if local_rejection { 20 } else { 12 } {
             let mut unsafe_face = false;
             for &t in &active {
                 if !safe_face(t.map(|v| before[v]), t.map(|v| self.vertices[v]), direction) {
@@ -161,7 +166,14 @@ impl Mesh {
             }
             for (v, flag) in reduce.iter_mut().enumerate() {
                 if *flag {
-                    self.vertices[v] = before[v] + (self.vertices[v] - before[v]) * 0.5;
+                    self.vertices[v] = if local_rejection && pass >= 8 {
+                        // A few pre-existing slivers must not cancel smoothing
+                        // everywhere else. Pin failed proposals, then recheck
+                        // neighboring faces against the resulting mixed update.
+                        before[v]
+                    } else {
+                        before[v] + (self.vertices[v] - before[v]) * 0.5
+                    };
                     *flag = false;
                 }
             }
@@ -183,6 +195,59 @@ impl Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn smoothing_does_not_make_existing_slivers_worse() {
+        let before = vec![Vec3(0., 0., 0.), Vec3(1., 0., 0.), Vec3(0.5, 0.004, 0.)];
+        let mut mesh = Mesh {
+            vertices: before.clone(),
+            triangles: vec![[0, 1, 2]],
+            mask: vec![0.; 3],
+            ..Default::default()
+        };
+        mesh.vertices[2].1 = 0.001;
+        mesh.limit_smoothing_deformation(&before);
+        let q = |v: &[Vec3]| quality(difference(v[1], v[0]), difference(v[2], v[0]));
+        assert!(q(&mesh.vertices) >= q(&before) * (1. - 1e-6));
+    }
+
+    #[test]
+    fn smoothing_allows_valid_steep_dihedrals_without_pinning_a_safe_patch() {
+        let before = vec![
+            Vec3(0., -1., 0.),
+            Vec3(0., 1., 0.),
+            Vec3(-1., 0., 1.),
+            Vec3(1., 0., 1.),
+            Vec3(3., 0., 0.),
+            Vec3(4., 0., 0.),
+            Vec3(3., 1., 0.),
+        ];
+        let mut mesh = Mesh {
+            vertices: before.clone(),
+            triangles: vec![[0, 1, 2], [1, 0, 3], [4, 5, 6]],
+            mask: vec![0.; 7],
+            ..Default::default()
+        };
+        mesh.vertices[2].0 = -0.5;
+        mesh.vertices[3].0 = 0.5;
+        for p in &mut mesh.vertices[4..] {
+            p.2 += 0.1;
+        }
+        let safe = mesh.vertices[4..].to_vec();
+        assert!(mesh.limit_smoothing_deformation(&before));
+        assert_eq!(&mesh.vertices[4..], safe);
+        // A sharper V has opposing normals but no triangle inversion or
+        // intersection. A dihedral sign test must not lock fairing in place.
+        assert_eq!(mesh.vertices[2].0, -0.5);
+        assert_eq!(mesh.vertices[3].0, 0.5);
+        for t in &mesh.triangles {
+            assert!(safe_face(
+                t.map(|i| before[i]),
+                t.map(|i| mesh.vertices[i]),
+                None
+            ));
+        }
+    }
 
     #[test]
     fn directional_stamp_allows_steep_relief_but_rejects_projected_collapse() {

@@ -263,3 +263,54 @@ fn adaptive_detail_groove_does_not_fold_with_or_without_stabilization() {
         assert_eq!(app.document.mesh(), &after);
     }
 }
+
+#[test]
+fn alpha_drag_default_and_add_menu_preserve_standard_and_roundtrip() {
+    use crate::sculpt::{Alpha, Brush, Project, StrokeMode};
+    let mut app = App::default();
+    let standard = app.document.brushes()[0].clone();
+    let preset = app
+        .document
+        .brushes()
+        .iter()
+        .find(|b| b.name == "Alpha Drag")
+        .unwrap()
+        .clone();
+    assert_eq!(preset.kind, Kind::Standard);
+    assert_eq!(preset.stroke_mode, StrokeMode::DragRect);
+    assert!(matches!(preset.alpha, Alpha::Image { .. }));
+    assert_eq!(
+        preset.alpha,
+        crate::sculpt::alpha::builtins()
+            .iter()
+            .find(|a| a.name == "Wood grain")
+            .unwrap()
+            .image
+    );
+    assert_ne!(preset.identity(), standard.identity());
+    assert_eq!(preset.strength, standard.strength);
+    assert_eq!(standard.stroke_mode, StrokeMode::Freehand);
+    let mut project = app.document.project();
+    project.brushes.retain(|b| b.name != "Alpha Drag");
+    app.document.replace_project(project, "old.clay").unwrap();
+    let ctx = egui::Context::default();
+    app.dispatch(Command::Action(Action::NewBrush("Alpha Drag".into())), &ctx);
+    assert!(app.document.brushes()[app.ui.selected] == preset);
+    app.dispatch(Command::Action(Action::NewBrush("Alpha Drag".into())), &ctx);
+    assert_ne!(
+        app.document.brushes()[app.ui.selected].identity(),
+        preset.identity()
+    );
+    assert!(app.document.brushes()[0] == standard);
+    let reopened: Project =
+        serde_json::from_slice(&serde_json::to_vec(&app.document.project()).unwrap()).unwrap();
+    reopened.validate().unwrap();
+    assert_eq!(
+        reopened.brushes.last().unwrap().alpha,
+        Brush::alpha_drag().alpha
+    );
+    assert_eq!(
+        reopened.brushes.last().unwrap().stroke_mode,
+        StrokeMode::DragRect
+    );
+}

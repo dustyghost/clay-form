@@ -192,6 +192,16 @@ impl UiState {
         match menu {
             BuiltinMenu::References => self.reference_controls(ui, document, commands),
             BuiltinMenu::Brushes => {
+                if ui
+                    .button("Alpha Drag")
+                    .customize(Action::NewBrush("Alpha Drag".into()))
+                    .clicked()
+                {
+                    commands.push(Command::AddAlphaDragBrush);
+                    if popup {
+                        ui.close_kind(egui::UiKind::Menu);
+                    }
+                }
                 for kind in Kind::ALL {
                     if ui
                         .button(format!("{kind:?}"))

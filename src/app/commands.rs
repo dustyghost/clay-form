@@ -948,6 +948,10 @@ impl App {
                 .document
                 .append_brush(crate::sculpt::Brush::new(kind))
                 .map(|index| self.ui.select_brush(index, &self.document)),
+            Command::AddAlphaDragBrush => self
+                .document
+                .append_brush(crate::sculpt::Brush::alpha_drag())
+                .map(|index| self.ui.select_brush(index, &self.document)),
             Command::DuplicateBrush(index) => self
                 .document
                 .duplicate_brush(index)

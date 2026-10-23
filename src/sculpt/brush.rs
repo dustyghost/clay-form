@@ -14,9 +14,10 @@ pub enum Kind {
     Mask,
     Snake,
     Detail,
+    Decimate,
 }
 impl Kind {
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::Standard,
         Self::Clay,
         Self::Inflate,
@@ -29,6 +30,7 @@ impl Kind {
         Self::Mask,
         Self::Snake,
         Self::Detail,
+        Self::Decimate,
     ];
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -271,6 +273,22 @@ pub struct Brush {
     pub pressure_curve: f32,
 }
 impl Brush {
+    /// A ready-to-place image stamp, independent of the Standard preset's identity.
+    pub fn alpha_drag() -> Self {
+        Self {
+            id: Some(content_guid(b"clay-form/default-brush/AlphaDrag")),
+            name: "Alpha Drag".into(),
+            stroke_mode: StrokeMode::DragRect,
+            alpha: super::alpha::builtins()
+                .iter()
+                .find(|asset| asset.name == "Wood grain")
+                .expect("built-in Wood grain alpha")
+                .image
+                .clone(),
+            ..Self::new(Kind::Standard)
+        }
+    }
+
     pub fn new(kind: Kind) -> Self {
         Self {
             id: Some(content_guid(

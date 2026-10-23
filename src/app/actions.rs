@@ -605,6 +605,7 @@ impl App {
                 self.ui.customization.popup_menu = Some(id);
                 None
             }
+            Action::NewBrush(name) if name == "Alpha Drag" => Some(Command::AddAlphaDragBrush),
             Action::NewBrush(name) => crate::sculpt::Kind::ALL
                 .into_iter()
                 .find(|k| format!("{k:?}") == name)

@@ -292,29 +292,18 @@ impl Mesh {
         dabs: &[Dab],
         stencils: &[super::alpha::Projection],
     ) -> bool {
+        if b.kind == Kind::Smooth {
+            return self.smooth_surface(b, dabs, stencils);
+        }
+        if b.kind == Kind::Decimate {
+            return false; // Topology only; handled by adapt_stenciled.
+        }
         let stable_dabs = (b.kind == Kind::Detail).then(|| self.detail_dabs(dabs));
         let dabs = stable_dabs.as_deref().unwrap_or(dabs);
         let mut deformed = false;
         let old = self.vertices.clone();
         let normals = self.normals();
-        let mut avg = vec![Vec3::default(); old.len()];
-        let mut count = vec![0f32; old.len()];
-        if b.kind == Kind::Smooth {
-            for &[a, c, d] in &self.triangles {
-                for (i, j, k) in [(a, c, d), (c, a, d), (d, a, c)] {
-                    avg[i] = avg[i] + old[j] + old[k];
-                    count[i] += 2.;
-                }
-            }
-        }
         let mut sculptable = self.sculptable_vertices();
-        if b.kind == Kind::Smooth {
-            for edge in &self.creases {
-                for &v in edge {
-                    sculptable[v] = false;
-                }
-            }
-        }
         let polish = (b.kind == Kind::Polish)
             .then(|| self.polish_planes(b, dabs, &normals, &mut sculptable));
         let clay = (b.kind == Kind::Clay).then(|| self.clay_planes(dabs));
@@ -405,7 +394,7 @@ impl Mesh {
                         plane_normal * (depth * (w * gain).min(1.) * sign)
                     }
                     Kind::Inflate => normals[i] * (radius * 0.15 * w * sign),
-                    Kind::Smooth => (avg[i] * (1. / count[i].max(1.)) - old[i]) * (w * sign),
+                    Kind::Smooth | Kind::Decimate => unreachable!(),
                     Kind::Flatten => normal * (-offset.dot(normal) * w * sign),
                     Kind::Polish => {
                         let (center, normal) = plane.expect("Polish requires a sampled plane");

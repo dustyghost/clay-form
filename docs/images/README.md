@@ -39,7 +39,8 @@ See [Development](../development.md#update-guide-screenshots) for prerequisites 
 | `brush-reset-before.png`, `brush-reset-after.png` | [Reset](../guide/sculpting.md#example-reset-an-experimental-brush) changes settings but keeps the name | `guide_workflows_offscreen_preview` |
 | `mirror-before.png`, `mirror-after.png` | [Replace one half from the other](../guide/modeling.md#mirror-one-side) with a consistent camera | `mirror_guide_offscreen_preview` |
 | `symmetry-stroke.png` | [One input stroke, two mirrored marks](../guide/sculpting.md#symmetry) | `guide_workflows_offscreen_preview` |
-| `adaptive-settings.png` | [Adaptive detail settings](../guide/sculpting.md#snake-brush-and-adaptive-sculpting) | `guide_workflows_offscreen_preview` |
+| `adaptive-settings.png` | [Adaptive detail settings](../guide/sculpting.md#snake-brush-and-adaptive-sculpting), with the separate Decimate brush selected | `smooth_decimate_offscreen_review`, `cleanup-decimate-controls` |
+| `smooth-pull-before.png`, `smooth-pull-after.png` | A short Snake pull smoothed back into the surface with fixed topology | `smooth_decimate_offscreen_review`, `cleanup-before` and `cleanup-smoothed` |
 | `primitive-cube.png` | [Dimensions versus spans](../guide/modeling.md#parametric-primitives) | `guide_workflows_offscreen_preview` |
 | `slice-trim-preview.png`, `slice-trim-result.png` | [Keep/remove preview and the resulting cap](../guide/modeling.md#slice); the result is orbited to expose the cap | `guide_workflows_offscreen_preview` |
 | `reference-images.png` | [Placement, locking, and opacity](../guide/references.md) using front/side ellipsoid studies | `guide_workflows_offscreen_preview` |

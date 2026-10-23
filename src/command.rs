@@ -102,6 +102,7 @@ pub(crate) enum Command {
     SetSymmetry(Symmetry),
     Mirror(crate::sculpt::Axis, bool),
     AddBrush(Kind),
+    AddAlphaDragBrush,
     DuplicateBrush(usize),
     UpdateBrush(usize, Brush),
     LoadAlpha,

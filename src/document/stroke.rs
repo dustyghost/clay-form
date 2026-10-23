@@ -116,6 +116,6 @@ impl Document {
             self.dirty = true;
             self.display_changed();
         }
-        deformed
+        deformed || before_topology || after_topology
     }
 }

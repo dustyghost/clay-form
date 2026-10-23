@@ -187,7 +187,14 @@ fn repeated_brush_strokes_do_not_fold_or_flatten_faces() {
                 }
             }
         }
-        assert_ne!(mesh.vertices, original, "{kind:?} must still sculpt");
+        if kind == Kind::Decimate {
+            assert_eq!(
+                mesh.vertices, original,
+                "Decimate never applies deformation"
+            );
+        } else {
+            assert_ne!(mesh.vertices, original, "{kind:?} must still sculpt");
+        }
         mesh.validate_closed().unwrap();
     }
 }

@@ -273,7 +273,7 @@ fn switching_to_smooth_discards_pending_stamp_and_keeps_one_undo_step() {
 }
 
 #[test]
-fn adaptive_shift_smooth_reports_actual_density_reduction_and_undoes() {
+fn adaptive_shift_smooth_keeps_topology_and_decimate_reports_reduction() {
     let mut app = App::default();
     let ctx = egui::Context::default();
     app.document
@@ -306,6 +306,37 @@ fn adaptive_shift_smooth_reports_actual_density_reduction_and_undoes() {
         &mut app,
         &ctx,
         egui::Modifiers::SHIFT,
+        vec![primary_event(center + Vec2::new(45., 0.), false)],
+    );
+    assert_eq!(app.document.mesh().triangles, before.mesh.triangles);
+    assert_ne!(app.document.mesh().vertices, before.mesh.vertices);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    let index = app
+        .document
+        .brushes()
+        .iter()
+        .position(|b| b.kind == Kind::Decimate)
+        .unwrap();
+    app.ui.select_brush(index, &app.document);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(center),
+            primary_event(center, true),
+        ],
+    );
+    for offset in [15., 30., 45.] {
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(center + Vec2::new(offset, 0.))],
+        );
+    }
+    navigation_frame(
+        &mut app,
+        &ctx,
         vec![primary_event(center + Vec2::new(45., 0.), false)],
     );
     let removed = before.mesh.vertices.len() - app.document.mesh().vertices.len();
