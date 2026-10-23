@@ -1,4 +1,4 @@
-//! Clay buildup and its local surface reference.
+//! Area-weighted surface reference for Clay and stroke-stable Flatten.
 
 use super::{Dab, Mesh, Vec3};
 
@@ -6,7 +6,7 @@ impl Mesh {
     /// Sample a whole patch instead of following the tiny ridge under the cursor.
     /// Area weighting keeps adaptive triangle density from biasing the plane;
     /// a smooth spatial taper avoids jumps when triangles enter the footprint.
-    pub(super) fn clay_planes(&self, dabs: &[Dab]) -> Vec<(Vec3, Vec3)> {
+    pub(crate) fn surface_planes(&self, dabs: &[Dab]) -> Vec<(Vec3, Vec3)> {
         dabs.iter()
             .map(|dab| {
                 let mut center = Vec3::default();

@@ -29,6 +29,8 @@ Build a rounded form, cut a fold, or pull out a horn: choose the brush for the s
 
 For broad, clean planes, try **Polish** with a large radius and light pressure. It flattens local bumps while holding sharp corners and marked creases. Masks, hidden surfaces, pressure, alphas, and symmetry still apply. Reversing Polish exaggerates relief, as with Flatten.
 
+**Flatten** samples the average surface angle and height under the brush at the start of a stroke. Brush back and forth to bring the surface progressively toward that same plane; the footprint follows your cursor without changing the target when you cross a bump or reverse direction. Release and start another stroke to choose a new plane. Lower strength or pressure gives a gentler result. Each symmetry copy samples its own starting patch. Subtract exaggerates relief away from the fixed plane; use Polish when you want to preserve sharp corners and marked creases.
+
 Select a tile in **Brush library**. Use **Add brush** if a brush is missing from an older project.
 
 **Clay** builds a layer against the average surface beneath the brush. It fills hollows faster than raised spots, helping overlapping dabs form a cohesive mass. **Standard** adds depth along the picked normal and retains more of the existing small surface variations. Clay samples the surrounding patch to keep small bumps from steering each dab; repeated passes still add volume. Subtract removes a similarly controlled layer.
