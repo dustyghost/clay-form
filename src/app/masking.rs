@@ -534,14 +534,19 @@ mod tests {
             )
             .unwrap();
         let before = app.document.geometry_snapshot();
-        let with_alt = |key| Event::Key {
+        let with_alt = |key, pressed| Event::Key {
             key,
             physical_key: None,
-            pressed: true,
+            pressed,
             repeat: false,
             modifiers: Modifiers::ALT,
         };
-        frame(&mut app, &ctx, Modifiers::ALT, vec![with_alt(Key::F2)]);
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::ALT,
+            vec![with_alt(Key::F2, true), with_alt(Key::F2, false)],
+        );
         assert_eq!(
             app.ui.viewport_menu.context,
             Some(ViewportMenuContext::Mask)
@@ -551,15 +556,33 @@ mod tests {
             &mut app,
             &ctx,
             Modifiers::ALT,
-            vec![with_alt(Key::ArrowDown)],
+            vec![
+                with_alt(Key::ArrowDown, true),
+                with_alt(Key::ArrowDown, false),
+            ],
         );
-        frame(&mut app, &ctx, Modifiers::ALT, vec![with_alt(Key::Enter)]);
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::ALT,
+            vec![with_alt(Key::Enter, true), with_alt(Key::Enter, false)],
+        );
         assert_eq!(app.ui.preferences.mask_preset.shape, MaskShape::Lasso);
         assert!(app.ui.viewport_menu.context.is_none());
         assert!(app.ui.mask_active);
-        frame(&mut app, &ctx, Modifiers::ALT, vec![with_alt(Key::F2)]);
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::ALT,
+            vec![with_alt(Key::F2, true), with_alt(Key::F2, false)],
+        );
         app.ui.viewport_menu.selected = 4;
-        frame(&mut app, &ctx, Modifiers::ALT, vec![with_alt(Key::Enter)]);
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::ALT,
+            vec![with_alt(Key::Enter, true), with_alt(Key::Enter, false)],
+        );
         assert!(app.ui.preferences.mask_preset.erase);
         frame(&mut app, &ctx, Modifiers::NONE, vec![]);
         assert!(!app.ui.mask_active);
@@ -569,9 +592,18 @@ mod tests {
             &mut app,
             &ctx,
             Modifiers::ALT,
-            vec![Event::PointerMoved(p), with_alt(Key::F2)],
+            vec![
+                Event::PointerMoved(p),
+                with_alt(Key::F2, true),
+                with_alt(Key::F2, false),
+            ],
         );
-        frame(&mut app, &ctx, Modifiers::ALT, vec![with_alt(Key::Escape)]);
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::ALT,
+            vec![with_alt(Key::Escape, true), with_alt(Key::Escape, false)],
+        );
         assert!(app.ui.viewport_menu.context.is_none());
         assert!(!app.ui.mask_active);
         assert_eq!(app.document.geometry_snapshot(), before);
