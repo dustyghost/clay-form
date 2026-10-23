@@ -2122,7 +2122,7 @@ fn visibility_frame(
     );
 }
 #[test]
-fn visibility_rectangle_latches_modifiers_without_zoom_or_sculpt_and_esc_cancels() {
+fn visibility_rectangle_latches_operation_and_hold_release_or_escape_cancel() {
     let mut app = App::default();
     let ctx = egui::Context::default();
     navigation_frame(&mut app, &ctx, vec![]);
@@ -2144,7 +2144,7 @@ fn visibility_rectangle_latches_modifiers_without_zoom_or_sculpt_and_esc_cancels
     visibility_frame(
         &mut app,
         &ctx,
-        egui::Modifiers::ALT,
+        modifiers | egui::Modifiers::ALT,
         vec![egui::Event::PointerMoved(end)],
     );
     assert_eq!(
@@ -2155,7 +2155,7 @@ fn visibility_rectangle_latches_modifiers_without_zoom_or_sculpt_and_esc_cancels
     visibility_frame(
         &mut app,
         &ctx,
-        egui::Modifiers::ALT,
+        modifiers | egui::Modifiers::ALT,
         vec![primary_event(end, false)],
     );
     let hidden = app.document.mesh().hidden_face_count();
@@ -2176,6 +2176,30 @@ fn visibility_rectangle_latches_modifiers_without_zoom_or_sculpt_and_esc_cancels
         &mut app,
         &ctx,
         egui::Modifiers::NONE,
+        vec![egui::Event::PointerMoved(end)],
+    );
+    visibility_frame(
+        &mut app,
+        &ctx,
+        egui::Modifiers::NONE,
+        vec![primary_event(end, false)],
+    );
+    assert_eq!(
+        app.document.geometry_snapshot(),
+        before,
+        "hold release cancels the uncommitted region"
+    );
+
+    visibility_frame(
+        &mut app,
+        &ctx,
+        modifiers,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    visibility_frame(
+        &mut app,
+        &ctx,
+        modifiers,
         vec![
             egui::Event::PointerMoved(end),
             egui::Event::Key {
