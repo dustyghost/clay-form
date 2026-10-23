@@ -15,7 +15,7 @@
 
 1. Open **Settings → Key settings** and assign **Hold to mask** (initially unbound), for example the **M** key. Modifier-only chords and key-plus-modifier chords are supported. **Clear** disables it; **Reset** returns it to unbound.
 2. Hover over an editable model in Sculpt or Modeling and hold your binding. The viewport shows the temporary mask shape and Add/Erase operation. Your original tool and Modeling selection stay intact.
-3. While holding, invoke your **Viewport context menu** binding to choose **Surface brush**, **Through-depth lasso**, or **Through-depth line**, then **Add** or **Erase**. Line also offers **Flip side**. These choices are remembered between holds and restarts.
+3. While holding, invoke your **Viewport tool menu** binding to choose **Surface brush**, **Through-depth lasso**, or **Through-depth line**, then **Add** or **Erase**. Line also offers **Flip side**. These choices are remembered between holds and restarts.
 4. Paint or draw the selection, release the pen to commit, then release the hold to return to the original tool. Each completed mask gesture is undoable.
 
 The **Mask → Hold to mask** section exposes the same choices and a Mask brush preset selector. Surface brushing uses that preset’s pressure, strength, alpha, spacing and stroke settings independently of the ordinary sculpt brush. Masking respects symmetry and hidden-face protection. Lasso and line select through every depth on the active model; they also work when the gesture begins in empty space.

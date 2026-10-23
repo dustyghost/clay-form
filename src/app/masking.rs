@@ -498,4 +498,119 @@ mod tests {
         assert_eq!(app.document.geometry_snapshot(), before);
         assert!(app.ui.status.contains("Hold to mask is available"));
     }
+    #[test]
+    fn temporary_mask_menu_rebinds_switches_modes_and_restores_without_edit() {
+        use crate::ui::context_menu::ViewportMenuContext;
+        let (mut app, ctx, p) = setup();
+        app.ui.preferences.mask_hold = HoldBinding {
+            alt: true,
+            ..Default::default()
+        };
+        app.ui
+            .preferences
+            .bind(
+                Action::ViewportContextMenu,
+                preferences::Shortcut::new(Key::F2, Modifiers::NONE),
+            )
+            .unwrap();
+        let before = app.document.geometry_snapshot();
+        let with_alt = |key| Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Modifiers::ALT,
+        };
+        frame(&mut app, &ctx, Modifiers::ALT, vec![with_alt(Key::F2)]);
+        assert_eq!(
+            app.ui.viewport_menu.context,
+            Some(ViewportMenuContext::Mask)
+        );
+        assert!(app.ui.mask_active);
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::ALT,
+            vec![with_alt(Key::ArrowDown)],
+        );
+        frame(&mut app, &ctx, Modifiers::ALT, vec![with_alt(Key::Enter)]);
+        assert_eq!(app.ui.preferences.mask_preset.shape, MaskShape::Lasso);
+        assert!(app.ui.viewport_menu.context.is_none());
+        assert!(app.ui.mask_active);
+        frame(&mut app, &ctx, Modifiers::ALT, vec![with_alt(Key::F2)]);
+        app.ui.viewport_menu.selected = 4;
+        frame(&mut app, &ctx, Modifiers::ALT, vec![with_alt(Key::Enter)]);
+        assert!(app.ui.preferences.mask_preset.erase);
+        frame(&mut app, &ctx, Modifiers::NONE, vec![]);
+        assert!(!app.ui.mask_active);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert_eq!(app.document.history_counts(), (0, 0));
+        frame(
+            &mut app,
+            &ctx,
+            Modifiers::ALT,
+            vec![Event::PointerMoved(p), with_alt(Key::F2)],
+        );
+        frame(&mut app, &ctx, Modifiers::ALT, vec![with_alt(Key::Escape)]);
+        assert!(app.ui.viewport_menu.context.is_none());
+        assert!(!app.ui.mask_active);
+        assert_eq!(app.document.geometry_snapshot(), before);
+    }
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "requires Vulkan and CLAY_GUIDE_PREVIEW"]
+    fn temporary_mask_offscreen_review() {
+        let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+        std::fs::create_dir_all(&directory).unwrap();
+        let mut capture = crate::viewport::UiCapture::new([1000, 800]);
+        let mut app = App::default();
+        app.ui.preferences.mask_hold = HoldBinding {
+            key: Some("M".into()),
+            ..Default::default()
+        };
+        app.viewport.initialize_renderer(&capture.state).unwrap();
+        let ctx = egui::Context::default();
+        let mut render = |app: &mut App, events| {
+            let output = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        Pos2::ZERO,
+                        Vec2::new(1000., 800.),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| {
+                    app.shortcuts(ctx);
+                    egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+                },
+            );
+            capture.render(&ctx, output)
+        };
+        let p = Pos2::new(500., 400.);
+        render(&mut app, vec![Event::PointerMoved(p)]);
+        render(&mut app, vec![key(Key::M, true), key(Key::Q, true)]);
+        let menu = render(&mut app, vec![]);
+        assert!(app.ui.viewport_menu.context.is_some());
+        app.ui.viewport_menu.selected = 2;
+        render(&mut app, vec![key(Key::Enter, true)]);
+        render(&mut app, vec![]);
+        let start = Pos2::new(500., 120.);
+        let end = Pos2::new(500., 680.);
+        let before = app.document.geometry_snapshot();
+        render(
+            &mut app,
+            vec![Event::PointerMoved(start), button(start, true)],
+        );
+        let preview = render(&mut app, vec![Event::PointerMoved(end)]);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        render(&mut app, vec![button(end, false)]);
+        let applied = render(&mut app, vec![key(Key::M, false)]);
+        assert!(app.document.mesh().mask.iter().any(|&m| m > 0.));
+        assert_eq!(app.document.mesh().vertices, before.mesh.vertices);
+        assert_eq!(app.document.history_counts(), (1, 0));
+        capture.save(directory.join("temporary-mask-menu.png"), &menu);
+        capture.save(directory.join("temporary-mask-line-preview.png"), &preview);
+        capture.save(directory.join("temporary-mask-applied.png"), &applied);
+    }
 }

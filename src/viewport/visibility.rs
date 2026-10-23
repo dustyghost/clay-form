@@ -24,6 +24,13 @@ impl SelectionTool {
         }
     }
     pub(crate) fn instructions(self) -> &'static str {
+        if let Self::MaskLassoOperation { erase } = self {
+            return if erase {
+                "Drag to erase through all depths · release to apply"
+            } else {
+                "Drag to mask through all depths · release to apply"
+            };
+        }
         if matches!(self, Self::MaskLine { .. }) {
             "Drag a dividing line, including from empty space · release to apply"
         } else if self.is_mask_lasso() {
