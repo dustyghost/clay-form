@@ -9,20 +9,31 @@ pub(crate) enum SelectionTool {
     Rectangle,
     Lasso,
     MaskLasso,
+    MaskLassoOperation { erase: bool },
     MaskLine { erase: bool, flip: bool },
     Visibility(VisibilitySettings),
 }
 impl SelectionTool {
+    fn is_mask_lasso(self) -> bool {
+        matches!(self, Self::MaskLasso | Self::MaskLassoOperation { .. })
+    }
     pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Rectangle => "Select rectangle",
             Self::Lasso => "Select lasso",
-            Self::MaskLasso => "Mask lasso",
+            Self::MaskLasso | Self::MaskLassoOperation { .. } => "Mask lasso",
             Self::MaskLine { .. } => "Mask through · Line",
             Self::Visibility(_) => "Hide/Isolate",
         }
     }
     pub(crate) fn instructions(self) -> &'static str {
+        if let Self::MaskLassoOperation { erase } = self {
+            return if erase {
+                "Drag to erase through all depths · release to apply"
+            } else {
+                "Drag to mask through all depths · release to apply"
+            };
+        }
         if matches!(
             self,
             Self::Visibility(VisibilitySettings {
@@ -40,7 +51,7 @@ impl SelectionTool {
                 })
         ) {
             "Drag a dividing line, including from empty space · release to apply"
-        } else if self == Self::MaskLasso {
+        } else if self.is_mask_lasso() {
             "Drag to mask · Alt to erase · release to apply"
         } else if matches!(self, Self::Visibility(_)) {
             "Drag the region · release to apply the chosen operation"
@@ -83,7 +94,7 @@ impl SelectionDrag {
             }
         } else {
             self.end = pos;
-            if (matches!(self.tool, SelectionTool::Lasso | SelectionTool::MaskLasso)
+            if (self.tool.is_mask_lasso()
                 || self.tool.visibility_shape() == Some(VisibilityShape::Lasso))
                 && self.points.last().is_none_or(|p| p.distance(pos) >= 2.)
             {
@@ -439,7 +450,9 @@ impl Viewport {
         }
         // Alt switches the operation even after Ctrl/Shift are released.
         drag.hide = match drag.tool {
-            SelectionTool::MaskLine { erase, .. } => erase,
+            SelectionTool::MaskLine { erase, .. } | SelectionTool::MaskLassoOperation { erase } => {
+                erase
+            }
             SelectionTool::Visibility(settings) => settings.hide,
             _ => modifiers.alt,
         };
@@ -513,8 +526,18 @@ impl Viewport {
             }
         }
         let operation = match (drag.tool, drag.hide) {
-            (SelectionTool::MaskLasso | SelectionTool::MaskLine { .. }, false) => "Add mask",
-            (SelectionTool::MaskLasso | SelectionTool::MaskLine { .. }, true) => "Erase mask",
+            (
+                SelectionTool::MaskLasso
+                | SelectionTool::MaskLassoOperation { .. }
+                | SelectionTool::MaskLine { .. },
+                false,
+            ) => "Add mask",
+            (
+                SelectionTool::MaskLasso
+                | SelectionTool::MaskLassoOperation { .. }
+                | SelectionTool::MaskLine { .. },
+                true,
+            ) => "Erase mask",
             (_, false) => "Isolate",
             (_, true) => "Hide",
         };
@@ -611,7 +634,7 @@ impl Viewport {
                     return true;
                 };
                 let contains = |p| scene.visible_depth(p) && region.contains(scene.project(p));
-                let result = if drag.tool == SelectionTool::MaskLasso {
+                let result = if drag.tool.is_mask_lasso() {
                     document.mask_region(contains, drag.hide)
                 } else {
                     document.select_face_region(contains, drag.hide)

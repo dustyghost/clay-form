@@ -18,6 +18,7 @@ mod context_menu;
 mod diagnostics;
 mod files;
 mod jobs;
+mod masking;
 pub(crate) mod paths;
 mod projection;
 mod recovery;
@@ -139,6 +140,7 @@ impl App {
             return;
         }
         let visibility = self.temporary_visibility_active(ctx);
+        let masking = self.temporary_mask_requested(ctx);
         let menu = self
             .ui
             .preferences
@@ -155,6 +157,12 @@ impl App {
                                     .ui
                                     .preferences
                                     .visibility_hold
+                                    .matches_shortcut(&shortcut, &binding))
+                            || (masking
+                                && self
+                                    .ui
+                                    .preferences
+                                    .mask_hold
                                     .matches_shortcut(&shortcut, &binding))
                     });
                     found |= matches && !matches!(event, egui::Event::Key { repeat: true, .. });
@@ -174,6 +182,9 @@ impl App {
                 })
             });
         }
+        if masking {
+            return;
+        }
         for action in self.ui.preferences.actions(ctx) {
             self.execute_action(action, ctx);
             if self.ui.pending.is_some() || self.ui.file_picker.is_some() {
@@ -183,6 +194,7 @@ impl App {
     }
 
     pub(crate) fn show_viewport(&mut self, ui: &mut egui::Ui) {
+        let mask_consumes_escape = self.update_temporary_mask(ui);
         self.ui.viewport_menu.viewport_rect = Some(ui.available_rect_before_wrap());
         if !ui.input(|i| self.ui.preferences.visibility_hold.active(i)) {
             self.ui.viewport_menu.suppress_visibility = false;
@@ -225,6 +237,7 @@ impl App {
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         if self.ui.file_picker.is_none()
             && self.ui.edges.selecting
+            && !mask_consumes_escape
             && !ui.ctx().wants_keyboard_input()
             && ui.input(|i| i.key_pressed(egui::Key::Escape))
         {
@@ -236,6 +249,7 @@ impl App {
         self.ui.modeling.count = self.viewport.modeling.selection().len();
         if self.ui.file_picker.is_none()
             && self.ui.modeling.active
+            && !mask_consumes_escape
             && !ui.ctx().wants_keyboard_input()
             && ui.input(|i| i.key_pressed(egui::Key::Escape))
         {
@@ -307,25 +321,29 @@ impl App {
             .clone()
             .or_else(|| self.projection.draft.as_ref().map(|d| d.mesh.clone()));
         self.viewport.projection_mode = self.ui.projection.open;
-        self.viewport.guided.enabled = self.ui.guide_paths;
+        self.viewport.guided.enabled = self.ui.guide_paths && !self.ui.mask_active;
         self.viewport.guided.path_starts_only = self.ui.path_starts_only;
-        self.viewport.visibility_hold = Some(if self.ui.viewport_menu.suppress_visibility {
-            Default::default()
-        } else {
-            self.ui.preferences.visibility_hold.clone()
-        });
+        self.viewport.visibility_hold = Some(
+            if self.ui.viewport_menu.suppress_visibility || self.ui.mask_active {
+                Default::default()
+            } else {
+                self.ui.preferences.visibility_hold.clone()
+            },
+        );
         self.viewport.show(
             ui,
             &mut self.document,
             &mut self.camera,
             ViewportOptions {
-                edge_select: self.ui.edges.selecting && !temporary_visibility,
+                edge_select: self.ui.edges.selecting
+                    && !temporary_visibility
+                    && !self.ui.mask_active,
                 modeling: self
                     .ui
                     .modeling
                     .active
                     .then_some(self.ui.modeling.options())
-                    .filter(|_| !temporary_visibility),
+                    .filter(|_| !temporary_visibility && !self.ui.mask_active),
                 arrange_references: self.ui.arrange_references,
                 references_visible: self.ui.references_visible,
                 slice: self
@@ -335,6 +353,8 @@ impl App {
                     .filter(|_| !temporary_visibility),
                 select: if temporary_visibility {
                     Some(self.ui.preferences.visibility_selection.tool())
+                } else if self.ui.mask_active {
+                    self.ui.preferences.mask_preset.selection_tool()
                 } else {
                     self.ui.selection_tool
                 },
@@ -347,6 +367,8 @@ impl App {
                 transform_operation: self.ui.transform_operation,
                 respect_mask: self.ui.respect_transform_mask,
                 selected,
+                temporary_mask: self.ui.mask_active,
+                mask_erase: self.ui.preferences.mask_preset.erase,
                 pressure: self.pressure,
                 wire: self.ui.wire,
                 wire_mode: self.ui.wire_mode,
@@ -364,12 +386,32 @@ impl App {
                         || (!over_toolbar
                             && !over_editor
                             && !self.ui.pointer_over_pinned_menu(ui.ctx()))),
-                reverse: self.ui.preferences.reverse,
-                zoom_hold: self.ui.preferences.zoom_hold,
-                pan_hold: self.ui.preferences.pan_hold,
+                reverse: if self.ui.mask_active {
+                    preferences::Hold::Disabled
+                } else {
+                    self.ui.preferences.reverse
+                },
+                zoom_hold: if self.ui.mask_active {
+                    preferences::Hold::Disabled
+                } else {
+                    self.ui.preferences.zoom_hold
+                },
+                pan_hold: if self.ui.mask_active {
+                    preferences::Hold::Disabled
+                } else {
+                    self.ui.preferences.pan_hold
+                },
             },
         );
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
+        if self.ui.mask_active || temporary_visibility {
+            self.viewport
+                .modeling
+                .accept_attribute_revision(&self.document);
+        }
+        if self.ui.mask_active {
+            self.paint_temporary_mask_status(ui);
+        }
         self.ui.modeling.count = self.viewport.modeling.selection().len();
         if temporary_visibility {
             let rect = self.ui.viewport_menu.viewport_rect.unwrap_or(ui.max_rect());

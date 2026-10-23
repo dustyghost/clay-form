@@ -140,6 +140,9 @@ impl UiState {
                     hint: "Remembered for the next hold. Red faces preview the result; no geometry is cut.".into(),
                 }).collect()
             }
+            ViewportMenuContext::Mask if self.mask_active || self.viewport_menu.hold.is_some() => {
+                self.temporary_mask_menu_entries(document)
+            }
             ViewportMenuContext::Mask => [
                 (Action::MaskLasso, "Lasso"),
                 (Action::MaskLine, "Through-depth line"),

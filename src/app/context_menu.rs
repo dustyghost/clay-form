@@ -5,24 +5,27 @@ impl App {
     pub(crate) fn temporary_visibility_active(&self, ctx: &egui::Context) -> bool {
         !self.ui.viewport_menu.suppress_visibility
             && !ctx.wants_keyboard_input()
-            && ctx.input(|i| self.ui.preferences.visibility_hold.active(i))
+            && ctx.input(|i| i.focused && self.ui.preferences.visibility_hold.active(i))
             && self.document.primitive().is_none()
             && self.document.active_visible()
             && !self.ui.paths_active
             && !self.ui.arrange_references
     }
     pub(crate) fn viewport_menu_context(&self, ctx: &egui::Context) -> ViewportMenuContext {
-        if self.temporary_visibility_active(ctx)
-            || matches!(
-                self.ui.selection_tool,
-                Some(crate::viewport::SelectionTool::Visibility(_))
-            )
-        {
+        if self.temporary_visibility_active(ctx) {
+            ViewportMenuContext::Visibility
+        } else if self.temporary_mask_requested(ctx) {
+            ViewportMenuContext::Mask
+        } else if matches!(
+            self.ui.selection_tool,
+            Some(crate::viewport::SelectionTool::Visibility(_))
+        ) {
             ViewportMenuContext::Visibility
         } else if matches!(
             self.ui.selection_tool,
             Some(
                 crate::viewport::SelectionTool::MaskLasso
+                    | crate::viewport::SelectionTool::MaskLassoOperation { .. }
                     | crate::viewport::SelectionTool::MaskLine { .. }
             )
         ) {
@@ -52,9 +55,13 @@ impl App {
         self.ui.viewport_menu.position = Some(position);
         self.ui.viewport_menu.selected = 0;
         self.ui.viewport_menu.just_opened = true;
-        self.ui.viewport_menu.hold = self
-            .temporary_visibility_active(ctx)
-            .then(|| self.ui.preferences.visibility_hold.clone());
+        self.ui.viewport_menu.hold = if self.temporary_visibility_active(ctx) {
+            Some(self.ui.preferences.visibility_hold.clone())
+        } else if context == ViewportMenuContext::Mask && self.temporary_mask_requested(ctx) {
+            Some(self.ui.preferences.mask_hold.clone())
+        } else {
+            None
+        };
         self.viewport.wait_for_release();
     }
     pub(crate) fn show_viewport_menu(&mut self, ctx: &egui::Context) {

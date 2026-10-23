@@ -10,6 +10,16 @@ impl App {
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         let active_brush = self.ui.brush_index_for_context(&self.document, ctx);
         let command = match action {
+            Action::TemporaryMaskBrush
+            | Action::TemporaryMaskLasso
+            | Action::TemporaryMaskLine
+            | Action::TemporaryMaskAdd
+            | Action::TemporaryMaskErase
+            | Action::TemporaryMaskFlip
+            | Action::TemporaryMaskPreset(_) => {
+                self.change_temporary_mask(action);
+                None
+            }
             Action::ViewportContextMenu => {
                 self.open_viewport_menu(ctx);
                 None

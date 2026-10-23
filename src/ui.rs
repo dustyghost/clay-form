@@ -15,6 +15,7 @@ mod edges;
 mod files;
 pub(crate) use files::{FileEntry, FilePicker};
 mod icons;
+mod masking;
 mod menus;
 mod mirror;
 mod modeling;
@@ -64,6 +65,8 @@ pub(crate) struct UiState {
     pub settings_message: String,
     pub mesh_busy: bool,
     pub selected: usize,
+    pub(crate) mask_active: bool,
+    pub(crate) mask_suppressed: bool,
     smooth_brush: Option<String>,
     brush_editor_focus: Option<(egui::Id, String)>,
     pub file_picker: Option<FilePicker>,
@@ -137,6 +140,8 @@ impl Default for UiState {
             settings_message: String::new(),
             mesh_busy: false,
             selected: 0,
+            mask_active: false,
+            mask_suppressed: false,
             smooth_brush: None,
             brush_editor_focus: None,
             file_picker: None,
@@ -197,6 +202,9 @@ impl UiState {
         document: &Document,
         ctx: &egui::Context,
     ) -> Option<usize> {
+        if self.mask_active && !ctx.wants_keyboard_input() {
+            return self.preferences.mask_preset.brush_index(document);
+        }
         if ctx.wants_keyboard_input() {
             // Text entry must stay attached to the preset whose field took focus.
             if let Some((field, id)) = &self.brush_editor_focus
@@ -218,6 +226,11 @@ impl UiState {
             {
                 self.smooth_brush = Some(brush.identity());
             }
+        }
+        if let Some(brush) = document.brushes().get(index)
+            && brush.kind == Kind::Mask
+        {
+            self.preferences.mask_preset.brush_id = Some(brush.identity());
         }
         self.selected = index;
     }
@@ -703,15 +716,24 @@ impl UiState {
     ) {
         let focus_before = ui.ctx().memory(|m| m.focused());
         let active = self.brush_index_for_context(document, ui.ctx());
-        let fallback = crate::sculpt::Brush::new(Kind::Smooth);
+        let fallback = crate::sculpt::Brush::new(if self.mask_active {
+            Kind::Mask
+        } else {
+            Kind::Smooth
+        });
         let original = active.map_or(&fallback, |index| &document.brushes()[index]);
         let selected = active.unwrap_or(self.selected);
         if active.is_none() && matches!(tool, Tool::Brush | Tool::Alpha | Tool::Presets) {
-            ui.label(
-                "Temporary Smooth uses default settings. Add a Smooth preset to customize it.",
-            );
-            if ui.button("Add Smooth preset").clicked() {
-                commands.push(Command::AddBrush(Kind::Smooth));
+            let kind = if self.mask_active {
+                Kind::Mask
+            } else {
+                Kind::Smooth
+            };
+            ui.label(format!(
+                "Temporary {kind:?} uses default settings. Add a {kind:?} preset to customize it."
+            ));
+            if ui.button(format!("Add {kind:?} preset")).clicked() {
+                commands.push(Command::AddBrush(kind));
             }
             return;
         }

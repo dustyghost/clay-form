@@ -3,6 +3,13 @@ use crate::{preferences::Tool, sculpt::Axis};
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum Action {
+    TemporaryMaskBrush,
+    TemporaryMaskLasso,
+    TemporaryMaskLine,
+    TemporaryMaskAdd,
+    TemporaryMaskErase,
+    TemporaryMaskFlip,
+    TemporaryMaskPreset(String),
     ViewportContextMenu,
     TemporaryVisibilityRectangle,
     TemporaryVisibilityLasso,
@@ -382,6 +389,12 @@ impl Action {
         Self::ApplyVisibilityPath,
         Self::ClearVisibilityPath,
         Self::DeleteVisibilityPoint,
+        Self::TemporaryMaskBrush,
+        Self::TemporaryMaskLasso,
+        Self::TemporaryMaskLine,
+        Self::TemporaryMaskAdd,
+        Self::TemporaryMaskErase,
+        Self::TemporaryMaskFlip,
         Self::ViewportContextMenu,
         Self::TemporaryVisibilityRectangle,
         Self::TemporaryVisibilityLasso,
@@ -451,6 +464,13 @@ impl Action {
     }
     pub fn label(&self) -> &'static str {
         match self {
+            Self::TemporaryMaskBrush => "Temporary mask: Surface brush",
+            Self::TemporaryMaskLasso => "Temporary mask: Through-depth lasso",
+            Self::TemporaryMaskLine => "Temporary mask: Through-depth line",
+            Self::TemporaryMaskAdd => "Temporary mask: Add",
+            Self::TemporaryMaskErase => "Temporary mask: Erase",
+            Self::TemporaryMaskFlip => "Temporary mask: Flip side",
+            Self::TemporaryMaskPreset(_) => "Temporary mask brush preset",
             Self::ViewportContextMenu => "Viewport tool menu",
             Self::TemporaryVisibilityRectangle => "Temporary visibility: Rectangle",
             Self::TemporaryVisibilityLasso => "Temporary visibility: Lasso",
