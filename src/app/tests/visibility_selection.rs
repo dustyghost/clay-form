@@ -133,11 +133,13 @@ fn visibility_path_edits_preview_then_commits_once_and_cancels() {
 
 #[test]
 fn visibility_new_choices_and_bindings_persist_and_clear() {
-    let mut preferences = crate::preferences::Preferences::default();
-    preferences.visibility_selection = VisibilitySettings {
-        shape: VisibilityShape::Path,
-        hide: true,
-        flip: true,
+    let mut preferences = crate::preferences::Preferences {
+        visibility_selection: VisibilitySettings {
+            shape: VisibilityShape::Path,
+            hide: true,
+            flip: true,
+        },
+        ..Default::default()
     };
     for action in [
         Action::SelectVisibilityLine,
