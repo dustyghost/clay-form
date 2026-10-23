@@ -360,11 +360,20 @@ impl UiState {
                         }
                     });
                 ui.separator();
-                ui.label("Ctrl+Shift drag: isolate rectangle • Alt: hide");
-                ui.label("Ctrl+Shift click: hide group; last visible group flips visibility");
-                ui.label("Ctrl+Shift click background: show all");
-                ui.label("Ctrl+Shift drag empty background: invert");
-                ui.label("Space: move rectangle • Esc: cancel");
+                ui.label(format!(
+                    "Hold {}: remembered Hide/Isolate",
+                    self.preferences.visibility_hold.label()
+                ));
+                ui.label(format!(
+                    "Tool menu: {}",
+                    self.preferences
+                        .shortcut(&Action::ViewportContextMenu)
+                        .map_or("Unbound".into(), |s| s.label())
+                ));
+                ui.label("Rectangle click: hide group; last visible group flips visibility");
+                ui.label("Rectangle click background: show all");
+                ui.label("Rectangle drag empty background: invert");
+                ui.label("Release hold or Escape: cancel unfinished selection");
                 ui.weak("Selects face centers through all depths; keeps quads whole.");
             }
             BuiltinMenu::Mesh => self.mesh_controls(ui, document, commands),

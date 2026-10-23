@@ -42,6 +42,8 @@ impl SelectionTool {
             "Drag a dividing line, including from empty space · release to apply"
         } else if self == Self::MaskLasso {
             "Drag to mask · Alt to erase · release to apply"
+        } else if matches!(self, Self::Visibility(_)) {
+            "Drag the region · release to apply the chosen operation"
         } else {
             "Drag to isolate · Alt to hide · release to apply"
         }
@@ -236,20 +238,34 @@ pub(super) fn paint_visibility_faces(
         mesh.face_region_selection(|p| scene.visible_depth(p) && contains(scene.project(p)));
     let color = Color32::from_rgba_unmultiplied(255, 90, 75, 65);
     let mut overlay = egui::Mesh::default();
+    let mut polygon = Vec::with_capacity(4);
     for (i, triangle) in mesh.triangles.iter().enumerate() {
-        if !mesh.face_visible(i)
-            || selected[i] != hide
-            || !triangle
-                .iter()
-                .all(|&v| scene.visible_depth(mesh.vertices[v]))
-        {
+        if !mesh.face_visible(i) || selected[i] != hide {
             continue;
         }
-        let base = overlay.vertices.len() as u32;
-        for &v in triangle {
-            overlay.colored_vertex(scene.project(mesh.vertices[v]), color);
+        // A selected face may cross the eye's near plane. Clip the overlay
+        // rather than omitting the visible part of a face that will be hidden.
+        polygon.clear();
+        let vertices = triangle.map(|v| mesh.vertices[v]);
+        let mut a = vertices[2];
+        for b in vertices {
+            if scene.visible_depth(a) != scene.visible_depth(b) {
+                let da = scene.eye_distance - a.dot(scene.view) - scene.near();
+                let db = scene.eye_distance - b.dot(scene.view) - scene.near();
+                polygon.push(scene.project(a + (b - a) * (da / (da - db))));
+            }
+            if scene.visible_depth(b) {
+                polygon.push(scene.project(b));
+            }
+            a = b;
         }
-        overlay.add_triangle(base, base + 1, base + 2);
+        let base = overlay.vertices.len() as u32;
+        for &p in &polygon {
+            overlay.colored_vertex(p, color);
+        }
+        for i in 1..polygon.len().saturating_sub(1) {
+            overlay.add_triangle(base, base + i as u32, base + i as u32 + 1);
+        }
     }
     painter.add(egui::Shape::mesh(overlay));
 }

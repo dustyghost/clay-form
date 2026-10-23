@@ -75,7 +75,7 @@ impl Viewport {
         let mut action = self.visibility_path_action.take();
         let panel = egui::Area::new(egui::Id::new("visibility_path_editor"))
             .order(egui::Order::Foreground)
-            .fixed_pos(scene.rect.left_top() + Vec2::splat(12.))
+            .fixed_pos(scene.rect.left_top() + Vec2::new(12., 40.))
             .show(ui.ctx(), |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     ui.set_max_width(240.);

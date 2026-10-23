@@ -377,8 +377,18 @@ impl App {
                 rect.left_top() + egui::vec2(12., 12.),
                 egui::Align2::LEFT_TOP,
                 format!(
-                    "Visibility · {} · hold {} · tool menu {}",
+                    "Hide/Isolate · {} · {}{} · hold {} · tool menu {}",
                     self.ui.preferences.visibility_selection.shape.label(),
+                    if self.ui.preferences.visibility_selection.hide {
+                        "Hide"
+                    } else {
+                        "Isolate"
+                    },
+                    if self.ui.preferences.visibility_selection.flip {
+                        " (flipped)"
+                    } else {
+                        ""
+                    },
                     self.ui.preferences.visibility_hold.label(),
                     self.ui
                         .preferences

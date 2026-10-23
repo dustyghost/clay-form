@@ -429,7 +429,9 @@ impl UiState {
                 });
             });
         }
-        if let Some(tool) = self.selection_tool {
+        if let Some(tool) = self.selection_tool
+            && !self.viewport_menu.visibility_was_active
+        {
             egui::TopBottomPanel::top("visibility_selection_controls").show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.strong(tool.label());
@@ -443,8 +445,10 @@ impl UiState {
                             .customize(Action::VisibilityIsolate);
                         design::checkbox(ui, &mut settings.flip, "Flip side / region")
                             .customize(Action::FlipVisibilitySide);
-                        self.preferences.visibility_selection = settings;
-                        self.selection_tool = Some(settings.tool());
+                        if settings.tool() != tool {
+                            self.preferences.visibility_selection = settings;
+                            self.selection_tool = Some(settings.tool());
+                        }
                     }
                     if let crate::viewport::SelectionTool::MaskLine {
                         mut erase,
@@ -464,7 +468,19 @@ impl UiState {
                     ui.separator();
                     ui.label(tool.instructions());
                     ui.separator();
-                    ui.label("Through all depths · Space to move · Esc to cancel");
+                    if matches!(
+                        tool,
+                        crate::viewport::SelectionTool::Visibility(
+                            crate::preferences::VisibilitySettings {
+                                shape: crate::preferences::VisibilityShape::Path,
+                                ..
+                            }
+                        )
+                    ) {
+                        ui.label("Through all depths · red faces will hide · Esc to cancel");
+                    } else {
+                        ui.label("Through all depths · Space to move · Esc to cancel");
+                    }
                     if ui.button("Done").clicked() {
                         commands.push(Command::SelectTool(None));
                     }

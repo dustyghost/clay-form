@@ -169,3 +169,113 @@ fn visibility_new_choices_and_bindings_persist_and_clear() {
     );
     assert!(preferences.visibility_selection.hide && preferences.visibility_selection.flip);
 }
+
+#[test]
+fn visibility_alt_hold_keeps_explicit_operation_and_cancels_every_shape_on_release() {
+    for shape in VisibilityShape::ALL {
+        let mut app = App::default();
+        let ctx = egui::Context::default();
+        app.ui.preferences.visibility_hold = crate::preferences::HoldBinding {
+            alt: true,
+            ..Default::default()
+        };
+        app.ui.preferences.visibility_selection = VisibilitySettings {
+            shape,
+            hide: false,
+            flip: false,
+        };
+        let original_tool = app.ui.selection_tool;
+        let before = app.document.geometry_snapshot();
+        navigation_frame(&mut app, &ctx, vec![]);
+        let start = Pos2::new(500., 300.);
+        let end = Pos2::new(680., 650.);
+        visibility_frame(
+            &mut app,
+            &ctx,
+            egui::Modifiers::ALT,
+            vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+        );
+        visibility_frame(
+            &mut app,
+            &ctx,
+            egui::Modifiers::ALT,
+            vec![egui::Event::PointerMoved(end)],
+        );
+        if shape == VisibilityShape::Path {
+            visibility_frame(
+                &mut app,
+                &ctx,
+                egui::Modifiers::ALT,
+                vec![primary_event(end, false)],
+            );
+            for point in [Pos2::new(400., 400.), Pos2::new(600., 400.)] {
+                visibility_frame(
+                    &mut app,
+                    &ctx,
+                    egui::Modifiers::ALT,
+                    vec![
+                        egui::Event::PointerMoved(point),
+                        primary_event(point, true),
+                        primary_event(point, false),
+                    ],
+                );
+            }
+        }
+        visibility_frame(&mut app, &ctx, egui::Modifiers::NONE, vec![]);
+        navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+        assert_eq!(
+            app.document.geometry_snapshot(),
+            before,
+            "hold release cancels {shape:?}"
+        );
+        assert_eq!(app.document.history_counts(), (0, 0));
+        assert_eq!(app.ui.selection_tool, original_tool);
+        if shape == VisibilityShape::Path {
+            visibility_frame(&mut app, &ctx, egui::Modifiers::ALT, vec![]);
+            app.dispatch(Command::Action(Action::ApplyVisibilityPath), &ctx);
+            visibility_frame(&mut app, &ctx, egui::Modifiers::ALT, vec![]);
+            assert_eq!(
+                app.document.geometry_snapshot(),
+                before,
+                "old path must not reappear"
+            );
+        }
+    }
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.ui.preferences.visibility_hold = crate::preferences::HoldBinding {
+        alt: true,
+        ..Default::default()
+    };
+    app.ui.preferences.visibility_selection = VisibilitySettings {
+        shape: VisibilityShape::Line,
+        hide: false,
+        flip: false,
+    };
+    navigation_frame(&mut app, &ctx, vec![]);
+    visibility_frame(
+        &mut app,
+        &ctx,
+        egui::Modifiers::ALT,
+        vec![
+            egui::Event::PointerMoved(Pos2::new(500., 100.)),
+            primary_event(Pos2::new(500., 100.), true),
+        ],
+    );
+    visibility_frame(
+        &mut app,
+        &ctx,
+        egui::Modifiers::ALT,
+        vec![
+            egui::Event::PointerMoved(Pos2::new(500., 740.)),
+            primary_event(Pos2::new(500., 740.), false),
+        ],
+    );
+    assert_eq!(
+        app.document.undo_label(),
+        Some("Isolate selection"),
+        "Alt used as hold never switches Isolate to Hide"
+    );
+    assert_eq!(app.camera.pan, Vec2::ZERO);
+    assert_eq!(app.camera.zoom, 1.);
+}
