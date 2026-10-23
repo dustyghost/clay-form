@@ -73,6 +73,24 @@ fn visibility_selection_offscreen_review() {
     g.frame(vec![]);
     assert!(g.app.document.mesh().hidden_face_count() > 0);
     g.save("visibility-path-result");
+    g.app.viewport.destroy_renderer();
+    for size in [[1000, 850], [640, 480]] {
+        let mut g = Guide::new(&directory, size);
+        g.app
+            .dispatch(Command::Action(Action::SelectVisibilityLine), &g.ctx);
+        g.frame(vec![]);
+        g.app
+            .dispatch(Command::Action(Action::ViewportContextMenu), &g.ctx);
+        g.app.ui.viewport_menu.position = Some(Pos2::new(size[0] as f32 - 5., size[1] as f32 - 5.));
+        g.save(&format!("visibility-menu-{}", size[0]));
+        assert!(g.text_positions.iter().any(|(t, _)| t == "Closed path"));
+        assert!(
+            g.text_positions
+                .iter()
+                .any(|(t, _)| t == "Flip side / region")
+        );
+        g.app.viewport.destroy_renderer();
+    }
 }
 
 #[test]
