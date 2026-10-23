@@ -344,10 +344,12 @@ mod tests {
     }
     #[test]
     fn viewport_menu_preferences_round_trip_clear_and_mac_chord() {
-        let mut prefs = Preferences::default();
-        prefs.visibility_hold = HoldBinding {
-            key: Some("V".into()),
-            alt: true,
+        let mut prefs = Preferences {
+            visibility_hold: HoldBinding {
+                key: Some("V".into()),
+                alt: true,
+                ..Default::default()
+            },
             ..Default::default()
         };
         prefs.clear_binding(&Action::ViewportContextMenu);
