@@ -232,10 +232,10 @@ impl UiState {
         .vscroll(true)
         .order(egui::Order::Foreground)
         .show(ctx, |ui| {
-            ui.weak("↑ ↓ choose · Enter apply · Escape close");
+            ui.weak("Up/Down choose · Enter apply · Escape close");
             for (i, entry) in entries.iter().enumerate() {
                 let label = if entry.selected {
-                    format!("✓ {}", entry.label)
+                    format!("{} (active)", entry.label)
                 } else {
                     entry.label.clone()
                 };

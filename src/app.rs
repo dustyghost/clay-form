@@ -157,7 +157,7 @@ impl App {
                                     .visibility_hold
                                     .matches_shortcut(&shortcut, &binding))
                     });
-                    found |= matches;
+                    found |= matches && !matches!(event, egui::Event::Key { repeat: true, .. });
                     !matches
                 });
                 found
