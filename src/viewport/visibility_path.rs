@@ -173,10 +173,9 @@ impl Viewport {
             if path.dragging
                 && press.is_none()
                 && let Some(pos) = ui.input(|i| i.pointer.interact_pos())
+                && let Some(i) = path.selected
             {
-                if let Some(i) = path.selected {
-                    path.points[i] = pos;
-                }
+                path.points[i] = pos;
             }
             if !ui.input(|i| i.pointer.primary_down()) {
                 path.dragging = false;
