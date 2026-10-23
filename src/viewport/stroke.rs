@@ -234,7 +234,7 @@ mod tests {
 
     #[test]
     fn live_stamp_matches_commit_without_buildup_or_document_edits() {
-        for kind in [Kind::Standard, Kind::Clay] {
+        for kind in [Kind::Standard, Kind::Clay, Kind::Flatten] {
             for mode in [StrokeMode::DragRect, StrokeMode::DragDot] {
                 for adaptive in [false, true] {
                     let mut document = Document::default();
@@ -244,9 +244,13 @@ mod tests {
                         PrimitiveKind::Plane
                     });
                     plane.divisions = [10, 10, 10];
-                    document
-                        .replace_geometry(Geometry::new(plane.mesh().unwrap()))
-                        .unwrap();
+                    let mut mesh = plane.mesh().unwrap();
+                    if kind == Kind::Flatten {
+                        for p in &mut mesh.vertices {
+                            p.2 += 0.025 * (p.0 * 12.).cos() * (p.1 * 12.).cos();
+                        }
+                    }
+                    document.replace_geometry(Geometry::new(mesh)).unwrap();
                     document
                         .set_adaptive(crate::sculpt::AdaptiveSettings {
                             enabled: adaptive,

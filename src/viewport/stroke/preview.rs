@@ -59,6 +59,11 @@ impl Request {
             return Some(mesh);
         }
         let mut budget = AdaptiveBudget::default();
+        let flatten_planes = if self.brush.kind == Kind::Flatten {
+            source.surface_planes(self.dabs.first().map_or(&[], Vec::as_slice))
+        } else {
+            Vec::new()
+        };
         for dabs in &self.dabs {
             if cancelled() {
                 return None;
@@ -80,7 +85,7 @@ impl Request {
             if cancelled() {
                 return None;
             }
-            mesh.stamp_many_stenciled(&self.brush, dabs, &self.stencils);
+            mesh.stamp_many_with_flatten_planes(&self.brush, dabs, &self.stencils, &flatten_planes);
             if detailed {
                 mesh.adapt_stenciled(&self.brush, region, &self.settings, &mut budget, false);
             }

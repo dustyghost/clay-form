@@ -292,6 +292,16 @@ impl Mesh {
         dabs: &[Dab],
         stencils: &[super::alpha::Projection],
     ) -> bool {
+        self.stamp_many_with_flatten_planes(b, dabs, stencils, &[])
+    }
+    /// Flatten's fixed target is separate from the moving dab footprint.
+    pub(crate) fn stamp_many_with_flatten_planes(
+        &mut self,
+        b: &Brush,
+        dabs: &[Dab],
+        stencils: &[super::alpha::Projection],
+        flatten_planes: &[(Vec3, Vec3)],
+    ) -> bool {
         if b.kind == Kind::Smooth {
             return self.smooth_surface(b, dabs, stencils);
         }
@@ -306,7 +316,10 @@ impl Mesh {
         let mut sculptable = self.sculptable_vertices();
         let polish = (b.kind == Kind::Polish)
             .then(|| self.polish_planes(b, dabs, &normals, &mut sculptable));
-        let clay = (b.kind == Kind::Clay).then(|| self.clay_planes(dabs));
+        let sampled = (b.kind == Kind::Clay
+            || (b.kind == Kind::Flatten && flatten_planes.len() != dabs.len()))
+        .then(|| self.surface_planes(dabs));
+        let flatten_planes = sampled.as_deref().unwrap_or(flatten_planes);
         let join_soft = b.kind == Kind::Standard
             && matches!(b.alpha, super::Alpha::Soft)
             && dabs.len() > 1
@@ -376,7 +389,7 @@ impl Mesh {
                 let displacement = match b.kind {
                     Kind::Standard => normal * (radius * 0.15 * w * sign),
                     Kind::Clay => {
-                        let (plane_center, plane_normal) = clay.as_ref().unwrap()[dab_index];
+                        let (plane_center, plane_normal) = sampled.as_ref().unwrap()[dab_index];
                         // Fill toward an offset surface plane, with the same
                         // bounded response for removal. The old subtract rule
                         // increased its displacement as a depression deepened.
@@ -395,7 +408,10 @@ impl Mesh {
                     }
                     Kind::Inflate => normals[i] * (radius * 0.15 * w * sign),
                     Kind::Smooth | Kind::Decimate => unreachable!(),
-                    Kind::Flatten => normal * (-offset.dot(normal) * w * sign),
+                    Kind::Flatten => {
+                        let (center, normal) = flatten_planes[dab_index];
+                        normal * (-(old[i] - center).dot(normal) * w.min(1.) * sign)
+                    }
                     Kind::Polish => {
                         let (center, normal) = plane.expect("Polish requires a sampled plane");
                         normal * (-(old[i] - center).dot(normal) * w.min(1.) * sign)
