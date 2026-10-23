@@ -197,8 +197,11 @@ impl App {
         {
             self.arrange_references(false);
         }
-        if enabled && ui.rect_contains_pointer(ui.available_rect_before_wrap()) {
-            for file in ui.input(|i| i.raw.dropped_files.clone()) {
+        if enabled {
+            // Native file drops target the window. Desktop drag protocols do not
+            // necessarily update the normal pointer position (or supply one at all).
+            // Consume each drop once, including when egui requests another layout pass.
+            for file in ui.input_mut(|i| std::mem::take(&mut i.raw.dropped_files)) {
                 self.dispatch(Command::AddReference(file), ui.ctx());
             }
         }

@@ -52,6 +52,18 @@ impl UiState {
             return;
         }
         self.selected_reference = self.selected_reference.min(document.references().len() - 1);
+        let index = self.selected_reference;
+        let image = &document.references()[index];
+        ui.horizontal_wrapped(|ui| {
+            ui.strong(&image.name);
+            if ui
+                .add(design::button(ui, Glyph::Delete, "Remove image"))
+                .on_hover_text("Remove this image from the project. The original file stays on disk. Hidden and locked images can also be removed.")
+                .clicked()
+            {
+                commands.push(Command::RemoveReference(index));
+            }
+        });
         egui::ScrollArea::vertical()
             .id_salt("reference_list")
             .max_height(140.)
@@ -77,10 +89,6 @@ impl UiState {
                     });
                 }
             });
-        let index = self.selected_reference;
-        let image = &document.references()[index];
-        ui.separator();
-        ui.label(&image.name);
         let mut placement = image.placement;
         design::checkbox(ui, &mut placement.locked, "Lock position and size");
         ui.add(
@@ -101,12 +109,6 @@ impl UiState {
         });
         if placement != image.placement {
             commands.push(Command::PlaceReference(index, placement));
-        }
-        if ui
-            .add(design::button(ui, Glyph::Delete, "Remove image"))
-            .clicked()
-        {
-            commands.push(Command::RemoveReference(index));
         }
         ui.small("Saved inside the project. Reference edits are separate from sculpt Undo/Redo.");
     }
