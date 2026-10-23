@@ -832,11 +832,11 @@ impl UiState {
                         commands.push(Command::SavePreset(selected));
                     }
                     if ui
-                        .add(design::button(ui, Glyph::Open, "Import brush"))
+                        .add(design::button(ui, Glyph::Open, "Import brush…"))
                         .customize(Action::LoadPreset)
                         .clicked()
                     {
-                        commands.push(Command::LoadPreset);
+                        commands.push(Command::Action(Action::LoadPreset));
                     }
                 });
                 ui.separator();
@@ -851,11 +851,11 @@ impl UiState {
                         commands.push(Command::ExportBrushLibrary);
                     }
                     if ui
-                        .add(design::button(ui, Glyph::Open, "Import library"))
+                        .add(design::button(ui, Glyph::Open, "Import library…"))
                         .customize(Action::ImportLibrary)
                         .clicked()
                     {
-                        commands.push(Command::ImportBrushLibrary);
+                        commands.push(Command::Action(Action::ImportLibrary));
                     }
                 });
                 ui.weak("Imports update brushes with matching IDs; new IDs are added.");
@@ -894,9 +894,9 @@ impl UiState {
         ui.add_enabled_ui(!self.mesh_busy, |ui| {
             ui.label("OBJ path");
             ui.add(egui::TextEdit::singleline(&mut self.obj_path).hint_text("/path/to/model.obj"));
-            if ui.add_enabled(document.model_count() < 64, design::button(ui, Glyph::Open, "Import OBJ"))
+            if ui.add_enabled(document.model_count() < 64, design::button(ui, Glyph::Open, "Import OBJ…"))
                 .on_hover_text("Add a new submodel at its original position and scale. Keeps this project; one undo step. Geometry and face groups only.")
-                .customize(Action::ImportObj).clicked() { commands.push(Command::ImportObj); }
+                .customize(Action::ImportObj).clicked() { commands.push(Command::Action(Action::ImportObj)); }
         });
         ui.separator();
         ui.add_enabled_ui(!self.mesh_busy, |ui| {

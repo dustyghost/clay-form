@@ -86,7 +86,7 @@ Saved brushes and project alphas embed their height images. To use a revised bui
 
 ### Create and reuse an image alpha
 
-1. Open **Alpha → Import image**, enter a PNG/JPEG path, and choose **Preview image**. Images can be up to **2048 × 2048** and **32 MB**.
+1. Open **Alpha → Import image → Choose image…**, browse to a PNG/JPEG, and choose **Preview alpha image** (or double-click the file). Images can be up to **2048 × 2048** and **32 MB**. You can also enter a path before opening the picker. Cancel leaves the brush and library unchanged.
 2. Name the alpha and give it a category such as *Stone*. Compare **Source** with **Result** while adjusting the crop, black/white levels, gamma, inversion, and **Edge fade**.
 3. Choose **Save alpha**. Select its thumbnail in the project library, then choose **Use on brush**. Switch brushes and choose **Use on brush** again to reuse the same image.
 4. Search by name or category. Use **Edit alpha** to adjust an asset, **Duplicate alpha** for a variation, or **Export selected alpha → Export PNG** to share a 16-bit height image. Import that PNG to use it in another project.
@@ -143,7 +143,7 @@ Resetting brush settings does not undo a sculpt stroke. Use **Undo** for geometr
 
 ### Save presets and brush icons
 
-In **Presets**, export/import a single brush or the whole library. Imports update brushes with matching IDs; **Duplicate brush** creates an independent variation. Importing an unchanged library does not modify the project.
+In **Presets**, **Import brush…** and **Import library…** open a file picker for JSON presets/libraries. Export paths remain editable in the panel. Imports update brushes with matching IDs; **Duplicate brush** creates an independent variation. Importing an unchanged library does not modify the project.
 
 Choose **Capture model icon** in Brush settings or the library to preview the active model as a thumbnail. Select **Use as brush icon**, optionally **Save PNG**, or cancel. **Restore default icon** brings back the built-in illustration. Icons are embedded in projects and exported presets.
 

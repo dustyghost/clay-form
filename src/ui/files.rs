@@ -1,6 +1,40 @@
-//! Project file chooser presentation; directory reads and writes belong to App.
+//! File chooser presentation; directory reads and writes belong to App.
 use super::*;
+use crate::command::AssetKind;
 use std::path::PathBuf;
+
+impl AssetKind {
+    pub(crate) fn title(self) -> &'static str {
+        match self {
+            Self::Reference => "Add reference image",
+            Self::Alpha => "Preview alpha image",
+            Self::Obj => "Import OBJ",
+            Self::Brush => "Import brush",
+            Self::BrushLibrary => "Import brush library",
+        }
+    }
+    pub(crate) fn filter_label(self) -> &'static str {
+        match self {
+            Self::Reference | Self::Alpha => "PNG / JPEG images (.png, .jpg, .jpeg)",
+            Self::Obj => "Wavefront models (.obj)",
+            Self::Brush => "Brush presets (.brush.json, .json)",
+            Self::BrushLibrary => "Brush libraries (.brushes.json, .json)",
+        }
+    }
+    pub(crate) fn accepts(self, path: &std::path::Path) -> bool {
+        let Some(extension) = path.extension().and_then(|ext| ext.to_str()) else {
+            return false;
+        };
+        let extensions: &[&str] = match self {
+            Self::Reference | Self::Alpha => &["png", "jpg", "jpeg"],
+            Self::Obj => &["obj"],
+            Self::Brush | Self::BrushLibrary => &["json"],
+        };
+        extensions
+            .iter()
+            .any(|ext| extension.eq_ignore_ascii_case(ext))
+    }
+}
 
 pub(crate) struct FileEntry {
     pub path: PathBuf,
@@ -8,6 +42,7 @@ pub(crate) struct FileEntry {
     pub directory: bool,
 }
 pub(crate) struct FilePicker {
+    pub asset: Option<AssetKind>,
     pub save: bool,
     pub resume_pending: bool,
     pub directory: PathBuf,
@@ -19,12 +54,23 @@ pub(crate) struct FilePicker {
 }
 
 impl UiState {
+    pub(crate) fn asset_path_mut(&mut self, asset: AssetKind) -> &mut String {
+        match asset {
+            AssetKind::Reference => &mut self.reference_path,
+            AssetKind::Alpha => &mut self.alpha_path,
+            AssetKind::Obj => &mut self.obj_path,
+            AssetKind::Brush => &mut self.preset_path,
+            AssetKind::BrushLibrary => &mut self.library_path,
+        }
+    }
     pub(crate) fn project_file_dialog(&mut self, ctx: &egui::Context) -> Option<Command> {
         let picker = self.file_picker.as_mut()?;
         let mut command = None;
         let modal = egui::Modal::new(egui::Id::new("project_file_picker")).show(ctx, |ui| {
             ui.set_width((ctx.content_rect().width() - 60.).clamp(260., 620.));
-            ui.heading(if picker.save {
+            ui.heading(if let Some(asset) = picker.asset {
+                asset.title()
+            } else if picker.save {
                 "Save project as"
             } else {
                 "Open project"
@@ -81,7 +127,11 @@ impl UiState {
                 .show(ui, |ui| {
                     ui.set_min_width(ui.available_width());
                     if picker.entries.is_empty() {
-                        ui.weak("This folder is empty.");
+                        ui.weak(if picker.asset.is_some() {
+                            "No matching files in this folder."
+                        } else {
+                            "This folder is empty."
+                        });
                     }
                     for entry in &picker.entries {
                         let label = if entry.directory {
@@ -110,7 +160,9 @@ impl UiState {
             let filename = ui
                 .add(egui::TextEdit::singleline(&mut picker.filename).desired_width(f32::INFINITY));
             let enter = filename.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            ui.weak(if picker.save {
+            ui.weak(if let Some(asset) = picker.asset {
+                asset.filter_label()
+            } else if picker.save {
                 "Clay Form project (.clay) · existing files require confirmation"
             } else {
                 "Double-click a folder to browse or a project to open it."
@@ -122,7 +174,9 @@ impl UiState {
                 if ui
                     .add_enabled(
                         !picker.filename.trim().is_empty(),
-                        egui::Button::new(if picker.save {
+                        egui::Button::new(if let Some(asset) = picker.asset {
+                            asset.title()
+                        } else if picker.save {
                             "Save project"
                         } else {
                             "Open project"

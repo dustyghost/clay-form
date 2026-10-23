@@ -6,7 +6,7 @@ impl UiState {
         document: &Document,
         commands: &mut Vec<Command>,
     ) {
-        ui.label("Drop PNG/JPEG images onto the model view, or enter a path:");
+        ui.label("Choose a PNG/JPEG image, or enter its path:");
         ui.add(
             egui::TextEdit::singleline(&mut self.reference_path)
                 .hint_text("/path/to/reference.png"),
@@ -14,7 +14,7 @@ impl UiState {
         if ui
             .add_enabled(
                 self.action_enabled(&Action::AddReference, document),
-                design::button(ui, Glyph::Plus, "Add image"),
+                design::button(ui, Glyph::Open, "Add image…"),
             )
             .customize(Action::AddReference)
             .clicked()

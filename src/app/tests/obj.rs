@@ -37,6 +37,9 @@ fn import_action_preserves_project_and_adds_one_undoable_submodel() {
     app.ui.path = "original.clay".into();
     app.ui.obj_path = file.path();
     app.execute_action(Action::ImportObj, &ctx);
+    assert!(app.ui.file_picker.is_some());
+    assert!(app.mesh_job.is_none());
+    app.dispatch(Command::AcceptProjectFile(false), &ctx);
     assert!(app.mesh_job.is_some() && app.ui.mesh_busy);
     assert_eq!(app.document.geometry_snapshot(), before);
     assert!(
@@ -85,19 +88,22 @@ fn failed_cancelled_and_interrupted_imports_leave_scene_and_history_intact() {
     let before = app.document.geometry_snapshot();
     let history = app.document.history_counts();
     app.ui.obj_path = invalid.path();
-    app.dispatch(Command::ImportObj, &ctx);
+    app.dispatch(Command::Action(Action::ImportObj), &ctx);
+    app.dispatch(Command::AcceptProjectFile(false), &ctx);
     finish_mesh_job(&mut app);
     assert!(app.ui.status.contains("line 7"), "{}", app.ui.status);
     assert_eq!(app.document.geometry_snapshot(), before);
     assert_eq!(app.document.history_counts(), history);
     assert!(!app.document.is_dirty());
     app.ui.obj_path = valid.path();
-    app.dispatch(Command::ImportObj, &ctx);
+    app.dispatch(Command::Action(Action::ImportObj), &ctx);
+    app.dispatch(Command::AcceptProjectFile(false), &ctx);
     app.dispatch(Command::CancelMeshJob, &ctx);
     app.poll_mesh_job();
     assert_eq!(app.document.geometry_snapshot(), before);
     assert_eq!(app.document.history_counts(), history);
-    app.dispatch(Command::ImportObj, &ctx);
+    app.dispatch(Command::Action(Action::ImportObj), &ctx);
+    app.dispatch(Command::AcceptProjectFile(false), &ctx);
     app.dispatch(Command::Request(PendingAction::New), &ctx);
     assert!(app.mesh_job.is_none());
     assert_eq!(app.document.model_count(), 1);
@@ -161,7 +167,8 @@ fn obj_import_offscreen_preview() {
         };
     }
     app.ui.obj_path = file.path();
-    app.dispatch(Command::ImportObj, &ctx);
+    app.dispatch(Command::Action(Action::ImportObj), &ctx);
+    app.dispatch(Command::AcceptProjectFile(false), &ctx);
     finish_mesh_job(&mut app);
     assert_eq!(app.document.model_count(), 2);
     assert_eq!(app.document.mesh().quads.len(), 1);

@@ -7,17 +7,25 @@ pub(crate) enum PendingAction {
     Recover(crate::recovery::Entry),
     Quit,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AssetKind {
+    Reference,
+    Alpha,
+    Obj,
+    Brush,
+    BrushLibrary,
+}
 pub(crate) enum Command {
     Path(crate::app::paths::PathCommand),
     Action(crate::action::Action),
     Request(PendingAction),
     Save,
     BrowseProject(bool),
+    BrowseAsset(AssetKind),
     NavigateProjectFiles(String),
     AcceptProjectFile(bool),
     CancelProjectFile,
     Export,
-    ImportObj,
     OpenProjection,
     KeepProjectionReference,
     PreviewProjection,
@@ -105,7 +113,6 @@ pub(crate) enum Command {
     AddAlphaDragBrush,
     DuplicateBrush(usize),
     UpdateBrush(usize, Brush),
-    LoadAlpha,
     SaveAlpha(Option<usize>, crate::sculpt::alpha::Asset),
     RemoveAlpha(usize),
     UseAlpha(usize, usize),
@@ -114,11 +121,9 @@ pub(crate) enum Command {
     AttachStencil,
 
     SavePreset(usize),
-    LoadPreset,
     CaptureBrushIcon(usize),
     ExportIconImage(String, crate::sculpt::BrushIcon),
     ExportBrushLibrary,
-    ImportBrushLibrary,
     SaveAndContinue,
     DiscardAndContinue,
     CancelPending,

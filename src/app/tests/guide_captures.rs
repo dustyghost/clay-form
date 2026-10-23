@@ -647,7 +647,8 @@ fn guide_workflows_offscreen_preview() {
         let mut g = Guide::new(directory, [1000, 800]);
         g.panel(Tool::Submodels, Dock::Right);
         g.app.ui.obj_path = format!("{}/docs/examples/pyramid.obj", env!("CARGO_MANIFEST_DIR"));
-        g.app.dispatch(Command::ImportObj, &g.ctx);
+        g.app.dispatch(Command::Action(Action::ImportObj), &g.ctx);
+        g.app.dispatch(Command::AcceptProjectFile(false), &g.ctx);
         finish_mesh_job(&mut g.app);
         assert_eq!(g.app.document.model_count(), 2);
         g.app.ui.obj_path = "docs/examples/pyramid.obj".into();
@@ -1075,6 +1076,82 @@ fn project_file_dialog_offscreen_review() {
     click_guide_label(&mut g, "Cancel");
     assert!(g.app.ui.file_picker.is_none());
     assert_eq!(g.app.document.geometry_snapshot(), before);
+}
+
+#[test]
+#[ignore = "renders asset file pickers; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn asset_file_dialog_offscreen_review() {
+    let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+    let images = directory.join("Images");
+    std::fs::create_dir_all(images.join("Studies")).unwrap();
+    let path = images.join("Front study.png");
+    image::RgbImage::from_fn(32, 32, |x, y| {
+        image::Rgb([(x * 8) as u8, (y * 8) as u8, 120])
+    })
+    .save(&path)
+    .unwrap();
+    std::fs::write(images.join("notes.txt"), "Not an image").unwrap();
+    for size in [[1200, 900], [760, 560]] {
+        let mut g = Guide::new(&directory, size);
+        g.interactive = true;
+        g.app
+            .ui
+            .preferences
+            .dock_menu(BuiltinMenu::References, Dock::Right);
+        g.app.ui.reference_path = images.to_string_lossy().into();
+        click_guide_label(&mut g, "Add image…");
+        assert_eq!(
+            g.app.ui.file_picker.as_ref().unwrap().asset,
+            Some(crate::command::AssetKind::Reference)
+        );
+        g.save(&format!("reference-picker-{}", size[0]));
+        assert!(!g.text_positions.iter().any(|(text, _)| text == "notes.txt"));
+        // Exercise selection and acceptance with actual pointer events.
+        click_guide_label(&mut g, "Front study.png");
+        g.frame(vec![]);
+        let point = g
+            .text_positions
+            .iter()
+            .rev()
+            .find(|(text, _)| text == "Add reference image")
+            .unwrap()
+            .1;
+        g.frame(vec![
+            egui::Event::PointerMoved(point),
+            primary_event(point, true),
+        ]);
+        g.frame(vec![primary_event(point, false), egui::Event::PointerGone]);
+        assert!(g.app.ui.file_picker.is_none());
+        assert_eq!(g.app.document.references().len(), 1);
+        assert!(g.app.ui.arrange_references);
+        g.save(&format!("reference-imported-{}", size[0]));
+    }
+    let mut g = Guide::new(&directory, [1200, 900]);
+    g.interactive = true;
+    g.panel(Tool::Alpha, Dock::Right);
+    g.app.ui.alpha_path = images.to_string_lossy().into();
+    let before = g.app.document.project();
+    click_guide_label(&mut g, "Import image");
+    click_guide_label(&mut g, "Choose image…");
+    g.save("alpha-picker");
+    click_guide_label(&mut g, "Front study.png");
+    g.frame(vec![]);
+    let point = g
+        .text_positions
+        .iter()
+        .rev()
+        .find(|(text, _)| text == "Preview alpha image")
+        .unwrap()
+        .1;
+    g.frame(vec![
+        egui::Event::PointerMoved(point),
+        primary_event(point, true),
+    ]);
+    g.frame(vec![primary_event(point, false), egui::Event::PointerGone]);
+    assert!(g.app.ui.file_picker.is_none());
+    assert!(g.app.ui.alphas.draft.is_some());
+    assert!(g.app.document.project() == before);
+    g.save("alpha-import-preview");
 }
 
 fn hover_guide_label(g: &mut Guide, label: &str) {

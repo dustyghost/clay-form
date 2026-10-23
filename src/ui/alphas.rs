@@ -328,11 +328,11 @@ impl UiState {
             ui.label("Image path (PNG/JPEG, up to 2048 × 2048)");
             ui.text_edit_singleline(&mut self.alpha_path);
             if ui
-                .add(design::button(ui, Glyph::Open, "Preview image"))
+                .add(design::button(ui, Glyph::Open, "Choose image…"))
                 .customize(Action::LoadAlpha)
                 .clicked()
             {
-                commands.push(Command::LoadAlpha);
+                commands.push(Command::Action(Action::LoadAlpha));
             }
             ui.weak("White applies; black protects. Adjust the image before saving it.");
         });
