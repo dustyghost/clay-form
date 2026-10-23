@@ -1,6 +1,6 @@
 use super::{Brush, Kind, Vec3};
 use serde::{Deserialize, Serialize};
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct Dab {
     pub center: Vec3,
     pub normal: Vec3,
@@ -478,7 +478,17 @@ impl Mesh {
             deformed |= self.vertices[i] != old[i];
         }
         if deformed {
-            self.limit_sculpt_deformation(&old)
+            if b.kind == Kind::Standard
+                && dabs.len() == 1
+                && matches!(
+                    b.effective_stroke_mode(),
+                    super::StrokeMode::DragRect | super::StrokeMode::DragDot
+                )
+            {
+                self.limit_stamp_deformation(&old, dabs[0].normal)
+            } else {
+                self.limit_sculpt_deformation(&old)
+            }
         } else {
             false
         }

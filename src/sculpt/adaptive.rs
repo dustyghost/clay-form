@@ -5,6 +5,7 @@ use super::{
     math::closest_triangle,
     subdivision::{MAX_TRIANGLES, MAX_VERTICES},
 };
+mod relief;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -136,6 +137,16 @@ impl Mesh {
         stencils: &[Projection],
         settings: &AdaptiveSettings,
     ) -> bool {
+        self.prepare_stenciled_stamp_cancellable(brush, dabs, stencils, settings, &|| false)
+    }
+    pub(crate) fn prepare_stenciled_stamp_cancellable(
+        &mut self,
+        brush: &Brush,
+        dabs: &[Dab],
+        stencils: &[Projection],
+        settings: &AdaptiveSettings,
+        cancelled: &impl Fn() -> bool,
+    ) -> bool {
         if !self.creases.is_empty()
             || !settings.enabled
             || !settings.refine
@@ -153,13 +164,35 @@ impl Mesh {
         if !target.is_finite() || target <= 1e-7 {
             return false;
         }
-        let mut remaining = 8192;
+        let relief = brush.kind == Kind::Standard
+            && (matches!(brush.alpha, Alpha::Image { .. }) || !stencils.is_empty());
+        // Relief error needs more local samples than the edge-length heuristic.
+        // Keep an explicit work ceiling and larger batches for interactive previews.
+        let mut remaining = if relief { 16384 } else { 8192 };
         let mut changed = false;
         for _ in 0..32 {
-            let count = self.split_local(brush, dabs, stencils, target, remaining.min(512));
+            if cancelled() {
+                break;
+            }
+            let count = self.split_local_impl::<true>(
+                brush,
+                dabs,
+                stencils,
+                target,
+                remaining.min(if relief { 1024 } else { 512 }),
+                true,
+            );
             changed |= count > 0;
+            let flips = if relief {
+                // Reconnect on the undeformed surface so quality improvement
+                // cannot flatten the relief or interpolate its heights afterwards.
+                self.improve_edges(brush, dabs, stencils, 512)
+            } else {
+                0
+            };
+            changed |= flips > 0;
             remaining -= count;
-            if count == 0 || remaining == 0 {
+            if (count == 0 && flips == 0) || remaining == 0 {
                 break;
             }
         }
@@ -526,7 +559,7 @@ impl Mesh {
         target: f32,
         limit: usize,
     ) -> usize {
-        self.split_local_impl::<true>(brush, dabs, stencils, target, limit)
+        self.split_local_impl::<true>(brush, dabs, stencils, target, limit, false)
     }
     fn split_local_impl<const LOCAL_MIDPOINTS: bool>(
         &mut self,
@@ -535,10 +568,16 @@ impl Mesh {
         stencils: &[Projection],
         target: f32,
         limit: usize,
+        relief: bool,
     ) -> usize {
         if limit == 0 {
             return 0;
         }
+        let relief = relief
+            && brush.kind == Kind::Standard
+            && (matches!(brush.alpha, Alpha::Image { .. }) || !stencils.is_empty());
+        let mut sampling =
+            relief.then(|| relief::Sampling::new(brush, Region { dabs, stencils }, target));
         let mut candidates = BTreeMap::new();
         for (fi, &t) in self.triangles.iter().enumerate() {
             if !self.in_patch(fi, t, brush, dabs, stencils) {
@@ -586,9 +625,22 @@ impl Mesh {
                         }
                     }
                 }
-                if length > edge_target * edge_target {
-                    candidates.insert(edge(x, y), length / (edge_target * edge_target));
+                let ratio = length / (edge_target * edge_target);
+                if ratio > 1. {
+                    candidates
+                        .entry(edge(x, y))
+                        .and_modify(|old: &mut f32| *old = old.max(ratio))
+                        .or_insert(ratio);
                 }
+            }
+            if let Some((key, ratio)) = sampling
+                .as_mut()
+                .and_then(|sampling| sampling.candidate(self, t))
+            {
+                candidates
+                    .entry(key)
+                    .and_modify(|old| *old = old.max(ratio))
+                    .or_insert(ratio);
             }
         }
         let mut candidates: Vec<_> = candidates.into_iter().collect();
@@ -1013,6 +1065,151 @@ fn edge(a: usize, b: usize) -> (usize, usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn reactor_relief_sampling_error() {
+        let mut brush = Brush::new(Kind::Standard);
+        brush.stroke_mode = super::super::StrokeMode::DragRect;
+        brush.radius = 252.10057;
+        brush.rotation = 55.801712;
+        brush.alpha = super::super::alpha::builtins()
+            .iter()
+            .find(|a| a.name == "Reactor rings")
+            .unwrap()
+            .image
+            .clone();
+        let d = Dab {
+            center: Vec3(-0.18910993, 0.22439388, 0.9556),
+            normal: Vec3(-0.18930681, 0.22462495, 0.955_88),
+            radius: 0.8365707,
+            ..dab()
+        };
+        let settings = AdaptiveSettings {
+            enabled: true,
+            ..Default::default()
+        };
+        let mut mesh = Mesh::sphere();
+        let original = mesh.clone();
+        let mut budget = Budget::default();
+        mesh.adapt(&brush, &[d], &settings, &mut budget, true);
+        mesh.prepare_drag_stamp(&brush, &[d], &settings);
+        assert!(mesh.vertices.len() <= original.vertices.len() + 256 + 16384);
+        let surface = mesh.clone();
+        assert!(
+            mesh.stamp_many(&brush, &[d]),
+            "refinement must not make the guard reject the stamp"
+        );
+        let mut errors = Vec::new();
+        for (fi, &t) in surface.triangles.iter().enumerate() {
+            if !surface.in_patch(fi, t, &brush, &[d], &[]) {
+                continue;
+            }
+            let [a, b, c] = t.map(|i| surface.vertices[i]);
+            let [x, y, z] = t.map(|i| mesh.vertices[i]);
+            let lengths = [(b - a).len(), (c - b).len(), (a - c).len()];
+            let quality = 2. * 3_f32.sqrt() * (b - a).cross(c - a).len()
+                / lengths.map(|v| v * v).into_iter().sum::<f32>();
+            assert!(quality > 0.05, "refinement generated a sliver: {quality}");
+            // Independent seventh-spaced samples cover triangle interiors and
+            // edges, not just the midpoint/quarters/centroid used for sizing.
+            for i in 0..=7 {
+                for j in 0..=7 - i {
+                    let u = i as f32 / 7.;
+                    let v = j as f32 / 7.;
+                    let w = 1. - u - v;
+                    let p = a * u + b * v + c * w;
+                    let offset = p - d.center;
+                    let height = brush
+                        .weight(offset.dot(d.right) / d.radius, offset.dot(d.up) / d.radius)
+                        * brush.strength
+                        * d.radius
+                        * 0.6;
+                    let expected = p + d.normal * height;
+                    let actual = x * u + y * v + z * w;
+                    errors.push((expected - actual).len() * brush.radius / d.radius);
+                }
+            }
+        }
+        errors.sort_by(f32::total_cmp);
+        let worst = *errors.last().unwrap();
+        let p95 = errors[errors.len() * 95 / 100];
+        eprintln!(
+            "Reactor rings: {} vertices, sampled error pixels p95 {p95}, max {worst}",
+            mesh.vertices.len()
+        );
+        assert!(worst < 1., "unresolved relief between vertices: {worst} px");
+        assert!(p95 < 0.35, "roughness across the footprint: {p95} px");
+        mesh.validate_closed().unwrap();
+    }
+    #[test]
+    fn reactor_ring_stamp_preserves_steep_relief_on_adaptive_sphere() {
+        use super::super::StrokeMode;
+        // Reproduce the reported 298 px Reactor rings stamp on the seed sphere.
+        // The inner ring is steep enough to turn past the old surface normal,
+        // but remains a height field in the stamp direction.
+        let mut mesh = Mesh::sphere();
+        let mut brush = Brush::new(Kind::Standard);
+        brush.stroke_mode = StrokeMode::DragRect;
+        brush.radius = 298.28677;
+        brush.rotation = 59.30068;
+        brush.alpha = super::super::alpha::builtins()
+            .iter()
+            .find(|a| a.name == "Reactor rings")
+            .unwrap()
+            .image
+            .clone();
+        let d = Dab {
+            center: Vec3(-0.0591254, 0.07994466, 0.9947),
+            normal: Vec3(-0.05919629, 0.08001776, 0.99503415),
+            radius: 0.98983807,
+            ..dab()
+        };
+        let settings = AdaptiveSettings {
+            enabled: true,
+            ..Default::default()
+        };
+        let mut budget = Budget::default();
+        mesh.adapt(&brush, &[d], &settings, &mut budget, true);
+        mesh.prepare_drag_stamp(&brush, &[d], &settings);
+        assert!(mesh.vertices.len() > 10_000);
+        let normals = mesh.normals();
+        for mode in [StrokeMode::DragRect, StrokeMode::DragDot] {
+            brush.stroke_mode = mode;
+            for invert in [false, true] {
+                let d = Dab { invert, ..d };
+                let mut stamped = mesh.clone();
+                assert!(stamped.stamp_many(&brush, &[d]));
+                let mut steep_faces = 0;
+                for &t in &mesh.triangles {
+                    let [a, b, c] = t.map(|i| mesh.vertices[i]);
+                    let [x, y, z] = t.map(|i| stamped.vertices[i]);
+                    let old = (b - a).cross(c - a);
+                    let new = (y - x).cross(z - x);
+                    steep_faces += usize::from(old.dot(new) < 0.);
+                    if old.dot(d.normal) > old.len() * 0.1 {
+                        assert!(new.dot(d.normal) >= old.dot(d.normal) * 0.999);
+                    }
+                }
+                assert!(steep_faces > 100, "exercise the old false fold detection");
+                for (i, &p) in mesh.vertices.iter().enumerate() {
+                    let offset = p - d.center;
+                    let weight = if offset.len() <= d.radius * 1.5
+                        && normals[i].dot(d.normal) >= 0.1
+                    {
+                        brush.weight(offset.dot(d.right) / d.radius, offset.dot(d.up) / d.radius)
+                    } else {
+                        0.
+                    };
+                    let sign = if invert { -1. } else { 1. };
+                    let expected = p + d.normal * (d.radius * 0.6 * brush.strength * weight * sign);
+                    assert!(
+                        (stamped.vertices[i] - expected).len() < 1e-5,
+                        "{mode:?}, invert {invert}: vertex {i} was clipped unevenly"
+                    );
+                }
+                stamped.validate_closed().unwrap();
+            }
+        }
+    }
     fn dab() -> Dab {
         Dab {
             center: Vec3(0., 0., 1.),
@@ -1321,8 +1518,8 @@ mod tests {
         let mut expected = original;
         for limit in [1, 23, 64] {
             assert_eq!(
-                actual.split_local_impl::<true>(&brush, &[dab()], &[], 0.02, limit),
-                expected.split_local_impl::<false>(&brush, &[dab()], &[], 0.02, limit)
+                actual.split_local_impl::<true>(&brush, &[dab()], &[], 0.02, limit, false),
+                expected.split_local_impl::<false>(&brush, &[dab()], &[], 0.02, limit, false)
             );
             assert_eq!(actual, expected);
         }

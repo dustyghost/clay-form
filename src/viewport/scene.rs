@@ -118,8 +118,9 @@ impl Scene {
         };
         // Pick against the original surface so moving/resizing never builds up a stamp.
         let scene = Self::from_geometry(rect, camera, geometry, renderer.is_none());
-        let mesh = stroke.preview_mesh(document, &scene);
-        let display = Arc::new(DisplayMesh::with_active_mesh(document, &mesh));
+        let display = stroke
+            .preview
+            .display(stroke, document, &scene, painter.ctx());
         let preview = Self::from_geometry(rect, camera, display.clone(), renderer.is_none());
         preview.paint_geometry(
             painter,
@@ -501,13 +502,19 @@ impl Scene {
                         if let [Some(a), Some(b), Some(c)] = ids.map(|i| samples[i]) {
                             let start = overlay.vertices.len() as u32;
                             for (point, weight) in [a, b, c] {
+                                let opacity =
+                                    if matches!(brush.alpha, crate::sculpt::Alpha::Image { .. }) {
+                                        weight.clamp(0., 1.).sqrt() * 0.75
+                                    } else {
+                                        weight * (90. / 255.)
+                                    };
                                 overlay.colored_vertex(
                                     point,
                                     Color32::from_rgba_unmultiplied(
                                         color.r(),
                                         color.g(),
                                         color.b(),
-                                        (weight * 90.) as u8,
+                                        (opacity * 255.) as u8,
                                     ),
                                 );
                             }

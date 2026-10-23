@@ -20,6 +20,120 @@ struct Guide {
 }
 
 #[test]
+#[ignore = "renders adaptive Reactor rings drag stamp; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn reactor_ring_stamp_offscreen_review() {
+    let directory = std::path::PathBuf::from(
+        std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW"),
+    );
+    std::fs::create_dir_all(&directory).unwrap();
+    for (name, offset, radius, rotation, subtract, surface_cursor) in [
+        (
+            "reactor-original",
+            Vec2::new(-0.0591254, -0.07994466),
+            298.28677,
+            59.30068_f32,
+            false,
+            false,
+        ),
+        (
+            "reactor-latest",
+            Vec2::new(-0.18910993, -0.22439388),
+            252.10057,
+            55.801712_f32,
+            false,
+            false,
+        ),
+        (
+            "reactor-subtract",
+            Vec2::new(-0.18910993, -0.22439388),
+            252.10057,
+            55.801712_f32,
+            true,
+            false,
+        ),
+        (
+            "reactor-surface",
+            Vec2::new(-0.18910993, -0.22439388),
+            252.10057,
+            55.801712_f32,
+            false,
+            true,
+        ),
+    ] {
+        let mut g = Guide::new(&directory, [1000, 1000]);
+        g.toolbar = false;
+        g.app.camera.zoom = 0.875;
+        g.app
+            .document
+            .set_symmetry(Symmetry {
+                enabled: false,
+                ..Default::default()
+            })
+            .unwrap();
+        g.app
+            .document
+            .set_adaptive(AdaptiveSettings {
+                enabled: true,
+                ..Default::default()
+            })
+            .unwrap();
+        let mut brush = g.app.document.brushes()[0].clone();
+        brush.stroke_mode = crate::sculpt::StrokeMode::DragRect;
+        brush.subtract = subtract;
+        brush.surface_cursor = surface_cursor;
+        brush.alpha = crate::sculpt::alpha::builtins()
+            .iter()
+            .find(|a| a.name == "Reactor rings")
+            .unwrap()
+            .image
+            .clone();
+        g.app.document.update_brush(0, brush).unwrap();
+        let before = g.app.document.geometry_snapshot();
+        let (rect, _) = g.frame(vec![]);
+        let scale = rect.width().min(rect.height()) * 0.35 * g.app.camera.zoom;
+        let start = rect.center() + offset * scale;
+        let angle = rotation.to_radians();
+        let end = start + Vec2::new(angle.cos(), angle.sin()) * radius;
+        g.frame(vec![
+            egui::Event::PointerMoved(start),
+            primary_event(start, true),
+        ]);
+        g.frame(vec![egui::Event::PointerMoved(end)]);
+        g.save(&format!("{name}-moving"));
+        if std::env::var_os("CLAY_GUIDE_MOVING_ONLY").is_some() {
+            continue;
+        }
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while g.app.viewport.stamp_preview_pending() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "stamp preview did not finish"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            g.frame(vec![]);
+        }
+        g.save(&format!("{name}-preview"));
+        assert_eq!(g.app.document.geometry_snapshot(), before);
+        g.frame(vec![primary_event(end, false), egui::Event::PointerGone]);
+        assert!(g.app.document.mesh().vertices.len() > 10_000);
+        assert_ne!(
+            &g.app.document.mesh().vertices[..before.mesh.vertices.len()],
+            &before.mesh.vertices,
+            "release must apply relief, not only refine the surface"
+        );
+        g.app.document.mesh().validate_closed().unwrap();
+        g.save(&format!("{name}-committed"));
+        g.app.camera.pitch = -0.35;
+        g.save(&format!("{name}-angled"));
+        let after = g.app.document.geometry_snapshot();
+        g.app.document.undo();
+        assert_eq!(g.app.document.geometry_snapshot(), before);
+        g.app.document.redo();
+        assert_eq!(g.app.document.geometry_snapshot(), after);
+    }
+}
+
+#[test]
 #[ignore = "local project review; requires Vulkan, CLAY_REVIEW_PROJECT and CLAY_GUIDE_PREVIEW"]
 fn project_file_offscreen_review() {
     let path = std::env::var("CLAY_REVIEW_PROJECT").expect("Set CLAY_REVIEW_PROJECT");

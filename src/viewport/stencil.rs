@@ -262,6 +262,7 @@ mod tests {
             brush.stroke_mode = mode;
             let start = initial.rect.center();
             let stroke = PendingStroke {
+                preview: Default::default(),
                 start,
                 end: start + Vec2::new(80., 0.),
                 anchor: initial.pick(start).unwrap(),
@@ -321,6 +322,7 @@ mod tests {
                 brush.stroke_mode = mode;
                 let start = scene.rect.center() + Vec2::new(25., 0.);
                 let stroke = PendingStroke {
+                    preview: Default::default(),
                     start,
                     end: start + Vec2::new(65., 0.),
                     anchor: scene.pick(start).unwrap(),

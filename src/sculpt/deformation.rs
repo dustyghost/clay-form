@@ -25,7 +25,7 @@ fn quality(a: Vector, b: Vector) -> f64 {
     2. * 3_f64.sqrt() * dot(normal, normal).sqrt() / (dot(a, a) + dot(b, b) + dot(c, c))
 }
 
-fn safe_face(before: [Vec3; 3], after: [Vec3; 3]) -> bool {
+fn safe_face(before: [Vec3; 3], after: [Vec3; 3], direction: Option<Vec3>) -> bool {
     let a = difference(before[1], before[0]);
     let b = difference(before[2], before[0]);
     let n = cross(a, b);
@@ -33,6 +33,15 @@ fn safe_face(before: [Vec3; 3], after: [Vec3; 3]) -> bool {
     if area_squared == 0. {
         return true;
     } // Existing degenerate faces need topology repair.
+    // A directional relief can turn a steep side past the old face normal
+    // without folding: its footprint in the stamp plane remains unchanged.
+    // Check winding in that plane for front-facing faces. Keep the original
+    // guard at the silhouette and on the back, where this projection is unsafe.
+    let axis = direction.map(|v| [v.0 as f64, v.1 as f64, v.2 as f64]);
+    let n = axis
+        .filter(|&axis| dot(n, axis) > 0.1 * (area_squared * dot(axis, axis)).sqrt())
+        .unwrap_or(n);
+    let projected_area = dot(cross(a, b), n);
     let x = difference(after[1], after[0]);
     let y = difference(after[2], after[0]);
     let dx = std::array::from_fn(|i| x[i] - a[i]);
@@ -40,8 +49,8 @@ fn safe_face(before: [Vec3; 3], after: [Vec3; 3]) -> bool {
     // Projected area during linear movement is 1 + linear*t + quadratic*t².
     // Check its minimum, not only the endpoint: two vertices could otherwise
     // cross and leave an apparently correctly oriented triangle at release.
-    let quadratic = dot(cross(dx, dy), n) / area_squared;
-    let linear = (dot(cross(a, dy), n) + dot(cross(dx, b), n)) / area_squared;
+    let quadratic = dot(cross(dx, dy), n) / projected_area;
+    let linear = (dot(cross(a, dy), n) + dot(cross(dx, b), n)) / projected_area;
     let mut minimum = (1. + linear + quadratic).min(1.);
     if quadratic > 0. {
         let t = -linear / (2. * quadratic);
@@ -66,14 +75,23 @@ fn normal_agreement(a: Vector, b: Vector) -> f64 {
 
 impl Mesh {
     pub(super) fn limit_sculpt_deformation(&mut self, before: &[Vec3]) -> bool {
-        self.limit_deformation(before, false)
+        self.limit_deformation(before, false, None)
+    }
+
+    pub(super) fn limit_stamp_deformation(&mut self, before: &[Vec3], direction: Vec3) -> bool {
+        self.limit_deformation(before, false, Some(direction))
     }
 
     pub(super) fn limit_projection_deformation(&mut self, before: &[Vec3]) -> bool {
-        self.limit_deformation(before, true)
+        self.limit_deformation(before, true, None)
     }
 
-    fn limit_deformation(&mut self, before: &[Vec3], prevent_folds: bool) -> bool {
+    fn limit_deformation(
+        &mut self,
+        before: &[Vec3],
+        prevent_folds: bool,
+        direction: Option<Vec3>,
+    ) -> bool {
         let active: Vec<_> = self
             .triangles
             .iter()
@@ -120,7 +138,7 @@ impl Mesh {
         for _ in 0..12 {
             let mut unsafe_face = false;
             for &t in &active {
-                if !safe_face(t.map(|v| before[v]), t.map(|v| self.vertices[v])) {
+                if !safe_face(t.map(|v| before[v]), t.map(|v| self.vertices[v]), direction) {
                     unsafe_face = true;
                     for v in t {
                         reduce[v] = true;
@@ -152,7 +170,7 @@ impl Mesh {
         // affect its neighbours. Reject a pathological dab without changing positions.
         if active
             .iter()
-            .any(|&t| !safe_face(t.map(|v| before[v]), t.map(|v| self.vertices[v])))
+            .any(|&t| !safe_face(t.map(|v| before[v]), t.map(|v| self.vertices[v]), direction))
             || pairs.iter().any(|pair| !safe_pair(&self.vertices, pair))
         {
             self.vertices.copy_from_slice(before);
@@ -165,6 +183,33 @@ impl Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn directional_stamp_allows_steep_relief_but_rejects_projected_collapse() {
+        for scale in [0.001, 1., 1000.] {
+            let before = [Vec3(0., 0., 0.), Vec3(1., 0., 1.), Vec3(0., 1., 0.)].map(|p| p * scale);
+            let mut after = before;
+            after[1].2 = -3. * scale;
+            let direction = Some(Vec3(0., 0., 1.));
+            assert!(!safe_face(before, after, None));
+            assert!(safe_face(before, after, direction));
+            // A tangent/back-facing projection cannot override the original guard.
+            assert!(!safe_face(before, after, Some(Vec3(0., 1., 0.))));
+            assert!(!safe_face(before, after, Some(Vec3(0., 0., -1.))));
+            // Correct winding at release does not excuse crossing zero area
+            // midway through the motion, even with a stamp projection.
+            after[1] = before[1] * -1.;
+            after[2] = before[2] * -1.;
+            assert!(!safe_face(before, after, direction));
+            after = before;
+            after[1] = before[0];
+            assert!(!safe_face(before, after, direction));
+            // Unchanged projected area still needs the triangle quality check.
+            after = before;
+            after[1].2 = 1000. * scale;
+            assert!(!safe_face(before, after, direction));
+        }
+    }
 
     #[test]
     fn projection_fold_guard_is_local_and_preserves_existing_sharp_edges() {
@@ -191,9 +236,11 @@ mod tests {
                 v.2 += scale;
             }
             assert!(
-                mesh.triangles
-                    .iter()
-                    .all(|&t| safe_face(t.map(|v| before[v]), t.map(|v| mesh.vertices[v]))),
+                mesh.triangles.iter().all(|&t| safe_face(
+                    t.map(|v| before[v]),
+                    t.map(|v| mesh.vertices[v]),
+                    None
+                )),
                 "A face-only check misses the fold"
             );
             let independent_patch = mesh.vertices[4..].to_vec();
@@ -251,7 +298,8 @@ mod tests {
         guarded.stamp(&brush, dab);
         assert!(before.triangles.iter().all(|&t| safe_face(
             t.map(|v| before.vertices[v]),
-            t.map(|v| guarded.vertices[v])
+            t.map(|v| guarded.vertices[v]),
+            None,
         )));
         guarded.validate_closed().unwrap();
     }
