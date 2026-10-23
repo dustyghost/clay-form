@@ -1787,6 +1787,15 @@ mod lasso_mask_tests {
 
     #[test]
     fn mask_lasso_preserves_attributes_hidden_vertices_and_every_subdivision_level() {
+        check_region_mask(false);
+    }
+
+    #[test]
+    fn line_mask_preserves_attributes_hidden_vertices_and_every_subdivision_level() {
+        check_region_mask(true);
+    }
+
+    fn check_region_mask(line: bool) {
         let mut primitive = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Plane);
         primitive.divisions = [4, 4, 1];
         let mut mesh = primitive.mesh().unwrap();
@@ -1808,7 +1817,17 @@ mod lasso_mask_tests {
         for erase in [false, true] {
             let before = doc.geometry_snapshot();
             let counts = doc.history_counts();
-            doc.mask_region(|p| p.0 > 0., erase).unwrap();
+            let label = match (line, erase) {
+                (true, true) => "Erase mask line",
+                (true, false) => "Mask line",
+                (false, true) => "Erase mask lasso",
+                (false, false) => "Mask lasso",
+            };
+            if line {
+                doc.mask_region_named(|p| p.0 > 0., erase, label).unwrap();
+            } else {
+                doc.mask_region(|p| p.0 > 0., erase).unwrap();
+            }
             let after = doc.geometry_snapshot();
             let mut restored_masks = after.clone();
             for (edited, old) in std::iter::once(&mut restored_masks.mesh)
@@ -1839,14 +1858,7 @@ mod lasso_mask_tests {
                 "no geometry, groups, visibility or inactive models may change"
             );
             assert_eq!(doc.history_counts().0, counts.0 + 1);
-            assert_eq!(
-                doc.undo_label(),
-                Some(if erase {
-                    "Erase mask lasso"
-                } else {
-                    "Mask lasso"
-                })
-            );
+            assert_eq!(doc.undo_label(), Some(label));
             let json = serde_json::to_string(&doc.project()).unwrap();
             let mut loaded = Document::default();
             loaded

@@ -416,6 +416,21 @@ impl UiState {
             egui::TopBottomPanel::top("visibility_selection_controls").show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.strong(tool.label());
+                    if let crate::viewport::SelectionTool::MaskLine {
+                        mut erase,
+                        mut flip,
+                    } = tool
+                    {
+                        ui.selectable_value(&mut erase, false, "Add mask");
+                        ui.selectable_value(&mut erase, true, "Erase mask");
+                        design::checkbox(ui, &mut flip, "Flip side")
+                            .customize(Action::FlipMaskLine);
+                        self.selection_tool =
+                            Some(crate::viewport::SelectionTool::MaskLine { erase, flip });
+                        if let Some(binding) = self.preferences.shortcut(&Action::FlipMaskLine) {
+                            ui.label(format!("Flip: {}", binding.label()));
+                        }
+                    }
                     ui.separator();
                     ui.label(tool.instructions());
                     ui.separator();

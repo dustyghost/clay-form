@@ -15,25 +15,34 @@ impl Document {
         contains: impl Fn(crate::sculpt::Vec3) -> bool,
         erase: bool,
     ) -> Result<(), String> {
-        if !self.active_visible() {
-            return Err("Show the active model before masking".into());
-        }
-        self.edit_group_meshes(
+        self.mask_region_named(
+            contains,
+            erase,
             if erase {
                 "Erase mask lasso"
             } else {
                 "Mask lasso"
             },
-            |mesh| {
-                let editable = mesh.sculptable_vertices();
-                for (i, &point) in mesh.vertices.iter().enumerate() {
-                    if editable[i] && contains(point) {
-                        mesh.mask[i] = if erase { 0. } else { 1. };
-                    }
-                }
-                Ok(())
-            },
         )
+    }
+    pub(crate) fn mask_region_named(
+        &mut self,
+        contains: impl Fn(crate::sculpt::Vec3) -> bool,
+        erase: bool,
+        label: &'static str,
+    ) -> Result<(), String> {
+        if !self.active_visible() {
+            return Err("Show the active model before masking".into());
+        }
+        self.edit_group_meshes(label, |mesh| {
+            let editable = mesh.sculptable_vertices();
+            for (i, &point) in mesh.vertices.iter().enumerate() {
+                if editable[i] && contains(point) {
+                    mesh.mask[i] = if erase { 0. } else { 1. };
+                }
+            }
+            Ok(())
+        })
     }
     pub fn mask_peak(&self) -> f32 {
         std::iter::once(&self.geometry.mesh)

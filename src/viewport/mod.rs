@@ -427,6 +427,8 @@ impl Viewport {
                 && options.slice.is_none()
                 && options.transform_mode == TransformMode::Sculpt,
             options.select,
+            matches!(options.select, Some(SelectionTool::MaskLine { .. }))
+                && (options.zoom_hold.active(modifiers) || options.pan_hold.active(modifiers)),
         ) {
             draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
             return;
@@ -584,13 +586,18 @@ impl Viewport {
             && self.gesture.is_none()
             && options.enabled
             && let Some(pos) = pointer
-            && (options.select.is_none() || gizmo_rect.contains(pos))
+            && (options.select.is_none()
+                || gizmo_rect.contains(pos)
+                || (matches!(options.select, Some(SelectionTool::MaskLine { .. }))
+                    && (zoom_held || pan_held)))
         {
             self.gesture = Some(if gizmo_rect.contains(pos) {
                 Gesture::Gizmo
             } else if navigation::contains(rect, pos)
                 || zoom_held
-                || (pan_held && scene.pick_model(pos).is_none())
+                || (pan_held
+                    && (scene.pick_model(pos).is_none()
+                        || matches!(options.select, Some(SelectionTool::MaskLine { .. }))))
             {
                 Gesture::Orbit
             } else if options.slice.is_some() && document.primitive().is_none() {

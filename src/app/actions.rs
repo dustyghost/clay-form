@@ -377,6 +377,24 @@ impl App {
                     (self.ui.selection_tool != Some(tool)).then_some(tool),
                 ))
             }
+            Action::MaskLine => {
+                use crate::viewport::SelectionTool;
+                Some(Command::SelectTool(
+                    (!matches!(self.ui.selection_tool, Some(SelectionTool::MaskLine { .. })))
+                        .then_some(SelectionTool::MaskLine {
+                            erase: false,
+                            flip: false,
+                        }),
+                ))
+            }
+            Action::FlipMaskLine => {
+                if let Some(crate::viewport::SelectionTool::MaskLine { flip, .. }) =
+                    &mut self.ui.selection_tool
+                {
+                    *flip = !*flip;
+                }
+                None
+            }
             Action::ShowAllFaces => Some(Command::ShowAllFaces),
             Action::InvertVisibility => Some(Command::InvertVisibility),
             Action::SplitHidden => Some(Command::SplitHidden),

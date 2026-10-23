@@ -437,6 +437,14 @@ impl UiState {
                     && document.mesh_settings().dynamic
                     && document.mesh().hidden_face_count() == 0
             }
+            Action::MaskLine => sculpt && document.active_visible(),
+            Action::FlipMaskLine => {
+                sculpt
+                    && matches!(
+                        self.selection_tool,
+                        Some(crate::viewport::SelectionTool::MaskLine { .. })
+                    )
+            }
             Action::ClearMask
             | Action::InvertMask
             | Action::DeleteMasked
@@ -540,6 +548,14 @@ impl UiState {
             Action::MaskLasso => {
                 self.selection_tool == Some(crate::viewport::SelectionTool::MaskLasso)
             }
+            Action::MaskLine => matches!(
+                self.selection_tool,
+                Some(crate::viewport::SelectionTool::MaskLine { .. })
+            ),
+            Action::FlipMaskLine => matches!(
+                self.selection_tool,
+                Some(crate::viewport::SelectionTool::MaskLine { flip: true, .. })
+            ),
             Action::Slice => self.slice_active,
             Action::Sculpt => self.transform_mode == crate::viewport::TransformMode::Sculpt,
             Action::Transform => self.transform_mode == crate::viewport::TransformMode::World,

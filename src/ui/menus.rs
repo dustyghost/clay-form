@@ -466,6 +466,11 @@ impl UiState {
                     .mask_threshold;
                 if ui.add_enabled(!self.mesh_busy, egui::Slider::new(&mut threshold, 0. ..=1.).text("Selection threshold").custom_formatter(|v,_| format!("{:.0}%",v*100.)).custom_parser(|text| text.trim().trim_end_matches('%').trim().parse::<f64>().ok().map(|v|v/100.))).on_hover_text("Minimum vertex mask value for grouping, deletion and extraction. Zero-valued vertices are always excluded. Complete faces must meet the threshold at every corner.").changed() { commands.push(Command::MaskThreshold(threshold)); }
                 ui.add_enabled_ui(!self.mesh_busy && document.primitive().is_none(), |ui| {
+                        ui.strong("Mask through");
+                        if ui.add_enabled(document.active_visible(), egui::Button::new("Line").selected(matches!(self.selection_tool, Some(crate::viewport::SelectionTool::MaskLine { .. })))).on_hover_text("Draw a dividing line from empty space. Add or erase masking on one side, front to back; never cuts geometry.").customize(Action::MaskLine).clicked() {
+                            commands.push(Command::Action(Action::MaskLine));
+                            if popup { ui.close_kind(egui::UiKind::Menu); }
+                        }
                         if ui.add_enabled(document.active_visible(), egui::Button::new("Mask lasso").selected(self.selection_tool == Some(crate::viewport::SelectionTool::MaskLasso))).on_hover_text("Drag to add masking; Alt to erase. Selects vertices through all depths. Hidden faces and their boundary vertices are protected.").customize(Action::MaskLasso).clicked() {
                             commands.push(Command::Action(Action::MaskLasso));
                             if popup { ui.close_kind(egui::UiKind::Menu); }
@@ -612,6 +617,12 @@ impl UiState {
                     design::checkbox(ui, &mut self.slice_options.flip, "Flip kept side");
                 }
                 ui.label("Active model · through all depths · resets subdivision levels");
+                ui.separator();
+                if ui.button("Mask through · Line").on_hover_text("Switch to non-destructive line masking. Keeps geometry and subdivision levels.").customize(Action::MaskLine).clicked() {
+                    commands.push(Command::Action(Action::MaskLine));
+                    ui.close_kind(egui::UiKind::Menu);
+                }
+                ui.label("Mask only · preserves geometry and subdivision levels");
             },
         );
     }

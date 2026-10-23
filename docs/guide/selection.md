@@ -5,6 +5,7 @@
 **Mask** a region to protect it from brushes. **Hide** it to work without seeing or picking it. **Group** it to recall a selection later.
 
 - [Protect a region with a lasso](#example-protect-a-region-with-a-lasso)
+- [Protect one side through the model](#protect-one-side-through-the-model)
 - [Edit a mask](#mask-operations)
 - [Save a region as a group](#vertex-groups)
 - [Hide or isolate faces](#selection-and-visibility)
@@ -26,6 +27,19 @@ If you protected the wrong side, choose **Invert mask**. To start over, use **Cl
 | ![Green L-shaped mask outline before release](../images/mask-lasso-preview.png) | ![Dark protected region after releasing the mask lasso](../images/mask-lasso-result.png) |
 
 *Mask lasso selects through the model, including its back. Hold Alt to erase masking inside the outline.*
+
+### Protect one side through the model
+
+1. Choose **Mask → Mask through → Line** (also available from **Slice → Mask through · Line**).
+2. Choose **Add mask** or **Erase mask** in the tool strip. **Flip side** selects the opposite side of the line.
+3. Press in empty viewport space above the model, draw a dividing line across it, and release below it. The tinted side and arrow show the affected half-plane; the line extends beyond both endpoints.
+4. Orbit to inspect the back. The same projected side is masked at every depth, in both orthographic and perspective views.
+
+During a drag, **Space** moves the whole line. **Escape** cancels without an edit; **Done** returns to normal sculpting. The existing navigation border and axis gizmo remain reserved for navigation. Away from those controls, an ordinary primary drag belongs to masking even when it starts off the model. Secondary-button orbit, middle-button pan, and your configured zoom/pan holds remain available between gestures. The configured zoom/pan holds take precedence when starting a primary drag.
+
+Line masking changes only mask weights on the active model and all stored subdivision levels. It preserves other masks outside the affected side. Rear-facing surfaces are included; explicitly hidden faces and their boundary vertices stay protected. It never cuts geometry or resets levels. One completed gesture is one Undo step; empty or unchanged selections create no history entry.
+
+**Mask through: Line** and **Flip mask line side** are available in custom menus and **Settings → Key settings**, with no assigned shortcut by default. Assign, remap, or clear them there. The tool strip displays the assigned flip shortcut; it can flip the preview while you hold the drag. Add/Erase and the side checkbox are also available before starting a gesture. **Mask lasso** remains alongside Line for freeform outlines.
 
 ### Adjust protection
 

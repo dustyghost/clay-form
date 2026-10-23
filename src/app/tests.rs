@@ -3398,6 +3398,13 @@ fn lasso_actions_toggle_from_shortcuts_and_obey_busy_guard() {
     for (action, tool) in [
         (Action::SelectLasso, SelectionTool::Lasso),
         (Action::MaskLasso, SelectionTool::MaskLasso),
+        (
+            Action::MaskLine,
+            SelectionTool::MaskLine {
+                erase: false,
+                flip: false,
+            },
+        ),
     ] {
         let mut app = App::default();
         let ctx = egui::Context::default();
@@ -3434,6 +3441,7 @@ fn lasso_actions_toggle_from_shortcuts_and_obey_busy_guard() {
     }
 }
 
+mod line_mask;
 mod rotation;
 
 mod obj;
