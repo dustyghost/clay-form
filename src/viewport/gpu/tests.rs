@@ -284,7 +284,8 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             read(&gpu)[center + 2] > active_solid[center + 2],
             "replacement alpha texture must upload"
         );
-        // Compare shader alpha against CPU sculpt weights at an actual pixel.
+        // Compare shader alpha against CPU sculpt weights at an actual pixel,
+        // including the display-only contrast boost for image alpha ghosts.
         for alpha in [
             Alpha::Soft,
             Alpha::Hard,
@@ -302,6 +303,11 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             b.brush.rotation = 35.;
             let q = 0.5 / 89.6 / b.radius;
             let weight = b.brush.weight(q, q);
+            let opacity = if matches!(b.brush.alpha, Alpha::Image { .. }) {
+                weight.clamp(0., 1.).sqrt() * 0.75
+            } else {
+                weight * (90. / 255.)
+            };
             let tint = b.color;
             gpu.paint(
                 &params,
@@ -313,11 +319,11 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             );
             let rgba = read(&gpu);
             for channel in 0..3 {
-                let expected = active_solid[center + channel] as f32 * (1. - weight * 90. / 255.)
-                    + tint[channel] * weight * 90.;
+                let expected = active_solid[center + channel] as f32 * (1. - opacity)
+                    + tint[channel] * opacity * 255.;
                 assert!(
                     (rgba[center + channel] as f32 - expected).abs() < 2.,
-                    "GPU alpha must match sculpting alpha"
+                    "GPU ghost must match sculpt weights with preview opacity"
                 );
             }
         }
