@@ -3443,6 +3443,7 @@ fn lasso_actions_toggle_from_shortcuts_and_obey_busy_guard() {
 
 mod line_mask;
 mod rotation;
+mod visibility_selection;
 
 mod obj;
 

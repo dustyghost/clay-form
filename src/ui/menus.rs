@@ -344,8 +344,10 @@ impl UiState {
                         for (tool, action) in [
                             (crate::viewport::SelectionTool::Rectangle, Action::SelectRectangle),
                             (crate::viewport::SelectionTool::Lasso, Action::SelectLasso),
+                            (crate::preferences::VisibilitySettings {shape: crate::preferences::VisibilityShape::Line, ..self.preferences.visibility_selection}.tool(), Action::SelectVisibilityLine),
+                            (crate::preferences::VisibilitySettings {shape: crate::preferences::VisibilityShape::Path, ..self.preferences.visibility_selection}.tool(), Action::SelectVisibilityPath),
                         ] {
-                            if ui.selectable_label(self.selection_tool == Some(tool), tool.label()).on_hover_text("Drag to isolate; Alt to hide. Selects face centers through all depths, keeping quads whole.").customize(action.clone()).clicked() {
+                            if ui.selectable_label(self.selection_tool == Some(tool), action.label()).on_hover_text("Selects face centers through all depths, keeping quads whole. Line and closed path use the chosen Hide/Isolate operation.").customize(action.clone()).clicked() {
                                 commands.push(Command::Action(action));
                                 if popup { ui.close_kind(egui::UiKind::Menu); }
                             }

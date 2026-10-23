@@ -221,37 +221,7 @@ impl Document {
                 "Isolate selection"
             },
             |mesh| {
-                let mut selected: Vec<_> = mesh
-                    .triangles
-                    .iter()
-                    .map(|t| {
-                        contains(
-                            (mesh.vertices[t[0]] + mesh.vertices[t[1]] + mesh.vertices[t[2]])
-                                * (1. / 3.),
-                        )
-                    })
-                    .collect();
-                let key = |mut t: [usize; 3]| {
-                    t.sort_unstable();
-                    t
-                };
-                let faces: std::collections::HashMap<_, _> = mesh
-                    .triangles
-                    .iter()
-                    .enumerate()
-                    .map(|(i, &t)| (key(t), i))
-                    .collect();
-                for &[a, b, c, d] in &mesh.quads {
-                    let inside = contains(
-                        (mesh.vertices[a] + mesh.vertices[b] + mesh.vertices[c] + mesh.vertices[d])
-                            * 0.25,
-                    );
-                    for t in [[a, b, c], [a, c, d], [a, b, d], [b, c, d]] {
-                        if let Some(&i) = faces.get(&key(t)) {
-                            selected[i] = inside;
-                        }
-                    }
-                }
+                let selected = mesh.face_region_selection(&contains);
                 let visible = selected
                     .iter()
                     .enumerate()

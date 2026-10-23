@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 pub(crate) use crate::action::Action;
+mod visibility;
+pub(crate) use visibility::{VisibilitySettings, VisibilityShape};
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Shortcut {
     pub key: String,
@@ -341,6 +343,7 @@ pub(crate) struct ModelingPreset {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct Preferences {
+    pub visibility_selection: VisibilitySettings,
     pub modeling_presets: Vec<ModelingPreset>,
     pub next_modeling_preset_id: u64,
     pub recovery: crate::recovery::Settings,
@@ -395,6 +398,7 @@ impl Default for Preferences {
             (Key::Minus, none),
         ];
         Self {
+            visibility_selection: VisibilitySettings::default(),
             modeling_presets: Vec::new(),
             next_modeling_preset_id: 1,
             recovery: Default::default(),

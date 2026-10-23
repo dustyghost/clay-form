@@ -364,6 +364,40 @@ impl App {
             Action::ContractMask => Some(Command::GrowMask(false)),
             Action::BlurMask => Some(Command::BlurMask),
             Action::SharpenMask => Some(Command::SharpenMask),
+            Action::SelectVisibilityLine | Action::SelectVisibilityPath => {
+                use crate::preferences::VisibilityShape;
+                self.ui.preferences.visibility_selection.shape =
+                    if action == Action::SelectVisibilityLine {
+                        VisibilityShape::Line
+                    } else {
+                        VisibilityShape::Path
+                    };
+                let tool = self.ui.preferences.visibility_selection.tool();
+                Some(Command::SelectTool(
+                    (self.ui.selection_tool != Some(tool)).then_some(tool),
+                ))
+            }
+            Action::VisibilityHide | Action::VisibilityIsolate | Action::FlipVisibilitySide => {
+                let settings = &mut self.ui.preferences.visibility_selection;
+                match action {
+                    Action::VisibilityHide => settings.hide = true,
+                    Action::VisibilityIsolate => settings.hide = false,
+                    _ => settings.flip = !settings.flip,
+                }
+                if matches!(
+                    self.ui.selection_tool,
+                    Some(crate::viewport::SelectionTool::Visibility(_))
+                ) {
+                    self.ui.selection_tool = Some(settings.tool());
+                }
+                None
+            }
+            Action::ApplyVisibilityPath
+            | Action::ClearVisibilityPath
+            | Action::DeleteVisibilityPoint => {
+                self.viewport.visibility_path_action(action);
+                None
+            }
             Action::SelectRectangle | Action::SelectLasso | Action::MaskLasso => {
                 use crate::viewport::SelectionTool;
                 let tool = match action {

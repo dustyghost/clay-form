@@ -416,6 +416,19 @@ impl UiState {
             egui::TopBottomPanel::top("visibility_selection_controls").show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.strong(tool.label());
+                    if let crate::viewport::SelectionTool::Visibility(mut settings) = tool {
+                        for shape in crate::preferences::VisibilityShape::ALL {
+                            ui.selectable_value(&mut settings.shape, shape, shape.label());
+                        }
+                        ui.selectable_value(&mut settings.hide, true, "Hide")
+                            .customize(Action::VisibilityHide);
+                        ui.selectable_value(&mut settings.hide, false, "Isolate")
+                            .customize(Action::VisibilityIsolate);
+                        design::checkbox(ui, &mut settings.flip, "Flip side / region")
+                            .customize(Action::FlipVisibilitySide);
+                        self.preferences.visibility_selection = settings;
+                        self.selection_tool = Some(settings.tool());
+                    }
                     if let crate::viewport::SelectionTool::MaskLine {
                         mut erase,
                         mut flip,

@@ -1,6 +1,44 @@
 //! Face visibility is independent of masks and polygroup membership.
 use super::Mesh;
 impl Mesh {
+    /// Classify polygon centers, keeping both triangles of a quad together.
+    /// Shared by visibility previews and document commits.
+    pub(crate) fn face_region_selection(
+        &self,
+        contains: impl Fn(super::Vec3) -> bool,
+    ) -> Vec<bool> {
+        let mut selected: Vec<_> = self
+            .triangles
+            .iter()
+            .map(|t| {
+                contains(
+                    (self.vertices[t[0]] + self.vertices[t[1]] + self.vertices[t[2]]) * (1. / 3.),
+                )
+            })
+            .collect();
+        let key = |mut t: [usize; 3]| {
+            t.sort_unstable();
+            t
+        };
+        let faces: std::collections::HashMap<_, _> = self
+            .triangles
+            .iter()
+            .enumerate()
+            .map(|(i, &t)| (key(t), i))
+            .collect();
+        for &[a, b, c, d] in &self.quads {
+            let inside = contains(
+                (self.vertices[a] + self.vertices[b] + self.vertices[c] + self.vertices[d]) * 0.25,
+            );
+            for t in [[a, b, c], [a, c, d], [a, b, d], [b, c, d]] {
+                if let Some(&i) = faces.get(&key(t)) {
+                    selected[i] = inside;
+                }
+            }
+        }
+        selected
+    }
+
     pub fn has_hidden_faces(&self) -> bool {
         self.hidden_faces.iter().any(|&hidden| hidden)
             || (self.vertex_groups.iter().any(|g| !g.visible)
