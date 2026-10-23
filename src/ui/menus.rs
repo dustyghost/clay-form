@@ -135,6 +135,7 @@ impl UiState {
                 && !self.recovery_open
                 && !self.settings_open
                 && !self.layout_open;
+            let max_height = (ctx.content_rect().height() - 80.).max(120.);
             let response = egui::Window::new(pinned.menu.label())
                 .id(egui::Id::new(("pinned_menu", pinned.menu)))
                 .open(&mut open)
@@ -144,12 +145,17 @@ impl UiState {
                 .default_width(320.)
                 .resizable(false)
                 .collapsible(false)
-                .max_height((ctx.content_rect().height() - 80.).max(120.))
-                .vscroll(true)
+                .max_height(max_height)
                 .show(ctx, |ui| {
+                    // Placement controls must stay reachable when the menu body scrolls.
                     unpin = self.menu_placement_controls(ui, pinned.menu, true);
                     ui.separator();
-                    self.builtin_menu_contents(pinned.menu, ui, document, camera, commands);
+                    egui::ScrollArea::vertical()
+                        .id_salt(("pinned_menu_body", pinned.menu))
+                        .max_height((max_height - 80.).max(40.))
+                        .show(ui, |ui| {
+                            self.builtin_menu_contents(pinned.menu, ui, document, camera, commands);
+                        });
                 });
             if let Some(response) = response {
                 // Include the closing frame so its click cannot edit the model underneath.
