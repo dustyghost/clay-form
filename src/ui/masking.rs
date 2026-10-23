@@ -63,3 +63,26 @@ impl UiState {
         conflicts
     }
 }
+
+impl UiState {
+    pub(super) fn temporary_mask_menu_entries(&self, document: &Document) -> Vec<super::context_menu::ViewportMenuEntry> {
+        use super::context_menu::ViewportMenuEntry;
+        let preset = &self.preferences.mask_preset;
+        let enabled = document.primitive().is_none() && document.active_visible();
+        let mut entries = [
+            (Action::TemporaryMaskBrush, "Surface brush", preset.shape == MaskShape::Brush, "Paint the visible surface using the remembered Mask brush preset."),
+            (Action::TemporaryMaskLasso, "Through-depth lasso", preset.shape == MaskShape::Lasso, "Draw a closed outline to mask vertices at every depth; hidden geometry stays protected."),
+            (Action::TemporaryMaskLine, "Through-depth line", preset.shape == MaskShape::Line, "Draw a dividing line to mask one side through every depth."),
+            (Action::TemporaryMaskAdd, "Add mask", !preset.erase, "Add protection with the temporary mask tool."),
+            (Action::TemporaryMaskErase, "Erase mask", preset.erase, "Erase protection with the temporary mask tool."),
+        ].into_iter().map(|(action,label,selected,hint)| ViewportMenuEntry { action, label: label.into(), selected, enabled, hint: hint.into() }).collect::<Vec<_>>();
+        if preset.shape == MaskShape::Line {
+            entries.push(ViewportMenuEntry { action: Action::TemporaryMaskFlip, label: "Flip side".into(), selected: preset.flip, enabled, hint: "Mask the opposite side of the dividing line.".into() });
+        }
+        let index = preset.brush_index(document);
+        for (i, brush) in document.brushes().iter().enumerate().filter(|(_,b)| b.kind == Kind::Mask) {
+            entries.push(ViewportMenuEntry { action: Action::TemporaryMaskPreset(brush.identity()), label: format!("Brush preset: {}", brush.name), selected: index == Some(i), enabled, hint: "Remembers this Mask preset independently of your ordinary sculpt brush.".into() });
+        }
+        entries
+    }
+}

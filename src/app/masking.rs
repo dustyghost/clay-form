@@ -34,8 +34,11 @@ impl App {
         let visibility = ctx.input(|i| self.ui.preferences.visibility_hold.active(i));
         let escape = ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let was_active = self.ui.mask_active;
-        if !held {
+        if !held && ctx.input(|i| i.focused) {
             self.ui.mask_suppressed = false;
+        }
+        if was_active && !ctx.input(|i| i.focused) {
+            self.ui.mask_suppressed = true;
         }
         if was_active && escape {
             self.ui.mask_suppressed = true;
@@ -253,4 +256,39 @@ mod tests {
         assert_eq!(legacy.mask_hold, HoldBinding::default());
         assert_eq!(legacy.mask_preset, MaskPreset::default());
     }
+    #[test]
+    fn temporary_mask_focus_loss_and_visibility_priority_do_not_leak_edits() {
+        let (mut app, ctx, p) = setup();
+        app.ui.preferences.mask_preset.shape = MaskShape::Lasso;
+        let before = app.document.geometry_snapshot();
+        frame(&mut app, &ctx, Modifiers::NONE, vec![key(Key::M, true), button(p, true)]);
+        frame(&mut app, &ctx, Modifiers::NONE, vec![Event::PointerMoved(p + Vec2::new(100., 100.))]);
+        frame_focused(&mut app, &ctx, Modifiers::NONE, vec![], false);
+        assert!(!app.ui.mask_active);
+        frame(&mut app, &ctx, Modifiers::NONE, vec![button(p, false), key(Key::M, false)]);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        app.ui.preferences.mask_hold = HoldBinding { ctrl: true, ..Default::default() };
+        frame(&mut app, &ctx, Modifiers::CTRL | Modifiers::SHIFT, vec![Event::PointerMoved(p)]);
+        assert!(!app.ui.mask_active);
+        assert_eq!(app.viewport_menu_context(&ctx), crate::ui::context_menu::ViewportMenuContext::Visibility);
+        frame(&mut app, &ctx, Modifiers::CTRL, vec![]);
+        assert!(app.ui.mask_active);
+        app.ui.preferences.mask_hold = HoldBinding::default();
+        frame(&mut app, &ctx, Modifiers::CTRL, vec![]);
+        assert!(!app.ui.mask_active);
+        assert_eq!(app.document.geometry_snapshot(), before);
+    }
+
+    #[test]
+    fn temporary_mask_unavailable_editors_never_override_their_tool() {
+        let (mut app, ctx, p) = setup();
+        app.ui.slice_active = true;
+        let before = app.document.geometry_snapshot();
+        frame(&mut app, &ctx, Modifiers::NONE, vec![key(Key::M, true), Event::PointerMoved(p)]);
+        assert!(!app.ui.mask_active);
+        assert!(app.ui.slice_active);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert!(app.ui.status.contains("Hold to mask is available"));
+    }
+
 }
