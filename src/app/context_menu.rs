@@ -47,7 +47,12 @@ impl App {
         let context = self.viewport_menu_context(ctx);
         self.ui.viewport_menu.context = Some(context);
         self.ui.viewport_menu.position = Some(position);
-        self.ui.viewport_menu.selected = 0;
+        self.ui.viewport_menu.selected = self
+            .ui
+            .viewport_menu_entries(context, &self.document)
+            .iter()
+            .position(|entry| matches!(entry.action, Action::ModelTool(_)))
+            .unwrap_or(0);
         self.ui.viewport_menu.just_opened = true;
         self.ui.viewport_menu.hold = if context == ViewportMenuContext::Visibility {
             Some(self.ui.preferences.visibility_hold.clone())
@@ -160,6 +165,7 @@ mod tests {
                 app.ui.modeling.count > 0,
                 "select a component before opening the menu"
             );
+            app.execute_action(Action::ModelTool(ModelTool::Rotate), &ctx);
             let before = app.document.geometry_snapshot();
             let history = app.document.history_counts();
             let selection = app.viewport.modeling.selection().clone();
@@ -173,6 +179,51 @@ mod tests {
                 app.ui.viewport_menu.context,
                 Some(ViewportMenuContext::Modeling)
             );
+            let target = match mode {
+                ComponentMode::Face => crate::viewport::SelectionSpan::Flat,
+                ComponentMode::Edge => crate::viewport::SelectionSpan::Border,
+                ComponentMode::Vertex => crate::viewport::SelectionSpan::Connected,
+            };
+            let entries = app
+                .ui
+                .viewport_menu_entries(ViewportMenuContext::Modeling, &app.document);
+            assert!(entries.iter().all(|entry| match entry.action {
+                Action::ModelTarget(span) => span.available(mode),
+                _ => true,
+            }));
+            app.ui.viewport_menu.selected = entries
+                .iter()
+                .position(|entry| entry.action == Action::ModelTarget(target))
+                .unwrap();
+            frame(
+                &mut app,
+                &ctx,
+                egui::Modifiers::NONE,
+                vec![key(egui::Key::Enter, egui::Modifiers::NONE)],
+            );
+            assert_eq!(app.ui.modeling.span, target);
+            assert_eq!(app.ui.modeling.tool, ModelTool::Rotate);
+            assert_eq!(app.viewport.modeling.selection(), &selection);
+            assert_eq!(
+                app.ui.viewport_menu.context,
+                Some(ViewportMenuContext::Modeling)
+            );
+            frame(
+                &mut app,
+                &ctx,
+                egui::Modifiers::NONE,
+                vec![egui::Event::Key {
+                    key: egui::Key::Enter,
+                    physical_key: None,
+                    pressed: false,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            );
+            app.ui.viewport_menu.selected = entries
+                .iter()
+                .position(|entry| entry.action == Action::ModelTool(ModelTool::Select))
+                .unwrap();
             frame(
                 &mut app,
                 &ctx,
