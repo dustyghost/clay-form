@@ -30,11 +30,13 @@ impl MaterialControls {
                 id: i as u64 + 1,
                 name: name.clone(),
                 material: m.unlinked(),
+                original: None,
             })
             .chain(library.copies.iter().map(|p| Asset {
                 id: p.id,
                 name: p.name.clone(),
                 material: p.material.unlinked(),
+                original: p.original.clone(),
             }))
             .collect();
         if let Some(id) = brush.material.primary_asset()
@@ -45,6 +47,7 @@ impl MaterialControls {
                 id,
                 name: "Custom material".into(),
                 material: brush.material.unlinked(),
+                original: None,
             });
         }
         for asset in document.materials() {
@@ -53,6 +56,9 @@ impl MaterialControls {
             } else {
                 presets.push(asset.clone());
             }
+        }
+        for asset in &mut presets {
+            asset.original = Some(asset.reset_material());
         }
         if let Some(id) = brush.material.primary_asset()
             && let Some(asset) = presets.iter().find(|a| a.id == id)
@@ -150,26 +156,35 @@ impl MaterialControls {
                     .desired_width(140.),
             );
         });
-        if ui
-            .add_enabled(
-                library.copies.len() < 64,
-                egui::Button::new("Copy material"),
-            )
-            .on_hover_text("Create an independent editable material")
-            .clicked()
-            && let Some(index) = library.copy(&edited_name, brush.material.clone())
-        {
-            let copy = &library.copies[index];
-            selected = Some(copy.id);
-            edited_name = copy.name.clone();
-            brush.material = copy.material.with_link(copy.id);
-            commands.push(Command::SaveMaterial(Asset {
-                id: copy.id,
-                name: copy.name.clone(),
-                material: copy.material.clone(),
-            }));
-        }
         let before = brush.material.clone();
+        let mut original = selected
+            .and_then(|id| presets.iter().find(|a| a.id == id))
+            .map(Asset::reset_material)
+            .unwrap_or_else(|| before.unlinked());
+        ui.horizontal(|ui| {
+            if ui.add_enabled(library.copies.len() < 64, egui::Button::new("Copy material"))
+                .on_hover_text("Create an independent editable material").clicked()
+                && let Some(index) = library.copy(&edited_name, brush.material.clone())
+            {
+                let copy = &library.copies[index];
+                selected = Some(copy.id);
+                edited_name = copy.name.clone();
+                original = copy.material.unlinked();
+                brush.material = copy.material.with_link(copy.id);
+                commands.push(Command::SaveMaterial(Asset {
+                    id: copy.id,
+                    name: copy.name.clone(),
+                    material: copy.material.clone(),
+                    original: Some(original.clone()),
+                }));
+            }
+            if ui.add_enabled(brush.material.values() != original.values(), egui::Button::new("Reset material"))
+                .on_hover_text("Restore original surface settings and layers; keep the name. Updates painted uses and can be undone.")
+                .clicked()
+            {
+                brush.material = selected.map_or_else(|| original.clone(), |id| original.with_link(id));
+            }
+        });
         egui::ComboBox::from_label("Paint channels")
             .selected_text(brush.paint_channels.label())
             .show_ui(ui, |ui| {
@@ -253,27 +268,31 @@ impl MaterialControls {
         });
         ui.collapsing("Material layers", |ui| {
             ui.weak("Layers are evaluated from top to bottom. Editing a named material updates its painted uses.");
-            let mut remove=None; let mut swap=None;
-            for (i,layer) in brush.material.layers.iter_mut().enumerate() {
-                // Zero-weight layers are still editable; add enables the first empty slot.
-                ui.push_id(i,|ui| { ui.collapsing(format!("Layer {}",i+1),|ui| {
-                    ui.add(egui::Slider::new(&mut layer.weight,0. ..=1.).text("Weight"));
-                    ui.horizontal(|ui| { ui.selectable_value(&mut layer.add,0.,"Mix"); ui.selectable_value(&mut layer.add,1.,"Add"); });
-                    egui::ComboBox::from_label("Start from").selected_text("Surface preset").show_ui(ui,|ui| {
-                        for (name,m) in Material::examples() { if ui.button(name).clicked() {layer.surface=m.surface(); layer.weight=1.; ui.close();} }
+            let occupied:Vec<_>=brush.material.layers.iter().enumerate().filter_map(|(i,layer)|(!layer.is_empty()).then_some(i)).collect();
+            let mut remove=None;
+            let mut swap=None;
+            for (number,&i) in occupied.iter().enumerate() {
+                let layer=&mut brush.material.layers[i];
+                ui.push_id(i,|ui| {
+                    ui.collapsing(format!("Layer {}",number+1),|ui| {
+                        ui.horizontal(|ui| {
+                            if ui.button("Remove layer").on_hover_text("Delete this layer and keep the remaining layers in order. Undo restores it.").clicked() {remove=Some(i);}
+                            if number>0 && ui.button("Move up").clicked() {swap=Some((i,occupied[number-1]));}
+                        });
+                        ui.add(egui::Slider::new(&mut layer.weight,0. ..=1.).text("Weight"));
+                        ui.horizontal(|ui| {ui.selectable_value(&mut layer.add,0.,"Mix");ui.selectable_value(&mut layer.add,1.,"Add");});
+                        egui::ComboBox::from_label("Start from").selected_text("Surface preset").show_ui(ui,|ui| {
+                            for (name,m) in Material::examples() {if ui.button(name).clicked() {layer.surface=m.surface();layer.weight=1.;ui.close();}}
+                        });
+                        surface_controls(ui,&mut layer.surface);
                     });
-                    surface_controls(ui,&mut layer.surface);
-                    ui.horizontal(|ui| {
-                        if i>0 && ui.button("Move up").clicked() {swap=Some(i);}
-                        if ui.button("Clear layer").clicked() {remove=Some(i);}
-                    });
-                }); });
+                });
             }
-            if let Some(i)=remove {brush.material.layers[i]=Layer::default();}
-            if let Some(i)=swap {brush.material.layers.swap(i,i-1);}
-            if ui.add_enabled(brush.material.layers.iter().any(|l|l.weight==0.),egui::Button::new("Add layer")).clicked()
-                && let Some(layer)=brush.material.layers.iter_mut().find(|l|l.weight==0.) {
-                *layer=Layer{surface:Surface{base_color:[0.5;3],..Default::default()},weight:0.5,add:0.};
+            if let Some(i)=remove {brush.material.layers.remove(i);}
+            if let Some((a,b))=swap {brush.material.layers.swap(a,b);}
+            if occupied.is_empty() {ui.weak("No additional layers");}
+            if ui.add_enabled(brush.material.layers.iter().any(Layer::is_empty),egui::Button::new("Add layer")).clicked() {
+                brush.material.layers.add(Layer{surface:Surface{base_color:[0.5;3],..Default::default()},weight:0.5,add:0.});
             }
         });
         if (before.values() != brush.material.values() || name != edited_name)
@@ -288,11 +307,13 @@ impl MaterialControls {
             } else if let Some(p) = library.copies.iter_mut().find(|p| p.id == id) {
                 p.name = edited_name.clone();
                 p.material = material.clone();
+                p.original = Some(original.clone());
             }
             commands.push(Command::SaveMaterial(Asset {
                 id,
                 name: edited_name,
                 material,
+                original: Some(original),
             }));
         }
     }

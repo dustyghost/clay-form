@@ -255,6 +255,7 @@ mod tests {
             id: 42,
             name: "Copper coating".into(),
             material: m.clone(),
+            original: None,
         })
         .unwrap();
         let mut brush = Brush::new(Kind::Paint);

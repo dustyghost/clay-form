@@ -22,6 +22,8 @@ In **Brush settings**, select a rendered sphere in **Materials**, then paint on 
 
 These are editable starting values. Ceramic uses a simple glossy dielectric; satin aluminium uses isotropic roughness, without directional brush marks or a separate coating layer. Edit **Colour**, **Roughness** and **Metallic** to make a custom material. Edit **Material name** to rename the selected swatch, including a built-in material. Use **Copy material** to save a separate editable copy, then adjust its channels. Copies and the colour palette are saved in your preferences and available across projects.
 
+**Reset material** restores a built-in material’s original surface settings and layers, or a copy’s settings from when it was created. It keeps your material name, updates painted uses, and supports Undo. Reset settings are saved with personal copies and project definitions. Older custom materials without saved reset settings use their values when first opened in this version as the starting point.
+
 Click a palette swatch to select its colour. **+ Colour** saves the current colour; right-click a swatch to remove it. **Sample colour** lets you click a visible surface to pick its underlying paint colour without lighting, mask shading or vertex-group tint. It samples once; **Escape** cancels.
 
 ![Paint brush settings and copper example](../images/material-copper.png)
@@ -58,7 +60,7 @@ The initial surface is opaque. Transparency, normal maps, height/displacement ma
 
 Editing a named material now updates surfaces painted with it, in proportion to each stroke's contribution. **Copy material** creates an independent version before you experiment. Rename it with **Material name**. These definitions travel with the project, and Undo restores changes to both the definition and painted surfaces.
 
-Open **Surface options** for IOR, specular level, emission colour and emission strength. Open **Material layers** to combine up to three additional surfaces over the base. Each layer has the same surface controls, a weight and **Mix** or **Add** blending. **Start from** supplies a surface preset; **Move up** changes the order and **Clear layer** resets it. Mix at full weight replaces the earlier surface; Add accumulates another contribution. Transmission and texture maps are not available yet.
+Open **Surface options** for IOR, specular level, emission colour and emission strength. Open **Material layers** to combine up to three additional surfaces over the base. Each layer has the same surface controls, a weight and **Mix** or **Add** blending. **Start from** supplies a surface preset; **Move up** changes the order and **Remove layer**, at the top of an expanded layer, deletes it and closes the gap in the stack. Empty slots are hidden, and **Add layer** creates a new layer. Undo restores a removed layer and its effect on painted surfaces. A layer with weight zero remains available for editing. Mix at full weight replaces the earlier surface; Add accumulates another contribution. Transmission and texture maps are not available yet.
 
 Open **Subsurface scattering** for weight, RGB scattering radius and scale. Beeswax, Ivory wax, Warm skin and Deep skin include starting settings and a subtle specular layer; all colours and controls remain editable. The viewport uses a fast soft-diffuse approximation, while Blender export uses full Principled scattering. The approximation does not account for actual model thickness, so check final translucency in Blender.
 

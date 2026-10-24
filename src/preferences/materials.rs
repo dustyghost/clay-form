@@ -7,6 +7,8 @@ pub(crate) struct MaterialPreset {
     pub id: u64,
     pub name: String,
     pub material: Material,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original: Option<Material>,
 }
 
 /// Personal copies and colours persist independently of the open project.
@@ -73,6 +75,7 @@ impl MaterialLibrary {
         self.copies.push(MaterialPreset {
             id: crate::sculpt::material::layers::fresh_id(),
             name,
+            original: Some(material.unlinked()),
             material: material.unlinked(),
         });
         Some(self.copies.len() - 1)
@@ -105,6 +108,12 @@ impl MaterialLibrary {
                 return Err("Invalid material name".into());
             }
             preset.material.validate()?;
+            if let Some(original) = &preset.original {
+                original.validate()?;
+                if !original.links.is_empty() {
+                    return Err("Material reset settings cannot reference another material".into());
+                }
+            }
         }
         for colour in &self.palette {
             Material {
@@ -147,6 +156,10 @@ mod tests {
         assert_ne!(
             prefs.materials.copies[index].material,
             Material::examples()[4].1.clone()
+        );
+        assert_eq!(
+            prefs.materials.copies[index].original,
+            Some(material.unlinked())
         );
         prefs.materials.copy(name, material.clone()).unwrap();
         assert_ne!(

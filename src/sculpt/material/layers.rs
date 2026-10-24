@@ -129,6 +129,11 @@ pub struct Layer {
     #[serde(skip_serializing_if = "super::zero")]
     pub add: f32,
 }
+impl Layer {
+    pub(crate) fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+}
 /// Copy-on-write layers keep ordinary vertex paint compact. Identical unedited
 /// stacks share storage across vertices, display snapshots and history entries.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -165,6 +170,27 @@ impl std::ops::DerefMut for LayerStack {
     }
 }
 impl LayerStack {
+    pub(crate) fn remove(&mut self, index: usize) -> bool {
+        if index >= self.len() || self[index].is_empty() {
+            return false;
+        }
+        self[index..].rotate_left(1);
+        self[2] = Layer::default();
+        true
+    }
+    pub(crate) fn add(&mut self, layer: Layer) -> bool {
+        let count = self.iter().filter(|l| !l.is_empty()).count();
+        if count == self.len() {
+            return false;
+        }
+        let mut stack = [Layer::default(); 3];
+        for (out, existing) in stack.iter_mut().zip(self.iter().filter(|l| !l.is_empty())) {
+            *out = *existing;
+        }
+        stack[count] = layer;
+        *self = stack.into();
+        true
+    }
     pub(crate) fn storage_id(&self) -> usize {
         std::sync::Arc::as_ptr(&self.0) as usize
     }
@@ -183,6 +209,17 @@ pub struct Asset {
     pub id: u64,
     pub name: String,
     pub material: Material,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original: Option<Material>,
+}
+impl Asset {
+    pub fn reset_material(&self) -> Material {
+        Material::examples()
+            .get(self.id.wrapping_sub(1) as usize)
+            .map(|(_, material)| material.clone())
+            .or_else(|| self.original.clone())
+            .unwrap_or_else(|| self.material.unlinked())
+    }
 }
 pub fn fresh_id() -> u64 {
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -267,6 +304,12 @@ pub fn validate_assets(assets: &[Asset]) -> Result<(), String> {
             return Err("Invalid named material".into());
         }
         asset.material.validate()?;
+        if let Some(original) = &asset.original {
+            original.validate()?;
+            if !original.links.is_empty() {
+                return Err("Material reset settings cannot reference another material".into());
+            }
+        }
     }
     Ok(())
 }
@@ -274,6 +317,43 @@ pub fn validate_assets(assets: &[Asset]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn material_layer_removal_preserves_order_copies_and_zero_weight_layers() {
+        let first = Layer {
+            weight: 0.3,
+            ..Default::default()
+        };
+        let muted = Layer {
+            surface: Surface {
+                roughness: 0.8,
+                ..Default::default()
+            },
+            weight: 0.,
+            add: 1.,
+        };
+        let third = Layer {
+            weight: 0.7,
+            ..Default::default()
+        };
+        let mut stack = LayerStack::from([first, muted, third]);
+        let original = stack.clone();
+        assert!(!stack.add(first), "A muted layer still occupies its slot");
+        assert!(stack.remove(0));
+        assert_eq!(*stack, [muted, third, Layer::default()]);
+        assert_eq!(
+            *original,
+            [first, muted, third],
+            "Removing from a copy must not edit its source"
+        );
+        assert!(stack.add(first));
+        assert!(stack.remove(1));
+        assert_eq!(*stack, [muted, first, Layer::default()]);
+        assert!(!stack.remove(2));
+        assert!(!stack.remove(3));
+        let restored: LayerStack =
+            serde_json::from_slice(&serde_json::to_vec(&stack).unwrap()).unwrap();
+        assert_eq!(restored, stack);
+    }
     #[test]
     fn material_subsurface_preview_softens_backlit_diffuse_by_rgb_radius() {
         let mut m = Material::from_srgb([0.5; 3], 0.6, 0.);

@@ -4,8 +4,14 @@ impl Document {
     pub fn materials(&self) -> &[Asset] {
         &self.geometry.scene.materials
     }
-    pub fn save_material(&mut self, asset: Asset) -> Result<(), String> {
+    pub fn save_material(&mut self, mut asset: Asset) -> Result<(), String> {
         crate::sculpt::material::layers::validate_assets(std::slice::from_ref(&asset))?;
+        asset.original = Some(
+            self.materials()
+                .iter()
+                .find(|a| a.id == asset.id)
+                .map_or_else(|| asset.reset_material(), Asset::reset_material),
+        );
         let existing = self.materials().iter().position(|a| a.id == asset.id);
         if existing.is_some_and(|i| self.materials()[i] == asset) {
             return Ok(());
@@ -79,6 +85,7 @@ mod tests {
             id: 41,
             name: "Coated copper".into(),
             material: base.clone(),
+            original: Some(base.clone()),
         };
         doc.save_material(asset.clone()).unwrap();
         doc.end_edit();
@@ -112,6 +119,18 @@ mod tests {
         let bytes = serde_json::to_vec(&project).unwrap();
         let restored: Project = serde_json::from_slice(&bytes).unwrap();
         assert!(restored == project);
+        // Reset restores the original shared surface, retaining the renamed definition.
+        let mut reset = doc.materials()[0].clone();
+        reset.name = "My coating".into();
+        reset.material = reset.reset_material();
+        doc.save_material(reset).unwrap();
+        doc.end_edit();
+        assert_eq!(doc.mesh(), &before.mesh);
+        assert_eq!(doc.geometry.settings.lower, before.settings.lower);
+        assert_eq!(doc.materials()[0].name, "My coating");
+        assert_eq!(doc.materials()[0].original, Some(base));
+        doc.undo();
+        assert_eq!(doc.geometry_snapshot(), after);
         // A colour-only fill must not replace layer/roughness bindings.
         brush.paint_channels = PaintChannels::Color;
         brush.material = Material::from_srgb([0.9, 0.1, 0.2], 0.1, 0.1);

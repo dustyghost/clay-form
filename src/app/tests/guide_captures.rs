@@ -3376,6 +3376,52 @@ fn material_controls_offscreen_review() {
     reach(&mut g, "Layer 1");
     click_guide_label(&mut g, "Layer 1");
     g.save("material-layers");
+    g.app.document.end_edit(); // Match the application's pointer-release boundary.
+    let with_layer = g.app.document.geometry_snapshot();
+    reach(&mut g, "Remove layer");
+    click_guide_label(&mut g, "Remove layer");
+    g.frame(vec![]);
+    assert_eq!(g.app.document.mesh().material(0), before_layers);
+    assert!(
+        g.app
+            .document
+            .materials()
+            .iter()
+            .find(|a| a.id == 6)
+            .unwrap()
+            .material
+            .layers
+            .iter()
+            .all(|l| l.is_empty())
+    );
+    assert!(!g.text_positions.iter().any(|(text, _)| text == "Layer 1"));
+    g.save("material-layer-removed");
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), with_layer);
+    g.frame(vec![
+        egui::Event::PointerMoved(Pos2::new(margin, 500.)),
+        egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: Vec2::new(0., 10000.),
+            modifiers: Default::default(),
+        },
+    ]);
+    reach(&mut g, "Reset material");
+    click_guide_label(&mut g, "Reset material");
+    g.frame(vec![]);
+    assert_eq!(g.app.document.mesh().material(0), before_layers);
+    let reset = g
+        .app
+        .document
+        .materials()
+        .iter()
+        .find(|a| a.id == 6)
+        .unwrap();
+    assert_eq!(reset.name, "Warm resin");
+    assert_eq!(reset.material, Material::examples()[5].1);
+    g.save("material-reset");
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), with_layer);
     click_guide_label(&mut g, "Export");
     click_guide_label(&mut g, "PLY…");
     assert_eq!(

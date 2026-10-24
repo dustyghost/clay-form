@@ -40,3 +40,7 @@ blender -b /tmp/clay-layer-export/layered.blend -noaudio --python-exit-code 1 --
 ```
 
 Blender validation should run outside a sandbox that denies its audio/runtime IPC. The application exporter bounds conversion time and cleans its private temporary directory. New native saves use project version 2; focused checks confirm version 1 JSON remains readable without changing its data shape. Full suite/lint and the configured GPU matrix remain for PR CI; physical tablet feel remains for hands-on testing.
+
+## Layer removal and material reset follow-up
+
+The focused material run passed 21 tests. The real-control walkthrough also passed: remove an added layer, verify its row disappears and the painted surface returns to its previous values, Undo, reset the renamed material to its factory preset, retain the name, then Undo again. Captures `material-layer-removed.png` and `material-reset.png` were visually inspected. Additional checks preserve remaining layer order and muted layers, retain copy reset settings through preferences persistence, and restore shared material values across subdivision levels.
