@@ -22,6 +22,7 @@ mod modeling;
 pub(crate) mod paths;
 mod primitive;
 mod projection;
+pub(crate) use projection::SurfaceReport;
 mod references;
 mod sidebar;
 mod transform;

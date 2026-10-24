@@ -163,6 +163,12 @@ impl UiState {
                 ui.close_kind(egui::UiKind::Menu);
             }
         }
+        if self.modeling.tool == ModelTool::PointSplit && self.point_split_controls(ui) {
+            commands.push(Command::ModelApply);
+            if popup {
+                ui.close_kind(egui::UiKind::Menu);
+            }
+        }
     }
 
     pub(crate) fn viewport_menu_entries(
@@ -376,8 +382,9 @@ impl UiState {
         let count = entries.len();
         let mut index = self.viewport_menu.selected.min(count.saturating_sub(1));
         let mut navigated = false;
+        let editing_value = ctx.wants_keyboard_input();
         ctx.input_mut(|i| {
-            if count > 0 {
+            if count > 0 && !editing_value {
                 if consume_menu_key(i, egui::Key::ArrowDown) {
                     index = (index + 1) % count;
                     navigated = true;
@@ -492,6 +499,9 @@ impl UiState {
                 if let Some((i, chosen)) = modeling_choices(ui, &entries, Some(index), navigated) {
                     self.viewport_menu.selected = i;
                     action = Some(chosen);
+                }
+                if self.modeling.tool == ModelTool::PointSplit && self.point_split_controls(ui) {
+                    action = Some(Action::ModelApply);
                 }
             } else {
                 for (i, entry) in entries.iter().enumerate() {

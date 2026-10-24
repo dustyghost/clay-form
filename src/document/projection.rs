@@ -82,9 +82,26 @@ impl Document {
         revision: u64,
         settings: Option<crate::diagnostics::EditSettings>,
     ) -> Result<(), String> {
+        self.apply_surface_positions(mesh, revision, settings, "Project details")
+    }
+    pub(crate) fn apply_relaxation(
+        &mut self,
+        mesh: Mesh,
+        revision: u64,
+        settings: Option<crate::diagnostics::EditSettings>,
+    ) -> Result<(), String> {
+        self.apply_surface_positions(mesh, revision, settings, "Relax mesh")
+    }
+    fn apply_surface_positions(
+        &mut self,
+        mesh: Mesh,
+        revision: u64,
+        settings: Option<crate::diagnostics::EditSettings>,
+        label: &'static str,
+    ) -> Result<(), String> {
         self.require_projection_target()?;
         if revision != self.display_revision() {
-            return Err("The scene changed; preview the projection again".into());
+            return Err("The scene changed; preview the surface edit again".into());
         }
         if mesh == *self.mesh() {
             return Ok(());
@@ -93,10 +110,10 @@ impl Document {
         original_attributes.vertices = self.mesh().vertices.clone();
         if mesh.vertices.len() != self.mesh().vertices.len() || original_attributes != *self.mesh()
         {
-            return Err("Projection cannot replace topology or attributes".into());
+            return Err("Surface edits cannot replace topology or attributes".into());
         }
         let mut geometry = self.geometry_snapshot();
         geometry.mesh = mesh;
-        self.replace_geometry_recorded(geometry, "Project details", settings)
+        self.replace_geometry_recorded(geometry, label, settings)
     }
 }

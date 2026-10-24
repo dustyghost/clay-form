@@ -76,3 +76,9 @@ pub mod alpha;
 
 pub mod path_geometry;
 pub mod paths;
+
+mod relaxation;
+pub use relaxation::{RelaxationOptions, RelaxationReport};
+
+#[cfg(test)]
+pub(crate) use relaxation::{inflated_relaxation_fixture, relaxation_fixture};

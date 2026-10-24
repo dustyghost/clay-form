@@ -16,6 +16,7 @@ pub struct ComponentBuildOptions {
     pub amount: f32,
     pub width: f32,
     pub round: bool,
+    pub double_ring: bool,
     pub triangulate: bool,
     pub crease: bool,
     pub other_side: bool,
@@ -443,6 +444,7 @@ impl Mesh {
         let polygons = self.polygons();
         let mut out = self.empty_topology();
         let mut cut = BTreeMap::new();
+        let mut between = BTreeMap::new();
         for p in &polygons {
             if p.vertices.iter().filter(|v| selected.contains(v)).count() > 1 {
                 return Err(
@@ -499,17 +501,13 @@ impl Mesh {
                 .map(|&w| self.vertices[v] + (self.vertices[w] - self.vertices[v]).norm() * width)
                 .collect();
             if o.round {
-                let center = positions.iter().fold(Vec3::default(), |p, &v| p + v)
-                    * (1. / positions.len() as f32);
-                let radius = positions.iter().map(|&p| (p - center).len()).sum::<f32>()
-                    / positions.len() as f32;
                 for p in &mut positions {
-                    let d = *p - center;
+                    let d = *p - self.vertices[v];
                     let planar = d - n * d.dot(n);
                     if planar.len() < 1e-6 {
                         return Err("This ring cannot be circularized".into());
                     }
-                    *p = center + planar.norm() * radius;
+                    *p = self.vertices[v] + planar.norm() * width;
                 }
             }
             let mut cap = Vec::new();
@@ -518,6 +516,40 @@ impl Mesh {
                 let id = out.append_blend(self, &[(v, 1. - t), (w, t)], position);
                 cut.insert((v, w), id);
                 cap.push(id);
+            }
+            if kind == ComponentBuild::PointSplit && o.double_ring {
+                let mut doubled = Vec::with_capacity(cap.len() * 2);
+                for i in 0..ring.len() {
+                    let a = ring[i];
+                    let b = ring[(i + 1) % ring.len()];
+                    let da = self.vertices[a] - self.vertices[v];
+                    let db = self.vertices[b] - self.vertices[v];
+                    let direction = da.norm() + db.norm();
+                    if direction.len() < 0.1 {
+                        return Err(
+                            "Double ring sides needs corners narrower than 174 degrees".into()
+                        );
+                    }
+                    let ta = width / (direction.len() * da.len());
+                    let tb = width / (direction.len() * db.len());
+                    if ta + tb >= 0.98 {
+                        return Err("Radius does not fit this face corner; reduce Radius".into());
+                    }
+                    let direction = if o.round {
+                        direction - n * direction.dot(n)
+                    } else {
+                        direction
+                    };
+                    if direction.len() < 1e-6 {
+                        return Err("This ring cannot be circularized".into());
+                    }
+                    let position = self.vertices[v] + direction.norm() * width;
+                    let id =
+                        out.append_blend(self, &[(v, 1. - ta - tb), (a, ta), (b, tb)], position);
+                    between.insert((v, edge(a, b)), id);
+                    doubled.extend([cap[i], id]);
+                }
+                cap = doubled;
             }
             let source = polygons.iter().find(|p| p.vertices.contains(&v)).unwrap();
             // A mixed-group junction gets an ungrouped cap rather than an arbitrary side's label.
@@ -555,7 +587,11 @@ impl Mesh {
                 if selected.contains(&v) {
                     let previous = p.vertices[(i + p.vertices.len() - 1) % p.vertices.len()];
                     let next = p.vertices[(i + 1) % p.vertices.len()];
-                    corners.extend([cut[&(v, previous)], cut[&(v, next)]]);
+                    corners.push(cut[&(v, previous)]);
+                    if let Some(&middle) = between.get(&(v, edge(previous, next))) {
+                        corners.push(middle);
+                    }
+                    corners.push(cut[&(v, next)]);
                 } else {
                     corners.push(v);
                 }

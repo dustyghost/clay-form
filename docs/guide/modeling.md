@@ -13,6 +13,7 @@ Start with [a primitive](#parametric-primitives) for a brush sculpt, or try [a s
 - [Model with a pen](#pen-modeling)
 - [Edge loops and creases](edges.md)
 - [Add mesh detail](#mesh-management)
+- [Redistribute stretched polygons](#relax-stretched-polygons)
 - [Thicken an open surface](#thickness-modifier)
 - [Cut the model](#slice)
 - [Combine submodels](#merge-down)
@@ -281,12 +282,23 @@ Choose a component mode to reveal its construction tools. Measured tools support
 | Edge | Extrude edge | Drag up/down or set Distance. An open border extends into a quad strip. A surface edge creates a ridge with new side faces; hover near the desired adjacent face, or enable **Other adjacent side**, then press to lock that side. |
 | Edge | Split edge | Drag along the edge to place a new vertex. **Position** runs from 0 to 1, starting at the circled endpoint nearest the initial press; insertion stays just inside the endpoints. |
 | Edge | Collapse edge | Drag along the edge or choose **Marked end**, **Midpoint**, or **Other end**. This merges both endpoints at the chosen position. |
-| Vertex | Split point | Set Radius or drag up/down to replace a vertex with a ring and center patch. **Circularize ring**, **Triangulate center**, and **Crease ring** control the patch. |
+| Vertex | Split point | Set Radius or drag up/down to replace a vertex with a ring and center patch. **Double ring sides (4 to 8)** adds one corner inside each adjacent face. **Circularize ring**, **Triangulate center**, and **Crease ring** control the patch. |
 | Vertex | Extrude point | Set Distance or drag up/down to create a pointed protrusion along the averaged surface normal. **Base radius** controls its footprint independently; circularization and ring creasing are optional. |
 | Face | Insert center point | Tap a face to insert its center and connect it to every corner with triangles. |
 | Face | Split face | Tap to connect a new center to shared edge midpoints, producing quads inside each selected face. |
 
 **Insert center point** and **Split face** act on a tap even when Tap to repeat is disabled. Both also offer **Apply to selection**. New construction tools clear the component selection after committing; hover or select the new geometry for the next operation. Their buttons can be added to custom menus, shelves and shortcuts, and their settings save in tool presets.
+
+To make an eight-sided patch at a four-quad junction:
+
+1. In the **Modeling** menu, choose **Vertex → Split point**, scroll to **Split point settings**, and enable **Double ring sides (4 to 8)**.
+2. Enter **Radius** in model units, measured from the original vertex to the ring.
+3. Press the vertex to preview that radius. Drag up to enlarge it or down to shrink it; the viewport shows the live amount. Release applies the patch; **Escape** cancels.
+4. With **Tap to repeat** enabled, tap another compatible vertex to use the same radius and ring options. Switching tools and returning keeps the radius. Use a modeling preset to save the setup across sessions.
+
+The ring has twice the original point's edge count, so a four-edge junction becomes eight-sided. Its center uses triangles. Radius must fit the neighborhood: oversized patches produce an error instead of silently changing size. Hidden faces and **Protect mask** still protect the surface, and each split is one Undo step.
+
+![Eight-sided split preview with the radius and ring controls](../images/split-point-octagon-preview.png)
 
 To turn a point into a tube base, use **Vertex → Split point**, then switch to **Face → Extrude** and drag the center patch outward. A three- or four-sided patch remains one selectable polygon unless Triangulate center is enabled; larger patches use center triangles, which can be selected together for region extrusion.
 
@@ -460,6 +472,30 @@ Choose the method that fits your work:
 | Subdivision | Keeping several editable detail levels | Adds resolution to the whole surface |
 | [Adaptive sculpt](sculpting.md#snake-brush-and-adaptive-sculpting) | Detail near the brush | Refines/simplifies locally |
 | Dynamic mesh / voxel remesh | Redistributing geometry or fusing overlapping closed parts | Rebuilds the whole surface |
+
+### Relax stretched polygons
+
+1. Mask the parts you want to keep fixed. Leave the area with stretched polygons unmasked; soft masks reduce movement gradually.
+2. Open **Mesh → Relax mesh…** and adjust **Strength** and **Iterations**. The default is 30 iterations.
+3. Set **Surface tolerance** in model units. Start small for fine detail; a larger value allows more redistribution and more surface deviation.
+4. Choose **Preview relaxation**. Compare the wireframe, shaded surface, groove depth and silhouette; orbit and zoom while the preview is open.
+5. Choose **Apply relaxation** for one Undo step, or **Cancel / Escape** to keep the original. Save the project to retain the result.
+
+If the effect is subtle, increase iterations and strength first. Once the surface tolerance is reached, stronger settings cannot move those vertices further. Increase tolerance cautiously and preview again: this permits more shape deviation, so check the shaded surface as well as the wireframe.
+
+Relaxation can tidy uneven spacing after an aggressive Inflate stroke. It preserves the inflated form and existing surface bumps; use Smooth/Polish when you also want to soften those bumps. Polygon count stays fixed, so relaxation redistributes crowded vertices rather than deleting them.
+
+![Relaxation preview with strength, iterations, tolerance and measured deviation](../images/relaxation-controls-preview.png)
+
+Relaxation moves existing vertices along a reference surface without changing polygon counts or connectivity. Boundaries, creases, corners sharper than 35°, hidden faces and fully masked vertices stay fixed. It works on the active submodel and subdivision level; other levels remain stored. Existing mesh and mask symmetry is followed, rather than adding mirrored copies.
+
+Consecutive applications share the original reference until another edit, Undo, or reopening the project. This prevents each pass from treating its own small shape changes as a new target. The displayed deviation samples face centers and edge midpoints; it is not an exact bound at every point. Tight or crowded regions may remain unchanged. If the work limit is reached, reduce iterations or mask more of the model.
+
+![Wireframe before relaxation](../images/relaxation-wire-before.png)
+
+![Wireframe after relaxation from the same camera](../images/relaxation-wire-after.png)
+
+*Spacing becomes more even while the recessed groove and outer form are retained.*
 
 ### Add subdivision levels
 
