@@ -136,3 +136,7 @@ If a recovery save fails, earlier copies remain available and an error stays vis
 
 [Submodels](modeling.md#submodels) · [Brush presets](sculpting.md#save-presets-and-brush-icons) · [Workspace](workspace.md)
 
+
+### Painted materials and OBJ
+
+Save painted meshes as `.clay` to retain vertex colour, roughness and metallic. OBJ import accepts conventional sRGB vertex colours, with opaque alpha only; material libraries are not imported. OBJ export reports a limitation for painted meshes because it cannot preserve all material channels. See [Paint colours and materials](materials.md).

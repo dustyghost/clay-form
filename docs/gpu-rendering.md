@@ -203,3 +203,7 @@ CLAY_GPU_SOFTWARE=1 CLAY_ROTATION_PREVIEW=/tmp/clay-rotation cargo test --releas
 
 This writes `-1.png` (ready), `-4.png` (rotation drag), and `-6.png` (regenerated dimensions) at the requested prefix.
 
+
+## Painted material checks
+
+`gpu_material_channels_match_linear_reference_and_survive_batching` checks real colour/roughness/metallic pixels, vertex interpolation, mask dimming and storage-buffer batches. It runs with the existing `viewport::gpu::` CI matrix. The six-material gallery is a manual capture: `CLAY_GUIDE_PREVIEW=/tmp/clay-material-review cargo test --locked --lib material_examples_manual_capture -- --ignored --nocapture`. See the [Blender mapping and validation notes](validation/material-paint-2026-10-24/README.md).

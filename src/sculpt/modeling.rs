@@ -301,6 +301,7 @@ impl Mesh {
             vertices.push(self.vertices[v]);
             mask.push(self.mask[v]);
         }
+        self.materials = self.reindex_materials(used.iter().copied());
         for group in &mut self.vertex_groups {
             group.weights = used.iter().map(|&v| group.weights[v]).collect();
         }

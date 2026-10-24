@@ -140,6 +140,7 @@ impl Viewport {
         self.completed_slice = None;
         self.status = None;
         document.cancel_relax_stroke();
+        document.cancel_paint_stroke();
         document.end_stroke();
     }
     pub(crate) fn finish_transform_drag(&mut self, document: &mut Document) {
@@ -835,7 +836,9 @@ impl Viewport {
             document.end_stroke();
             return;
         }
-        if (brush.kind == Kind::Relax || document.relax_stroke_active())
+        if (matches!(brush.kind, Kind::Relax | Kind::Paint)
+            || document.relax_stroke_active()
+            || document.paint_stroke_active())
             && ui.input(|i| i.key_pressed(egui::Key::Escape))
         {
             self.cancel(document);

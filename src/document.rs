@@ -20,6 +20,7 @@ mod primitive;
 pub use path_stroke::{PathStrokeOptions, PathStrokePreview, PathStrokeRequest, PathStrokeSession};
 mod projection;
 pub use projection::ProjectionSource;
+mod paint;
 mod references;
 mod relax;
 mod scene;
@@ -39,7 +40,7 @@ pub struct ModelRef<'a> {
 }
 impl ModelRef<'_> {
     pub fn display_mesh(&self, active: bool) -> &Mesh {
-        if active {
+        if active || !self.mesh.materials.is_empty() {
             self.mesh
         } else {
             self.settings.lower.first().unwrap_or(self.mesh)
@@ -61,6 +62,7 @@ pub struct Document {
     stroke_active: bool,
     relax_surface: Option<(u64, crate::sculpt::RelaxationSurface)>,
     relax_stroke: Option<(bool, crate::diagnostics::EditSettings)>,
+    paint_stroke: Option<(bool, crate::diagnostics::EditSettings)>,
     pub(crate) relax_status: Option<String>,
     stroke_deformed: bool,
     stroke_before: Option<Geometry>,
@@ -90,6 +92,7 @@ impl Default for Document {
             stroke_active: false,
             relax_surface: None,
             relax_stroke: None,
+            paint_stroke: None,
             relax_status: None,
             stroke_deformed: false,
             stroke_before: None,

@@ -174,6 +174,7 @@ impl Geometry {
             let count = lower.vertices.len();
             lower.vertices.copy_from_slice(&self.mesh.vertices[..count]);
             lower.mask.copy_from_slice(&self.mesh.mask[..count]);
+            lower.materials = self.mesh.reindex_materials(0..count);
             for (low, high) in lower.vertex_groups.iter_mut().zip(&self.mesh.vertex_groups) {
                 low.weights.copy_from_slice(&high.weights[..count]);
             }
@@ -187,11 +188,17 @@ impl Geometry {
             let mut baseline = self.mesh.clone();
             baseline.vertices.copy_from_slice(&higher.vertices[..count]);
             baseline.mask.copy_from_slice(&higher.mask[..count]);
+            baseline.materials = higher.reindex_materials(0..count);
             for (base, high) in baseline.vertex_groups.iter_mut().zip(&higher.vertex_groups) {
                 base.weights.copy_from_slice(&high.weights[..count]);
             }
             let old = baseline.subdivide()?;
             let new = self.mesh.subdivide()?;
+            if !higher.materials.is_empty() || !new.materials.is_empty() {
+                higher.materials = (0..higher.vertices.len())
+                    .map(|i| higher.material(i).delta(new.material(i), old.material(i)))
+                    .collect();
+            }
             for i in 0..higher.vertices.len() {
                 higher.vertices[i] = higher.vertices[i] + (new.vertices[i] - old.vertices[i]);
                 higher.mask[i] = (higher.mask[i] + new.mask[i] - old.mask[i]).clamp(0., 1.);
@@ -237,6 +244,7 @@ impl Mesh {
         }
         let mut result = Self {
             creases: Vec::new(),
+            materials: self.materials.clone(),
             vertex_groups: self.vertex_groups.clone(),
             hidden_faces: Vec::new(),
             polygroups: Vec::new(),
@@ -266,6 +274,7 @@ impl Mesh {
                         .vertices
                         .push((self.vertices[x] + self.vertices[y]) * 0.5);
                     result.mask.push((self.mask[x] + self.mask[y]) * 0.5);
+                    result.append_material(self, &[(x, 0.5), (y, 0.5)]);
                     for (group, old) in result.vertex_groups.iter_mut().zip(&self.vertex_groups) {
                         group.weights.push((old.weights[x] + old.weights[y]) * 0.5);
                     }
@@ -315,6 +324,7 @@ impl Mesh {
             let cd = midpoint(&mut result, &mut edges, c, d);
             let da = midpoint(&mut result, &mut edges, d, a);
             let center = result.vertices.len();
+            result.append_material(self, &[(a, 0.25), (b, 0.25), (c, 0.25), (d, 0.25)]);
             result.vertices.push(
                 (self.vertices[a] + self.vertices[b] + self.vertices[c] + self.vertices[d]) * 0.25,
             );
@@ -436,6 +446,7 @@ mod tests {
     fn tetrahedron() -> Mesh {
         Mesh {
             creases: Vec::new(),
+            materials: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
             polygroups: Vec::new(),

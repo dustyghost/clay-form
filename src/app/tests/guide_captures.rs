@@ -3026,3 +3026,72 @@ fn relax_brush_manual_capture() {
     g.save("relax-brush-controls");
     g.app.viewport.destroy_renderer();
 }
+
+#[test]
+#[ignore = "manual material gallery and paint controls; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn material_examples_manual_capture() {
+    use crate::sculpt::{Geometry, Kind, Material, Mesh};
+    let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(
+        directory.join("materials.json"),
+        serde_json::to_string_pretty(&Material::examples()).unwrap(),
+    )
+    .unwrap();
+    let mut g = Guide::new(&directory, [1200, 1000]);
+    g.interactive = true;
+    g.app
+        .document
+        .replace_geometry(Geometry::new(Mesh::sphere()))
+        .unwrap();
+    g.app
+        .dispatch(Command::Action(Action::NewBrush("Paint".into())), &g.ctx);
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    g.app.ui.show_polygroups = false;
+    g.panel(Tool::Brush, Dock::Right);
+    for (index, (name, material)) in Material::examples().into_iter().enumerate() {
+        let mut brush = g.app.document.brushes()[g.app.ui.selected].clone();
+        brush.kind = Kind::Paint;
+        brush.material = material;
+        brush.strength = 1.;
+        g.app
+            .document
+            .update_brush(g.app.ui.selected, brush)
+            .unwrap();
+        click_guide_label(&mut g, "Fill unmasked vertices");
+        assert!(
+            (0..g.app.document.mesh().vertices.len())
+                .all(|i| g.app.document.mesh().material(i) == material),
+            "{name}: brush {:?}, sample {:?}",
+            g.app.document.brushes()[g.app.ui.selected].material,
+            g.app.document.mesh().material(0)
+        );
+        g.save(&format!("material-{index}"));
+    }
+    // Verify a real pointer stroke paints only its footprint and leaves geometry fixed.
+    let before = g.app.document.geometry_snapshot();
+    let mut brush = g.app.document.brushes()[g.app.ui.selected].clone();
+    brush.material = Material::examples()[1].1;
+    brush.radius = 45.;
+    g.app
+        .document
+        .update_brush(g.app.ui.selected, brush)
+        .unwrap();
+    let rect = g.frame(vec![]).0;
+    let point = rect.center();
+    g.frame(vec![
+        egui::Event::PointerMoved(point),
+        primary_event(point, true),
+    ]);
+    g.frame(vec![egui::Event::PointerMoved(point + Vec2::new(60., 30.))]);
+    g.frame(vec![
+        primary_event(point + Vec2::new(60., 30.), false),
+        egui::Event::PointerGone,
+    ]);
+    assert_ne!(g.app.document.mesh().materials, before.mesh.materials);
+    assert_eq!(g.app.document.mesh().vertices, before.mesh.vertices);
+    g.save("material-painted-stroke");
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+}

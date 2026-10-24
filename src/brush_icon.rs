@@ -162,6 +162,7 @@ pub(crate) fn default_icon(kind: Kind) -> BrushIcon {
             }
             Kind::Grab => 0.35 * (-((x - 0.20) / 0.28).powi(2) - (y / 0.35).powi(2)).exp(),
             Kind::Mask => 0.10 * stroke,
+            Kind::Paint => 0.,
             Kind::Snake => {
                 0.35 * (-((y - 0.25 * (x * 5.).sin()) / 0.13).powi(2) - (x / 0.65).powi(6)).exp()
             }
@@ -186,7 +187,12 @@ pub(crate) fn default_icon(kind: Kind) -> BrushIcon {
                 1.
             };
             let edge = ((0.85 - r) / 0.1).clamp(0., 1.);
-            for base in [190., 155., 125.] {
+            let color = if kind == Kind::Paint && (v + 0.25 * (u * 5.).sin()).abs() < 0.22 {
+                [55., 155., 220.]
+            } else {
+                [190., 155., 125.]
+            };
+            for base in color {
                 rgba.push((base * shade * mask * edge + 24. * (1. - edge)) as u8);
             }
             rgba.push(255);

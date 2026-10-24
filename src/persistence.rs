@@ -193,6 +193,9 @@ pub fn save_alpha(path: &str, alpha: &Alpha) -> Result<(), String> {
 
 pub fn export_obj(path: &str, mesh: &Mesh) -> Result<(), String> {
     mesh.validate()?;
+    if !mesh.materials.is_empty() {
+        return Err("OBJ cannot preserve painted material properties. Save as .clay to keep colour, roughness and metallic. Material exchange is not yet supported.".into());
+    }
     let mut text = String::from("# Clay Form mesh\n");
     for v in &mesh.vertices {
         text.push_str(&format!("v {} {} {}\n", v.0, v.1, v.2));

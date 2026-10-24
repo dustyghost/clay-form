@@ -388,6 +388,7 @@ mod tests {
                 mask: vec![0.; 6],
                 quads: Vec::new(),
                 creases: Vec::new(),
+                materials: Vec::new(),
                 vertex_groups: Vec::new(),
                 polygroups: Vec::new(),
                 hidden_faces: Vec::new(),

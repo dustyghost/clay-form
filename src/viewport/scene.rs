@@ -249,23 +249,31 @@ impl Scene {
             let mut rendered = egui::Mesh::default();
             for &(i, normal) in &geometry.shading.vertices {
                 let v = mesh.vertices[i];
-                let illumination = 0.25 + 0.75 * normal.dot(light).max(0.);
                 let mask = if i < active_vertices {
                     1. - mesh.mask[i] * 0.75
                 } else {
                     1.
                 };
-                let base = if i < active_vertices {
-                    [190., 155., 125.]
-                } else {
-                    [130., 143., 155.]
-                };
+                let base = mesh
+                    .material(i)
+                    .studio_color(
+                        normal,
+                        (view
+                            - v * (if self.eye_distance > 0. {
+                                1. / self.eye_distance
+                            } else {
+                                0.
+                            }))
+                        .norm(),
+                        light,
+                    )
+                    .map(|c| c * 255.);
                 rendered.colored_vertex(
                     project(v),
                     Color32::from_rgb(
-                        (base[0] * illumination * mask) as u8,
-                        (base[1] * illumination * mask) as u8,
-                        (base[2] * illumination * mask) as u8,
+                        (base[0] * mask) as u8,
+                        (base[1] * mask) as u8,
+                        (base[2] * mask) as u8,
                     ),
                 );
             }

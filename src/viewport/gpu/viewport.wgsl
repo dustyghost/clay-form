@@ -22,16 +22,18 @@ fn project(p: vec3f) -> vec4f {
 struct Surface {
  @builtin(position) clip: vec4f,
  @location(0) normal: vec3f, @location(1) color: vec3f, @location(2) position: vec3f,
+ @location(6) material: vec2f,
  @location(3) mask: f32, @location(4) is_active: f32, @location(5) @interpolate(flat) group: vec4f,
 }
 @vertex fn surface_vertex(@builtin(vertex_index) index: u32) -> Surface {
- let i=indices[index]*10u;
+ let i=indices[index]*12u;
  let p=vec3f(vertices[i],vertices[i+1u],vertices[i+2u]);
  let mask=vertices[i+9u];
  var out: Surface;
  out.clip=project(p); out.position=p;
  out.normal=vec3f(vertices[i+3u],vertices[i+4u],vertices[i+5u]);
  out.color=vec3f(vertices[i+6u],vertices[i+7u],vertices[i+8u]);
+ out.material=vec2f(vertices[i+10u],vertices[i+11u]);
  out.mask=max(mask,0.); out.is_active=step(0.,mask); out.group=groups[index/3u];
  return out;
 }
@@ -54,12 +56,35 @@ fn alpha_weight(input: vec2f) -> f32 {
  if u.brush_color.w==2. { return select(0.,1.,max(abs(q.x),abs(q.y))<0.7); }
  return image_weight(q)*fade;
 }
+fn display_rgb(linear: vec3f) -> vec3f {
+ let c=max(linear,vec3f(0.));
+ return select(1.055*pow(c,vec3f(1./2.4))-0.055,12.92*c,c<=vec3f(0.0031308));
+}
+// Isotropic GGX metallic/roughness, dielectric IOR 1.5. Fixed studio illumination.
+fn material_light(base: vec3f, roughness: f32, metallic: f32, n: vec3f, eye: vec3f, light: vec3f) -> vec3f {
+ let h=normalize(light+eye);
+ let nl=max(dot(n,light),0.); let nv=max(dot(n,eye),0.001);
+ let nh=max(dot(n,h),0.); let vh=max(dot(eye,h),0.);
+ let a=pow(max(roughness,0.045),2.); let a2=a*a;
+ let d=a2/(3.14159265*pow(nh*nh*(a2-1.)+1.,2.));
+ let gv=2.*nv/(nv+sqrt(a2+(1.-a2)*nv*nv));
+ let gl=2.*nl/max(nl+sqrt(a2+(1.-a2)*nl*nl),0.00001);
+ let f0=mix(vec3f(0.04),base,metallic);
+ let f=f0+(vec3f(1.)-f0)*pow(1.-vh,5.);
+ let spec=d*gv*gl*f/max(4.*nv*max(nl,0.001),0.00001);
+ let diffuse=(vec3f(1.)-f)*(1.-metallic)*base/3.14159265;
+ // Broad neutral fill keeps dark sides and metals readable; no scene reflections.
+ let ambient=base*(0.10*(1.-metallic)+0.16*metallic);
+ return display_rgb(ambient+(diffuse+spec)*nl*2.5);
+}
 @fragment fn surface_fragment(v: Surface) -> @location(0) vec4f {
  let light=normalize(u.view.xyz+u.up.xyz*0.7-u.right.xyz*0.5);
  let shade=0.25+0.75*max(dot(normalize(v.normal)*select(1.,-1.,u.flags.z==1.),light),0.);
- var base=v.color;
- if u.flags.x==1. && v.group.a>0.5 { base=mix(v.color,v.group.rgb,mix(0.5,1.,v.is_active)); }
- var rgb=base*shade*(1.-v.mask*0.75);
+ let normal=normalize(v.normal)*select(1.,-1.,u.flags.z==1.);
+ let eye=normalize(u.view.xyz-v.position*u.perspective.x);
+ var rgb=material_light(v.color,clamp(v.material.x,0.,1.),clamp(v.material.y,0.,1.),normal,eye,light);
+ if u.flags.x==1. && v.group.a>0.5 { rgb=mix(rgb,v.group.rgb*shade,mix(0.5,1.,v.is_active)); }
+ rgb*=1.-v.mask*0.75;
  // Derivatives must be evaluated uniformly, before per-fragment conditions.
  var widths: array<f32,32>;
  for(var i=0u;i<u32(u.right.w);i++) { widths[i]=fwidth(dot(v.position-u.guide_center.xyz,u.guide_normals[i].xyz)); }

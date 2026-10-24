@@ -156,6 +156,7 @@ fn geometry_bytes(geometry: &Geometry) -> usize {
         .map(|mesh| {
             mesh.vertices.len() * std::mem::size_of::<crate::sculpt::Vec3>()
                 + mesh.mask.len() * std::mem::size_of::<f32>()
+                + mesh.materials.len() * std::mem::size_of::<crate::sculpt::Material>()
                 + mesh.triangles.len() * std::mem::size_of::<[usize; 3]>()
                 + mesh.quads.len() * std::mem::size_of::<[usize; 4]>()
                 + mesh.creases.len() * std::mem::size_of::<[usize; 2]>()
@@ -180,6 +181,7 @@ mod tests {
         let mut history = History::default();
         let mut mesh = Geometry::new(Mesh {
             creases: Vec::new(),
+            materials: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
             polygroups: Vec::new(),

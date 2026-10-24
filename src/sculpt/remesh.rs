@@ -177,6 +177,7 @@ impl Mesh {
             .collect();
         let mut mesh = Mesh {
             creases: Vec::new(),
+            materials: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
             polygroups: Vec::new(),
@@ -279,6 +280,7 @@ impl Mesh {
         }
         mesh.smooth_remesh();
         self.transfer_groups_to(&mut mesh);
+        self.transfer_materials_to(&mut mesh, &cancelled)?;
         mesh.validate_closed()?;
         Ok(mesh)
     }
@@ -306,6 +308,7 @@ mod tests {
     fn cube(offset: Vec3) -> Mesh {
         Mesh {
             creases: Vec::new(),
+            materials: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
             polygroups: Vec::new(),

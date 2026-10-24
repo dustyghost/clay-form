@@ -159,6 +159,7 @@ fn gpu_perspective_picking_alpha_wireframe_and_clipping() {
             triangles: vec![[0, 1, 2]],
             quads: vec![],
             mask: vec![0.; 3],
+            materials: Vec::new(),
             vertex_groups: vec![],
             polygroups: vec![],
             hidden_faces: vec![],

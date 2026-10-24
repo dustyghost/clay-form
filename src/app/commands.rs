@@ -244,6 +244,7 @@ impl App {
                 }
                 Ok(())
             }
+            Command::FillMaterial(brush) => self.document.fill_material(&brush),
             Command::Export => {
                 let path = std::path::Path::new(&self.ui.path).with_extension("obj");
                 persistence::export_obj(&path.to_string_lossy(), self.document.mesh())

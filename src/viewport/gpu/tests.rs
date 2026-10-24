@@ -6,6 +6,104 @@ use crate::{
     sculpt::{Geometry, Primitive, PrimitiveKind, Transform},
 };
 
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "requires Vulkan; checks material pixels, interpolation, masks and buffer batching"]
+fn gpu_material_channels_match_linear_reference_and_survive_batching() {
+    use crate::sculpt::{Material, Vec3};
+    let headless = Headless::new();
+    let renderer = Renderer::new(&headless.state).unwrap();
+    let handle = renderer.gpu.clone();
+    let mut gpu = handle.lock().unwrap();
+    let mut document = Document::default();
+    let mut plane = Primitive::for_kind(PrimitiveKind::Plane);
+    plane.divisions = [4, 4, 1];
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(256.));
+    let (right, up, view) = (Vec3(1., 0., 0.), Vec3(0., 1., 0.), Vec3(0., 0., 1.));
+    let params = Params::new(rect, right, up, view, 90., rect.center(), 3.);
+    let center = (128 * 256 + 128) * 4;
+    let mut samples = Vec::new();
+    for (name, material) in Material::examples() {
+        let mut mesh = plane.mesh().unwrap();
+        mesh.materials = vec![material; mesh.vertices.len()];
+        document.replace_geometry(Geometry::new(mesh)).unwrap();
+        let display = Arc::new(DisplayMesh::new(&document));
+        gpu.upload(&display);
+        gpu.paint(
+            &params,
+            [256, 256],
+            false,
+            WireMode::Visible,
+            false,
+            &Preview::default(),
+        );
+        let rgba = gpu.read();
+        let expected = material.studio_color(view, view, (view + up * 0.7 - right * 0.5).norm());
+        for (i, expected) in expected.into_iter().enumerate() {
+            assert!(
+                (rgba[center + i] as f32 - expected.clamp(0., 1.) * 255.).abs() <= 2.,
+                "{name} channel {i}: {} vs {expected}",
+                rgba[center + i]
+            );
+        }
+        samples.push(rgba[center..center + 3].to_vec());
+    }
+    assert!(samples.windows(2).all(|s| s[0] != s[1]));
+    let mut mesh = plane.mesh().unwrap();
+    mesh.materials = mesh
+        .vertices
+        .iter()
+        .map(|p| Material {
+            base_color: [(p.0 + 1.) * 0.5, 0.1, 0.2],
+            roughness: 0.45,
+            metallic: 0.3,
+        })
+        .collect();
+    mesh.mask.fill(0.5);
+    document.replace_geometry(Geometry::new(mesh)).unwrap();
+    let display = Arc::new(DisplayMesh::new(&document));
+    gpu.upload(&display);
+    gpu.paint(
+        &params,
+        [256, 256],
+        false,
+        WireMode::Visible,
+        false,
+        &Preview::default(),
+    );
+    let single = gpu.read();
+    let material = Material {
+        base_color: [0.5, 0.1, 0.2],
+        roughness: 0.45,
+        metallic: 0.3,
+    };
+    for (i, expected) in material
+        .studio_color(view, view, (view + up * 0.7 - right * 0.5).norm())
+        .into_iter()
+        .enumerate()
+    {
+        assert!(
+            (single[center + i] as f32 - expected * 255. * 0.625).abs() <= 2.,
+            "interpolated colour and mask channel {i}"
+        );
+    }
+    gpu.upload_meshes(&display, 480);
+    assert!(gpu.meshes.len() > 1);
+    gpu.paint(
+        &params,
+        [256, 256],
+        false,
+        WireMode::Visible,
+        false,
+        &Preview::default(),
+    );
+    assert_eq!(
+        gpu.read(),
+        single,
+        "material packing must survive buffer batch boundaries"
+    );
+}
+
 #[test]
 fn display_cache_inputs_keep_quad_edges_and_model_ownership() {
     let mut document = Document::default();

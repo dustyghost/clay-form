@@ -376,6 +376,7 @@ impl Mesh {
         old_vertices: &[usize],
         old_faces: &[usize],
     ) {
+        result.materials = self.reindex_materials(old_vertices.iter().copied());
         result.vertex_groups = self
             .vertex_groups
             .iter()

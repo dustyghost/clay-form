@@ -605,15 +605,15 @@ impl Gpu {
             return;
         }
         self.meshes.clear();
-        let per_batch = (limit / (3 * 40)).max(1);
+        let per_batch = (limit / (3 * 48)).max(1);
         for (batch, triangles) in data.shading.triangles.chunks(per_batch).enumerate() {
             let mut mapping = std::collections::HashMap::new();
             let mut packed = Vec::new();
             let mut indices = Vec::with_capacity(triangles.len() * 3);
             for &source in triangles.iter().flatten() {
                 let index = *mapping.entry(source).or_insert_with(|| {
-                    let index = (packed.len() / 10) as u32;
-                    packed.extend_from_slice(&vertices[source * 10..source * 10 + 10]);
+                    let index = (packed.len() / 12) as u32;
+                    packed.extend_from_slice(&vertices[source * 12..source * 12 + 12]);
                     index
                 });
                 indices.push(index);

@@ -63,6 +63,8 @@ See [Development](../development.md#update-guide-screenshots) for prerequisites 
 | `split-point-octagon-preview.png` | [Adjust and repeat eight-sided vertex patches](../guide/modeling.md#construct-from-edges-points-and-face-centers) | `mesh_refinement_offscreen_review` |
 | `relaxation-controls-preview.png`, `relaxation-wire-before.png`, `relaxation-wire-after.png` | [Redistribute stretched polygons while preserving the groove](../guide/modeling.md#relax-stretched-polygons) | `mesh_refinement_offscreen_review` |
 
+| `material-copper.png`, `material-painted-stroke.png` | [Example materials and a local paint stroke](../guide/materials.md) | `material_examples_manual_capture` (manual only) |
+
 ## Example assets
 
 [pyramid.obj](../examples/pyramid.obj) contains the imported sample. [Front study](../examples/front-study.png) and [Side study](../examples/side-study.png) are original renders of a scaled UV sphere, exported by the same model-icon renderer used in the app. They are input assets, not screenshots of controls.

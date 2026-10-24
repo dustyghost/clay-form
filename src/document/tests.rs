@@ -1119,6 +1119,7 @@ mod mask_edit_tests {
     fn delete_masked_cuts_and_compacts_preserving_remaining_quads_and_masks() {
         let mesh = Mesh {
             creases: Vec::new(),
+            materials: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
             polygroups: Vec::new(),

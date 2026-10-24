@@ -112,6 +112,8 @@ fn parse(text: &str, cancelled: &impl Fn() -> bool) -> Result<Mesh, String> {
         return Err("OBJ exceeds 128 MB limit".into());
     }
     let mut vertices = Vec::new();
+    let mut materials = Vec::new();
+    let mut has_colors = false;
     let mut faces = Vec::new();
     let (mut textures, mut normals) = (0, 0);
     let (mut texture_ref, mut normal_ref) = (0, 0);
@@ -160,6 +162,23 @@ fn parse(text: &str, cancelled: &impl Fn() -> bool) -> Result<Mesh, String> {
                             }
                             // w is a free-form weight; polygon positions are the literal x/y/z.
                             vertices.push(Vec3(p[0], p[1], p[2]));
+                            let mut material = crate::sculpt::Material::default();
+                            if p.len() >= 6 {
+                                // Conventional v x y z r g b [a], display-encoded RGB.
+                                if p[3..6].iter().any(|v| !(0. ..=1.).contains(v)) {
+                                    return Err("OBJ vertex colours must be from 0 to 1".into());
+                                }
+                                if p.len() == 7 && p[6] != 1. {
+                                    return Err(
+                                        "OBJ vertex opacity is not supported; use opaque colours"
+                                            .into(),
+                                    );
+                                }
+                                material.base_color =
+                                    [p[3], p[4], p[5]].map(crate::sculpt::material::srgb_to_linear);
+                                has_colors = true;
+                            }
+                            materials.push(material);
                         }
                         "vt" => textures += 1,
                         _ => normals += 1,
@@ -240,6 +259,7 @@ fn parse(text: &str, cancelled: &impl Fn() -> bool) -> Result<Mesh, String> {
     let mut mesh = Mesh {
         creases: Vec::new(),
         mask: vec![0.; vertices.len()],
+        materials: if has_colors { materials } else { Vec::new() },
         vertex_groups: names
             .into_iter()
             .map(|name| VertexGroup {

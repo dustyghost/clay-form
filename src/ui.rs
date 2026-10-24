@@ -8,6 +8,7 @@ use crate::{
 use eframe::egui::{self, Color32, Sense, Vec2};
 pub(crate) mod alphas;
 mod design;
+mod material;
 use design::Glyph;
 pub(crate) mod context_menu;
 mod customization;
@@ -872,6 +873,16 @@ impl UiState {
                             ui.selectable_value(&mut b.kind, k, format!("{k:?}"));
                         }
                     });
+                if b.kind == Kind::Paint {
+                    crate::ui::material::paint_controls(ui, b);
+                    if ui
+                        .add(design::button(ui, Glyph::Edit, "Fill unmasked vertices"))
+                        .customize(Action::FillMaterial)
+                        .clicked()
+                    {
+                        commands.push(Command::FillMaterial(b.clone()));
+                    }
+                }
                 if b.kind == Kind::Decimate {
                     ui.label("Reduce triangles locally without smoothing. Requires Adaptive sculpt; Edge size and Simplify ratio control reduction.");
                 }

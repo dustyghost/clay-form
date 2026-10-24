@@ -3657,3 +3657,5 @@ mod path_brush;
 mod paths;
 #[cfg(target_os = "linux")]
 mod ring_diagnostics;
+
+mod paint;

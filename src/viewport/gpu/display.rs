@@ -31,6 +31,7 @@ impl DisplayMesh {
         let active = document.active_model_index();
         let mut mesh = Mesh {
             creases: Vec::new(),
+            materials: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
             polygroups: Vec::new(),
@@ -107,6 +108,17 @@ impl DisplayMesh {
             }
             mesh.vertices.extend_from_slice(&surface.vertices);
             mesh.mask.extend_from_slice(&surface.mask);
+            mesh.materials.extend((0..surface.vertices.len()).map(|i| {
+                if index != active && surface.materials.is_empty() {
+                    crate::sculpt::Material::from_srgb(
+                        [130., 143., 155.].map(|v| v / 255.),
+                        0.85,
+                        0.,
+                    )
+                } else {
+                    surface.material(i)
+                }
+            }));
             let surface_shading = surface.surface_shading();
             let shading_offset = shading.vertices.len();
             shading.vertices.extend(
@@ -174,11 +186,8 @@ impl DisplayMesh {
             .iter()
             .flat_map(|&(i, n)| {
                 let p = self.mesh.vertices[i];
-                let color = if i < self.active_vertices {
-                    [190., 155., 125.]
-                } else {
-                    [130., 143., 155.]
-                };
+                let material = self.mesh.material(i);
+                let color = material.base_color;
                 let mask = if i < self.active_vertices {
                     self.mesh.mask[i]
                 } else {
@@ -191,10 +200,12 @@ impl DisplayMesh {
                     n.0,
                     n.1,
                     n.2,
-                    color[0] / 255.,
-                    color[1] / 255.,
-                    color[2] / 255.,
+                    color[0],
+                    color[1],
+                    color[2],
                     mask,
+                    material.roughness,
+                    material.metallic,
                 ]
             })
             .collect()

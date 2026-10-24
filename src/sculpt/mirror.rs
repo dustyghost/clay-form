@@ -144,6 +144,7 @@ impl Mesh {
                 );
                 result.vertices.push(mirror);
                 result.mask.push(half.mask[i]);
+                result.append_material(&half, &[(i, 1.)]);
                 for (out, original) in result.vertex_groups.iter_mut().zip(&half.vertex_groups) {
                     out.weights.push(original.weights[i]);
                 }

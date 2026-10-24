@@ -248,7 +248,7 @@ These are separate possibilities, outside the seven priorities above. Each needs
 | Candidate | Intended use |
 | --- | --- |
 | Sculpt layers and morph targets | Adjust or remove a set of sculpted changes without undoing later work |
-| Materials and vertex colour painting | Inspect forms under different shading and paint colour directly on the surface |
+| Advanced material channels | Vertex colour, roughness and metallic painting are implemented; textures, opacity, emission and layered materials remain future work |
 | Quad retopology | Rebuild cleaner topology, using detail projection to recover the reference surface |
 | Boolean operations | Combine or subtract submodels for construction and hard-surface work |
 | Texture painting and UV workflows | Prepare textured assets for other applications |
