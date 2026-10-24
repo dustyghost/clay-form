@@ -48,7 +48,7 @@ fn quarter_turn(app: &mut App, ctx: &egui::Context, center: Pos2) {
         ctx,
         vec![egui::Event::PointerMoved(start), primary_event(start, true)],
     );
-    assert!(app.viewport.gesture == Some(Gesture::Transform));
+    assert!(app.viewport.session.gesture == Some(Gesture::Transform));
     let middle = arc(center, std::f32::consts::FRAC_PI_2);
     let output = frame(app, ctx, vec![egui::Event::PointerMoved(middle)], true);
     assert!(
@@ -178,7 +178,7 @@ fn rotation_action_line_reuses_its_start_and_direction_without_moving_the_line()
         &ctx,
         vec![egui::Event::PointerMoved(press), primary_event(press, true)],
     );
-    assert!(app.viewport.gesture == Some(Gesture::Transform));
+    assert!(app.viewport.session.gesture == Some(Gesture::Transform));
     navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(release)]);
     navigation_frame(&mut app, &ctx, vec![primary_event(release, false)]);
     assert_eq!(app.document.history_counts(), (1, 0));
@@ -384,7 +384,7 @@ fn drag_universal(app: &mut App, ctx: &egui::Context, start: Pos2, end: Pos2) {
         ctx,
         vec![egui::Event::PointerMoved(start), primary_event(start, true)],
     );
-    assert!(app.viewport.gesture == Some(Gesture::Transform));
+    assert!(app.viewport.session.gesture == Some(Gesture::Transform));
     navigation_frame(app, ctx, vec![egui::Event::PointerMoved(end)]);
     navigation_frame(app, ctx, vec![primary_event(end, false)]);
 }
@@ -408,7 +408,7 @@ fn universal_gizmo_moves_scales_and_toggles_to_sculpt_without_pointer_leakage() 
             &ctx,
             vec![egui::Event::PointerMoved(start), primary_event(start, true)],
         );
-        assert!(app.viewport.gesture == Some(Gesture::Transform));
+        assert!(app.viewport.session.gesture == Some(Gesture::Transform));
         navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
         let transformed = app.document.geometry_snapshot();
         assert_ne!(transformed, before);

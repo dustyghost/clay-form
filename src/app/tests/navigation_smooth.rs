@@ -31,7 +31,7 @@ fn navigation_frame_is_empty_space_even_when_clay_fills_the_view() {
             modifiers,
             vec![egui::Event::PointerMoved(start), primary_event(start, true)],
         );
-        assert!(app.viewport.gesture == Some(Gesture::Orbit));
+        assert!(app.viewport.session.gesture == Some(Gesture::Orbit));
         visibility_frame(
             &mut app,
             &ctx,
@@ -91,7 +91,7 @@ fn navigation_frame_fast_taps_do_not_stamp_select_or_cut() {
                 ],
             );
             assert_eq!(app.document.geometry_snapshot(), before);
-            assert!(app.viewport.gesture.is_none());
+            assert!(app.viewport.session.gesture.is_none());
         }
         assert!(!app.document.can_undo());
     }

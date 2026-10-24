@@ -36,7 +36,7 @@ impl App {
             && !self.ui.paths_active
             && !self.viewport.paths.active
             && !self.ui.projection.open
-            && !self.viewport.attach_stencil
+            && !self.viewport.session.attach_stencil
             && !self.ui.arrange_references
             && self.mesh_job.is_none()
             && !self.ui.settings_open
@@ -79,7 +79,7 @@ impl App {
         let active = held && !self.ui.mask_suppressed && eligible && (was_active || over_viewport);
         if active != was_active {
             // Never mix a mask gesture into an already-started sculpt/modeling edit.
-            let was_dragging = self.viewport.gesture.is_some();
+            let was_dragging = self.viewport.session.gesture.is_some();
             self.viewport.cancel(&mut self.document);
             if was_dragging || (!active && ctx.input(|i| i.pointer.primary_down())) {
                 self.viewport.wait_for_release();

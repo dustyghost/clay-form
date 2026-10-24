@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    app::paths::PathCommand,
+    command::PathCommand,
     document::PathStrokeOptions,
     sculpt::{
         Geometry, Kind, Primitive, PrimitiveKind, Vec3,
@@ -238,7 +238,7 @@ fn save_and_sculpt_commits_once_then_guidance_can_be_disabled_without_editing() 
     // Disabling capture is a tool preference, not a mesh or path edit.
     app.dispatch(Command::Action(Action::TogglePathGuides), &ctx);
     assert!(!app.ui.guide_paths);
-    assert!(!app.viewport.guided.enabled);
+    assert!(!app.viewport.session.guided.enabled);
     assert_eq!(app.document.geometry_snapshot(), saved);
     assert_eq!(app.document.history_counts(), saved_counts);
     app.dispatch(Command::Undo, &ctx);

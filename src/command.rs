@@ -1,4 +1,7 @@
 //! UI intent; execution and file access belong to the application controller.
+mod path;
+pub(crate) use path::PathCommand;
+
 use crate::sculpt::{AdaptiveSettings, Brush, Kind, Symmetry};
 #[derive(Clone)]
 pub(crate) enum PendingAction {
@@ -16,7 +19,7 @@ pub(crate) enum AssetKind {
     BrushLibrary,
 }
 pub(crate) enum Command {
-    Path(crate::app::paths::PathCommand),
+    Path(PathCommand),
     Action(crate::action::Action),
     Request(PendingAction),
     Save,

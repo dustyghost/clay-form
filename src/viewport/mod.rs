@@ -1,6 +1,7 @@
 //! Converts viewport gestures into camera movement and document sculpt dabs.
 mod controls;
 mod edges;
+mod interaction;
 mod modeling;
 pub(crate) use modeling::{
     ComponentMode, ModelAxis, ModelConstruction, ModelInteraction, ModelTool, ModelingOptions,
@@ -50,46 +51,18 @@ pub(crate) enum Gesture {
     Edges,
     Modeling,
 }
-struct SnakeStroke {
-    center: Vec3,
-    normal: Vec3,
-    mobility: f32,
-}
 #[derive(Default)]
 pub(crate) struct Viewport {
-    pub(crate) visibility_hold: Option<crate::preferences::HoldBinding>,
+    pub(crate) session: interaction::InteractionSession,
     pub(crate) paths: paths::PathEditor,
-    pub(crate) guided: guided::GuidedPaths,
-    pub(crate) attach_stencil: bool,
-    stencil_overlay: stencil::Overlay,
-    pub(crate) projection_preview: Option<std::sync::Arc<crate::sculpt::Mesh>>,
-    pub(crate) projection_mode: bool,
     pub(crate) modeling: modeling::ModelingState,
     edge_selection: Vec<[usize; 2]>,
     edge_revision: u64,
     references: references::ReferenceOverlay,
     renderer: Option<gpu::Renderer>,
-    pub(crate) gesture: Option<Gesture>,
     pub(crate) completed_stroke: bool,
-    gizmo_dragged: bool,
-    gizmo_start: Option<Pos2>,
-    gizmo_snap: Option<(f32, f32)>,
     blocked_until_release: bool,
-    stroke: bool,
-    stroke_brush: Option<String>,
-    decimate_removed: Option<(usize, usize)>,
-    pending_stroke: Option<stroke::PendingStroke>,
-    stabilizer: Option<stabilizer::Stabilizer>,
-    last: Option<Pos2>,
-    snake: Option<SnakeStroke>,
-    transform: transform::TransformControls,
-    primitive: primitive::PrimitiveControls,
-    slice: Option<slice::SliceDrag>,
-    selection: Option<visibility::SelectionDrag>,
-    visibility_path: Option<visibility_path::VisibilityPath>,
-    visibility_path_action: Option<crate::preferences::Action>,
     pub(crate) status: Option<String>,
-    slice_path: Option<slice::SlicePathDraft>,
     pub(crate) completed_slice: Option<crate::mesh_job::Operation>,
 }
 #[derive(Clone, Copy)]
@@ -123,12 +96,14 @@ pub(crate) struct ViewportOptions {
 impl Viewport {
     #[cfg(test)]
     pub(crate) fn stamp_preview_pending(&self) -> bool {
-        self.pending_stroke
+        self.session
+            .sculpt
+            .pending_stroke
             .as_ref()
             .is_some_and(|stroke| stroke.preview.refining())
     }
     fn record_cleanup(&mut self, document: &Document, before: (usize, usize)) {
-        if let Some((vertices, faces)) = self.decimate_removed.as_mut() {
+        if let Some((vertices, faces)) = self.session.sculpt.decimate_removed.as_mut() {
             *vertices += before.0.saturating_sub(document.mesh().vertices.len());
             *faces += before.1.saturating_sub(document.mesh().triangles.len());
         }
@@ -155,42 +130,29 @@ impl Viewport {
         }
     }
     pub(crate) fn cancel(&mut self, document: &mut Document) {
-        let renderer = self.renderer.take();
-        let paths = std::mem::take(&mut self.paths);
-        let edge_selection = std::mem::take(&mut self.edge_selection);
-        let mut modeling = std::mem::take(&mut self.modeling);
-        modeling.cancel();
-        let edge_revision = self.edge_revision;
-        let blocked_until_release = self.blocked_until_release
-            || self.guided.dragging()
+        self.blocked_until_release |= self.session.guided.dragging()
             || self.references.dragging()
-            || self.stencil_overlay.controls.capturing();
-        let mut references = std::mem::take(&mut self.references);
-        references.cancel_drag();
-        *self = Self {
-            paths,
-            edge_selection,
-            modeling,
-            edge_revision,
-            blocked_until_release,
-            references,
-            renderer,
-            ..Default::default()
-        };
+            || self.session.stencil_overlay.controls.capturing();
+        self.modeling.cancel();
+        self.references.cancel_drag();
+        self.session = Default::default();
+        self.completed_stroke = false;
+        self.completed_slice = None;
+        self.status = None;
         document.end_stroke();
     }
     pub(crate) fn finish_transform_drag(&mut self, document: &mut Document) {
-        let mut transform = std::mem::take(&mut self.transform);
+        let mut transform = std::mem::take(&mut self.session.transform);
         transform.finish_drag();
-        let dragging = self.gesture.is_some();
+        let dragging = self.session.gesture.is_some();
         self.cancel(document);
-        self.transform = transform;
+        self.session.transform = transform;
         if dragging {
             self.wait_for_release();
         }
     }
     pub(crate) fn reset_transform_pivot(&mut self, document: &Document, mode: TransformMode) {
-        self.transform.reset_pivot(document, mode);
+        self.session.transform.reset_pivot(document, mode);
     }
     pub(crate) fn wait_for_release(&mut self) {
         self.blocked_until_release = true;
@@ -217,8 +179,8 @@ impl Viewport {
             enabled: options.enabled && !blocked_this_frame && ui.input(|i| i.focused),
             ..options
         };
-        if !options.enabled && self.gesture == Some(Gesture::Edges) {
-            self.gesture = None;
+        if !options.enabled && self.session.gesture == Some(Gesture::Edges) {
+            self.session.gesture = None;
         }
         let (response, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
         let rect = response.rect;
@@ -245,28 +207,33 @@ impl Viewport {
             brush.subtract = options.mask_erase;
         }
         let brush_id = brush.identity();
-        if self.stroke_brush.as_ref().is_some_and(|id| *id != brush_id)
+        if self
+            .session
+            .sculpt
+            .stroke_brush
+            .as_ref()
+            .is_some_and(|id| *id != brush_id)
             && ui.input(|i| i.pointer.primary_down())
         {
             // A temporary preset starts at the pointer with its own stroke mode
             // and stabilizer. Keep already applied dabs in the same undo step.
-            self.pending_stroke = None;
-            self.stabilizer = None;
-            self.last = None;
-            self.snake = None;
-            self.stroke = false;
+            self.session.sculpt.pending_stroke = None;
+            self.session.sculpt.stabilizer = None;
+            self.session.sculpt.last = None;
+            self.session.sculpt.snake = None;
+            self.session.sculpt.stroke = false;
         }
         if (!options.enabled
-            || !self.guided.enabled
+            || !self.session.guided.enabled
             || ui.input(|i| i.key_pressed(egui::Key::Escape)))
-            && self.guided.dragging()
+            && self.session.guided.dragging()
         {
-            self.guided.cancel();
+            self.session.guided.cancel();
         }
         let previewing = options.enabled
-            && !self.projection_mode
+            && !self.session.projection_mode
             && ui.input(|i| i.pointer.primary_down() && !i.key_pressed(egui::Key::Escape));
-        if previewing && let Some(pending) = self.pending_stroke.as_mut() {
+        if previewing && let Some(pending) = self.session.sculpt.pending_stroke.as_mut() {
             if let Some(end) = response.interact_pointer_pos() {
                 pending.end = end;
             }
@@ -277,7 +244,7 @@ impl Viewport {
             document,
             ui.input(|i| i.pointer.interact_pos()),
             options.modeling,
-            options.enabled && !self.projection_mode,
+            options.enabled && !self.session.projection_mode,
             ui.input(|i| i.key_pressed(egui::Key::Escape)),
         );
         let scene = Scene::paint_with_stroke(
@@ -292,17 +259,22 @@ impl Viewport {
             options.wire_mode,
             options.wire_triangles,
             self.renderer.as_mut(),
-            self.pending_stroke.as_ref().filter(|_| previewing),
-            self.projection_preview
+            self.session
+                .sculpt
+                .pending_stroke
+                .as_ref()
+                .filter(|_| previewing),
+            self.session
+                .projection_preview
                 .as_deref()
                 .or_else(|| self.modeling.preview())
-                .or_else(|| self.guided.preview()),
+                .or_else(|| self.session.guided.preview()),
         );
         if let Some(renderer) = &self.renderer {
             renderer.set_backfaces(options.backface_opacity);
             renderer.set_polygroups(options.show_polygroups);
         }
-        if self.projection_mode {
+        if self.session.projection_mode {
             if options.enabled && response.hovered() {
                 camera.zoom_by(ui.input(|i| i.smooth_scroll_delta.y));
             }
@@ -327,19 +299,20 @@ impl Viewport {
             draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
             return;
         }
-        self.guided.paint(document, &scene, &painter);
-        if self.attach_stencil {
-            self.stencil_overlay
+        self.session.guided.paint(document, &scene, &painter);
+        if self.session.attach_stencil {
+            self.session
+                .stencil_overlay
                 .paint(document.stencil(), &scene, &painter);
             if !options.enabled || ui.input(|i| i.key_pressed(egui::Key::Escape) || !i.focused) {
-                self.attach_stencil = false;
+                self.session.attach_stencil = false;
                 self.wait_for_release();
             } else if response.clicked_by(egui::PointerButton::Primary)
                 && let Some(pos) = response.interact_pointer_pos()
             {
                 match stencil::attach(document, &scene, pos) {
                     Ok(()) => {
-                        self.attach_stencil = false;
+                        self.session.attach_stencil = false;
                     }
                     Err(error) => self.status = Some(error),
                 }
@@ -354,22 +327,24 @@ impl Viewport {
             return;
         }
         let displayed_stencil = self
+            .session
             .stencil_overlay
             .controls
             .preview()
             .cloned()
             .or_else(|| document.stencil().cloned());
-        self.stencil_overlay
+        self.session
+            .stencil_overlay
             .paint(displayed_stencil.as_ref(), &scene, &painter);
-        let stencil_controls = self.stencil_overlay.controls.show(
+        let stencil_controls = self.session.stencil_overlay.controls.show(
             ui,
             document,
             &scene,
             options.enabled
-                && !self.stroke
-                && self.pending_stroke.is_none()
-                && !self.guided.dragging()
-                && self.gesture.is_none(),
+                && !self.session.sculpt.stroke
+                && self.session.sculpt.pending_stroke.is_none()
+                && !self.session.guided.dragging()
+                && self.session.gesture.is_none(),
         );
         if stencil_controls {
             draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
@@ -420,14 +395,14 @@ impl Viewport {
             })
         });
         let frame_press = options.enabled
-            && self.gesture.is_none()
+            && self.session.gesture.is_none()
             && frame_start.is_some_and(|p| {
                 navigation::contains(rect, p)
                     && !gizmo_rect.contains(p)
                     && ui.ctx().layer_id_at(p) == Some(response.layer_id)
             });
         if frame_press {
-            self.gesture = Some(Gesture::Orbit);
+            self.session.gesture = Some(Gesture::Orbit);
         }
         if self.update_visibility(
             ui,
@@ -502,24 +477,24 @@ impl Viewport {
         let zoom_held = options.zoom_hold.active(modifiers);
         let pan_held = options.pan_hold.active(modifiers);
         if options.enabled
-            && self.gesture != Some(Gesture::Transform)
-            && self.pending_stroke.is_none()
-            && !self.guided.dragging()
+            && self.session.gesture != Some(Gesture::Transform)
+            && self.session.sculpt.pending_stroke.is_none()
+            && !self.session.guided.dragging()
             && !self.modeling.dragging()
-            && self.slice.is_none()
-            && self.slice_path.is_none()
+            && self.session.slice.is_none()
+            && self.session.slice_path.is_none()
             && response.hovered()
         {
             let scroll = ui.input(|i| i.smooth_scroll_delta.y);
             camera.zoom_by(scroll);
         }
         if options.enabled
-            && self.gesture != Some(Gesture::Transform)
-            && self.pending_stroke.is_none()
-            && !self.guided.dragging()
+            && self.session.gesture != Some(Gesture::Transform)
+            && self.session.sculpt.pending_stroke.is_none()
+            && !self.session.guided.dragging()
             && !self.modeling.dragging()
-            && self.slice.is_none()
-            && self.slice_path.is_none()
+            && self.session.slice.is_none()
+            && self.session.slice_path.is_none()
             && response.dragged_by(egui::PointerButton::Secondary)
         {
             let d = ui.input(|i| i.pointer.delta());
@@ -532,17 +507,17 @@ impl Viewport {
             }
         }
         if options.enabled
-            && self.gesture != Some(Gesture::Transform)
-            && self.pending_stroke.is_none()
-            && !self.guided.dragging()
+            && self.session.gesture != Some(Gesture::Transform)
+            && self.session.sculpt.pending_stroke.is_none()
+            && !self.session.guided.dragging()
             && !self.modeling.dragging()
-            && self.slice.is_none()
-            && self.slice_path.is_none()
+            && self.session.slice.is_none()
+            && self.session.slice_path.is_none()
             && response.dragged_by(egui::PointerButton::Middle)
         {
             camera.pan += ui.input(|i| i.pointer.delta());
         }
-        if options.arrange_references && self.gesture != Some(Gesture::Orbit) {
+        if options.arrange_references && self.session.gesture != Some(Gesture::Orbit) {
             draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
             return;
         }
@@ -558,9 +533,9 @@ impl Viewport {
             && options.enabled
             && (primary
                 || response.clicked_by(egui::PointerButton::Primary)
-                || self.gesture == Some(Gesture::Edges))
-            && (self.gesture == Some(Gesture::Edges)
-                || (self.gesture.is_none()
+                || self.session.gesture == Some(Gesture::Edges))
+            && (self.session.gesture == Some(Gesture::Edges)
+                || (self.session.gesture.is_none()
                     && pointer.is_some_and(|p| {
                         !gizmo_rect.contains(p)
                             && !navigation::contains(rect, p)
@@ -571,7 +546,7 @@ impl Viewport {
                     })))
         {
             if primary {
-                self.gesture = Some(Gesture::Edges);
+                self.session.gesture = Some(Gesture::Edges);
             }
             if ui.input(|i| i.pointer.any_released()) {
                 if response.clicked_by(egui::PointerButton::Primary)
@@ -579,12 +554,12 @@ impl Viewport {
                 {
                     self.pick_edge(point, ui.input(|i| i.modifiers), document, &scene);
                 }
-                self.gesture = None;
+                self.session.gesture = None;
             }
             return;
         }
         if (primary || response.clicked_by(egui::PointerButton::Primary))
-            && self.gesture.is_none()
+            && self.session.gesture.is_none()
             && options.enabled
             && !zoom_held
             && options.transform_mode == TransformMode::Sculpt
@@ -601,7 +576,7 @@ impl Viewport {
             return;
         }
         if primary
-            && self.gesture.is_none()
+            && self.session.gesture.is_none()
             && options.enabled
             && let Some(pos) = pointer
             && (options.select.is_none()
@@ -609,7 +584,7 @@ impl Viewport {
                 || (matches!(options.select, Some(SelectionTool::MaskLine { .. }))
                     && (zoom_held || pan_held)))
         {
-            self.gesture = Some(if gizmo_rect.contains(pos) {
+            self.session.gesture = Some(if gizmo_rect.contains(pos) {
                 Gesture::Gizmo
             } else if navigation::contains(rect, pos)
                 || zoom_held
@@ -621,7 +596,7 @@ impl Viewport {
             } else if options.slice.is_some() && document.primitive().is_none() {
                 Gesture::Slice
             } else if options.transform_mode != TransformMode::Sculpt
-                && self.transform.can_drag(
+                && self.session.transform.can_drag(
                     document,
                     &scene,
                     options.transform_mode,
@@ -631,7 +606,7 @@ impl Viewport {
             {
                 Gesture::Transform
             } else if options.transform_mode == TransformMode::Sculpt
-                && self.primitive.can_drag(document, &scene, pos)
+                && self.session.primitive.can_drag(document, &scene, pos)
             {
                 Gesture::Primitive
             } else if options.transform_mode == TransformMode::Sculpt
@@ -642,26 +617,27 @@ impl Viewport {
             } else {
                 Gesture::Orbit
             });
-            self.gizmo_dragged = zoom_held || pan_held;
-            if self.gesture == Some(Gesture::Gizmo) {
-                self.gizmo_start = Some(pos);
-                self.gizmo_snap = gizmo::snap_target(camera, gizmo_rect.center(), pos);
+            self.session.gizmo_dragged = zoom_held || pan_held;
+            if self.session.gesture == Some(Gesture::Gizmo) {
+                self.session.gizmo_start = Some(pos);
+                self.session.gizmo_snap = gizmo::snap_target(camera, gizmo_rect.center(), pos);
             }
         }
         if primary
-            && matches!(self.gesture, Some(Gesture::Orbit | Gesture::Gizmo))
+            && matches!(self.session.gesture, Some(Gesture::Orbit | Gesture::Gizmo))
             && options.enabled
         {
             let mut delta = ui.input(|i| i.pointer.delta());
             // The press frame's pointer movement is not part of the drag.
             if !ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Primary)) {
-                if self.gesture == Some(Gesture::Gizmo) && !self.gizmo_dragged {
+                if self.session.gesture == Some(Gesture::Gizmo) && !self.session.gizmo_dragged {
                     let travel = self
+                        .session
                         .gizmo_start
                         .zip(pointer)
                         .map_or(Vec2::ZERO, |(start, pos)| pos - start);
                     if zoom_held || pan_held || travel.length() > gizmo::DRAG_THRESHOLD {
-                        self.gizmo_dragged = true;
+                        self.session.gizmo_dragged = true;
                         // Apply accumulated movement once the tap becomes a deliberate drag.
                         if !zoom_held && !pan_held {
                             delta = travel;
@@ -677,13 +653,13 @@ impl Viewport {
                 } else {
                     camera.orbit(delta);
                 }
-                self.gizmo_dragged |= delta.length_sq() > 0. || zoom_held || pan_held;
+                self.session.gizmo_dragged |= delta.length_sq() > 0. || zoom_held || pan_held;
             }
         }
-        let previous_gesture = self.gesture;
+        let previous_gesture = self.session.gesture;
         if !ui.input(|i| i.pointer.primary_down()) {
             // A fast tap can contain both press and release in the same frame.
-            if self.gesture.is_none()
+            if self.session.gesture.is_none()
                 && options.enabled
                 && !zoom_held
                 && !pan_held
@@ -701,26 +677,27 @@ impl Viewport {
                 })
                 && gizmo_rect.contains(start)
             {
-                self.gesture = Some(Gesture::Gizmo);
-                self.gizmo_start = Some(start);
-                self.gizmo_snap = gizmo::snap_target(camera, gizmo_rect.center(), start);
-                self.gizmo_dragged = false;
+                self.session.gesture = Some(Gesture::Gizmo);
+                self.session.gizmo_start = Some(start);
+                self.session.gizmo_snap = gizmo::snap_target(camera, gizmo_rect.center(), start);
+                self.session.gizmo_dragged = false;
             }
-            if self.gesture == Some(Gesture::Gizmo)
+            if self.session.gesture == Some(Gesture::Gizmo)
                 && options.enabled
-                && !self.gizmo_dragged
+                && !self.session.gizmo_dragged
                 && self
+                    .session
                     .gizmo_start
                     .zip(ui.input(|i| i.pointer.interact_pos()))
                     .is_some_and(|(start, end)| start.distance(end) <= gizmo::DRAG_THRESHOLD)
-                && let Some((yaw, pitch)) = self.gizmo_snap
+                && let Some((yaw, pitch)) = self.session.gizmo_snap
             {
                 camera.yaw = yaw;
                 camera.pitch = pitch;
             }
-            self.gesture = None;
-            self.gizmo_start = None;
-            self.gizmo_snap = None;
+            self.session.gesture = None;
+            self.session.gizmo_start = None;
+            self.session.gizmo_snap = None;
         }
         if previous_gesture == Some(Gesture::Orbit) {
             draw_gizmo(camera, &painter, gizmo_rect, pointer);
@@ -742,7 +719,8 @@ impl Viewport {
             return;
         }
         if options.transform_mode != TransformMode::Sculpt {
-            let dragging = primary && self.gesture == Some(Gesture::Transform) && options.enabled;
+            let dragging =
+                primary && self.session.gesture == Some(Gesture::Transform) && options.enabled;
             // A complete tap may arrive in one frame. Placement and release
             // coordinates follow the same update path as ordinary drags.
             let fast_press = (options.enabled
@@ -766,7 +744,7 @@ impl Viewport {
                 .flatten()
                 .filter(|p| {
                     !gizmo_rect.contains(*p)
-                        && self.transform.can_drag(
+                        && self.session.transform.can_drag(
                             document,
                             &scene,
                             options.transform_mode,
@@ -776,7 +754,7 @@ impl Viewport {
                 });
             let result = (|| {
                 if let Some(start) = fast_press {
-                    self.transform.update(
+                    self.session.transform.update(
                         document,
                         &scene,
                         options.transform_mode,
@@ -790,7 +768,7 @@ impl Viewport {
                     && previous_gesture == Some(Gesture::Transform)
                     && ui.input(|i| i.pointer.button_released(egui::PointerButton::Primary));
                 if dragging || releasing || fast_press.is_some() {
-                    self.transform.update(
+                    self.session.transform.update(
                         document,
                         &scene,
                         options.transform_mode,
@@ -803,14 +781,14 @@ impl Viewport {
                 Ok::<_, String>(())
             })();
             if !dragging {
-                self.transform.finish_drag();
+                self.session.transform.finish_drag();
                 document.end_stroke();
             }
             if let Err(error) = result {
                 self.finish_transform_drag(document);
                 self.status = Some(error);
             }
-            self.transform.paint(
+            self.session.transform.paint(
                 document,
                 &scene,
                 &painter,
@@ -821,9 +799,14 @@ impl Viewport {
             return;
         }
         if document.primitive().is_some() {
-            let dragging = primary && self.gesture == Some(Gesture::Primitive) && options.enabled;
-            self.primitive.update(document, &scene, pointer, dragging);
-            self.primitive.paint(document, &scene, &painter, pointer);
+            let dragging =
+                primary && self.session.gesture == Some(Gesture::Primitive) && options.enabled;
+            self.session
+                .primitive
+                .update(document, &scene, pointer, dragging);
+            self.session
+                .primitive
+                .paint(document, &scene, &painter, pointer);
             draw_gizmo(camera, &painter, gizmo_rect, pointer);
             painter.text(
                 navigation::inner(rect).left_bottom() + Vec2::new(8., -8.),
@@ -835,8 +818,8 @@ impl Viewport {
             return;
         }
         if stencil.is_some() && matches!(brush.kind, Kind::Grab | Kind::Snake | Kind::Detail) {
-            if self.guided.dragging() {
-                self.guided.cancel();
+            if self.session.guided.dragging() {
+                self.session.guided.cancel();
                 self.status = Some(
                     "Guided stroke cancelled; disable the stencil before using this brush".into(),
                 );
@@ -851,9 +834,9 @@ impl Viewport {
             document.end_stroke();
             return;
         }
-        let drawing = primary && self.gesture == Some(Gesture::Sculpt) && options.enabled;
+        let drawing = primary && self.session.gesture == Some(Gesture::Sculpt) && options.enabled;
         let guide_start = (options.enabled
-            && !self.stroke
+            && !self.session.sculpt.stroke
             && !zoom_held
             && !pan_held
             && options.select.is_none()
@@ -865,7 +848,7 @@ impl Viewport {
                 && !navigation::contains(rect, *p)
                 && ui.ctx().layer_id_at(*p) == Some(response.layer_id)
         });
-        if let Some(result) = self.guided.update(
+        if let Some(result) = self.session.guided.update(
             document,
             &scene,
             &brush,
@@ -897,20 +880,20 @@ impl Viewport {
                     && !navigation::contains(rect, pos)
                     && scene.pick(pos).is_some()
             });
-        if (drawing || patterned_click) && !self.stroke {
+        if (drawing || patterned_click) && !self.session.sculpt.stroke {
             if brush.kind == Kind::Decimate && document.mesh_settings().adaptive.enabled {
-                self.decimate_removed.get_or_insert((0, 0));
+                self.session.sculpt.decimate_removed.get_or_insert((0, 0));
             }
             let brush = brush.clone();
             if brush.effective_stroke_mode() == StrokeMode::Freehand {
                 document.begin_stroke();
-                self.stabilizer = pointer
+                self.session.sculpt.stabilizer = pointer
                     .filter(|_| brush.stabilize && brush.supports_stabilization())
                     .map(|start| stabilizer::Stabilizer::new(start, brush.stabilizer_distance));
             } else if let Some(start) = pointer
                 && let Some(anchor) = scene.pick(start)
             {
-                self.pending_stroke = Some(stroke::PendingStroke {
+                self.session.sculpt.pending_stroke = Some(stroke::PendingStroke {
                     preview: Default::default(),
                     start,
                     end: start,
@@ -921,12 +904,12 @@ impl Viewport {
                     anchor,
                 });
             }
-            self.stroke = true;
-            self.stroke_brush = Some(brush_id);
-            self.last = None;
-            self.snake = None;
+            self.session.sculpt.stroke = true;
+            self.session.sculpt.stroke_brush = Some(brush_id);
+            self.session.sculpt.last = None;
+            self.session.sculpt.snake = None;
         }
-        if self.pending_stroke.is_some() {
+        if self.session.sculpt.pending_stroke.is_some() {
             if !options.enabled || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                 self.cancel(document);
                 self.wait_for_release();
@@ -934,7 +917,7 @@ impl Viewport {
                 return;
             }
             if drawing {
-                let pending = self.pending_stroke.as_mut().unwrap();
+                let pending = self.session.sculpt.pending_stroke.as_mut().unwrap();
                 if let Some(end) = pointer {
                     pending.end = end;
                 }
@@ -945,7 +928,7 @@ impl Viewport {
                 return;
             }
             if ui.input(|i| i.pointer.button_released(egui::PointerButton::Primary)) {
-                let mut pending = self.pending_stroke.take().unwrap();
+                let mut pending = self.session.sculpt.pending_stroke.take().unwrap();
                 if let Some(end) = ui.input(|i| i.pointer.interact_pos()) {
                     pending.end = end;
                 }
@@ -959,44 +942,45 @@ impl Viewport {
                     self.record_cleanup(document, before);
                 }
             } else {
-                self.pending_stroke = None;
+                self.session.sculpt.pending_stroke = None;
             }
         }
         if !drawing {
-            if let Some((vertices, faces)) = self.decimate_removed.take() {
+            if let Some((vertices, faces)) = self.session.sculpt.decimate_removed.take() {
                 self.status = Some(if vertices > 0 {
                     format!("Decimate: removed {vertices} vertices and {faces} faces")
                 } else {
                     "Decimate: no removable edges at this size. Increase Edge size for more reduction; protected features stay intact.".into()
                 });
             }
-            self.completed_stroke = document.end_stroke() && self.stroke;
-            self.stroke = false;
-            self.stroke_brush = None;
-            self.last = None;
-            self.snake = None;
+            self.completed_stroke = document.end_stroke() && self.session.sculpt.stroke;
+            self.session.sculpt.stroke = false;
+            self.session.sculpt.stroke_brush = None;
+            self.session.sculpt.last = None;
+            self.session.sculpt.snake = None;
             // Never pull the trailing brush to the pointer on release.
-            self.stabilizer = None;
+            self.session.sculpt.stabilizer = None;
         }
         if pointer.is_some_and(|p| navigation::contains(rect, p)) {
-            self.last = None;
-            self.stabilizer = None;
+            self.session.sculpt.last = None;
+            self.session.sculpt.stabilizer = None;
         }
         if let Some(pos) = pointer.filter(|p| {
             options.select.is_none()
-                && (!navigation::contains(rect, *p) || self.pending_stroke.is_some())
+                && (!navigation::contains(rect, *p) || self.session.sculpt.pending_stroke.is_some())
                 && !gizmo_rect.contains(*p)
-                && self.gesture != Some(Gesture::Orbit)
-                && self.gesture != Some(Gesture::Gizmo)
+                && self.session.gesture != Some(Gesture::Orbit)
+                && self.session.gesture != Some(Gesture::Gizmo)
         }) {
             let b = brush;
             if drawing
-                && self.last.is_none()
-                && self.stabilizer.is_none()
+                && self.session.sculpt.last.is_none()
+                && self.session.sculpt.stabilizer.is_none()
                 && b.stabilize
                 && b.supports_stabilization()
             {
-                self.stabilizer = Some(stabilizer::Stabilizer::new(pos, b.stabilizer_distance));
+                self.session.sculpt.stabilizer =
+                    Some(stabilizer::Stabilizer::new(pos, b.stabilizer_distance));
             }
             let radius = b.radius
                 * if b.pressure_radius {
@@ -1009,7 +993,7 @@ impl Viewport {
             } else {
                 Color32::from_rgb(125, 210, 245)
             };
-            let pos = if let Some(stabilizer) = self.stabilizer.as_mut() {
+            let pos = if let Some(stabilizer) = self.session.sculpt.stabilizer.as_mut() {
                 let trailing = stabilizer.follow(pos);
                 stabilizer.paint(&painter, pos, color);
                 trailing
@@ -1038,7 +1022,7 @@ impl Viewport {
                 }
             }
             if drawing {
-                let previous = self.last.unwrap_or(pos);
+                let previous = self.session.sculpt.last.unwrap_or(pos);
                 let distance = pos.distance(previous);
                 let spacing = (radius
                     * if b.kind == Kind::Snake {
@@ -1049,7 +1033,7 @@ impl Viewport {
                         b.spacing
                     })
                 .max(1.);
-                if self.last.is_none()
+                if self.session.sculpt.last.is_none()
                     || distance >= spacing
                     || matches!(b.kind, Kind::Grab | Kind::Snake)
                 {
@@ -1062,7 +1046,7 @@ impl Viewport {
                         let point = previous + (pos - previous) * (step as f32 / steps as f32);
                         let brush = b.clone();
                         let hit = if brush.kind == Kind::Snake {
-                            if self.snake.is_none()
+                            if self.session.sculpt.snake.is_none()
                                 && let Some((center, normal)) = scene.pick(point)
                             {
                                 let seed = document
@@ -1077,14 +1061,16 @@ impl Viewport {
                                 if let Some((index, &tip)) = seed.filter(|(_, v)| {
                                     (**v - center).len() < radius / scene.scale_at(center)
                                 }) {
-                                    self.snake = Some(SnakeStroke {
+                                    self.session.sculpt.snake = Some(interaction::SnakeStroke {
                                         center: tip,
                                         normal,
                                         mobility: 1. - document.mesh().mask[index],
                                     });
                                 }
                             }
-                            self.snake
+                            self.session
+                                .sculpt
+                                .snake
                                 .as_ref()
                                 .map(|snake| (snake.center, snake.normal))
                         } else {
@@ -1116,7 +1102,7 @@ impl Viewport {
                             }
                             if brush.kind == Kind::Snake
                                 && deformed
-                                && let Some(snake) = &mut self.snake
+                                && let Some(snake) = &mut self.session.sculpt.snake
                             {
                                 // Keep a continuous handle; snapping to a globally nearest
                                 // vertex jumps between the shaft and tip as topology changes.
@@ -1125,7 +1111,7 @@ impl Viewport {
                             }
                         }
                     }
-                    self.last = Some(pos);
+                    self.session.sculpt.last = Some(pos);
                 }
             }
         }

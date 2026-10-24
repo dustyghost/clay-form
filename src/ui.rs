@@ -39,6 +39,8 @@ pub(crate) struct UiState {
     pub projection: projection::ProjectionControls,
     pub paths_active: bool,
     pub paths_history_ready: bool,
+    pub paths_history_reason: Option<&'static str>,
+    pub paths_preview_active: bool,
     pub guide_paths: bool,
     pub path_starts_only: bool,
     pub modeling: modeling::ModelingControls,
@@ -106,6 +108,8 @@ impl Default for UiState {
             projection: Default::default(),
             paths_active: false,
             paths_history_ready: true,
+            paths_history_reason: None,
+            paths_preview_active: false,
             guide_paths: true,
             path_starts_only: false,
             modeling: modeling::ModelingControls {
@@ -401,7 +405,7 @@ impl UiState {
                         .customize(Action::EditPaths)
                         .clicked()
                     {
-                        commands.push(Command::Path(crate::app::paths::PathCommand::Open));
+                        commands.push(Command::Path(crate::command::PathCommand::Open));
                     }
                 });
                 ui.horizontal_wrapped(|ui| {
@@ -1278,7 +1282,7 @@ impl UiState {
             .customize(Action::EditPaths)
             .clicked()
         {
-            commands.push(Command::Path(crate::app::paths::PathCommand::Open));
+            commands.push(Command::Path(crate::command::PathCommand::Open));
         }
         let mut guide_paths = self.guide_paths;
         if design::checkbox(ui, &mut guide_paths, "Guide brush strokes with paths")

@@ -1,5 +1,5 @@
 //! Linear polygon subdivision and a detail-preserving multiresolution stack.
-use super::{AdaptiveSettings, Mesh, Vec3};
+use super::{AdaptiveSettings, Geometry, Mesh, Vec3};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -66,6 +66,14 @@ impl MeshSettings {
         self.lower.len() + self.upper.len() + 1
     }
     pub fn validate(&self, mesh: &Mesh) -> Result<(), String> {
+        self.validate_cancellable(mesh, &|| false)
+    }
+    pub(crate) fn validate_cancellable(
+        &self,
+        mesh: &Mesh,
+        cancel: &impl Fn() -> bool,
+    ) -> Result<(), String> {
+        check_cancel(cancel)?;
         if let Some(primitive) = &self.primitive
             && (self.levels() != 1
                 || self.dynamic
@@ -107,6 +115,7 @@ impl MeshSettings {
             return Err("Subdivision stack exceeds memory limit".into());
         }
         for level in &levels {
+            check_cancel(cancel)?;
             level.validate()?;
             if level
                 .vertex_groups
@@ -118,7 +127,7 @@ impl MeshSettings {
             }
         }
         for pair in levels.windows(2) {
-            let refined = pair[0].subdivide()?;
+            let refined = pair[0].subdivide_cancellable(cancel)?;
             if refined.triangles != pair[1].triangles
                 || refined.vertices.len() != pair[1].vertices.len()
             {
@@ -128,27 +137,15 @@ impl MeshSettings {
         Ok(())
     }
 }
-#[derive(Clone, Debug, PartialEq)]
-pub struct Geometry {
-    pub paths: Vec<super::paths::SurfacePath>,
-    pub scene: super::SceneSettings,
-    pub name: String,
-    pub submodels: Vec<super::project::Submodel>,
-    pub mesh: Mesh,
-    pub settings: MeshSettings,
-}
 impl Geometry {
-    pub fn new(mesh: Mesh) -> Self {
-        Self {
-            mesh,
-            paths: Vec::new(),
-            name: "Model".into(),
-            scene: super::SceneSettings::default(),
-            submodels: Vec::new(),
-            settings: MeshSettings::default(),
-        }
-    }
     pub fn subdivide(&mut self) -> Result<(), String> {
+        self.subdivide_cancellable(&|| false)
+    }
+    pub(crate) fn subdivide_cancellable(
+        &mut self,
+        cancel: &impl Fn() -> bool,
+    ) -> Result<(), String> {
+        check_cancel(cancel)?;
         if self.settings.primitive.is_some() {
             return Err("Convert the primitive to a sculpting mesh first".into());
         }
@@ -161,7 +158,7 @@ impl Geometry {
         if self.settings.levels() >= MAX_LEVELS {
             return Err("Subdivision level limit reached".into());
         }
-        let refined = self.mesh.subdivide()?;
+        let refined = self.mesh.subdivide_cancellable(cancel)?;
         self.settings
             .lower
             .push(std::mem::replace(&mut self.mesh, refined));
@@ -227,6 +224,10 @@ impl Mesh {
     /// Split each quad or triangle into four; shared edges share midpoint vertices.
     /// Original vertices retain their indices, which is the multiresolution contract.
     pub fn subdivide(&self) -> Result<Self, String> {
+        self.subdivide_cancellable(&|| false)
+    }
+    pub(crate) fn subdivide_cancellable(&self, cancel: &impl Fn() -> bool) -> Result<Self, String> {
+        check_cancel(cancel)?;
         self.validate()?;
         if self.triangles.is_empty() {
             return Err("Mesh has no faces to subdivide".into());
@@ -250,6 +251,7 @@ impl Mesh {
         };
         let mut polygons = std::collections::HashSet::new();
         for &[a, b, c, d] in &self.quads {
+            check_cancel(cancel)?;
             for t in [[a, b, c], [a, c, d], [a, b, d], [b, c, d]] {
                 polygons.insert(key(t));
             }
@@ -289,6 +291,7 @@ impl Mesh {
                 .collect()
         };
         for (fi, &[a, b, c]) in self.triangles.iter().enumerate() {
+            check_cancel(cancel)?;
             if polygons.contains(&key([a, b, c])) {
                 continue;
             }
@@ -306,6 +309,7 @@ impl Mesh {
             }
         }
         for &[a, b, c, d] in &self.quads {
+            check_cancel(cancel)?;
             let ab = midpoint(&mut result, &mut edges, a, b);
             let bc = midpoint(&mut result, &mut edges, b, c);
             let cd = midpoint(&mut result, &mut edges, c, d);
@@ -347,13 +351,16 @@ impl Mesh {
             }
         }
         for &[a, b] in &self.creases {
+            check_cancel(cancel)?;
             let m = edges[&(a.min(b), a.max(b))];
             result
                 .creases
                 .extend([super::edges::edge(a, m), super::edges::edge(m, b)]);
         }
         result.creases.sort_unstable();
+        check_cancel(cancel)?;
         result.validate()?;
+        check_cancel(cancel)?;
         Ok(result)
     }
     pub(crate) fn smooth_remesh(&mut self) {
@@ -501,5 +508,31 @@ mod tests {
         geometry.set_dynamic(true);
         assert_eq!(geometry.settings.levels(), 1);
         assert!(geometry.subdivide().is_err());
+    }
+}
+
+fn check_cancel(cancel: &impl Fn() -> bool) -> Result<(), String> {
+    if cancel() {
+        Err("Subdivision cancelled".into())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod cancellation_tests {
+    use super::*;
+    #[test]
+    fn cancellation_during_subdivision_keeps_the_geometry_and_levels() {
+        let mut geometry = Geometry::new(Mesh::sphere());
+        let before = geometry.clone();
+        let checks = std::cell::Cell::new(0);
+        let result = geometry.subdivide_cancellable(&|| {
+            checks.set(checks.get() + 1);
+            checks.get() > 30
+        });
+        assert!(result.unwrap_err().contains("cancelled"));
+        assert_eq!(geometry, before);
+        assert!(checks.get() > 30);
     }
 }

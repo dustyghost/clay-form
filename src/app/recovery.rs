@@ -28,7 +28,7 @@ impl App {
         self.document.is_dirty()
             && !self.document.edit_in_progress()
             && self.mesh_job.is_none()
-            && self.viewport.gesture.is_none()
+            && self.viewport.session.gesture.is_none()
             && self.ui.pending.is_none()
             && self.ui.primitive_warning.is_none()
             && !self.closing

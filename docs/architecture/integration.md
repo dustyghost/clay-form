@@ -106,6 +106,6 @@ Workspace appearance updates egui visuals and both CPU/GPU viewport backgrounds.
 
 ### Register an action
 
-To add a reusable operation, add an `Action`, its label/catalog entry, availability and dispatch mapping, then attach `.customize(action)` to its source response. Append new entries to `Action::ALL`: `Preferences::default` currently assigns the first 19 shortcuts by catalog position, so inserting an action into that prefix shifts existing defaults. New actions are unbound unless a default is deliberately added.
+To add a reusable operation, add an `Action`, its label/catalog entry, availability and dispatch mapping, then attach `.customize(action)` to its source response. Add entries to `Action::ALL` for catalog discovery. Define defaults by action identity in `Action::default_shortcut`; catalog ordering cannot shift existing defaults. New actions are unbound unless a default is deliberately added. Existing saved bindings retain their identities and migration rules.
 
 Confirmation buttons and per-object numeric editors keep their local context. Run the preference and application tests for key/layout behavior; the optional Vulkan test `custom_interface_offscreen_preview` renders the editor and key settings. Set `CLAY_CUSTOM_UI_PREVIEW=/tmp/clay-custom-ui` to export PNGs.

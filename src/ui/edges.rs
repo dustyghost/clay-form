@@ -23,38 +23,12 @@ impl Default for EdgeControls {
     }
 }
 impl UiState {
-    pub(super) fn edge_unavailable(
+    pub(crate) fn edge_unavailable(
         &self,
         action: &Action,
         document: &Document,
     ) -> Option<&'static str> {
-        if self.mesh_busy {
-            Some("Wait for the mesh operation to finish, or cancel it.")
-        } else if self.pending.is_some()
-            || self.primitive_warning.is_some()
-            || self.recovery_open
-            || self.settings_open
-            || self.layout_open
-            || self.icon_capture_open()
-        {
-            Some("Finish or close the open dialog to use edge tools.")
-        } else if document.primitive().is_some() {
-            Some("Convert the primitive in Submodels before editing its edges.")
-        } else if !document.active_visible() {
-            Some("Show the active submodel before editing its edges.")
-        } else if document
-            .model(document.active_model_index())
-            .unwrap()
-            .metadata
-            .temporary_thickness
-            > 0.
-        {
-            Some("Apply or disable the Thickness modifier in Submodels to edit the base mesh.")
-        } else if *action == Action::SmoothSubdivide && document.mesh().has_hidden_faces() {
-            Some("Show all faces before smooth subdivision.")
-        } else {
-            None
-        }
+        crate::app::policy::EditorPolicy::new(self, document).edge_unavailable(action)
     }
 
     pub(super) fn edge_help(

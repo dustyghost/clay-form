@@ -2645,7 +2645,7 @@ fn universal_transform_offscreen_review() {
             egui::Event::PointerMoved(start),
             primary_event(start, true),
         ]);
-        assert!(g.app.viewport.gesture == Some(Gesture::Transform));
+        assert!(g.app.viewport.session.gesture == Some(Gesture::Transform));
         g.frame(vec![egui::Event::PointerMoved(end)]);
         g.frame(vec![primary_event(end, false)]);
         g.save(&format!("universal-pivot-moved-{}", size[0]));

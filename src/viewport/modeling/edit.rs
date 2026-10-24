@@ -467,7 +467,7 @@ impl Viewport {
         point: Option<Pos2>,
         pressed: bool,
     ) {
-        if !pressed || self.gesture.is_some() {
+        if !pressed || self.session.gesture.is_some() {
             return;
         }
         let (Some(component), Some(point)) = (hover, point) else {
@@ -493,7 +493,7 @@ impl Viewport {
                     self.modeling.selected = targets.into_iter().collect();
                     self.modeling.selection_anchor = Some(anchor);
                     self.modeling.symmetry = None;
-                    self.gesture = Some(Gesture::Modeling);
+                    self.session.gesture = Some(Gesture::Modeling);
                     return;
                 }
                 if model.tool.is_transform() && model.interaction == ModelInteraction::Free {
@@ -507,7 +507,7 @@ impl Viewport {
                         super::transform::Handle::Free,
                         false,
                     ) {
-                        Ok(()) => self.gesture = Some(Gesture::Modeling),
+                        Ok(()) => self.session.gesture = Some(Gesture::Modeling),
                         Err(e) => self.status = Some(e),
                     }
                     return;
@@ -540,7 +540,7 @@ impl Viewport {
                     amount: 0.,
                     result: None,
                 });
-                self.gesture = Some(Gesture::Modeling);
+                self.session.gesture = Some(Gesture::Modeling);
             }
             Err(e) => self.status = Some(e),
         }

@@ -1,7 +1,8 @@
 //! Path controls edit a private draft and emit commands for persistent operations.
 use super::*;
 use crate::{
-    app::paths::{PathCommand, PathState},
+    app::paths::PathState,
+    command::PathCommand,
     sculpt::paths::PathMode,
     viewport::paths::{PathEditor, PathTool, RingAxis, RingMode},
 };

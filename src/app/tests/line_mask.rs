@@ -16,7 +16,7 @@ fn begin(app: &mut App, ctx: &egui::Context, erase: bool, flip: bool) {
         vec![egui::Event::PointerMoved(START), primary_event(START, true)],
     );
     navigation_frame(app, ctx, vec![egui::Event::PointerMoved(END)]);
-    assert!(app.viewport.gesture == Some(Gesture::Select));
+    assert!(app.viewport.session.gesture == Some(Gesture::Select));
 }
 
 #[test]
@@ -258,7 +258,7 @@ fn line_mask_fast_pen_samples_flip_and_remapped_navigation() {
             egui::Modifiers::SHIFT,
             vec![egui::Event::PointerMoved(START), primary_event(START, true)],
         );
-        assert!(app.viewport.gesture == Some(Gesture::Orbit));
+        assert!(app.viewport.session.gesture == Some(Gesture::Orbit));
         visibility_frame(
             &mut app,
             &ctx,

@@ -17,10 +17,10 @@ The main paths through the app are:
 
 | If you are changing… | Start in… | Keep in mind |
 | --- | --- | --- |
-| Commands, files, or background jobs | `app.rs`, `app/`, `command.rs` | The controller coordinates; UI widgets emit commands. |
+| Commands, files, or background jobs | `app.rs`, `app/`, `command/`, `background_job.rs` | `app/policy.rs` shares availability rules between controls and dispatch; feature handlers execute after edit-boundary checks. |
 | Persistent scene state or edits | `document.rs`, `document/` | Document content is private. Views receive read-only data. |
 | Undo and redo | `history.rs` | History is bounded to 24 entries and 128 MB. |
-| Brushes, topology, or validation | `sculpt/` | No egui, filesystem, or tablet dependencies. |
+| Brushes, topology, or validation | `sculpt/` | Scene data lives in `sculpt/geometry.rs`; subdivision algorithms live in `sculpt/subdivision.rs`. |
 | Project files, image alphas, or OBJ export | `persistence.rs` | Preserve version 1 compatibility. |
 | Subdivision or remesh jobs | `mesh_job.rs` | Compute privately; commit through the controller. |
 | Detail projection | `sculpt/projection.rs`, `document/projection.rs`, `app/projection.rs` | Preserve reference submodels; preview privately and commit once. |
@@ -49,7 +49,7 @@ Desktop startup lives in `main.rs`. See [integration details](architecture/integ
 4. Expose settings in `ui/` and gesture handling in `viewport/` as needed.
 5. Check no-op, cancellation, undo, and invalid-input behavior alongside the successful edit.
 
-For a reusable shortcut or custom control, also add an `Action`, catalog label, availability check, and dispatch mapping. **Append to `Action::ALL`**: the first 19 positions currently determine default shortcuts. See [custom interface actions](architecture/integration.md#custom-interface-actions) for the complete registration and preference rules.
+For a reusable shortcut or custom control, also add an `Action`, catalog label, availability check, and dispatch mapping. Declare default shortcuts explicitly in `Action::default_shortcut`; catalog order does not determine bindings. See [custom interface actions](architecture/integration.md#custom-interface-actions) for the complete registration and preference rules.
 
 Introduce a trait when a second implementation needs one. Current concrete modules are enough for the existing app.
 
@@ -130,3 +130,11 @@ These references retain the implementation limits, data mappings, and failure be
 ## Modeling
 
 [Selection, construction, joins, symmetry, transforms, measured drafts, and presets →](architecture/modeling.md#pen-modeling)
+
+## Interaction and worker ownership
+
+The viewport retains its renderer, path editor, model selection, and reference overlay. Temporary gesture state belongs to `viewport/interaction.rs`; cancelling drops that session and ends the document stroke. Stroke buffers and previews belong to the nested sculpt session.
+
+Mesh, projection, and path workers use `BackgroundJob<T>` for cancellation, panic reporting, and completion. Mesh cancellation keeps the worker tracked until it finishes, preventing overlapping cancel/retry jobs. Mesh workers return `ValidatedGeometry`; document commits consume that result without rebuilding subdivision levels on the UI thread. Synchronous document operations still validate before committing.
+
+History caches settings allocation estimates per entry and counts shared alpha/icon buffers once across undo and redo. Estimates exclude allocator overhead and the live document; diagnostic serialization retains separate export size limits.

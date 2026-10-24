@@ -1,11 +1,8 @@
 //! Private, cancellable projection drafts; only Apply changes the document.
 use super::*;
+use crate::background_job::BackgroundJob;
 use crate::sculpt::{Mesh, ProjectionOptions, ProjectionReport};
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-    mpsc,
-};
+use std::sync::Arc;
 
 pub(super) struct ProjectionDraft {
     pub mesh: Arc<Mesh>,
@@ -13,15 +10,9 @@ pub(super) struct ProjectionDraft {
     pub settings: crate::diagnostics::EditSettings,
 }
 struct Worker {
-    receiver: mpsc::Receiver<Result<(Mesh, ProjectionReport), String>>,
-    cancel: Arc<AtomicBool>,
+    job: BackgroundJob<(Mesh, ProjectionReport)>,
     revision: u64,
     settings: crate::diagnostics::EditSettings,
-}
-impl Drop for Worker {
-    fn drop(&mut self) {
-        self.cancel.store(true, Ordering::Relaxed);
-    }
 }
 #[derive(Default)]
 pub(super) struct ProjectionState {
@@ -52,7 +43,7 @@ impl App {
     }
     pub(super) fn clear_projection_preview(&mut self) {
         self.projection = Default::default();
-        self.viewport.projection_preview = None;
+        self.viewport.session.projection_preview = None;
         self.ui.projection.report = None;
         self.ui.projection.busy = false;
     }
@@ -77,19 +68,9 @@ impl App {
         self.clear_projection_preview();
         self.viewport.cancel(&mut self.document);
         let target = self.document.mesh().clone();
-        let (sender, receiver) = mpsc::channel();
-        let cancel = Arc::new(AtomicBool::new(false));
-        let flag = cancel.clone();
-        std::thread::Builder::new()
-            .name("clay-detail-projection".into())
-            .spawn(move || {
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    target.project_details(&source, options, &|| flag.load(Ordering::Relaxed))
-                }))
-                .unwrap_or_else(|_| Err("Projection failed; original mesh kept".into()));
-                let _ = sender.send(result);
-            })
-            .map_err(|e| e.to_string())?;
+        let job = BackgroundJob::start("clay-detail-projection", move |cancel| {
+            target.project_details(&source, options, &cancel)
+        })?;
         let mut settings = self.document.capture_edit_settings();
         let view = settings
             .view_input
@@ -104,8 +85,7 @@ impl App {
             "max_distance": options.max_distance,
         });
         self.projection.worker = Some(Worker {
-            receiver,
-            cancel,
+            job,
             revision: self.document.display_revision(),
             settings,
         });
@@ -114,17 +94,7 @@ impl App {
         Ok(())
     }
     pub(super) fn poll_projection(&mut self) {
-        let result = self
-            .projection
-            .worker
-            .as_ref()
-            .and_then(|w| match w.receiver.try_recv() {
-                Ok(result) => Some(result),
-                Err(mpsc::TryRecvError::Empty) => None,
-                Err(mpsc::TryRecvError::Disconnected) => {
-                    Some(Err("Projection worker stopped".into()))
-                }
-            });
+        let result = self.projection.worker.as_mut().and_then(|w| w.job.poll());
         if let Some(result) = result {
             let worker = self.projection.worker.take().unwrap();
             self.ui.projection.busy = false;

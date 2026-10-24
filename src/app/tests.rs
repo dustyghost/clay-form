@@ -40,7 +40,7 @@ fn empty_space_drag_keeps_orbiting_when_crossing_clay() {
         &ctx,
         vec![egui::Event::PointerMoved(empty), primary_event(empty, true)],
     );
-    assert!(app.viewport.gesture == Some(Gesture::Orbit));
+    assert!(app.viewport.session.gesture == Some(Gesture::Orbit));
     navigation_frame(
         &mut app,
         &ctx,
@@ -63,7 +63,7 @@ fn gizmo_axis_click_snaps_and_drag_rotates_without_sculpting() {
         &ctx,
         vec![egui::Event::PointerMoved(x), primary_event(x, true)],
     );
-    assert!(app.viewport.gesture == Some(Gesture::Gizmo));
+    assert!(app.viewport.session.gesture == Some(Gesture::Gizmo));
     navigation_frame(&mut app, &ctx, vec![primary_event(x, false)]);
     assert!((app.camera.yaw - std::f32::consts::FRAC_PI_2).abs() < 1e-6);
     navigation_frame(
@@ -285,7 +285,13 @@ fn background_mesh_jobs_commit_once_and_cancellation_or_failure_keeps_original()
     assert_eq!(app.document.geometry_snapshot(), original);
     app.dispatch(Command::Subdivide, &ctx);
     app.dispatch(Command::CancelMeshJob, &ctx);
-    app.poll_mesh_job();
+    assert!(app.mesh_job.as_ref().unwrap().is_cancelled());
+    app.dispatch(Command::Subdivide, &ctx);
+    assert!(
+        app.mesh_job.as_ref().unwrap().is_cancelled(),
+        "retry must not replace the draining worker"
+    );
+    finish_mesh_job(&mut app);
     assert_eq!(app.document.geometry_snapshot(), original);
     app.dispatch(Command::SetDynamicMesh(true), &ctx);
     app.dispatch(Command::SetRemeshSettings(16, false), &ctx);
@@ -559,7 +565,7 @@ fn holding_zoom_when_pen_drag_starts_over_clay_avoids_sculpting() {
             egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
         },
     );
-    assert!(app.viewport.gesture == Some(Gesture::Orbit));
+    assert!(app.viewport.session.gesture == Some(Gesture::Orbit));
     let _ = ctx.run(
         egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
@@ -910,7 +916,7 @@ fn floating_transform_toolbar_switches_operation_without_editing_the_model() {
     assert_eq!(app.ui.transform_operation, TransformOperation::Scale);
     assert_eq!(app.document.geometry_snapshot(), before);
     assert!(!app.document.can_undo());
-    assert!(app.viewport.gesture.is_none());
+    assert!(app.viewport.session.gesture.is_none());
     app.dispatch(Command::TransformMode(TransformMode::Sculpt), &ctx);
     let (commands, rect) = app.ui.transform_toolbar(&ctx, egui::Rect::EVERYTHING, true);
     assert!(commands.is_empty() && rect.is_none());
@@ -1008,7 +1014,7 @@ fn primitive_shape_handle_drag_edits_recipe_without_sculpting_and_undoes_once() 
         &ctx,
         vec![egui::Event::PointerMoved(start), primary_event(start, true)],
     );
-    assert!(app.viewport.gesture == Some(Gesture::Primitive));
+    assert!(app.viewport.session.gesture == Some(Gesture::Primitive));
     for distance in [10., 20., 30.] {
         navigation_frame(
             &mut app,
@@ -1146,7 +1152,7 @@ fn primitive_sidebar_changes_segments_without_dragging_model_and_hides_after_con
     assert_eq!(app.document.primitive().unwrap().segments, 49);
     assert_eq!(app.document.history_counts().0, count + 1);
     assert!(!app.ui.primitive_controls_requested);
-    assert!(app.viewport.gesture.is_none());
+    assert!(app.viewport.session.gesture.is_none());
     assert_eq!(app.camera.yaw, 0.);
     app.document.undo();
     assert_eq!(app.document.geometry_snapshot(), before);
@@ -1677,7 +1683,7 @@ fn slice_drag_previews_without_edits_and_commits_each_mode_as_one_undo() {
             &ctx,
             vec![egui::Event::PointerMoved(start), primary_event(start, true)],
         );
-        assert!(app.viewport.gesture == Some(Gesture::Slice));
+        assert!(app.viewport.session.gesture == Some(Gesture::Slice));
         navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
         assert_eq!(app.document.geometry_snapshot(), before);
         assert_eq!(app.document.history_counts(), (0, 0));
@@ -2018,6 +2024,7 @@ fn slice_path_fast_clicks_and_failed_cut_keep_an_editable_draft() {
     );
     assert!(app.mesh_job.is_some(), "draft was lost after failure");
     app.cancel_mesh_job();
+    finish_mesh_job(&mut app);
     navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Enter, false)]);
     navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Enter, true)]);
     assert!(app.mesh_job.is_some(), "draft was lost after cancellation");
@@ -2140,7 +2147,7 @@ fn visibility_rectangle_latches_operation_and_hold_release_or_escape_cancel() {
         modifiers,
         vec![egui::Event::PointerMoved(start), primary_event(start, true)],
     );
-    assert!(app.viewport.gesture == Some(Gesture::Select));
+    assert!(app.viewport.session.gesture == Some(Gesture::Select));
     visibility_frame(
         &mut app,
         &ctx,
@@ -2392,7 +2399,7 @@ fn escape_exits_line_and_path_slice_with_or_without_a_draft() {
                 }],
             );
             assert!(!app.ui.slice_active);
-            assert!(app.viewport.gesture.is_none());
+            assert!(app.viewport.session.gesture.is_none());
             navigation_frame(&mut app, &ctx, vec![primary_event(center, false)]);
             navigation_frame(&mut app, &ctx, vec![]);
             assert!(app.mesh_job.is_none());
@@ -2406,7 +2413,7 @@ fn escape_exits_line_and_path_slice_with_or_without_a_draft() {
                     primary_event(center, true),
                 ],
             );
-            assert!(app.viewport.gesture == Some(Gesture::Sculpt));
+            assert!(app.viewport.session.gesture == Some(Gesture::Sculpt));
         }
     }
 }
@@ -2713,7 +2720,7 @@ fn alt_primary_on_clay_sculpts_and_reverses_without_panning() {
                     },
                 );
                 if pressed == Some(true) {
-                    assert!(app.viewport.gesture == Some(Gesture::Sculpt));
+                    assert!(app.viewport.session.gesture == Some(Gesture::Sculpt));
                 }
             }
             assert_eq!(app.camera.pan, Vec2::ZERO);
@@ -3319,7 +3326,7 @@ fn lasso_previews_then_commits_once_at_multiple_angles_and_keeps_other_models() 
                     before,
                     "preview must not edit"
                 );
-                assert!(app.viewport.gesture == Some(Gesture::Select));
+                assert!(app.viewport.session.gesture == Some(Gesture::Select));
                 visibility_frame(
                     &mut app,
                     &ctx,
@@ -3627,6 +3634,7 @@ fn delete_submodel_action_removes_hidden_reference_clears_targets_and_locks_duri
     app.dispatch(Command::DeleteSubmodel, &ctx);
     assert_eq!(app.document.geometry_snapshot(), after);
     app.dispatch(Command::CancelMeshJob, &ctx);
+    finish_mesh_job(&mut app);
     app.dispatch(Command::OpenProjection, &ctx);
     app.dispatch(Command::DeleteSubmodel, &ctx);
     assert_eq!(app.document.geometry_snapshot(), after);

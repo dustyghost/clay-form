@@ -20,6 +20,7 @@ mod files;
 mod jobs;
 mod masking;
 pub(crate) mod paths;
+pub(crate) mod policy;
 mod projection;
 mod recovery;
 mod references;
@@ -233,7 +234,7 @@ impl App {
         if self.ui.projection.open && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.cancel_projection();
         }
-        if let Some(id) = self.viewport.guided.used_path.take() {
+        if let Some(id) = self.viewport.session.guided.used_path.take() {
             self.paths.selected_path = Some(id);
         }
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
@@ -317,16 +318,16 @@ impl App {
         });
         let selected = self.ui.brush_index_for_context(&self.document, ui.ctx());
         self.capture_diagnostic_context(ui.ctx());
-        self.viewport.projection_preview = self
+        self.viewport.session.projection_preview = self
             .paths
             .preview_mesh
             .clone()
             .or_else(|| self.projection.draft.as_ref().map(|d| d.mesh.clone()));
-        self.viewport.projection_mode = self.ui.projection.open;
-        self.viewport.guided.enabled =
+        self.viewport.session.projection_mode = self.ui.projection.open;
+        self.viewport.session.guided.enabled =
             self.ui.guide_paths && !self.ui.mask_active && !temporary_visibility;
-        self.viewport.guided.path_starts_only = self.ui.path_starts_only;
-        self.viewport.visibility_hold = Some(if !temporary_visibility {
+        self.viewport.session.guided.path_starts_only = self.ui.path_starts_only;
+        self.viewport.session.visibility_hold = Some(if !temporary_visibility {
             Default::default()
         } else {
             self.ui.preferences.visibility_hold.clone()
@@ -383,7 +384,7 @@ impl App {
                 show_guides: self.ui.show_symmetry_guides,
                 guide_opacity: self.ui.guide_opacity,
                 enabled: enabled
-                    && (self.viewport.guided.dragging()
+                    && (self.viewport.session.guided.dragging()
                         || (!over_toolbar
                             && !over_editor
                             && !self.ui.pointer_over_pinned_menu(ui.ctx()))),
@@ -510,7 +511,7 @@ impl eframe::App for App {
             self.cancel_projection();
         }
         if ctx.input(|i| i.viewport().close_requested()) && self.viewport.paths.active {
-            let _ = self.dispatch_path(paths::PathCommand::Close);
+            let _ = self.dispatch_path(crate::command::PathCommand::Close);
         }
         if ctx.input(|i| i.viewport().close_requested())
             && self.document.is_dirty()

@@ -18,7 +18,7 @@ pub(super) struct VisibilityPath {
 
 impl Viewport {
     pub(crate) fn visibility_path_action(&mut self, action: Action) {
-        self.visibility_path_action = Some(action);
+        self.session.visibility_path_action = Some(action);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -58,21 +58,21 @@ impl Viewport {
                         .iter()
                         .any(|e| matches!(e, egui::Event::PointerGone))
             })
-            || self.visibility_path.as_ref().is_some_and(|p| {
+            || self.session.visibility_path.as_ref().is_some_and(|p| {
                 p.revision != document.display_revision() || p.projection != projection
             });
         if interrupted {
-            let had_path = self.visibility_path.take().is_some();
-            self.visibility_path_action = None;
-            if self.gesture == Some(Gesture::Select) {
-                self.gesture = None;
+            let had_path = self.session.visibility_path.take().is_some();
+            self.session.visibility_path_action = None;
+            if self.session.gesture == Some(Gesture::Select) {
+                self.session.gesture = None;
             }
             if had_path {
                 self.wait_for_release();
             }
             return had_path;
         }
-        let mut action = self.visibility_path_action.take();
+        let mut action = self.session.visibility_path_action.take();
         let panel = egui::Area::new(egui::Id::new("visibility_path_editor"))
             .order(egui::Order::Foreground)
             .fixed_pos(scene.rect.left_top() + Vec2::new(12., 40.))
@@ -83,7 +83,11 @@ impl Viewport {
                     ui.label("Click to add · drag points to edit");
                     ui.label("Click an edge to insert a point");
                     ui.label("Red faces will be hidden");
-                    let count = self.visibility_path.as_ref().map_or(0, |p| p.points.len());
+                    let count = self
+                        .session
+                        .visibility_path
+                        .as_ref()
+                        .map_or(0, |p| p.points.len());
                     ui.label(format!("{count} / 64 points · closes last to first"));
                     ui.horizontal(|ui| {
                         if ui
@@ -98,7 +102,8 @@ impl Viewport {
                     });
                     if ui
                         .add_enabled(
-                            self.visibility_path
+                            self.session
+                                .visibility_path
                                 .as_ref()
                                 .is_some_and(|p| p.selected.is_some()),
                             egui::Button::new("Delete point"),
@@ -112,8 +117,8 @@ impl Viewport {
             .response
             .rect;
         if matches!(action, Some(Action::ClearVisibilityPath)) {
-            self.visibility_path = None;
-            self.gesture = None;
+            self.session.visibility_path = None;
+            self.session.gesture = None;
             self.wait_for_release();
             return true;
         }
@@ -137,19 +142,22 @@ impl Viewport {
         });
         if let Some(pos) = press
             && !navigate
-            && self.gesture.is_none()
+            && self.session.gesture.is_none()
             && document.active_visible()
             && document.primitive().is_none()
         {
-            let path = self.visibility_path.get_or_insert_with(|| VisibilityPath {
-                points: Vec::new(),
-                selected: None,
-                dragging: false,
-                revision: document.display_revision(),
-                projection,
-            });
+            let path = self
+                .session
+                .visibility_path
+                .get_or_insert_with(|| VisibilityPath {
+                    points: Vec::new(),
+                    selected: None,
+                    dragging: false,
+                    revision: document.display_revision(),
+                    projection,
+                });
             path.dragging = true;
-            self.gesture = Some(Gesture::Select);
+            self.session.gesture = Some(Gesture::Select);
             if let Some(i) = path.points.iter().position(|p| p.distance(pos) <= 12.) {
                 path.selected = Some(i);
             } else if path.points.len() < 64 {
@@ -165,11 +173,11 @@ impl Viewport {
                 path.selected = Some(i);
             } else {
                 path.dragging = false;
-                self.gesture = None;
+                self.session.gesture = None;
                 self.status = Some("Visibility paths are limited to 64 points".into());
             }
         }
-        if let Some(path) = &mut self.visibility_path {
+        if let Some(path) = &mut self.session.visibility_path {
             if path.dragging
                 && press.is_none()
                 && let Some(pos) = ui.input(|i| i.pointer.interact_pos())
@@ -179,8 +187,8 @@ impl Viewport {
             }
             if !ui.input(|i| i.pointer.primary_down()) {
                 path.dragging = false;
-                if self.gesture == Some(Gesture::Select) {
-                    self.gesture = None;
+                if self.session.gesture == Some(Gesture::Select) {
+                    self.session.gesture = None;
                 }
             }
             if matches!(action, Some(Action::DeleteVisibilityPoint))
@@ -223,8 +231,8 @@ impl Viewport {
                             .err()
                             .unwrap_or_else(|| "Visibility path applied".into()),
                     );
-                    self.visibility_path = None;
-                    self.gesture = None;
+                    self.session.visibility_path = None;
+                    self.session.gesture = None;
                     self.wait_for_release();
                 } else {
                     self.status = Some("Add at least three points enclosing an area".into());
@@ -234,6 +242,6 @@ impl Viewport {
         }
         // Let camera navigation run between edits; the changed projection then
         // invalidates this view-space draft on the following frame.
-        self.gesture == Some(Gesture::Select) || press.is_some() || editor_press
+        self.session.gesture == Some(Gesture::Select) || press.is_some() || editor_press
     }
 }

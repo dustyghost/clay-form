@@ -31,6 +31,7 @@ pub(crate) struct Entry {
     pub id: u64,
     pub settings: Option<crate::diagnostics::EditSettings>,
     bytes: usize,
+    settings_memory: crate::diagnostics::SettingsMemory,
 }
 #[derive(Default)]
 pub(crate) struct History {
@@ -61,19 +62,28 @@ impl History {
         self.discarded_redo += self.redo.len();
         self.redo.clear();
         self.next_id += 1;
-        let bytes =
-            geometry_bytes(&geometry) + settings.as_ref().map_or(0, |s| s.estimated_bytes());
+        let bytes = geometry_bytes(&geometry);
+        let settings_memory = settings
+            .as_ref()
+            .map_or_else(Default::default, |s| s.memory());
         self.undo.push_back(Entry {
             geometry,
             label,
             id: self.next_id,
             settings,
             bytes,
+            settings_memory,
         });
         self.enforce_limits();
     }
     pub fn retained_bytes(&self) -> usize {
-        self.undo.iter().chain(&self.redo).map(|e| e.bytes).sum()
+        let mut shared = std::collections::HashMap::new();
+        let mut owned = 0;
+        for entry in self.undo.iter().chain(&self.redo) {
+            owned += entry.bytes + entry.settings_memory.owned;
+            shared.extend(entry.settings_memory.shared.iter().copied());
+        }
+        owned + shared.values().sum::<usize>()
     }
     pub fn enforce_limits(&mut self) {
         while self.undo.len() + self.redo.len() > self.retention.edits
@@ -89,11 +99,7 @@ impl History {
     pub fn undo(&mut self, mesh: &mut Geometry) -> bool {
         if let Some(mut previous) = self.undo.pop_back() {
             std::mem::swap(mesh, &mut previous.geometry);
-            previous.bytes = geometry_bytes(&previous.geometry)
-                + previous
-                    .settings
-                    .as_ref()
-                    .map_or(0, |s| s.estimated_bytes());
+            previous.bytes = geometry_bytes(&previous.geometry);
             self.redo.push(previous);
             self.enforce_limits();
             true
@@ -104,8 +110,7 @@ impl History {
     pub fn redo(&mut self, mesh: &mut Geometry) -> bool {
         if let Some(mut next) = self.redo.pop() {
             std::mem::swap(mesh, &mut next.geometry);
-            next.bytes = geometry_bytes(&next.geometry)
-                + next.settings.as_ref().map_or(0, |s| s.estimated_bytes());
+            next.bytes = geometry_bytes(&next.geometry);
             self.undo.push_back(next);
             self.enforce_limits();
             true
@@ -230,5 +235,49 @@ mod retention_tests {
         assert_eq!(history.counts(), (0, 0));
         assert_eq!(history.evicted, 3);
         assert_eq!(history.discarded_redo, 1);
+    }
+}
+
+#[cfg(test)]
+mod shared_settings_tests {
+    use super::*;
+    use crate::{
+        diagnostics::EditSettings,
+        sculpt::{Alpha, Brush, Kind, Mesh},
+    };
+    #[test]
+    fn shared_images_keep_undo_and_are_counted_once_across_both_stacks() {
+        let pixels: std::sync::Arc<[f32]> = vec![0.12345; 2048 * 2048].into();
+        let mut brush = Brush::new(Kind::Standard);
+        brush.alpha = Alpha::Image {
+            width: 2048,
+            height: 2048,
+            pixels,
+        };
+        let settings = EditSettings {
+            brushes: vec![brush.clone(); 3],
+            active_brush: Some(brush),
+            symmetry: Default::default(),
+            topology: Default::default(),
+            view_input: None,
+            first_dab: None,
+        };
+        let mut history = History::default();
+        let mut geometry = Geometry::new(Mesh::default());
+        for _ in 0..8 {
+            history.record_owned(geometry.clone(), "stroke", Some(settings.clone()));
+        }
+        assert_eq!(history.counts(), (8, 0));
+        assert!((16 * 1024 * 1024..17 * 1024 * 1024).contains(&history.retained_bytes()));
+        let bytes = history.retained_bytes();
+        assert!(history.undo(&mut geometry));
+        assert!(history.undo(&mut geometry));
+        assert_eq!(history.retained_bytes(), bytes);
+        assert!(history.redo(&mut geometry));
+        assert_eq!(history.retained_bytes(), bytes);
+        history.record_owned(geometry.clone(), "branch", None);
+        assert_eq!(history.counts(), (8, 0));
+        history.reset();
+        assert_eq!(history.retained_bytes(), 0);
     }
 }

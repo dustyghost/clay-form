@@ -13,7 +13,7 @@ impl App {
         if self.mesh_job.is_some() {
             return Err("A mesh operation is already running".into());
         }
-        let was_dragging = self.viewport.gesture.is_some();
+        let was_dragging = self.viewport.session.gesture.is_some();
         if matches!(operation, Operation::SlicePath(..)) {
             self.viewport.pause_slice_path(&mut self.document);
         } else {
@@ -32,31 +32,31 @@ impl App {
         Ok(())
     }
     pub(super) fn cancel_mesh_job(&mut self) {
-        if self.mesh_job.take().is_some() {
+        if let Some(job) = &self.mesh_job {
+            job.cancel();
             self.ui.status = "Mesh operation cancelled; original mesh kept".into();
         }
-        self.ui.mesh_busy = false;
+        self.ui.mesh_busy = self.mesh_job.is_some();
         self.job_settings = None;
     }
     pub(super) fn poll_mesh_job(&mut self) {
-        if let Some(result) = self.mesh_job.as_ref().and_then(MeshJob::poll) {
-            let operation = self
-                .mesh_job
-                .take()
-                .expect("completed job")
-                .operation
-                .clone();
+        if let Some(result) = self.mesh_job.as_mut().and_then(MeshJob::poll) {
+            let job = self.mesh_job.take().expect("completed job");
+            self.ui.mesh_busy = false;
+            if job.is_cancelled() {
+                self.job_settings = None;
+                return;
+            }
+            let operation = job.operation;
             let label = operation.history_label();
             self.ui.mesh_busy = false;
             let settings = self.job_settings.take();
-            match result.and_then(|geometry| {
-                if matches!(operation, Operation::Edges(_))
-                    && geometry == self.document.geometry_snapshot()
+            match result.map(|geometry| {
+                if !(matches!(operation, Operation::Edges(_))
+                    && self.document.geometry_matches(geometry.geometry()))
                 {
-                    Ok(())
-                } else {
                     self.document
-                        .replace_geometry_recorded(geometry, label, settings)
+                        .commit_validated_geometry(geometry, label, settings)
                 }
             }) {
                 Ok(()) => {
