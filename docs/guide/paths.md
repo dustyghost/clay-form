@@ -14,6 +14,8 @@ Use **Mesh → Editable paths** to draw a reusable guide, edit it while orbiting
 
 A free path can leave the surface and is useful as a spatial guide. Save it, then choose **Attach saved path to surface** before using it as a brush route. Surface paths retain their world-space positions as you move the camera. Rear-facing surface segments appear dim and dashed; orbit until their points face the camera before selecting or moving them.
 
+**Add / draw** keeps dense guides readable by showing only the start, open endpoint, selected point, and the point under the pointer. Choose **Move points** or **Insert point** to show every editable control-point handle. These handles are not brush dabs or mesh vertices.
+
 ## Round individual corners
 
 Choose **Move points** and select a corner. Use **Round** and adjust **Rounding (model units)**, or drag the diamond handle toward the inside of the bend. The two circular handles adjust how far the rounding extends along the adjoining segments. Choose **Sharp** to remove that corner’s explicit rounding.

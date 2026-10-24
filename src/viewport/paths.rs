@@ -495,6 +495,9 @@ impl PathEditor {
             self.navigating = false;
         }
         self.refresh_guide(document);
+        let hovered = pos
+            .filter(|_| response.contains_pointer() && self.tool == PathTool::Add)
+            .and_then(|pos| self.nearest_point(scene, pos));
         if let Some(path) = self.draft.as_ref() {
             let cache = self.guide.as_ref().expect("draft guide refreshed");
             let color = if cache.warning.is_some() {
@@ -539,7 +542,14 @@ impl PathEditor {
                 painter.line_segment(segment, Stroke::new(2_f32, color));
             }
             for (i, point) in path.points.iter().enumerate() {
-                if self.tool == PathTool::Ring && i != path.seam && self.selected != Some(i) {
+                // Dense generated rings remain readable while drawing. Point-editing
+                // tools expose every handle; drawing keeps only useful landmarks.
+                if !matches!(self.tool, PathTool::Move | PathTool::Insert)
+                    && i != path.seam
+                    && self.selected != Some(i)
+                    && hovered != Some(i)
+                    && (path.closed || i + 1 != path.points.len())
+                {
                     continue;
                 }
                 if !scene.visible_depth(point.position) {
