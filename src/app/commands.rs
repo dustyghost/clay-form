@@ -685,7 +685,7 @@ impl App {
                 use crate::viewport::{TransformMode as Mode, TransformOperation as Op};
                 let mode = match operation {
                     Op::PlaceLine => Mode::ActionLine,
-                    Op::PlacePivot => Mode::World,
+                    Op::PlacePivot | Op::Universal => Mode::World,
                     _ if self.ui.transform_mode == Mode::Sculpt => Mode::World,
                     _ => self.ui.transform_mode,
                 };

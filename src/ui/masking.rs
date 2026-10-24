@@ -9,7 +9,7 @@ impl UiState {
         commands: &mut Vec<Command>,
     ) {
         ui.collapsing("Hold to mask", |ui| {
-            ui.label(format!("Hold binding: {}", self.preferences.mask_hold.label()));
+            ui.label(format!("Shared selection hold: {} (choose Mask in the X menu)", self.preferences.visibility_hold.label()));
             if ui.button("Configure hold and menu keys…").clicked() {
                 self.settings_open = true;
             }
@@ -50,7 +50,7 @@ impl UiState {
         let visibility = &self.preferences.visibility_hold;
         if visibility.enabled() {
             conflicts.push(format!(
-                "If {} and {} are both held, visibility takes priority.",
+                "If {} and {} are both held, the shared selection hold follows the X menu.",
                 hold.label(),
                 visibility.label()
             ));

@@ -141,39 +141,41 @@ impl App {
         }
         let visibility = self.temporary_visibility_active(ctx);
         let masking = self.temporary_mask_requested(ctx);
-        let menu = self
-            .ui
-            .preferences
-            .shortcut(&Action::ViewportContextMenu)
-            .cloned();
-        let open_menu = menu.is_some_and(|binding| {
-            ctx.input_mut(|input| {
-                let mut found = false;
-                input.events.retain(|event| {
-                    let matches = Shortcut::from_event(event).is_some_and(|shortcut| {
-                        shortcut == binding
-                            || (visibility
-                                && self
-                                    .ui
-                                    .preferences
-                                    .visibility_hold
-                                    .matches_shortcut(&shortcut, &binding))
-                            || (masking
-                                && self
-                                    .ui
-                                    .preferences
-                                    .mask_hold
-                                    .matches_shortcut(&shortcut, &binding))
+        let mask_binding = self.temporary_mask_binding(ctx).clone();
+        for action in [
+            Action::ViewportContextMenu,
+            Action::MaskVisibilityMenu,
+            Action::TransformMenu,
+        ] {
+            let binding = self.ui.preferences.shortcut(&action).cloned();
+            let open_menu = binding.is_some_and(|binding| {
+                ctx.input_mut(|input| {
+                    let mut found = false;
+                    input.events.retain(|event| {
+                        let matches = Shortcut::from_event(event).is_some_and(|mut shortcut| {
+                            // Alt reverses a held selection; it must not block its chooser.
+                            if (visibility || masking) && !binding.alt {
+                                shortcut.alt = false;
+                            }
+                            shortcut == binding
+                                || (visibility
+                                    && self
+                                        .ui
+                                        .preferences
+                                        .visibility_hold
+                                        .matches_shortcut(&shortcut, &binding))
+                                || (masking && mask_binding.matches_shortcut(&shortcut, &binding))
+                        });
+                        found |= matches && !matches!(event, egui::Event::Key { repeat: true, .. });
+                        !matches
                     });
-                    found |= matches && !matches!(event, egui::Event::Key { repeat: true, .. });
-                    !matches
-                });
-                found
-            })
-        });
-        if open_menu {
-            self.open_viewport_menu(ctx);
-            return;
+                    found
+                })
+            });
+            if open_menu {
+                self.open_quick_menu(ctx, action);
+                return;
+            }
         }
         if visibility && let Some(key) = &self.ui.preferences.visibility_hold.key {
             ctx.input_mut(|input| {
@@ -321,15 +323,14 @@ impl App {
             .clone()
             .or_else(|| self.projection.draft.as_ref().map(|d| d.mesh.clone()));
         self.viewport.projection_mode = self.ui.projection.open;
-        self.viewport.guided.enabled = self.ui.guide_paths && !self.ui.mask_active;
+        self.viewport.guided.enabled =
+            self.ui.guide_paths && !self.ui.mask_active && !temporary_visibility;
         self.viewport.guided.path_starts_only = self.ui.path_starts_only;
-        self.viewport.visibility_hold = Some(
-            if self.ui.viewport_menu.suppress_visibility || self.ui.mask_active {
-                Default::default()
-            } else {
-                self.ui.preferences.visibility_hold.clone()
-            },
-        );
+        self.viewport.visibility_hold = Some(if !temporary_visibility {
+            Default::default()
+        } else {
+            self.ui.preferences.visibility_hold.clone()
+        });
         self.viewport.show(
             ui,
             &mut self.document,
@@ -368,7 +369,7 @@ impl App {
                 respect_mask: self.ui.respect_transform_mask,
                 selected,
                 temporary_mask: self.ui.mask_active,
-                mask_erase: self.ui.preferences.mask_preset.erase,
+                mask_erase: self.ui.preferences.mask_preset.erase ^ ui.input(|i| i.modifiers.alt),
                 pressure: self.pressure,
                 wire: self.ui.wire,
                 wire_mode: self.ui.wire_mode,
@@ -415,13 +416,12 @@ impl App {
         self.ui.modeling.count = self.viewport.modeling.selection().len();
         if temporary_visibility {
             let rect = self.ui.viewport_menu.viewport_rect.unwrap_or(ui.max_rect());
-            ui.painter().text(
-                rect.left_top() + egui::vec2(12., 12.),
-                egui::Align2::LEFT_TOP,
+            let galley = ui.painter().layout(
                 format!(
-                    "Hide/Isolate · {} · {}{} · hold {} · tool menu {}",
+                    "Selection · Visibility · {} · {}{} · hold {} · tool menu {}",
                     self.ui.preferences.visibility_selection.shape.label(),
-                    if self.ui.preferences.visibility_selection.hide {
+                    if self.ui.preferences.visibility_selection.hide ^ ui.input(|i| i.modifiers.alt)
+                    {
                         "Hide"
                     } else {
                         "Isolate"
@@ -434,10 +434,16 @@ impl App {
                     self.ui.preferences.visibility_hold.label(),
                     self.ui
                         .preferences
-                        .shortcut(&Action::ViewportContextMenu)
+                        .shortcut(&Action::MaskVisibilityMenu)
                         .map_or("Unbound".into(), |s| s.label())
                 ),
                 egui::FontId::proportional(14.),
+                egui::Color32::WHITE,
+                (rect.width() - 172.).max(120.),
+            );
+            ui.painter().galley(
+                rect.left_top() + egui::vec2(12., 42.),
+                galley,
                 egui::Color32::WHITE,
             );
         }

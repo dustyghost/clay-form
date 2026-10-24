@@ -197,12 +197,29 @@ impl UiState {
             })
     }
 
+    pub(crate) fn selection_brush_active(&self) -> bool {
+        self.mask_active || self.viewport_menu.visibility_was_active
+    }
+
+    /// Selection holds borrow brush settings without selecting a brush in the UI.
+    pub(crate) fn highlighted_brush_index(
+        &self,
+        document: &Document,
+        ctx: &egui::Context,
+    ) -> Option<usize> {
+        if self.selection_brush_active() {
+            None
+        } else {
+            self.brush_index_for_context(document, ctx)
+        }
+    }
+
     pub(crate) fn brush_index_for_context(
         &self,
         document: &Document,
         ctx: &egui::Context,
     ) -> Option<usize> {
-        if self.mask_active && !ctx.wants_keyboard_input() {
+        if self.selection_brush_active() && !ctx.wants_keyboard_input() {
             return self.preferences.mask_preset.brush_index(document);
         }
         if ctx.wants_keyboard_input() {
@@ -255,7 +272,7 @@ impl UiState {
                 if ui
                     .button("Tool menu")
                     .on_hover_text(format!(
-                        "Viewport functions · {binding} · assign in Key settings"
+                        "Modeling functions · {binding} · assign in Key settings"
                     ))
                     .customize(Action::ViewportContextMenu)
                     .clicked()
@@ -717,7 +734,7 @@ impl UiState {
     ) {
         let focus_before = ui.ctx().memory(|m| m.focused());
         let active = self.brush_index_for_context(document, ui.ctx());
-        let fallback = crate::sculpt::Brush::new(if self.mask_active {
+        let fallback = crate::sculpt::Brush::new(if self.selection_brush_active() {
             Kind::Mask
         } else {
             Kind::Smooth
@@ -725,7 +742,7 @@ impl UiState {
         let original = active.map_or(&fallback, |index| &document.brushes()[index]);
         let selected = active.unwrap_or(self.selected);
         if active.is_none() && matches!(tool, Tool::Brush | Tool::Alpha | Tool::Presets) {
-            let kind = if self.mask_active {
+            let kind = if self.selection_brush_active() {
                 Kind::Mask
             } else {
                 Kind::Smooth
@@ -737,6 +754,13 @@ impl UiState {
                 commands.push(Command::AddBrush(kind));
             }
             return;
+        }
+        if self.selection_brush_active() {
+            ui.strong(if self.mask_active {
+                "Selection · Mask"
+            } else {
+                "Selection · Visibility"
+            });
         }
         let mut edited = original.clone();
         let b = &mut edited;
@@ -758,9 +782,15 @@ impl UiState {
                     .show(ui, |ui| {
                         for (i, b) in document.brushes().iter().enumerate() {
                             let id = self.brush_texture(ui.ctx(), i, b);
-                            if design::brush_tile(ui, id, &b.name, active == Some(i), width)
-                                .customize(Action::SelectBrush(b.identity()))
-                                .clicked()
+                            if design::brush_tile(
+                                ui,
+                                id,
+                                &b.name,
+                                self.highlighted_brush_index(document, ui.ctx()) == Some(i),
+                                width,
+                            )
+                            .customize(Action::SelectBrush(b.identity()))
+                            .clicked()
                             {
                                 self.select_brush(i, document);
                             }
@@ -771,7 +801,11 @@ impl UiState {
                     });
                 ui.add_space(4.);
                 if active.is_none() {
-                    ui.weak("Temporary Smooth · default settings");
+                    ui.weak(if self.selection_brush_active() {
+                        "Selection · default Mask preset"
+                    } else {
+                        "Temporary Smooth · default settings"
+                    });
                     return;
                 }
                 if ui

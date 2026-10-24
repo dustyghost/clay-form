@@ -14,6 +14,22 @@ pub(crate) enum SelectionTool {
     Visibility(VisibilitySettings),
 }
 impl SelectionTool {
+    fn with_reverse(self, reverse: bool) -> Self {
+        match self {
+            Self::MaskLassoOperation { erase } => Self::MaskLassoOperation {
+                erase: erase ^ reverse,
+            },
+            Self::MaskLine { erase, flip } => Self::MaskLine {
+                erase: erase ^ reverse,
+                flip,
+            },
+            Self::Visibility(mut settings) => {
+                settings.hide ^= reverse;
+                Self::Visibility(settings)
+            }
+            other => other,
+        }
+    }
     fn is_mask_lasso(self) -> bool {
         matches!(self, Self::MaskLasso | Self::MaskLassoOperation { .. })
     }
@@ -295,6 +311,7 @@ impl Viewport {
         select: Option<SelectionTool>,
         navigate: bool,
     ) -> bool {
+        let select = select.map(|tool| tool.with_reverse(ui.input(|i| i.modifiers.alt)));
         if matches!(
             select,
             Some(SelectionTool::Visibility(VisibilitySettings {
@@ -376,6 +393,11 @@ impl Viewport {
         // tool switches cancel instead of committing a stale selection on release.
         if matches!(drag.tool, SelectionTool::MaskLine { .. })
             && let Some(tool @ SelectionTool::MaskLine { .. }) = select
+        {
+            drag.tool = tool;
+        }
+        if matches!(drag.tool, SelectionTool::MaskLassoOperation { .. })
+            && let Some(tool @ SelectionTool::MaskLassoOperation { .. }) = select
         {
             drag.tool = tool;
         }

@@ -248,27 +248,27 @@ fn line_mask_fast_pen_samples_flip_and_remapped_navigation() {
     for pan in [false, true] {
         let before = app.document.geometry_snapshot();
         if pan {
-            app.ui.preferences.pan_hold = crate::preferences::Hold::Alt;
+            app.ui.preferences.pan_hold = crate::preferences::Hold::Shift;
         } else {
-            app.ui.preferences.zoom_hold = crate::preferences::Hold::Alt;
+            app.ui.preferences.zoom_hold = crate::preferences::Hold::Shift;
         }
         visibility_frame(
             &mut app,
             &ctx,
-            egui::Modifiers::ALT,
+            egui::Modifiers::SHIFT,
             vec![egui::Event::PointerMoved(START), primary_event(START, true)],
         );
         assert!(app.viewport.gesture == Some(Gesture::Orbit));
         visibility_frame(
             &mut app,
             &ctx,
-            egui::Modifiers::ALT,
+            egui::Modifiers::SHIFT,
             vec![egui::Event::PointerMoved(START + Vec2::new(40., 40.))],
         );
         visibility_frame(
             &mut app,
             &ctx,
-            egui::Modifiers::ALT,
+            egui::Modifiers::SHIFT,
             vec![primary_event(START + Vec2::new(40., 40.), false)],
         );
         assert_eq!(app.document.geometry_snapshot(), before);

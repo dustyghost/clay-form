@@ -3,11 +3,29 @@ use super::*;
 use crate::{preferences::MaskShape, viewport::TransformMode};
 
 impl App {
+    pub(super) fn temporary_mask_binding(&self, ctx: &egui::Context) -> &preferences::HoldBinding {
+        if self.ui.preferences.selection_mode == preferences::SelectionMode::Mask
+            && ctx.input(|i| self.ui.preferences.visibility_hold.active(i))
+        {
+            &self.ui.preferences.visibility_hold
+        } else {
+            &self.ui.preferences.mask_hold
+        }
+    }
+    fn mask_hold_requested(&self, ctx: &egui::Context) -> bool {
+        // The shared hold takes priority over the optional dedicated mask binding.
+        if ctx.input(|i| self.ui.preferences.visibility_hold.active(i)) {
+            self.ui.preferences.selection_mode == preferences::SelectionMode::Mask
+        } else {
+            ctx.input(|i| self.ui.preferences.mask_hold.active(i))
+        }
+    }
+
     pub(super) fn temporary_mask_requested(&self, ctx: &egui::Context) -> bool {
         !self.ui.mask_suppressed
             && !ctx.wants_keyboard_input()
             && self.temporary_mask_available()
-            && ctx.input(|i| self.ui.preferences.mask_hold.active(i))
+            && self.mask_hold_requested(ctx)
             && !self.temporary_visibility_active(ctx)
     }
     pub(super) fn temporary_mask_available(&self) -> bool {
@@ -37,8 +55,7 @@ impl App {
     /// and blocks the still-down pen until release. The normal tool never changes.
     pub(super) fn update_temporary_mask(&mut self, ui: &egui::Ui) -> bool {
         let ctx = ui.ctx();
-        let held = ctx.input(|i| self.ui.preferences.mask_hold.active(i));
-        let visibility = ctx.input(|i| self.ui.preferences.visibility_hold.active(i));
+        let held = self.mask_hold_requested(ctx);
         let escape = ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let was_active = self.ui.mask_active;
         if !held && ctx.input(|i| i.focused) {
@@ -59,11 +76,7 @@ impl App {
         let eligible = self.temporary_mask_available()
             && ctx.input(|i| i.focused)
             && !ctx.wants_keyboard_input();
-        let active = held
-            && !visibility
-            && !self.ui.mask_suppressed
-            && eligible
-            && (was_active || over_viewport);
+        let active = held && !self.ui.mask_suppressed && eligible && (was_active || over_viewport);
         if active != was_active {
             // Never mix a mask gesture into an already-started sculpt/modeling edit.
             let was_dragging = self.viewport.gesture.is_some();
@@ -109,10 +122,14 @@ impl App {
     pub(super) fn paint_temporary_mask_status(&self, ui: &egui::Ui) {
         let preset = &self.ui.preferences.mask_preset;
         let text = format!(
-            "Hold to mask · {} · {} · {} · release to restore tool",
-            self.ui.preferences.mask_hold.label(),
+            "Selection · Mask · {} · {} · {} · release to restore tool",
+            self.temporary_mask_binding(ui.ctx()).label(),
             preset.shape.label(),
-            if preset.erase { "Erase" } else { "Add" }
+            if preset.erase ^ ui.input(|i| i.modifiers.alt) {
+                "Erase"
+            } else {
+                "Add"
+            }
         );
         let rect = self.ui.viewport_menu.viewport_rect.unwrap_or(ui.max_rect());
         let color = egui::Color32::LIGHT_GREEN;
@@ -264,7 +281,7 @@ mod tests {
     }
 
     #[test]
-    fn temporary_mask_modifier_chords_do_not_zoom_smooth_or_reverse() {
+    fn temporary_mask_modifier_chords_do_not_navigate_or_sculpt() {
         for modifiers in [Modifiers::CTRL, Modifiers::SHIFT, Modifiers::ALT] {
             let (mut app, ctx, p) = setup();
             app.ui.preferences.mask_hold = HoldBinding {
@@ -273,6 +290,9 @@ mod tests {
                 alt: modifiers.alt,
                 ..Default::default()
             };
+            if modifiers.alt {
+                app.document.invert_mask().unwrap();
+            }
             let vertices = app.document.mesh().vertices.clone();
             let camera = (
                 app.camera.yaw,
@@ -490,10 +510,7 @@ mod tests {
             vec![Event::PointerMoved(p)],
         );
         assert!(!app.ui.mask_active);
-        assert_eq!(
-            app.viewport_menu_context(&ctx),
-            crate::ui::context_menu::ViewportMenuContext::Visibility
-        );
+        assert!(app.temporary_visibility_active(&ctx));
         frame(&mut app, &ctx, Modifiers::CTRL, vec![]);
         assert!(app.ui.mask_active);
         app.ui.preferences.mask_hold = HoldBinding::default();
@@ -529,7 +546,7 @@ mod tests {
         app.ui
             .preferences
             .bind(
-                Action::ViewportContextMenu,
+                Action::MaskVisibilityMenu,
                 preferences::Shortcut::new(Key::F2, Modifiers::NONE),
             )
             .unwrap();
@@ -642,7 +659,7 @@ mod tests {
         };
         let p = Pos2::new(500., 400.);
         render(&mut app, vec![Event::PointerMoved(p)]);
-        render(&mut app, vec![key(Key::M, true), key(Key::Q, true)]);
+        render(&mut app, vec![key(Key::M, true), key(Key::X, true)]);
         let menu = render(&mut app, vec![]);
         assert!(app.ui.viewport_menu.context.is_some());
         app.ui.viewport_menu.selected = 2;
@@ -665,5 +682,132 @@ mod tests {
         capture.save(directory.join("temporary-mask-menu.png"), &menu);
         capture.save(directory.join("temporary-mask-line-preview.png"), &preview);
         capture.save(directory.join("temporary-mask-applied.png"), &applied);
+    }
+    #[test]
+    fn temporary_mask_alt_reverses_brush_line_and_lasso_without_changing_preset() {
+        let alt_button = |pos, pressed| Event::PointerButton {
+            pos,
+            pressed,
+            button: egui::PointerButton::Primary,
+            modifiers: Modifiers::ALT,
+        };
+        for shape in [MaskShape::Brush, MaskShape::Line, MaskShape::Lasso] {
+            for saved_erase in [false, true] {
+                let (mut app, ctx, _) = setup();
+                app.ui.preferences.mask_preset.shape = shape;
+                app.ui.preferences.mask_preset.erase = saved_erase;
+                if !saved_erase {
+                    app.document.invert_mask().unwrap();
+                }
+                let before = app.document.geometry_snapshot();
+                let count = app.document.history_counts().0;
+                let start = if shape == MaskShape::Brush {
+                    Pos2::new(500., 400.)
+                } else {
+                    Pos2::new(490., 150.)
+                };
+                frame(
+                    &mut app,
+                    &ctx,
+                    Modifiers::NONE,
+                    vec![key(Key::M, true), Event::PointerMoved(start)],
+                );
+                frame(
+                    &mut app,
+                    &ctx,
+                    Modifiers::ALT,
+                    vec![alt_button(start, true)],
+                );
+                let points = if shape == MaskShape::Brush {
+                    vec![Pos2::new(520., 400.)]
+                } else {
+                    vec![
+                        Pos2::new(780., 150.),
+                        Pos2::new(780., 680.),
+                        Pos2::new(490., 680.),
+                    ]
+                };
+                let end = *points.last().unwrap();
+                frame(
+                    &mut app,
+                    &ctx,
+                    Modifiers::ALT,
+                    points.into_iter().map(Event::PointerMoved).collect(),
+                );
+                frame(&mut app, &ctx, Modifiers::ALT, vec![alt_button(end, false)]);
+                frame(&mut app, &ctx, Modifiers::NONE, vec![key(Key::M, false)]);
+                assert_eq!(app.ui.preferences.mask_preset.erase, saved_erase);
+                assert_ne!(app.document.mesh().mask, before.mesh.mask, "{shape:?}");
+                assert_eq!(app.document.mesh().vertices, before.mesh.vertices);
+                assert_eq!(app.document.history_counts().0, count + 1);
+                app.document.undo();
+                assert_eq!(app.document.geometry_snapshot(), before);
+            }
+        }
+    }
+
+    #[test]
+    fn shared_selection_hold_masks_shapes_and_release_cannot_sculpt_or_hide() {
+        for shape in [MaskShape::Brush, MaskShape::Line, MaskShape::Lasso] {
+            let (mut app, ctx, centre) = setup();
+            app.ui.preferences.mask_hold = HoldBinding::default();
+            app.ui.preferences.selection_mode = preferences::SelectionMode::Mask;
+            app.ui.preferences.mask_preset.shape = shape;
+            let before = app.document.geometry_snapshot();
+            let selected = app.ui.selected;
+            let hold = Modifiers::CTRL | Modifiers::SHIFT;
+            frame(&mut app, &ctx, hold, vec![Event::PointerMoved(centre)]);
+            assert!(app.ui.mask_active);
+            assert!(!app.temporary_visibility_active(&ctx));
+            let start = if shape == MaskShape::Brush {
+                centre
+            } else {
+                Pos2::new(490., 150.)
+            };
+            let points = if shape == MaskShape::Brush {
+                vec![centre + Vec2::new(25., 0.)]
+            } else {
+                vec![
+                    Pos2::new(780., 150.),
+                    Pos2::new(780., 680.),
+                    Pos2::new(490., 680.),
+                ]
+            };
+            frame(
+                &mut app,
+                &ctx,
+                hold,
+                vec![Event::PointerMoved(start), button(start, true)],
+            );
+            frame(
+                &mut app,
+                &ctx,
+                hold,
+                points.iter().copied().map(Event::PointerMoved).collect(),
+            );
+            frame(
+                &mut app,
+                &ctx,
+                hold,
+                vec![button(*points.last().unwrap(), false)],
+            );
+            assert!(
+                app.document.mesh().mask.iter().any(|&m| m > 0.),
+                "{shape:?}"
+            );
+            let masked = app.document.geometry_snapshot();
+            assert_eq!(masked.mesh.vertices, before.mesh.vertices);
+            assert_eq!(masked.mesh.hidden_faces, before.mesh.hidden_faces);
+            frame(&mut app, &ctx, Modifiers::NONE, vec![]);
+            assert!(!app.ui.selection_brush_active());
+            assert_eq!(
+                app.ui.brush_index_for_context(&app.document, &ctx),
+                Some(selected)
+            );
+            assert_eq!(app.document.geometry_snapshot(), masked);
+            assert_eq!(app.document.history_counts(), (1, 0));
+            app.dispatch(Command::Undo, &ctx);
+            assert_eq!(app.document.geometry_snapshot(), before);
+        }
     }
 }

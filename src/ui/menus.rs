@@ -371,13 +371,13 @@ impl UiState {
                     });
                 ui.separator();
                 ui.label(format!(
-                    "Hold {}: remembered Hide/Isolate",
+                    "Hold {}: mode chosen in X menu",
                     self.preferences.visibility_hold.label()
                 ));
                 ui.label(format!(
                     "Tool menu: {}",
                     self.preferences
-                        .shortcut(&Action::ViewportContextMenu)
+                        .shortcut(&Action::MaskVisibilityMenu)
                         .map_or("Unbound".into(), |s| s.label())
                 ));
                 ui.label("Rectangle click: hide group; last visible group flips visibility");

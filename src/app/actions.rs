@@ -24,6 +24,15 @@ impl App {
                 self.open_viewport_menu(ctx);
                 None
             }
+            Action::MaskVisibilityMenu | Action::TransformMenu => {
+                self.open_quick_menu(ctx, action);
+                None
+            }
+            Action::ModelAxis(axis) => {
+                self.viewport.cancel(&mut self.document);
+                self.ui.modeling.axis = axis;
+                None
+            }
             Action::TemporaryVisibilityRectangle | Action::TemporaryVisibilityLasso => {
                 self.ui.preferences.visibility_selection.shape =
                     if action == Action::TemporaryVisibilityRectangle {
@@ -407,7 +416,16 @@ impl App {
                         VisibilityShape::Path
                     };
                 let tool = self.ui.preferences.visibility_selection.tool();
-                if self.temporary_visibility_active(ctx) {
+                if self.temporary_visibility_active(ctx)
+                    || self.ui.viewport_menu.context
+                        == Some(crate::ui::context_menu::ViewportMenuContext::Visibility)
+                {
+                    if matches!(
+                        self.ui.selection_tool,
+                        Some(crate::viewport::SelectionTool::Visibility(_))
+                    ) {
+                        self.ui.selection_tool = Some(tool);
+                    }
                     None
                 } else {
                     Some(Command::SelectTool(
@@ -528,6 +546,17 @@ impl App {
                 let mut settings = self.document.mesh_settings().adaptive.clone();
                 settings.enabled = true;
                 Some(Command::SetAdaptive(settings))
+            }
+            Action::UniversalTransform => {
+                if self.ui.transform_mode != crate::viewport::TransformMode::Sculpt {
+                    Some(Command::TransformMode(
+                        crate::viewport::TransformMode::Sculpt,
+                    ))
+                } else {
+                    Some(Command::TransformOperation(
+                        crate::viewport::TransformOperation::Universal,
+                    ))
+                }
             }
             Action::Sculpt => Some(Command::TransformMode(
                 crate::viewport::TransformMode::Sculpt,

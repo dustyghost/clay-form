@@ -60,9 +60,41 @@ impl UiState {
             .constrain_to(viewport)
             .show(ctx, |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.set_max_width((viewport.width() - 32.).clamp(160., 300.));
+                    let width = if self.transform_operation == Operation::Universal {
+                        200.
+                    } else {
+                        300.
+                    };
+                    ui.set_max_width((viewport.width() - 32.).clamp(160., width));
                     ui.add_enabled_ui(enabled, |ui| {
                         self.menu_placement_controls(ui, BuiltinMenu::Transform, false);
+                        if self.transform_operation == Operation::Universal {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.strong("Universal")
+                                    .on_hover_text(Operation::Universal.hint());
+                                if ui
+                                    .small_button("Reset pivot")
+                                    .customize(Action::ResetPivot)
+                                    .clicked()
+                                {
+                                    commands.push(Command::ResetTransformPivot);
+                                }
+                                if ui.small_button("Done").clicked() {
+                                    commands.push(Command::TransformMode(Mode::Sculpt));
+                                }
+                            });
+                            ui.weak("Drag centre diamond to move pivot");
+                            let key = self
+                                .preferences
+                                .shortcut(&Action::UniversalTransform)
+                                .map_or("Unbound".into(), |s| s.label());
+                            let menu = self
+                                .preferences
+                                .shortcut(&Action::TransformMenu)
+                                .map_or("Unbound".into(), |s| s.label());
+                            ui.weak(format!("{key}: sculpt · {menu}: transform options"));
+                            return;
+                        }
                         ui.horizontal_wrapped(|ui| {
                             ui.strong("Transform");
                             for (mode, label) in [

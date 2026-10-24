@@ -596,8 +596,17 @@ The same controls are also in **Model → Modeling** on the top bar. Use its Pan
 
 The Q menu shows functions for the current component mode and marks the active choices. Choose with the mouse/pen or use Up/Down and Enter. Picking a function closes the menu and keeps the current selection. Escape, an outside click or focus loss dismisses the menu without editing geometry. Finish the current drag before opening it.
 
-Change or clear **Viewport tool menu** in **Settings → Key settings**. Its displayed tooltip follows the assigned shortcut; the default Q does not replace right-drag orbit or middle-drag pan. Existing custom bindings remain intact when preferences upgrade; if Q is already assigned, the new menu starts unbound.
+Change or clear **Modeling quick menu** in **Settings → Key settings**. Its displayed tooltip follows the assigned shortcut; the default Q does not replace right-drag orbit or middle-drag pan. Existing custom bindings remain intact when preferences upgrade; if Q is already assigned, the new menu starts unbound.
 
-Holding the configured **Hold for visibility** chord opens the visibility menu instead. Choose Rectangle or Lasso and keep holding to select a region; release the hold to resume the previous Modeling/sculpt tool. Opening or closing the menu never paints or edits geometry, and releasing the hold while the menu is open closes it. Releasing the hold cancels an unfinished selection gesture; completed selections remain. Escape cancels temporary visibility until its hold is released. The selected shape is remembered during the session.
+**Q** always opens Modeling. **X** opens the mask/visibility chooser, whose selected tab decides whether Ctrl+Shift masks or changes visibility. The shared hold and all three quick-menu bindings can be changed, cleared and reset in Key settings. Hold shortcuts support modifier-only and key-plus-modifier chords. Release the hold to restore the previous tool; unfinished gestures are cancelled. **Alt** temporarily reverses Add/Erase masking or Hide/Isolate visibility.
 
-Both the hold and menu invocation can be changed, cleared and reset in Key settings. Modifier-only and key-plus-modifier holds are supported. For example, set the visibility hold to Alt and the tool menu to F2: Alt+F2 opens the visibility chooser. The menu key ignores only the active hold's modifiers; unrelated shortcut modifiers still matter. Visibility takes priority over Smooth, Reverse, zoom/pan holds and Modeling selection subtraction while the full visibility chord is down; middle/right-button navigation remains available. Settings reports overlapping modifiers and action keys. Text entry and modal editors suppress tool shortcuts.
+**E** opens transform options. In Modeling it offers Move/Rotate/Scale, Free/Gizmo/Axis interaction and applicable axis choices. Otherwise it offers object transforms, World axes/Action Line, pivot controls and Respect mask. Opening the menu makes no geometry edit; choose options and then an operation to begin using it.
+
+
+### Universal transform gizmo
+
+Press **T** to show the universal gizmo for the active object. All handles are available together: colored arrows move along X/Y/Z, colored squares scale along an axis, and colored rings rotate around an axis. The white circle moves freely in the view plane; the white square scales uniformly.
+
+Drag the **centre diamond** to move the pivot in the view plane without moving the mesh or adding an Undo step. Rotation and scaling then use that pivot. **Reset pivot** returns it to the model centre; **Place pivot** remains available for clicking a point on the surface. Pivot placement is session-only. The existing Respect mask setting applies to geometry transforms.
+
+Press **T** again to return to sculpting. T also returns to sculpting from the other object transform modes. Each geometry drag remains one Undo step. The shortcut can be rebound or cleared in Key settings; an existing custom T binding is preserved.

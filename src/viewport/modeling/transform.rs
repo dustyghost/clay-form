@@ -30,6 +30,7 @@ fn ring(axis: Vec3, pivot: Vec3, color: Color32, label: &'static str) -> Ring {
         pivot,
         color,
         label,
+        radius: SIZE,
     }
 }
 fn vertices(mesh: &Mesh, components: &BTreeSet<Component>) -> Vec<usize> {

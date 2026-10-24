@@ -247,6 +247,10 @@ impl UiState {
         }
         let sculpt = document.primitive().is_none() && document.active_visible();
         match action {
+            Action::UniversalTransform => {
+                self.transform_mode != crate::viewport::TransformMode::Sculpt
+                    || (document.active_visible() && !document.mesh().vertices.is_empty())
+            }
             Action::Move
             | Action::Scale
             | Action::Rotate
@@ -492,9 +496,15 @@ impl UiState {
         let brush = active.map(|index| &document.brushes()[index]);
         match action {
             Action::ToggleStencil => document.stencil().is_some_and(|s| s.enabled),
-            Action::SelectBrush(id) => brush.is_some_and(|b| b.identity() == *id),
+            Action::SelectBrush(id) => self
+                .highlighted_brush_index(document, ctx)
+                .is_some_and(|index| document.brushes()[index].identity() == *id),
             Action::ModelTool(tool) => self.modeling.active && self.modeling.tool == *tool,
             Action::ModelTarget(span) => self.modeling.active && self.modeling.span == *span,
+            Action::ModelAxis(axis) => self.modeling.active && self.modeling.axis == *axis,
+            Action::ModelInteraction(mode) => {
+                self.modeling.active && self.modeling.interaction == *mode
+            }
             Action::ModelProtectMask => self.modeling.protect_mask,
             Action::ModelSmoothPreview => self.modeling.smooth_preview,
             Action::ModelTapRepeat => self.modeling.tap_repeat,
@@ -600,6 +610,10 @@ impl UiState {
             Action::Slice => self.slice_active,
             Action::Sculpt => self.transform_mode == crate::viewport::TransformMode::Sculpt,
             Action::Transform => self.transform_mode == crate::viewport::TransformMode::World,
+            Action::UniversalTransform => {
+                self.transform_mode == crate::viewport::TransformMode::World
+                    && self.transform_operation == crate::viewport::TransformOperation::Universal
+            }
             Action::LineTransform => {
                 self.transform_mode == crate::viewport::TransformMode::ActionLine
             }
@@ -956,22 +970,22 @@ impl UiState {
                     for value in Hold::ALL { ui.selectable_value(hold, value, format!("{value:?}")); }
                 });
             }
-            super::context_menu::hold_binding_editor(ui, "Hold to mask", &mut self.preferences.mask_hold);
+            super::context_menu::hold_binding_editor(ui, "Dedicated mask hold (optional)", &mut self.preferences.mask_hold);
             for conflict in self.mask_binding_conflicts() { ui.colored_label(egui::Color32::YELLOW, conflict); }
-            ui.weak("Masking takes priority over brush and navigation modifiers while held; visibility wins overlapping holds. Right/middle drag and wheel remain available.");
-            super::context_menu::hold_binding_editor(ui, "Hold for visibility", &mut self.preferences.visibility_hold);
+            ui.weak("Alt reverses masking and visibility without changing the saved operation. The shared selection hold follows the X menu and wins overlapping holds. Right/middle drag and wheel remain available.");
+            super::context_menu::hold_binding_editor(ui, "Hold for selection (X menu)", &mut self.preferences.visibility_hold);
             if self.preferences.visibility_hold.enabled() {
                 let h = &self.preferences.visibility_hold;
                 for (label, hold) in [("Smooth", self.preferences.smooth), ("Reverse", self.preferences.reverse), ("Zoom", self.preferences.zoom_hold), ("Pan", self.preferences.pan_hold)] {
                     let overlaps = match hold { Hold::Ctrl => h.ctrl || h.command, Hold::Shift => h.shift, Hold::Alt => h.alt, Hold::Disabled => false };
-                    if overlaps { ui.weak(format!("Visibility overrides {label} while its full chord is held.")); }
+                    if overlaps { ui.weak(format!("Selection overrides {label} while its full chord is held.")); }
                 }
-                if h.ctrl || h.command { ui.weak("Visibility overrides Ctrl/Cmd component-selection subtraction while its full chord is held."); }
+                if h.ctrl || h.command { ui.weak("Selection overrides Ctrl/Cmd component-selection subtraction while its full chord is held."); }
                 for (action,binding) in &self.preferences.bindings {
-                    if let Some(binding) = binding && self.preferences.visibility_hold.key.as_ref() == Some(&binding.key) { ui.colored_label(egui::Color32::YELLOW, format!("Visibility hold shares a key with {}. Clear or change one binding.", action.label())); }
+                    if let Some(binding) = binding && self.preferences.visibility_hold.key.as_ref() == Some(&binding.key) { ui.colored_label(egui::Color32::YELLOW, format!("Selection hold shares a key with {}. Clear or change one binding.", action.label())); }
                 }
             }
-            ui.weak("Temporary visibility takes priority over tool modifiers and selection. Middle/right-button navigation remains available. Zoom takes priority over pan with shared modifiers. Pan starts off the model; on the model, brush modifiers apply. The configured visibility hold selects regions.");
+            ui.weak("Temporary selection takes priority over tool modifiers. Middle/right-button navigation remains available. Zoom takes priority over pan with shared modifiers. Pan starts off the model; on the model, brush modifiers apply. Choose Mask or Visibility in the X menu; the hold uses that mode and its remembered shape.");
             if ui.button("Reset keys to defaults").clicked() {
                 let defaults = Preferences::default();
                 self.preferences.visibility_hold = defaults.visibility_hold;

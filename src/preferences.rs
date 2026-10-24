@@ -346,9 +346,17 @@ pub(crate) struct ModelingPreset {
     pub name: String,
     pub options: crate::viewport::ModelingOptions,
 }
+/// The shared selection hold follows the mode chosen in the X menu.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum SelectionMode {
+    Mask,
+    #[default]
+    Visibility,
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct Preferences {
+    pub selection_mode: SelectionMode,
     pub visibility_selection: VisibilitySettings,
     pub modeling_presets: Vec<ModelingPreset>,
     pub next_modeling_preset_id: u64,
@@ -420,6 +428,16 @@ impl Default for Preferences {
                 .map(|(i, a)| {
                     let key = if a == Action::ViewportContextMenu {
                         Some((Key::Q, none))
+                    } else if a == Action::MaskVisibilityMenu {
+                        Some((Key::X, none))
+                    } else if a == Action::TransformMenu {
+                        Some((Key::E, none))
+                    } else if a == Action::UniversalTransform {
+                        Some((Key::T, none))
+                    } else if a == Action::Symmetry {
+                        Some((Key::X, Modifiers::SHIFT))
+                    } else if a == Action::Wireframe {
+                        Some((Key::W, none))
                     } else if a == Action::SaveAs {
                         Some((Key::S, ctrl | Modifiers::SHIFT))
                     } else {
@@ -429,6 +447,7 @@ impl Default for Preferences {
                 })
                 .map(|(a, key)| (a, key.map(|(k, m)| Shortcut::new(k, m))))
                 .collect(),
+            selection_mode: SelectionMode::default(),
             mask_hold: HoldBinding::default(),
             mask_preset: MaskPreset::default(),
             visibility_hold: HoldBinding::visibility_default(),
@@ -884,6 +903,67 @@ pub(crate) fn save(path: &std::path::Path, prefs: &Preferences) -> Result<(), St
 }
 pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
     let mut prefs: Preferences = crate::persistence::read_json(&path.to_string_lossy())?;
+    // This update introduces T and moves the stock selection-menu key from W to X.
+    // Explicit unbindings and non-default assignments remain intact.
+    if !prefs
+        .bindings
+        .iter()
+        .any(|(a, _)| *a == Action::UniversalTransform)
+    {
+        let previous = prefs
+            .bindings
+            .iter()
+            .find(|(a, _)| *a == Action::MaskVisibilityMenu);
+        let had_selection_menu = previous.is_some();
+        let migrate = previous.is_none()
+            || previous.is_some_and(|(_, key)| {
+                key.as_ref() == Some(&Shortcut::new(Key::W, Modifiers::NONE))
+            });
+        if migrate {
+            if prefs.shortcut(&Action::Symmetry) == Some(&Shortcut::new(Key::X, Modifiers::NONE)) {
+                let replacement = Shortcut::new(Key::X, Modifiers::SHIFT);
+                let free = !prefs
+                    .bindings
+                    .iter()
+                    .any(|(_, key)| key.as_ref() == Some(&replacement));
+                if let Some((_, key)) = prefs
+                    .bindings
+                    .iter_mut()
+                    .find(|(a, _)| *a == Action::Symmetry)
+                {
+                    *key = free.then_some(replacement);
+                }
+            }
+            let replacement = Shortcut::new(Key::X, Modifiers::NONE);
+            let free = !prefs
+                .bindings
+                .iter()
+                .any(|(_, key)| key.as_ref() == Some(&replacement));
+            if free
+                && let Some((_, key)) = prefs
+                    .bindings
+                    .iter_mut()
+                    .find(|(a, _)| *a == Action::MaskVisibilityMenu)
+            {
+                *key = Some(replacement);
+            }
+        }
+        // Restore the displaced stock wireframe key only after W is free.
+        let wireframe = Shortcut::new(Key::W, Modifiers::NONE);
+        if had_selection_menu
+            && prefs.shortcut(&Action::Wireframe) == Some(&Shortcut::new(Key::W, Modifiers::SHIFT))
+            && !prefs
+                .bindings
+                .iter()
+                .any(|(_, key)| key.as_ref() == Some(&wireframe))
+            && let Some((_, key)) = prefs
+                .bindings
+                .iter_mut()
+                .find(|(a, _)| *a == Action::Wireframe)
+        {
+            *key = Some(wireframe);
+        }
+    }
     // Add newly introduced actions without stealing existing shortcuts or clearing explicit unbindings.
     for (action, mut shortcut) in Preferences::default().bindings {
         if !prefs.bindings.iter().any(|(a, _)| *a == action) {
@@ -964,13 +1044,13 @@ mod tests {
                         physical_key: None,
                         pressed: true,
                         repeat: false,
-                        modifiers: Modifiers::SHIFT,
+                        modifiers: Modifiers::NONE,
                     },
                 ],
                 ..Default::default()
             },
             |ctx| {
-                assert_eq!(prefs.actions(ctx), vec![Action::Save]);
+                assert_eq!(prefs.actions(ctx), vec![Action::Save, Action::Wireframe]);
                 assert!(prefs.actions(ctx).is_empty());
             },
         );
@@ -1403,5 +1483,151 @@ mod sidebar_tests {
         restored.pinned_menus.clear();
         restored.sidebar_order.push(restored.sidebar_order[0]);
         assert!(restored.validate().is_err());
+    }
+}
+
+#[cfg(test)]
+mod quick_menu_migration_tests {
+    use super::*;
+    #[test]
+    fn quick_menu_migration_preserves_custom_bindings_and_moves_stock_symmetry() {
+        for custom_x in [false, true] {
+            let mut prefs = Preferences::default();
+            prefs.bindings.retain(|(a, _)| {
+                !matches!(
+                    a,
+                    Action::MaskVisibilityMenu | Action::TransformMenu | Action::UniversalTransform
+                )
+            });
+            prefs
+                .bind(
+                    if custom_x {
+                        Action::Guides
+                    } else {
+                        Action::Symmetry
+                    },
+                    Shortcut::new(Key::X, Modifiers::NONE),
+                )
+                .unwrap();
+            let path = std::env::temp_dir().join(format!(
+                "clay-quick-menu-{}-{custom_x}.json",
+                std::process::id()
+            ));
+            crate::persistence::write_json(&path.to_string_lossy(), &prefs).unwrap();
+            let loaded = load(&path).unwrap();
+            loaded.validate().unwrap();
+            assert_eq!(
+                loaded.shortcut(&Action::TransformMenu),
+                Some(&Shortcut::new(Key::E, Modifiers::NONE))
+            );
+            if custom_x {
+                assert!(loaded.shortcut(&Action::MaskVisibilityMenu).is_none());
+                assert_eq!(
+                    loaded.shortcut(&Action::Guides),
+                    prefs.shortcut(&Action::Guides)
+                );
+            } else {
+                assert_eq!(
+                    loaded.shortcut(&Action::MaskVisibilityMenu),
+                    Some(&Shortcut::new(Key::X, Modifiers::NONE))
+                );
+                assert_eq!(
+                    loaded.shortcut(&Action::Symmetry),
+                    Some(&Shortcut::new(Key::X, Modifiers::SHIFT))
+                );
+            }
+            save(&path, &loaded).unwrap();
+            assert_eq!(load(&path).unwrap(), loaded);
+            std::fs::remove_file(path).unwrap();
+        }
+    }
+    #[test]
+    fn universal_key_upgrade_moves_previous_w_and_preserves_custom_t_and_unbinding() {
+        for unbound in [false, true] {
+            let mut prefs = Preferences::default();
+            prefs
+                .bindings
+                .retain(|(a, _)| *a != Action::UniversalTransform);
+            prefs
+                .bind(Action::Wireframe, Shortcut::new(Key::W, Modifiers::SHIFT))
+                .unwrap();
+            prefs
+                .bind(
+                    Action::MaskVisibilityMenu,
+                    Shortcut::new(Key::W, Modifiers::NONE),
+                )
+                .unwrap();
+            prefs
+                .bind(Action::Symmetry, Shortcut::new(Key::X, Modifiers::NONE))
+                .unwrap();
+            prefs
+                .bind(Action::Guides, Shortcut::new(Key::T, Modifiers::NONE))
+                .unwrap();
+            if unbound {
+                prefs.clear_binding(&Action::MaskVisibilityMenu);
+            }
+            let path = std::env::temp_dir().join(format!(
+                "clay-universal-keys-{}-{unbound}.json",
+                std::process::id()
+            ));
+            crate::persistence::write_json(&path.to_string_lossy(), &prefs).unwrap();
+            let loaded = load(&path).unwrap();
+            loaded.validate().unwrap();
+            assert_eq!(
+                loaded.shortcut(&Action::Wireframe),
+                Some(&Shortcut::new(Key::W, Modifiers::NONE))
+            );
+            assert!(loaded.shortcut(&Action::UniversalTransform).is_none());
+            assert_eq!(
+                loaded.shortcut(&Action::Guides),
+                prefs.shortcut(&Action::Guides)
+            );
+            if unbound {
+                assert!(loaded.shortcut(&Action::MaskVisibilityMenu).is_none());
+            } else {
+                assert_eq!(
+                    loaded.shortcut(&Action::MaskVisibilityMenu),
+                    Some(&Shortcut::new(Key::X, Modifiers::NONE))
+                );
+                assert_eq!(
+                    loaded.shortcut(&Action::Symmetry),
+                    Some(&Shortcut::new(Key::X, Modifiers::SHIFT))
+                );
+            }
+            save(&path, &loaded).unwrap();
+            assert_eq!(load(&path).unwrap(), loaded);
+            std::fs::remove_file(path).unwrap();
+        }
+    }
+    #[test]
+    fn wireframe_upgrade_preserves_custom_keys_and_occupied_w() {
+        for (binding, occupied) in [
+            (None, false),
+            (Some(Shortcut::new(Key::F2, Modifiers::NONE)), false),
+            (Some(Shortcut::new(Key::W, Modifiers::SHIFT)), true),
+        ] {
+            let mut prefs = Preferences::default();
+            prefs
+                .bindings
+                .retain(|(a, _)| *a != Action::UniversalTransform);
+            prefs.clear_binding(&Action::Wireframe);
+            if let Some(key) = binding.clone() {
+                prefs.bind(Action::Wireframe, key).unwrap();
+            }
+            if occupied {
+                prefs
+                    .bind(Action::Guides, Shortcut::new(Key::W, Modifiers::NONE))
+                    .unwrap();
+            }
+            let path = std::env::temp_dir().join(format!(
+                "clay-wireframe-upgrade-{}.json",
+                std::process::id()
+            ));
+            crate::persistence::write_json(&path.to_string_lossy(), &prefs).unwrap();
+            let loaded = load(&path).unwrap();
+            assert_eq!(loaded.shortcut(&Action::Wireframe), binding.as_ref());
+            loaded.validate().unwrap();
+            std::fs::remove_file(path).unwrap();
+        }
     }
 }

@@ -3,7 +3,8 @@ use crate::ui::context_menu::ViewportMenuContext;
 
 impl App {
     pub(crate) fn temporary_visibility_active(&self, ctx: &egui::Context) -> bool {
-        !self.ui.viewport_menu.suppress_visibility
+        self.ui.preferences.selection_mode == preferences::SelectionMode::Visibility
+            && !self.ui.viewport_menu.suppress_visibility
             && !ctx.wants_keyboard_input()
             && ctx.input(|i| i.focused && self.ui.preferences.visibility_hold.active(i))
             && self.document.primitive().is_none()
@@ -11,24 +12,10 @@ impl App {
             && !self.ui.paths_active
             && !self.ui.arrange_references
     }
-    pub(crate) fn viewport_menu_context(&self, ctx: &egui::Context) -> ViewportMenuContext {
-        if self.temporary_visibility_active(ctx) {
-            return ViewportMenuContext::Visibility;
-        }
-        if self.temporary_mask_requested(ctx) {
-            return ViewportMenuContext::Mask;
-        }
-        match self.ui.selection_tool {
-            Some(crate::viewport::SelectionTool::Visibility(_)) => ViewportMenuContext::Visibility,
-            Some(
-                crate::viewport::SelectionTool::MaskLasso
-                | crate::viewport::SelectionTool::MaskLassoOperation { .. }
-                | crate::viewport::SelectionTool::MaskLine { .. },
-            ) => ViewportMenuContext::Mask,
-            _ => ViewportMenuContext::Modeling,
-        }
-    }
     pub(crate) fn open_viewport_menu(&mut self, ctx: &egui::Context) {
+        self.open_quick_menu(ctx, Action::ViewportContextMenu);
+    }
+    pub(crate) fn open_quick_menu(&mut self, ctx: &egui::Context, action: Action) {
         if self.viewport.gesture.is_some()
             || self.viewport.modeling.dragging()
             || ctx.wants_keyboard_input()
@@ -44,7 +31,22 @@ impl App {
             .pointer_hover_pos()
             .filter(|p| rect.contains(*p))
             .unwrap_or(rect.center());
-        let context = self.viewport_menu_context(ctx);
+        let context = match action {
+            Action::TransformMenu => ViewportMenuContext::Transform,
+            Action::MaskVisibilityMenu => {
+                if self.temporary_visibility_active(ctx) {
+                    ViewportMenuContext::Visibility
+                } else if self.temporary_mask_requested(ctx) {
+                    ViewportMenuContext::Mask
+                } else {
+                    match self.ui.preferences.selection_mode {
+                        preferences::SelectionMode::Mask => ViewportMenuContext::Mask,
+                        preferences::SelectionMode::Visibility => ViewportMenuContext::Visibility,
+                    }
+                }
+            }
+            _ => ViewportMenuContext::Modeling,
+        };
         self.ui.viewport_menu.context = Some(context);
         self.ui.viewport_menu.position = Some(position);
         self.ui.viewport_menu.selected = self
@@ -54,20 +56,43 @@ impl App {
             .position(|entry| matches!(entry.action, Action::ModelTool(_)))
             .unwrap_or(0);
         self.ui.viewport_menu.just_opened = true;
-        self.ui.viewport_menu.hold = if self.temporary_visibility_active(ctx) {
-            Some(self.ui.preferences.visibility_hold.clone())
-        } else if context == ViewportMenuContext::Mask && self.temporary_mask_requested(ctx) {
-            Some(self.ui.preferences.mask_hold.clone())
-        } else {
-            None
-        };
+        self.ui.viewport_menu.hold =
+            if action == Action::MaskVisibilityMenu && self.temporary_visibility_active(ctx) {
+                Some(self.ui.preferences.visibility_hold.clone())
+            } else if context == ViewportMenuContext::Mask && self.temporary_mask_requested(ctx) {
+                Some(self.temporary_mask_binding(ctx).clone())
+            } else {
+                None
+            };
         self.viewport.wait_for_release();
     }
     pub(crate) fn show_viewport_menu(&mut self, ctx: &egui::Context) {
-        let was_open = self.ui.viewport_menu.context.is_some();
+        let context = self.ui.viewport_menu.context;
+        let was_open = context.is_some();
         let (action, closed) = self.ui.viewport_menu_popup(ctx, &self.document);
         if let Some(action) = action {
-            self.execute_action(action, ctx);
+            if context == Some(ViewportMenuContext::Visibility)
+                && matches!(
+                    action,
+                    Action::SelectVisibilityLine | Action::SelectVisibilityPath
+                )
+            {
+                // The popup may already be closed. Its choices configure the hold,
+                // whereas the same actions elsewhere start persistent selection tools.
+                self.ui.preferences.visibility_selection.shape =
+                    if action == Action::SelectVisibilityLine {
+                        preferences::VisibilityShape::Line
+                    } else {
+                        preferences::VisibilityShape::Path
+                    };
+            } else if action == Action::UniversalTransform {
+                self.dispatch(
+                    Command::TransformOperation(crate::viewport::TransformOperation::Universal),
+                    ctx,
+                );
+            } else {
+                self.execute_action(action, ctx);
+            }
         }
         if was_open || closed {
             self.viewport.wait_for_release();
@@ -111,8 +136,8 @@ mod tests {
         ctx: &egui::Context,
         modifiers: egui::Modifiers,
         events: Vec<egui::Event>,
-    ) {
-        let _ = ctx.run(
+    ) -> egui::FullOutput {
+        ctx.run(
             egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
                     egui::Pos2::ZERO,
@@ -126,7 +151,7 @@ mod tests {
                 app.shortcuts(ctx);
                 egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
             },
-        );
+        )
     }
     #[test]
     fn viewport_menu_keeps_modeling_selection_and_history_for_each_mode() {
@@ -254,7 +279,7 @@ mod tests {
         app.ui
             .preferences
             .bind(
-                Action::ViewportContextMenu,
+                Action::MaskVisibilityMenu,
                 Shortcut::new(egui::Key::F2, egui::Modifiers::NONE),
             )
             .unwrap();
@@ -315,7 +340,7 @@ mod tests {
             &ctx,
             egui::Modifiers::CTRL | egui::Modifiers::SHIFT,
             vec![key(
-                egui::Key::Q,
+                egui::Key::X,
                 egui::Modifiers::CTRL | egui::Modifiers::SHIFT,
             )],
         );
@@ -425,5 +450,189 @@ mod tests {
         ));
         let old: Preferences = serde_json::from_str("{}").unwrap();
         assert_eq!(old.visibility_hold, HoldBinding::visibility_default());
+    }
+    #[test]
+    fn quick_menus_route_q_x_e_and_keep_underlying_selection() {
+        let tap = |code, modifiers| {
+            let mut release = key(code, modifiers);
+            if let egui::Event::Key { pressed, .. } = &mut release {
+                *pressed = false;
+            }
+            vec![key(code, modifiers), release]
+        };
+        let (mut app, ctx) = setup();
+        let before = app.document.geometry_snapshot();
+        let history = app.document.history_counts();
+        let hold = egui::Modifiers::CTRL | egui::Modifiers::SHIFT;
+        for (key_code, context) in [
+            (egui::Key::Q, ViewportMenuContext::Modeling),
+            (egui::Key::X, ViewportMenuContext::Visibility),
+            (egui::Key::E, ViewportMenuContext::Transform),
+        ] {
+            frame(&mut app, &ctx, hold, tap(key_code, hold));
+            assert_eq!(app.ui.viewport_menu.context, Some(context));
+            frame(&mut app, &ctx, hold, tap(egui::Key::Escape, hold));
+            assert!(app.ui.modeling.active);
+        }
+        frame(&mut app, &ctx, egui::Modifiers::NONE, vec![]);
+        frame(
+            &mut app,
+            &ctx,
+            egui::Modifiers::NONE,
+            tap(egui::Key::E, egui::Modifiers::NONE),
+        );
+        let entries = app
+            .ui
+            .viewport_menu_entries(ViewportMenuContext::Transform, &app.document);
+        assert_eq!(entries[0].action, Action::ModelTool(ModelTool::Move));
+        frame(
+            &mut app,
+            &ctx,
+            egui::Modifiers::NONE,
+            tap(egui::Key::Enter, egui::Modifiers::NONE),
+        );
+        assert_eq!(app.ui.modeling.tool, ModelTool::Move);
+        assert!(app.ui.viewport_menu.context.is_none());
+        app.dispatch(Command::ModelingMode(false), &ctx);
+        frame(
+            &mut app,
+            &ctx,
+            egui::Modifiers::NONE,
+            tap(egui::Key::E, egui::Modifiers::NONE),
+        );
+        let entries = app
+            .ui
+            .viewport_menu_entries(ViewportMenuContext::Transform, &app.document);
+        assert_eq!(entries[0].action, Action::Move);
+        frame(
+            &mut app,
+            &ctx,
+            egui::Modifiers::NONE,
+            tap(egui::Key::Enter, egui::Modifiers::NONE),
+        );
+        assert_eq!(app.ui.transform_mode, crate::viewport::TransformMode::World);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert_eq!(app.document.history_counts(), history);
+    }
+
+    #[test]
+    fn quick_selection_menu_configures_presets_without_starting_a_tool() {
+        use crate::preferences::VisibilityShape;
+        for (action, shape) in [
+            (Action::SelectVisibilityLine, VisibilityShape::Line),
+            (Action::SelectVisibilityPath, VisibilityShape::Path),
+        ] {
+            let (mut app, ctx) = setup();
+            let before = app.document.geometry_snapshot();
+            let history = app.document.history_counts();
+            app.open_quick_menu(&ctx, Action::MaskVisibilityMenu);
+            app.ui.viewport_menu.selected = app
+                .ui
+                .viewport_menu_entries(ViewportMenuContext::Visibility, &app.document)
+                .iter()
+                .position(|entry| entry.action == action)
+                .unwrap();
+            // Exercise the real popup closing before its chosen action is dispatched.
+            frame(
+                &mut app,
+                &ctx,
+                egui::Modifiers::NONE,
+                vec![key(egui::Key::Enter, egui::Modifiers::NONE)],
+            );
+            assert!(app.ui.viewport_menu.context.is_none());
+            assert!(
+                app.ui.selection_tool.is_none(),
+                "Choosing {shape:?} must only set the hold preset"
+            );
+            assert!(app.ui.modeling.active);
+            assert_eq!(app.ui.preferences.visibility_selection.shape, shape);
+            assert_eq!(app.document.geometry_snapshot(), before);
+            assert_eq!(app.document.history_counts(), history);
+        }
+    }
+
+    #[test]
+    fn shared_selection_tabs_control_hold_and_restore_brush_without_edits() {
+        let (mut app, ctx) = setup();
+        let before = app.document.geometry_snapshot();
+        let history = app.document.history_counts();
+        let selected = app.ui.selected;
+        let mask_brush = app.ui.preferences.mask_preset.brush_index(&app.document);
+        let hold = egui::Modifiers::CTRL | egui::Modifiers::SHIFT;
+        let p = app.ui.viewport_menu.viewport_rect.unwrap().center();
+        frame(&mut app, &ctx, hold, vec![egui::Event::PointerMoved(p)]);
+        assert!(app.temporary_visibility_active(&ctx));
+        assert_eq!(
+            app.ui.brush_index_for_context(&app.document, &ctx),
+            mask_brush
+        );
+        frame(&mut app, &ctx, hold, vec![key(egui::Key::X, hold)]);
+        assert_eq!(
+            app.ui.viewport_menu.context,
+            Some(ViewportMenuContext::Visibility)
+        );
+        for (label, mode) in [
+            ("Mask", preferences::SelectionMode::Mask),
+            ("Visibility", preferences::SelectionMode::Visibility),
+        ] {
+            let output = frame(&mut app, &ctx, hold, vec![]);
+            let point = output
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) if text.galley.text() == label => {
+                        Some(text.pos + text.galley.size() * 0.5)
+                    }
+                    _ => None,
+                })
+                .expect("selection tab is rendered");
+            for pressed in [true, false] {
+                frame(
+                    &mut app,
+                    &ctx,
+                    hold,
+                    vec![
+                        egui::Event::PointerMoved(point),
+                        egui::Event::PointerButton {
+                            pos: point,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: hold,
+                        },
+                    ],
+                );
+            }
+            frame(&mut app, &ctx, hold, vec![egui::Event::PointerMoved(p)]);
+            assert_eq!(app.ui.preferences.selection_mode, mode);
+            assert_eq!(app.ui.mask_active, mode == preferences::SelectionMode::Mask);
+            assert_eq!(
+                app.temporary_visibility_active(&ctx),
+                mode == preferences::SelectionMode::Visibility
+            );
+            assert_eq!(
+                app.ui.brush_index_for_context(&app.document, &ctx),
+                mask_brush
+            );
+            assert_eq!(app.document.geometry_snapshot(), before);
+        }
+        frame(&mut app, &ctx, egui::Modifiers::NONE, vec![]);
+        assert!(app.ui.viewport_menu.context.is_none());
+        assert!(!app.ui.selection_brush_active());
+        assert_eq!(
+            app.ui.brush_index_for_context(&app.document, &ctx),
+            Some(selected)
+        );
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert_eq!(app.document.history_counts(), history);
+        assert!(app.ui.modeling.active);
+        let path =
+            std::env::temp_dir().join(format!("clay-selection-mode-{}.json", std::process::id()));
+        app.ui.preferences.selection_mode = preferences::SelectionMode::Mask;
+        preferences::save(&path, &app.ui.preferences).unwrap();
+        assert_eq!(
+            preferences::load(&path).unwrap().selection_mode,
+            preferences::SelectionMode::Mask
+        );
+        std::fs::remove_file(path).unwrap();
     }
 }

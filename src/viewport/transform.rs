@@ -18,13 +18,15 @@ pub(crate) enum TransformMode {
 pub(crate) enum TransformOperation {
     #[default]
     Move,
+    Universal,
     Scale,
     PlaceLine,
     Rotate,
     PlacePivot,
 }
 impl TransformOperation {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
+        Self::Universal,
         Self::PlaceLine,
         Self::Move,
         Self::Scale,
@@ -35,13 +37,14 @@ impl TransformOperation {
         mode != TransformMode::Sculpt
             && match self {
                 Self::PlaceLine => mode == TransformMode::ActionLine,
-                Self::PlacePivot => mode == TransformMode::World,
+                Self::PlacePivot | Self::Universal => mode == TransformMode::World,
                 _ => true,
             }
     }
     pub fn label(self) -> &'static str {
         match self {
             Self::Move => "Move",
+            Self::Universal => "Universal",
             Self::Scale => "Scale",
             Self::Rotate => "Rotate",
             Self::PlaceLine => "Set line",
@@ -51,6 +54,9 @@ impl TransformOperation {
     pub fn hint(self) -> &'static str {
         match self {
             Self::Move => "Drag an axis or the middle handle to move the model",
+            Self::Universal => {
+                "Arrows move · squares scale · rings rotate · centre diamond moves only the pivot"
+            }
             Self::Scale => "Drag an axis/end to stretch, or the middle to scale uniformly",
             Self::Rotate => {
                 "Drag a colored ring to rotate about that axis. Action Line rotates around its direction. Edge-on rings use a straight drag along the ring"
@@ -68,6 +74,7 @@ impl TransformOperation {
 #[derive(Clone, Copy, PartialEq)]
 enum Handle {
     Axis(Vec3, Vec2),
+    ScaleAxis(Vec3, Vec2),
     Free,
     Uniform,
     LineStart,
@@ -98,6 +105,9 @@ fn bounds_center(document: &Document) -> Vec3 {
     }
     (min + max) * 0.5
 }
+fn universal_size(scene: &Scene) -> f32 {
+    (scene.rect.width().min(scene.rect.height()) * 0.42).clamp(50., 130.)
+}
 impl TransformControls {
     pub fn finish_drag(&mut self) {
         self.drag = None;
@@ -126,14 +136,27 @@ impl TransformControls {
             }
         })
     }
-    fn rings(&self, document: &Document, mode: TransformMode, op: TransformOperation) -> Vec<Ring> {
-        if op != TransformOperation::Rotate
-            || !document.active_visible()
+    fn rings(
+        &self,
+        document: &Document,
+        scene: &Scene,
+        mode: TransformMode,
+        op: TransformOperation,
+    ) -> Vec<Ring> {
+        if !matches!(
+            op,
+            TransformOperation::Rotate | TransformOperation::Universal
+        ) || !document.active_visible()
             || document.mesh().vertices.is_empty()
         {
             return vec![];
         }
         let pivot = self.origin(document, mode);
+        let radius = if op == TransformOperation::Universal {
+            universal_size(scene) * (rotation::RADIUS / 130.)
+        } else {
+            rotation::RADIUS
+        };
         if mode == TransformMode::World {
             [
                 (Vec3(1., 0., 0.), controls::AXES[0], "Rotate X"),
@@ -146,6 +169,7 @@ impl TransformControls {
                 pivot,
                 color,
                 label,
+                radius,
             })
             .collect()
         } else if let Some([a, b]) = self.line
@@ -156,6 +180,7 @@ impl TransformControls {
                 pivot,
                 color: controls::ACTION,
                 label: "Rotate line",
+                radius,
             }]
         } else {
             vec![]
@@ -185,6 +210,48 @@ impl TransformControls {
                 )];
             }
             let origin = scene.project(pivot);
+            if op == TransformOperation::Universal {
+                let size = universal_size(scene);
+                let offset = size * (28. / 130.);
+                let mut handles = vec![
+                    (origin, Handle::Pivot, controls::NEUTRAL, "Move pivot"),
+                    (
+                        origin + Vec2::new(-offset, offset),
+                        Handle::Free,
+                        controls::NEUTRAL,
+                        "Move freely",
+                    ),
+                    (
+                        origin + Vec2::new(offset, offset),
+                        Handle::Uniform,
+                        controls::NEUTRAL,
+                        "Scale all",
+                    ),
+                ];
+                for (axis, color, label) in [
+                    (Vec3(1., 0., 0.), controls::AXES[0], "X"),
+                    (Vec3(0., 1., 0.), controls::AXES[1], "Y"),
+                    (Vec3(0., 0., 1.), controls::AXES[2], "Z"),
+                ] {
+                    let projected = scene.axis_direction(pivot, axis);
+                    if projected.length() > 0.1 {
+                        let direction = projected.normalized();
+                        handles.push((
+                            origin + direction * size,
+                            Handle::Axis(axis, projected),
+                            color,
+                            label,
+                        ));
+                        handles.push((
+                            origin + direction * size * 0.4,
+                            Handle::ScaleAxis(axis, projected),
+                            color,
+                            label,
+                        ));
+                    }
+                }
+                return handles;
+            }
             let mut handles = vec![(
                 origin,
                 if op == TransformOperation::Scale {
@@ -231,7 +298,9 @@ impl TransformControls {
                     controls::ACTION,
                     "MOVE",
                 )],
-                TransformOperation::Rotate | TransformOperation::PlacePivot => vec![],
+                TransformOperation::Rotate
+                | TransformOperation::PlacePivot
+                | TransformOperation::Universal => vec![],
                 TransformOperation::Scale => vec![
                     (
                         end,
@@ -259,12 +328,24 @@ impl TransformControls {
         op: TransformOperation,
         pointer: Pos2,
     ) -> Option<Handle> {
-        if op == TransformOperation::Rotate {
+        if op == TransformOperation::Universal
+            && let Some((_, handle, _, _)) = self
+                .handles(document, scene, mode, op)
+                .into_iter()
+                .filter(|(p, _, _, _)| p.distance(pointer) <= controls::HIT_RADIUS)
+                .min_by(|a, b| a.0.distance(pointer).total_cmp(&b.0.distance(pointer)))
+        {
+            return Some(handle);
+        }
+        if matches!(
+            op,
+            TransformOperation::Rotate | TransformOperation::Universal
+        ) {
             if pointer.distance(scene.project(self.origin(document, mode))) < 16. {
                 return None;
             }
             return self
-                .rings(document, mode, op)
+                .rings(document, scene, mode, op)
                 .into_iter()
                 .map(|ring| (ring.nearest(scene, pointer).0, ring.axis))
                 .filter(|(distance, _)| *distance <= controls::HIT_RADIUS)
@@ -316,7 +397,7 @@ impl TransformControls {
             }
             if let Some(Handle::Rotate(axis)) = self.drag {
                 self.rotation = self
-                    .rings(document, mode, op)
+                    .rings(document, scene, mode, op)
                     .into_iter()
                     .find(|ring| ring.axis == axis)
                     .map(|ring| ring.begin(scene, pointer));
@@ -384,9 +465,11 @@ impl TransformControls {
             Handle::Free | Handle::LineMove => {
                 transform.translation = movement;
             }
-            Handle::Axis(axis, projected) => {
+            Handle::Axis(axis, projected) | Handle::ScaleAxis(axis, projected) => {
                 let amount = delta.dot(projected) / projected.length_sq().max(0.01);
-                if op == TransformOperation::Scale {
+                if op == TransformOperation::Scale
+                    || matches!(self.drag, Some(Handle::ScaleAxis(..)))
+                {
                     let factor = (amount * 0.01).clamp(-2., 2.).exp();
                     transform.scale = Vec3(
                         1. + axis.0 * (factor - 1.),
@@ -450,7 +533,10 @@ impl TransformControls {
         }
         let pointer = painter.ctx().pointer_hover_pos();
         let hovered = pointer.and_then(|p| self.hit(document, scene, mode, op, p));
-        if op == TransformOperation::Rotate {
+        if matches!(
+            op,
+            TransformOperation::Rotate | TransformOperation::Universal
+        ) {
             controls::marker(
                 painter,
                 origin,
@@ -458,12 +544,17 @@ impl TransformControls {
                 controls::NEUTRAL,
                 false,
             );
-            for ring in self.rings(document, mode, op) {
+            for ring in self.rings(document, scene, mode, op) {
                 let highlighted = [self.drag, hovered]
                     .into_iter()
                     .flatten()
                     .any(|h| matches!(h, Handle::Rotate(axis) if (axis - ring.axis).len() < 1e-4));
-                ring.paint(scene, painter, highlighted);
+                ring.paint_with_label(
+                    scene,
+                    painter,
+                    highlighted,
+                    op != TransformOperation::Universal || highlighted,
+                );
             }
             if let Some(rotation) = &self.rotation {
                 controls::label(
@@ -485,22 +576,35 @@ impl TransformControls {
         }
         for (point, handle, color, label) in self.handles(document, scene, mode, op) {
             if mode == TransformMode::World {
-                painter.line_segment([origin, point], egui::Stroke::new(2_f32, color));
+                if op == TransformOperation::Universal && matches!(handle, Handle::Axis(..)) {
+                    painter.arrow(origin, point - origin, egui::Stroke::new(2_f32, color));
+                } else if op != TransformOperation::Universal {
+                    painter.line_segment([origin, point], egui::Stroke::new(2_f32, color));
+                }
             }
             let highlighted =
                 self.drag.is_some_and(|h| h == handle) || hovered.is_some_and(|h| h == handle);
-            let marker = if op == TransformOperation::PlacePivot {
+            let marker = if matches!(handle, Handle::Pivot) {
                 controls::Marker::Diamond
-            } else if op == TransformOperation::Scale {
+            } else if op == TransformOperation::Scale
+                || matches!(handle, Handle::ScaleAxis(..) | Handle::Uniform)
+            {
                 controls::Marker::Square
             } else {
                 controls::Marker::Circle
             };
-            controls::marker(painter, point, marker, color, highlighted);
-            let caption = if mode == TransformMode::World && matches!(handle, Handle::Axis(..)) {
+            if op != TransformOperation::Universal
+                || !matches!(handle, Handle::Axis(..))
+                || highlighted
+            {
+                controls::marker(painter, point, marker, color, highlighted);
+            }
+            let caption = if mode == TransformMode::World
+                && matches!(handle, Handle::Axis(..) | Handle::ScaleAxis(..))
+            {
                 format!(
                     "{} {}",
-                    if op == TransformOperation::Scale {
+                    if op == TransformOperation::Scale || matches!(handle, Handle::ScaleAxis(..)) {
                         "Scale"
                     } else {
                         "Move"
@@ -510,7 +614,9 @@ impl TransformControls {
             } else {
                 label.to_owned()
             };
-            controls::label(painter, point + Vec2::new(12., -20.), &caption, color);
+            if op != TransformOperation::Universal || highlighted {
+                controls::label(painter, point + Vec2::new(12., -20.), &caption, color);
+            }
         }
     }
 }

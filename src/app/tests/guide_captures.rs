@@ -15,6 +15,7 @@ struct Guide {
     toolbar: bool,
     viewport: bool,
     interactive: bool,
+    modifiers: egui::Modifiers,
     directory: std::path::PathBuf,
     text_positions: Vec<(String, Pos2)>,
 }
@@ -80,7 +81,7 @@ fn visibility_selection_offscreen_review() {
             .dispatch(Command::Action(Action::SelectVisibilityLine), &g.ctx);
         g.frame(vec![]);
         g.app
-            .dispatch(Command::Action(Action::ViewportContextMenu), &g.ctx);
+            .dispatch(Command::Action(Action::MaskVisibilityMenu), &g.ctx);
         g.app.ui.viewport_menu.position = Some(Pos2::new(size[0] as f32 - 5., size[1] as f32 - 5.));
         g.save(&format!("visibility-menu-{}", size[0]));
         assert!(g.text_positions.iter().any(|(t, _)| t == "Closed path"));
@@ -568,6 +569,7 @@ impl Guide {
             toolbar: true,
             viewport: true,
             interactive: false,
+            modifiers: egui::Modifiers::NONE,
             directory: directory.into(),
             text_positions: Vec::new(),
         }
@@ -593,6 +595,7 @@ impl Guide {
                     Vec2::new(self.size[0] as f32, self.size[1] as f32),
                 )),
                 time: Some(self.time),
+                modifiers: self.modifiers,
                 events,
                 ..Default::default()
             },
@@ -2570,8 +2573,191 @@ fn viewport_context_menu_offscreen_review() {
             assert_eq!(g.app.ui.modeling.span, crate::viewport::SelectionSpan::Ring);
             g.save(&format!("modeling-docked-{dock:?}-{}", size[0]));
         }
+        g.app.ui.preferences.undock_menu(BuiltinMenu::Modeling);
+        g.app.ui.preferences.selection_mode = preferences::SelectionMode::Mask;
+        g.app
+            .dispatch(Command::Action(Action::MaskVisibilityMenu), &g.ctx);
+        g.save(&format!("quick-mask-{}", size[0]));
+        assert!(
+            g.text_positions
+                .iter()
+                .any(|(t, _)| t.starts_with("Surface brush"))
+        );
+        let visibility = g
+            .text_positions
+            .iter()
+            .rev()
+            .find(|(t, _)| t == "Visibility")
+            .unwrap()
+            .1;
+        g.frame(vec![
+            egui::Event::PointerMoved(visibility),
+            primary_event(visibility, true),
+        ]);
+        g.frame(vec![
+            primary_event(visibility, false),
+            egui::Event::PointerGone,
+        ]);
+        g.save(&format!("quick-visibility-{}", size[0]));
+        assert_eq!(
+            g.app.ui.viewport_menu.context,
+            Some(crate::ui::context_menu::ViewportMenuContext::Visibility)
+        );
+        g.app.ui.viewport_menu.context = None;
+        for components in [true, false] {
+            g.app.dispatch(Command::ModelingMode(components), &g.ctx);
+            g.app
+                .dispatch(Command::Action(Action::TransformMenu), &g.ctx);
+            g.save(&format!("quick-transform-{components}-{}", size[0]));
+            let label = if components {
+                "Selected components"
+            } else {
+                "Active object"
+            };
+            assert!(g.text_positions.iter().any(|(t, _)| t == label));
+            g.app.ui.viewport_menu.context = None;
+        }
         assert_eq!(g.app.document.geometry_snapshot(), before);
         assert_eq!(g.app.document.history_counts(), history);
         g.app.viewport.destroy_renderer();
     }
+}
+
+#[test]
+#[ignore = "universal transform visual review; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn universal_transform_offscreen_review() {
+    let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    for size in [[1100, 800], [640, 480]] {
+        let mut g = Guide::new(&directory, size);
+        g.interactive = true;
+        g.app.camera.yaw = 0.55;
+        g.app.camera.pitch = 0.35;
+        g.app
+            .dispatch(Command::Action(Action::UniversalTransform), &g.ctx);
+        let rect = g.frame(vec![]).0;
+        let before = g.app.document.geometry_snapshot();
+        let history = g.app.document.history_counts();
+        g.save(&format!("universal-oblique-{}", size[0]));
+        let start = rect.center();
+        let end = start + Vec2::new(20., 10.);
+        g.frame(vec![
+            egui::Event::PointerMoved(start),
+            primary_event(start, true),
+        ]);
+        assert!(g.app.viewport.gesture == Some(Gesture::Transform));
+        g.frame(vec![egui::Event::PointerMoved(end)]);
+        g.frame(vec![primary_event(end, false)]);
+        g.save(&format!("universal-pivot-moved-{}", size[0]));
+        assert_eq!(g.app.document.geometry_snapshot(), before);
+        assert_eq!(g.app.document.history_counts(), history);
+        g.app.camera.yaw = 0.;
+        g.app.camera.pitch = 0.;
+        g.app.dispatch(Command::ResetTransformPivot, &g.ctx);
+        g.save(&format!("universal-front-{}", size[0]));
+        g.app
+            .dispatch(Command::Action(Action::UniversalTransform), &g.ctx);
+        assert_eq!(
+            g.app.ui.transform_mode,
+            crate::viewport::TransformMode::Sculpt
+        );
+        g.app.viewport.destroy_renderer();
+    }
+}
+
+#[test]
+#[ignore = "shared selection visual review; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn shared_selection_offscreen_review() {
+    fn click_tab(g: &mut Guide, label: &str) {
+        g.frame(vec![]);
+        let point = g
+            .text_positions
+            .iter()
+            .rev()
+            .find(|(text, _)| text == label)
+            .unwrap()
+            .1;
+        g.frame(vec![
+            egui::Event::PointerMoved(point),
+            primary_event(point, true),
+        ]);
+        g.frame(vec![primary_event(point, false)]);
+    }
+    let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1100, 800]);
+    g.interactive = true;
+    g.panel(Tool::Library, Dock::Left);
+    let rect = g.frame(vec![]).0;
+    let before = g.app.document.geometry_snapshot();
+    let selected = g.app.ui.selected;
+    g.modifiers = egui::Modifiers::CTRL | egui::Modifiers::SHIFT;
+    g.frame(vec![egui::Event::PointerMoved(rect.center())]);
+    g.app.open_quick_menu(&g.ctx, Action::MaskVisibilityMenu);
+    g.save("shared-selection-menu");
+    assert!(g.text_positions.iter().any(|(t, _)| t == "Clear mask"));
+    assert!(g.text_positions.iter().any(|(t, _)| t == "Show all"));
+    click_tab(&mut g, "Mask");
+    g.save("shared-selection-mask-menu");
+    assert!(g.text_positions.iter().any(|(t, _)| t == "Clear mask"));
+    assert!(g.text_positions.iter().any(|(t, _)| t == "Show all"));
+    g.app.ui.viewport_menu.context = None;
+    g.frame(vec![egui::Event::PointerMoved(rect.center())]);
+    g.save("shared-selection-mask");
+    assert!(g.app.ui.mask_active);
+    assert!(
+        g.app
+            .ui
+            .highlighted_brush_index(&g.app.document, &g.ctx)
+            .is_none()
+    );
+    let mask = g
+        .app
+        .ui
+        .preferences
+        .mask_preset
+        .brush_index(&g.app.document)
+        .unwrap();
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(t, _)| t == &g.app.document.brushes()[mask].name)
+    );
+    assert!(!g.text_positions.iter().any(|(t, _)| t == "Selection"));
+    g.app.open_quick_menu(&g.ctx, Action::MaskVisibilityMenu);
+    g.frame(vec![]);
+    click_tab(&mut g, "Visibility");
+    g.app.ui.viewport_menu.context = None;
+    g.frame(vec![egui::Event::PointerMoved(rect.center())]);
+    g.save("shared-selection-visibility");
+    assert!(!g.app.ui.mask_active);
+    assert!(g.app.temporary_visibility_active(&g.ctx));
+    assert!(
+        g.app
+            .ui
+            .highlighted_brush_index(&g.app.document, &g.ctx)
+            .is_none()
+    );
+    let mask = g
+        .app
+        .ui
+        .preferences
+        .mask_preset
+        .brush_index(&g.app.document)
+        .unwrap();
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(t, _)| t == &g.app.document.brushes()[mask].name)
+    );
+    assert!(!g.text_positions.iter().any(|(t, _)| t == "Selection"));
+    g.modifiers = egui::Modifiers::NONE;
+    g.save("shared-selection-released");
+    assert!(!g.app.ui.selection_brush_active());
+    assert_eq!(
+        g.app.ui.highlighted_brush_index(&g.app.document, &g.ctx),
+        Some(selected)
+    );
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.app.viewport.destroy_renderer();
 }
