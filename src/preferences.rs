@@ -346,9 +346,17 @@ pub(crate) struct ModelingPreset {
     pub name: String,
     pub options: crate::viewport::ModelingOptions,
 }
+/// The shared selection hold follows the mode chosen in the X menu.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum SelectionMode {
+    Mask,
+    #[default]
+    Visibility,
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct Preferences {
+    pub selection_mode: SelectionMode,
     pub visibility_selection: VisibilitySettings,
     pub modeling_presets: Vec<ModelingPreset>,
     pub next_modeling_preset_id: u64,
@@ -439,6 +447,7 @@ impl Default for Preferences {
                 })
                 .map(|(a, key)| (a, key.map(|(k, m)| Shortcut::new(k, m))))
                 .collect(),
+            selection_mode: SelectionMode::default(),
             mask_hold: HoldBinding::default(),
             mask_preset: MaskPreset::default(),
             visibility_hold: HoldBinding::visibility_default(),

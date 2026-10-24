@@ -3,11 +3,29 @@ use super::*;
 use crate::{preferences::MaskShape, viewport::TransformMode};
 
 impl App {
+    pub(super) fn temporary_mask_binding(&self, ctx: &egui::Context) -> &preferences::HoldBinding {
+        if self.ui.preferences.selection_mode == preferences::SelectionMode::Mask
+            && ctx.input(|i| self.ui.preferences.visibility_hold.active(i))
+        {
+            &self.ui.preferences.visibility_hold
+        } else {
+            &self.ui.preferences.mask_hold
+        }
+    }
+    fn mask_hold_requested(&self, ctx: &egui::Context) -> bool {
+        // The shared hold takes priority over the optional dedicated mask binding.
+        if ctx.input(|i| self.ui.preferences.visibility_hold.active(i)) {
+            self.ui.preferences.selection_mode == preferences::SelectionMode::Mask
+        } else {
+            ctx.input(|i| self.ui.preferences.mask_hold.active(i))
+        }
+    }
+
     pub(super) fn temporary_mask_requested(&self, ctx: &egui::Context) -> bool {
         !self.ui.mask_suppressed
             && !ctx.wants_keyboard_input()
             && self.temporary_mask_available()
-            && ctx.input(|i| self.ui.preferences.mask_hold.active(i))
+            && self.mask_hold_requested(ctx)
             && !self.temporary_visibility_active(ctx)
     }
     pub(super) fn temporary_mask_available(&self) -> bool {
@@ -37,8 +55,7 @@ impl App {
     /// and blocks the still-down pen until release. The normal tool never changes.
     pub(super) fn update_temporary_mask(&mut self, ui: &egui::Ui) -> bool {
         let ctx = ui.ctx();
-        let held = ctx.input(|i| self.ui.preferences.mask_hold.active(i));
-        let visibility = ctx.input(|i| self.ui.preferences.visibility_hold.active(i));
+        let held = self.mask_hold_requested(ctx);
         let escape = ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let was_active = self.ui.mask_active;
         if !held && ctx.input(|i| i.focused) {
@@ -59,11 +76,7 @@ impl App {
         let eligible = self.temporary_mask_available()
             && ctx.input(|i| i.focused)
             && !ctx.wants_keyboard_input();
-        let active = held
-            && !visibility
-            && !self.ui.mask_suppressed
-            && eligible
-            && (was_active || over_viewport);
+        let active = held && !self.ui.mask_suppressed && eligible && (was_active || over_viewport);
         if active != was_active {
             // Never mix a mask gesture into an already-started sculpt/modeling edit.
             let was_dragging = self.viewport.gesture.is_some();
@@ -109,8 +122,8 @@ impl App {
     pub(super) fn paint_temporary_mask_status(&self, ui: &egui::Ui) {
         let preset = &self.ui.preferences.mask_preset;
         let text = format!(
-            "Hold to mask · {} · {} · {} · release to restore tool",
-            self.ui.preferences.mask_hold.label(),
+            "Selection · Mask · {} · {} · {} · release to restore tool",
+            self.temporary_mask_binding(ui.ctx()).label(),
             preset.shape.label(),
             if preset.erase ^ ui.input(|i| i.modifiers.alt) {
                 "Erase"
@@ -730,6 +743,71 @@ mod tests {
                 app.document.undo();
                 assert_eq!(app.document.geometry_snapshot(), before);
             }
+        }
+    }
+
+    #[test]
+    fn shared_selection_hold_masks_shapes_and_release_cannot_sculpt_or_hide() {
+        for shape in [MaskShape::Brush, MaskShape::Line, MaskShape::Lasso] {
+            let (mut app, ctx, centre) = setup();
+            app.ui.preferences.mask_hold = HoldBinding::default();
+            app.ui.preferences.selection_mode = preferences::SelectionMode::Mask;
+            app.ui.preferences.mask_preset.shape = shape;
+            let before = app.document.geometry_snapshot();
+            let selected = app.ui.selected;
+            let hold = Modifiers::CTRL | Modifiers::SHIFT;
+            frame(&mut app, &ctx, hold, vec![Event::PointerMoved(centre)]);
+            assert!(app.ui.mask_active);
+            assert!(!app.temporary_visibility_active(&ctx));
+            let start = if shape == MaskShape::Brush {
+                centre
+            } else {
+                Pos2::new(490., 150.)
+            };
+            let points = if shape == MaskShape::Brush {
+                vec![centre + Vec2::new(25., 0.)]
+            } else {
+                vec![
+                    Pos2::new(780., 150.),
+                    Pos2::new(780., 680.),
+                    Pos2::new(490., 680.),
+                ]
+            };
+            frame(
+                &mut app,
+                &ctx,
+                hold,
+                vec![Event::PointerMoved(start), button(start, true)],
+            );
+            frame(
+                &mut app,
+                &ctx,
+                hold,
+                points.iter().copied().map(Event::PointerMoved).collect(),
+            );
+            frame(
+                &mut app,
+                &ctx,
+                hold,
+                vec![button(*points.last().unwrap(), false)],
+            );
+            assert!(
+                app.document.mesh().mask.iter().any(|&m| m > 0.),
+                "{shape:?}"
+            );
+            let masked = app.document.geometry_snapshot();
+            assert_eq!(masked.mesh.vertices, before.mesh.vertices);
+            assert_eq!(masked.mesh.hidden_faces, before.mesh.hidden_faces);
+            frame(&mut app, &ctx, Modifiers::NONE, vec![]);
+            assert!(!app.ui.selection_brush_active());
+            assert_eq!(
+                app.ui.brush_index_for_context(&app.document, &ctx),
+                Some(selected)
+            );
+            assert_eq!(app.document.geometry_snapshot(), masked);
+            assert_eq!(app.document.history_counts(), (1, 0));
+            app.dispatch(Command::Undo, &ctx);
+            assert_eq!(app.document.geometry_snapshot(), before);
         }
     }
 }

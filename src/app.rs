@@ -141,6 +141,7 @@ impl App {
         }
         let visibility = self.temporary_visibility_active(ctx);
         let masking = self.temporary_mask_requested(ctx);
+        let mask_binding = self.temporary_mask_binding(ctx).clone();
         for action in [
             Action::ViewportContextMenu,
             Action::MaskVisibilityMenu,
@@ -163,12 +164,7 @@ impl App {
                                         .preferences
                                         .visibility_hold
                                         .matches_shortcut(&shortcut, &binding))
-                                || (masking
-                                    && self
-                                        .ui
-                                        .preferences
-                                        .mask_hold
-                                        .matches_shortcut(&shortcut, &binding))
+                                || (masking && mask_binding.matches_shortcut(&shortcut, &binding))
                         });
                         found |= matches && !matches!(event, egui::Event::Key { repeat: true, .. });
                         !matches
@@ -327,15 +323,14 @@ impl App {
             .clone()
             .or_else(|| self.projection.draft.as_ref().map(|d| d.mesh.clone()));
         self.viewport.projection_mode = self.ui.projection.open;
-        self.viewport.guided.enabled = self.ui.guide_paths && !self.ui.mask_active;
+        self.viewport.guided.enabled =
+            self.ui.guide_paths && !self.ui.mask_active && !temporary_visibility;
         self.viewport.guided.path_starts_only = self.ui.path_starts_only;
-        self.viewport.visibility_hold = Some(
-            if self.ui.viewport_menu.suppress_visibility || self.ui.mask_active {
-                Default::default()
-            } else {
-                self.ui.preferences.visibility_hold.clone()
-            },
-        );
+        self.viewport.visibility_hold = Some(if !temporary_visibility {
+            Default::default()
+        } else {
+            self.ui.preferences.visibility_hold.clone()
+        });
         self.viewport.show(
             ui,
             &mut self.document,
@@ -421,11 +416,9 @@ impl App {
         self.ui.modeling.count = self.viewport.modeling.selection().len();
         if temporary_visibility {
             let rect = self.ui.viewport_menu.viewport_rect.unwrap_or(ui.max_rect());
-            ui.painter().text(
-                rect.left_top() + egui::vec2(12., 12.),
-                egui::Align2::LEFT_TOP,
+            let galley = ui.painter().layout(
                 format!(
-                    "Hide/Isolate · {} · {}{} · hold {} · tool menu {}",
+                    "Selection · Visibility · {} · {}{} · hold {} · tool menu {}",
                     self.ui.preferences.visibility_selection.shape.label(),
                     if self.ui.preferences.visibility_selection.hide ^ ui.input(|i| i.modifiers.alt)
                     {
@@ -445,6 +438,12 @@ impl App {
                         .map_or("Unbound".into(), |s| s.label())
                 ),
                 egui::FontId::proportional(14.),
+                egui::Color32::WHITE,
+                (rect.width() - 172.).max(120.),
+            );
+            ui.painter().galley(
+                rect.left_top() + egui::vec2(12., 42.),
+                galley,
                 egui::Color32::WHITE,
             );
         }

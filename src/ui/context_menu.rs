@@ -12,7 +12,6 @@ pub(crate) enum ViewportMenuContext {
 #[derive(Default)]
 pub(crate) struct ViewportMenuState {
     pub context: Option<ViewportMenuContext>,
-    pub last_selection_context: Option<ViewportMenuContext>,
     pub position: Option<egui::Pos2>,
     pub viewport_rect: Option<egui::Rect>,
     pub selected: usize,
@@ -138,7 +137,7 @@ pub(crate) fn hold_binding_editor(
                 *hold = Default::default();
             }
             if ui.button("Reset").clicked() {
-                *hold = if label == "Hold for visibility" {
+                *hold = if label == "Hold for selection (X menu)" {
                     crate::preferences::HoldBinding::visibility_default()
                 } else {
                     Default::default()
@@ -433,22 +432,26 @@ impl UiState {
                         (ViewportMenuContext::Visibility, "Visibility"),
                     ] {
                         if ui.selectable_label(context == choice, label).clicked() {
+                            self.preferences.selection_mode = match choice {
+                                ViewportMenuContext::Mask => {
+                                    crate::preferences::SelectionMode::Mask
+                                }
+                                _ => crate::preferences::SelectionMode::Visibility,
+                            };
                             self.viewport_menu.context = Some(choice);
                             self.viewport_menu.selected = 0;
                         }
                     }
                 });
-                let hold = if context == ViewportMenuContext::Mask {
-                    &self.preferences.mask_hold
-                } else {
-                    &self.preferences.visibility_hold
-                };
+                let hold = &self.preferences.visibility_hold;
                 if hold.enabled() {
-                    ui.weak(format!("Hold {} to use · Alt reverses", hold.label()));
+                    ui.weak(format!(
+                        "Hold {} to use selected tab · Alt reverses",
+                        hold.label()
+                    ));
                 } else {
-                    ui.weak("Assign Hold to mask in Key settings · Alt reverses");
+                    ui.weak("Assign Hold for selection in Key settings · Alt reverses");
                 }
-                self.viewport_menu.last_selection_context = self.viewport_menu.context;
                 ui.separator();
             } else if context == ViewportMenuContext::Transform {
                 ui.strong(if self.modeling.active {

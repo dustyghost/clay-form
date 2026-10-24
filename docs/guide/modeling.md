@@ -598,7 +598,7 @@ The Q menu shows functions for the current component mode and marks the active c
 
 Change or clear **Modeling quick menu** in **Settings → Key settings**. Its displayed tooltip follows the assigned shortcut; the default Q does not replace right-drag orbit or middle-drag pan. Existing custom bindings remain intact when preferences upgrade; if Q is already assigned, the new menu starts unbound.
 
-**Q** always opens Modeling. **X** opens the mask/visibility chooser, using the active hold to choose its initial tab. Both temporary holds and all three quick-menu bindings can be changed, cleared and reset in Key settings. Hold shortcuts support modifier-only and key-plus-modifier chords. Release the hold to restore the previous tool; unfinished gestures are cancelled. **Alt** temporarily reverses Add/Erase masking or Hide/Isolate visibility.
+**Q** always opens Modeling. **X** opens the mask/visibility chooser, whose selected tab decides whether Ctrl+Shift masks or changes visibility. The shared hold and all three quick-menu bindings can be changed, cleared and reset in Key settings. Hold shortcuts support modifier-only and key-plus-modifier chords. Release the hold to restore the previous tool; unfinished gestures are cancelled. **Alt** temporarily reverses Add/Erase masking or Hide/Isolate visibility.
 
 **E** opens transform options. In Modeling it offers Move/Rotate/Scale, Free/Gizmo/Axis interaction and applicable axis choices. Otherwise it offers object transforms, World axes/Action Line, pivot controls and Respect mask. Opening the menu makes no geometry edit; choose options and then an operation to begin using it.
 

@@ -371,7 +371,7 @@ impl UiState {
                     });
                 ui.separator();
                 ui.label(format!(
-                    "Hold {}: remembered Hide/Isolate",
+                    "Hold {}: mode chosen in X menu",
                     self.preferences.visibility_hold.label()
                 ));
                 ui.label(format!(

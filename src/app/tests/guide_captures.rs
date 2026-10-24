@@ -15,6 +15,7 @@ struct Guide {
     toolbar: bool,
     viewport: bool,
     interactive: bool,
+    modifiers: egui::Modifiers,
     directory: std::path::PathBuf,
     text_positions: Vec<(String, Pos2)>,
 }
@@ -568,6 +569,7 @@ impl Guide {
             toolbar: true,
             viewport: true,
             interactive: false,
+            modifiers: egui::Modifiers::NONE,
             directory: directory.into(),
             text_positions: Vec::new(),
         }
@@ -593,6 +595,7 @@ impl Guide {
                     Vec2::new(self.size[0] as f32, self.size[1] as f32),
                 )),
                 time: Some(self.time),
+                modifiers: self.modifiers,
                 events,
                 ..Default::default()
             },
@@ -2571,6 +2574,7 @@ fn viewport_context_menu_offscreen_review() {
             g.save(&format!("modeling-docked-{dock:?}-{}", size[0]));
         }
         g.app.ui.preferences.undock_menu(BuiltinMenu::Modeling);
+        g.app.ui.preferences.selection_mode = preferences::SelectionMode::Mask;
         g.app
             .dispatch(Command::Action(Action::MaskVisibilityMenu), &g.ctx);
         g.save(&format!("quick-mask-{}", size[0]));
@@ -2659,4 +2663,60 @@ fn universal_transform_offscreen_review() {
         );
         g.app.viewport.destroy_renderer();
     }
+}
+
+#[test]
+#[ignore = "shared selection visual review; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn shared_selection_offscreen_review() {
+    fn click_tab(g: &mut Guide, label: &str) {
+        g.frame(vec![]);
+        let point = g
+            .text_positions
+            .iter()
+            .rev()
+            .find(|(text, _)| text == label)
+            .unwrap()
+            .1;
+        g.frame(vec![
+            egui::Event::PointerMoved(point),
+            primary_event(point, true),
+        ]);
+        g.frame(vec![primary_event(point, false)]);
+    }
+    let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1100, 800]);
+    g.interactive = true;
+    g.panel(Tool::Library, Dock::Left);
+    let rect = g.frame(vec![]).0;
+    let before = g.app.document.geometry_snapshot();
+    let selected = g.app.ui.selected;
+    g.modifiers = egui::Modifiers::CTRL | egui::Modifiers::SHIFT;
+    g.frame(vec![egui::Event::PointerMoved(rect.center())]);
+    g.app.open_quick_menu(&g.ctx, Action::MaskVisibilityMenu);
+    g.save("shared-selection-menu");
+    click_tab(&mut g, "Mask");
+    g.app.ui.viewport_menu.context = None;
+    g.frame(vec![egui::Event::PointerMoved(rect.center())]);
+    g.save("shared-selection-mask");
+    assert!(g.app.ui.mask_active);
+    assert!(g.text_positions.iter().any(|(t, _)| t == "Selection"));
+    g.app.open_quick_menu(&g.ctx, Action::MaskVisibilityMenu);
+    g.frame(vec![]);
+    click_tab(&mut g, "Visibility");
+    g.app.ui.viewport_menu.context = None;
+    g.frame(vec![egui::Event::PointerMoved(rect.center())]);
+    g.save("shared-selection-visibility");
+    assert!(!g.app.ui.mask_active);
+    assert!(g.app.temporary_visibility_active(&g.ctx));
+    assert!(g.text_positions.iter().any(|(t, _)| t == "Selection"));
+    g.modifiers = egui::Modifiers::NONE;
+    g.save("shared-selection-released");
+    assert!(!g.app.ui.selection_brush_active());
+    assert_eq!(
+        g.app.ui.brush_index_for_context(&g.app.document, &g.ctx),
+        Some(selected)
+    );
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.app.viewport.destroy_renderer();
 }
