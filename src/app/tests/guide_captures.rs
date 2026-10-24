@@ -1149,6 +1149,28 @@ fn asset_file_dialog_offscreen_review() {
     g.app.ui.alpha_path = images.to_string_lossy().into();
     let before = g.app.document.project();
     click_guide_label(&mut g, "Import image");
+    g.save("alpha-import-expanded");
+    // Toolbar wrapping can leave the expanded importer below the sidebar fold.
+    // Reach the button through the actual sidebar scroll instead of assuming it
+    // remains visible at a fixed window height.
+    for _ in 0..12 {
+        g.frame(vec![]);
+        if g.text_positions.iter().any(|(text, point)| {
+            text == "Choose image…" && point.y > 0. && point.y < g.size[1] as f32 - 20.
+        }) {
+            break;
+        }
+        g.frame(vec![
+            egui::Event::PointerMoved(Pos2::new(g.size[0] as f32 - 120., g.size[1] as f32 - 40.)),
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: Vec2::new(0., -100.),
+                modifiers: egui::Modifiers::NONE,
+            },
+        ]);
+        g.frame(vec![egui::Event::PointerGone]);
+    }
+    g.save("alpha-import-controls");
     click_guide_label(&mut g, "Choose image…");
     g.save("alpha-picker");
     click_guide_label(&mut g, "Front study.png");
