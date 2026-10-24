@@ -244,6 +244,7 @@ impl App {
                 }
                 Ok(())
             }
+            Command::FillAllMaterial(brush) => self.document.fill_all_material(&brush),
             Command::FillMaterial(brush) => self.document.fill_material(&brush),
             Command::Export => {
                 let path = std::path::Path::new(&self.ui.path).with_extension("obj");

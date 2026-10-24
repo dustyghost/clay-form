@@ -1,6 +1,19 @@
 use super::*;
 
 impl Document {
+    pub fn fill_all_material(&mut self, brush: &Brush) -> Result<(), String> {
+        if brush.kind != Kind::Paint {
+            return Err("Select a Paint brush before filling materials".into());
+        }
+        if !self.active_visible() {
+            return Err("Show the active model before painting".into());
+        }
+        crate::sculpt::validate_brush(brush)?;
+        self.edit_group_meshes("Fill all materials", |mesh| {
+            mesh.fill_all_material(brush);
+            Ok(())
+        })
+    }
     pub fn fill_material(&mut self, brush: &Brush) -> Result<(), String> {
         if brush.kind != Kind::Paint {
             return Err("Select a Paint brush before filling materials".into());
@@ -129,5 +142,60 @@ mod tests {
         assert!(geometry.mesh.materials.iter().all(|m| *m == fill.material));
         geometry.set_level(2).unwrap();
         assert!(geometry.mesh.materials.iter().all(|m| *m == fill.material));
+    }
+}
+
+#[cfg(test)]
+mod fill_all_tests {
+    use super::*;
+    #[test]
+    fn material_fill_all_ignores_protection_preserves_other_models_and_undoes_all_levels() {
+        let mut doc = Document::default();
+        doc.duplicate_model(false).unwrap();
+        let mut geometry = doc.geometry_snapshot();
+        geometry.mesh.mask.fill(1.);
+        geometry
+            .mesh
+            .set_face_visibility(vec![false; geometry.mesh.triangles.len()]);
+        geometry.subdivide().unwrap();
+        doc.replace_geometry(geometry).unwrap();
+        let before = doc.geometry_snapshot();
+        let history = doc.history_counts();
+        let mut brush = Brush::new(Kind::Paint);
+        brush.material = crate::sculpt::Material::examples()[4].1;
+        brush.strength = 0.;
+        brush.subtract = true;
+        doc.fill_all_material(&brush).unwrap();
+        assert_eq!(doc.history_counts().0, history.0 + 1);
+        let after = doc.geometry_snapshot();
+        assert_eq!(after.mesh.vertices, before.mesh.vertices);
+        assert_eq!(after.mesh.mask, before.mesh.mask);
+        assert_eq!(
+            after.scene, before.scene,
+            "other models and metadata unchanged"
+        );
+        for mesh in std::iter::once(&after.mesh)
+            .chain(after.settings.lower.iter())
+            .chain(after.settings.upper.iter())
+        {
+            assert_eq!(mesh.materials.len(), mesh.vertices.len());
+            assert!(mesh.materials.iter().all(|m| *m == brush.material));
+        }
+        let history = doc.history_counts();
+        doc.fill_all_material(&brush).unwrap();
+        assert_eq!(doc.history_counts(), history, "identical fill is a no-op");
+        doc.undo();
+        assert_eq!(doc.geometry_snapshot(), before);
+        doc.redo();
+        assert_eq!(doc.geometry_snapshot(), after);
+        brush.paint_channels = crate::sculpt::PaintChannels::Color;
+        brush.material = crate::sculpt::Material::examples()[1].1;
+        doc.fill_all_material(&brush).unwrap();
+        assert!(
+            doc.mesh()
+                .materials
+                .iter()
+                .all(|m| m.base_color == brush.material.base_color && m.metallic == 1.)
+        );
     }
 }

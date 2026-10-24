@@ -1,5 +1,5 @@
 use super::*;
-use crate::sculpt::{Geometry, Kind};
+use crate::sculpt::Kind;
 
 #[test]
 fn material_brush_menu_old_project_pointer_release_escape_and_undo() {
@@ -8,11 +8,14 @@ fn material_brush_menu_old_project_pointer_release_escape_and_undo() {
     let mut project = app.document.project();
     project.brushes.retain(|b| b.kind != Kind::Paint);
     app.document.replace_project(project, "old.clay").unwrap();
-    app.document
-        .replace_geometry(Geometry::new(crate::sculpt::Mesh::sphere()))
-        .unwrap();
+    assert!(!app.document.mesh().vertex_groups.is_empty());
+    assert!(app.ui.show_polygroups);
     app.dispatch(Command::Action(Action::NewBrush("Paint".into())), &ctx);
     assert_eq!(app.document.brushes()[app.ui.selected].kind, Kind::Paint);
+    assert!(
+        !app.ui.show_polygroups,
+        "Paint must show the painted material"
+    );
     let mut project = app.document.project();
     project.mesh_settings.dynamic = true;
     project.mesh_settings.auto_remesh = true;
@@ -79,4 +82,66 @@ fn material_brush_menu_old_project_pointer_release_escape_and_undo() {
     assert_eq!(app.document.history_counts(), history);
     app.dispatch(Command::Redo, &ctx);
     assert_eq!(app.document.geometry_snapshot(), after);
+}
+
+#[test]
+fn material_sampler_does_not_paint_and_p_toggles_group_view() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.dispatch(Command::AddBrush(Kind::Paint), &ctx);
+    let before = app.document.geometry_snapshot();
+    let history = app.document.history_counts();
+    let rect = navigation_frame(&mut app, &ctx, vec![]);
+    let point = rect.center();
+    app.ui.materials.sampling = true;
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(point), primary_event(point, true)],
+    );
+    navigation_frame(&mut app, &ctx, vec![primary_event(point, false)]);
+    assert!(!app.ui.materials.sampling);
+    let colour = app.document.brushes()[app.ui.selected].material.base_color;
+    for (a, b) in colour
+        .into_iter()
+        .zip(crate::sculpt::Material::default().base_color)
+    {
+        assert!((a - b).abs() < 1e-6);
+    }
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert_eq!(app.document.history_counts(), history);
+    app.ui.materials.sampling = true;
+    let key = |key| egui::Event::Key {
+        key,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: Default::default(),
+    };
+    navigation_frame(&mut app, &ctx, vec![key(egui::Key::Escape)]);
+    assert!(!app.ui.materials.sampling);
+    for expected in [true, false] {
+        let _ = ctx.run(
+            egui::RawInput {
+                events: vec![key(egui::Key::P)],
+                ..Default::default()
+            },
+            |ctx| app.shortcuts(ctx),
+        );
+        assert_eq!(app.ui.show_polygroups, expected);
+        let _ = ctx.run(Default::default(), |_| {});
+    }
+    let _ = ctx.run(
+        egui::RawInput {
+            events: vec![key(egui::Key::P)],
+            ..Default::default()
+        },
+        |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.text_edit_singleline(&mut app.ui.path).request_focus();
+            });
+            app.shortcuts(ctx);
+            assert!(!app.ui.show_polygroups, "P must not toggle while typing");
+        },
+    );
 }

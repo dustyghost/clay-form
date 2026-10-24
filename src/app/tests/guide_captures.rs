@@ -3030,7 +3030,7 @@ fn relax_brush_manual_capture() {
 #[test]
 #[ignore = "manual material gallery and paint controls; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn material_examples_manual_capture() {
-    use crate::sculpt::{Geometry, Kind, Material, Mesh};
+    use crate::sculpt::Material;
     let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
     std::fs::create_dir_all(&directory).unwrap();
     std::fs::write(
@@ -3040,26 +3040,16 @@ fn material_examples_manual_capture() {
     .unwrap();
     let mut g = Guide::new(&directory, [1200, 1000]);
     g.interactive = true;
-    g.app
-        .document
-        .replace_geometry(Geometry::new(Mesh::sphere()))
-        .unwrap();
+    g.app.ui.show_polygroups = true;
     g.app
         .dispatch(Command::Action(Action::NewBrush("Paint".into())), &g.ctx);
     g.app.camera.yaw = 0.;
     g.app.camera.pitch = 0.;
-    g.app.ui.show_polygroups = false;
+    assert!(!g.app.ui.show_polygroups);
     g.panel(Tool::Brush, Dock::Right);
     for (index, (name, material)) in Material::examples().into_iter().enumerate() {
-        let mut brush = g.app.document.brushes()[g.app.ui.selected].clone();
-        brush.kind = Kind::Paint;
-        brush.material = material;
-        brush.strength = 1.;
-        g.app
-            .document
-            .update_brush(g.app.ui.selected, brush)
-            .unwrap();
-        click_guide_label(&mut g, "Fill unmasked vertices");
+        click_guide_label(&mut g, name);
+        click_guide_label(&mut g, "Fill all");
         assert!(
             (0..g.app.document.mesh().vertices.len())
                 .all(|i| g.app.document.mesh().material(i) == material),
@@ -3094,4 +3084,100 @@ fn material_examples_manual_capture() {
     g.save("material-painted-stroke");
     g.app.dispatch(Command::Undo, &g.ctx);
     assert_eq!(g.app.document.geometry_snapshot(), before);
+}
+
+#[test]
+#[ignore = "requires Vulkan; clicks material swatches, copy, palette, sampler and fill and checks viewport pixels"]
+fn material_controls_offscreen_review() {
+    use crate::sculpt::{Kind, Material};
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir().join("clay-material-controls"));
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1200, 1000]);
+    g.interactive = true;
+    g.app.ui.show_polygroups = true;
+    g.app.dispatch(Command::AddBrush(Kind::Paint), &g.ctx);
+    assert!(!g.app.ui.show_polygroups);
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    g.panel(Tool::Brush, Dock::Right);
+    click_guide_label(&mut g, "Copper");
+    assert_eq!(
+        g.app.document.brushes()[g.app.ui.selected].material,
+        Material::examples()[4].1
+    );
+    let before = g.app.document.geometry_snapshot();
+    let (rect, pixels_before) = g.frame(vec![egui::Event::PointerGone]);
+    let point = rect.center();
+    g.stroke(point - Vec2::new(40., 0.), point + Vec2::new(40., 0.));
+    let (_, pixels_after) = g.frame(vec![egui::Event::PointerGone]);
+    assert_ne!(
+        g.app.document.mesh().materials,
+        before.mesh.materials,
+        "Pointer must apply paint at {point:?} in {rect:?}"
+    );
+    let changed = (point.y as usize - 60..point.y as usize + 60)
+        .flat_map(|y| {
+            (point.x as usize - 80..point.x as usize + 80).map(move |x| ((999 - y) * 1200 + x) * 4)
+        })
+        .filter(|&i| {
+            pixels_before[i..i + 3]
+                .iter()
+                .zip(&pixels_after[i..i + 3])
+                .any(|(a, b)| a.abs_diff(*b) > 8)
+        })
+        .count();
+    assert!(
+        changed > 500,
+        "Paint on the startup sphere must visibly change its pixels: {changed}"
+    );
+    assert_eq!(g.app.document.mesh().vertices, before.mesh.vertices);
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    click_guide_label(&mut g, "Fill all");
+    assert!(
+        g.app
+            .document
+            .mesh()
+            .materials
+            .iter()
+            .all(|m| *m == Material::examples()[4].1)
+    );
+    click_guide_label(&mut g, "Copy material");
+    assert_eq!(g.app.ui.preferences.materials.copies.len(), 1);
+    click_guide_label(&mut g, "+ Colour");
+    assert!(
+        g.app
+            .ui
+            .preferences
+            .materials
+            .palette
+            .contains(&Material::examples()[4].1.base_color)
+    );
+    click_guide_label(&mut g, "Red plastic");
+    click_guide_label(&mut g, "Sample colour");
+    assert!(
+        g.app.ui.materials.sampling,
+        "Sampler stays armed while pointer is over its button"
+    );
+    let before_sample = g.app.document.geometry_snapshot();
+    let history = g.app.document.history_counts();
+    g.frame(vec![
+        egui::Event::PointerMoved(point),
+        primary_event(point, true),
+    ]);
+    g.frame(vec![primary_event(point, false)]);
+    assert!(!g.app.ui.materials.sampling);
+    for (a, b) in g.app.document.brushes()[g.app.ui.selected]
+        .material
+        .base_color
+        .into_iter()
+        .zip(Material::examples()[4].1.base_color)
+    {
+        assert!((a - b).abs() < 1e-6);
+    }
+    assert_eq!(g.app.document.geometry_snapshot(), before_sample);
+    assert_eq!(g.app.document.history_counts(), history);
+    g.save("material-controls");
 }

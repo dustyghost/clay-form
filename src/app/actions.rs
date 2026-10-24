@@ -404,6 +404,9 @@ impl App {
             }
             Action::Export => Some(Command::Export),
             Action::ClearMask => Some(Command::ClearMask),
+            Action::FillAllMaterial => Some(Command::FillAllMaterial(
+                self.document.brushes()[self.ui.selected].clone(),
+            )),
             Action::FillMaterial => Some(Command::FillMaterial(
                 self.document.brushes()[self.ui.selected].clone(),
             )),

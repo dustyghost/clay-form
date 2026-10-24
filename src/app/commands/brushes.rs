@@ -20,7 +20,19 @@ impl App {
                 .document
                 .duplicate_brush(index)
                 .map(|index| self.ui.select_brush(index, &self.document)),
-            Command::UpdateBrush(index, brush) => self.document.update_brush(index, brush),
+            Command::UpdateBrush(index, brush) => {
+                let entering_paint = brush.kind == crate::sculpt::Kind::Paint
+                    && self
+                        .document
+                        .brushes()
+                        .get(index)
+                        .is_some_and(|b| b.kind != crate::sculpt::Kind::Paint);
+                self.document.update_brush(index, brush).map(|()| {
+                    if entering_paint && index == self.ui.selected {
+                        self.ui.show_polygroups = false;
+                    }
+                })
+            }
             Command::SaveAlpha(index, asset) => self.document.save_alpha(index, asset).map(|i| {
                 self.ui.alphas.selected = Some(crate::ui::alphas::Selection::Project(i));
                 self.ui.alphas.draft = None;

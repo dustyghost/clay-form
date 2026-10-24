@@ -53,6 +53,8 @@ pub(crate) enum Gesture {
 }
 #[derive(Default)]
 pub(crate) struct Viewport {
+    pub(crate) sample_colour: bool,
+    pub(crate) sampled_colour: Option<[f32; 3]>,
     pub(crate) session: interaction::InteractionSession,
     pub(crate) paths: paths::PathEditor,
     pub(crate) modeling: modeling::ModelingState,
@@ -275,6 +277,32 @@ impl Viewport {
         if let Some(renderer) = &self.renderer {
             renderer.set_backfaces(options.backface_opacity);
             renderer.set_polygroups(options.show_polygroups);
+        }
+        if self.sample_colour {
+            if ui.input(|i| i.key_pressed(egui::Key::Escape) || !i.focused) {
+                self.sample_colour = false;
+                self.wait_for_release();
+            } else if options.enabled
+                && response.clicked_by(egui::PointerButton::Primary)
+                && let Some(pos) = response.interact_pointer_pos()
+                && let Some(colour) = scene.pick_colour(pos)
+            {
+                self.sampled_colour = Some(colour);
+                self.sample_colour = false;
+                self.wait_for_release();
+            }
+            if response.hovered() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+                camera.zoom_by(ui.input(|i| i.smooth_scroll_delta.y));
+            }
+            painter.text(
+                rect.center_top() + Vec2::new(0., 24.),
+                egui::Align2::CENTER_TOP,
+                "Click a surface to sample its colour · Esc cancels",
+                egui::FontId::proportional(14.),
+                controls::NEUTRAL,
+            );
+            return;
         }
         if self.session.projection_mode {
             if options.enabled && response.hovered() {

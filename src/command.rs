@@ -30,6 +30,7 @@ pub(crate) enum Command {
     CancelProjectFile,
     Export,
     FillMaterial(Brush),
+    FillAllMaterial(Brush),
     OpenProjection,
     OpenRelaxation,
     KeepProjectionReference,

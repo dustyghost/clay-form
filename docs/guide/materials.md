@@ -4,7 +4,7 @@
 
 Choose **Paint** in the brush library, or **Add brush → Paint** in the brush library when opening an older project that has no Paint preset. Convert a parametric primitive to a sculpt mesh first.
 
-In **Brush settings**, choose an **Example material**, then paint on the model. **Whole material** paints colour, roughness and metallic together. Choose **Colour only**, **Roughness only** or **Metallic only** to change one property without replacing the others.
+In **Brush settings**, select a rendered sphere in **Materials**, then paint on the model. **Whole material** paints colour, roughness and metallic together. Choose **Colour only**, **Roughness only** or **Metallic only** to change one property without replacing the others.
 
 | Example | Appearance | Roughness | Metallic |
 | --- | --- | --- | --- |
@@ -15,15 +15,19 @@ In **Brush settings**, choose an **Example material**, then paint on the model. 
 | Copper | Warm metal | 0.24 | 1 |
 | Red plastic | Red with a glossy highlight | 0.30 | 0 |
 
-These are editable starting values. Ceramic uses a simple glossy dielectric; satin aluminium uses isotropic roughness, without directional brush marks or a separate coating layer. Edit **Colour**, **Roughness** and **Metallic** to make a custom material. Save or duplicate the brush preset to reuse it.
+These are editable starting values. Ceramic uses a simple glossy dielectric; satin aluminium uses isotropic roughness, without directional brush marks or a separate coating layer. Edit **Colour**, **Roughness** and **Metallic** to make a custom material. Use **Copy material** to save an editable copy, then rename it and adjust its channels. Copies and the colour palette are saved in your preferences and available across projects.
+
+Click a palette swatch to select its colour. **+ Colour** saves the current colour; right-click a swatch to remove it. **Sample colour** lets you click a visible surface to pick its underlying paint colour without lighting, mask shading or vertex-group tint. It samples once; **Escape** cancels.
 
 ![Paint brush settings and copper example](../images/material-copper.png)
 
 **Strength**, pressure, radius, falloff, alpha, stencil and symmetry work with painting. Repeated strokes approach the chosen values. Mirrored copies do not double the strength where their footprints overlap. **Subtract**, or the configured reverse modifier, blends the selected channels toward default clay. **Escape** cancels an active stroke; release records one Undo step.
 
-**Fill unmasked vertices** applies the selected channels to the active model at the current Strength. Set Strength to 1 for the exact example values. The fill respects partial masks and hidden faces and updates stored subdivision levels in one undoable operation. The fill action can also be added to a custom menu or assigned a shortcut.
+**Fill all** applies the selected channels at full strength to every vertex of the active model, including masked and hidden vertices. It uses the chosen material even when Subtract is selected, updates every stored subdivision level, and creates one Undo step. Other submodels are unchanged.
 
-Painting never moves vertices or changes topology, including when Adaptive sculpt or automatic voxel remeshing is enabled. Masks protect paint independently of vertex groups. Turn off the polygroup colour overlay to inspect the actual painted material; the overlay does not alter paint.
+**Fill unmasked vertices** applies the selected channels to the active model at the current Strength. Set Strength to 1 for the exact material values. The fill respects partial masks and hidden faces and updates stored subdivision levels in one undoable operation. The fill action can also be added to a custom menu or assigned a shortcut.
+
+Painting never moves vertices or changes topology, including when Adaptive sculpt or automatic voxel remeshing is enabled. Masks protect paint independently of vertex groups. Selecting Paint turns off the vertex-group colour overlay so strokes are visible. **P** toggles vertex-group colours for inspection; it never changes the paint. Existing custom P bindings are preserved, and the toggle can be reassigned in keyboard settings.
 
 ![A local teal stroke over red plastic](../images/material-painted-stroke.png)
 

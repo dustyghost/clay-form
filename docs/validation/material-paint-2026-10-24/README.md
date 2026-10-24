@@ -22,6 +22,14 @@ The 4,706-vertex sphere makes the vertex-resolution limit visible at the paint b
 
 The broader GPU CI run caught default material arrays being expanded in the picking mesh. The cache now preserves implicit defaults and keeps inactive tint in display handling. The existing `gpu_offscreen_depth_wireframe_and_cache` regression passed after the fix; the material pixel/batching regression was rerun as well.
 
+## Painting-control follow-up
+
+The grouped startup sphere exposed a visibility problem: vertex-group colours entirely covered the painted material. Selecting Paint now turns the overlay off, and **P** toggles it deliberately. Existing custom P assignments and subsequent explicit unbindings survive preference migration.
+
+The **Materials** grid renders sphere previews with the same studio shading as the viewport. **Copy material** creates a named, editable personal preset; the colour palette and copies persist between projects. The one-shot sampler interpolates the raw visible-surface colour, independently of lighting and mask/group shading. **Fill all** applies the selected channels at full strength across the active model, including masked/hidden vertices and stored subdivision levels, with one Undo step.
+
+Fourteen focused non-GPU material checks pass, including legacy preference migration, library persistence, sampler interpolation and cancellation, P while typing, and Fill all with masks/hidden faces/other models/multiple subdivision levels. The new `material_controls_offscreen_review` clicks the swatches, Copy, palette, sampler and Fill all; it checks visible pixel changes from a real stroke on the grouped startup sphere and verifies sampling leaves geometry and history unchanged. This interactive regression joins CI. The six-material gallery remains a manual capture and now selects each rendered swatch and clicks Fill all.
+
 ## Blender fixture
 
 ```sh

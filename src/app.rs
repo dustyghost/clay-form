@@ -333,6 +333,15 @@ impl App {
         } else {
             self.ui.preferences.visibility_hold.clone()
         });
+        self.ui.materials.sampling &= self
+            .document
+            .brushes()
+            .get(self.ui.selected)
+            .is_some_and(|b| b.kind == crate::sculpt::Kind::Paint);
+        if self.ui.materials.sampling && !self.viewport.sample_colour {
+            self.viewport.cancel(&mut self.document);
+        }
+        self.viewport.sample_colour = self.ui.materials.sampling;
         self.viewport.show(
             ui,
             &mut self.document,
@@ -406,6 +415,16 @@ impl App {
                 },
             },
         );
+        self.ui.materials.sampling = self.viewport.sample_colour;
+        if let Some(colour) = self.viewport.sampled_colour.take() {
+            let mut brush = self.document.brushes()[self.ui.selected].clone();
+            brush.material.base_color = colour;
+            if let Err(error) = self.document.update_brush(self.ui.selected, brush) {
+                self.ui.status = error;
+            } else {
+                self.ui.status = "Colour sampled; use + Colour to save it to the palette".into();
+            }
+        }
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         if self.ui.mask_active || temporary_visibility {
             self.viewport

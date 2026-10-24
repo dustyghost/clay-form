@@ -83,6 +83,7 @@ pub(crate) struct UiState {
     pub preset_path: String,
     pub alpha_path: String,
     pub alphas: alphas::AlphaControls,
+    pub materials: material::MaterialControls,
     pub status: String,
     pub pending: Option<PendingAction>,
     pub pending_save_path: String,
@@ -160,6 +161,7 @@ impl Default for UiState {
             preset_path: "brush.brush.json".into(),
             alpha_path: String::new(),
             alphas: Default::default(),
+            materials: Default::default(),
             status: "Ready • Drag clay to sculpt; Alt-drag empty space to pan; Shift smooths"
                 .into(),
             pending: None,
@@ -242,6 +244,14 @@ impl UiState {
     }
 
     pub(crate) fn select_brush(&mut self, index: usize, document: &Document) {
+        self.materials.sampling = false;
+        if document
+            .brushes()
+            .get(index)
+            .is_some_and(|b| b.kind == Kind::Paint)
+        {
+            self.show_polygroups = false;
+        }
         // Remember both the preset being left and a newly chosen Smooth variation.
         for i in [self.selected, index] {
             if let Some(brush) = document.brushes().get(i)
@@ -874,7 +884,13 @@ impl UiState {
                         }
                     });
                 if b.kind == Kind::Paint {
-                    crate::ui::material::paint_controls(ui, b);
+                    ui.horizontal_wrapped(|ui| {
+                    if ui.add(design::button(ui, Glyph::Edit, "Fill all"))
+                        .customize(Action::FillAllMaterial)
+                        .on_hover_text("Apply the selected channels at full strength to the entire active model, including masked and hidden vertices. One undo restores the previous materials.")
+                        .clicked() {
+                        commands.push(Command::FillAllMaterial(b.clone()));
+                    }
                     if ui
                         .add(design::button(ui, Glyph::Edit, "Fill unmasked vertices"))
                         .customize(Action::FillMaterial)
@@ -882,6 +898,8 @@ impl UiState {
                     {
                         commands.push(Command::FillMaterial(b.clone()));
                     }
+                    });
+                    self.materials.show(ui, b, &mut self.preferences.materials);
                 }
                 if b.kind == Kind::Decimate {
                     ui.label("Reduce triangles locally without smoothing. Requires Adaptive sculpt; Edge size and Simplify ratio control reduction.");

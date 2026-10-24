@@ -171,6 +171,19 @@ impl PaintChannels {
     }
 }
 impl Mesh {
+    pub(crate) fn fill_all_material(&mut self, brush: &Brush) {
+        for i in 0..self.vertices.len() {
+            let old = self.material(i);
+            let next = brush.paint_channels.apply(old, brush.material, 1.);
+            if next != old {
+                if self.materials.is_empty() {
+                    self.materials
+                        .resize(self.vertices.len(), Material::default());
+                }
+                self.materials[i] = next;
+            }
+        }
+    }
     pub(crate) fn fill_material(&mut self, brush: &Brush) {
         let eligible = self.sculptable_vertices();
         for (i, allowed) in eligible.into_iter().enumerate() {

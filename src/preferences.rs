@@ -7,7 +7,9 @@ pub(crate) use crate::action::Action;
 mod visibility;
 pub(crate) use visibility::{VisibilitySettings, VisibilityShape};
 mod masking;
+mod materials;
 pub(crate) use masking::{MaskPreset, MaskShape};
+pub(crate) use materials::MaterialLibrary;
 mod hold_binding;
 pub(crate) use hold_binding::HoldBinding;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -356,6 +358,9 @@ pub(crate) enum SelectionMode {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct Preferences {
+    pub materials: MaterialLibrary,
+    #[serde(default)]
+    pub paint_shortcuts_version: u32,
     pub selection_mode: SelectionMode,
     pub visibility_selection: VisibilitySettings,
     pub modeling_presets: Vec<ModelingPreset>,
@@ -392,6 +397,8 @@ pub(crate) struct Preferences {
 impl Default for Preferences {
     fn default() -> Self {
         Self {
+            materials: MaterialLibrary::default(),
+            paint_shortcuts_version: 1,
             visibility_selection: VisibilitySettings::default(),
             modeling_presets: Vec::new(),
             next_modeling_preset_id: 1,
@@ -445,6 +452,7 @@ impl Default for Preferences {
 }
 impl Preferences {
     pub fn validate(&self) -> Result<(), String> {
+        self.materials.validate()?;
         self.mask_hold.validate()?;
         self.visibility_hold.validate()?;
         if self.modeling_presets.len() > 128 || self.next_modeling_preset_id == 0 {
@@ -862,6 +870,19 @@ pub(crate) fn save(path: &std::path::Path, prefs: &Preferences) -> Result<(), St
 }
 pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
     let mut prefs: Preferences = crate::persistence::read_json(&path.to_string_lossy())?;
+    if prefs.paint_shortcuts_version == 0 {
+        let shortcut = Action::PolygroupColors.default_shortcut();
+        if !prefs.bindings.iter().any(|(_, key)| *key == shortcut)
+            && let Some((_, key)) = prefs
+                .bindings
+                .iter_mut()
+                .find(|(a, _)| *a == Action::PolygroupColors)
+            && key.is_none()
+        {
+            *key = shortcut;
+        }
+        prefs.paint_shortcuts_version = 1;
+    }
     // This update introduces T and moves the stock selection-menu key from W to X.
     // Explicit unbindings and non-default assignments remain intact.
     if !prefs

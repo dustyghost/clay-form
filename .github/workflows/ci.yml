@@ -79,6 +79,7 @@ jobs:
           cargo test --locked --lib diagnostic_export_dialog_offscreen_preview -- --ignored
           cargo test --locked --lib recovery_and_menu_placement_offscreen_preview -- --ignored
           cargo test --locked --lib obj_import_offscreen_preview -- --ignored
+          cargo test --locked --lib material_controls_offscreen_review -- --ignored
           cargo test --locked --lib reference_images_offscreen_preview -- --ignored
           cargo test --locked --lib navigation_and_smooth_offscreen_preview -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-flatten" cargo test --locked --lib flatten_stroke_offscreen_review -- --ignored
