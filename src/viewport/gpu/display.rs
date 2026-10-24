@@ -9,6 +9,7 @@ pub(crate) struct DisplayMesh {
     pub mesh: Mesh,
     pub shading: SurfaceShading,
     pub owners: Vec<usize>,
+    muted_vertices: Vec<bool>,
     pub source_faces: Vec<usize>,
     pub poly_colors: Vec<[u8; 4]>,
     pub edge_colors: HashMap<(usize, usize), eframe::egui::Color32>,
@@ -43,6 +44,7 @@ impl DisplayMesh {
         let mut edge_colors = HashMap::new();
         let mut shading = SurfaceShading::default();
         let mut owners = Vec::new();
+        let mut muted_vertices = Vec::new();
         let mut source_faces = Vec::new();
         let mut poly_colors = Vec::new();
         let mut outlines = Vec::new();
@@ -108,17 +110,16 @@ impl DisplayMesh {
             }
             mesh.vertices.extend_from_slice(&surface.vertices);
             mesh.mask.extend_from_slice(&surface.mask);
-            mesh.materials.extend((0..surface.vertices.len()).map(|i| {
-                if index != active && surface.materials.is_empty() {
-                    crate::sculpt::Material::from_srgb(
-                        [130., 143., 155.].map(|v| v / 255.),
-                        0.85,
-                        0.,
-                    )
-                } else {
-                    surface.material(i)
-                }
-            }));
+            muted_vertices.extend(std::iter::repeat_n(
+                index != active && surface.materials.is_empty(),
+                surface.vertices.len(),
+            ));
+            if !mesh.materials.is_empty() || !surface.materials.is_empty() {
+                mesh.materials
+                    .resize(offset, crate::sculpt::Material::default());
+                mesh.materials
+                    .extend((0..surface.vertices.len()).map(|i| surface.material(i)));
+            }
             let surface_shading = surface.surface_shading();
             let shading_offset = shading.vertices.len();
             shading.vertices.extend(
@@ -171,6 +172,7 @@ impl DisplayMesh {
             mesh,
             shading,
             owners,
+            muted_vertices,
             source_faces,
             poly_colors,
             edge_colors,
@@ -180,13 +182,20 @@ impl DisplayMesh {
             depth_extent,
         }
     }
+    pub fn material(&self, i: usize) -> crate::sculpt::Material {
+        if self.muted_vertices[i] {
+            crate::sculpt::Material::from_srgb([130., 143., 155.].map(|v| v / 255.), 0.85, 0.)
+        } else {
+            self.mesh.material(i)
+        }
+    }
     pub(super) fn vertices(&self) -> Vec<f32> {
         self.shading
             .vertices
             .iter()
             .flat_map(|&(i, n)| {
                 let p = self.mesh.vertices[i];
-                let material = self.mesh.material(i);
+                let material = self.material(i);
                 let color = material.base_color;
                 let mask = if i < self.active_vertices {
                     self.mesh.mask[i]

@@ -254,7 +254,7 @@ impl Scene {
                 } else {
                     1.
                 };
-                let base = mesh
+                let base = geometry
                     .material(i)
                     .studio_color(
                         normal,

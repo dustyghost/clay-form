@@ -20,6 +20,8 @@ The manual capture clicks the real **Fill unmasked vertices** control for all si
 
 The 4,706-vertex sphere makes the vertex-resolution limit visible at the paint boundary. Subdivide for finer paint. Copper's uniform fill away from its highlight reflects the simple studio environment; the viewport does not render surrounding scene reflections.
 
+The broader GPU CI run caught default material arrays being expanded in the picking mesh. The cache now preserves implicit defaults and keeps inactive tint in display handling. The existing `gpu_offscreen_depth_wireframe_and_cache` regression passed after the fix; the material pixel/batching regression was rerun as well.
+
 ## Blender fixture
 
 ```sh
