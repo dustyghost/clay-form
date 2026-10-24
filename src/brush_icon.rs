@@ -103,15 +103,23 @@ fn render(mesh: &Mesh, camera: &Camera, wireframe: bool) -> Result<BrushIcon, St
     })
 }
 pub(crate) fn default_icon(kind: Kind) -> BrushIcon {
-    if kind == Kind::Decimate {
+    if matches!(kind, Kind::Decimate | Kind::Relax) {
         // A sparse, rounded triangle mesh shows the topology Decimate produces.
-        let mesh = crate::sculpt::Primitive {
-            kind: crate::sculpt::PrimitiveKind::Icosphere,
-            subdivisions: 2,
-            ..Default::default()
+        let mut primitive = crate::sculpt::Primitive::for_kind(if kind == Kind::Relax {
+            crate::sculpt::PrimitiveKind::Cube
+        } else {
+            crate::sculpt::PrimitiveKind::Icosphere
+        });
+        primitive.subdivisions = 2;
+        primitive.divisions = [6; 3];
+        let mut mesh = primitive
+            .mesh()
+            .expect("valid topology brush icon geometry");
+        if kind == Kind::Relax {
+            for vertex in &mut mesh.vertices {
+                *vertex = vertex.norm();
+            }
         }
-        .mesh()
-        .expect("valid Decimate icon geometry");
         let camera = Camera {
             yaw: 0.25,
             pitch: -0.2,
@@ -133,7 +141,9 @@ pub(crate) fn default_icon(kind: Kind) -> BrushIcon {
         let r = x * x + y * y;
         let stroke = (-((x / 0.65).powi(6) + (y / 0.20).powi(2))).exp();
         match kind {
-            Kind::Decimate => unreachable!("Decimate uses a wireframe mesh thumbnail"),
+            Kind::Decimate | Kind::Relax => {
+                unreachable!("Decimate uses a wireframe mesh thumbnail")
+            }
             Kind::Standard => 0.24 * stroke,
             Kind::Clay => 0.20 * (-((x / 0.65).powi(6) + (y / 0.28).powi(6))).exp(),
             Kind::Inflate => 0.40 * (-r / 0.20).exp(),

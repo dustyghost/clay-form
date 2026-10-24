@@ -14,6 +14,13 @@ impl Document {
     }
     pub fn end_stroke(&mut self) -> bool {
         let deformed = self.stroke_active && self.stroke_deformed;
+        if let Some((_, settings)) = self.relax_stroke.take()
+            && deformed
+            && let Some(before) = self.stroke_before.take()
+        {
+            self.history
+                .record_owned(before, "Relax stroke", Some(settings));
+        }
         self.stroke_active = false;
         self.stroke_deformed = false;
         self.stroke_before = None;
@@ -46,6 +53,12 @@ impl Document {
         }
         if stencil.is_some() && matches!(brush.kind, Kind::Grab | Kind::Snake | Kind::Detail) {
             return false;
+        }
+        if brush.kind == Kind::Relax {
+            return self.apply_relax_dab(brush, dab, stencil).unwrap_or(false);
+        }
+        if self.relax_stroke.is_some() {
+            self.end_stroke();
         }
         self.begin_stroke();
         let dabs = self.symmetry.dabs(dab);

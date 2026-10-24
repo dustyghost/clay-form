@@ -139,6 +139,7 @@ impl Viewport {
         self.completed_stroke = false;
         self.completed_slice = None;
         self.status = None;
+        document.cancel_relax_stroke();
         document.end_stroke();
     }
     pub(crate) fn finish_transform_drag(&mut self, document: &mut Document) {
@@ -834,6 +835,13 @@ impl Viewport {
             document.end_stroke();
             return;
         }
+        if (brush.kind == Kind::Relax || document.relax_stroke_active())
+            && ui.input(|i| i.key_pressed(egui::Key::Escape))
+        {
+            self.cancel(document);
+            self.wait_for_release();
+            return;
+        }
         let drawing = primary && self.session.gesture == Some(Gesture::Sculpt) && options.enabled;
         let guide_start = (options.enabled
             && !self.session.sculpt.stroke
@@ -1097,6 +1105,9 @@ impl Viewport {
                             );
                             let deformed =
                                 document.apply_dab_stenciled(&brush, dab, stencil.as_ref());
+                            if let Some(status) = document.relax_status.take() {
+                                self.status = Some(status);
+                            }
                             if brush.kind == Kind::Decimate {
                                 self.record_cleanup(document, before);
                             }

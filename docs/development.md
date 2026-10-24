@@ -6,7 +6,7 @@ Run commands from the repository root.
 
 ## Checks and profiling
 
-Before opening a pull request, run:
+During development, run focused tests for the changed behavior. PR CI runs the full checks below; do not duplicate them locally before opening or updating a PR:
 
 ```sh
 cargo fmt --check

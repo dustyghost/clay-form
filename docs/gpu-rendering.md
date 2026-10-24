@@ -43,8 +43,6 @@ CLAY_GPU_SOFTWARE=1 cargo test --locked --lib recovery_and_menu_placement_offscr
 CLAY_GPU_SOFTWARE=1 cargo test --locked --lib obj_import_offscreen_preview -- --ignored
 CLAY_GPU_SOFTWARE=1 cargo test --locked --lib reference_images_offscreen_preview -- --ignored
 CLAY_GPU_SOFTWARE=1 cargo test --locked --lib navigation_and_smooth_offscreen_preview -- --ignored
-CLAY_GPU_SOFTWARE=1 cargo test --locked --lib detail_groove_offscreen_preview -- --ignored
-CLAY_GPU_SOFTWARE=1 cargo test --locked --lib clay_buildup_offscreen_preview -- --ignored
 CLAY_GPU_SOFTWARE=1 cargo test --locked --lib perspective_view_offscreen_preview -- --ignored
 CLAY_GPU_SOFTWARE=1 cargo test --locked --lib closed_cylinder_path_offscreen_preview -- --ignored
 CLAY_GPU_SOFTWARE=1 cargo test --locked --lib live_detail_path_offscreen_preview -- --ignored
@@ -53,7 +51,7 @@ CLAY_GPU_SOFTWARE=1 cargo test --locked --lib rounded_path_corners_offscreen_pre
 CLAY_GPU_SOFTWARE=1 cargo test --locked --lib automatic_path_settings_offscreen_preview -- --ignored
 ```
 
-Only the manual load profile is excluded. Software rendering checks shader, framebuffer, picking/display, and UI composition correctness; it is not a hardware performance measurement.
+The load profiler, diagnostic export reviews and manual-only brush captures are excluded from routine CI. Software rendering checks shader, framebuffer, picking/display, and UI composition correctness; it is not a hardware performance measurement.
 
 The focused checks remain available for local debugging. On a Linux host with Vulkan installed, the opt-in wgpu test compiles the real shaders and reads back rendered pixels:
 
@@ -70,6 +68,25 @@ CLAY_GPU_PREVIEW=/tmp/clay-gpu-preview.png cargo test --locked gpu_offscreen -- 
 ```
 
 ### Preview images
+
+The following captures are **manual visual review**, not routine CI checks. They render images without asserting visual correctness. Inspect both shaded and wireframe images after running:
+
+```sh
+CLAY_GPU_SOFTWARE=1 LP_NUM_THREADS=2 CLAY_BUILDUP_PREVIEW=/tmp/clay-buildup cargo test --locked --lib clay_buildup_offscreen_preview -- --ignored
+CLAY_GPU_SOFTWARE=1 LP_NUM_THREADS=2 CLAY_DETAIL_PREVIEW=/tmp/clay-detail cargo test --locked --lib detail_groove_offscreen_preview -- --ignored
+CLAY_GPU_SOFTWARE=1 LP_NUM_THREADS=2 CLAY_GUIDE_PREVIEW=/tmp/clay-inflate-relax cargo test --locked --lib inflate_relaxation_manual_capture -- --ignored
+CLAY_GPU_SOFTWARE=1 LP_NUM_THREADS=2 CLAY_GUIDE_PREVIEW=/tmp/clay-relax-brush cargo test --locked --lib relax_brush_manual_capture -- --ignored
+```
+
+Remaining automated coverage:
+
+| Manual capture | Ordinary regression coverage retained in CI |
+| --- | --- |
+| Clay buildup | `sculpt::clay::tests` checks buildup, sampled planes, pressure, masks, alpha and symmetry; `clay_viewport_stroke_restores_geometry_and_topology_with_one_undo` checks fixed/adaptive strokes and Undo/Redo. |
+| Detail groove | `adaptive_detail_groove_does_not_fold_with_or_without_stabilization` uses the same scene and checks closed geometry, normals, incision, shoulders, untouched back faces and Undo/Redo; sculpt tests retain depth/inversion and protected-region checks. |
+| Inflate → Relax | `relaxation_after_aggressive_inflate_reduces_stretch_and_retains_the_bulge` checks stretch, surface deviation, bulge, masks, creases, topology and attributes. Separate relaxation tests retain groove, wider redistribution, boundaries, hidden faces, nearby sheets and cancellation coverage. |
+
+`mesh_refinement_offscreen_review` remains in GPU CI: it clicks Preview/Apply/Cancel, verifies Undo/Redo and point-split controls, and checks compact-window scrolling. Only its independent Inflate image sequence moved to `inflate_relaxation_manual_capture`. Core GPU pixel, depth and clipping tests are unchanged. Export-review tools and the load profiler were already manual and remain available.
 
 The perspective regression compares real framebuffer coverage against CPU picking, checks brush-alpha agreement, wireframe, symmetry guides and camera-only cache reuse, and exercises near-plane crossings and distant geometry. `perspective_view_offscreen_preview` renders the View controls in both projections, exporting `/tmp/clay-perspective-orthographic.png` and `/tmp/clay-perspective-ui.png` for visual inspection. Set `CLAY_PERSPECTIVE_PREVIEW` to change the output prefix.
 

@@ -154,7 +154,10 @@ impl Mesh {
                 brush.effective_stroke_mode(),
                 super::StrokeMode::DragRect | super::StrokeMode::DragDot
             )
-            || matches!(brush.kind, Kind::Mask | Kind::Smooth | Kind::Decimate)
+            || matches!(
+                brush.kind,
+                Kind::Mask | Kind::Smooth | Kind::Relax | Kind::Decimate
+            )
             || brush.strength <= 0.
             || dabs.is_empty()
         {
@@ -229,7 +232,7 @@ impl Mesh {
         let Region { dabs, stencils } = region;
         if !self.creases.is_empty()
             || !settings.enabled
-            || matches!(brush.kind, Kind::Mask | Kind::Smooth)
+            || matches!(brush.kind, Kind::Mask | Kind::Smooth | Kind::Relax)
             || brush.strength <= 0.
             || dabs.is_empty()
             || matches!(&brush.alpha,Alpha::Image { pixels,.. } if pixels.iter().all(|&p|p==0.))
@@ -302,8 +305,9 @@ impl Mesh {
         let sculptable = self.sculptable_vertices();
         for _ in 0..2 {
             let mut active = vec![false; self.vertices.len()];
+            let nearby_faces = self.patch_candidates(brush, dabs);
             for (fi, &t) in self.triangles.iter().enumerate() {
-                if self.in_patch(fi, t, brush, dabs, stencils) {
+                if nearby_faces[fi] && self.in_patch(fi, t, brush, dabs, stencils) {
                     for i in t {
                         active[i] = true;
                     }
@@ -443,8 +447,9 @@ impl Mesh {
     ) -> usize {
         let mut edges: Vec<((usize, usize), OrientedFaceEdge)> = Vec::new();
         let mut local_vertices = vec![false; self.vertices.len()];
+        let nearby_faces = self.patch_candidates(brush, dabs);
         for (i, &[a, b, c]) in self.triangles.iter().enumerate() {
-            if !self.in_patch(i, [a, b, c], brush, dabs, stencils) {
+            if !nearby_faces[i] || !self.in_patch(i, [a, b, c], brush, dabs, stencils) {
                 continue;
             }
             for (a, b, c) in [(a, b, c), (b, c, a), (c, a, b)] {
@@ -579,8 +584,9 @@ impl Mesh {
         let mut sampling =
             relief.then(|| relief::Sampling::new(brush, Region { dabs, stencils }, target));
         let mut candidates = BTreeMap::new();
+        let nearby_faces = self.patch_candidates(brush, dabs);
         for (fi, &t) in self.triangles.iter().enumerate() {
-            if !self.in_patch(fi, t, brush, dabs, stencils) {
+            if !nearby_faces[fi] || !self.in_patch(fi, t, brush, dabs, stencils) {
                 continue;
             }
             let [a, b, c] = t;
@@ -736,9 +742,10 @@ impl Mesh {
         limit: usize,
     ) -> usize {
         let mut candidates = BTreeMap::new();
+        let nearby_faces = self.patch_candidates(brush, dabs);
         for (fi, &t) in self.triangles.iter().enumerate() {
             let [a, b, c] = t;
-            if self.in_patch(fi, t, brush, dabs, stencils) {
+            if nearby_faces[fi] && self.in_patch(fi, t, brush, dabs, stencils) {
                 for (a, b) in [(a, b), (b, c), (c, a)] {
                     let length = (self.vertices[a] - self.vertices[b]).len();
                     if length < threshold {
@@ -1075,6 +1082,53 @@ impl Mesh {
         }
         (neighbors, incident)
     }
+    /// Classify each shared vertex once before scanning faces. An outcode's
+    /// common bit means all three corners lie beyond the same brush-box plane.
+    /// This only rejects distant faces; the exact footprint/normal/visibility
+    /// checks still decide membership. Rebuild after every topology/position edit.
+    fn patch_candidates(&self, brush: &Brush, dabs: &[Dab]) -> Vec<bool> {
+        let reach = if matches!(
+            brush.effective_stroke_mode(),
+            super::StrokeMode::DragRect | super::StrokeMode::DragDot
+        ) {
+            1.5
+        } else {
+            1.
+        };
+        let magnitude = self
+            .vertices
+            .iter()
+            .fold(0_f32, |m, p| m.max(p.0.abs()).max(p.1.abs()).max(p.2.abs()));
+        let mut nearby = vec![false; self.triangles.len()];
+        for dab in dabs {
+            if brush.pressure && dab.pressure <= 0. {
+                continue;
+            }
+            let magnitude = magnitude
+                .max(dab.center.0.abs())
+                .max(dab.center.1.abs())
+                .max(dab.center.2.abs());
+            let radius = dab.radius * reach + 16. * f32::EPSILON * (magnitude + dab.radius + 1.);
+            let low = dab.center - Vec3(radius, radius, radius);
+            let high = dab.center + Vec3(radius, radius, radius);
+            let codes: Vec<u8> = self
+                .vertices
+                .iter()
+                .map(|p| {
+                    u8::from(p.0 < low.0)
+                        | (u8::from(p.0 > high.0) << 1)
+                        | (u8::from(p.1 < low.1) << 2)
+                        | (u8::from(p.1 > high.1) << 3)
+                        | (u8::from(p.2 < low.2) << 4)
+                        | (u8::from(p.2 > high.2) << 5)
+                })
+                .collect();
+            for (near, &[a, b, c]) in nearby.iter_mut().zip(&self.triangles) {
+                *near |= codes[a] & codes[b] & codes[c] == 0;
+            }
+        }
+        nearby
+    }
     fn in_patch(
         &self,
         face: usize,
@@ -1392,12 +1446,14 @@ mod tests {
                                 radius,
                                 ..dab()
                             });
+                            let candidates = mesh.patch_candidates(&brush, &dabs);
                             for projected in [&[][..], stencils.as_slice()] {
                                 for (face, &t) in mesh.triangles.iter().enumerate() {
                                     let precise = mesh
                                         .in_patch_impl::<false>(face, t, &brush, &dabs, projected);
                                     assert_eq!(
-                                        mesh.in_patch(face, t, &brush, &dabs, projected),
+                                        candidates[face]
+                                            && mesh.in_patch(face, t, &brush, &dabs, projected),
                                         precise
                                     );
                                     accepted += usize::from(precise);
@@ -1445,7 +1501,8 @@ mod tests {
                             ..dab()
                         };
                         assert_eq!(
-                            mesh.in_patch(0, [0, 1, 2], &brush, &[d], &[]),
+                            mesh.patch_candidates(&brush, &[d])[0]
+                                && mesh.in_patch(0, [0, 1, 2], &brush, &[d], &[]),
                             mesh.in_patch_impl::<false>(0, [0, 1, 2], &brush, &[d], &[])
                         );
                     }

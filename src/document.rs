@@ -21,6 +21,7 @@ pub use path_stroke::{PathStrokeOptions, PathStrokePreview, PathStrokeRequest, P
 mod projection;
 pub use projection::ProjectionSource;
 mod references;
+mod relax;
 mod scene;
 mod stroke;
 #[cfg(test)]
@@ -58,6 +59,9 @@ pub struct Document {
     dirty: bool,
     edit: Option<EditSession>,
     stroke_active: bool,
+    relax_surface: Option<(u64, crate::sculpt::RelaxationSurface)>,
+    relax_stroke: Option<(bool, crate::diagnostics::EditSettings)>,
+    pub(crate) relax_status: Option<String>,
     stroke_deformed: bool,
     stroke_before: Option<Geometry>,
     stroke_flatten_planes: Vec<(crate::sculpt::Vec3, crate::sculpt::Vec3)>,
@@ -84,6 +88,9 @@ impl Default for Document {
             dirty: false,
             edit: None,
             stroke_active: false,
+            relax_surface: None,
+            relax_stroke: None,
+            relax_status: None,
             stroke_deformed: false,
             stroke_before: None,
             stroke_flatten_planes: Vec::new(),

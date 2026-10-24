@@ -72,7 +72,8 @@ jobs:
           sudo apt-get install --yes libwayland-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
 
       - name: Run all GPU correctness checks
-        # The manual load profile is diagnostic, not a correctness test.
+        # Keep pixel/depth/clipping checks and tests that exercise real controls.
+        # Manual-only captures are documented in docs/gpu-rendering.md.
         run: |
           cargo test --locked --lib viewport::gpu:: -- --ignored --skip gpu_load_profile --test-threads=1
           cargo test --locked --lib diagnostic_export_dialog_offscreen_preview -- --ignored
@@ -80,8 +81,6 @@ jobs:
           cargo test --locked --lib obj_import_offscreen_preview -- --ignored
           cargo test --locked --lib reference_images_offscreen_preview -- --ignored
           cargo test --locked --lib navigation_and_smooth_offscreen_preview -- --ignored
-          cargo test --locked --lib detail_groove_offscreen_preview -- --ignored
-          cargo test --locked --lib clay_buildup_offscreen_preview -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-flatten" cargo test --locked --lib flatten_stroke_offscreen_review -- --ignored
           cargo test --locked --lib perspective_view_offscreen_preview -- --ignored
           cargo test --locked --lib closed_cylinder_path_offscreen_preview -- --ignored

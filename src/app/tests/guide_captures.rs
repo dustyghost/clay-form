@@ -2865,41 +2865,6 @@ fn mesh_refinement_offscreen_review() {
     assert_eq!(g.app.document.geometry_snapshot(), after);
     drop(g);
 
-    let mut g = Guide::new(&directory, [1000, 850]);
-    g.toolbar = false;
-    g.app
-        .document
-        .replace_geometry(Geometry::new(crate::sculpt::inflated_relaxation_fixture()))
-        .unwrap();
-    g.app.camera.yaw = 0.45;
-    g.app.camera.pitch = -0.3;
-    g.app.camera.zoom = 0.8;
-    g.save("inflate-relaxation-shaded-before");
-    g.app.ui.wire = true;
-    g.save("inflate-relaxation-wire-before");
-    let mesh = g.app.document.mesh();
-    let (out, report) = mesh
-        .relax_mesh(
-            mesh,
-            crate::sculpt::RelaxationOptions {
-                strength: 1.,
-                iterations: 30,
-                max_deviation: 0.01,
-            },
-            &|| false,
-        )
-        .unwrap();
-    std::fs::write(
-        directory.join("inflate-relaxation-measurements.txt"),
-        report.summary(),
-    )
-    .unwrap();
-    g.app.document.replace_geometry(Geometry::new(out)).unwrap();
-    g.save("inflate-relaxation-wire-after");
-    g.app.ui.wire = false;
-    g.save("inflate-relaxation-shaded-after");
-    drop(g);
-
     let mut g = Guide::new(&directory, [1100, 1120]);
     g.interactive = true;
     let mut p = Primitive::for_kind(PrimitiveKind::Cube);
@@ -2960,4 +2925,104 @@ fn mesh_refinement_offscreen_review() {
     g.save("relaxation-small-bottom");
     click_guide_label(&mut g, "Cancel");
     assert!(!g.app.ui.projection.open);
+}
+
+#[test]
+#[ignore = "manual Inflate/Relax visual review; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn inflate_relaxation_manual_capture() {
+    use crate::sculpt::Geometry;
+    let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1000, 850]);
+    g.toolbar = false;
+    g.app
+        .document
+        .replace_geometry(Geometry::new(crate::sculpt::inflated_relaxation_fixture()))
+        .unwrap();
+    g.app.camera.yaw = 0.45;
+    g.app.camera.pitch = -0.3;
+    g.app.camera.zoom = 0.8;
+    g.save("inflate-relaxation-shaded-before");
+    g.app.ui.wire = true;
+    g.save("inflate-relaxation-wire-before");
+    let mesh = g.app.document.mesh();
+    let (out, report) = mesh
+        .relax_mesh(
+            mesh,
+            crate::sculpt::RelaxationOptions {
+                strength: 1.,
+                iterations: 30,
+                max_deviation: 0.01,
+            },
+            &|| false,
+        )
+        .unwrap();
+    std::fs::write(
+        directory.join("inflate-relaxation-measurements.txt"),
+        report.summary(),
+    )
+    .unwrap();
+    g.app.document.replace_geometry(Geometry::new(out)).unwrap();
+    g.save("inflate-relaxation-wire-after");
+    g.app.ui.wire = false;
+    g.save("inflate-relaxation-shaded-after");
+    drop(g);
+}
+
+#[test]
+#[ignore = "manual Relax brush visual review; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn relax_brush_manual_capture() {
+    use crate::sculpt::{Brush, Dab, Geometry, Kind, Vec3};
+    let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1000, 850]);
+    g.toolbar = false;
+    g.app
+        .document
+        .replace_geometry(Geometry::new(crate::sculpt::inflated_relaxation_fixture()))
+        .unwrap();
+    g.app.camera.yaw = 0.45;
+    g.app.camera.pitch = -0.3;
+    g.app.camera.zoom = 0.8;
+    g.app.ui.selected = g
+        .app
+        .document
+        .brushes()
+        .iter()
+        .position(|b| b.kind == Kind::Relax)
+        .unwrap();
+    g.save("relax-brush-shaded-before");
+    g.app.ui.wire = true;
+    g.save("relax-brush-wire-before");
+    let mut brush = Brush::new(Kind::Relax);
+    brush.strength = 1.;
+    brush.relax_tolerance = 0.01;
+    for _ in 0..3 {
+        for _ in 0..12 {
+            g.app.document.apply_dab(
+                &brush,
+                Dab {
+                    center: Vec3(0., 0., 1.1),
+                    normal: Vec3(0., 0., 1.),
+                    right: Vec3(1., 0., 0.),
+                    up: Vec3(0., 1., 0.),
+                    radius: 1.5,
+                    pressure: 1.,
+                    delta: Vec3::default(),
+                    invert: false,
+                },
+            );
+        }
+        g.app.document.end_stroke();
+    }
+    g.save("relax-brush-wire-after");
+    g.app.ui.wire = false;
+    g.save("relax-brush-shaded-after");
+    g.app
+        .document
+        .update_brush(g.app.ui.selected, brush)
+        .unwrap();
+    g.panel(Tool::Brush, Dock::Right);
+    g.save("relax-brush-controls");
+    g.app.viewport.destroy_renderer();
 }

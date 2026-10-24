@@ -21,6 +21,7 @@ Build a rounded form, cut a fold, or pull out a horn: choose the brush for the s
 | --- | --- |
 | Build up or remove clay | Standard, Clay, Inflate |
 | Even out a surface | Smooth, Flatten |
+| Redistribute crowded or stretched polygons without smoothing the shape | Relax |
 | Reduce surplus triangles | Decimate (Adaptive sculpt) |
 | Polish bumps into cleaner planes while holding sharp corners | Polish |
 | Tighten a fold | Pinch, Crease, Detail |
@@ -238,6 +239,24 @@ Enable **Mesh → Adaptive sculpt**. It adds or removes local triangles as you b
 | Simplify ratio | Threshold for collapsing edges relative to the target |
 
 **Enabling adaptive sculpt discards stored subdivision levels.** Undo restores them. It requires a closed, consistently oriented surface; Mask strokes do not change topology.
+
+### Redistribute polygons with Relax
+
+Choose **Relax** from the brush library (use **Add brush → Relax** in older projects). After Inflate, paint over crowded or stretched regions to even out the existing vertices. Radius, Strength, falloff, alpha, tablet pressure and symmetry control the local influence. Masks and hidden faces protect the surface; open boundaries, creases and sharp features stay fixed. Relax keeps vertex counts, faces and attributes, even with Adaptive sculpt enabled.
+
+**Surface tolerance** in Brush settings bounds sampled deviation from the retained surface, in model units. Start with the default 0.002; a larger tolerance allows more redistribution on curved regions. The status reports moved/protected/constrained vertices. If little moves, the tolerance or fixed topology may be limiting the result. Relax does not add missing resolution. Use Smooth/Polish when you intend to soften the shape.
+
+Consecutive Relax strokes share one immutable reference, so releasing and pressing again does not reset the surface-error allowance. A different mesh edit, Undo/Redo, changing the active model, or reopening the project captures a new reference on the next Relax stroke. Camera and brush-setting changes keep it. Saved geometry and presets round-trip normally; this reference cache is session-only.
+
+![Relax brush surface tolerance and strength controls](../images/relax-brush-controls.png)
+
+![Inflated mesh before Relax](../images/relax-brush-wire-before.png)
+
+![The same mesh after three Relax strokes](../images/relax-brush-wire-after.png)
+
+*Spacing becomes more even around the inflated region. The bulge, polygon count and camera are retained.*
+
+Relax uses freehand strokes and has no subtract operation. Release commits one undo step; **Escape** cancels the current stroke and preserves redo history. Use matched shaded and wireframe views to judge both shape preservation and spacing.
 
 ### Smooth first, then reduce triangles
 

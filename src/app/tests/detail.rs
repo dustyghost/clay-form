@@ -77,7 +77,7 @@ fn detail_groove(adaptive: AdaptiveSettings, stabilize: bool) -> (App, egui::Con
 
 #[cfg(target_os = "linux")]
 #[test]
-#[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
+#[ignore = "manual visual review; requires a Vulkan adapter (software lavapipe supported)"]
 fn detail_groove_offscreen_preview() {
     let mut capture = crate::viewport::UiCapture::new([1000, 800]);
     let (mut app, ctx) = detail_groove(
@@ -140,6 +140,7 @@ fn reset_brush_settings_restores_behavior_and_keeps_preset_identity() {
         edited.alpha = Alpha::Square;
         edited.radius = 123.;
         edited.strength = 0.8;
+        edited.relax_tolerance = 0.1;
         edited.falloff = 3.;
         edited.inner_radius = 0.5;
         edited.surface_cursor = true;
