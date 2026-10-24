@@ -52,6 +52,10 @@ Save as **`.clay`** to preserve paint, brush settings, masks, groups and subdivi
 
 ## Shading
 
+The **Light** widget beneath the viewport axes lets you drag the light around the model directly in view. Its gold marker shows the light direction; a hollow marker is behind the model. **Front / back** flips sides, **Directional** and **Point** change the light type, and point lights have a **Distance** slider. **Follow camera** controls whether the light moves with the view. Escape cancels a light drag. Collapse the **Light** header to make room, or turn off **Show light controls** in the Lighting panel. These controls change illumination without moving the camera or painting the model.
+
+![Viewport light controls and Lighting panel](../images/lighting-controls.png)
+
 Open **View → Lighting** to choose a **Directional light** or **Point light**. Use **Drag to move light**, or the azimuth and elevation sliders, to reposition it. Point lights also have a distance control and distance falloff. Change light colour, intensity and ambient fill; turn off **Light follows camera** to keep the light fixed in world space. **Reset studio lighting** restores the original appearance. Lighting is saved in your preferences and does not edit paint or geometry.
 
 The default viewport lighting uses a studio light and neutral fill. Roughness changes highlight width; metallic changes the diffuse/specular balance and tints metal reflections. The same material appearance is used for the active and inactive painted models. Unpainted inactive models retain their blue-grey selection tint.

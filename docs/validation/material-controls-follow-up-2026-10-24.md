@@ -48,3 +48,9 @@ The focused material run passed 21 tests. The real-control walkthrough also pass
 ## Whole-material removal follow-up
 
 A focused regression removes a personal material blended over another definition on a small mesh with lower and higher subdivision levels and a duplicated submodel. All surface values and other definition weights remain unchanged. Project serialization, removal of the personal library entry, Undo/Redo restoration and persisted built-in visibility pass. The real-control walkthrough removes the renamed swatch, verifies it disappears while paint stays unchanged, then exercises Undo/Redo and restoring built-in swatches without rebinding paint. The `material-removed.png` capture was visually inspected.
+
+## Viewport light controls and CI Undo fix
+
+The light widget has a screen-oriented orbit handle, front/back flip, directional/point selector and point distance. The focused lighting math checks pass for camera-relative and world-space lights. The real-control Vulkan walkthrough verifies changed model pixels, release outside the widget, Escape rollback, type/distance changes and collapse while camera, geometry and history remain unchanged. Both expanded and collapsed captures were inspected.
+
+CI found that unrelated Undo operations detached a default Paint brush from its not-yet-registered library material, changing project state in the guide reattachment and submodel selection tests. History now detaches only definitions that existed before the transition and were removed by it. Both previously failing tests pass locally; the complete suite and lint remain in CI.

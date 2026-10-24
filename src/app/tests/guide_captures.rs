@@ -3522,4 +3522,128 @@ fn viewport_lighting_offscreen_review() {
     assert_eq!(g.app.document.geometry_snapshot(), before);
     assert_eq!(g.app.document.history_counts(), history);
     g.save("lighting-studio");
+    // The viewport widget moves a world-space light in screen directions, while
+    // retaining its pointer even after dragging out over the model.
+    g.app.camera.yaw = 0.8;
+    g.app.camera.pitch = -0.4;
+    g.app.ui.preferences.lighting.camera_relative = false;
+    let camera = g.app.camera;
+    let lighting = g.app.ui.preferences.lighting;
+    let (_, widget_before) = g.frame(vec![]);
+    let pad = |g: &Guide| {
+        g.text_positions
+            .iter()
+            .find(|(text, _)| text == "Drag light")
+            .unwrap()
+            .1
+            - Vec2::new(0., 48.)
+    };
+    let start = pad(&g);
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    let end = start + Vec2::new(-95., 20.);
+    g.frame(vec![egui::Event::PointerMoved(end)]);
+    g.frame(vec![primary_event(end, false), egui::Event::PointerGone]);
+    let (_, widget_after) = g.frame(vec![]);
+    assert_ne!(g.app.ui.preferences.lighting.azimuth, lighting.azimuth);
+    let changed = ((rect.center().y - 100.) as usize..(rect.center().y + 100.) as usize)
+        .flat_map(|y| {
+            ((rect.center().x - 100.) as usize..(rect.center().x + 100.) as usize)
+                .map(move |x| ((999 - y) * 1200 + x) * 4)
+        })
+        .filter(|&i| {
+            widget_before[i..i + 3]
+                .iter()
+                .zip(&widget_after[i..i + 3])
+                .any(|(a, b)| a.abs_diff(*b) > 12)
+        })
+        .count();
+    assert!(
+        changed > 500,
+        "The light widget changes model pixels, not just the overlay"
+    );
+    assert_eq!(
+        (
+            g.app.camera.yaw,
+            g.app.camera.pitch,
+            g.app.camera.zoom,
+            g.app.camera.pan
+        ),
+        (camera.yaw, camera.pitch, camera.zoom, camera.pan)
+    );
+    let lighting = g.app.ui.preferences.lighting;
+    let start = pad(&g);
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    g.frame(vec![egui::Event::PointerMoved(
+        start + Vec2::new(40., -10.),
+    )]);
+    assert_ne!(g.app.ui.preferences.lighting, lighting);
+    g.frame(vec![slice_key(egui::Key::Escape, true)]);
+    assert_eq!(g.app.ui.preferences.lighting, lighting);
+    g.frame(vec![
+        slice_key(egui::Key::Escape, false),
+        egui::Event::PointerMoved(rect.center()),
+        primary_event(rect.center(), false),
+    ]);
+    click_guide_label(&mut g, "Point");
+    assert_eq!(g.app.ui.preferences.lighting.kind, LightKind::Point);
+    g.frame(vec![]);
+    let distance = g.app.ui.preferences.lighting.distance;
+    let start = g
+        .text_positions
+        .iter()
+        .find(|(text, _)| text == "Distance")
+        .unwrap()
+        .1
+        + Vec2::new(20., 23.);
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    let end = start + Vec2::new(35., 0.);
+    g.frame(vec![egui::Event::PointerMoved(end)]);
+    g.frame(vec![primary_event(end, false), egui::Event::PointerGone]);
+    assert_ne!(g.app.ui.preferences.lighting.distance, distance);
+    let (right, up, view) = camera.basis();
+    let side = g
+        .app
+        .ui
+        .preferences
+        .lighting
+        .vector(right, up, view)
+        .dot(view);
+    click_guide_label(&mut g, "Front / back");
+    let flipped = g
+        .app
+        .ui
+        .preferences
+        .lighting
+        .vector(right, up, view)
+        .dot(view);
+    assert!((flipped + side).abs() < 1e-4);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    assert_eq!(g.app.document.history_counts(), history);
+    assert_eq!(
+        (
+            g.app.camera.yaw,
+            g.app.camera.pitch,
+            g.app.camera.zoom,
+            g.app.camera.pan
+        ),
+        (camera.yaw, camera.pitch, camera.zoom, camera.pan)
+    );
+    g.save("lighting-viewport-widget");
+    click_guide_label(&mut g, "Light");
+    g.frame(vec![]);
+    assert!(
+        !g.text_positions
+            .iter()
+            .any(|(text, _)| text == "Drag light")
+    );
+    g.save("lighting-widget-collapsed");
 }

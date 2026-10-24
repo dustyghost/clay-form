@@ -1,4 +1,7 @@
 //! Viewport illumination, independent of authored material channels.
+mod overlay;
+pub(crate) use overlay::LightControls;
+
 use crate::sculpt::Vec3;
 use eframe::egui;
 use serde::{Deserialize, Serialize};
@@ -20,6 +23,7 @@ pub(crate) struct Lighting {
     pub fill: f32,
     pub colour: [f32; 3],
     pub camera_relative: bool,
+    pub show_controls: bool,
 }
 impl Default for Lighting {
     fn default() -> Self {
@@ -32,6 +36,7 @@ impl Default for Lighting {
             fill: 1.,
             colour: [1.; 3],
             camera_relative: true,
+            show_controls: true,
         }
     }
 }
@@ -95,6 +100,7 @@ impl Lighting {
     }
     pub fn controls(&mut self, ui: &mut egui::Ui) {
         ui.label("Viewport lighting");
+        ui.checkbox(&mut self.show_controls, "Show light controls");
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.kind, LightKind::Directional, "Directional light");
             ui.selectable_value(&mut self.kind, LightKind::Point, "Point light");

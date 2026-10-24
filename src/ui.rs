@@ -84,6 +84,7 @@ pub(crate) struct UiState {
     pub alpha_path: String,
     pub alphas: alphas::AlphaControls,
     pub materials: material::MaterialControls,
+    pub light_controls: crate::lighting::LightControls,
     pub export_busy: bool,
     pub status: String,
     pub pending: Option<PendingAction>,
@@ -163,6 +164,7 @@ impl Default for UiState {
             alpha_path: String::new(),
             alphas: Default::default(),
             materials: Default::default(),
+            light_controls: Default::default(),
             export_busy: false,
             status: "Ready • Drag clay to sculpt; Alt-drag empty space to pan; Shift smooths"
                 .into(),

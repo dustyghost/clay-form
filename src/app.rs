@@ -321,6 +321,14 @@ impl App {
         let over_toolbar = toolbar_rect.is_some_and(|rect| {
             ui.input(|i| i.pointer.hover_pos().is_some_and(|p| rect.contains(p)))
         });
+        let light_input = self.ui.light_controls.show(
+            ui.ctx(),
+            ui.available_rect_before_wrap(),
+            &self.camera,
+            &mut self.ui.preferences.lighting,
+            enabled && self.viewport.session.gesture.is_none(),
+        );
+        self.ui.preferences.lighting.install(ui.ctx());
         let selected = self.ui.brush_index_for_context(&self.document, ui.ctx());
         self.capture_diagnostic_context(ui.ctx());
         self.viewport.session.projection_preview = self
@@ -398,6 +406,7 @@ impl App {
                 show_guides: self.ui.show_symmetry_guides,
                 guide_opacity: self.ui.guide_opacity,
                 enabled: enabled
+                    && !light_input
                     && (self.viewport.session.guided.dragging()
                         || (!over_toolbar
                             && !over_editor
