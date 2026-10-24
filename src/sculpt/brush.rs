@@ -324,7 +324,7 @@ impl Brush {
                 _ => 0.25,
             },
             material: if kind == Kind::Paint {
-                super::Material::examples()[1].1
+                super::Material::examples()[1].1.with_link(2)
             } else {
                 super::Material::default()
             },

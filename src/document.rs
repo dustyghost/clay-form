@@ -20,6 +20,7 @@ mod primitive;
 pub use path_stroke::{PathStrokeOptions, PathStrokePreview, PathStrokeRequest, PathStrokeSession};
 mod projection;
 pub use projection::ProjectionSource;
+mod materials;
 mod paint;
 mod references;
 mod relax;
@@ -105,6 +106,9 @@ impl Default for Document {
 }
 impl Document {
     /// Session-only invalidation token for display geometry, materials, and ownership.
+    pub(crate) fn stroke_active(&self) -> bool {
+        self.stroke_active
+    }
     pub(crate) fn display_revision(&self) -> u64 {
         self.display_revision
     }
@@ -208,12 +212,14 @@ impl Document {
         if self.history.undo(&mut self.geometry) {
             self.dirty = true;
             self.display_changed();
+            self.sync_material_brushes();
         }
     }
     pub fn redo(&mut self) {
         self.end_edit();
         self.end_stroke();
         if self.history.redo(&mut self.geometry) {
+            self.sync_material_brushes();
             self.dirty = true;
             self.display_changed();
         }

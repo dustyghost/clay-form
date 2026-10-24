@@ -13,6 +13,7 @@ use wgpu::util::DeviceExt;
 
 pub(super) struct Renderer {
     revision: Option<u64>,
+    live_display: bool,
     geometry: Option<Arc<DisplayMesh>>,
     render_geometry: Option<Arc<DisplayMesh>>,
     gpu: Arc<Mutex<Gpu>>,
@@ -23,6 +24,7 @@ impl Renderer {
         Ok(Self {
             preview: Arc::new(Mutex::new(Preview::default())),
             revision: None,
+            live_display: false,
             geometry: None,
             render_geometry: None,
             gpu: Arc::new(Mutex::new(Gpu::new(
@@ -33,8 +35,17 @@ impl Renderer {
         })
     }
     pub fn geometry(&mut self, document: &Document) -> Arc<DisplayMesh> {
-        if self.revision != Some(document.display_revision()) {
-            self.geometry = Some(Arc::new(DisplayMesh::new(document)));
+        if self.revision != Some(document.display_revision())
+            || (self.live_display && !document.stroke_active())
+        {
+            let preview = self
+                .geometry
+                .as_ref()
+                .and_then(|display| display.during_stroke(document));
+            self.live_display = preview.is_some();
+            self.geometry = Some(Arc::new(
+                preview.unwrap_or_else(|| DisplayMesh::new(document)),
+            ));
             self.render_geometry = Some(
                 if (0..document.model_count())
                     .any(|i| document.model(i).unwrap().metadata.temporary_thickness > 0.)
@@ -72,6 +83,7 @@ impl Renderer {
             geometry.depth_extent,
         );
         params.set_perspective(scene.eye_distance, geometry.depth_extent);
+        params.lighting = crate::lighting::Lighting::current(painter.ctx());
         params.background = crate::preferences::viewport_background(painter.ctx()).to_array()[..3]
             .try_into()
             .unwrap();
@@ -218,6 +230,9 @@ struct Uniforms {
     brush_shape: [f32; 4],
     guide_center: [f32; 4],
     flags: [f32; 4],
+    light_position: [f32; 4],
+    light_colour: [f32; 4],
+    material_info: [f32; 4],
     guide_normals: [[f32; 4]; 32],
     guide_sides: [[f32; 4]; 32],
     guide_colors: [[f32; 4]; 32],
@@ -243,6 +258,7 @@ struct Gpu {
     // Backfaces use a separate buffer: queue writes are visible to the entire submission.
     back_uniform: wgpu::Buffer,
     meshes: Vec<MeshBuffers>,
+    vertex_stride: usize,
     edges: Option<Vec<(wgpu::Buffer, u32)>>,
     triangle_edges: Option<Vec<(wgpu::Buffer, u32)>>,
     uploaded: Option<Arc<DisplayMesh>>,
@@ -295,7 +311,12 @@ impl Gpu {
         for binding in 2..=4 {
             entries.push(wgpu::BindGroupLayoutEntry {
                 binding,
-                visibility: wgpu::ShaderStages::VERTEX,
+                visibility: wgpu::ShaderStages::VERTEX
+                    | if binding == 2 {
+                        wgpu::ShaderStages::FRAGMENT
+                    } else {
+                        wgpu::ShaderStages::empty()
+                    },
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
@@ -497,6 +518,7 @@ impl Gpu {
             uniform: uniform(),
             back_uniform: uniform(),
             meshes: vec![Self::mesh_buffers(device, &[], &[], &[])],
+            vertex_stride: 12,
             edges: None,
             triangle_edges: None,
             uploaded: None,
@@ -582,7 +604,9 @@ impl Gpu {
     // A document may contain several maximum-density models. Chunk the display
     // data at the device binding limit instead of imposing a new geometry limit.
     fn upload_meshes(&mut self, data: &DisplayMesh, limit: usize) {
-        let vertices = data.vertices();
+        self.vertex_stride = data.vertex_stride();
+        let stride = self.vertex_stride;
+        let vertices = data.vertices(stride);
         let colors: Vec<[f32; 4]> = data
             .poly_colors
             .iter()
@@ -605,15 +629,15 @@ impl Gpu {
             return;
         }
         self.meshes.clear();
-        let per_batch = (limit / (3 * 48)).max(1);
+        let per_batch = (limit / (3 * stride * 4)).max(1);
         for (batch, triangles) in data.shading.triangles.chunks(per_batch).enumerate() {
             let mut mapping = std::collections::HashMap::new();
             let mut packed = Vec::new();
             let mut indices = Vec::with_capacity(triangles.len() * 3);
             for &source in triangles.iter().flatten() {
                 let index = *mapping.entry(source).or_insert_with(|| {
-                    let index = (packed.len() / 12) as u32;
-                    packed.extend_from_slice(&vertices[source * 12..source * 12 + 12]);
+                    let index = (packed.len() / stride) as u32;
+                    packed.extend_from_slice(&vertices[source * stride..(source + 1) * stride]);
                     index
                 });
                 indices.push(index);
@@ -664,6 +688,7 @@ impl Gpu {
     fn uniforms(&mut self, p: &Params, preview: &Preview, mode: WireMode) -> Uniforms {
         let vector = |v: Vec3, w| [v.0, v.1, v.2, w];
         let mut u: Uniforms = bytemuck::Zeroable::zeroed();
+        u.material_info = [self.vertex_stride as f32, 0., 0., 0.];
         u.right = vector(p.right, 0.);
         u.up = vector(p.up, 0.);
         u.view = vector(p.view, 0.);
@@ -673,6 +698,16 @@ impl Gpu {
             p.perspective[1],
             p.perspective[2],
             p.depth,
+        ];
+        u.light_position = vector(
+            p.lighting.vector(p.right, p.up, p.view),
+            f32::from(p.lighting.kind == crate::lighting::LightKind::Point),
+        );
+        u.light_colour = [
+            p.lighting.colour[0] * p.lighting.intensity,
+            p.lighting.colour[1] * p.lighting.intensity,
+            p.lighting.colour[2] * p.lighting.intensity,
+            p.lighting.fill,
         ];
         u.flags = [
             f32::from(preview.show_polygroups),

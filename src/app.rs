@@ -16,6 +16,7 @@ mod actions;
 mod commands;
 mod context_menu;
 mod diagnostics;
+mod exports;
 mod files;
 mod jobs;
 mod masking;
@@ -38,6 +39,7 @@ pub struct App {
     paths: paths::PathState,
     closing: bool,
     mesh_job: Option<MeshJob>,
+    export_job: Option<crate::background_job::BackgroundJob<(std::path::PathBuf, Vec<u8>)>>,
     recovery: Option<crate::recovery::Recovery>,
     recovery_entries: Vec<crate::recovery::Entry>,
     recovery_error: Option<String>,
@@ -60,6 +62,7 @@ impl Default for App {
             paths: Default::default(),
             closing: false,
             mesh_job: None,
+            export_job: None,
             recovery: None,
             recovery_entries: Vec::new(),
             recovery_error: None,
@@ -197,6 +200,7 @@ impl App {
     }
 
     pub(crate) fn show_viewport(&mut self, ui: &mut egui::Ui) {
+        self.ui.preferences.lighting.install(ui.ctx());
         let mask_consumes_escape = self.update_temporary_mask(ui);
         self.ui.viewport_menu.viewport_rect = Some(ui.available_rect_before_wrap());
         if !ui.input(|i| self.ui.preferences.visibility_hold.active(i)) {
@@ -418,6 +422,7 @@ impl App {
         self.ui.materials.sampling = self.viewport.sample_colour;
         if let Some(colour) = self.viewport.sampled_colour.take() {
             let mut brush = self.document.brushes()[self.ui.selected].clone();
+            brush.material = brush.material.unlinked();
             brush.material.base_color = colour;
             if let Err(error) = self.document.update_brush(self.ui.selected, brush) {
                 self.ui.status = error;
@@ -522,6 +527,7 @@ impl eframe::App for App {
     }
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         self.poll_mesh_job();
+        self.poll_export(ctx);
         self.poll_projection();
         self.poll_paths();
         let native_pressure = ctx.input(|i| {

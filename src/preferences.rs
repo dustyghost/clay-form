@@ -359,6 +359,7 @@ pub(crate) enum SelectionMode {
 #[serde(default)]
 pub(crate) struct Preferences {
     pub materials: MaterialLibrary,
+    pub lighting: crate::lighting::Lighting,
     #[serde(default)]
     pub paint_shortcuts_version: u32,
     pub selection_mode: SelectionMode,
@@ -398,6 +399,7 @@ impl Default for Preferences {
     fn default() -> Self {
         Self {
             materials: MaterialLibrary::default(),
+            lighting: Default::default(),
             paint_shortcuts_version: 1,
             visibility_selection: VisibilitySettings::default(),
             modeling_presets: Vec::new(),
@@ -453,6 +455,7 @@ impl Default for Preferences {
 impl Preferences {
     pub fn validate(&self) -> Result<(), String> {
         self.materials.validate()?;
+        self.lighting.validate()?;
         self.mask_hold.validate()?;
         self.visibility_hold.validate()?;
         if self.modeling_presets.len() > 128 || self.next_modeling_preset_id == 0 {

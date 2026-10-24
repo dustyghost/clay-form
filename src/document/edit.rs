@@ -3,6 +3,7 @@ use super::Document;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum EditKind {
+    Material(u64),
     Primitive,
     Thickness,
     MaskIntensity,
@@ -11,6 +12,7 @@ pub(crate) enum EditKind {
 impl EditKind {
     fn label(self) -> &'static str {
         match self {
+            Self::Material(_) => "Edit material",
             Self::Primitive => "Edit primitive parameters",
             Self::Thickness => "Edit thickness modifier",
             Self::MaskIntensity => "Mask intensity",
@@ -20,6 +22,7 @@ impl EditKind {
 }
 
 pub(super) enum EditSession {
+    Material(u64),
     Primitive,
     Thickness,
     MaskThreshold,
@@ -28,6 +31,7 @@ pub(super) enum EditSession {
 impl EditSession {
     fn kind(&self) -> EditKind {
         match self {
+            Self::Material(id) => EditKind::Material(*id),
             Self::Primitive => EditKind::Primitive,
             Self::Thickness => EditKind::Thickness,
             Self::MaskThreshold => EditKind::MaskThreshold,

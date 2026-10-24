@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct MaterialPreset {
+    #[serde(default = "crate::sculpt::material::layers::fresh_id")]
+    pub id: u64,
     pub name: String,
     pub material: Material,
 }
@@ -10,12 +12,36 @@ pub(crate) struct MaterialPreset {
 /// Personal copies and colours persist independently of the open project.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct MaterialLibrary {
+    #[serde(default = "builtin_names", deserialize_with = "read_names")]
+    pub names: Vec<String>,
+    #[serde(default = "builtin_values", deserialize_with = "read_values")]
+    pub values: Vec<Material>,
     pub copies: Vec<MaterialPreset>,
     pub palette: Vec<[f32; 3]>,
+}
+fn builtin_values() -> Vec<Material> {
+    Material::examples().map(|(_, m)| m).to_vec()
+}
+fn builtin_names() -> Vec<String> {
+    Material::examples()
+        .map(|(name, _)| name.to_owned())
+        .to_vec()
+}
+fn read_names<'de, D: serde::Deserializer<'de>>(de: D) -> Result<Vec<String>, D::Error> {
+    let mut values = Vec::<String>::deserialize(de)?;
+    values.extend(builtin_names().into_iter().skip(values.len()));
+    Ok(values)
+}
+fn read_values<'de, D: serde::Deserializer<'de>>(de: D) -> Result<Vec<Material>, D::Error> {
+    let mut values = Vec::<Material>::deserialize(de)?;
+    values.extend(builtin_values().into_iter().skip(values.len()));
+    Ok(values)
 }
 impl Default for MaterialLibrary {
     fn default() -> Self {
         Self {
+            names: builtin_names(),
+            values: builtin_values(),
             copies: Vec::new(),
             palette: [
                 [0.95, 0.94, 0.90],
@@ -44,7 +70,11 @@ impl MaterialLibrary {
             name = format!("{stem} copy {number}");
             number += 1;
         }
-        self.copies.push(MaterialPreset { name, material });
+        self.copies.push(MaterialPreset {
+            id: crate::sculpt::material::layers::fresh_id(),
+            name,
+            material: material.unlinked(),
+        });
         Some(self.copies.len() - 1)
     }
     pub fn add_colour(&mut self, colour: [f32; 3]) {
@@ -53,8 +83,22 @@ impl MaterialLibrary {
         }
     }
     pub fn validate(&self) -> Result<(), String> {
-        if self.copies.len() > 64 || self.palette.len() > 32 {
+        if self.names.len() != Material::examples().len()
+            || self.values.len() != self.names.len()
+            || self.copies.len() > 64
+            || self.palette.len() > 32
+        {
             return Err("Material library is too large".into());
+        }
+        if self
+            .names
+            .iter()
+            .any(|name| name.trim().is_empty() || name.len() > 128)
+        {
+            return Err("Invalid material name".into());
+        }
+        for material in &self.values {
+            material.validate()?;
         }
         for preset in &self.copies {
             if preset.name.trim().is_empty() || preset.name.len() > 128 {
@@ -78,16 +122,33 @@ mod tests {
     use super::*;
     use crate::preferences::{Action, Key, Modifiers, Preferences, Shortcut, load, save};
     #[test]
+    fn material_library_migrates_six_presets_without_losing_custom_names_or_values() {
+        let mut library = MaterialLibrary::default();
+        library.names[4] = "My copper".into();
+        library.values[4].roughness = 0.7;
+        let mut old = serde_json::to_value(&library).unwrap();
+        old["names"].as_array_mut().unwrap().truncate(6);
+        old["values"].as_array_mut().unwrap().truncate(6);
+        let migrated: MaterialLibrary = serde_json::from_value(old).unwrap();
+        migrated.validate().unwrap();
+        assert_eq!(migrated.names[4], "My copper");
+        assert_eq!(migrated.values[4].roughness, 0.7);
+        assert_eq!(migrated.names.len(), 11);
+        assert_eq!(migrated.names[7], "Beeswax");
+        assert!(migrated.values[9].subsurface > 0.);
+    }
+    #[test]
     fn material_library_copies_and_palette_survive_preferences_round_trip() {
         let mut prefs = Preferences::default();
-        let (name, material) = Material::examples()[4];
-        let index = prefs.materials.copy(name, material).unwrap();
+        prefs.materials.names[4] = "Warm copper".into();
+        let (name, material) = Material::examples()[4].clone();
+        let index = prefs.materials.copy(name, material.clone()).unwrap();
         prefs.materials.copies[index].material.roughness = 0.8;
         assert_ne!(
             prefs.materials.copies[index].material,
-            Material::examples()[4].1
+            Material::examples()[4].1.clone()
         );
-        prefs.materials.copy(name, material).unwrap();
+        prefs.materials.copy(name, material.clone()).unwrap();
         assert_ne!(
             prefs.materials.copies[0].name,
             prefs.materials.copies[1].name

@@ -1,38 +1,51 @@
 # Material channel contract
 
-Issue [#9](https://github.com/dustyghost/clay-form/issues/9) establishes the shared foundation for texture painting (#11) and Blender exchange (#21). This version stores independent continuous material values per mesh vertex; it does not assign material IDs or use vertex-group display colours.
+Issues [#9](https://github.com/dustyghost/clay-form/issues/9) and [#61](https://github.com/dustyghost/clay-form/issues/61) provide vertex painting and shared layered surfaces for later texture painting and Blender exchange.
 
-## Storage and blending
+## Storage and shared definitions
 
-`Mesh.materials` is either empty (implicit default clay) or has one `Material` per vertex. Each value contains `base_color: [f32; 3]`, `roughness: f32`, and `metallic: f32`. Channels must be finite and between 0 and 1. Empty arrays are omitted from project JSON, and missing fields in older projects load with the default. The first actual paint change allocates the vertex array. History memory accounting includes its payload.
+`Mesh.materials` is empty for implicit default clay, or contains one evaluated `Material` per vertex. A material contains a base surface and three ordered additional surfaces. Each surface has linear RGB base colour, roughness, metallic, IOR, specular level, linear RGB emission and emission strength, plus subsurface weight, RGB radius and scale. Additional layers have weight and an Add amount: 0 is Mix, 1 is Add. Intermediate values preserve continuous painting and topology interpolation.
 
-Base colour uses scene-linear RGB with sRGB/Rec.709 primaries. The colour picker presents display colour and converts at its boundary; scalar channels are linear data, with no colour conversion. Topology interpolation and brush blending occur in linear channel space. A dab blends each enabled channel toward its target by strength × pressure response × falloff/alpha × stencil × (1 − mask). Overlapping symmetry copies use the strongest influence. Material mode blends parameter values, not two complete BSDF lobes or a discrete preset identity.
+Colour, roughness, metallic, specular, emission colour and layer controls range from 0 to 1. IOR ranges from 1 to 4; emission strength from 0 to 100; subsurface radius and scale from 0 to 10 in model units. All values must be finite. Defaults preserve older projects: IOR 1.5, specular 0.5, no emission, scattering or additional layers. New projects use format version 2, so older application versions reject them rather than discard unfamiliar material data. Version 1 projects remain readable. Sparse default fields are omitted in JSON. The existing 128 MB project-file limit still applies; failed saves retain the previous file.
 
-The example materials are value presets. Their values travel with the brush and project; changing a preset does not retroactively alter earlier strokes. Saved brush presets provide reusable user-defined materials without a second registry or hidden shared assignments.
+`SceneSettings.materials` holds up to 256 named definitions with stable IDs. Vertices retain sparse influence weights independently for base colour, roughness, metallic and the remaining surface/layer controls. Editing a named definition applies its parameter delta in proportion to those weights across every submodel and stored subdivision level. Undo restores the definition and affected values together. Copies have new identities. Legacy painted values without identity links remain independent until repainted; loading an older file does not guess shared assignments. Personal swatch templates and palette colours also persist in preferences; the open project's definition takes precedence over a personal template with the same identity.
 
-## Blender compatibility matrix
+A brush stroke interpolates the evaluated parameters and influences, not discrete face assignments. Weight is strength × pressure × falloff/alpha × stencil × (1 − mask); overlapping symmetry copies use the strongest influence. Colour-only painting changes only base colour and its binding, retaining layer and other channel bindings. Erasing fades towards default clay. The sampler copies raw base colour into a detached brush material without editing a shared definition or the model. Existing vertex groups, masks and visibility stay independent.
 
-The channel definitions follow [Blender's Principled BSDF inputs](https://docs.blender.org/manual/en/4.5/render/shader_nodes/shader/principled.html). The validation fixture uses Blender 5.2.2 LTS; it is not a production exchange implementation.
+## Layers and rendering
 
-| Channel / structure | Current representation | Blender mapping / future exchange policy |
-| --- | --- | --- |
-| Base colour | Vertex RGB, linear, 0–1 | FLOAT_COLOR POINT attribute `clay_base_color` → Principled Base Color. Preserve linear values; use the sRGB transfer function only for colour images/UI. |
-| Roughness | Vertex scalar, 0–1 | FLOAT POINT attribute `clay_roughness` → Roughness. GGX perceptual roughness; the viewport clamps shading roughness to 0.045 to bound highlights without changing stored values. |
-| Metallic | Vertex scalar, 0–1 | FLOAT POINT attribute `clay_metallic` → Metallic. Intermediate values interpolate the metal/dielectric model. |
-| Opacity | Not stored; opaque | Principled Alpha = 1. Future alpha is linear 0–1 coverage, independent of transmission. Reject/report unsupported transparency rather than dropping it. |
-| Emission | Not stored; zero authored emission | Future linear RGB plus nonnegative strength → Emission Color/Strength. Studio fill is viewport lighting, not authored emission. The validation fixture uses emission only to reproduce that fixed fill. |
-| Normal | Geometric/split surface normals | No painted normal channel. Future texture normals use tangent-space +Y, linear/non-colour data, with explicit tangent basis and UV seam handling; other conventions require conversion. |
-| Height/displacement | Not stored | Future signed scalar in model-space length units; zero is no displacement, positive follows outward normal. Export must declare scene unit scale and whether displacement is baked geometry or a shader input. |
-| Material slots / face assignments | No independent slot registry | A continuous vertex parameter field maps to one shared Principled material reading attributes. Existing polygroups remain face groups, not material slots. Blender face slots must be preserved separately or explicitly converted in #21. |
-| Material blends | Continuous parameter interpolation | Export the evaluated fields as attributes; optional UV baking belongs to the texture/baking work. This is not arbitrary Mix Shader equivalence. |
-| Textures, layered materials, node graphs, procedurals | Unsupported in this version | #21 must preserve the external source, offer an explicit bake/conversion, or report omission. Do not silently flatten them into these five floats. |
+A layer combines linear-light results as:
 
-The vertex foundation imposes no UV requirement. Texture painting can use the same channel definitions with an image source and explicit colour/data interpretation. Data from future material slots or images must not overwrite vertex masks/groups.
+`result = previous × (1 − weight × (1 − add)) + layer × weight`
 
-## Transfer and rendering
+Mix at weight 1 replaces the preceding surface. Add accumulates the weighted surface and can exceed unit energy. This is an opaque surface stack, not a complete shader graph: transmission, anisotropy, texture maps and displacement are not authored here. Layer parameters interpolate between painted materials in their fixed stack positions.
 
-Exact index mappings preserve material data through extraction, deletion and visibility splitting. New modeled/sliced vertices interpolate the same source weights as mask/group data. Thickness and mirroring copy the source values. Subdivision stores the same vertex-prefix contract as geometry, preserving high-level residual detail when switching levels. Adaptive split/collapse interpolate endpoints. Voxel remesh uses the existing bounded surface BVH, nearest-triangle barycentric sampling, cancellation and a search budget; failure rejects the worker result. Detail projection retains target material values.
+The CPU and GPU use the same isotropic GGX approximation, adjustable dielectric IOR/specular and authored emission. Viewport lighting is a separate preference: one directional or point light, colour, intensity, camera-relative/world orientation and neutral fill. The material swatches use fixed neutral studio lighting so they remain comparable. Both swatches and the viewport update when the shared definition changes. Subsurface preview uses a radius-dependent wrapped diffuse approximation to keep interaction fast; it does not compute actual mesh thickness or multiple scattering. Blender export connects weight/radius/scale to Principled subsurface scattering. Display conversion to sRGB happens once after layer composition. Masks and group colours are display overlays.
 
-Both GPU and CPU viewport paths use an isotropic GGX metallic/roughness approximation, dielectric IOR 1.5, one camera-relative directional light and a constant neutral fill. Shading runs in linear light, then converts once to display sRGB for the existing unorm compositor. Mask dimming and polygroup/guide overlays are display overlays. Default clay now uses this same shading, so the first painted stroke does not switch the rest of the model to a different lighting model.
+## Blender mapping and exports
 
-The GPU regression checks rendered channels against a numeric reference, interpolation, mask dimming and small storage-buffer batches. Manual example captures and a controlled Blender fixture are documented in [validation notes](validation/material-paint-2026-10-24/README.md). Full Blender render equivalence is not promised: multiscattering, lighting, shadows, normal interpolation and display transforms can differ.
+The implementation uses ordinary [Principled BSDF inputs](https://docs.blender.org/manual/en/4.5/render/shader_nodes/shader/principled.html), Math, Mix Shader and Add Shader nodes. `More exports…` offers PLY and Blender alongside the existing OBJ export. These exports capture the active model at its current subdivision level, including faces currently hidden for sculpting. Save `.clay` to retain the complete scene, brushes, masks, groups, history-independent editing state and subdivision stack.
+
+| Data | Blender `.blend` | PLY | OBJ |
+| --- | --- | --- | --- |
+| Current geometry | Yes; Y-up converted to Z-up | Yes; source Y-up coordinates | Yes |
+| Split surface normals | Yes | Recomputed by importer | Existing OBJ behaviour |
+| Base vertex colour | Linear FLOAT POINT channels → Base Color | 8-bit sRGB RGB vertex properties | Not included |
+| Roughness / metallic | Scalar attributes → matching Principled inputs | Not included | Not included |
+| IOR / specular | Principled IOR / Specular IOR Level | Not included | Not included |
+| Emission | Linear colour / strength → matching Principled inputs | Not included | Not included |
+| Subsurface scattering | Principled Subsurface Weight / Radius / Scale; full Blender scattering | Not included | Not included |
+| Three weighted layers | Standard shader nodes implementing Mix/Add | Not included | Not included |
+| Shared definitions and paint blending | Named node groups, vertex weights and residual parameter attributes | Not included | Not included |
+
+Blender export requires Blender 4.0 or newer on `PATH`. Conversion runs in a cancellable worker using a private snapshot and temporary files. The destination is replaced atomically only after successful conversion; the chooser confirms overwrites. The exported model has a fitted camera and neutral light for inspection.
+
+In Blender, open the material node tree and enter a group named after the Clay Form material. Its labelled Value nodes are the shared definition. The generated evaluation tree adds weighted definitions to residual POINT attributes, retaining mixed and partially painted strokes. The residuals are data, not colour images. Parameter values are clamped to the same ranges as Clay Form. The exchange version and source coordinate convention are stored as metadata. Importing edits back into Clay Form remains future exchange work; `.blend` is not a substitute for the native project.
+
+Full render identity is not promised: Blender's multiscattering, lighting, shadows, reflections and display transforms differ from the viewport approximation. External arbitrary shader graphs require an explicit future conversion or baking policy; they must not silently flatten into this channel contract.
+
+## Topology and verification
+
+Exact remappings copy material values and influences. Subdivision, adaptive split/collapse, modeled/sliced vertices and voxel remeshing interpolate the same source weights as existing material fields. Remeshing retains the bounded surface search and cancellation checks. Thickness and mirroring copy values. Detail projection retains target painting. History accounting includes material storage and conservatively estimates influence allocations.
+
+Focused tests cover legacy defaults, channel-only painting, layer Mix/Add arithmetic, shared edits through subdivision and undo, native round trips, PLY bytes and Blender residual reconstruction. GPU checks compare layered pixels to the CPU reference and exercise small storage-buffer batches. UI checks click swatches, resize the crowded panel, rename, paint, sample and fill. Blender conversion and render review are manual interoperability checks, excluded from routine CI.

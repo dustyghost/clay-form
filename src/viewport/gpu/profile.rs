@@ -178,3 +178,46 @@ fn gpu_load_profile() {
         }
     }
 }
+
+#[test]
+#[ignore = "manual release stroke CPU profile; excluded from routine CI"]
+fn gpu_load_profile_strokes() {
+    for levels in [2, 3] {
+        let mut geometry = Geometry::new(Mesh::starting_sphere());
+        for _ in 0..levels {
+            geometry.subdivide().unwrap();
+        }
+        for kind in [Kind::Paint, Kind::Standard, Kind::Clay] {
+            let mut doc = Document::default();
+            doc.replace_geometry(geometry.clone()).unwrap();
+            let brush = Brush::new(kind);
+            let dab = Dab {
+                center: Vec3(0., 0., 1.),
+                normal: Vec3(0., 0., 1.),
+                right: Vec3(1., 0., 0.),
+                up: Vec3(0., 1., 0.),
+                radius: 0.15,
+                pressure: 1.,
+                delta: Vec3::default(),
+                invert: false,
+            };
+            let mut previous = DisplayMesh::new(&doc);
+            for step in 0..3 {
+                let now = Instant::now();
+                doc.apply_dab(&brush, dab);
+                let dab_ms = now.elapsed().as_secs_f64() * 1000.;
+                let now = Instant::now();
+                previous = previous
+                    .during_stroke(&doc)
+                    .unwrap_or_else(|| DisplayMesh::new(&doc));
+                std::hint::black_box(&previous);
+                let display_ms = now.elapsed().as_secs_f64() * 1000.;
+                eprintln!(
+                    "stroke_profile kind={kind:?} level={} vertices={} step={step} dab_ms={dab_ms:.2} display_ms={display_ms:.2}",
+                    levels + 1,
+                    doc.mesh().vertices.len()
+                );
+            }
+        }
+    }
+}

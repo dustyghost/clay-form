@@ -244,8 +244,19 @@ impl App {
                 }
                 Ok(())
             }
+            Command::SaveMaterial(asset) => self.document.save_material(asset),
             Command::FillAllMaterial(brush) => self.document.fill_all_material(&brush),
             Command::FillMaterial(brush) => self.document.fill_material(&brush),
+            Command::BrowseExport(format) => {
+                self.browse_export(format);
+                Ok(())
+            }
+            Command::CancelExport => {
+                if let Some(job) = &self.export_job {
+                    job.cancel();
+                }
+                Ok(())
+            }
             Command::Export => {
                 let path = std::path::Path::new(&self.ui.path).with_extension("obj");
                 persistence::export_obj(&path.to_string_lossy(), self.document.mesh())

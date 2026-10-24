@@ -245,7 +245,7 @@ impl Scene {
             crate::preferences::viewport_background(painter.ctx()),
         );
         if renderer.is_none() {
-            let light = (view + up * 0.7 + right * (-0.5)).norm();
+            let lighting = crate::lighting::Lighting::current(painter.ctx());
             let mut rendered = egui::Mesh::default();
             for &(i, normal) in &geometry.shading.vertices {
                 let v = mesh.vertices[i];
@@ -254,9 +254,10 @@ impl Scene {
                 } else {
                     1.
                 };
+                let (light, radiance) = lighting.at(v, right, up, view);
                 let base = geometry
                     .material(i)
-                    .studio_color(
+                    .lit_color(
                         normal,
                         (view
                             - v * (if self.eye_distance > 0. {
@@ -266,6 +267,8 @@ impl Scene {
                             }))
                         .norm(),
                         light,
+                        radiance,
+                        lighting.fill,
                     )
                     .map(|c| c * 255.);
                 rendered.colored_vertex(

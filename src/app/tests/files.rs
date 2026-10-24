@@ -339,3 +339,55 @@ fn asset_file_dialog_imports_brushes_and_libraries_and_preserves_invalid_inputs(
         assert!(app.document.is_dirty());
     }
 }
+
+#[test]
+fn material_export_picker_confirms_overwrite_and_cancellation_keeps_destination() {
+    use crate::persistence::material_export::ExportFormat;
+    let folder = Folder::new();
+    let path = folder.0.join("paint.ply");
+    std::fs::write(&path, b"previous export").unwrap();
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.ui.path = folder.0.join("paint.clay").to_string_lossy().into();
+    let original = app.document.project();
+    app.dispatch(Command::BrowseExport(ExportFormat::Ply), &ctx);
+    app.dispatch(Command::AcceptProjectFile(false), &ctx);
+    assert!(app.export_job.is_none());
+    assert_eq!(
+        app.ui.file_picker.as_ref().unwrap().overwrite.as_ref(),
+        Some(&path)
+    );
+    assert_eq!(std::fs::read(&path).unwrap(), b"previous export");
+    app.dispatch(Command::AcceptProjectFile(true), &ctx);
+    app.dispatch(Command::CancelExport, &ctx);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while app.export_job.is_some() {
+        app.poll_export(&ctx);
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::yield_now();
+    }
+    assert_eq!(std::fs::read(&path).unwrap(), b"previous export");
+    app.dispatch(Command::BrowseExport(ExportFormat::Ply), &ctx);
+    app.dispatch(Command::AcceptProjectFile(false), &ctx);
+    app.dispatch(Command::AcceptProjectFile(true), &ctx);
+    while app.export_job.is_some() {
+        app.poll_export(&ctx);
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::yield_now();
+    }
+    assert!(std::fs::read(&path).unwrap().starts_with(b"ply\n"));
+    assert!(app.document.project() == original);
+    assert!(app.ui.path.ends_with("paint.clay"));
+    app.dispatch(Command::BrowseExport(ExportFormat::Blender), &ctx);
+    app.ui.file_picker.as_mut().unwrap().filename = "paint.clay".into();
+    app.dispatch(Command::AcceptProjectFile(false), &ctx);
+    assert!(app.export_job.is_none());
+    assert!(
+        app.ui
+            .file_picker
+            .as_ref()
+            .unwrap()
+            .error
+            .contains(".blend")
+    );
+}

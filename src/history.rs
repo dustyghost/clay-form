@@ -145,6 +145,14 @@ fn geometry_bytes(geometry: &Geometry) -> usize {
                 + p.points.len() * std::mem::size_of::<crate::sculpt::paths::PathPoint>()
         })
         .sum();
+    let mut layer_allocations = std::collections::HashSet::new();
+    let asset_layer_bytes = geometry
+        .scene
+        .materials
+        .iter()
+        .filter(|a| layer_allocations.insert(a.material.layers.storage_id()))
+        .count()
+        * std::mem::size_of::<[crate::sculpt::material::layers::Layer; 3]>();
     std::iter::once(&geometry.mesh)
         .chain(geometry.settings.lower.iter())
         .chain(geometry.settings.upper.iter())
@@ -157,6 +165,9 @@ fn geometry_bytes(geometry: &Geometry) -> usize {
             mesh.vertices.len() * std::mem::size_of::<crate::sculpt::Vec3>()
                 + mesh.mask.len() * std::mem::size_of::<f32>()
                 + mesh.materials.len() * std::mem::size_of::<crate::sculpt::Material>()
+                + mesh.materials.iter().filter(|m|layer_allocations.insert(m.layers.storage_id())).count()*std::mem::size_of::<[crate::sculpt::material::layers::Layer;3]>()
+                // Conservative accounting: shared influence allocations may be counted twice.
+                + mesh.materials.iter().map(|m|m.links.len()*std::mem::size_of::<crate::sculpt::material::layers::Influence>()).sum::<usize>()
                 + mesh.triangles.len() * std::mem::size_of::<[usize; 3]>()
                 + mesh.quads.len() * std::mem::size_of::<[usize; 4]>()
                 + mesh.creases.len() * std::mem::size_of::<[usize; 2]>()
@@ -170,6 +181,8 @@ fn geometry_bytes(geometry: &Geometry) -> usize {
         })
         .sum::<usize>()
         + path_bytes
+        + asset_layer_bytes
+        + geometry.scene.materials.iter().map(|a|a.name.len()+std::mem::size_of::<crate::sculpt::material::layers::Asset>()).sum::<usize>()
 }
 
 #[cfg(test)]

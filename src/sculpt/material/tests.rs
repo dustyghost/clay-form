@@ -88,6 +88,7 @@ fn material_subdivision_interpolates_linear_channels_and_retains_high_level_deta
             base_color: [(p.0 + 1.) * 0.5, 0., 0.],
             roughness: (p.1 + 1.) * 0.5,
             metallic: 0.3,
+            ..Default::default()
         })
         .collect();
     let mut geometry = Geometry::new(mesh.clone());
@@ -112,12 +113,12 @@ fn material_subdivision_interpolates_linear_channels_and_retains_high_level_deta
 
 #[test]
 fn material_topology_reindex_shell_merge_adaptive_and_voxel_transfer() {
-    let copper = Material::examples()[4].1;
+    let copper = Material::examples()[4].1.clone();
     let mut mesh = Mesh::sphere();
-    mesh.materials = vec![copper; mesh.vertices.len()];
+    mesh.materials = vec![copper.clone(); mesh.vertices.len()];
     let shell = plane();
     let mut painted_shell = shell.clone();
-    painted_shell.materials = vec![copper; shell.vertices.len()];
+    painted_shell.materials = vec![copper.clone(); shell.vertices.len()];
     let thick = painted_shell.solidify(0.1).unwrap();
     assert!(thick.materials.iter().all(|m| *m == copper));
     assert_eq!(thick.materials.len(), thick.vertices.len());
@@ -203,6 +204,7 @@ fn material_slicing_mirroring_modeling_and_projection_preserve_surface_values() 
             base_color: [(p.0 + 1.) * 0.5, (p.1 + 1.) * 0.5, 0.3],
             roughness: 0.4,
             metallic: 0.6,
+            ..Default::default()
         })
         .collect();
     let (cut, other) = mesh
@@ -287,7 +289,7 @@ fn material_legacy_defaults_validation_and_example_roundtrips() {
     let mut mesh = plane();
     for (_, material) in Material::examples() {
         material.validate().unwrap();
-        mesh.materials = vec![material; mesh.vertices.len()];
+        mesh.materials = vec![material.clone(); mesh.vertices.len()];
         let restored: Mesh = serde_json::from_str(&serde_json::to_string(&mesh).unwrap()).unwrap();
         assert_eq!(mesh, restored);
         MeshSettings::default().validate(&restored).unwrap();

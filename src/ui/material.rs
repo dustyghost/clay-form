@@ -7,89 +7,169 @@ use eframe::egui;
 #[derive(Default)]
 pub(crate) struct MaterialControls {
     textures: Vec<(Material, egui::TextureHandle)>,
-    selected_copy: Option<usize>,
+
     pub sampling: bool,
 }
 impl MaterialControls {
-    pub fn show(&mut self, ui: &mut egui::Ui, brush: &mut Brush, library: &mut MaterialLibrary) {
-        if self.selected_copy.is_some_and(|i| {
-            library
-                .copies
-                .get(i)
-                .is_none_or(|p| p.material != brush.material)
-        }) {
-            self.selected_copy = None;
-        }
-        ui.strong("Materials");
-        let presets: Vec<_> = Material::examples()
-            .into_iter()
-            .map(|(n, m)| (n.to_owned(), m))
-            .chain(library.copies.iter().map(|p| (p.name.clone(), p.material)))
-            .collect();
-        egui::ScrollArea::vertical()
-            .id_salt("material_swatches")
-            .max_height(252.)
-            .show(ui, |ui| {
-                let width =
-                    ((ui.available_width() - 2. * ui.spacing().item_spacing.x) / 3.).max(48.);
-                egui::Grid::new("materials").num_columns(3).show(ui, |ui| {
-                    for (index, (name, material)) in presets.iter().enumerate() {
-                        let texture = self.texture(ui.ctx(), index, *material);
-                        let selected = if let Some(copy) = self.selected_copy {
-                            index == copy + 6
-                        } else {
-                            index < 6 && *material == brush.material
-                        };
-                        if super::design::brush_tile(ui, texture, name, selected, width).clicked() {
-                            brush.material = *material;
-                            self.selected_copy = index.checked_sub(6);
-                        }
-                        if index % 3 == 2 {
-                            ui.end_row();
-                        }
-                    }
-                });
-            });
-        let name = self
-            .selected_copy
-            .and_then(|i| library.copies.get(i))
-            .map(|p| p.name.as_str())
-            .or_else(|| {
-                presets
-                    .iter()
-                    .take(6)
-                    .find(|(_, m)| *m == brush.material)
-                    .map(|(n, _)| n.as_str())
+    pub fn show(
+        &mut self,
+        ui: &mut egui::Ui,
+        brush: &mut Brush,
+        library: &mut MaterialLibrary,
+        document: &crate::document::Document,
+        commands: &mut Vec<crate::command::Command>,
+    ) {
+        use crate::command::Command;
+        use crate::sculpt::material::layers::{Asset, Layer, Surface};
+        let mut presets: Vec<Asset> = library
+            .names
+            .iter()
+            .zip(&library.values)
+            .enumerate()
+            .map(|(i, (name, m))| Asset {
+                id: i as u64 + 1,
+                name: name.clone(),
+                material: m.unlinked(),
             })
-            .unwrap_or("Custom material")
-            .to_owned();
-        ui.horizontal(|ui| {
-            ui.label(&name);
-            if ui
-                .add_enabled(
-                    library.copies.len() < 64,
-                    egui::Button::new("Copy material"),
-                )
-                .on_hover_text("Save an editable copy in your material library")
-                .clicked()
-            {
-                self.selected_copy = library.copy(&name, brush.material);
+            .chain(library.copies.iter().map(|p| Asset {
+                id: p.id,
+                name: p.name.clone(),
+                material: p.material.unlinked(),
+            }))
+            .collect();
+        if let Some(id) = brush.material.primary_asset()
+            && !presets.iter().any(|a| a.id == id)
+            && !document.materials().iter().any(|a| a.id == id)
+        {
+            presets.push(Asset {
+                id,
+                name: "Custom material".into(),
+                material: brush.material.unlinked(),
+            });
+        }
+        for asset in document.materials() {
+            if let Some(existing) = presets.iter_mut().find(|p| p.id == asset.id) {
+                *existing = asset.clone();
+            } else {
+                presets.push(asset.clone());
+            }
+        }
+        if let Some(id) = brush.material.primary_asset()
+            && let Some(asset) = presets.iter().find(|a| a.id == id)
+        {
+            brush.material = asset.material.with_link(id);
+            if !document.materials().iter().any(|a| a.id == id) {
+                commands.push(Command::SaveMaterial(asset.clone()));
+            }
+        }
+        let mut selected = brush.material.primary_asset().or_else(|| {
+            presets
+                .iter()
+                .find(|a| a.material.values() == brush.material.values())
+                .map(|a| a.id)
+        });
+        ui.strong("Materials");
+        ui.scope(|ui| {
+            let height_id = ui.make_persistent_id("material_library_height");
+            let mut height = ui
+                .ctx()
+                .data_mut(|data| data.get_persisted::<f32>(height_id).unwrap_or(176.));
+            egui::ScrollArea::vertical()
+                .id_salt("material_swatches")
+                .max_height(height)
+                .min_scrolled_height(height)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    let width =
+                        ((ui.available_width() - 2. * ui.spacing().item_spacing.x) / 3.).max(48.);
+                    egui::Grid::new("materials").num_columns(3).show(ui, |ui| {
+                        for (index, asset) in presets.iter().enumerate() {
+                            let (name, material) = (&asset.name, &asset.material);
+                            let texture = self.texture(ui.ctx(), index, material.clone());
+                            if super::design::brush_tile(
+                                ui,
+                                texture,
+                                name,
+                                selected == Some(asset.id),
+                                width,
+                            )
+                            .clicked()
+                            {
+                                brush.material = material.with_link(asset.id);
+                                selected = Some(asset.id);
+                                commands.push(Command::SaveMaterial(asset.clone()));
+                            }
+                            if index % 3 == 2 {
+                                ui.end_row();
+                            }
+                        }
+                    });
+                });
+            let resize = ui
+                .horizontal(|ui| {
+                    let width = (ui.available_width() - 32.).clamp(64., 192.);
+                    ui.add_space(((ui.available_width() - width) * 0.5).max(0.));
+                    ui.add_sized(
+                        [width, 32.],
+                        egui::Button::new("Drag to resize materials")
+                            .frame(false)
+                            .sense(egui::Sense::drag()),
+                    )
+                    .on_hover_cursor(egui::CursorIcon::ResizeVertical)
+                    .on_hover_text("Drag up or down to change the material library height")
+                })
+                .inner;
+            let drag_id = height_id.with("drag_start");
+            if resize.drag_started() {
+                ui.ctx().data_mut(|data| data.insert_temp(drag_id, height));
+            }
+            if let Some(delta) = resize.total_drag_delta() {
+                let start = ui
+                    .ctx()
+                    .data(|data| data.get_temp::<f32>(drag_id))
+                    .unwrap_or(height);
+                height = (start + delta.y).clamp(82., 704.);
+                ui.ctx()
+                    .data_mut(|data| data.insert_persisted(height_id, height));
+                ui.ctx().request_repaint();
+            }
+            if resize.drag_stopped() {
+                ui.ctx().data_mut(|data| data.remove::<f32>(drag_id));
             }
         });
-        if let Some(index) = self.selected_copy {
-            let mut name = library.copies[index].name.clone();
-            if ui
-                .add(
-                    egui::TextEdit::singleline(&mut name)
-                        .char_limit(32)
-                        .hint_text("Material name"),
-                )
-                .changed()
-                && !name.trim().is_empty()
-            {
-                library.copies[index].name = name;
-            }
+        let name = selected
+            .and_then(|id| presets.iter().find(|a| a.id == id))
+            .map_or("Custom material", |a| a.name.as_str())
+            .to_owned();
+        let mut edited_name = name.clone();
+        ui.horizontal(|ui| {
+            ui.label("Material name");
+            ui.add(
+                egui::TextEdit::singleline(&mut edited_name)
+                    .char_limit(32)
+                    .desired_width(140.),
+            );
+        });
+        if ui
+            .add_enabled(
+                library.copies.len() < 64,
+                egui::Button::new("Copy material"),
+            )
+            .on_hover_text("Create an independent editable material")
+            .clicked()
+            && let Some(index) = library.copy(&edited_name, brush.material.clone())
+        {
+            let copy = &library.copies[index];
+            selected = Some(copy.id);
+            edited_name = copy.name.clone();
+            brush.material = copy.material.with_link(copy.id);
+            commands.push(Command::SaveMaterial(Asset {
+                id: copy.id,
+                name: copy.name.clone(),
+                material: copy.material.clone(),
+            }));
         }
+        let before = brush.material.clone();
         egui::ComboBox::from_label("Paint channels")
             .selected_text(brush.paint_channels.label())
             .show_ui(ui, |ui| {
@@ -151,10 +231,72 @@ impl MaterialControls {
         }
         ui.add(egui::Slider::new(&mut brush.material.roughness, 0. ..=1.).text("Roughness"));
         ui.add(egui::Slider::new(&mut brush.material.metallic, 0. ..=1.).text("Metallic"));
-        if let Some(index) = self.selected_copy {
-            library.copies[index].material = brush.material;
+        ui.collapsing("Surface options", |ui| {
+            ui.add(egui::Slider::new(&mut brush.material.ior, 1. ..=4.).text("IOR"));
+            ui.add(egui::Slider::new(&mut brush.material.specular, 0. ..=1.).text("Specular"));
+            ui.horizontal(|ui| {
+                ui.label("Emission");
+                ui.color_edit_button_rgb(&mut brush.material.emission);
+            });
+            ui.add(
+                egui::Slider::new(&mut brush.material.emission_strength, 0. ..=100.)
+                    .text("Emission strength"),
+            );
+        });
+        ui.collapsing("Subsurface scattering", |ui| {
+            subsurface_controls(
+                ui,
+                &mut brush.material.subsurface,
+                &mut brush.material.subsurface_radius,
+                &mut brush.material.subsurface_scale,
+            );
+        });
+        ui.collapsing("Material layers", |ui| {
+            ui.weak("Layers are evaluated from top to bottom. Editing a named material updates its painted uses.");
+            let mut remove=None; let mut swap=None;
+            for (i,layer) in brush.material.layers.iter_mut().enumerate() {
+                // Zero-weight layers are still editable; add enables the first empty slot.
+                ui.push_id(i,|ui| { ui.collapsing(format!("Layer {}",i+1),|ui| {
+                    ui.add(egui::Slider::new(&mut layer.weight,0. ..=1.).text("Weight"));
+                    ui.horizontal(|ui| { ui.selectable_value(&mut layer.add,0.,"Mix"); ui.selectable_value(&mut layer.add,1.,"Add"); });
+                    egui::ComboBox::from_label("Start from").selected_text("Surface preset").show_ui(ui,|ui| {
+                        for (name,m) in Material::examples() { if ui.button(name).clicked() {layer.surface=m.surface(); layer.weight=1.; ui.close();} }
+                    });
+                    surface_controls(ui,&mut layer.surface);
+                    ui.horizontal(|ui| {
+                        if i>0 && ui.button("Move up").clicked() {swap=Some(i);}
+                        if ui.button("Clear layer").clicked() {remove=Some(i);}
+                    });
+                }); });
+            }
+            if let Some(i)=remove {brush.material.layers[i]=Layer::default();}
+            if let Some(i)=swap {brush.material.layers.swap(i,i-1);}
+            if ui.add_enabled(brush.material.layers.iter().any(|l|l.weight==0.),egui::Button::new("Add layer")).clicked()
+                && let Some(layer)=brush.material.layers.iter_mut().find(|l|l.weight==0.) {
+                *layer=Layer{surface:Surface{base_color:[0.5;3],..Default::default()},weight:0.5,add:0.};
+            }
+        });
+        if (before.values() != brush.material.values() || name != edited_name)
+            && !edited_name.trim().is_empty()
+        {
+            let id = selected.unwrap_or_else(crate::sculpt::material::layers::fresh_id);
+            let material = brush.material.unlinked();
+            brush.material = material.with_link(id);
+            if (1..=library.names.len() as u64).contains(&id) {
+                library.names[id as usize - 1] = edited_name.clone();
+                library.values[id as usize - 1] = material.clone();
+            } else if let Some(p) = library.copies.iter_mut().find(|p| p.id == id) {
+                p.name = edited_name.clone();
+                p.material = material.clone();
+            }
+            commands.push(Command::SaveMaterial(Asset {
+                id,
+                name: edited_name,
+                material,
+            }));
         }
     }
+
     fn texture(
         &mut self,
         ctx: &egui::Context,
@@ -163,7 +305,7 @@ impl MaterialControls {
     ) -> egui::TextureId {
         if index == self.textures.len() {
             self.textures.push((
-                material,
+                material.clone(),
                 ctx.load_texture(
                     format!("material-{index}"),
                     render_swatch(material),
@@ -171,7 +313,7 @@ impl MaterialControls {
                 ),
             ));
         } else if self.textures[index].0 != material {
-            self.textures[index].0 = material;
+            self.textures[index].0 = material.clone();
             self.textures[index]
                 .1
                 .set(render_swatch(material), egui::TextureOptions::LINEAR);
@@ -201,4 +343,53 @@ fn render_swatch(material: Material) -> egui::ColorImage {
         }
     }
     egui::ColorImage::from_rgba_unmultiplied([SIZE, SIZE], &rgba)
+}
+
+fn subsurface_controls(
+    ui: &mut egui::Ui,
+    weight: &mut f32,
+    radius: &mut [f32; 3],
+    scale: &mut f32,
+) {
+    ui.weak(
+        "Fast viewport approximation; Blender export uses full Principled subsurface scattering.",
+    );
+    ui.add(egui::Slider::new(weight, 0. ..=1.).text("Subsurface weight"));
+    ui.add(
+        egui::Slider::new(scale, 0. ..=10.)
+            .logarithmic(true)
+            .text("Subsurface scale"),
+    );
+    ui.horizontal(|ui| {
+        ui.label("Radius RGB");
+        for (value, label) in radius.iter_mut().zip(["R ", "G ", "B "]) {
+            ui.add(
+                egui::DragValue::new(value)
+                    .range(0. ..=10.)
+                    .speed(0.01)
+                    .prefix(label),
+            );
+        }
+    });
+}
+fn surface_controls(ui: &mut egui::Ui, s: &mut crate::sculpt::material::layers::Surface) {
+    ui.horizontal(|ui| {
+        ui.label("Colour");
+        ui.color_edit_button_rgb(&mut s.base_color);
+    });
+    ui.add(egui::Slider::new(&mut s.roughness, 0. ..=1.).text("Roughness"));
+    ui.add(egui::Slider::new(&mut s.metallic, 0. ..=1.).text("Metallic"));
+    ui.add(egui::Slider::new(&mut s.ior, 1. ..=4.).text("IOR"));
+    ui.add(egui::Slider::new(&mut s.specular, 0. ..=1.).text("Specular"));
+    ui.horizontal(|ui| {
+        ui.label("Emission");
+        ui.color_edit_button_rgb(&mut s.emission);
+    });
+    ui.add(egui::Slider::new(&mut s.emission_strength, 0. ..=100.).text("Emission strength"));
+    subsurface_controls(
+        ui,
+        &mut s.subsurface,
+        &mut s.subsurface_radius,
+        &mut s.subsurface_scale,
+    );
 }

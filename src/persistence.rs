@@ -1,4 +1,5 @@
 //! Filesystem adapter: versioned projects, presets, image alphas, and OBJ import/export.
+pub mod material_export;
 mod obj;
 pub use obj::load_obj;
 pub(crate) use obj::load_obj_cancellable;

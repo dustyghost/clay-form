@@ -84,6 +84,7 @@ pub(crate) struct UiState {
     pub alpha_path: String,
     pub alphas: alphas::AlphaControls,
     pub materials: material::MaterialControls,
+    pub export_busy: bool,
     pub status: String,
     pub pending: Option<PendingAction>,
     pub pending_save_path: String,
@@ -162,6 +163,7 @@ impl Default for UiState {
             alpha_path: String::new(),
             alphas: Default::default(),
             materials: Default::default(),
+            export_busy: false,
             status: "Ready • Drag clay to sculpt; Alt-drag empty space to pan; Shift smooths"
                 .into(),
             pending: None,
@@ -299,6 +301,27 @@ impl UiState {
                 self.builtin_menu(ui, BuiltinMenu::Edit, document, camera, &mut commands);
                 self.builtin_menu(ui, BuiltinMenu::Settings, document, camera, &mut commands);
                 self.custom_menu_bar(ui, document, &mut commands);
+                ui.menu_button("More exports…", |ui| {
+                    for format in [
+                        crate::persistence::material_export::ExportFormat::Ply,
+                        crate::persistence::material_export::ExportFormat::Blender,
+                    ] {
+                        if ui
+                            .add_enabled(!self.export_busy, egui::Button::new(format.title()))
+                            .on_hover_text(format.description())
+                            .clicked()
+                        {
+                            commands.push(Command::BrowseExport(format));
+                            ui.close();
+                        }
+                    }
+                });
+                if self.export_busy {
+                    ui.spinner();
+                    if ui.button("Cancel export").clicked() {
+                        commands.push(Command::CancelExport);
+                    }
+                }
                 if self.preferences.compact_toolbar {
                     if self.mesh_busy {
                         ui.spinner();
@@ -899,7 +922,8 @@ impl UiState {
                         commands.push(Command::FillMaterial(b.clone()));
                     }
                     });
-                    self.materials.show(ui, b, &mut self.preferences.materials);
+                    self.materials
+                        .show(ui, b, &mut self.preferences.materials, document, commands);
                 }
                 if b.kind == Kind::Decimate {
                     ui.label("Reduce triangles locally without smoothing. Requires Adaptive sculpt; Edge size and Simplify ratio control reduction.");

@@ -94,6 +94,8 @@ impl ModelMetadata {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SceneSettings {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub materials: Vec<super::material::layers::Asset>,
     pub active_index: usize,
     pub active_metadata: ModelMetadata,
     pub groups: Vec<String>,
@@ -141,9 +143,10 @@ pub struct Project {
     pub mesh_settings: MeshSettings,
 }
 impl Project {
-    pub const VERSION: u32 = 1;
+    pub const VERSION: u32 = 2;
     pub fn validate(&self) -> Result<(), String> {
         super::paths::validate_library(&self.paths)?;
+        super::material::layers::validate_assets(&self.scene.materials)?;
         let mut model_ids = std::collections::HashSet::new();
         for metadata in std::iter::once(&self.scene.active_metadata)
             .chain(self.submodels.iter().map(|m| &m.metadata))
@@ -157,7 +160,7 @@ impl Project {
             stencil.validate()?;
         }
         crate::reference::validate(&self.references)?;
-        if self.version != Self::VERSION {
+        if !(1..=Self::VERSION).contains(&self.version) {
             return Err("Unsupported project version".into());
         }
         if self.scene.active_index > self.submodels.len() || self.scene.groups.len() > 64 {

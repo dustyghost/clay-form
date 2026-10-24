@@ -43,6 +43,7 @@ pub(crate) struct FileEntry {
 }
 pub(crate) struct FilePicker {
     pub asset: Option<AssetKind>,
+    pub export: Option<crate::persistence::material_export::ExportFormat>,
     pub save: bool,
     pub resume_pending: bool,
     pub directory: PathBuf,
@@ -68,7 +69,9 @@ impl UiState {
         let mut command = None;
         let modal = egui::Modal::new(egui::Id::new("project_file_picker")).show(ctx, |ui| {
             ui.set_width((ctx.content_rect().width() - 60.).clamp(260., 620.));
-            ui.heading(if let Some(asset) = picker.asset {
+            ui.heading(if let Some(format) = picker.export {
+                format.title()
+            } else if let Some(asset) = picker.asset {
                 asset.title()
             } else if picker.save {
                 "Save project as"
@@ -160,7 +163,9 @@ impl UiState {
             let filename = ui
                 .add(egui::TextEdit::singleline(&mut picker.filename).desired_width(f32::INFINITY));
             let enter = filename.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            ui.weak(if let Some(asset) = picker.asset {
+            ui.weak(if let Some(format) = picker.export {
+                format.description()
+            } else if let Some(asset) = picker.asset {
                 asset.filter_label()
             } else if picker.save {
                 "Clay Form project (.clay) · existing files require confirmation"
@@ -174,7 +179,9 @@ impl UiState {
                 if ui
                     .add_enabled(
                         !picker.filename.trim().is_empty(),
-                        egui::Button::new(if let Some(asset) = picker.asset {
+                        egui::Button::new(if let Some(format) = picker.export {
+                            format.title()
+                        } else if let Some(asset) = picker.asset {
                             asset.title()
                         } else if picker.save {
                             "Save project"

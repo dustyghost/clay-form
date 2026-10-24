@@ -130,7 +130,7 @@ mod tests {
         geometry.subdivide().unwrap();
         doc.replace_geometry(geometry).unwrap();
         let mut fill = Brush::new(Kind::Paint);
-        fill.material = Material::examples()[4].1;
+        fill.material = Material::examples()[4].1.clone();
         fill.strength = 1.;
         doc.fill_material(&fill).unwrap();
         assert!(doc.mesh().materials.iter().all(|m| *m == fill.material));
@@ -162,7 +162,7 @@ mod fill_all_tests {
         let before = doc.geometry_snapshot();
         let history = doc.history_counts();
         let mut brush = Brush::new(Kind::Paint);
-        brush.material = crate::sculpt::Material::examples()[4].1;
+        brush.material = crate::sculpt::Material::examples()[4].1.clone();
         brush.strength = 0.;
         brush.subtract = true;
         doc.fill_all_material(&brush).unwrap();
@@ -189,7 +189,7 @@ mod fill_all_tests {
         doc.redo();
         assert_eq!(doc.geometry_snapshot(), after);
         brush.paint_channels = crate::sculpt::PaintChannels::Color;
-        brush.material = crate::sculpt::Material::examples()[1].1;
+        brush.material = crate::sculpt::Material::examples()[1].1.clone();
         doc.fill_all_material(&brush).unwrap();
         assert!(
             doc.mesh()

@@ -23,9 +23,23 @@ fn gpu_material_channels_match_linear_reference_and_survive_batching() {
     let params = Params::new(rect, right, up, view, 90., rect.center(), 3.);
     let center = (128 * 256 + 128) * 4;
     let mut samples = Vec::new();
-    for (name, material) in Material::examples() {
+    let mut layered = Material::from_srgb([0.1, 0.2, 0.3], 0.6, 0.2);
+    layered.ior = 1.8;
+    layered.specular = 0.8;
+    layered.emission = [0.1, 0.02, 0.03];
+    layered.emission_strength = 0.3;
+    layered.layers[0].weight = 0.35;
+    layered.layers[0].surface = Material::examples()[4].1.surface();
+    layered.layers[1].weight = 0.2;
+    layered.layers[1].add = 1.;
+    layered.layers[1].surface.emission = [0.1, 0.4, 0.2];
+    layered.layers[1].surface.emission_strength = 0.6;
+    for (name, material) in Material::examples()
+        .into_iter()
+        .chain(std::iter::once(("Layered surface", layered)))
+    {
         let mut mesh = plane.mesh().unwrap();
-        mesh.materials = vec![material; mesh.vertices.len()];
+        mesh.materials = vec![material.clone(); mesh.vertices.len()];
         document.replace_geometry(Geometry::new(mesh)).unwrap();
         let display = Arc::new(DisplayMesh::new(&document));
         gpu.upload(&display);
@@ -46,6 +60,25 @@ fn gpu_material_channels_match_linear_reference_and_survive_batching() {
                 rgba[center + i]
             );
         }
+        if material.needs_extended_shading() {
+            assert_eq!(gpu.vertex_stride, 77);
+            gpu.upload_meshes(&display, 1024);
+            gpu.paint(
+                &params,
+                [256, 256],
+                false,
+                WireMode::Visible,
+                false,
+                &Preview::default(),
+            );
+            assert_eq!(
+                gpu.read(),
+                rgba,
+                "Layered channels survive batch boundaries"
+            );
+        } else {
+            assert_eq!(gpu.vertex_stride, 12);
+        }
         samples.push(rgba[center..center + 3].to_vec());
     }
     assert!(samples.windows(2).all(|s| s[0] != s[1]));
@@ -57,6 +90,7 @@ fn gpu_material_channels_match_linear_reference_and_survive_batching() {
             base_color: [(p.0 + 1.) * 0.5, 0.1, 0.2],
             roughness: 0.45,
             metallic: 0.3,
+            ..Default::default()
         })
         .collect();
     mesh.mask.fill(0.5);
@@ -76,6 +110,7 @@ fn gpu_material_channels_match_linear_reference_and_survive_batching() {
         base_color: [0.5, 0.1, 0.2],
         roughness: 0.45,
         metallic: 0.3,
+        ..Default::default()
     };
     for (i, expected) in material
         .studio_color(view, view, (view + up * 0.7 - right * 0.5).norm())
@@ -87,7 +122,7 @@ fn gpu_material_channels_match_linear_reference_and_survive_batching() {
             "interpolated colour and mask channel {i}"
         );
     }
-    gpu.upload_meshes(&display, 480);
+    gpu.upload_meshes(&display, 1024);
     assert!(gpu.meshes.len() > 1);
     gpu.paint(
         &params,
@@ -940,4 +975,181 @@ fn gpu_composite_preserves_dpi_clipping_and_srgb() {
             .all(|(&a, b)| a.abs_diff(b) <= 1),
         "sRGB output must preserve display RGB shading: {samples:?}"
     );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "requires Vulkan; validates movable directional/point lighting against the CPU model"]
+fn gpu_lighting_types_colour_and_distance_match_cpu() {
+    use crate::{
+        lighting::{LightKind, Lighting},
+        sculpt::{Material, Vec3},
+    };
+    let headless = Headless::new();
+    let renderer = Renderer::new(&headless.state).unwrap();
+    let handle = renderer.gpu.clone();
+    let mut gpu = handle.lock().unwrap();
+    let mut plane = Primitive::for_kind(PrimitiveKind::Plane);
+    plane.divisions = [2, 2, 1];
+    let mut mesh = plane.mesh().unwrap();
+    let material = Material::from_srgb([0.6, 0.5, 0.4], 0.6, 0.2);
+    mesh.materials = vec![material.clone(); mesh.vertices.len()];
+    let mut doc = Document::default();
+    doc.replace_geometry(Geometry::new(mesh)).unwrap();
+    gpu.upload(&Arc::new(DisplayMesh::new(&doc)));
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(256.));
+    let (right, up, view) = (Vec3(1., 0., 0.), Vec3(0., 1., 0.), Vec3(0., 0., 1.));
+    let mut params = Params::new(rect, right, up, view, 90., rect.center(), 3.);
+    let configurations = [
+        Lighting::default(),
+        Lighting {
+            azimuth: 75.,
+            elevation: 15.,
+            fill: 0.3,
+            ..Default::default()
+        },
+        Lighting {
+            kind: LightKind::Point,
+            distance: 3.,
+            colour: [0.2, 0.5, 1.],
+            ..Default::default()
+        },
+        Lighting {
+            kind: LightKind::Point,
+            distance: 6.,
+            colour: [0.2, 0.5, 1.],
+            ..Default::default()
+        },
+    ];
+    let mut samples = Vec::new();
+    for lighting in configurations {
+        params.lighting = lighting;
+        gpu.paint(
+            &params,
+            [256, 256],
+            false,
+            WireMode::Visible,
+            false,
+            &Preview::default(),
+        );
+        let rgba = gpu.read();
+        let center = (128 * 256 + 128) * 4;
+        let (light, radiance) = lighting.at(Vec3::default(), right, up, view);
+        let expected = material.lit_color(view, view, light, radiance, lighting.fill);
+        for (i, c) in expected.into_iter().enumerate() {
+            assert!(
+                (rgba[center + i] as f32 - c.clamp(0., 1.) * 255.).abs() < 3.,
+                "lighting {lighting:?}: channel {i}"
+            );
+        }
+        samples.push(rgba[center..center + 3].to_vec());
+    }
+    assert!(samples.windows(2).all(|pair| pair[0] != pair[1]));
+    assert!(
+        samples[2][2] > samples[3][2],
+        "Point illumination falls off with distance"
+    );
+}
+
+#[test]
+fn dense_stroke_display_keeps_full_resolution_and_rejects_incompatible_topology() {
+    use crate::sculpt::{Brush, Dab, Kind, Mesh, Vec3};
+    let mut geometry = Geometry::new(Mesh::starting_sphere());
+    for _ in 0..2 {
+        geometry.subdivide().unwrap();
+    }
+    let mut doc = Document::default();
+    doc.replace_geometry(geometry).unwrap();
+    let mut previous = DisplayMesh::new(&doc);
+    let dab = Dab {
+        center: Vec3(0., 0., 1.),
+        normal: Vec3(0., 0., 1.),
+        right: Vec3(1., 0., 0.),
+        up: Vec3(0., 1., 0.),
+        radius: 0.3,
+        pressure: 1.,
+        delta: Vec3::default(),
+        invert: false,
+    };
+    for kind in [Kind::Paint, Kind::Standard, Kind::Clay] {
+        let before = doc.geometry_snapshot();
+        assert!(doc.apply_dab(&Brush::new(kind), dab));
+        let preview = previous
+            .during_stroke(&doc)
+            .expect("dense fixed-topology stroke has a fast display path");
+        assert_eq!(preview.mesh.vertices, doc.mesh().vertices);
+        assert_eq!(preview.mesh.materials, doc.mesh().materials);
+        assert_eq!(preview.mesh.mask, doc.mesh().mask);
+        assert_eq!(preview.shading.triangles, previous.shading.triangles);
+        assert!(
+            preview
+                .shading
+                .vertices
+                .iter()
+                .all(|(_, n)| n.0.is_finite() && n.1.is_finite() && n.2.is_finite())
+        );
+        if kind == Kind::Paint {
+            assert_eq!(preview.shading.vertices, previous.shading.vertices);
+        }
+        doc.end_stroke();
+        assert!(preview.during_stroke(&doc).is_none());
+        doc.undo();
+        assert_eq!(doc.geometry_snapshot(), before);
+        doc.redo();
+        previous = DisplayMesh::new(&doc);
+    }
+    doc.begin_stroke();
+    let mut changed = doc.geometry_snapshot();
+    changed.mesh.triangles.swap(0, 1);
+    changed.settings.lower.clear();
+    changed.settings.upper.clear();
+    doc.replace_geometry(changed).unwrap();
+    doc.begin_stroke();
+    assert!(previous.during_stroke(&doc).is_none());
+    doc.end_stroke();
+    doc.select_face_region(|p| p.0 > 0., true).unwrap();
+    doc.begin_stroke();
+    assert!(previous.during_stroke(&doc).is_none());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "requires Vulkan; restores full-detail shading when a dense stroke finishes"]
+fn gpu_dense_stroke_display_finishes_with_exact_shading() {
+    use crate::sculpt::{Brush, Dab, Kind, Mesh, Vec3};
+    let headless = Headless::new();
+    let mut renderer = Renderer::new(&headless.state).unwrap();
+    let mut geometry = Geometry::new(Mesh::starting_sphere());
+    for _ in 0..2 {
+        geometry.subdivide().unwrap();
+    }
+    let mut doc = Document::default();
+    doc.replace_geometry(geometry).unwrap();
+    let initial = renderer.geometry(&doc);
+    doc.apply_dab(
+        &Brush::new(Kind::Clay),
+        Dab {
+            center: Vec3(0., 0., 1.),
+            normal: Vec3(0., 0., 1.),
+            right: Vec3(1., 0., 0.),
+            up: Vec3(0., 1., 0.),
+            radius: 0.3,
+            pressure: 1.,
+            delta: Vec3::default(),
+            invert: false,
+        },
+    );
+    let preview = renderer.geometry(&doc);
+    assert!(renderer.live_display);
+    assert!(!Arc::ptr_eq(&initial, &preview));
+    let revision = doc.display_revision();
+    doc.end_stroke();
+    assert_eq!(revision, doc.display_revision());
+    let final_display = renderer.geometry(&doc);
+    assert!(!renderer.live_display);
+    assert!(!Arc::ptr_eq(&preview, &final_display));
+    let expected = DisplayMesh::new(&doc);
+    assert_eq!(final_display.shading.vertices, expected.shading.vertices);
+    assert_eq!(final_display.shading.triangles, expected.shading.triangles);
+    assert!(Arc::ptr_eq(&final_display, &renderer.geometry(&doc)));
 }

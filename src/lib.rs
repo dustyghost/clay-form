@@ -8,6 +8,7 @@ mod command;
 pub mod diagnostics;
 pub mod document;
 mod history;
+mod lighting;
 mod mesh_job;
 pub mod persistence;
 mod preferences;

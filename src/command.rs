@@ -29,6 +29,9 @@ pub(crate) enum Command {
     AcceptProjectFile(bool),
     CancelProjectFile,
     Export,
+    BrowseExport(crate::persistence::material_export::ExportFormat),
+    CancelExport,
+    SaveMaterial(crate::sculpt::material::layers::Asset),
     FillMaterial(Brush),
     FillAllMaterial(Brush),
     OpenProjection,
@@ -140,6 +143,8 @@ impl Command {
     pub(crate) fn edit_kind(&self) -> Option<crate::document::EditKind> {
         use crate::document::EditKind;
         match self {
+            Self::SaveMaterial(asset) => Some(EditKind::Material(asset.id)),
+            Self::UpdateBrush(_, brush) => brush.material.primary_asset().map(EditKind::Material),
             Self::UpdatePrimitive(_) => Some(EditKind::Primitive),
             Self::SetTemporaryThickness(_) => Some(EditKind::Thickness),
             Self::MaskIntensity(_) => Some(EditKind::MaskIntensity),

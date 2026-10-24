@@ -110,7 +110,7 @@ impl Mesh {
                 .materials
                 .iter()
                 .chain(&self.materials)
-                .copied()
+                .cloned()
                 .collect(),
             vertex_groups: self
                 .vertex_groups
