@@ -20,6 +20,7 @@ impl UiState {
             BuiltinMenu::Symmetry => Glyph::Symmetry,
             BuiltinMenu::Visibility | BuiltinMenu::Submodels => Glyph::Layers,
             BuiltinMenu::Mesh => Glyph::Mesh,
+            BuiltinMenu::Modeling => Glyph::Edit,
             BuiltinMenu::Wireframe => Glyph::Wire,
             BuiltinMenu::Mask => Glyph::Mask,
             BuiltinMenu::View => Glyph::Camera,
@@ -59,7 +60,9 @@ impl UiState {
             ui,
             glyph,
             label,
-            menu == BuiltinMenu::Symmetry && document.symmetry().enabled,
+            (menu == BuiltinMenu::Symmetry && document.symmetry().enabled)
+                || (menu == BuiltinMenu::Modeling && self.modeling.active),
+            menu == BuiltinMenu::Modeling,
             |ui| {
                 ui.set_min_width(280.);
                 self.menu_placement_controls(ui, menu, false);
@@ -196,6 +199,7 @@ impl UiState {
             .iter()
             .any(|stack| stack.info.kind == Some(egui::UiKind::Menu));
         match menu {
+            BuiltinMenu::Modeling => self.modeling_function_menu(ui, document, commands, popup),
             BuiltinMenu::References => self.reference_controls(ui, document, commands),
             BuiltinMenu::Brushes => {
                 if ui

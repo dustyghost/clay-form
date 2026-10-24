@@ -279,6 +279,7 @@ pub(crate) enum BuiltinMenu {
     Symmetry,
     Mask,
     View,
+    Modeling,
 }
 impl BuiltinMenu {
     pub fn label(self) -> &'static str {
@@ -297,6 +298,7 @@ impl BuiltinMenu {
             Self::Symmetry => "Symmetry",
             Self::Mask => "Mask",
             Self::View => "View",
+            Self::Modeling => "Modeling",
         }
     }
 }

@@ -1108,6 +1108,23 @@ fn open_edge_controls(g: &mut Guide) {
     click_guide_label(g, "Edges and creases");
 }
 
+fn click_guide_modeling_checkbox(g: &mut Guide) {
+    g.frame(vec![]);
+    // The Mesh panel is painted after the top-bar Modeling menu.
+    let point = g
+        .text_positions
+        .iter()
+        .rev()
+        .find(|(text, _)| text == "Modeling")
+        .expect("Mesh panel Modeling checkbox is visible")
+        .1;
+    g.frame(vec![
+        egui::Event::PointerMoved(point),
+        primary_event(point, true),
+    ]);
+    g.frame(vec![primary_event(point, false), egui::Event::PointerGone]);
+}
+
 fn click_guide_label(g: &mut Guide, label: &str) {
     g.frame(vec![]);
     let point = g
@@ -1398,7 +1415,7 @@ fn modeling_workflow_offscreen_review() {
     g.app.camera.pitch = 0.;
     g.app.camera.zoom = 0.65;
     g.frame(vec![]);
-    click_guide_label(&mut g, "Modeling");
+    click_guide_modeling_checkbox(&mut g);
     assert!(g.app.ui.modeling.active);
     let (rect, _) = g.frame(vec![]);
     let center = rect.center();
@@ -1515,7 +1532,7 @@ fn modeling_boundary_join_offscreen_review() {
     g.app.camera.yaw = 0.;
     g.app.camera.pitch = 0.;
     g.app.camera.zoom = 0.65;
-    click_guide_label(&mut g, "Modeling");
+    click_guide_modeling_checkbox(&mut g);
     click_guide_label(&mut g, "Extrude");
     let before = g.app.document.geometry_snapshot();
     let history = g.app.document.history_counts();
@@ -1567,7 +1584,7 @@ fn modeling_selection_offscreen_review() {
     g.app.camera.yaw = 0.;
     g.app.camera.pitch = 0.;
     g.app.camera.zoom = 0.7;
-    click_guide_label(&mut g, "Modeling");
+    click_guide_modeling_checkbox(&mut g);
     let before = g.app.document.geometry_snapshot();
     let history = g.app.document.history_counts();
     let (rect, _) = g.frame(vec![]);
@@ -1621,7 +1638,7 @@ fn modeling_symmetry_dissolve_offscreen_review() {
     g.app.camera.yaw = 0.;
     g.app.camera.pitch = 0.;
     g.app.camera.zoom = 0.65;
-    click_guide_label(&mut g, "Modeling");
+    click_guide_modeling_checkbox(&mut g);
     click_guide_label(&mut g, "Symmetry");
     assert!(g.app.document.symmetry().enabled);
     let (rect, _) = g.frame(vec![]);
@@ -1702,7 +1719,7 @@ fn modeling_milestones_offscreen_review() {
     g.app.camera.yaw = 0.;
     g.app.camera.pitch = 0.;
     g.app.camera.zoom = 0.65;
-    click_guide_label(&mut g, "Modeling");
+    click_guide_modeling_checkbox(&mut g);
     click_guide_label(&mut g, "Symmetry");
     let (rect, _) = g.frame(vec![]);
     let scale = rect.width().min(rect.height()) * 0.35 * g.app.camera.zoom;
@@ -1779,7 +1796,7 @@ fn modeling_face_group_gap_offscreen_review() {
     g.app.camera.yaw = 0.;
     g.app.camera.pitch = 0.;
     g.app.camera.zoom = 0.65;
-    click_guide_label(&mut g, "Modeling");
+    click_guide_modeling_checkbox(&mut g);
     click_guide_label(&mut g, "Symmetry");
     let (rect, _) = g.frame(vec![]);
     let scale = rect.width().min(rect.height()) * 0.35 * g.app.camera.zoom;
@@ -1825,7 +1842,7 @@ fn modeling_component_construction_offscreen_review() {
     g.app.camera.yaw = 0.;
     g.app.camera.pitch = 0.;
     g.app.camera.zoom = 0.65;
-    click_guide_label(&mut g, "Modeling");
+    click_guide_modeling_checkbox(&mut g);
     click_guide_label(&mut g, "Symmetry");
     click_guide_label(&mut g, "Vertex");
     click_guide_label(&mut g, "Split point");
@@ -1963,7 +1980,7 @@ fn modeling_region_fuse_offscreen_review() {
         g.app.camera.pitch = 0.;
         g.app.camera.zoom = 0.8;
         if !g.app.ui.modeling.active {
-            click_guide_label(&mut g, "Modeling");
+            click_guide_modeling_checkbox(&mut g);
         }
         click_guide_label(&mut g, "Select");
         g.app.ui.modeling.change = crate::viewport::SelectionChange::Replace;
@@ -2467,6 +2484,70 @@ fn viewport_context_menu_offscreen_review() {
             crate::viewport::ModelTool::FaceSplit
         );
         assert!(g.app.ui.viewport_menu.context.is_none());
+        click_guide_label(&mut g, "Modeling");
+        g.save(&format!("modeling-bar-menu-{}", size[0]));
+        let pin = g
+            .ctx
+            .data(|d| d.get_temp::<egui::Rect>(egui::Id::new(("icon_button", "Pin menu open"))))
+            .unwrap()
+            .center();
+        g.frame(vec![
+            egui::Event::PointerMoved(pin),
+            primary_event(pin, true),
+        ]);
+        g.frame(vec![primary_event(pin, false), egui::Event::PointerGone]);
+        g.save(&format!("modeling-pinned-{}", size[0]));
+        assert_eq!(
+            g.app.ui.preferences.pinned_menus[0].menu,
+            BuiltinMenu::Modeling
+        );
+        let unpin = g
+            .ctx
+            .data(|d| d.get_temp::<egui::Rect>(egui::Id::new(("icon_button", "Unpin menu"))))
+            .unwrap()
+            .center();
+        assert!(unpin.y >= 0. && unpin.y < size[1] as f32);
+        g.frame(vec![
+            egui::Event::PointerMoved(unpin),
+            primary_event(unpin, true),
+        ]);
+        g.frame(vec![primary_event(unpin, false), egui::Event::PointerGone]);
+        assert!(g.app.ui.preferences.pinned_menus.is_empty());
+        for dock in [Dock::Left, Dock::Right] {
+            g.app.dispatch(
+                Command::ModelingComponent(crate::viewport::ComponentMode::Face),
+                &g.ctx,
+            );
+            g.app.ui.preferences.dock_menu(BuiltinMenu::Modeling, dock);
+            g.frame(vec![]);
+            click_guide_label(&mut g, "Edge");
+            g.save(&format!("modeling-docked-{dock:?}-top-{}", size[0]));
+            for _ in 0..8 {
+                if g.text_positions
+                    .iter()
+                    .any(|(text, point)| text == "Parallel edges" && point.y < size[1] as f32 - 20.)
+                {
+                    break;
+                }
+                let x = if dock == Dock::Left {
+                    120.
+                } else {
+                    size[0] as f32 - 120.
+                };
+                g.frame(vec![
+                    egui::Event::PointerMoved(Pos2::new(x, size[1] as f32 - 40.)),
+                    egui::Event::MouseWheel {
+                        unit: egui::MouseWheelUnit::Point,
+                        delta: Vec2::new(0., -60.),
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ]);
+                g.frame(vec![egui::Event::PointerGone]);
+            }
+            click_guide_label(&mut g, "Parallel edges");
+            assert_eq!(g.app.ui.modeling.span, crate::viewport::SelectionSpan::Ring);
+            g.save(&format!("modeling-docked-{dock:?}-{}", size[0]));
+        }
         assert_eq!(g.app.document.geometry_snapshot(), before);
         assert_eq!(g.app.document.history_counts(), history);
         g.app.viewport.destroy_renderer();

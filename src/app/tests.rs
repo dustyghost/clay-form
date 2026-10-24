@@ -2948,6 +2948,109 @@ mod pinned_menus {
     }
 
     #[test]
+    fn modeling_menu_bar_pin_move_and_dock_preserve_geometry_and_choices() {
+        use crate::preferences::Dock;
+        use crate::viewport::{ComponentMode, ModelTool, SelectionSpan};
+        let mut app = App::default();
+        let ctx = egui::Context::default();
+        ctx.style_mut(|style| style.animation_time = 0.);
+        let before = app.document.geometry_snapshot();
+        let history = app.document.history_counts();
+        frame(&mut app, &ctx, vec![]);
+        let output = frame(&mut app, &ctx, vec![]);
+        click(&mut app, &ctx, text_point(&output, "Modeling"));
+        assert!(
+            !app.ui.modeling.active,
+            "opening the menu alone does not switch tools"
+        );
+        let output = frame(&mut app, &ctx, vec![]);
+        click(&mut app, &ctx, text_point(&output, "Edge"));
+        assert_eq!(app.ui.modeling.mode, ComponentMode::Edge);
+        assert!(egui::Popup::is_any_open(&ctx));
+        let output = frame(&mut app, &ctx, vec![]);
+        click(&mut app, &ctx, text_point(&output, "Parallel edges"));
+        assert_eq!(app.ui.modeling.span, SelectionSpan::Ring);
+        assert!(egui::Popup::is_any_open(&ctx));
+        let output = frame(&mut app, &ctx, vec![]);
+        click(&mut app, &ctx, text_point(&output, "Move components"));
+        assert_eq!(app.ui.modeling.tool, ModelTool::Move);
+        assert!(!egui::Popup::is_any_open(&ctx));
+        let output = frame(&mut app, &ctx, vec![]);
+        click(&mut app, &ctx, text_point(&output, "Modeling"));
+        let selection = app.viewport.modeling.selection().clone();
+        frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+        assert!(!egui::Popup::is_any_open(&ctx));
+        assert!(app.ui.modeling.active);
+        assert_eq!(app.ui.modeling.tool, ModelTool::Move);
+        assert_eq!(app.viewport.modeling.selection(), &selection);
+        frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: false,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+        let output = frame(&mut app, &ctx, vec![]);
+        click(&mut app, &ctx, text_point(&output, "Modeling"));
+        frame(&mut app, &ctx, vec![]);
+        click(&mut app, &ctx, icon_point(&ctx, "Pin menu open"));
+        frame(&mut app, &ctx, vec![]);
+        assert_eq!(
+            app.ui.preferences.pinned_menus[0].menu,
+            BuiltinMenu::Modeling
+        );
+        let position = app.ui.preferences.pinned_menus[0].position;
+        let title = Pos2::new(position[0] + 100., position[1] + 16.);
+        let end = title + Vec2::new(-120., 60.);
+        frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(title), primary_event(title, true)],
+        );
+        frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+        frame(&mut app, &ctx, vec![primary_event(end, false)]);
+        assert_ne!(app.ui.preferences.pinned_menus[0].position, position);
+        let output = frame(&mut app, &ctx, vec![]);
+        click(&mut app, &ctx, text_point(&output, "Individual"));
+        assert_eq!(app.ui.modeling.span, SelectionSpan::Single);
+        assert_eq!(app.ui.modeling.tool, ModelTool::Move);
+        assert_eq!(app.ui.preferences.pinned_menus.len(), 1);
+        frame(&mut app, &ctx, vec![]);
+        click(&mut app, &ctx, icon_point(&ctx, "Make collapsible on left"));
+        assert!(app.ui.preferences.pinned_menus.is_empty());
+        assert_eq!(
+            app.ui.preferences.menu_sections[0].menu,
+            BuiltinMenu::Modeling
+        );
+        assert_eq!(app.ui.preferences.menu_sections[0].dock, Dock::Left);
+        app.ui
+            .preferences
+            .save_workspace_as("Modeling placement")
+            .unwrap();
+        let restored: crate::preferences::Preferences =
+            serde_json::from_str(&serde_json::to_string(&app.ui.preferences).unwrap()).unwrap();
+        restored.validate().unwrap();
+        assert_eq!(restored.menu_sections, app.ui.preferences.menu_sections);
+        assert_eq!(restored.workspaces, app.ui.preferences.workspaces);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert_eq!(app.document.history_counts(), history);
+    }
+
+    #[test]
     fn transform_placement_icons_move_shared_controls_without_duplicate_toolbar() {
         use crate::preferences::{Dock, Tool};
         let mut app = App::default();
