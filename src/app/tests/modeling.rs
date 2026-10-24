@@ -1118,6 +1118,7 @@ fn modeling_component_construction_taps_preview_cancel_and_undo() {
             0.1
         };
         app.ui.modeling.construction.width = 0.08;
+        app.ui.modeling.construction.double_ring = tool == ModelTool::PointSplit;
         app.ui.modeling.options().validate().unwrap();
         let before = app.document.geometry_snapshot();
         let history = app.document.history_counts().0;
@@ -1190,6 +1191,7 @@ fn modeling_construction_presets_roundtrip_and_keep_older_preferences_compatible
         Command::Action(Action::ModelTool(ModelTool::PointSplit)),
         &ctx,
     );
+    app.ui.modeling.construction.double_ring = true;
     app.ui.modeling.construction.round = true;
     app.ui.modeling.construction.crease = true;
     app.ui.modeling.construction.triangulate = true;
@@ -1687,4 +1689,82 @@ fn modeling_separate_fuse_reports_partial_contacts_and_requested_travel() {
         app.dispatch(Command::Undo, &ctx);
         assert_eq!(app.document.mesh(), &mesh);
     }
+}
+
+#[test]
+fn modeling_double_ring_drag_reverses_cancels_and_repeats_remembered_radius() {
+    let (mut app, ctx, rect) = setup();
+    let mut p = Primitive::for_kind(PrimitiveKind::Cube);
+    p.divisions = [6; 3];
+    app.document
+        .replace_geometry(Geometry::new(p.mesh().unwrap()))
+        .unwrap();
+    navigation_frame(&mut app, &ctx, vec![]);
+    let scale = rect.width().min(rect.height()) * 0.35;
+    let point = rect.center() + Vec2::new(scale / 3., scale / 3.);
+    app.dispatch(
+        Command::Action(Action::ModelTool(ModelTool::PointSplit)),
+        &ctx,
+    );
+    app.ui.modeling.amount = 0.08;
+    app.ui.modeling.construction.double_ring = true;
+    app.ui.modeling.construction.crease = true;
+    let before = app.document.geometry_snapshot();
+    let history = app.document.history_counts();
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(point), primary_event(point, true)],
+    );
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(point + Vec2::new(0., -12.))],
+    );
+    let larger = app.viewport.modeling.preview().unwrap().clone();
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(point + Vec2::new(0., -4.))],
+    );
+    let smaller = app.viewport.modeling.preview().unwrap().clone();
+    assert_ne!(larger.vertices, smaller.vertices);
+    assert_eq!(larger.triangles, smaller.triangles);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(point + Vec2::new(0., -12.))],
+    );
+    assert_eq!(app.viewport.modeling.preview().unwrap(), &larger);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Escape, true)]);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            primary_event(point, false),
+            slice_key(egui::Key::Escape, false),
+        ],
+    );
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert_eq!(app.document.history_counts(), history);
+    tap(&mut app, &ctx, point);
+    assert_eq!(app.document.mesh().creases.len(), 8);
+    assert_eq!(app.document.history_counts().0, history.0 + 1);
+    app.dispatch(
+        Command::Action(Action::ModelTool(ModelTool::FaceSplit)),
+        &ctx,
+    );
+    app.dispatch(
+        Command::Action(Action::ModelTool(ModelTool::PointSplit)),
+        &ctx,
+    );
+    assert_eq!(app.ui.modeling.amount, 0.08);
+    assert!(app.ui.modeling.construction.double_ring);
+    let other = rect.center() + Vec2::new(-scale / 3., -scale / 3.);
+    tap(&mut app, &ctx, other);
+    assert_eq!(app.document.mesh().creases.len(), 16, "{}", app.ui.status);
+    app.dispatch(Command::Undo, &ctx);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), before);
 }

@@ -91,6 +91,7 @@ pub(crate) enum Action {
     Export,
     ImportObj,
     ProjectDetails,
+    RelaxMesh,
     KeepProjectionReference,
     EditPaths,
     TogglePathGuides,
@@ -445,6 +446,7 @@ impl Action {
         Self::ModelAxis(crate::viewport::ModelAxis::Z),
         Self::ModelAxis(crate::viewport::ModelAxis::Normal),
         Self::ModelAxis(crate::viewport::ModelAxis::Uniform),
+        Self::RelaxMesh,
     ];
     /// Help shared by the built-in controls, custom menus, and shelves.
     pub fn help(&self) -> Option<&'static str> {
@@ -463,6 +465,9 @@ impl Action {
             }
             Self::DeleteSubmodel => {
                 "Remove the selected submodel, including hidden geometry, masks, levels and modifiers. Undo restores it. Deleting the last model leaves an empty model slot."
+            }
+            Self::RelaxMesh => {
+                "Redistribute existing vertices along a fixed surface reference. Masks protect local regions; preview, inspect and apply one undoable edit."
             }
             Self::ProjectDetails => {
                 "Preview detail transfer from a reference submodel or stored subdivision level onto the active target. Choose the model below, strength and distance; Apply is one undoable edit."
@@ -607,6 +612,7 @@ impl Action {
             Self::NextBrush => "Next brush",
             Self::Subdivide => "Subdivide mesh",
             Self::ProjectDetails => "Project details",
+            Self::RelaxMesh => "Relax mesh",
             Self::KeepProjectionReference => "Keep projection reference",
             Self::LowerLevel => "Lower subdivision level",
             Self::HigherLevel => "Higher subdivision level",

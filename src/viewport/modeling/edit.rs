@@ -99,6 +99,7 @@ impl ModelingState {
                             fraction.clamp(0., 1.)
                         }
                     }
+                    ModelTool::PointSplit => drag.initial_amount + travel / drag.scale,
                     ModelTool::Rotate => travel,
                     ModelTool::Scale => (travel / 150.).exp(),
                     _ => travel / drag.scale,
@@ -178,6 +179,7 @@ impl ModelingState {
                     amount,
                     width: c.width,
                     round: c.round,
+                    double_ring: c.double_ring,
                     triangulate: c.triangulate,
                     crease: c.crease,
                     other_side: c.other_side,
@@ -512,6 +514,10 @@ impl Viewport {
                     }
                     return;
                 }
+                let components = targets.into_iter().collect();
+                let result = (model.tool == ModelTool::PointSplit).then(|| {
+                    ModelingState::edit_result(document, &components, anchor, model, model.amount)
+                });
                 self.modeling.edit_drag = Some(EditDrag {
                     direct: None,
                     start: point,
@@ -534,11 +540,11 @@ impl Viewport {
                     initial_amount: model.amount,
                     moved: false,
                     scale: scene.scale_at(scene.pick(point).map_or(Vec3::default(), |h| h.0)),
-                    components: targets.into_iter().collect(),
+                    components,
                     anchor: scene.pick(point).map_or(Vec3::default(), |h| h.0),
                     revision: document.display_revision(),
-                    amount: 0.,
-                    result: None,
+                    amount: model.amount,
+                    result,
                 });
                 self.session.gesture = Some(Gesture::Modeling);
             }

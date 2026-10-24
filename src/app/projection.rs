@@ -1,7 +1,8 @@
-//! Private, cancellable projection drafts; only Apply changes the document.
+//! Shared private, cancellable surface-edit drafts; only Apply changes the document.
 use super::*;
 use crate::background_job::BackgroundJob;
-use crate::sculpt::{Mesh, ProjectionOptions, ProjectionReport};
+use crate::sculpt::{Mesh, ProjectionOptions};
+use crate::ui::SurfaceReport;
 use std::sync::Arc;
 
 pub(super) struct ProjectionDraft {
@@ -10,7 +11,7 @@ pub(super) struct ProjectionDraft {
     pub settings: crate::diagnostics::EditSettings,
 }
 struct Worker {
-    job: BackgroundJob<(Mesh, ProjectionReport)>,
+    job: BackgroundJob<(Mesh, SurfaceReport)>,
     revision: u64,
     settings: crate::diagnostics::EditSettings,
 }
@@ -18,6 +19,7 @@ struct Worker {
 pub(super) struct ProjectionState {
     worker: Option<Worker>,
     pub draft: Option<ProjectionDraft>,
+    pub reference: Option<(u64, Arc<Mesh>)>,
 }
 impl App {
     pub(super) fn open_projection(&mut self) -> Result<(), String> {
@@ -27,6 +29,7 @@ impl App {
         }
         self.viewport.cancel(&mut self.document);
         self.ui.projection.open = true;
+        self.ui.projection.relaxation = false;
         if self
             .ui
             .projection
@@ -42,7 +45,8 @@ impl App {
         Ok(())
     }
     pub(super) fn clear_projection_preview(&mut self) {
-        self.projection = Default::default();
+        self.projection.worker = None;
+        self.projection.draft = None;
         self.viewport.session.projection_preview = None;
         self.ui.projection.report = None;
         self.ui.projection.busy = false;
@@ -54,7 +58,10 @@ impl App {
     }
     pub(super) fn start_projection(&mut self) -> Result<(), String> {
         if !self.ui.projection.open || self.mesh_job.is_some() {
-            return Err("Open Project details when no mesh job is running".into());
+            return Err("Open a surface preview when no mesh job is running".into());
+        }
+        if self.ui.projection.relaxation {
+            return self.start_relaxation();
         }
         let source = self
             .ui
@@ -69,7 +76,9 @@ impl App {
         self.viewport.cancel(&mut self.document);
         let target = self.document.mesh().clone();
         let job = BackgroundJob::start("clay-detail-projection", move |cancel| {
-            target.project_details(&source, options, &cancel)
+            target
+                .project_details(&source, options, &cancel)
+                .map(|(mesh, report)| (mesh, SurfaceReport::Projection(report)))
         })?;
         let mut settings = self.document.capture_edit_settings();
         let view = settings
@@ -99,7 +108,7 @@ impl App {
             let worker = self.projection.worker.take().unwrap();
             self.ui.projection.busy = false;
             if worker.revision != self.document.display_revision() {
-                self.ui.status = "Scene changed; preview the projection again".into();
+                self.ui.status = "Scene changed; preview the surface edit again".into();
                 return;
             }
             match result {
@@ -121,13 +130,67 @@ impl App {
             .projection
             .draft
             .take()
-            .ok_or("Preview the projection before applying it")?;
-        let result = self.document.apply_projection(
+            .ok_or("Preview the surface edit before applying it")?;
+        let apply = if self.ui.projection.relaxation {
+            Document::apply_relaxation
+        } else {
+            Document::apply_projection
+        };
+        let result = apply(
+            &mut self.document,
             (*draft.mesh).clone(),
             draft.revision,
             Some(draft.settings),
         );
+        if result.is_ok()
+            && self.ui.projection.relaxation
+            && let Some((revision, _)) = &mut self.projection.reference
+        {
+            *revision = self.document.display_revision();
+        }
         self.cancel_projection();
         result
+    }
+    pub(super) fn open_relaxation(&mut self) -> Result<(), String> {
+        self.open_projection()?;
+        self.ui.projection.relaxation = true;
+        self.ui.status = "Mask protected areas, then preview mesh relaxation".into();
+        Ok(())
+    }
+    fn start_relaxation(&mut self) -> Result<(), String> {
+        self.document.require_projection_target()?;
+        let options = self.ui.projection.relaxation_options;
+        options.validate()?;
+        self.clear_projection_preview();
+        self.viewport.cancel(&mut self.document);
+        let revision = self.document.display_revision();
+        if self
+            .projection
+            .reference
+            .as_ref()
+            .is_none_or(|(r, _)| *r != revision)
+        {
+            self.projection.reference = Some((revision, Arc::new(self.document.mesh().clone())));
+        }
+        let reference = self.projection.reference.as_ref().unwrap().1.clone();
+        let target = self.document.mesh().clone();
+        let job = BackgroundJob::start("clay-mesh-relaxation", move |cancel| {
+            target
+                .relax_mesh(&reference, options, &cancel)
+                .map(|(mesh, report)| (mesh, SurfaceReport::Relaxation(report)))
+        })?;
+        let mut settings = self.document.capture_edit_settings();
+        let view = settings
+            .view_input
+            .get_or_insert_with(|| serde_json::json!({}));
+        view["relaxation"] = serde_json::json!({"strength":options.strength,"iterations":options.iterations,"max_deviation":options.max_deviation});
+        self.projection.worker = Some(Worker {
+            job,
+            revision,
+            settings,
+        });
+        self.ui.projection.busy = true;
+        self.ui.status = "Computing mesh relaxation…".into();
+        Ok(())
     }
 }

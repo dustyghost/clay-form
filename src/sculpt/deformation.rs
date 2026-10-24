@@ -25,7 +25,7 @@ fn quality(a: Vector, b: Vector) -> f64 {
     2. * 3_f64.sqrt() * dot(normal, normal).sqrt() / (dot(a, a) + dot(b, b) + dot(c, c))
 }
 
-fn safe_face(before: [Vec3; 3], after: [Vec3; 3], direction: Option<Vec3>) -> bool {
+pub(super) fn safe_face(before: [Vec3; 3], after: [Vec3; 3], direction: Option<Vec3>) -> bool {
     let a = difference(before[1], before[0]);
     let b = difference(before[2], before[0]);
     let n = cross(a, b);

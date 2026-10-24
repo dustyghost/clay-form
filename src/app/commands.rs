@@ -490,6 +490,7 @@ impl App {
                 Ok(())
             }
             Command::OpenProjection => self.open_projection(),
+            Command::OpenRelaxation => self.open_relaxation(),
             Command::KeepProjectionReference => {
                 self.viewport.cancel(&mut self.document);
                 self.document.preserve_projection_reference().map(|index| {

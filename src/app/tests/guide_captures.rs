@@ -2076,7 +2076,7 @@ fn detail_projection_offscreen_review() {
         assert!(std::time::Instant::now() < deadline);
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
-    assert!(g.app.ui.projection.report.as_ref().unwrap().moved > 0);
+    assert!(g.app.ui.projection.report.as_ref().unwrap().moved() > 0);
     let preview = g.app.projection.draft.as_ref().unwrap().mesh.clone();
     assert_eq!(g.app.document.geometry_snapshot(), before);
     assert!(!g.app.document.is_dirty());
@@ -2760,4 +2760,158 @@ fn shared_selection_offscreen_review() {
     );
     assert_eq!(g.app.document.geometry_snapshot(), before);
     g.app.viewport.destroy_renderer();
+}
+
+#[test]
+#[ignore = "mesh refinement interactive review; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn mesh_refinement_offscreen_review() {
+    use crate::sculpt::Geometry;
+    use crate::viewport::ModelTool;
+    let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1200, 850]);
+    g.interactive = true;
+    g.app
+        .document
+        .replace_geometry(Geometry::new(crate::sculpt::relaxation_fixture()))
+        .unwrap();
+    g.app.camera.yaw = 0.22;
+    g.app.camera.pitch = -0.3;
+    g.app.camera.zoom = 0.8;
+    g.save("relaxation-shaded-before");
+    g.app.ui.wire = true;
+    g.save("relaxation-wire-before");
+    let before = g.app.document.geometry_snapshot();
+    g.app.dispatch(Command::Action(Action::RelaxMesh), &g.ctx);
+    g.app.ui.projection.relaxation_options.iterations = 10;
+    g.app.camera.pan = Vec2::new(210., 0.);
+    assert!(g.app.ui.projection.open, "{}", g.app.ui.status);
+    g.save("relaxation-controls-before");
+    click_guide_label(&mut g, "Preview relaxation");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while g.app.ui.projection.busy {
+        g.app.poll_projection();
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(
+        g.app.ui.projection.report.as_ref().unwrap().moved() > 0,
+        "{}",
+        g.app.ui.status
+    );
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    let preview = &g.app.projection.draft.as_ref().unwrap().mesh;
+    let volume = |mesh: &crate::sculpt::Mesh| {
+        mesh.triangles
+            .iter()
+            .map(|t| mesh.vertices[t[0]].dot(mesh.vertices[t[1]].cross(mesh.vertices[t[2]])) / 6.)
+            .sum::<f32>()
+    };
+    let aspect = |mesh: &crate::sculpt::Mesh| {
+        let values: Vec<_> = mesh
+            .quads
+            .iter()
+            .filter(|q| q.iter().all(|&i| mesh.vertices[i].2 > 0.6))
+            .map(|q| {
+                let lengths: Vec<_> = (0..4)
+                    .map(|i| (mesh.vertices[q[i]] - mesh.vertices[q[(i + 1) % 4]]).len())
+                    .collect();
+                lengths.iter().copied().fold(0., f32::max)
+                    / lengths.iter().copied().fold(f32::INFINITY, f32::min)
+            })
+            .collect();
+        values.iter().sum::<f32>() / values.len() as f32
+    };
+    let report = format!(
+        "{}\nVertices: {} -> {}\nTriangles: {} -> {}\nMean front-quad edge aspect: {:.6} -> {:.6}\nVolume: {:.6} -> {:.6}\n",
+        g.app.ui.projection.report.as_ref().unwrap().summary(),
+        before.mesh.vertices.len(),
+        preview.vertices.len(),
+        before.mesh.triangles.len(),
+        preview.triangles.len(),
+        aspect(&before.mesh),
+        aspect(preview),
+        volume(&before.mesh),
+        volume(preview)
+    );
+    std::fs::write(directory.join("relaxation-measurements.txt"), report).unwrap();
+    g.save("relaxation-controls-preview");
+    click_guide_label(&mut g, "Apply relaxation");
+    assert_eq!(g.app.document.undo_label(), Some("Relax mesh"));
+    g.app.camera.pan = Vec2::ZERO;
+    g.save("relaxation-wire-after");
+    g.app.ui.wire = false;
+    g.save("relaxation-shaded-after");
+    let after = g.app.document.geometry_snapshot();
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.app.dispatch(Command::Redo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), after);
+    g.app.dispatch(Command::OpenRelaxation, &g.ctx);
+    g.frame(vec![slice_key(egui::Key::Escape, true)]);
+    g.frame(vec![slice_key(egui::Key::Escape, false)]);
+    assert!(!g.app.ui.projection.open);
+    assert_eq!(g.app.document.geometry_snapshot(), after);
+    drop(g);
+
+    let mut g = Guide::new(&directory, [1100, 1120]);
+    g.interactive = true;
+    let mut p = Primitive::for_kind(PrimitiveKind::Cube);
+    p.divisions = [4; 3];
+    g.app
+        .document
+        .replace_geometry(Geometry::new(p.mesh().unwrap()))
+        .unwrap();
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    g.app.ui.wire = true;
+    g.app.dispatch(Command::ModelingMode(true), &g.ctx);
+    g.app.dispatch(
+        Command::Action(Action::ModelTool(ModelTool::PointSplit)),
+        &g.ctx,
+    );
+    g.app
+        .ui
+        .preferences
+        .dock_menu(BuiltinMenu::Modeling, Dock::Right);
+    g.app.ui.modeling.construction.crease = true;
+    g.save("split-point-controls");
+    click_guide_label(&mut g, "Double ring sides (4 to 8)");
+    assert!(g.app.ui.modeling.construction.double_ring);
+    let rect = g.frame(vec![]).0;
+    let start = rect.center();
+    let before = g.app.document.geometry_snapshot();
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    g.frame(vec![egui::Event::PointerMoved(start + Vec2::new(0., -14.))]);
+    g.save("split-point-octagon-preview");
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.frame(vec![primary_event(start + Vec2::new(0., -14.), false)]);
+    assert_eq!(
+        g.app.document.mesh().creases.len(),
+        8,
+        "{}",
+        g.app.ui.status
+    );
+    g.save("split-point-octagon-result");
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    drop(g);
+    let mut g = Guide::new(&directory, [640, 480]);
+    g.interactive = true;
+    g.app.dispatch(Command::OpenRelaxation, &g.ctx);
+    g.save("relaxation-small-top");
+    g.frame(vec![
+        egui::Event::PointerMoved(Pos2::new(250., 300.)),
+        egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: Vec2::new(0., -900.),
+            modifiers: Default::default(),
+        },
+    ]);
+    g.save("relaxation-small-bottom");
+    click_guide_label(&mut g, "Cancel");
+    assert!(!g.app.ui.projection.open);
 }

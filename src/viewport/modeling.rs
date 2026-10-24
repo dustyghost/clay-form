@@ -186,6 +186,7 @@ fn legacy_interaction() -> ModelInteraction {
 pub(crate) struct ModelConstruction {
     pub width: f32,
     pub round: bool,
+    pub double_ring: bool,
     pub triangulate: bool,
     pub crease: bool,
     pub other_side: bool,
@@ -195,6 +196,7 @@ impl Default for ModelConstruction {
         Self {
             width: 0.1,
             round: false,
+            double_ring: false,
             triangulate: false,
             crease: false,
             other_side: false,
@@ -337,6 +339,9 @@ impl ModelingState {
                 _ => None,
             })
             .collect()
+    }
+    pub fn preview_amount(&self) -> Option<f32> {
+        self.edit_drag.as_ref().map(|drag| drag.amount)
     }
     pub fn preview(&self) -> Option<&Mesh> {
         if let Some(drag) = &self.edit_drag {

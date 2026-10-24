@@ -23,6 +23,7 @@ The main paths through the app are:
 | Brushes, topology, or validation | `sculpt/` | Scene data lives in `sculpt/geometry.rs`; subdivision algorithms live in `sculpt/subdivision.rs`. |
 | Project files, image alphas, or OBJ export | `persistence.rs` | Preserve version 1 compatibility. |
 | Subdivision or remesh jobs | `mesh_job.rs` | Compute privately; commit through the controller. |
+| Surface relaxation | `sculpt/relaxation.rs`, `app/projection.rs`, `document/projection.rs` | Fixed local reference fans, protected features, bounded cancellable work, shared preview/apply lifecycle. |
 | Detail projection | `sculpt/projection.rs`, `document/projection.rs`, `app/projection.rs` | Preserve reference submodels; preview privately and commit once. |
 | Navigation or projection | `camera.rs`, `viewport/projection.rs` | Camera state is session-only. |
 | Gestures, picking, or drawing | `viewport/` | Picking and rendering share one immutable mesh snapshot per frame. |

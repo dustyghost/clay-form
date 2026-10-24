@@ -16,6 +16,7 @@ pub(crate) struct ModelingControls {
     pub transform_direction: crate::sculpt::Vec3,
     pub directions: std::collections::BTreeMap<ModelTool, crate::sculpt::Vec3>,
     pub amount: f32,
+    pub preview_amount: Option<f32>,
     pub protect_mask: bool,
     pub individual: bool,
     pub snap: f32,
@@ -94,6 +95,45 @@ impl ModelingControls {
     }
 }
 impl UiState {
+    pub(super) fn point_split_controls(&mut self, ui: &mut egui::Ui) -> bool {
+        ui.separator();
+        ui.strong("Split point settings");
+        if let Some(amount) = self.modeling.preview_amount {
+            ui.label(format!("Radius {amount:.6} (preview)"));
+        } else {
+            ui.add(
+                egui::DragValue::new(&mut self.modeling.amount)
+                    .prefix("Radius ")
+                    .range(0.000001..=1000.)
+                    .speed(0.001)
+                    .max_decimals(6),
+            );
+        }
+        design::checkbox(
+            ui,
+            &mut self.modeling.construction.double_ring,
+            "Double ring sides (4 to 8)",
+        );
+        design::checkbox(
+            ui,
+            &mut self.modeling.construction.round,
+            "Circularize ring",
+        );
+        design::checkbox(ui, &mut self.modeling.construction.crease, "Crease ring");
+        design::checkbox(
+            ui,
+            &mut self.modeling.construction.triangulate,
+            "Triangulate center",
+        );
+        design::checkbox(ui, &mut self.modeling.tap_repeat, "Tap to repeat")
+            .customize(Action::ModelTapRepeat);
+        ui.weak("Radius uses model units from the original vertex. Press to preview; drag up/down to resize. Release applies; Esc cancels.");
+        ui.weak("Closed point fan · radius below half the shortest edge");
+        ui.add_enabled(self.modeling.count > 0, egui::Button::new("Apply amount"))
+            .customize(Action::ModelApply)
+            .clicked()
+    }
+
     pub(super) fn modeling_controls(
         &mut self,
         ui: &mut egui::Ui,
@@ -195,7 +235,10 @@ impl UiState {
             design::checkbox(ui, &mut self.modeling.protect_mask,"Protect mask").customize(Action::ModelProtectMask);
             ui.weak("Hidden faces are protected · topology edits replace stored levels");
             match self.modeling.tool {
-                ModelTool::EdgeExtrude | ModelTool::EdgeSplit | ModelTool::EdgeCollapse | ModelTool::PointExtrude | ModelTool::PointSplit | ModelTool::FacePoint | ModelTool::FaceSplit => {
+                ModelTool::PointSplit => {
+                    if self.point_split_controls(ui) { commands.push(Command::ModelApply); }
+                }
+                ModelTool::EdgeExtrude | ModelTool::EdgeSplit | ModelTool::EdgeCollapse | ModelTool::PointExtrude | ModelTool::FacePoint | ModelTool::FaceSplit => {
                     let tool=self.modeling.tool;
                     if matches!(tool,ModelTool::EdgeSplit|ModelTool::EdgeCollapse) {
                         ui.label("Position from marked endpoint (0–1)");
@@ -218,7 +261,6 @@ impl UiState {
                     if matches!(tool,ModelTool::PointSplit|ModelTool::PointExtrude) {
                         design::checkbox(ui, &mut self.modeling.construction.round,"Circularize ring");
                         design::checkbox(ui, &mut self.modeling.construction.crease,"Crease ring");
-                        if tool==ModelTool::PointSplit {design::checkbox(ui, &mut self.modeling.construction.triangulate,"Triangulate center");}
                         ui.weak("Closed point fan · radius below half the shortest edge");
                     }
                     if tool.instant(){ui.weak(if tool==ModelTool::FacePoint {"Tap: connect a center point to each corner"}else{"Tap: split into quads and connect neighboring edges"});}

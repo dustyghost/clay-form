@@ -890,6 +890,7 @@ fn component_options(amount: f32) -> ComponentBuildOptions {
         amount,
         width: 0.1,
         round: false,
+        double_ring: false,
         triangulate: false,
         crease: false,
         other_side: false,
@@ -1009,6 +1010,7 @@ fn modeling_point_ring_and_surface_edge_construction_are_symmetric() {
         for round in [false, true] {
             let mut options = component_options(0.1);
             options.round = round;
+            options.double_ring = kind == ComponentBuild::PointSplit;
             options.crease = true;
             let out = mesh
                 .build_components(kind, &[], &[], &[v], mesh.vertices[v], options, &sym)
@@ -1522,5 +1524,53 @@ fn modeling_fuse_both_selected_ends_of_a_tunnel_join_once() {
             .unwrap();
         assert!(out.joined && !out.partial_contact && !out.varying_distance);
         check_joined_surface(&out.mesh, 1);
+    }
+}
+
+#[test]
+fn modeling_double_point_ring_has_eight_exact_radius_vertices_and_repeats() {
+    for divisions in [4, 6] {
+        let mesh = cube(divisions);
+        let v = mesh
+            .vertices
+            .iter()
+            .position(|p| p.0.abs() < 1e-6 && p.1.abs() < 1e-6 && (p.2 - 1.).abs() < 1e-6)
+            .unwrap();
+        let sym = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+        let mut options = component_options(0.1);
+        options.double_ring = true;
+        options.crease = true;
+        let out = mesh
+            .build_components(
+                ComponentBuild::PointSplit,
+                &[],
+                &[],
+                &[v],
+                mesh.vertices[v],
+                options,
+                &sym,
+            )
+            .unwrap();
+        out.validate_closed().unwrap();
+        assert_eq!(out.creases.len(), 8);
+        let ring: BTreeSet<_> = out.creases.iter().flatten().copied().collect();
+        assert_eq!(ring.len(), 8);
+        for i in ring {
+            assert!(((out.vertices[i] - mesh.vertices[v]).len() - 0.1).abs() < 1e-6);
+        }
+        options.amount = 1.;
+        assert!(
+            mesh.build_components(
+                ComponentBuild::PointSplit,
+                &[],
+                &[],
+                &[v],
+                mesh.vertices[v],
+                options,
+                &sym
+            )
+            .unwrap_err()
+            .contains("Radius")
+        );
     }
 }

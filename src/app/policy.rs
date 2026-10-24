@@ -58,7 +58,7 @@ impl<'a> EditorPolicy<'a> {
                 Intent::Projection | Intent::Navigate | Intent::Request
             )
         {
-            return Err("Apply or cancel the projection before editing the scene");
+            return Err("Apply or cancel the surface preview before editing the scene");
         }
         if ui.paths_active {
             if !matches!(
@@ -299,7 +299,9 @@ impl<'a> EditorPolicy<'a> {
             Action::HigherLevel | Action::DeleteHigherLevels => {
                 sculpt && document.mesh_settings().level() < document.mesh_settings().levels()
             }
-            Action::ProjectDetails => document.require_projection_target().is_ok(),
+            Action::ProjectDetails | Action::RelaxMesh => {
+                document.require_projection_target().is_ok()
+            }
             Action::EditPaths => document.active_visible(),
             Action::StrokeEntirePath => {
                 sculpt
@@ -463,6 +465,7 @@ impl<'a> EditorPolicy<'a> {
             Command::SplitHidden => Some(Action::SplitHidden),
             Command::ConvertPrimitive => Some(Action::ConvertPrimitive),
             Command::OpenProjection => Some(Action::ProjectDetails),
+            Command::OpenRelaxation => Some(Action::RelaxMesh),
             Command::KeepProjectionReference => Some(Action::KeepProjectionReference),
             Command::ApplyThickness => Some(Action::ApplyThickness),
             _ => None,

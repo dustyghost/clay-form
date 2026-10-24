@@ -250,6 +250,7 @@ impl App {
         }
         self.viewport.modeling.sync(&self.document);
         self.ui.modeling.count = self.viewport.modeling.selection().len();
+        self.ui.modeling.preview_amount = self.viewport.modeling.preview_amount();
         if self.ui.file_picker.is_none()
             && self.ui.modeling.active
             && !mask_consumes_escape

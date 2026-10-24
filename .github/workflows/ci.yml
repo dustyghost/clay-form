@@ -96,3 +96,4 @@ jobs:
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-context-menu" cargo test --locked --lib viewport_context_menu_offscreen_review -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-universal" cargo test --locked --lib universal_transform_offscreen_review -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-shared-selection" cargo test --locked --lib shared_selection_offscreen_review -- --ignored
+          CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-mesh-refinement" cargo test --locked --lib mesh_refinement_offscreen_review -- --ignored
