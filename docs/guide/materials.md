@@ -2,7 +2,7 @@
 
 [Documentation home](../../README.md#documentation) · [Brush controls](sculpting.md)
 
-Choose **Paint** in the brush library, or **Tool menu → New brush → Paint** when opening an older project that has no Paint preset. Convert a parametric primitive to a sculpt mesh first.
+Choose **Paint** in the brush library, or **Add brush → Paint** in the brush library when opening an older project that has no Paint preset. Convert a parametric primitive to a sculpt mesh first.
 
 In **Brush settings**, choose an **Example material**, then paint on the model. **Whole material** paints colour, roughness and metallic together. Choose **Colour only**, **Roughness only** or **Metallic only** to change one property without replacing the others.
 
