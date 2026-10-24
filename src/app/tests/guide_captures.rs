@@ -3376,8 +3376,8 @@ fn material_controls_offscreen_review() {
     reach(&mut g, "Layer 1");
     click_guide_label(&mut g, "Layer 1");
     g.save("material-layers");
-    click_guide_label(&mut g, "More exports…");
-    click_guide_label(&mut g, "Export PLY");
+    click_guide_label(&mut g, "Export");
+    click_guide_label(&mut g, "PLY…");
     assert_eq!(
         g.app.ui.file_picker.as_ref().unwrap().export,
         Some(crate::persistence::material_export::ExportFormat::Ply)

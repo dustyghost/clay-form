@@ -301,13 +301,28 @@ impl UiState {
                 self.builtin_menu(ui, BuiltinMenu::Edit, document, camera, &mut commands);
                 self.builtin_menu(ui, BuiltinMenu::Settings, document, camera, &mut commands);
                 self.custom_menu_bar(ui, document, &mut commands);
-                ui.menu_button("More exports…", |ui| {
-                    for format in [
-                        crate::persistence::material_export::ExportFormat::Ply,
-                        crate::persistence::material_export::ExportFormat::Blender,
+                ui.menu_button("Export", |ui| {
+                    if ui
+                        .button("OBJ")
+                        .customize(Action::Export)
+                        .on_hover_text("Geometry only; use PLY or Blender for painted models")
+                        .clicked()
+                    {
+                        commands.push(Command::Export);
+                        ui.close();
+                    }
+                    for (format, label) in [
+                        (
+                            crate::persistence::material_export::ExportFormat::Ply,
+                            "PLY…",
+                        ),
+                        (
+                            crate::persistence::material_export::ExportFormat::Blender,
+                            "Blender…",
+                        ),
                     ] {
                         if ui
-                            .add_enabled(!self.export_busy, egui::Button::new(format.title()))
+                            .add_enabled(!self.export_busy, egui::Button::new(label))
                             .on_hover_text(format.description())
                             .clicked()
                         {
@@ -364,13 +379,6 @@ impl UiState {
                 }
                 if ui.button("Save as…").customize(Action::SaveAs).clicked() {
                     commands.push(Command::BrowseProject(true));
-                }
-                if ui
-                    .add(design::button(ui, Glyph::Export, "Export OBJ"))
-                    .customize(Action::Export)
-                    .clicked()
-                {
-                    commands.push(Command::Export);
                 }
 
                 if self.mesh_busy {

@@ -24,7 +24,7 @@ The CPU and GPU use the same isotropic GGX approximation, adjustable dielectric 
 
 ## Blender mapping and exports
 
-The implementation uses ordinary [Principled BSDF inputs](https://docs.blender.org/manual/en/4.5/render/shader_nodes/shader/principled.html), Math, Mix Shader and Add Shader nodes. `More exports…` offers PLY and Blender alongside the existing OBJ export. These exports capture the active model at its current subdivision level, including faces currently hidden for sculpting. Save `.clay` to retain the complete scene, brushes, masks, groups, history-independent editing state and subdivision stack.
+The implementation uses ordinary [Principled BSDF inputs](https://docs.blender.org/manual/en/4.5/render/shader_nodes/shader/principled.html), Math, Mix Shader and Add Shader nodes. The **Export** menu offers OBJ, PLY and Blender. These exports capture the active model at its current subdivision level, including faces currently hidden for sculpting. Save `.clay` to retain the complete scene, brushes, masks, groups, history-independent editing state and subdivision stack.
 
 | Data | Blender `.blend` | PLY | OBJ |
 | --- | --- | --- | --- |
