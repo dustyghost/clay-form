@@ -1,5 +1,5 @@
-1188 moved · 223 protected · 60 limited · 0.001971 maximum sampled surface deviation
+1188 moved · 223 protected · 66 constrained by surface/quality limits · 0.002000 maximum sampled surface deviation
 Vertices: 1538 -> 1538
 Triangles: 3072 -> 3072
-Mean front-quad edge aspect: 1.692414 -> 1.597350
-Volume: 8.199427 -> 8.198874
+Mean front-quad edge aspect: 1.692414 -> 1.595014
+Volume: 8.199427 -> 8.198796

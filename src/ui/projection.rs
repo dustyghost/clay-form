@@ -141,9 +141,12 @@ impl UiState {
                 });
             });
             if old!=state.relaxation_options { commands.push(Command::ClearProjectionPreview); }
+            ui.collapsing("Protection and reference surface", |ui| {
             ui.weak("Boundaries, creases, sharp corners, hidden faces and fully masked vertices stay fixed. Soft masks reduce movement. Connectivity and attributes stay intact.");
             ui.weak(format!("Only the active subdivision level is relaxed; {} level(s) retained. Symmetry follows the existing mesh and mask. Consecutive applications reuse the reference until another edit or Undo.", document.mesh_settings().levels()));
             ui.weak("Deviation is sampled at face centers and edge midpoints. Inspect the wireframe, groove and silhouette before applying. Tight regions can remain unchanged.");
+            });
+            ui.weak("Little change? Try more iterations, then increase surface tolerance cautiously and preview again.");
             if state.busy { ui.spinner(); ui.label("Computing preview…"); }
             if let Some(report)=&state.report { ui.label(report.summary()); }
             ui.weak("Orbit and zoom to inspect · Escape cancels");

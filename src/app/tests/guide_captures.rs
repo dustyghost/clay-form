@@ -291,7 +291,10 @@ fn project_file_offscreen_review() {
     if let Ok(manifest) = std::env::var("CLAY_REVIEW_MANIFEST") {
         let manifest: serde_json::Value =
             serde_json::from_slice(&std::fs::read(manifest).unwrap()).unwrap();
-        let camera = &manifest["current_settings"]["view_input"]["camera"];
+        let view = &manifest["current_settings"]["view_input"];
+        g.app.ui.wire = view["wireframe"].as_bool().unwrap_or(false);
+        g.app.ui.show_polygroups = view["show_polygroups"].as_bool().unwrap_or(false);
+        let camera = &view["camera"];
         let value = |key: &str| camera[key].as_f64().unwrap() as f32;
         g.app.camera.yaw = value("yaw");
         g.app.camera.pitch = value("pitch");
@@ -304,7 +307,12 @@ fn project_file_offscreen_review() {
         g.app.camera.field_of_view = value("field_of_view");
         g.app.camera.perspective_radius = value("perspective_radius");
     }
+    if let Ok(zoom) = std::env::var("CLAY_REVIEW_ZOOM") {
+        g.app.camera.zoom = zoom.parse().expect("CLAY_REVIEW_ZOOM must be a number");
+    }
     g.save("project-review");
+    g.app.ui.wire = false;
+    g.save("project-shaded");
 }
 
 #[test]
@@ -386,7 +394,10 @@ fn smooth_decimate_offscreen_review() {
         if let Ok(manifest) = std::env::var("CLAY_REVIEW_MANIFEST") {
             let manifest: serde_json::Value =
                 serde_json::from_slice(&std::fs::read(manifest).unwrap()).unwrap();
-            let camera = &manifest["current_settings"]["view_input"]["camera"];
+            let view = &manifest["current_settings"]["view_input"];
+            g.app.ui.wire = view["wireframe"].as_bool().unwrap_or(false);
+            g.app.ui.show_polygroups = view["show_polygroups"].as_bool().unwrap_or(false);
+            let camera = &view["camera"];
             g.app.camera.yaw = camera["yaw"].as_f64().unwrap() as f32;
             g.app.camera.pitch = camera["pitch"].as_f64().unwrap() as f32;
         }
@@ -2852,6 +2863,41 @@ fn mesh_refinement_offscreen_review() {
     g.frame(vec![slice_key(egui::Key::Escape, false)]);
     assert!(!g.app.ui.projection.open);
     assert_eq!(g.app.document.geometry_snapshot(), after);
+    drop(g);
+
+    let mut g = Guide::new(&directory, [1000, 850]);
+    g.toolbar = false;
+    g.app
+        .document
+        .replace_geometry(Geometry::new(crate::sculpt::inflated_relaxation_fixture()))
+        .unwrap();
+    g.app.camera.yaw = 0.45;
+    g.app.camera.pitch = -0.3;
+    g.app.camera.zoom = 0.8;
+    g.save("inflate-relaxation-shaded-before");
+    g.app.ui.wire = true;
+    g.save("inflate-relaxation-wire-before");
+    let mesh = g.app.document.mesh();
+    let (out, report) = mesh
+        .relax_mesh(
+            mesh,
+            crate::sculpt::RelaxationOptions {
+                strength: 1.,
+                iterations: 30,
+                max_deviation: 0.01,
+            },
+            &|| false,
+        )
+        .unwrap();
+    std::fs::write(
+        directory.join("inflate-relaxation-measurements.txt"),
+        report.summary(),
+    )
+    .unwrap();
+    g.app.document.replace_geometry(Geometry::new(out)).unwrap();
+    g.save("inflate-relaxation-wire-after");
+    g.app.ui.wire = false;
+    g.save("inflate-relaxation-shaded-after");
     drop(g);
 
     let mut g = Guide::new(&directory, [1100, 1120]);

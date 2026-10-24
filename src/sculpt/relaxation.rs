@@ -13,7 +13,7 @@ impl Default for RelaxationOptions {
     fn default() -> Self {
         Self {
             strength: 0.5,
-            iterations: 5,
+            iterations: 30,
             max_deviation: 0.002,
         }
     }
@@ -44,31 +44,44 @@ pub struct RelaxationReport {
 impl RelaxationReport {
     pub fn summary(&self) -> String {
         format!(
-            "{} moved · {} protected · {} limited · {:.6} maximum sampled surface deviation",
+            "{} moved · {} protected · {} constrained by surface/quality limits · {:.6} maximum sampled surface deviation",
             self.moved, self.protected, self.limited, self.max_deviation
         )
     }
 }
-fn nearest(reference: &Mesh, faces: &[usize], p: Vec3, budget: &mut usize) -> Result<Vec3, String> {
+fn nearest(
+    reference: &Mesh,
+    patches: &[Vec<usize>],
+    p: Vec3,
+    seed: &mut usize,
+    budget: &mut usize,
+) -> Result<Vec3, String> {
     let mut best = p;
     let mut distance = f32::INFINITY;
-    for &f in faces {
-        if *budget == 0 {
-            return Err(
-                "Relaxation work limit reached; use fewer iterations or a smaller unmasked region"
-                    .into(),
-            );
+    // Walk only connected reference faces. Correspondence can move with a vertex,
+    // without a global closest-point query jumping to a nearby separate sheet.
+    for _ in 0..64 {
+        let previous = *seed;
+        for &f in &patches[previous] {
+            if *budget == 0 {
+                return Err("Relaxation work limit reached; use fewer iterations or a smaller unmasked region".into());
+            }
+            *budget -= 1;
+            let [a, b, c] = reference.triangles[f].map(|v| reference.vertices[v]);
+            let q = closest_triangle(p, a, b, c);
+            let delta = q - p;
+            let d = delta.dot(delta);
+            if d < distance {
+                distance = d;
+                best = q;
+                *seed = f;
+            }
         }
-        *budget -= 1;
-        let [a, b, c] = reference.triangles[f].map(|v| reference.vertices[v]);
-        let q = closest_triangle(p, a, b, c);
-        let d = (q - p).len();
-        if d < distance {
-            distance = d;
-            best = q;
+        if *seed == previous {
+            return Ok(best);
         }
     }
-    Ok(best)
+    Err("Relaxation could not track the connected reference surface; use fewer iterations".into())
 }
 fn samples(p: [Vec3; 3]) -> [Vec3; 4] {
     [
@@ -152,7 +165,11 @@ impl Mesh {
             patch.dedup();
             patches.push(patch);
         }
-        let normals = reference.normals();
+        let mut anchors: Vec<_> = incident
+            .iter()
+            .map(|faces| faces.first().copied().unwrap_or(0))
+            .collect();
+        let mut sample_anchors: Vec<_> = (0..self.triangles.len()).map(|f| [f; 4]).collect();
         let mut out = self.clone();
         let mut budget = 80_000_000;
         let mut limited = vec![false; n];
@@ -160,6 +177,7 @@ impl Mesh {
             if cancel() {
                 return Err("Relaxation cancelled".into());
             }
+            let normals = out.normals();
             let old = out.vertices.clone();
             for i in 0..n {
                 if i % 256 == 0 && cancel() {
@@ -179,23 +197,30 @@ impl Mesh {
                     .iter()
                     .map(|&j| (old[j] - old[i]).len())
                     .fold(f32::INFINITY, f32::min);
-                let d = d * (0.15 * shortest / d.len().max(1e-20)).min(1.);
+                let d = d * (0.4 * shortest / d.len().max(1e-20)).min(1.);
                 if d.len() < 1e-8 {
                     continue;
                 }
-                // Only the original topological fan is searchable: no jumps to another wall/sheet.
-                out.vertices[i] = nearest(reference, &incident[i], old[i] + d, &mut budget)?;
+                out.vertices[i] = nearest(
+                    reference,
+                    &patches,
+                    old[i] + d,
+                    &mut anchors[i],
+                    &mut budget,
+                )?;
             }
-            // Freeze unsafe neighborhoods, then recheck faces adjacent to frozen vertices.
+            // Backtrack constrained moves before freezing them. Recheck only faces
+            // touching changed vertices; unaffected faces already passed this iteration.
             let mut safe = false;
-            for _ in 0..8 {
+            let mut pending = vec![true; self.triangles.len()];
+            for attempt in 0..16 {
                 let mut reject = vec![false; n];
                 let mut invalid = false;
                 for (f, &t) in self.triangles.iter().enumerate() {
                     if f % 256 == 0 && cancel() {
                         return Err("Relaxation cancelled".into());
                     }
-                    if t.iter().all(|&v| out.vertices[v] == old[v]) {
+                    if !pending[f] || t.iter().all(|&v| out.vertices[v] == old[v]) {
                         continue;
                     }
                     let p = t.map(|v| out.vertices[v]);
@@ -203,8 +228,15 @@ impl Mesh {
                     let before = face_normals[f];
                     let mut bad = cross.dot(before) <= 0.1 * before.dot(before)
                         || !super::deformation::safe_face(t.map(|v| old[v]), p, None);
-                    for point in samples(p) {
-                        if (nearest(reference, &patches[f], point, &mut budget)? - point).len()
+                    for (s, point) in samples(p).into_iter().enumerate() {
+                        if (nearest(
+                            reference,
+                            &patches,
+                            point,
+                            &mut sample_anchors[f][s],
+                            &mut budget,
+                        )? - point)
+                            .len()
                             > options.max_deviation
                         {
                             bad = true;
@@ -222,10 +254,24 @@ impl Mesh {
                     safe = true;
                     break;
                 }
+                pending.fill(false);
                 for i in 0..n {
-                    if reject[i] {
+                    if reject[i] && out.vertices[i] != old[i] {
+                        for &f in &incident[i] {
+                            pending[f] = true;
+                        }
                         limited[i] |= out.vertices[i] != old[i];
-                        out.vertices[i] = old[i];
+                        out.vertices[i] = if attempt < 8 {
+                            nearest(
+                                reference,
+                                &patches,
+                                (old[i] + out.vertices[i]) * 0.5,
+                                &mut anchors[i],
+                                &mut budget,
+                            )?
+                        } else {
+                            old[i]
+                        };
                     }
                 }
             }
@@ -255,10 +301,17 @@ impl Mesh {
             if t.iter().all(|&v| out.vertices[v] == reference.vertices[v]) {
                 continue;
             }
-            for p in samples(t.map(|v| out.vertices[v])) {
-                report.max_deviation = report
-                    .max_deviation
-                    .max((nearest(reference, &patches[f], p, &mut budget)? - p).len());
+            for (s, p) in samples(t.map(|v| out.vertices[v])).into_iter().enumerate() {
+                report.max_deviation = report.max_deviation.max(
+                    (nearest(
+                        reference,
+                        &patches,
+                        p,
+                        &mut sample_anchors[f][s],
+                        &mut budget,
+                    )? - p)
+                        .len(),
+                );
             }
         }
         if report.max_deviation > options.max_deviation + 1e-6 {
@@ -281,6 +334,39 @@ pub(crate) fn relaxation_fixture() -> Mesh {
             p.2 += 0.18 * (1. - p.0 * p.0) * (1. - p.1 * p.1)
                 - 0.4 * (-p.0 * p.0 / 0.025).exp() * (1. - p.1 * p.1).powi(2);
         }
+    }
+    mesh
+}
+#[cfg(test)]
+pub(crate) fn inflated_relaxation_fixture() -> Mesh {
+    use super::{Brush, Dab, Kind, Primitive, PrimitiveKind};
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
+    primitive.divisions = [12; 3];
+    let mut mesh = primitive.mesh().unwrap();
+    for p in &mut mesh.vertices {
+        *p = p.norm();
+    }
+    let mut brush = Brush::new(Kind::Inflate);
+    brush.strength = 1.;
+    for _ in 0..8 {
+        let center = *mesh
+            .vertices
+            .iter()
+            .max_by(|a, b| a.2.total_cmp(&b.2))
+            .unwrap();
+        mesh.stamp(
+            &brush,
+            Dab {
+                center,
+                normal: Vec3(0., 0., 1.),
+                right: Vec3(1., 0., 0.),
+                up: Vec3(0., 1., 0.),
+                radius: 0.7,
+                pressure: 1.,
+                delta: Vec3::default(),
+                invert: false,
+            },
+        );
     }
     mesh
 }
@@ -351,6 +437,129 @@ mod tests {
         assert_ne!(moved_positions, source.vertices);
     }
     #[test]
+    fn relaxation_after_aggressive_inflate_reduces_stretch_and_retains_the_bulge() {
+        let mut source = inflated_relaxation_fixture();
+        for (i, p) in source.vertices.iter().enumerate() {
+            if p.2 < 0. {
+                source.mask[i] = 1.;
+            }
+        }
+        let crease = source.polygon_edges()[0];
+        source.creases.push(crease);
+        let region: Vec<_> = source
+            .quads
+            .iter()
+            .filter(|q| q.iter().all(|&v| source.vertices[v].2 > 0.5))
+            .collect();
+        let aspect = |m: &Mesh| {
+            region
+                .iter()
+                .map(|q| {
+                    let edges = std::array::from_fn::<_, 4, _>(|i| {
+                        (m.vertices[q[i]] - m.vertices[q[(i + 1) % 4]]).len()
+                    });
+                    edges.into_iter().fold(0., f32::max)
+                        / edges.into_iter().fold(f32::INFINITY, f32::min)
+                })
+                .sum::<f32>()
+                / region.len() as f32
+        };
+        let options = RelaxationOptions {
+            strength: 1.,
+            iterations: 30,
+            max_deviation: 0.01,
+        };
+        let (mut out, report) = source.relax_mesh(&source, options, &|| false).unwrap();
+        eprintln!(
+            "Inflate region aspect: {} -> {}; {report:?}",
+            aspect(&source),
+            aspect(&out)
+        );
+        assert!(aspect(&out) < aspect(&source) * 0.95);
+        assert!(report.max_deviation <= options.max_deviation);
+        let tip = |m: &Mesh| {
+            m.vertices
+                .iter()
+                .map(|p| p.2)
+                .fold(f32::NEG_INFINITY, f32::max)
+        };
+        assert!((tip(&out) - tip(&source)).abs() < options.max_deviation);
+        out.validate_closed().unwrap();
+        for (i, p) in source.vertices.iter().enumerate() {
+            if source.mask[i] == 1. || crease.contains(&i) {
+                assert_eq!(out.vertices[i], *p);
+            }
+        }
+        out.vertices = source.vertices.clone();
+        assert_eq!(out, source);
+    }
+    #[test]
+    fn relaxation_redistributes_beyond_original_fan_without_changing_the_surface() {
+        let mut primitive = Primitive::for_kind(PrimitiveKind::Plane);
+        primitive.divisions = [16, 16, 1];
+        let mut source = primitive.mesh().unwrap();
+        for p in &mut source.vertices {
+            p.0 += 0.28 * (std::f32::consts::PI * p.0).sin();
+        }
+        let variation = |m: &Mesh| {
+            let areas: Vec<_> = m
+                .triangles
+                .iter()
+                .map(|t| {
+                    let [a, b, c] = t.map(|v| m.vertices[v]);
+                    (b - a).cross(c - a).len()
+                })
+                .collect();
+            let mean = areas.iter().sum::<f32>() / areas.len() as f32;
+            (areas.iter().map(|a| (a - mean).powi(2)).sum::<f32>() / areas.len() as f32).sqrt()
+                / mean
+        };
+        let options = RelaxationOptions {
+            strength: 1.,
+            iterations: 30,
+            max_deviation: 0.000001,
+        };
+        let (mut out, report) = source.relax_mesh(&source, options, &|| false).unwrap();
+        assert!(
+            variation(&out) < variation(&source) * 0.8,
+            "spacing variation {} -> {}",
+            variation(&source),
+            variation(&out)
+        );
+        let escaped = source
+            .vertices
+            .iter()
+            .enumerate()
+            .filter(|&(i, _)| {
+                let xs: Vec<_> = source
+                    .triangles
+                    .iter()
+                    .filter(|t| t.contains(&i))
+                    .flat_map(|t| t.map(|v| source.vertices[v].0))
+                    .collect();
+                out.vertices[i].0 < xs.iter().copied().fold(f32::INFINITY, f32::min) - 1e-5
+                    || out.vertices[i].0
+                        > xs.iter().copied().fold(f32::NEG_INFINITY, f32::max) + 1e-5
+            })
+            .count();
+        assert!(
+            escaped > 20,
+            "only {escaped} vertices travelled beyond their original fan"
+        );
+        assert!(report.max_deviation < 0.000001);
+        assert!(out.vertices.iter().all(|p| p.2.abs() < 1e-7));
+        for (i, p) in source.vertices.iter().enumerate() {
+            if p.0.abs() > 0.999 || p.1.abs() > 0.999 {
+                assert_eq!(out.vertices[i], *p);
+            }
+        }
+        // Repeated passes relocate against the same reference, retaining attributes.
+        out = out.relax_mesh(&source, options, &|| false).unwrap().0;
+        assert!(variation(&out) < variation(&source) * 0.8);
+        out.vertices = source.vertices.clone();
+        assert_eq!(out, source);
+    }
+    #[test]
     fn relaxation_plane_boundaries_masks_hidden_faces_and_thin_sheets_are_protected() {
         let mut p = Primitive::for_kind(PrimitiveKind::Plane);
         p.divisions = [12, 12, 1];
@@ -381,6 +590,16 @@ mod tests {
             .extend(mesh.quads.iter().map(|q| q.map(|i| i + offset)));
         thin.triangles
             .extend(mesh.triangles.iter().map(|t| t.map(|i| i + offset)));
+        // Join the sheets at a distant boundary: component filtering alone would
+        // no longer prevent a closest-point query from jumping between them.
+        let [a, b] = mesh
+            .polygon_edges()
+            .into_iter()
+            .find(|&[a, b]| mesh.vertices[a].1 < -0.999 && mesh.vertices[b].1 < -0.999)
+            .unwrap();
+        thin.triangles
+            .extend([[a, b, b + offset], [a, b + offset, a + offset]]);
+        thin.quads.push([a, b, b + offset, a + offset]);
         let (out, _) = thin
             .relax_mesh(&thin, Default::default(), &|| false)
             .unwrap();

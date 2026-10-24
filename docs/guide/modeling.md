@@ -476,10 +476,14 @@ Choose the method that fits your work:
 ### Relax stretched polygons
 
 1. Mask the parts you want to keep fixed. Leave the area with stretched polygons unmasked; soft masks reduce movement gradually.
-2. Open **Mesh → Relax mesh…** and adjust **Strength** and **Iterations**.
+2. Open **Mesh → Relax mesh…** and adjust **Strength** and **Iterations**. The default is 30 iterations.
 3. Set **Surface tolerance** in model units. Start small for fine detail; a larger value allows more redistribution and more surface deviation.
 4. Choose **Preview relaxation**. Compare the wireframe, shaded surface, groove depth and silhouette; orbit and zoom while the preview is open.
 5. Choose **Apply relaxation** for one Undo step, or **Cancel / Escape** to keep the original. Save the project to retain the result.
+
+If the effect is subtle, increase iterations and strength first. Once the surface tolerance is reached, stronger settings cannot move those vertices further. Increase tolerance cautiously and preview again: this permits more shape deviation, so check the shaded surface as well as the wireframe.
+
+Relaxation can tidy uneven spacing after an aggressive Inflate stroke. It preserves the inflated form and existing surface bumps; use Smooth/Polish when you also want to soften those bumps. Polygon count stays fixed, so relaxation redistributes crowded vertices rather than deleting them.
 
 ![Relaxation preview with strength, iterations, tolerance and measured deviation](../images/relaxation-controls-preview.png)
 

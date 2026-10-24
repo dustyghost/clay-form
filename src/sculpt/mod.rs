@@ -81,4 +81,4 @@ mod relaxation;
 pub use relaxation::{RelaxationOptions, RelaxationReport};
 
 #[cfg(test)]
-pub(crate) use relaxation::relaxation_fixture;
+pub(crate) use relaxation::{inflated_relaxation_fixture, relaxation_fixture};
