@@ -2,7 +2,7 @@
 struct Uniforms {
  right: vec4f, up: vec4f, view: vec4f, projection: vec4f, perspective: vec4f,
  brush_center: vec4f, brush_normal: vec4f, brush_color: vec4f, brush_shape: vec4f,
- guide_center: vec4f, flags: vec4f, light_position: vec4f, light_colour: vec4f, material_info: vec4f,
+ guide_center: vec4f, flags: vec4f, light_position: array<vec4f,8>, light_colour: array<vec4f,8>, light_info: vec4f, material_info: vec4f,
  guide_normals: array<vec4f,32>, guide_sides: array<vec4f,32>, guide_colors: array<vec4f,32>,
 }
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -65,7 +65,7 @@ fn display_rgb(linear: vec3f) -> vec3f {
 }
 // Isotropic GGX metallic/roughness, dielectric IOR 1.5. Adjustable viewport illumination.
 fn material_light(base: vec3f, roughness: f32, metallic: f32, ior: f32, specular: f32, subsurface: f32, radius: vec3f, scale: f32, n: vec3f, eye: vec3f, light: vec3f, radiance: vec3f) -> vec3f {
- let h=normalize(light+eye);
+ let halfway=light+eye; let h=halfway/max(length(halfway),0.000001);
  let nl=max(dot(n,light),0.); let nv=max(dot(n,eye),0.001);
  let nh=max(dot(n,h),0.); let vh=max(dot(eye,h),0.);
  let a=pow(max(roughness,0.045),2.); let a2=a*a;
@@ -77,11 +77,20 @@ fn material_light(base: vec3f, roughness: f32, metallic: f32, ior: f32, specular
  let spec=d*gv*gl*f/max(4.*nv*max(nl,0.001),0.00001);
  let diffuse=(vec3f(1.)-f)*(1.-metallic)*base/3.14159265;
  // Broad neutral fill keeps dark sides and metals readable; no scene reflections.
- let ambient=base*(0.10*(1.-metallic)+0.16*metallic);
  let wrap=clamp(radius*scale*10.,vec3f(0.),vec3f(1.));
  let scattered=max((vec3f(dot(n,light))+wrap)/(vec3f(1.)+wrap),vec3f(0.))/(vec3f(1.)+wrap);
  let diffuse_light=mix(vec3f(nl),scattered,subsurface);
- return ambient*u.light_colour.w+(diffuse*diffuse_light+spec*nl)*radiance;
+ return (diffuse*diffuse_light+spec*nl)*radiance;
+}
+fn surface_lighting(base: vec3f, roughness: f32, metallic: f32, ior: f32, specular: f32, subsurface: f32, radius: vec3f, scale: f32, n: vec3f, eye: vec3f, position: vec3f) -> vec3f {
+ var result=base*(0.10*(1.-metallic)+0.16*metallic)*u.light_info.y;
+ for(var i=0u;i<u32(u.light_info.x);i++) {
+  let delta=u.light_position[i].xyz-position*u.light_position[i].w;
+  let light=delta/max(length(delta),0.000001);
+  let attenuation=select(1.,16./max(dot(delta,delta),0.01),u.light_position[i].w==1.);
+  result+=material_light(base,roughness,metallic,ior,specular,subsurface,radius,scale,n,eye,light,u.light_colour[i].xyz*attenuation);
+ }
+ return result;
 }
 fn channel(v: Surface, offset: u32) -> f32 {
  if u.material_info.x==12. {if offset==12u {return 1.5;} if offset==13u {return 0.5;} return 0.;}
@@ -90,17 +99,16 @@ fn channel(v: Surface, offset: u32) -> f32 {
 }
 fn channels(v: Surface, offset: u32) -> vec3f { return vec3f(channel(v,offset),channel(v,offset+1u),channel(v,offset+2u)); }
 @fragment fn surface_fragment(v: Surface) -> @location(0) vec4f {
- let delta=u.light_position.xyz-v.position*u.light_position.w;
+ let delta=u.light_position[0].xyz-v.position*u.light_position[0].w;
  let light=delta/max(length(delta),0.000001);
- let attenuation=select(1.,16./max(dot(delta,delta),0.01),u.light_position.w==1.);
  let shade=0.25+0.75*max(dot(normalize(v.normal)*select(1.,-1.,u.flags.z==1.),light),0.);
  let normal=normalize(v.normal)*select(1.,-1.,u.flags.z==1.);
  let eye=normalize(u.view.xyz-v.position*u.perspective.x);
- var linear=material_light(v.color,clamp(v.material.x,0.,1.),clamp(v.material.y,0.,1.),channel(v,12u),channel(v,13u),channel(v,18u),channels(v,19u),channel(v,22u),normal,eye,light,u.light_colour.xyz*attenuation)+channels(v,14u)*channel(v,17u);
+ var linear=surface_lighting(v.color,clamp(v.material.x,0.,1.),clamp(v.material.y,0.,1.),channel(v,12u),channel(v,13u),channel(v,18u),channels(v,19u),channel(v,22u),normal,eye,v.position)+channels(v,14u)*channel(v,17u);
  for(var i=0u;i<3u;i++) {
   let start=23u+i*18u; let weight=channel(v,start+16u); let add=channel(v,start+17u);
   if weight>0. {
-   let layer=material_light(channels(v,start),channel(v,start+3u),channel(v,start+4u),channel(v,start+5u),channel(v,start+6u),channel(v,start+11u),channels(v,start+12u),channel(v,start+15u),normal,eye,light,u.light_colour.xyz*attenuation)+channels(v,start+7u)*channel(v,start+10u);
+   let layer=surface_lighting(channels(v,start),channel(v,start+3u),channel(v,start+4u),channel(v,start+5u),channel(v,start+6u),channel(v,start+11u),channels(v,start+12u),channel(v,start+15u),normal,eye,v.position)+channels(v,start+7u)*channel(v,start+10u);
    linear=linear*(1.-weight*(1.-add))+layer*weight;
   }
  }

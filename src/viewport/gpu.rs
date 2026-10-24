@@ -230,8 +230,9 @@ struct Uniforms {
     brush_shape: [f32; 4],
     guide_center: [f32; 4],
     flags: [f32; 4],
-    light_position: [f32; 4],
-    light_colour: [f32; 4],
+    light_position: [[f32; 4]; crate::lighting::MAX_LIGHTS],
+    light_colour: [[f32; 4]; crate::lighting::MAX_LIGHTS],
+    light_info: [f32; 4],
     material_info: [f32; 4],
     guide_normals: [[f32; 4]; 32],
     guide_sides: [[f32; 4]; 32],
@@ -699,16 +700,19 @@ impl Gpu {
             p.perspective[2],
             p.depth,
         ];
-        u.light_position = vector(
-            p.lighting.vector(p.right, p.up, p.view),
-            f32::from(p.lighting.kind == crate::lighting::LightKind::Point),
-        );
-        u.light_colour = [
-            p.lighting.colour[0] * p.lighting.intensity,
-            p.lighting.colour[1] * p.lighting.intensity,
-            p.lighting.colour[2] * p.lighting.intensity,
-            p.lighting.fill,
-        ];
+        u.light_info = [p.lighting.lights.len() as f32, p.lighting.fill, 0., 0.];
+        for (i, light) in p.lighting.lights.iter().enumerate() {
+            u.light_position[i] = vector(
+                light.vector(p.right, p.up, p.view),
+                f32::from(light.kind == crate::lighting::LightKind::Point),
+            );
+            u.light_colour[i] = [
+                light.colour[0] * light.intensity,
+                light.colour[1] * light.intensity,
+                light.colour[2] * light.intensity,
+                0.,
+            ];
+        }
         u.flags = [
             f32::from(preview.show_polygroups),
             f32::from(mode == WireMode::Transparent),

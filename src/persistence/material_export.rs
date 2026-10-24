@@ -31,9 +31,48 @@ impl ExportFormat {
         }
     }
 }
+/// A world-space snapshot, captured on the UI thread before the export worker starts.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct ExportLighting {
+    lights: Vec<ExportLight>,
+    ambient_fill: f32,
+}
+#[derive(Clone, Debug, serde::Serialize)]
+struct ExportLight {
+    kind: &'static str,
+    vector: [f32; 3],
+    colour: [f32; 3],
+    intensity: f32,
+}
+impl ExportLighting {
+    pub(crate) fn capture(rig: &crate::lighting::Lighting, camera: crate::camera::Camera) -> Self {
+        let (right, up, view) = camera.basis();
+        Self {
+            ambient_fill: rig.fill,
+            lights: rig
+                .lights
+                .iter()
+                .map(|light| {
+                    let vector = light.vector(right, up, view);
+                    ExportLight {
+                        kind: if light.kind == crate::lighting::LightKind::Point {
+                            "POINT"
+                        } else {
+                            "SUN"
+                        },
+                        vector: [vector.0, vector.1, vector.2],
+                        colour: light.colour,
+                        intensity: light.intensity,
+                    }
+                })
+                .collect(),
+        }
+    }
+}
 pub fn export_bytes(
     project: &Project,
     format: ExportFormat,
+    lighting: Option<&ExportLighting>,
     cancel: &dyn Fn() -> bool,
 ) -> Result<Vec<u8>, String> {
     project.validate()?;
@@ -42,7 +81,7 @@ pub fn export_bytes(
     }
     match format {
         ExportFormat::Ply => ply(project, cancel),
-        ExportFormat::Blender => blender(project, cancel),
+        ExportFormat::Blender => blender(project, lighting, cancel),
     }
 }
 fn ply(project: &Project, cancel: &dyn Fn() -> bool) -> Result<Vec<u8>, String> {
@@ -80,6 +119,8 @@ struct Exchange<'a> {
     /// Cached channels include arbitrary paint blending; residuals preserve it exactly.
     channels: Vec<Vec<f32>>,
     assets: Vec<ExchangeAsset<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    lighting: Option<&'a ExportLighting>,
 }
 #[derive(serde::Serialize)]
 struct ExchangeAsset<'a> {
@@ -88,7 +129,11 @@ struct ExchangeAsset<'a> {
     values: Vec<f32>,
     weights: Vec<[f32; 4]>,
 }
-fn exchange(project: &Project, cancel: &dyn Fn() -> bool) -> Result<Vec<u8>, String> {
+fn exchange(
+    project: &Project,
+    lighting: Option<&ExportLighting>,
+    cancel: &dyn Fn() -> bool,
+) -> Result<Vec<u8>, String> {
     let mesh = &project.mesh;
     let shading = mesh.surface_shading();
     let normals = shading
@@ -109,6 +154,7 @@ fn exchange(project: &Project, cancel: &dyn Fn() -> bool) -> Result<Vec<u8>, Str
         faces: &mesh.triangles,
         channels: vec![vec![0.; mesh.vertices.len()]; VALUE_COUNT],
         assets: Vec::new(),
+        lighting,
     };
     for (i, m) in (0..mesh.vertices.len()).map(|i| (i, mesh.material(i))) {
         if i % 1024 == 0 && cancel() {
@@ -152,7 +198,11 @@ impl Drop for Temporary {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
-fn blender(project: &Project, cancel: &dyn Fn() -> bool) -> Result<Vec<u8>, String> {
+fn blender(
+    project: &Project,
+    lighting: Option<&ExportLighting>,
+    cancel: &dyn Fn() -> bool,
+) -> Result<Vec<u8>, String> {
     let directory = std::env::temp_dir().join(format!(
         "clay-export-{}-{}",
         std::process::id(),
@@ -169,7 +219,7 @@ fn blender(project: &Project, cancel: &dyn Fn() -> bool) -> Result<Vec<u8>, Stri
     let input = temporary.0.join("material.json");
     let script = temporary.0.join("export.py");
     let output = temporary.0.join("model.blend");
-    std::fs::write(&input, exchange(project, cancel)?).map_err(|e| e.to_string())?;
+    std::fs::write(&input, exchange(project, lighting, cancel)?).map_err(|e| e.to_string())?;
     std::fs::write(&script, include_str!("export_blender.py")).map_err(|e| e.to_string())?;
     let log_path = temporary.0.join("blender.log");
     let log = std::fs::File::create(&log_path).map_err(|e| e.to_string())?;
@@ -267,7 +317,7 @@ mod tests {
     #[test]
     fn material_exports_preserve_colour_bytes_and_reconstruct_layered_channels() {
         let project = fixture();
-        let bytes = export_bytes(&project, ExportFormat::Ply, &|| false).unwrap();
+        let bytes = export_bytes(&project, ExportFormat::Ply, None, &|| false).unwrap();
         let marker = b"end_header\n";
         let start = bytes
             .windows(marker.len())
@@ -287,7 +337,7 @@ mod tests {
             );
         }
         let data: serde_json::Value =
-            serde_json::from_slice(&exchange(&project, &|| false).unwrap()).unwrap();
+            serde_json::from_slice(&exchange(&project, None, &|| false).unwrap()).unwrap();
         for c in 0..VALUE_COUNT {
             let residual = data["channels"][c][0].as_f64().unwrap();
             let weight = data["assets"][0]["weights"][0][group(c)].as_f64().unwrap();
@@ -297,7 +347,114 @@ mod tests {
                     < 1e-6
             );
         }
-        assert!(export_bytes(&project, ExportFormat::Ply, &|| true).is_err());
+        assert!(export_bytes(&project, ExportFormat::Ply, None, &|| true).is_err());
+    }
+    #[test]
+    fn lighting_export_is_optional_and_freezes_camera_relative_lights() {
+        use crate::lighting::{Light, LightKind, Lighting};
+        let project = fixture();
+        let camera = crate::camera::Camera {
+            yaw: 0.7,
+            pitch: -0.4,
+            ..Default::default()
+        };
+        let mut rig = Lighting {
+            lights: vec![
+                Light::default(),
+                Light {
+                    kind: LightKind::Point,
+                    camera_relative: false,
+                    distance: 3.,
+                    ..Default::default()
+                },
+            ],
+            fill: 0.4,
+            ..Default::default()
+        };
+        let snapshot = ExportLighting::capture(&rig, camera);
+        let axes = camera.basis();
+        let direction = rig.lights[0].vector(axes.0, axes.1, axes.2);
+        assert_eq!(
+            snapshot.lights[0].vector,
+            [direction.0, direction.1, direction.2]
+        );
+        assert_eq!(snapshot.lights[0].kind, "SUN");
+        assert_eq!(snapshot.lights[1].kind, "POINT");
+        rig.lights[0].azimuth = 130.;
+        rig.lights[1].distance = 10.;
+        let with: serde_json::Value =
+            serde_json::from_slice(&exchange(&project, Some(&snapshot), &|| false).unwrap())
+                .unwrap();
+        let without: serde_json::Value =
+            serde_json::from_slice(&exchange(&project, None, &|| false).unwrap()).unwrap();
+        assert!(without.get("lighting").is_none());
+        assert_eq!(with["lighting"]["lights"].as_array().unwrap().len(), 2);
+        for (i, expected) in [direction.0, direction.1, direction.2]
+            .into_iter()
+            .enumerate()
+        {
+            assert!(
+                (with["lighting"]["lights"][0]["vector"][i].as_f64().unwrap() - expected as f64)
+                    .abs()
+                    < 1e-6
+            );
+        }
+        assert_eq!(
+            export_bytes(&project, ExportFormat::Ply, Some(&snapshot), &|| false).unwrap(),
+            export_bytes(&project, ExportFormat::Ply, None, &|| false).unwrap()
+        );
+    }
+    #[test]
+    #[ignore = "manual Blender light interoperability validation; requires Blender on PATH"]
+    fn lighting_blender_export_manual_review() {
+        use crate::lighting::{Light, LightKind, Lighting};
+        let directory = PathBuf::from(
+            std::env::var("CLAY_EXPORT_REVIEW").unwrap_or_else(|_| "/tmp/clay-light-export".into()),
+        );
+        std::fs::create_dir_all(&directory).unwrap();
+        let project = fixture();
+        let camera = crate::camera::Camera {
+            yaw: 0.7,
+            pitch: -0.4,
+            ..Default::default()
+        };
+        let rig = Lighting {
+            lights: vec![
+                Light::default(),
+                Light {
+                    kind: LightKind::Point,
+                    camera_relative: false,
+                    distance: 3.,
+                    intensity: 0.7,
+                    colour: [0.2, 0.5, 1.],
+                    ..Default::default()
+                },
+            ],
+            fill: 0.4,
+            ..Default::default()
+        };
+        let snapshot = ExportLighting::capture(&rig, camera);
+        let empty = ExportLighting::capture(
+            &Lighting {
+                lights: vec![],
+                fill: 0.4,
+                ..Default::default()
+            },
+            camera,
+        );
+        for (name, lights) in [
+            ("viewport", Some(&snapshot)),
+            ("neutral", None),
+            ("ambient", Some(&empty)),
+        ] {
+            let bytes = export_bytes(&project, ExportFormat::Blender, lights, &|| false).unwrap();
+            std::fs::write(directory.join(format!("{name}.blend")), bytes).unwrap();
+        }
+        std::fs::write(
+            directory.join("lighting.json"),
+            serde_json::to_vec(&snapshot).unwrap(),
+        )
+        .unwrap();
     }
     #[test]
     #[ignore = "manual Blender interoperability validation; requires Blender on PATH"]
@@ -306,12 +463,12 @@ mod tests {
             std::env::var("CLAY_EXPORT_REVIEW").unwrap_or_else(|_| "/tmp/clay-layer-export".into());
         std::fs::create_dir_all(&directory).unwrap();
         let project = fixture();
-        let bytes = export_bytes(&project, ExportFormat::Blender, &|| false).unwrap();
+        let bytes = export_bytes(&project, ExportFormat::Blender, None, &|| false).unwrap();
         assert!(bytes.starts_with(b"BLENDER") || bytes.starts_with(&[0x28, 0xb5, 0x2f, 0xfd]));
         std::fs::write(PathBuf::from(&directory).join("layered.blend"), bytes).unwrap();
         std::fs::write(
             PathBuf::from(&directory).join("exchange.json"),
-            exchange(&project, &|| false).unwrap(),
+            exchange(&project, None, &|| false).unwrap(),
         )
         .unwrap();
     }

@@ -54,3 +54,16 @@ A focused regression removes a personal material blended over another definition
 The light widget has a screen-oriented orbit handle, front/back flip, directional/point selector and point distance. The focused lighting math checks pass for camera-relative and world-space lights. The real-control Vulkan walkthrough verifies changed model pixels, release outside the widget, Escape rollback, type/distance changes and collapse while camera, geometry and history remain unchanged. Both expanded and collapsed captures were inspected.
 
 CI found that unrelated Undo operations detached a default Paint brush from its not-yet-registered library material, changing project state in the guide reattachment and submodel selection tests. History now detaches only definitions that existed before the transition and were removed by it. Both previously failing tests pass locally; the complete suite and lint remain in CI.
+
+## Multiple lights and optional Blender lighting export
+
+Six focused lighting/input/export tests pass, including legacy single-light migration, the eight-light limit, removal/selection, session-only widget visibility and immutable camera-relative export snapshots. The GPU check compares zero, one, mixed and eight lights against the CPU reference for both basic and layered emissive materials; it confirms ambient fill and emission are not multiplied by light count. The real-control walkthrough adds, selects, edits and removes lights, closes/reopens the widget, and checks the Blender-only export checkbox.
+
+The visible widget initially inherited egui's oversized first-frame Area estimate, causing its hit rectangle to overlap sculpt input. An explicit initial size fixes this; the new regression exercises a fresh stroke with the widget hidden and shown. All three affected CI tests (Clay history, adaptive Detail and off-guide freehand strokes) pass locally.
+
+Blender 5.2.2 LTS successfully exported and reopened three fixtures: viewport lighting enabled, unchecked neutral preview, and an empty rig with ambient only. `scripts/validate-light-export-blender.py` checks Sun direction, point position, both colours and power, Y-up/Z-up conversion and World fill, then renders the two-light result for visual inspection. The mapping preserves editable light parameters, not render identity. Reproduce with:
+
+```sh
+cargo test --locked --lib lighting_blender_export_manual_review -- --ignored
+blender -b -noaudio --python-exit-code 1 --python scripts/validate-light-export-blender.py -- /tmp/clay-light-export
+```

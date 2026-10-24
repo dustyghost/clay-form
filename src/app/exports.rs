@@ -16,15 +16,22 @@ impl App {
         &mut self,
         path: std::path::PathBuf,
         format: ExportFormat,
+        include_lights: bool,
     ) -> Result<(), String> {
         if self.export_job.is_some() {
             return Err("An export is already running".into());
         }
         let project = self.document.project();
+        let lighting = (include_lights && format == ExportFormat::Blender).then(|| {
+            crate::persistence::material_export::ExportLighting::capture(
+                &self.ui.preferences.lighting,
+                self.camera,
+            )
+        });
         self.export_job = Some(crate::background_job::BackgroundJob::start(
             "material-export",
             move |cancel| {
-                let bytes = export_bytes(&project, format, cancel)?;
+                let bytes = export_bytes(&project, format, lighting.as_ref(), cancel)?;
                 Ok((path, bytes))
             },
         )?);

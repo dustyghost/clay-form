@@ -44,6 +44,7 @@ pub(crate) struct FileEntry {
 pub(crate) struct FilePicker {
     pub asset: Option<AssetKind>,
     pub export: Option<crate::persistence::material_export::ExportFormat>,
+    pub include_lights: bool,
     pub save: bool,
     pub resume_pending: bool,
     pub directory: PathBuf,
@@ -172,6 +173,10 @@ impl UiState {
             } else {
                 "Double-click a folder to browse or a project to open it."
             });
+            if picker.export == Some(crate::persistence::material_export::ExportFormat::Blender) {
+                ui.checkbox(&mut picker.include_lights, "Include viewport lights")
+                    .on_hover_text("Export all current lights and ambient fill. Camera-relative lights use their current world positions. Blender shading may differ.");
+            }
             if !picker.error.is_empty() {
                 ui.colored_label(Color32::LIGHT_RED, &picker.error);
             }

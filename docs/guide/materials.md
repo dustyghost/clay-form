@@ -52,11 +52,13 @@ Save as **`.clay`** to preserve paint, brush settings, masks, groups and subdivi
 
 ## Shading
 
-The **Light** widget beneath the viewport axes lets you drag the light around the model directly in view. Its gold marker shows the light direction; a hollow marker is behind the model. **Front / back** flips sides, **Directional** and **Point** change the light type, and point lights have a **Distance** slider. **Follow camera** controls whether the light moves with the view. Escape cancels a light drag. Collapse the **Light** header to make room, or turn off **Show light controls** in the Lighting panel. These controls change illumination without moving the camera or painting the model.
+The viewport light widget starts hidden each time you open the app. Turn on **View → Lighting → Show light controls** when you want it, and use **Close light controls** to hide it completely. The **Light** widget beneath the viewport axes lets you drag the light around the model directly in view. Its gold marker shows the light direction; a hollow marker is behind the model. **Front / back** flips sides, **Directional** and **Point** change the light type, and point lights have a **Distance** slider. **Follow camera** controls whether the light moves with the view. Escape cancels a light drag. Choose which light to move from its light selector. You can also collapse the **Light** header or turn off **Show light controls** in the Lighting panel. These controls change illumination without moving the camera or painting the model.
 
 ![Viewport light controls and Lighting panel](../images/lighting-controls.png)
 
-Open **View → Lighting** to choose a **Directional light** or **Point light**. Use **Drag to move light**, or the azimuth and elevation sliders, to reposition it. Point lights also have a distance control and distance falloff. Change light colour, intensity and ambient fill; turn off **Light follows camera** to keep the light fixed in world space. **Reset studio lighting** restores the original appearance. Lighting is saved in your preferences and does not edit paint or geometry.
+Open **View → Lighting** and use **Add light** or **Remove light** to manage up to eight lights. Select a light from the list to edit it independently as a **Directional light** or **Point light**. Removing the last light leaves ambient fill and material emission. Use **Drag to move light**, or the azimuth and elevation sliders, to reposition it. Point lights also have a distance control and distance falloff. Change each light’s colour and intensity; **Ambient fill** applies to the whole scene. Turn off **Light follows camera** to keep a light fixed in world space. **Reset studio lighting** restores one studio light and neutral fill. Your lights are saved in preferences.
+
+Lighting controls do not edit paint or geometry.
 
 The default viewport lighting uses a studio light and neutral fill. Roughness changes highlight width; metallic changes the diffuse/specular balance and tints metal reflections. The same material appearance is used for the active and inactive painted models. Unpainted inactive models retain their blue-grey selection tint.
 
@@ -77,5 +79,7 @@ Open **Subsurface scattering** for weight, RGB scattering radius and scale. Bees
 ## Exporting paint
 
 Choose **Export → PLY…** for geometry and base vertex colours, or **Export → Blender…** for the full painted material stack and editable named definitions. Blender export needs Blender 4.0 or newer installed on `PATH`. Export runs in the background and can be cancelled. Choose a destination in the file dialog; replacing a file requires confirmation.
+
+**Export → Blender… → Include viewport lights** optionally exports your current lights and ambient fill. It starts unchecked; leaving it off keeps the neutral preview light used by Blender export. Directional lights become Sun lights and point lights retain their positions, colours and distance falloff. Camera-relative lights are frozen at their current world positions. Blender’s shadows, reflections and material shading can make the final appearance differ. OBJ and PLY do not export this light setup.
 
 Both formats export the active model at its current mesh level, including hidden faces. PLY does not contain roughness, metallic, emission or layers. Keep a `.clay` project for the full scene and subdivision levels. In Blender, edit the labelled values inside the node group named after your material. Changes coming back from Blender are part of the later exchange flow.

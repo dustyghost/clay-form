@@ -44,6 +44,7 @@ impl App {
         self.ui.file_picker = Some(crate::ui::FilePicker {
             asset,
             export: None,
+            include_lights: false,
             save,
             resume_pending,
             directory: std::env::current_dir().unwrap_or_else(|_| ".".into()),
@@ -133,7 +134,8 @@ impl App {
                 picker.overwrite = Some(path);
                 return;
             }
-            match self.start_export(path, format) {
+            let include_lights = picker.include_lights;
+            match self.start_export(path, format, include_lights) {
                 Ok(()) => self.ui.file_picker = None,
                 Err(error) => self.ui.file_picker.as_mut().unwrap().error = error,
             }

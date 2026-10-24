@@ -249,3 +249,30 @@ fn material_removal_preserves_paint_other_bindings_levels_and_library_undo() {
     app.dispatch(Command::Undo, &ctx);
     assert!(app.ui.preferences.materials.hidden_builtins.is_empty());
 }
+
+#[test]
+fn lighting_widget_does_not_block_fresh_sculpt_strokes_outside_it() {
+    for show in [false, true] {
+        let mut app = App::default();
+        app.ui.preferences.lighting.show_controls = show;
+        let ctx = egui::Context::default();
+        let before = app.document.geometry_snapshot();
+        let lighting = app.ui.preferences.lighting.clone();
+        let rect = navigation_frame(&mut app, &ctx, vec![]);
+        let start = rect.center() - Vec2::new(0., 130.);
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+        );
+        let end = start + Vec2::new(0., 40.);
+        navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+        navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+        assert_ne!(
+            app.document.mesh().vertices,
+            before.mesh.vertices,
+            "show_controls={show}"
+        );
+        assert_eq!(app.ui.preferences.lighting, lighting);
+    }
+}

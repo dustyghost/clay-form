@@ -254,10 +254,9 @@ impl Scene {
                 } else {
                     1.
                 };
-                let (light, radiance) = lighting.at(v, right, up, view);
                 let base = geometry
                     .material(i)
-                    .lit_color(
+                    .lit_color_many(
                         normal,
                         (view
                             - v * (if self.eye_distance > 0. {
@@ -266,8 +265,7 @@ impl Scene {
                                 0.
                             }))
                         .norm(),
-                        light,
-                        radiance,
+                        lighting.samples(v, right, up, view),
                         lighting.fill,
                     )
                     .map(|c| c * 255.);

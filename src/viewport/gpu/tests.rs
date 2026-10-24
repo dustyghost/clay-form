@@ -982,7 +982,7 @@ fn gpu_composite_preserves_dpi_clipping_and_srgb() {
 #[ignore = "requires Vulkan; validates movable directional/point lighting against the CPU model"]
 fn gpu_lighting_types_colour_and_distance_match_cpu() {
     use crate::{
-        lighting::{LightKind, Lighting},
+        lighting::{Light, LightKind, Lighting},
         sculpt::{Material, Vec3},
     };
     let headless = Headless::new();
@@ -992,63 +992,138 @@ fn gpu_lighting_types_colour_and_distance_match_cpu() {
     let mut plane = Primitive::for_kind(PrimitiveKind::Plane);
     plane.divisions = [2, 2, 1];
     let mut mesh = plane.mesh().unwrap();
-    let material = Material::from_srgb([0.6, 0.5, 0.4], 0.6, 0.2);
-    mesh.materials = vec![material.clone(); mesh.vertices.len()];
-    let mut doc = Document::default();
-    doc.replace_geometry(Geometry::new(mesh)).unwrap();
-    gpu.upload(&Arc::new(DisplayMesh::new(&doc)));
-    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(256.));
-    let (right, up, view) = (Vec3(1., 0., 0.), Vec3(0., 1., 0.), Vec3(0., 0., 1.));
-    let mut params = Params::new(rect, right, up, view, 90., rect.center(), 3.);
-    let configurations = [
-        Lighting::default(),
-        Lighting {
-            azimuth: 75.,
-            elevation: 15.,
-            fill: 0.3,
-            ..Default::default()
-        },
-        Lighting {
-            kind: LightKind::Point,
-            distance: 3.,
-            colour: [0.2, 0.5, 1.],
-            ..Default::default()
-        },
-        Lighting {
-            kind: LightKind::Point,
-            distance: 6.,
-            colour: [0.2, 0.5, 1.],
-            ..Default::default()
-        },
-    ];
-    let mut samples = Vec::new();
-    for lighting in configurations {
-        params.lighting = lighting;
-        gpu.paint(
-            &params,
-            [256, 256],
-            false,
-            WireMode::Visible,
-            false,
-            &Preview::default(),
-        );
-        let rgba = gpu.read();
-        let center = (128 * 256 + 128) * 4;
-        let (light, radiance) = lighting.at(Vec3::default(), right, up, view);
-        let expected = material.lit_color(view, view, light, radiance, lighting.fill);
-        for (i, c) in expected.into_iter().enumerate() {
-            assert!(
-                (rgba[center + i] as f32 - c.clamp(0., 1.) * 255.).abs() < 3.,
-                "lighting {lighting:?}: channel {i}"
+    let plain = Material::from_srgb([0.6, 0.5, 0.4], 0.6, 0.2);
+    let mut layered = plain.clone();
+    layered.emission = [0.02, 0.01, 0.03];
+    layered.emission_strength = 1.;
+    layered.subsurface = 0.3;
+    layered.layers[0].weight = 0.3;
+    layered.layers[0].surface.base_color = [0.2, 0.1, 0.1];
+    layered.layers[0].surface.emission = [0.01, 0.02, 0.01];
+    layered.layers[0].surface.emission_strength = 0.5;
+    for material in [plain, layered] {
+        mesh.materials = vec![material.clone(); mesh.vertices.len()];
+        let mut doc = Document::default();
+        doc.replace_geometry(Geometry::new(mesh.clone())).unwrap();
+        gpu.upload(&Arc::new(DisplayMesh::new(&doc)));
+        let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(256.));
+        let (right, up, view) = (Vec3(1., 0., 0.), Vec3(0., 1., 0.), Vec3(0., 0., 1.));
+        let mut params = Params::new(rect, right, up, view, 90., rect.center(), 3.);
+        let configurations = [
+            Lighting::default(),
+            Lighting {
+                lights: vec![Light {
+                    azimuth: 75.,
+                    elevation: 15.,
+                    ..Default::default()
+                }],
+                fill: 0.3,
+                ..Default::default()
+            },
+            Lighting {
+                lights: vec![Light {
+                    kind: LightKind::Point,
+                    distance: 3.,
+                    colour: [0.2, 0.5, 1.],
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+            Lighting {
+                lights: vec![Light {
+                    kind: LightKind::Point,
+                    distance: 6.,
+                    colour: [0.2, 0.5, 1.],
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+            Lighting {
+                lights: vec![
+                    Light {
+                        intensity: 0.6,
+                        colour: [1., 0.1, 0.2],
+                        azimuth: -65.,
+                        ..Default::default()
+                    },
+                    Light {
+                        kind: LightKind::Point,
+                        distance: 4.,
+                        intensity: 0.7,
+                        colour: [0.1, 0.5, 1.],
+                        azimuth: 45.,
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            },
+            Lighting {
+                lights: vec![],
+                ..Default::default()
+            },
+            Lighting {
+                lights: vec![
+                    Light {
+                        intensity: 0.,
+                        ..Default::default()
+                    };
+                    2
+                ],
+                ..Default::default()
+            },
+            Lighting {
+                lights: vec![],
+                fill: 0.,
+                ..Default::default()
+            },
+            Lighting {
+                lights: (0..8)
+                    .map(|i| Light {
+                        azimuth: i as f32 * 40. - 160.,
+                        intensity: 0.2,
+                        ..Default::default()
+                    })
+                    .collect(),
+                ..Default::default()
+            },
+        ];
+        let mut samples = Vec::new();
+        for lighting in configurations {
+            params.lighting = lighting.clone();
+            gpu.paint(
+                &params,
+                [256, 256],
+                false,
+                WireMode::Visible,
+                false,
+                &Preview::default(),
             );
+            let rgba = gpu.read();
+            let center = (128 * 256 + 128) * 4;
+            let expected = material.lit_color_many(
+                view,
+                view,
+                lighting.samples(Vec3::default(), right, up, view),
+                lighting.fill,
+            );
+            for (i, c) in expected.into_iter().enumerate() {
+                assert!(
+                    (rgba[center + i] as f32 - c.clamp(0., 1.) * 255.).abs() < 3.,
+                    "lighting {lighting:?}: channel {i}"
+                );
+            }
+            samples.push(rgba[center..center + 3].to_vec());
         }
-        samples.push(rgba[center..center + 3].to_vec());
+        assert_eq!(
+            samples[5], samples[6],
+            "Adding lights must not multiply ambient fill or emission"
+        );
+        assert_ne!(samples[4], samples[5], "Both light types contribute");
+        assert!(
+            samples[2][2] > samples[3][2],
+            "Point illumination falls off with distance"
+        );
     }
-    assert!(samples.windows(2).all(|pair| pair[0] != pair[1]));
-    assert!(
-        samples[2][2] > samples[3][2],
-        "Point illumination falls off with distance"
-    );
 }
 
 #[test]

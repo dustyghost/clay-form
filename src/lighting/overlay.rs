@@ -1,12 +1,12 @@
 //! A viewport light-orbit widget. Its pointer ownership lasts through release,
 //! including when the pointer leaves the widget and crosses the sculpt.
-use super::{LightKind, Lighting};
+use super::{Light, LightKind, Lighting};
 use crate::{camera::Camera, sculpt::Vec3};
 use eframe::egui::{self, Color32, Rect, Stroke, Vec2};
 
 #[derive(Default)]
 pub(crate) struct LightControls {
-    drag: Option<(Lighting, Camera)>,
+    drag: Option<(usize, Light, Camera)>,
     holding: bool,
 }
 impl LightControls {
@@ -20,12 +20,19 @@ impl LightControls {
         enabled: bool,
     ) -> bool {
         let was_dragging = self.drag.is_some();
+        if self.drag.is_some_and(|(index, _, _)| {
+            index != lighting.selected || index >= lighting.lights.len()
+        }) {
+            self.drag = None;
+        }
         let cancel = !enabled
             || !lighting.show_controls
             || ctx.input(|i| !i.focused || i.key_pressed(egui::Key::Escape));
-        if cancel && let Some((start, _)) = self.drag.take() {
-            lighting.azimuth = start.azimuth;
-            lighting.elevation = start.elevation;
+        if cancel && let Some((index, start, _)) = self.drag.take() {
+            if let Some(light) = lighting.lights.get_mut(index) {
+                light.azimuth = start.azimuth;
+                light.elevation = start.elevation;
+            }
             ctx.input_mut(|i| {
                 i.consume_key(egui::Modifiers::NONE, egui::Key::Escape);
             });
@@ -34,6 +41,9 @@ impl LightControls {
         if lighting.show_controls {
             let response = egui::Area::new(egui::Id::new("viewport_light_controls"))
                 .order(egui::Order::Foreground)
+                // The default Area estimate is much wider than this widget and
+                // constrains its first-frame hit rectangle over the sculpt.
+                .default_size(Vec2::new(162., 430.))
                 .fixed_pos(viewport.right_top() + Vec2::new(-172., 156.))
                 .constrain_to(viewport)
                 .movable(false)
@@ -41,6 +51,10 @@ impl LightControls {
                     egui::Frame::popup(ui.style()).show(ui, |ui| {
                         ui.set_width(148.);
                         ui.add_enabled_ui(enabled, |ui| {
+                            if ui.button("Close light controls").clicked() { lighting.show_controls = false; }
+                            lighting.selector(ui);
+                            let selected = lighting.selected;
+                            let Some(light) = lighting.lights.get_mut(selected) else { return; };
                             egui::CollapsingHeader::new("Light")
                                 .default_open(true)
                                 .show_unindented(ui, |ui| {
@@ -48,32 +62,32 @@ impl LightControls {
                                     let pad = pad.on_hover_cursor(egui::CursorIcon::Grab)
                                         .on_hover_text("Drag to orbit the light around the model. Escape cancels. The hollow marker is behind the model.");
                                     if !cancel && pad.drag_started_by(egui::PointerButton::Primary) {
-                                        self.drag = Some((*lighting, *camera));
+                                        self.drag = Some((selected, *light, *camera));
                                     }
-                                    if let Some((start, camera)) = self.drag
+                                    if let Some((_, start, camera)) = self.drag
                                         && let Some(delta) = pad.total_drag_delta() {
-                                        lighting.orbit_in_view(start, camera, delta);
+                                        light.orbit_in_view(start, camera, delta);
                                         ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
                                     }
                                     if pad.drag_stopped_by(egui::PointerButton::Primary) {
                                         self.drag = None;
                                     }
-                                    draw_pad(ui.painter(), rect, lighting.direction_in_view(*camera), pad.hovered());
+                                    draw_pad(ui.painter(), rect, light.direction_in_view(*camera), pad.hovered());
                                     ui.horizontal(|ui| {
-                                        ui.selectable_value(&mut lighting.kind, LightKind::Directional, "Directional");
-                                        ui.selectable_value(&mut lighting.kind, LightKind::Point, "Point");
+                                        ui.selectable_value(&mut light.kind, LightKind::Directional, "Directional");
+                                        ui.selectable_value(&mut light.kind, LightKind::Point, "Point");
                                     });
-                                    if lighting.kind == LightKind::Point {
+                                    if light.kind == LightKind::Point {
                                         ui.label("Distance");
                                         ui.spacing_mut().slider_width = 100.;
-                                        ui.add(egui::Slider::new(&mut lighting.distance, 0.1..=50.).logarithmic(true))
+                                        ui.add(egui::Slider::new(&mut light.distance, 0.1..=50.).logarithmic(true))
                                             .on_hover_text("Move the point light closer to or farther from the model");
                                     }
                                     if ui.button("Front / back").on_hover_text("Move the light to the opposite side of the view plane").clicked() {
-                                        let local = lighting.direction_in_view(*camera);
-                                        lighting.set_view_direction(Vec3(local.0, local.1, -local.2), *camera);
+                                        let local = light.direction_in_view(*camera);
+                                        light.set_view_direction(Vec3(local.0, local.1, -local.2), *camera);
                                     }
-                                    ui.checkbox(&mut lighting.camera_relative, "Follow camera");
+                                    ui.checkbox(&mut light.camera_relative, "Follow camera");
                                 });
                         });
                     });
@@ -95,7 +109,7 @@ impl LightControls {
         blocked
     }
 }
-impl Lighting {
+impl Light {
     fn direction_in_view(self, camera: Camera) -> Vec3 {
         let (right, up, view) = camera.basis();
         let world = self.vector(right, up, view).norm();
@@ -190,8 +204,8 @@ mod tests {
             pitch: -0.4,
             ..Default::default()
         };
-        let mut local = Lighting::default();
-        let mut world = Lighting {
+        let mut local = Light::default();
+        let mut world = Light {
             camera_relative: false,
             ..local
         };

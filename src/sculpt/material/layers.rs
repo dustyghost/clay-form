@@ -262,6 +262,38 @@ impl Material {
             subsurface_scale: self.subsurface_scale,
         }
     }
+    pub(crate) fn lit_color_many(
+        &self,
+        normal: Vec3,
+        eye: Vec3,
+        lights: impl Iterator<Item = (Vec3, [f32; 3])> + Clone,
+        fill: f32,
+    ) -> [f32; 3] {
+        let shade = |surface: Surface| {
+            // Ambient and emission belong to the surface, not to each lamp.
+            let mut result = surface.linear_color(normal, eye, eye, [0.; 3], fill);
+            let direct = Surface {
+                emission_strength: 0.,
+                ..surface
+            };
+            for (light, radiance) in lights.clone() {
+                let contribution = direct.linear_color(normal, eye, light, radiance, 0.);
+                for i in 0..3 {
+                    result[i] += contribution[i];
+                }
+            }
+            result
+        };
+        let mut result = shade(self.surface());
+        for layer in self.layers.iter().filter(|layer| layer.weight > 0.) {
+            let colour = shade(layer.surface);
+            for i in 0..3 {
+                result[i] =
+                    result[i] * (1. - layer.weight * (1. - layer.add)) + colour[i] * layer.weight;
+            }
+        }
+        result.map(|v| linear_to_srgb(v.max(0.)))
+    }
     pub(crate) fn lit_color(
         &self,
         normal: Vec3,

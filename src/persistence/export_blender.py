@@ -145,10 +145,40 @@ camera.rotation_euler = (center-camera.location).to_track_quat('-Z', 'Y').to_eul
 camera.data.type = 'ORTHO'
 camera.data.ortho_scale = radius*2.5
 scene.camera = camera
-bpy.ops.object.light_add(type='SUN', location=center+Vector((2, -3, 4))*radius)
-light = bpy.context.object
-light.rotation_euler = (center-light.location).to_track_quat('-Z', 'Y').to_euler()
-light.data.energy = 2.5
+lighting = data.get('lighting')
+if lighting is None:
+    # Preserve the neutral preview light when viewport lighting was not requested.
+    bpy.ops.object.light_add(type='SUN', location=center+Vector((2, -3, 4))*radius)
+    light = bpy.context.object
+    light.rotation_euler = (center-light.location).to_track_quat('-Z', 'Y').to_euler()
+    light.data.energy = 2.5
+else:
+    world = scene.world or bpy.data.worlds.new('Clay ambient fill')
+    scene.world = world
+    world.use_nodes = True
+    background = world.node_tree.nodes.get('Background')
+    background.inputs['Color'].default_value = (1, 1, 1, 1)
+    background.inputs['Strength'].default_value = lighting['ambient_fill'] * 0.1
+    world['clay_ambient_fill'] = lighting['ambient_fill']
+    for index, source in enumerate(lighting['lights']):
+        x, y, z = source['vector']
+        vector = Vector((x, -z, y))
+        lamp = bpy.data.lights.new(f'Clay light {index+1}', source['kind'])
+        light = bpy.data.objects.new(lamp.name, lamp)
+        bpy.context.collection.objects.link(light)
+        lamp.color = source['colour']
+        lamp['clay_intensity'] = source['intensity']
+        if source['kind'] == 'POINT':
+            light.location = vector
+            # Viewport irradiance is intensity * 16 / distance squared.
+            # Blender point power is distributed over a sphere (4*pi steradians).
+            lamp.energy = source['intensity'] * 16 * 4 * math.pi
+            lamp.shadow_soft_size = 0
+        else:
+            light.rotation_euler = (-vector).to_track_quat('-Z', 'Y').to_euler()
+            lamp.energy = source['intensity']
+            lamp.angle = 0
+    scene['clay_viewport_lights_included'] = True
 bpy.ops.object.select_all(action='DESELECT')
 obj.select_set(True)
 bpy.context.view_layer.objects.active = obj

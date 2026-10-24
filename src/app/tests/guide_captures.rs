@@ -3466,7 +3466,7 @@ fn material_controls_offscreen_review() {
 #[ignore = "requires Vulkan; moves viewport lights through real controls and checks rendered changes"]
 fn viewport_lighting_offscreen_review() {
     use crate::{
-        lighting::{LightKind, Lighting},
+        lighting::{Light, LightKind, Lighting},
         sculpt::{Brush, Kind, Material},
     };
     let directory = std::env::var("CLAY_GUIDE_PREVIEW")
@@ -3513,22 +3513,35 @@ fn viewport_lighting_offscreen_review() {
         })
         .count();
     assert!(changed > 500, "Moving the light changes the rendered model");
-    assert!((g.app.ui.preferences.lighting.azimuth - Lighting::default().azimuth - 54.).abs() < 1.);
+    assert!(
+        (g.app.ui.preferences.lighting.lights[0].azimuth - Light::default().azimuth - 54.).abs()
+            < 1.
+    );
     click_guide_label(&mut g, "Point light");
-    assert_eq!(g.app.ui.preferences.lighting.kind, LightKind::Point);
+    assert_eq!(
+        g.app.ui.preferences.lighting.lights[0].kind,
+        LightKind::Point
+    );
     g.save("lighting-point");
     click_guide_label(&mut g, "Reset studio lighting");
     assert_eq!(g.app.ui.preferences.lighting, Lighting::default());
     assert_eq!(g.app.document.geometry_snapshot(), before);
     assert_eq!(g.app.document.history_counts(), history);
     g.save("lighting-studio");
+    assert!(!g.app.ui.preferences.lighting.show_controls);
+    assert!(
+        !g.text_positions
+            .iter()
+            .any(|(text, _)| text == "Drag light")
+    );
+    click_guide_label(&mut g, "Show light controls");
     // The viewport widget moves a world-space light in screen directions, while
     // retaining its pointer even after dragging out over the model.
     g.app.camera.yaw = 0.8;
     g.app.camera.pitch = -0.4;
-    g.app.ui.preferences.lighting.camera_relative = false;
+    g.app.ui.preferences.lighting.lights[0].camera_relative = false;
     let camera = g.app.camera;
-    let lighting = g.app.ui.preferences.lighting;
+    let lighting = g.app.ui.preferences.lighting.clone();
     let (_, widget_before) = g.frame(vec![]);
     let pad = |g: &Guide| {
         g.text_positions
@@ -3547,7 +3560,10 @@ fn viewport_lighting_offscreen_review() {
     g.frame(vec![egui::Event::PointerMoved(end)]);
     g.frame(vec![primary_event(end, false), egui::Event::PointerGone]);
     let (_, widget_after) = g.frame(vec![]);
-    assert_ne!(g.app.ui.preferences.lighting.azimuth, lighting.azimuth);
+    assert_ne!(
+        g.app.ui.preferences.lighting.lights[0].azimuth,
+        lighting.lights[0].azimuth
+    );
     let changed = ((rect.center().y - 100.) as usize..(rect.center().y + 100.) as usize)
         .flat_map(|y| {
             ((rect.center().x - 100.) as usize..(rect.center().x + 100.) as usize)
@@ -3573,7 +3589,7 @@ fn viewport_lighting_offscreen_review() {
         ),
         (camera.yaw, camera.pitch, camera.zoom, camera.pan)
     );
-    let lighting = g.app.ui.preferences.lighting;
+    let lighting = g.app.ui.preferences.lighting.clone();
     let start = pad(&g);
     g.frame(vec![
         egui::Event::PointerMoved(start),
@@ -3591,9 +3607,12 @@ fn viewport_lighting_offscreen_review() {
         primary_event(rect.center(), false),
     ]);
     click_guide_label(&mut g, "Point");
-    assert_eq!(g.app.ui.preferences.lighting.kind, LightKind::Point);
+    assert_eq!(
+        g.app.ui.preferences.lighting.lights[0].kind,
+        LightKind::Point
+    );
     g.frame(vec![]);
-    let distance = g.app.ui.preferences.lighting.distance;
+    let distance = g.app.ui.preferences.lighting.lights[0].distance;
     let start = g
         .text_positions
         .iter()
@@ -3608,21 +3627,13 @@ fn viewport_lighting_offscreen_review() {
     let end = start + Vec2::new(35., 0.);
     g.frame(vec![egui::Event::PointerMoved(end)]);
     g.frame(vec![primary_event(end, false), egui::Event::PointerGone]);
-    assert_ne!(g.app.ui.preferences.lighting.distance, distance);
+    assert_ne!(g.app.ui.preferences.lighting.lights[0].distance, distance);
     let (right, up, view) = camera.basis();
-    let side = g
-        .app
-        .ui
-        .preferences
-        .lighting
+    let side = g.app.ui.preferences.lighting.lights[0]
         .vector(right, up, view)
         .dot(view);
     click_guide_label(&mut g, "Front / back");
-    let flipped = g
-        .app
-        .ui
-        .preferences
-        .lighting
+    let flipped = g.app.ui.preferences.lighting.lights[0]
         .vector(right, up, view)
         .dot(view);
     assert!((flipped + side).abs() < 1e-4);
@@ -3646,4 +3657,72 @@ fn viewport_lighting_offscreen_review() {
             .any(|(text, _)| text == "Drag light")
     );
     g.save("lighting-widget-collapsed");
+    click_guide_label(&mut g, "Close light controls");
+    g.frame(vec![]);
+    assert!(!g.app.ui.preferences.lighting.show_controls);
+    assert!(
+        !g.text_positions
+            .iter()
+            .any(|(text, _)| text == "Close light controls")
+    );
+    let first = g.app.ui.preferences.lighting.lights[0];
+    click_guide_label(&mut g, "Add light");
+    assert_eq!(g.app.ui.preferences.lighting.lights.len(), 2);
+    assert_eq!(g.app.ui.preferences.lighting.selected, 1);
+    click_guide_label(&mut g, "Point light");
+    assert_eq!(g.app.ui.preferences.lighting.lights[0], first);
+    assert_eq!(
+        g.app.ui.preferences.lighting.lights[1].kind,
+        LightKind::Point
+    );
+    let second = g.app.ui.preferences.lighting.lights[1];
+    click_guide_label(&mut g, "Show light controls");
+    click_guide_label(&mut g, "Light"); // Reopen the collapsed orbit controls.
+    g.save("lighting-multiple-lights");
+    click_guide_label(&mut g, "Light 2");
+    click_guide_label(&mut g, "Light 1");
+    assert_eq!(g.app.ui.preferences.lighting.selected, 0);
+    g.frame(vec![]);
+    let start = pad(&g);
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    let end = start + Vec2::new(30., 20.);
+    g.frame(vec![egui::Event::PointerMoved(end)]);
+    g.frame(vec![primary_event(end, false)]);
+    assert_ne!(g.app.ui.preferences.lighting.lights[0], first);
+    assert_eq!(g.app.ui.preferences.lighting.lights[1], second);
+    click_guide_label(&mut g, "Remove light");
+    assert_eq!(g.app.ui.preferences.lighting.lights, vec![second]);
+    assert_eq!(g.app.ui.preferences.lighting.selected, 0);
+    click_guide_label(&mut g, "Remove light");
+    assert!(g.app.ui.preferences.lighting.lights.is_empty());
+    g.save("lighting-ambient-only");
+    click_guide_label(&mut g, "Reset studio lighting");
+    click_guide_label(&mut g, "Close light controls");
+    assert_eq!(g.app.ui.preferences.lighting, Lighting::default());
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    assert_eq!(g.app.document.history_counts(), history);
+    g.app.dispatch(
+        Command::BrowseExport(crate::persistence::material_export::ExportFormat::Blender),
+        &g.ctx,
+    );
+    g.frame(vec![]);
+    assert!(!g.app.ui.file_picker.as_ref().unwrap().include_lights);
+    click_guide_label(&mut g, "Include viewport lights");
+    assert!(g.app.ui.file_picker.as_ref().unwrap().include_lights);
+    g.save("lighting-blender-export-option");
+    g.app.dispatch(Command::CancelProjectFile, &g.ctx);
+    g.app.dispatch(
+        Command::BrowseExport(crate::persistence::material_export::ExportFormat::Ply),
+        &g.ctx,
+    );
+    g.frame(vec![]);
+    assert!(
+        !g.text_positions
+            .iter()
+            .any(|(text, _)| text == "Include viewport lights")
+    );
+    g.app.dispatch(Command::CancelProjectFile, &g.ctx);
 }
