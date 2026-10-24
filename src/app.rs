@@ -220,10 +220,7 @@ impl App {
                 });
             });
         }
-        if self.ui.viewport_menu.visibility_was_active
-            && !temporary_visibility
-            && self.viewport.gesture == Some(crate::viewport::Gesture::Select)
-        {
+        if self.ui.viewport_menu.visibility_was_active && !temporary_visibility {
             self.viewport.cancel(&mut self.document);
             self.viewport.wait_for_release();
         }
@@ -355,7 +352,7 @@ impl App {
                     .then_some(self.ui.slice_options)
                     .filter(|_| !temporary_visibility),
                 select: if temporary_visibility {
-                    Some(self.ui.temporary_visibility_tool)
+                    Some(self.ui.preferences.visibility_selection.tool())
                 } else if self.ui.mask_active {
                     self.ui.preferences.mask_preset.selection_tool()
                 } else {
@@ -407,8 +404,12 @@ impl App {
             },
         );
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
+        if self.ui.mask_active || temporary_visibility {
+            self.viewport
+                .modeling
+                .accept_attribute_revision(&self.document);
+        }
         if self.ui.mask_active {
-            self.viewport.modeling.accept_mask_revision(&self.document);
             self.paint_temporary_mask_status(ui);
         }
         self.ui.modeling.count = self.viewport.modeling.selection().len();
@@ -418,8 +419,18 @@ impl App {
                 rect.left_top() + egui::vec2(12., 12.),
                 egui::Align2::LEFT_TOP,
                 format!(
-                    "Visibility · {} · hold {} · tool menu {}",
-                    self.ui.temporary_visibility_tool.label(),
+                    "Hide/Isolate · {} · {}{} · hold {} · tool menu {}",
+                    self.ui.preferences.visibility_selection.shape.label(),
+                    if self.ui.preferences.visibility_selection.hide {
+                        "Hide"
+                    } else {
+                        "Isolate"
+                    },
+                    if self.ui.preferences.visibility_selection.flip {
+                        " (flipped)"
+                    } else {
+                        ""
+                    },
                     self.ui.preferences.visibility_hold.label(),
                     self.ui
                         .preferences

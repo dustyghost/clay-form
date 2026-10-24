@@ -135,18 +135,33 @@ Use **Select lasso**, hold **Alt**, draw the outline, and release:
 
 *Hiding changes visibility, not geometry. Use Show all to restore the view.*
 
-### Temporary rectangle shortcuts
+### Line and editable closed path
 
-In Sculpt mode, hold **Ctrl+Shift**:
+Choose **Visibility → Hide/Isolate: Line** or **Hide/Isolate: Closed path**. In the tool strip, select **Hide** or **Isolate** and optionally **Flip side / region**. These choices are remembered independently of the sculpt brush. Alt does not change the operation in this workflow.
+
+- **Line:** drag a dividing line, including from empty space. The line extends beyond its endpoints. Release to apply; Space moves the line while dragging.
+- **Closed path:** click at least three points around a region. The last point connects visibly to the first. Drag a point to move it, click an edge to insert a point, or use **Delete point**. Up to 64 points are supported. **Apply visibility** commits; **Clear path** discards the outline.
+- **Flip side / region:** switches the line half-plane or selects outside the closed region. Crossing paths use alternating inside/outside regions, like the lasso.
+
+Red faces preview exactly the faces that will become hidden. **Isolate** hides currently visible faces outside the selected region; already-hidden faces stay hidden. The classifier uses projected polygon centers at each depth, including perspective projection. Whole quads stay together even when the dividing line crosses them. A center on the boundary belongs to the unflipped region. Hiding never cuts, caps, splits, or moves geometry.
+
+The new shape, operation, flip, Apply, Clear, and Delete point actions are available in **Settings → Key settings** and custom controls. They start unbound; assign, remap, clear, or reset them there. The editor buttons also work without shortcuts.
+
+### Temporary Hide/Isolate
+
+Configure **Hold for visibility** and **Viewport tool menu** in **Settings → Key settings**. The default visibility hold is Ctrl+Shift; the UI shows your assigned binding. While holding it over the viewport, open the tool menu to choose Rectangle, Lasso, Line, or Closed path and Hide/Isolate. The chosen shape, operation, and flip state are remembered for the next hold and after restarting.
+
+Release the hold to return to the prior sculpt or Modeling tool without losing its component selection. Keep the hold active until releasing a rectangle, lasso, or line, or applying a multi-click closed path. Releasing the hold first discards the unfinished gesture; it never commits an edit. Escape, focus loss, camera changes, and a change of model discard drafts without a geometry edit. Opening a menu never paints or applies visibility.
+
+For the rectangle shape, the established click behavior remains available:
 
 | Gesture | Result |
 | --- | --- |
-| Drag | Isolate a rectangle; add Alt to hide it |
 | Click a group's face | Hide that group; if it was the last visible group, flip visibility |
 | Click background | Show all faces |
 | Drag entirely in empty background | Invert visibility |
 
-You can release the keys after starting a selection. This temporary gesture remains a rectangle unless an explicit selection tool is active.
+The navigation border, right-button orbit, middle-button pan, and wheel remain available. An unfinished view-space path is discarded when the camera changes.
 
 ### Restore visibility and avoid surprises
 

@@ -435,6 +435,28 @@ impl UiState {
                     && document.mesh_settings().dynamic
                     && document.mesh().hidden_face_count() == 0
             }
+            Action::SelectVisibilityLine
+            | Action::SelectVisibilityPath
+            | Action::VisibilityHide
+            | Action::VisibilityIsolate
+            | Action::FlipVisibilitySide => sculpt && document.active_visible(),
+            Action::ApplyVisibilityPath
+            | Action::ClearVisibilityPath
+            | Action::DeleteVisibilityPoint => {
+                sculpt
+                    && ((self.viewport_menu.visibility_was_active
+                        && self.preferences.visibility_selection.shape
+                            == crate::preferences::VisibilityShape::Path)
+                        || matches!(
+                            self.selection_tool,
+                            Some(crate::viewport::SelectionTool::Visibility(
+                                crate::preferences::VisibilitySettings {
+                                    shape: crate::preferences::VisibilityShape::Path,
+                                    ..
+                                }
+                            ))
+                        ))
+            }
             Action::MaskLine => sculpt && document.active_visible(),
             Action::FlipMaskLine => {
                 sculpt
@@ -537,6 +559,27 @@ impl UiState {
             Action::ArrangeReferences => self.arrange_references,
             Action::ShowReferences => self.references_visible,
             Action::WireTriangles => self.wire_triangles,
+            Action::SelectVisibilityLine => matches!(
+                self.selection_tool,
+                Some(crate::viewport::SelectionTool::Visibility(
+                    crate::preferences::VisibilitySettings {
+                        shape: crate::preferences::VisibilityShape::Line,
+                        ..
+                    }
+                ))
+            ),
+            Action::SelectVisibilityPath => matches!(
+                self.selection_tool,
+                Some(crate::viewport::SelectionTool::Visibility(
+                    crate::preferences::VisibilitySettings {
+                        shape: crate::preferences::VisibilityShape::Path,
+                        ..
+                    }
+                ))
+            ),
+            Action::VisibilityHide => self.preferences.visibility_selection.hide,
+            Action::VisibilityIsolate => !self.preferences.visibility_selection.hide,
+            Action::FlipVisibilitySide => self.preferences.visibility_selection.flip,
             Action::SelectRectangle => {
                 self.selection_tool == Some(crate::viewport::SelectionTool::Rectangle)
             }

@@ -114,6 +114,12 @@ Mask lassos use transactional `Document::mask_region` edits on every stored leve
 
 Region selection uses projected polygon centers through all depths and selects complete quads. Document visibility edits apply the same region to each stored level, normalize visibility consistently, and avoid history entries for unchanged effective visibility. Split Hidden compacts visible/hidden face sets into two meshes and records the entire scene once, preserving attributes and model order while resetting only the split model's topology settings.
 
+### Hide/Isolate lines and closed paths
+
+`Preferences::visibility_selection` retains shape, Hide/Isolate, and side inversion independently of the active tool. Explicit visibility settings do not reinterpret Alt, allowing any configured hold chord. `Mesh::face_region_selection` supplies identical whole-polygon classification for the red face preview and `Document::select_face_region`; line boundaries include zero distance before inversion. Each center is projected at its own depth in perspective views.
+
+`viewport/visibility_path.rs` owns a session-only closed polygon with up to 64 editable points. It uses the same even/odd boundary-inclusive region as the lasso, including concavity and self-intersections. Apply/Clear/Delete point have reusable configurable actions and visible buttons. Preview, point movement, and menu interaction do not enter document history. The draft is invalidated by camera/revision/tool changes, focus loss, cancellation, and release of the temporary hold; no draft survives to reappear on a later hold. These workflows preserve topology, masks, groups, inactive models, and stored subdivision levels.
+
 ### Merge Down
 
 `Mesh::merged_with` concatenates indexed surfaces, offsets face/group references, and extends each independent group's weights with zeroes over the other surface. `Document::merge_down_target` uses the panel's folder order. Merge Down prepares and validates both surfaces before installing the combined model, bakes recipes/thickness, preserves the active identity, and records the scene once for undo.

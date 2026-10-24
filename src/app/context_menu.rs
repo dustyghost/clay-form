@@ -5,7 +5,7 @@ impl App {
     pub(crate) fn temporary_visibility_active(&self, ctx: &egui::Context) -> bool {
         !self.ui.viewport_menu.suppress_visibility
             && !ctx.wants_keyboard_input()
-            && ctx.input(|i| self.ui.preferences.visibility_hold.active(i))
+            && ctx.input(|i| i.focused && self.ui.preferences.visibility_hold.active(i))
             && self.document.primitive().is_none()
             && self.document.active_visible()
             && !self.ui.paths_active
@@ -13,19 +13,19 @@ impl App {
     }
     pub(crate) fn viewport_menu_context(&self, ctx: &egui::Context) -> ViewportMenuContext {
         if self.temporary_visibility_active(ctx) {
-            ViewportMenuContext::Visibility
-        } else if self.temporary_mask_requested(ctx)
-            || matches!(
-                self.ui.selection_tool,
-                Some(
-                    crate::viewport::SelectionTool::MaskLasso
-                        | crate::viewport::SelectionTool::MaskLine { .. }
-                )
-            )
-        {
-            ViewportMenuContext::Mask
-        } else {
-            ViewportMenuContext::Modeling
+            return ViewportMenuContext::Visibility;
+        }
+        if self.temporary_mask_requested(ctx) {
+            return ViewportMenuContext::Mask;
+        }
+        match self.ui.selection_tool {
+            Some(crate::viewport::SelectionTool::Visibility(_)) => ViewportMenuContext::Visibility,
+            Some(
+                crate::viewport::SelectionTool::MaskLasso
+                | crate::viewport::SelectionTool::MaskLassoOperation { .. }
+                | crate::viewport::SelectionTool::MaskLine { .. },
+            ) => ViewportMenuContext::Mask,
+            _ => ViewportMenuContext::Modeling,
         }
     }
     pub(crate) fn open_viewport_menu(&mut self, ctx: &egui::Context) {
@@ -54,7 +54,7 @@ impl App {
             .position(|entry| matches!(entry.action, Action::ModelTool(_)))
             .unwrap_or(0);
         self.ui.viewport_menu.just_opened = true;
-        self.ui.viewport_menu.hold = if context == ViewportMenuContext::Visibility {
+        self.ui.viewport_menu.hold = if self.temporary_visibility_active(ctx) {
             Some(self.ui.preferences.visibility_hold.clone())
         } else if context == ViewportMenuContext::Mask && self.temporary_mask_requested(ctx) {
             Some(self.ui.preferences.mask_hold.clone())
@@ -283,8 +283,8 @@ mod tests {
             vec![key(egui::Key::Enter, egui::Modifiers::ALT)],
         );
         assert_eq!(
-            app.ui.temporary_visibility_tool,
-            crate::viewport::SelectionTool::Lasso
+            app.ui.preferences.visibility_selection.shape,
+            crate::preferences::VisibilityShape::Lasso
         );
         frame(&mut app, &ctx, egui::Modifiers::NONE, vec![]);
         assert!(app.ui.modeling.active);

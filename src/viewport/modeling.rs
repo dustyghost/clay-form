@@ -296,8 +296,8 @@ impl ModelingState {
             self.revision = document.display_revision();
         }
     }
-    /// Mask-only edits retain component indices; refresh derived previews without losing selection.
-    pub(crate) fn accept_mask_revision(&mut self, document: &Document) {
+    /// Attribute-only edits retain component indices; refresh derived previews without losing selection.
+    pub(crate) fn accept_attribute_revision(&mut self, document: &Document) {
         self.revision = document.display_revision();
         self.symmetry = None;
         self.smooth = None;

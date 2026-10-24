@@ -1,6 +1,6 @@
 //! Shared viewport tool chooser. Consumers supply actions; this popup never edits geometry.
 use super::*;
-use crate::viewport::{ComponentMode, ModelTool, SelectionSpan, SelectionTool};
+use crate::viewport::{ComponentMode, ModelTool, SelectionSpan};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ViewportMenuContext {
@@ -243,28 +243,23 @@ impl UiState {
             );
                 entries
             }
-            ViewportMenuContext::Visibility => [
-                (
-                    Action::TemporaryVisibilityRectangle,
-                    SelectionTool::Rectangle,
-                    "Rectangle",
-                ),
-                (
-                    Action::TemporaryVisibilityLasso,
-                    SelectionTool::Lasso,
-                    "Lasso",
-                ),
-            ]
-            .into_iter()
-            .map(|(action, tool, label)| ViewportMenuEntry {
-                action,
-                label: label.into(),
-                selected: self.temporary_visibility_tool == tool,
-                enabled: document.primitive().is_none() && document.active_visible(),
-                hint: "Drag to isolate; Alt hides. This shape is remembered for the next hold."
-                    .into(),
-            })
-            .collect(),
+            ViewportMenuContext::Visibility => {
+                use crate::preferences::VisibilityShape;
+                let settings = self.preferences.visibility_selection;
+                [
+                    (Action::TemporaryVisibilityRectangle, "Rectangle", settings.shape == VisibilityShape::Rectangle),
+                    (Action::TemporaryVisibilityLasso, "Lasso", settings.shape == VisibilityShape::Lasso),
+                    (Action::SelectVisibilityLine, "Line", settings.shape == VisibilityShape::Line),
+                    (Action::SelectVisibilityPath, "Closed path", settings.shape == VisibilityShape::Path),
+                    (Action::VisibilityHide, "Hide selected region", settings.hide),
+                    (Action::VisibilityIsolate, "Isolate selected region", !settings.hide),
+                    (Action::FlipVisibilitySide, "Flip side / region", settings.flip),
+                ].into_iter().map(|(action,label,selected)| ViewportMenuEntry {
+                    action, label: label.into(), selected,
+                    enabled: document.primitive().is_none() && document.active_visible(),
+                    hint: "Remembered for the next hold. Red faces preview the result; no geometry is cut.".into(),
+                }).collect()
+            }
             ViewportMenuContext::Mask if self.mask_active || self.viewport_menu.hold.is_some() => {
                 self.temporary_mask_menu_entries(document)
             }

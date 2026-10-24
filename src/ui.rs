@@ -28,7 +28,6 @@ mod transform;
 use customization::ActionResponse;
 pub(crate) struct UiState {
     pub viewport_menu: context_menu::ViewportMenuState,
-    pub temporary_visibility_tool: crate::viewport::SelectionTool,
     icons: icons::Icons,
     pinned_menu_rects: Vec<egui::Rect>,
     pub library_path: String,
@@ -96,7 +95,6 @@ impl Default for UiState {
     fn default() -> Self {
         Self {
             viewport_menu: Default::default(),
-            temporary_visibility_tool: crate::viewport::SelectionTool::Rectangle,
             icons: Default::default(),
             pinned_menu_rects: Vec::new(),
             library_path: "brush-library.brushes.json".into(),
@@ -445,10 +443,27 @@ impl UiState {
                 });
             });
         }
-        if let Some(tool) = self.selection_tool {
+        if let Some(tool) = self.selection_tool
+            && !self.viewport_menu.visibility_was_active
+        {
             egui::TopBottomPanel::top("visibility_selection_controls").show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.strong(tool.label());
+                    if let crate::viewport::SelectionTool::Visibility(mut settings) = tool {
+                        for shape in crate::preferences::VisibilityShape::ALL {
+                            ui.selectable_value(&mut settings.shape, shape, shape.label());
+                        }
+                        ui.selectable_value(&mut settings.hide, true, "Hide")
+                            .customize(Action::VisibilityHide);
+                        ui.selectable_value(&mut settings.hide, false, "Isolate")
+                            .customize(Action::VisibilityIsolate);
+                        design::checkbox(ui, &mut settings.flip, "Flip side / region")
+                            .customize(Action::FlipVisibilitySide);
+                        if settings.tool() != tool {
+                            self.preferences.visibility_selection = settings;
+                            self.selection_tool = Some(settings.tool());
+                        }
+                    }
                     if let crate::viewport::SelectionTool::MaskLine {
                         mut erase,
                         mut flip,
@@ -467,7 +482,19 @@ impl UiState {
                     ui.separator();
                     ui.label(tool.instructions());
                     ui.separator();
-                    ui.label("Through all depths · Space to move · Esc to cancel");
+                    if matches!(
+                        tool,
+                        crate::viewport::SelectionTool::Visibility(
+                            crate::preferences::VisibilitySettings {
+                                shape: crate::preferences::VisibilityShape::Path,
+                                ..
+                            }
+                        )
+                    ) {
+                        ui.label("Through all depths · red faces will hide · Esc to cancel");
+                    } else {
+                        ui.label("Through all depths · Space to move · Esc to cancel");
+                    }
                     if ui.button("Done").clicked() {
                         commands.push(Command::SelectTool(None));
                     }

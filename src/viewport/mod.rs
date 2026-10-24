@@ -25,6 +25,7 @@ mod stencil;
 mod stroke;
 mod transform;
 mod visibility;
+mod visibility_path;
 use crate::{
     camera::Camera,
     document::Document,
@@ -85,6 +86,8 @@ pub(crate) struct Viewport {
     primitive: primitive::PrimitiveControls,
     slice: Option<slice::SliceDrag>,
     selection: Option<visibility::SelectionDrag>,
+    visibility_path: Option<visibility_path::VisibilityPath>,
+    visibility_path_action: Option<crate::preferences::Action>,
     pub(crate) status: Option<String>,
     slice_path: Option<slice::SlicePathDraft>,
     pub(crate) completed_slice: Option<crate::mesh_job::Operation>,
