@@ -25,6 +25,7 @@ mod stencil;
 mod stroke;
 mod transform;
 mod visibility;
+mod visibility_path;
 use crate::{
     camera::Camera,
     document::Document,
@@ -85,6 +86,8 @@ pub(crate) struct Viewport {
     primitive: primitive::PrimitiveControls,
     slice: Option<slice::SliceDrag>,
     selection: Option<visibility::SelectionDrag>,
+    visibility_path: Option<visibility_path::VisibilityPath>,
+    visibility_path_action: Option<crate::preferences::Action>,
     pub(crate) status: Option<String>,
     slice_path: Option<slice::SlicePathDraft>,
     pub(crate) completed_slice: Option<crate::mesh_job::Operation>,
@@ -102,6 +105,8 @@ pub(crate) struct ViewportOptions {
     pub transform_operation: TransformOperation,
     pub respect_mask: bool,
     pub selected: Option<usize>,
+    pub temporary_mask: bool,
+    pub mask_erase: bool,
     pub pressure: f32,
     pub wire: bool,
     pub wire_mode: WireMode,
@@ -225,10 +230,20 @@ impl Viewport {
             renderer.clear_preview();
         }
         let modifiers = ui.input(|i| i.modifiers);
-        let brush = options.selected.map_or_else(
-            || Brush::new(Kind::Smooth),
+        let mut brush = options.selected.map_or_else(
+            || {
+                Brush::new(if options.temporary_mask {
+                    Kind::Mask
+                } else {
+                    Kind::Smooth
+                })
+            },
             |i| document.brushes()[i].clone(),
         );
+        if options.temporary_mask {
+            brush.kind = Kind::Mask;
+            brush.subtract = options.mask_erase;
+        }
         let brush_id = brush.identity();
         if self.stroke_brush.as_ref().is_some_and(|id| *id != brush_id)
             && ui.input(|i| i.pointer.primary_down())
@@ -577,6 +592,7 @@ impl Viewport {
             && let Some(point) =
                 pointer.filter(|p| !gizmo_rect.contains(*p) && !navigation::contains(rect, *p))
             && let Some((owner, _, _)) = scene.pick_model(point)
+            && !options.temporary_mask
             && owner != document.active_model_index()
         {
             let _ = document.select_submodel(owner);

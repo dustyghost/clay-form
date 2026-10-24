@@ -354,8 +354,10 @@ impl UiState {
                         for (tool, action) in [
                             (crate::viewport::SelectionTool::Rectangle, Action::SelectRectangle),
                             (crate::viewport::SelectionTool::Lasso, Action::SelectLasso),
+                            (crate::preferences::VisibilitySettings {shape: crate::preferences::VisibilityShape::Line, ..self.preferences.visibility_selection}.tool(), Action::SelectVisibilityLine),
+                            (crate::preferences::VisibilitySettings {shape: crate::preferences::VisibilityShape::Path, ..self.preferences.visibility_selection}.tool(), Action::SelectVisibilityPath),
                         ] {
-                            if ui.selectable_label(self.selection_tool == Some(tool), tool.label()).on_hover_text("Drag to isolate; Alt to hide. Selects face centers through all depths, keeping quads whole.").customize(action.clone()).clicked() {
+                            if ui.selectable_label(self.selection_tool == Some(tool), action.label()).on_hover_text("Selects face centers through all depths, keeping quads whole. Line and closed path use the chosen Hide/Isolate operation.").customize(action.clone()).clicked() {
                                 commands.push(Command::Action(action));
                                 if popup { ui.close_kind(egui::UiKind::Menu); }
                             }
@@ -368,11 +370,20 @@ impl UiState {
                         }
                     });
                 ui.separator();
-                ui.label("Ctrl+Shift drag: isolate rectangle • Alt: hide");
-                ui.label("Ctrl+Shift click: hide group; last visible group flips visibility");
-                ui.label("Ctrl+Shift click background: show all");
-                ui.label("Ctrl+Shift drag empty background: invert");
-                ui.label("Space: move rectangle • Esc: cancel");
+                ui.label(format!(
+                    "Hold {}: remembered Hide/Isolate",
+                    self.preferences.visibility_hold.label()
+                ));
+                ui.label(format!(
+                    "Tool menu: {}",
+                    self.preferences
+                        .shortcut(&Action::ViewportContextMenu)
+                        .map_or("Unbound".into(), |s| s.label())
+                ));
+                ui.label("Rectangle click: hide group; last visible group flips visibility");
+                ui.label("Rectangle click background: show all");
+                ui.label("Rectangle drag empty background: invert");
+                ui.label("Release hold or Escape: cancel unfinished selection");
                 ui.weak("Selects face centers through all depths; keeps quads whole.");
             }
             BuiltinMenu::Mesh => self.mesh_controls(ui, document, commands),
@@ -469,6 +480,7 @@ impl UiState {
                 }
             }
             BuiltinMenu::Mask => {
+                self.temporary_mask_controls(ui, document, commands);
                 let mut threshold = document
                     .model(document.active_model_index())
                     .unwrap()

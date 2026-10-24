@@ -1,6 +1,7 @@
 //! Latched rectangle, lasso, and mask-line gestures ahead of sculpt routing.
 use super::{Gesture, Viewport, scene::Scene};
 use crate::document::Document;
+use crate::preferences::{VisibilitySettings, VisibilityShape};
 use eframe::egui::{self, Color32, Pos2, Rect, Stroke, StrokeKind};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -8,24 +9,62 @@ pub(crate) enum SelectionTool {
     Rectangle,
     Lasso,
     MaskLasso,
+    MaskLassoOperation { erase: bool },
     MaskLine { erase: bool, flip: bool },
+    Visibility(VisibilitySettings),
 }
 impl SelectionTool {
+    fn is_mask_lasso(self) -> bool {
+        matches!(self, Self::MaskLasso | Self::MaskLassoOperation { .. })
+    }
     pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Rectangle => "Select rectangle",
             Self::Lasso => "Select lasso",
-            Self::MaskLasso => "Mask lasso",
+            Self::MaskLasso | Self::MaskLassoOperation { .. } => "Mask lasso",
             Self::MaskLine { .. } => "Mask through · Line",
+            Self::Visibility(_) => "Hide/Isolate",
         }
     }
     pub(crate) fn instructions(self) -> &'static str {
-        if matches!(self, Self::MaskLine { .. }) {
+        if let Self::MaskLassoOperation { erase } = self {
+            return if erase {
+                "Drag to erase through all depths · release to apply"
+            } else {
+                "Drag to mask through all depths · release to apply"
+            };
+        }
+        if matches!(
+            self,
+            Self::Visibility(VisibilitySettings {
+                shape: VisibilityShape::Path,
+                ..
+            })
+        ) {
+            "Click to add points · drag to edit · Apply commits the closed region"
+        } else if matches!(
+            self,
+            Self::MaskLine { .. }
+                | Self::Visibility(VisibilitySettings {
+                    shape: VisibilityShape::Line,
+                    ..
+                })
+        ) {
             "Drag a dividing line, including from empty space · release to apply"
-        } else if self == Self::MaskLasso {
+        } else if self.is_mask_lasso() {
             "Drag to mask · Alt to erase · release to apply"
+        } else if matches!(self, Self::Visibility(_)) {
+            "Drag the region · release to apply the chosen operation"
         } else {
             "Drag to isolate · Alt to hide · release to apply"
+        }
+    }
+    fn visibility_shape(self) -> Option<VisibilityShape> {
+        match self {
+            Self::Rectangle => Some(VisibilityShape::Rectangle),
+            Self::Lasso => Some(VisibilityShape::Lasso),
+            Self::Visibility(settings) => Some(settings.shape),
+            _ => None,
         }
     }
 }
@@ -55,7 +94,8 @@ impl SelectionDrag {
             }
         } else {
             self.end = pos;
-            if matches!(self.tool, SelectionTool::Lasso | SelectionTool::MaskLasso)
+            if (self.tool.is_mask_lasso()
+                || self.tool.visibility_shape() == Some(VisibilityShape::Lasso))
                 && self.points.last().is_none_or(|p| p.distance(pos) >= 2.)
             {
                 // Reject overlong gestures instead of silently changing their shape.
@@ -145,12 +185,12 @@ fn paint_mask_line(
 
 // Even/odd filling supports concave and crossing outlines. Boundary points are
 // inside; zero-length edges are harmless. Bounds avoid work for distant vertices.
-struct LassoRegion {
+pub(super) struct LassoRegion {
     points: Vec<Pos2>,
     bounds: Rect,
 }
 impl LassoRegion {
-    fn new(points: Vec<Pos2>) -> Option<Self> {
+    pub(super) fn new(points: Vec<Pos2>) -> Option<Self> {
         if points.len() < 3 {
             return None;
         }
@@ -169,7 +209,7 @@ impl LassoRegion {
         }
         Some(Self { points, bounds })
     }
-    fn contains(&self, p: Pos2) -> bool {
+    pub(super) fn contains(&self, p: Pos2) -> bool {
         if !self.bounds.contains(p) {
             return false;
         }
@@ -195,6 +235,52 @@ impl LassoRegion {
     }
 }
 
+/// Overlay exactly the whole polygons that the document will hide. The same
+/// centroid classifier handles quads in both preview and commit.
+pub(super) fn paint_visibility_faces(
+    painter: &egui::Painter,
+    scene: &Scene,
+    document: &Document,
+    contains: impl Fn(Pos2) -> bool,
+    hide: bool,
+) {
+    let mesh = document.mesh();
+    let selected =
+        mesh.face_region_selection(|p| scene.visible_depth(p) && contains(scene.project(p)));
+    let color = Color32::from_rgba_unmultiplied(255, 90, 75, 65);
+    let mut overlay = egui::Mesh::default();
+    let mut polygon = Vec::with_capacity(4);
+    for (i, triangle) in mesh.triangles.iter().enumerate() {
+        if !mesh.face_visible(i) || selected[i] != hide {
+            continue;
+        }
+        // A selected face may cross the eye's near plane. Clip the overlay
+        // rather than omitting the visible part of a face that will be hidden.
+        polygon.clear();
+        let vertices = triangle.map(|v| mesh.vertices[v]);
+        let mut a = vertices[2];
+        for b in vertices {
+            if scene.visible_depth(a) != scene.visible_depth(b) {
+                let da = scene.eye_distance - a.dot(scene.view) - scene.near();
+                let db = scene.eye_distance - b.dot(scene.view) - scene.near();
+                polygon.push(scene.project(a + (b - a) * (da / (da - db))));
+            }
+            if scene.visible_depth(b) {
+                polygon.push(scene.project(b));
+            }
+            a = b;
+        }
+        let base = overlay.vertices.len() as u32;
+        for &p in &polygon {
+            overlay.colored_vertex(p, color);
+        }
+        for i in 1..polygon.len().saturating_sub(1) {
+            overlay.add_triangle(base, base + i as u32, base + i as u32 + 1);
+        }
+    }
+    painter.add(egui::Shape::mesh(overlay));
+}
+
 impl Viewport {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn update_visibility(
@@ -209,6 +295,19 @@ impl Viewport {
         select: Option<SelectionTool>,
         navigate: bool,
     ) -> bool {
+        if matches!(
+            select,
+            Some(SelectionTool::Visibility(VisibilitySettings {
+                shape: VisibilityShape::Path,
+                ..
+            }))
+        ) {
+            self.selection = None;
+            return self.update_visibility_path(
+                ui, response, painter, scene, document, gizmo, enabled, select, navigate,
+            );
+        }
+        self.visibility_path = None;
         let modifiers = ui.input(|i| i.modifiers);
         let requested = select.is_some()
             || ui.input(|i| {
@@ -280,9 +379,14 @@ impl Viewport {
         {
             drag.tool = tool;
         }
+        if let (SelectionTool::Visibility(old), Some(SelectionTool::Visibility(new))) =
+            (drag.tool, select)
+            && old.shape == new.shape
+        {
+            drag.tool = SelectionTool::Visibility(new);
+        }
         if !enabled
-            || (matches!(drag.tool, SelectionTool::MaskLine { .. })
-                && egui::Popup::is_any_open(ui.ctx()))
+            || egui::Popup::is_any_open(ui.ctx())
             || (select.is_some() && select != Some(drag.tool))
             || ui.input(|i| {
                 i.key_pressed(egui::Key::Escape)
@@ -346,7 +450,10 @@ impl Viewport {
         }
         // Alt switches the operation even after Ctrl/Shift are released.
         drag.hide = match drag.tool {
-            SelectionTool::MaskLine { erase, .. } => erase,
+            SelectionTool::MaskLine { erase, .. } | SelectionTool::MaskLassoOperation { erase } => {
+                erase
+            }
+            SelectionTool::Visibility(settings) => settings.hide,
             _ => modifiers.alt,
         };
         let color = if drag.hide {
@@ -354,10 +461,16 @@ impl Viewport {
         } else {
             Color32::LIGHT_GREEN
         };
-        let rect = if let SelectionTool::MaskLine { flip, .. } = drag.tool {
+        let rect = if let SelectionTool::MaskLine { flip, .. }
+        | SelectionTool::Visibility(VisibilitySettings {
+            shape: VisibilityShape::Line,
+            flip,
+            ..
+        }) = drag.tool
+        {
             paint_mask_line(painter, scene.rect, drag.start, drag.end, flip, color);
             Rect::from_two_pos(drag.start, drag.end)
-        } else if drag.tool == SelectionTool::Rectangle {
+        } else if drag.tool.visibility_shape() == Some(VisibilityShape::Rectangle) {
             let rect = Rect::from_two_pos(drag.start, drag.end);
             painter.rect_filled(rect, 0., color.gamma_multiply(0.13));
             painter.rect_stroke(rect, 0., Stroke::new(1.5_f32, color), StrokeKind::Inside);
@@ -372,9 +485,65 @@ impl Viewport {
             );
             rect
         };
+        let rectangle_inverts = drag.tool.visibility_shape() == Some(VisibilityShape::Rectangle)
+            && drag.start.distance(drag.end) >= 4.
+            && drag.group.is_none()
+            && !document.mesh().triangles.iter().enumerate().any(|(i, t)| {
+                document.mesh().face_visible(i)
+                    && t.iter()
+                        .any(|&v| scene.visible_depth(document.mesh().vertices[v]))
+                    && triangle_intersects_rect(
+                        t.map(|v| scene.project(document.mesh().vertices[v])),
+                        rect,
+                    )
+            });
+        if let SelectionTool::Visibility(settings) = drag.tool {
+            let region = LassoRegion::new(drag.polygon());
+            let contains = |p: Pos2| match settings.shape {
+                VisibilityShape::Line => {
+                    line_contains(drag.start, drag.end, false, p) != settings.flip
+                }
+                VisibilityShape::Rectangle => rect.contains(p) != settings.flip,
+                VisibilityShape::Lasso => {
+                    region.as_ref().is_some_and(|r| r.contains(p)) != settings.flip
+                }
+                VisibilityShape::Path => false,
+            };
+            let valid_preview = match settings.shape {
+                VisibilityShape::Lasso => region.is_some(),
+                VisibilityShape::Rectangle => drag.start.distance(drag.end) >= 4.,
+                VisibilityShape::Line => drag.start.distance(drag.end) >= 6.,
+                VisibilityShape::Path => false,
+            };
+            if valid_preview {
+                paint_visibility_faces(
+                    painter,
+                    scene,
+                    document,
+                    |p| {
+                        if rectangle_inverts {
+                            settings.hide
+                        } else {
+                            contains(p)
+                        }
+                    },
+                    settings.hide,
+                );
+            }
+        }
         let operation = match (drag.tool, drag.hide) {
-            (SelectionTool::MaskLasso | SelectionTool::MaskLine { .. }, false) => "Add mask",
-            (SelectionTool::MaskLasso | SelectionTool::MaskLine { .. }, true) => "Erase mask",
+            (
+                SelectionTool::MaskLasso
+                | SelectionTool::MaskLassoOperation { .. }
+                | SelectionTool::MaskLine { .. },
+                false,
+            ) => "Add mask",
+            (
+                SelectionTool::MaskLasso
+                | SelectionTool::MaskLassoOperation { .. }
+                | SelectionTool::MaskLine { .. },
+                true,
+            ) => "Erase mask",
             (_, false) => "Isolate",
             (_, true) => "Hide",
         };
@@ -395,6 +564,52 @@ impl Viewport {
         if ui.input(|i| i.pointer.button_released(egui::PointerButton::Primary)) {
             let drag = self.selection.take().unwrap();
             self.gesture = None;
+            if let SelectionTool::Visibility(settings) = drag.tool {
+                if rectangle_inverts {
+                    let result = document.invert_visibility();
+                    self.status =
+                        Some(result.err().unwrap_or_else(|| "Visibility inverted".into()));
+                    return true;
+                }
+                let region = LassoRegion::new(drag.polygon());
+                let valid = match settings.shape {
+                    VisibilityShape::Lasso => region.is_some(),
+                    _ => drag.start.distance(drag.end) >= 6.,
+                };
+                if !valid && settings.shape != VisibilityShape::Rectangle {
+                    self.status = Some("Draw a longer line or enclose an area".into());
+                    return true;
+                }
+                if valid {
+                    let result = document.select_face_region(
+                        |p| {
+                            if !scene.visible_depth(p) {
+                                return false;
+                            }
+                            let p = scene.project(p);
+                            let inside = match settings.shape {
+                                VisibilityShape::Line => {
+                                    line_contains(drag.start, drag.end, false, p)
+                                }
+                                VisibilityShape::Rectangle => rect.contains(p),
+                                VisibilityShape::Lasso => {
+                                    region.as_ref().is_some_and(|r| r.contains(p))
+                                }
+                                VisibilityShape::Path => false,
+                            };
+                            inside != settings.flip
+                        },
+                        settings.hide,
+                    );
+                    self.status = Some(
+                        result
+                            .err()
+                            .unwrap_or_else(|| format!("{operation} selection applied")),
+                    );
+                    return true;
+                }
+                // Preserve the established rectangle tap/group/background shortcuts.
+            }
             if let SelectionTool::MaskLine { erase, flip } = drag.tool {
                 if drag.start.distance(drag.end) < 6. {
                     self.status = Some("Draw a longer dividing line".into());
@@ -419,13 +634,13 @@ impl Viewport {
                 );
                 return true;
             }
-            if drag.tool != SelectionTool::Rectangle {
+            if drag.tool.visibility_shape() != Some(VisibilityShape::Rectangle) {
                 let Some(region) = LassoRegion::new(drag.polygon()) else {
                     self.status = Some("Draw a lasso enclosing an area".into());
                     return true;
                 };
                 let contains = |p| scene.visible_depth(p) && region.contains(scene.project(p));
-                let result = if drag.tool == SelectionTool::MaskLasso {
+                let result = if drag.tool.is_mask_lasso() {
                     document.mask_region(contains, drag.hide)
                 } else {
                     document.select_face_region(contains, drag.hide)

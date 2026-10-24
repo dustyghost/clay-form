@@ -435,6 +435,28 @@ impl UiState {
                     && document.mesh_settings().dynamic
                     && document.mesh().hidden_face_count() == 0
             }
+            Action::SelectVisibilityLine
+            | Action::SelectVisibilityPath
+            | Action::VisibilityHide
+            | Action::VisibilityIsolate
+            | Action::FlipVisibilitySide => sculpt && document.active_visible(),
+            Action::ApplyVisibilityPath
+            | Action::ClearVisibilityPath
+            | Action::DeleteVisibilityPoint => {
+                sculpt
+                    && ((self.viewport_menu.visibility_was_active
+                        && self.preferences.visibility_selection.shape
+                            == crate::preferences::VisibilityShape::Path)
+                        || matches!(
+                            self.selection_tool,
+                            Some(crate::viewport::SelectionTool::Visibility(
+                                crate::preferences::VisibilitySettings {
+                                    shape: crate::preferences::VisibilityShape::Path,
+                                    ..
+                                }
+                            ))
+                        ))
+            }
             Action::MaskLine => sculpt && document.active_visible(),
             Action::FlipMaskLine => {
                 sculpt
@@ -537,6 +559,27 @@ impl UiState {
             Action::ArrangeReferences => self.arrange_references,
             Action::ShowReferences => self.references_visible,
             Action::WireTriangles => self.wire_triangles,
+            Action::SelectVisibilityLine => matches!(
+                self.selection_tool,
+                Some(crate::viewport::SelectionTool::Visibility(
+                    crate::preferences::VisibilitySettings {
+                        shape: crate::preferences::VisibilityShape::Line,
+                        ..
+                    }
+                ))
+            ),
+            Action::SelectVisibilityPath => matches!(
+                self.selection_tool,
+                Some(crate::viewport::SelectionTool::Visibility(
+                    crate::preferences::VisibilitySettings {
+                        shape: crate::preferences::VisibilityShape::Path,
+                        ..
+                    }
+                ))
+            ),
+            Action::VisibilityHide => self.preferences.visibility_selection.hide,
+            Action::VisibilityIsolate => !self.preferences.visibility_selection.hide,
+            Action::FlipVisibilitySide => self.preferences.visibility_selection.flip,
             Action::SelectRectangle => {
                 self.selection_tool == Some(crate::viewport::SelectionTool::Rectangle)
             }
@@ -913,6 +956,9 @@ impl UiState {
                     for value in Hold::ALL { ui.selectable_value(hold, value, format!("{value:?}")); }
                 });
             }
+            super::context_menu::hold_binding_editor(ui, "Hold to mask", &mut self.preferences.mask_hold);
+            for conflict in self.mask_binding_conflicts() { ui.colored_label(egui::Color32::YELLOW, conflict); }
+            ui.weak("Masking takes priority over brush and navigation modifiers while held; visibility wins overlapping holds. Right/middle drag and wheel remain available.");
             super::context_menu::hold_binding_editor(ui, "Hold for visibility", &mut self.preferences.visibility_hold);
             if self.preferences.visibility_hold.enabled() {
                 let h = &self.preferences.visibility_hold;
@@ -929,6 +975,7 @@ impl UiState {
             if ui.button("Reset keys to defaults").clicked() {
                 let defaults = Preferences::default();
                 self.preferences.visibility_hold = defaults.visibility_hold;
+                self.preferences.mask_hold = defaults.mask_hold;
                 self.preferences.bindings = defaults.bindings; self.preferences.smooth = defaults.smooth;
                 self.preferences.reverse = defaults.reverse; self.preferences.zoom_hold = defaults.zoom_hold; self.preferences.pan_hold = defaults.pan_hold;
                 self.capturing = None; self.settings_message.clear();

@@ -4,6 +4,10 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 pub(crate) use crate::action::Action;
+mod visibility;
+pub(crate) use visibility::{VisibilitySettings, VisibilityShape};
+mod masking;
+pub(crate) use masking::{MaskPreset, MaskShape};
 mod hold_binding;
 pub(crate) use hold_binding::HoldBinding;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -345,12 +349,15 @@ pub(crate) struct ModelingPreset {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct Preferences {
+    pub visibility_selection: VisibilitySettings,
     pub modeling_presets: Vec<ModelingPreset>,
     pub next_modeling_preset_id: u64,
     pub recovery: crate::recovery::Settings,
     pub history_retention: crate::diagnostics::Retention,
     pub version: u32,
     pub bindings: Vec<(Action, Option<Shortcut>)>,
+    pub mask_hold: HoldBinding,
+    pub mask_preset: MaskPreset,
     pub visibility_hold: HoldBinding,
     pub smooth: Hold,
     pub reverse: Hold,
@@ -400,6 +407,7 @@ impl Default for Preferences {
             (Key::Minus, none),
         ];
         Self {
+            visibility_selection: VisibilitySettings::default(),
             modeling_presets: Vec::new(),
             next_modeling_preset_id: 1,
             recovery: Default::default(),
@@ -421,6 +429,8 @@ impl Default for Preferences {
                 })
                 .map(|(a, key)| (a, key.map(|(k, m)| Shortcut::new(k, m))))
                 .collect(),
+            mask_hold: HoldBinding::default(),
+            mask_preset: MaskPreset::default(),
             visibility_hold: HoldBinding::visibility_default(),
             smooth: Hold::Shift,
             reverse: Hold::Alt,
@@ -457,6 +467,7 @@ impl Default for Preferences {
 }
 impl Preferences {
     pub fn validate(&self) -> Result<(), String> {
+        self.mask_hold.validate()?;
         self.visibility_hold.validate()?;
         if self.modeling_presets.len() > 128 || self.next_modeling_preset_id == 0 {
             return Err("Invalid modeling preset library".into());

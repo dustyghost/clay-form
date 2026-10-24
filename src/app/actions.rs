@@ -10,17 +10,35 @@ impl App {
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         let active_brush = self.ui.brush_index_for_context(&self.document, ctx);
         let command = match action {
+            Action::TemporaryMaskBrush
+            | Action::TemporaryMaskLasso
+            | Action::TemporaryMaskLine
+            | Action::TemporaryMaskAdd
+            | Action::TemporaryMaskErase
+            | Action::TemporaryMaskFlip
+            | Action::TemporaryMaskPreset(_) => {
+                self.change_temporary_mask(action);
+                None
+            }
             Action::ViewportContextMenu => {
                 self.open_viewport_menu(ctx);
                 None
             }
             Action::TemporaryVisibilityRectangle | Action::TemporaryVisibilityLasso => {
-                self.ui.temporary_visibility_tool =
+                self.ui.preferences.visibility_selection.shape =
                     if action == Action::TemporaryVisibilityRectangle {
-                        crate::viewport::SelectionTool::Rectangle
+                        crate::preferences::VisibilityShape::Rectangle
                     } else {
-                        crate::viewport::SelectionTool::Lasso
+                        crate::preferences::VisibilityShape::Lasso
                     };
+                if !self.temporary_visibility_active(ctx)
+                    && matches!(
+                        self.ui.selection_tool,
+                        Some(crate::viewport::SelectionTool::Visibility(_))
+                    )
+                {
+                    self.ui.selection_tool = Some(self.ui.preferences.visibility_selection.tool());
+                }
                 None
             }
             Action::EditPaths => Some(Command::Path(paths::PathCommand::Open)),
@@ -380,6 +398,47 @@ impl App {
             Action::ContractMask => Some(Command::GrowMask(false)),
             Action::BlurMask => Some(Command::BlurMask),
             Action::SharpenMask => Some(Command::SharpenMask),
+            Action::SelectVisibilityLine | Action::SelectVisibilityPath => {
+                use crate::preferences::VisibilityShape;
+                self.ui.preferences.visibility_selection.shape =
+                    if action == Action::SelectVisibilityLine {
+                        VisibilityShape::Line
+                    } else {
+                        VisibilityShape::Path
+                    };
+                let tool = self.ui.preferences.visibility_selection.tool();
+                if self.temporary_visibility_active(ctx) {
+                    None
+                } else {
+                    Some(Command::SelectTool(
+                        (self.ui.selection_tool != Some(tool)).then_some(tool),
+                    ))
+                }
+            }
+            Action::VisibilityHide | Action::VisibilityIsolate | Action::FlipVisibilitySide => {
+                let temporary = self.temporary_visibility_active(ctx);
+                let settings = &mut self.ui.preferences.visibility_selection;
+                match action {
+                    Action::VisibilityHide => settings.hide = true,
+                    Action::VisibilityIsolate => settings.hide = false,
+                    _ => settings.flip = !settings.flip,
+                }
+                if !temporary
+                    && matches!(
+                        self.ui.selection_tool,
+                        Some(crate::viewport::SelectionTool::Visibility(_))
+                    )
+                {
+                    self.ui.selection_tool = Some(settings.tool());
+                }
+                None
+            }
+            Action::ApplyVisibilityPath
+            | Action::ClearVisibilityPath
+            | Action::DeleteVisibilityPoint => {
+                self.viewport.visibility_path_action(action);
+                None
+            }
             Action::SelectRectangle | Action::SelectLasso | Action::MaskLasso => {
                 use crate::viewport::SelectionTool;
                 let tool = match action {

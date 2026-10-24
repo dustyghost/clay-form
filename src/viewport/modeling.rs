@@ -296,6 +296,12 @@ impl ModelingState {
             self.revision = document.display_revision();
         }
     }
+    /// Attribute-only edits retain component indices; refresh derived previews without losing selection.
+    pub(crate) fn accept_attribute_revision(&mut self, document: &Document) {
+        self.revision = document.display_revision();
+        self.symmetry = None;
+        self.smooth = None;
+    }
     pub fn cancel(&mut self) {
         self.selection_drag = None;
         self.smooth = None;

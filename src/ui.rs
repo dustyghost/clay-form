@@ -15,6 +15,7 @@ mod edges;
 mod files;
 pub(crate) use files::{FileEntry, FilePicker};
 mod icons;
+mod masking;
 mod menus;
 mod mirror;
 mod modeling;
@@ -27,7 +28,6 @@ mod transform;
 use customization::ActionResponse;
 pub(crate) struct UiState {
     pub viewport_menu: context_menu::ViewportMenuState,
-    pub temporary_visibility_tool: crate::viewport::SelectionTool,
     icons: icons::Icons,
     pinned_menu_rects: Vec<egui::Rect>,
     pub library_path: String,
@@ -65,6 +65,8 @@ pub(crate) struct UiState {
     pub settings_message: String,
     pub mesh_busy: bool,
     pub selected: usize,
+    pub(crate) mask_active: bool,
+    pub(crate) mask_suppressed: bool,
     smooth_brush: Option<String>,
     brush_editor_focus: Option<(egui::Id, String)>,
     pub file_picker: Option<FilePicker>,
@@ -93,7 +95,6 @@ impl Default for UiState {
     fn default() -> Self {
         Self {
             viewport_menu: Default::default(),
-            temporary_visibility_tool: crate::viewport::SelectionTool::Rectangle,
             icons: Default::default(),
             pinned_menu_rects: Vec::new(),
             library_path: "brush-library.brushes.json".into(),
@@ -139,6 +140,8 @@ impl Default for UiState {
             settings_message: String::new(),
             mesh_busy: false,
             selected: 0,
+            mask_active: false,
+            mask_suppressed: false,
             smooth_brush: None,
             brush_editor_focus: None,
             file_picker: None,
@@ -199,6 +202,9 @@ impl UiState {
         document: &Document,
         ctx: &egui::Context,
     ) -> Option<usize> {
+        if self.mask_active && !ctx.wants_keyboard_input() {
+            return self.preferences.mask_preset.brush_index(document);
+        }
         if ctx.wants_keyboard_input() {
             // Text entry must stay attached to the preset whose field took focus.
             if let Some((field, id)) = &self.brush_editor_focus
@@ -220,6 +226,11 @@ impl UiState {
             {
                 self.smooth_brush = Some(brush.identity());
             }
+        }
+        if let Some(brush) = document.brushes().get(index)
+            && brush.kind == Kind::Mask
+        {
+            self.preferences.mask_preset.brush_id = Some(brush.identity());
         }
         self.selected = index;
     }
@@ -432,10 +443,27 @@ impl UiState {
                 });
             });
         }
-        if let Some(tool) = self.selection_tool {
+        if let Some(tool) = self.selection_tool
+            && !self.viewport_menu.visibility_was_active
+        {
             egui::TopBottomPanel::top("visibility_selection_controls").show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.strong(tool.label());
+                    if let crate::viewport::SelectionTool::Visibility(mut settings) = tool {
+                        for shape in crate::preferences::VisibilityShape::ALL {
+                            ui.selectable_value(&mut settings.shape, shape, shape.label());
+                        }
+                        ui.selectable_value(&mut settings.hide, true, "Hide")
+                            .customize(Action::VisibilityHide);
+                        ui.selectable_value(&mut settings.hide, false, "Isolate")
+                            .customize(Action::VisibilityIsolate);
+                        design::checkbox(ui, &mut settings.flip, "Flip side / region")
+                            .customize(Action::FlipVisibilitySide);
+                        if settings.tool() != tool {
+                            self.preferences.visibility_selection = settings;
+                            self.selection_tool = Some(settings.tool());
+                        }
+                    }
                     if let crate::viewport::SelectionTool::MaskLine {
                         mut erase,
                         mut flip,
@@ -454,7 +482,19 @@ impl UiState {
                     ui.separator();
                     ui.label(tool.instructions());
                     ui.separator();
-                    ui.label("Through all depths · Space to move · Esc to cancel");
+                    if matches!(
+                        tool,
+                        crate::viewport::SelectionTool::Visibility(
+                            crate::preferences::VisibilitySettings {
+                                shape: crate::preferences::VisibilityShape::Path,
+                                ..
+                            }
+                        )
+                    ) {
+                        ui.label("Through all depths · red faces will hide · Esc to cancel");
+                    } else {
+                        ui.label("Through all depths · Space to move · Esc to cancel");
+                    }
                     if ui.button("Done").clicked() {
                         commands.push(Command::SelectTool(None));
                     }
@@ -677,15 +717,24 @@ impl UiState {
     ) {
         let focus_before = ui.ctx().memory(|m| m.focused());
         let active = self.brush_index_for_context(document, ui.ctx());
-        let fallback = crate::sculpt::Brush::new(Kind::Smooth);
+        let fallback = crate::sculpt::Brush::new(if self.mask_active {
+            Kind::Mask
+        } else {
+            Kind::Smooth
+        });
         let original = active.map_or(&fallback, |index| &document.brushes()[index]);
         let selected = active.unwrap_or(self.selected);
         if active.is_none() && matches!(tool, Tool::Brush | Tool::Alpha | Tool::Presets) {
-            ui.label(
-                "Temporary Smooth uses default settings. Add a Smooth preset to customize it.",
-            );
-            if ui.button("Add Smooth preset").clicked() {
-                commands.push(Command::AddBrush(Kind::Smooth));
+            let kind = if self.mask_active {
+                Kind::Mask
+            } else {
+                Kind::Smooth
+            };
+            ui.label(format!(
+                "Temporary {kind:?} uses default settings. Add a {kind:?} preset to customize it."
+            ));
+            if ui.button(format!("Add {kind:?} preset")).clicked() {
+                commands.push(Command::AddBrush(kind));
             }
             return;
         }

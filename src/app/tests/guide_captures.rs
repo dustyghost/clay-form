@@ -20,6 +20,80 @@ struct Guide {
 }
 
 #[test]
+#[ignore = "visibility selection visual review; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn visibility_selection_offscreen_review() {
+    use crate::preferences::{VisibilitySettings, VisibilityShape};
+    let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1000, 850]);
+    g.interactive = true;
+    g.app.ui.preferences.visibility_selection = VisibilitySettings {
+        shape: VisibilityShape::Line,
+        hide: true,
+        flip: false,
+    };
+    g.app.dispatch(
+        Command::SelectTool(Some(g.app.ui.preferences.visibility_selection.tool())),
+        &g.ctx,
+    );
+    let rect = g.frame(vec![]).0;
+    let start = Pos2::new(rect.center().x, rect.top() + 50.);
+    let end = Pos2::new(rect.center().x + 60., rect.bottom() - 40.);
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    g.frame(vec![egui::Event::PointerMoved(end)]);
+    g.save("visibility-line-preview");
+    g.frame(vec![primary_event(end, false)]);
+    assert!(g.app.document.mesh().hidden_face_count() > 0);
+    g.save("visibility-line-result");
+    g.app.document.show_all_faces().unwrap();
+    g.app.ui.preferences.visibility_selection.shape = VisibilityShape::Path;
+    g.app.dispatch(
+        Command::SelectTool(Some(g.app.ui.preferences.visibility_selection.tool())),
+        &g.ctx,
+    );
+    g.frame(vec![]);
+    for pos in [
+        Pos2::new(380., 350.),
+        Pos2::new(620., 350.),
+        Pos2::new(680., 620.),
+        Pos2::new(350., 650.),
+    ] {
+        g.frame(vec![
+            egui::Event::PointerMoved(pos),
+            primary_event(pos, true),
+        ]);
+        g.frame(vec![primary_event(pos, false)]);
+    }
+    g.save("visibility-path-preview");
+    g.app
+        .dispatch(Command::Action(Action::ApplyVisibilityPath), &g.ctx);
+    g.frame(vec![]);
+    assert!(g.app.document.mesh().hidden_face_count() > 0);
+    g.save("visibility-path-result");
+    g.app.viewport.destroy_renderer();
+    for size in [[1000, 850], [640, 480]] {
+        let mut g = Guide::new(&directory, size);
+        g.app
+            .dispatch(Command::Action(Action::SelectVisibilityLine), &g.ctx);
+        g.frame(vec![]);
+        g.app
+            .dispatch(Command::Action(Action::ViewportContextMenu), &g.ctx);
+        g.app.ui.viewport_menu.position = Some(Pos2::new(size[0] as f32 - 5., size[1] as f32 - 5.));
+        g.save(&format!("visibility-menu-{}", size[0]));
+        assert!(g.text_positions.iter().any(|(t, _)| t == "Closed path"));
+        assert!(
+            g.text_positions
+                .iter()
+                .any(|(t, _)| t == "Flip side / region")
+        );
+        g.app.viewport.destroy_renderer();
+    }
+}
+
+#[test]
 #[ignore = "Flatten stroke visual review; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn flatten_stroke_offscreen_review() {
     use crate::sculpt::{Geometry, Kind};
