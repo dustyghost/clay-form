@@ -587,3 +587,17 @@ Merge bakes primitives and thickness modifier, uses current mesh levels, and res
 
 [Brushes and adaptive detail](sculpting.md) · [Masks and selection](selection.md) · [Import/export](files.md)
 
+
+### Switch functions beside the model
+
+Press **Q** over the viewport, or click **Tool menu** in the toolbar. Choose **Face**, **Edge** or **Vertex** under **Component**, then choose a **Target** such as Individual, Loop, Connected or Flat island. Targets follow the current component mode, just like the Modeling panel. Component changes convert the selection; target changes keep the current tool and selection. These controls leave the menu open so you can then choose a function.
+
+The same controls are also in **Model → Modeling** on the top bar. Use its Panel controls to pin a movable window or dock a collapsible section on the left or right. These placements are saved with your workspace. Pinned and docked controls stay open when you choose a function; the drop-down and Q popup close after a function choice. Opening or moving the menu alone does not edit the model.
+
+The Q menu shows functions for the current component mode and marks the active choices. Choose with the mouse/pen or use Up/Down and Enter. Picking a function closes the menu and keeps the current selection. Escape, an outside click or focus loss dismisses the menu without editing geometry. Finish the current drag before opening it.
+
+Change or clear **Viewport tool menu** in **Settings → Key settings**. Its displayed tooltip follows the assigned shortcut; the default Q does not replace right-drag orbit or middle-drag pan. Existing custom bindings remain intact when preferences upgrade; if Q is already assigned, the new menu starts unbound.
+
+Holding the configured **Hold for visibility** chord opens the visibility menu instead. Choose Rectangle or Lasso and keep holding to select a region; release the hold to resume the previous Modeling/sculpt tool. Opening or closing the menu never paints or edits geometry, and releasing the hold while the menu is open closes it. Releasing the hold cancels an unfinished selection gesture; completed selections remain. Escape cancels temporary visibility until its hold is released. The selected shape is remembered during the session.
+
+Both the hold and menu invocation can be changed, cleared and reset in Key settings. Modifier-only and key-plus-modifier holds are supported. For example, set the visibility hold to Alt and the tool menu to F2: Alt+F2 opens the visibility chooser. The menu key ignores only the active hold's modifiers; unrelated shortcut modifiers still matter. Visibility takes priority over Smooth, Reverse, zoom/pan holds and Modeling selection subtraction while the full visibility chord is down; middle/right-button navigation remains available. Settings reports overlapping modifiers and action keys. Text entry and modal editors suppress tool shortcuts.

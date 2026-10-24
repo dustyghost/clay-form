@@ -3,6 +3,9 @@ use crate::{preferences::Tool, sculpt::Axis};
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum Action {
+    ViewportContextMenu,
+    TemporaryVisibilityRectangle,
+    TemporaryVisibilityLasso,
     Save,
     SaveAs,
     Open,
@@ -363,6 +366,9 @@ impl Action {
         Self::TogglePathGuides,
         Self::TogglePathOnlyStrokes,
         Self::StrokeEntirePath,
+        Self::ViewportContextMenu,
+        Self::TemporaryVisibilityRectangle,
+        Self::TemporaryVisibilityLasso,
     ];
     /// Help shared by the built-in controls, custom menus, and shelves.
     pub fn help(&self) -> Option<&'static str> {
@@ -429,6 +435,9 @@ impl Action {
     }
     pub fn label(&self) -> &'static str {
         match self {
+            Self::ViewportContextMenu => "Viewport tool menu",
+            Self::TemporaryVisibilityRectangle => "Temporary visibility: Rectangle",
+            Self::TemporaryVisibilityLasso => "Temporary visibility: Lasso",
             Self::EditPaths => "Editable paths",
             Self::TogglePathGuides => "Guide brush strokes with paths",
             Self::TogglePathOnlyStrokes => "Only start strokes on paths",

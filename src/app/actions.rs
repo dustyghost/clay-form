@@ -10,6 +10,19 @@ impl App {
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         let active_brush = self.ui.brush_index_for_context(&self.document, ctx);
         let command = match action {
+            Action::ViewportContextMenu => {
+                self.open_viewport_menu(ctx);
+                None
+            }
+            Action::TemporaryVisibilityRectangle | Action::TemporaryVisibilityLasso => {
+                self.ui.temporary_visibility_tool =
+                    if action == Action::TemporaryVisibilityRectangle {
+                        crate::viewport::SelectionTool::Rectangle
+                    } else {
+                        crate::viewport::SelectionTool::Lasso
+                    };
+                None
+            }
             Action::EditPaths => Some(Command::Path(paths::PathCommand::Open)),
             Action::StrokeEntirePath => Some(Command::Path(paths::PathCommand::StrokeEntirePath)),
             Action::TogglePathOnlyStrokes => {
@@ -93,6 +106,9 @@ impl App {
                 None
             }
             Action::ModelTarget(span) => {
+                if !self.ui.modeling.active {
+                    self.dispatch(Command::ModelingMode(true), ctx);
+                }
                 self.viewport.cancel(&mut self.document);
                 self.ui.modeling.span = span;
                 None
