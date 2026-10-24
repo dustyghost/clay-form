@@ -247,6 +247,10 @@ impl UiState {
         }
         let sculpt = document.primitive().is_none() && document.active_visible();
         match action {
+            Action::UniversalTransform => {
+                self.transform_mode != crate::viewport::TransformMode::Sculpt
+                    || (document.active_visible() && !document.mesh().vertices.is_empty())
+            }
             Action::Move
             | Action::Scale
             | Action::Rotate
@@ -604,6 +608,10 @@ impl UiState {
             Action::Slice => self.slice_active,
             Action::Sculpt => self.transform_mode == crate::viewport::TransformMode::Sculpt,
             Action::Transform => self.transform_mode == crate::viewport::TransformMode::World,
+            Action::UniversalTransform => {
+                self.transform_mode == crate::viewport::TransformMode::World
+                    && self.transform_operation == crate::viewport::TransformOperation::Universal
+            }
             Action::LineTransform => {
                 self.transform_mode == crate::viewport::TransformMode::ActionLine
             }

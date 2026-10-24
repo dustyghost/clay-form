@@ -13,6 +13,7 @@ pub(crate) enum Action {
     ViewportContextMenu,
     MaskVisibilityMenu,
     TransformMenu,
+    UniversalTransform,
     ModelAxis(crate::viewport::ModelAxis),
     TemporaryVisibilityRectangle,
     TemporaryVisibilityLasso,
@@ -403,6 +404,7 @@ impl Action {
         Self::TemporaryVisibilityLasso,
         Self::MaskVisibilityMenu,
         Self::TransformMenu,
+        Self::UniversalTransform,
         Self::ModelAxis(crate::viewport::ModelAxis::X),
         Self::ModelAxis(crate::viewport::ModelAxis::Y),
         Self::ModelAxis(crate::viewport::ModelAxis::Z),
@@ -484,6 +486,7 @@ impl Action {
             Self::ViewportContextMenu => "Modeling quick menu",
             Self::MaskVisibilityMenu => "Mask / visibility quick menu",
             Self::TransformMenu => "Transform quick menu",
+            Self::UniversalTransform => "Toggle universal transform gizmo",
             Self::ModelAxis(axis) => match axis {
                 crate::viewport::ModelAxis::X => "Axis X",
                 crate::viewport::ModelAxis::Y => "Axis Y",
@@ -692,6 +695,7 @@ impl From<crate::viewport::TransformOperation> for Action {
     fn from(operation: crate::viewport::TransformOperation) -> Self {
         use crate::viewport::TransformOperation;
         match operation {
+            TransformOperation::Universal => Self::UniversalTransform,
             TransformOperation::Move => Self::Move,
             TransformOperation::Scale => Self::Scale,
             TransformOperation::PlaceLine => Self::PlaceLine,

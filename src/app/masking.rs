@@ -646,7 +646,7 @@ mod tests {
         };
         let p = Pos2::new(500., 400.);
         render(&mut app, vec![Event::PointerMoved(p)]);
-        render(&mut app, vec![key(Key::M, true), key(Key::W, true)]);
+        render(&mut app, vec![key(Key::M, true), key(Key::X, true)]);
         let menu = render(&mut app, vec![]);
         assert!(app.ui.viewport_menu.context.is_some());
         app.ui.viewport_menu.selected = 2;

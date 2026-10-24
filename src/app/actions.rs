@@ -547,6 +547,17 @@ impl App {
                 settings.enabled = true;
                 Some(Command::SetAdaptive(settings))
             }
+            Action::UniversalTransform => {
+                if self.ui.transform_mode != crate::viewport::TransformMode::Sculpt {
+                    Some(Command::TransformMode(
+                        crate::viewport::TransformMode::Sculpt,
+                    ))
+                } else {
+                    Some(Command::TransformOperation(
+                        crate::viewport::TransformOperation::Universal,
+                    ))
+                }
+            }
             Action::Sculpt => Some(Command::TransformMode(
                 crate::viewport::TransformMode::Sculpt,
             )),

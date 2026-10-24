@@ -11,6 +11,7 @@ pub(in crate::viewport) struct Ring {
     pub pivot: Vec3,
     pub color: Color32,
     pub label: &'static str,
+    pub radius: f32,
 }
 impl Ring {
     fn basis(&self) -> (Vec3, Vec3) {
@@ -29,7 +30,7 @@ impl Ring {
                 let (s, c) = (i as f32 * TAU / SEGMENTS as f32).sin_cos();
                 let radial = u * c + v * s;
                 (
-                    scene.project(self.pivot + radial * (RADIUS / scene.scale_at(self.pivot))),
+                    scene.project(self.pivot + radial * (self.radius / scene.scale_at(self.pivot))),
                     radial,
                 )
             })
@@ -57,17 +58,29 @@ impl Ring {
             .unwrap()
     }
     pub fn paint(&self, scene: &Scene, painter: &egui::Painter, highlighted: bool) {
+        self.paint_with_label(scene, painter, highlighted, true);
+    }
+    pub fn paint_with_label(
+        &self,
+        scene: &Scene,
+        painter: &egui::Painter,
+        highlighted: bool,
+        show_label: bool,
+    ) {
         painter.add(egui::Shape::line(
             self.samples(scene).into_iter().map(|(p, _)| p).collect(),
             egui::Stroke::new(if highlighted { 3.5 } else { 2_f32 }, self.color),
         ));
+        if !show_label {
+            return;
+        }
         let (u, v) = self.basis();
         let radial = if self.axis.2.abs() > 0.9 {
             (u + v).norm()
         } else {
             u
         };
-        let point = scene.project(self.pivot + radial * (RADIUS / scene.scale_at(self.pivot)));
+        let point = scene.project(self.pivot + radial * (self.radius / scene.scale_at(self.pivot)));
         controls::label(
             painter,
             point + Vec2::new(10., -18.),
@@ -95,6 +108,7 @@ impl Ring {
             tangent,
             last: pointer,
             angle: 0.,
+            radius: self.radius,
         };
         if tangent.is_none()
             && let Some(radial) = drag.projected_radial(scene, pointer)
@@ -111,6 +125,7 @@ pub(in crate::viewport) struct RotationDrag {
     tangent: Option<Vec2>,
     last: Pos2,
     pub angle: f32,
+    radius: f32,
 }
 impl RotationDrag {
     fn projected_radial(&self, scene: &Scene, pointer: Pos2) -> Option<Vec3> {
@@ -131,7 +146,7 @@ impl RotationDrag {
         let angle = if let Some(tangent) = self.tangent {
             // An edge-on ring has no stable ray/plane intersection. Use the
             // latched screen tangent so it remains usable from snapped views.
-            (pointer - self.last).dot(tangent) / RADIUS
+            (pointer - self.last).dot(tangent) / self.radius
         } else if let Some(radial) = self.projected_radial(scene, pointer) {
             let angle = self
                 .axis
@@ -196,6 +211,7 @@ mod tests {
                     pivot: Vec3(0.2, -0.1, 0.3),
                     color: Color32::WHITE,
                     label: "test",
+                    radius: RADIUS,
                 };
                 let (u, v) = ring.basis();
                 let point = |angle: f32| {
@@ -228,6 +244,7 @@ mod tests {
                 pivot: Vec3::default(),
                 color: Color32::WHITE,
                 label: "test",
+                radius: RADIUS,
             };
             let point = ring.samples(&scene)[10].0;
             let mut drag = ring.begin(&scene, point);

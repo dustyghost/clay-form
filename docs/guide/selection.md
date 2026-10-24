@@ -15,7 +15,7 @@
 
 1. Open **Settings → Key settings** and assign **Hold to mask** (initially unbound), for example the **M** key. Modifier-only chords and key-plus-modifier chords are supported. **Clear** disables it; **Reset** returns it to unbound.
 2. Hover over an editable model in Sculpt or Modeling and hold your binding. The viewport shows the temporary mask shape and Add/Erase operation. Your original tool and Modeling selection stay intact.
-3. While holding, press **W** (the default **Mask / visibility quick menu** binding) to choose **Surface brush**, **Through-depth lasso**, or **Through-depth line**, then **Add** or **Erase**. Line also offers **Flip side**. These choices are remembered between holds and restarts.
+3. While holding, press **X** (the default **Mask / visibility quick menu** binding) to choose **Surface brush**, **Through-depth lasso**, or **Through-depth line**, then **Add** or **Erase**. Line also offers **Flip side**. These choices are remembered between holds and restarts.
 4. Paint or draw the selection, release the pen to commit, then release the hold to return to the original tool. Each completed mask gesture is undoable.
 
 The **Mask → Hold to mask** section exposes the same choices and a Mask brush preset selector. Surface brushing uses that preset’s pressure, strength, alpha, spacing and stroke settings independently of the ordinary sculpt brush. Surface brushing respects brush symmetry; all three shapes protect hidden geometry. Through-depth lasso and line do not repeat with brush symmetry. Lasso and line select through every depth on the active model; they also work when the gesture begins in empty space.
@@ -184,6 +184,6 @@ You need both visible and hidden faces. Apply/remove thickness modifier first. B
 
 ### Quick menus
 
-**Q** always opens Modeling. **W** opens mask/visibility choices; the active hold selects the relevant tab, and either tab can be selected when configuring the remembered choices. **E** opens transform options for selected components in Modeling or the active object otherwise. All three bindings can be changed or cleared in Key settings.
+**Q** always opens Modeling. **X** opens mask/visibility choices; the active hold selects the relevant tab, and either tab can be selected when configuring the remembered choices. **E** opens transform options for selected components in Modeling or the active object otherwise. All three bindings can be changed or cleared in Key settings.
 
-W changes remembered choices without starting a gesture. Keep using your configured hold to apply them. Surface brush, line and lasso masking support Add/Erase; visibility offers Rectangle, Lasso, Line and Closed path with Hide/Isolate. **Alt reverses the current operation**, including during a drag and when applying a closed path, without changing the shape, flipped side or saved preset. If Alt is itself part of a configured hold, it also reverses the operation; use a different hold to reserve Alt solely for reversal.
+X changes remembered choices without starting a gesture. Keep using your configured hold to apply them. Surface brush, line and lasso masking support Add/Erase; visibility offers Rectangle, Lasso, Line and Closed path with Hide/Isolate. **Alt reverses the current operation**, including during a drag and when applying a closed path, without changing the shape, flipped side or saved preset. If Alt is itself part of a configured hold, it also reverses the operation; use a different hold to reserve Alt solely for reversal.

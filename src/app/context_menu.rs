@@ -38,19 +38,16 @@ impl App {
                 } else if self.temporary_mask_requested(ctx) {
                     ViewportMenuContext::Mask
                 } else {
-                    self.ui
-                        .viewport_menu
-                        .last_selection_context
-                        .unwrap_or_else(|| {
-                            if matches!(
-                                self.ui.selection_tool,
-                                Some(crate::viewport::SelectionTool::Visibility(_))
-                            ) {
-                                ViewportMenuContext::Visibility
-                            } else {
-                                ViewportMenuContext::Mask
-                            }
-                        })
+                    self.ui.viewport_menu.last_selection_context.unwrap_or({
+                        if matches!(
+                            self.ui.selection_tool,
+                            Some(crate::viewport::SelectionTool::Visibility(_))
+                        ) {
+                            ViewportMenuContext::Visibility
+                        } else {
+                            ViewportMenuContext::Mask
+                        }
+                    })
                 }
             }
             _ => ViewportMenuContext::Modeling,
@@ -78,7 +75,14 @@ impl App {
         let was_open = self.ui.viewport_menu.context.is_some();
         let (action, closed) = self.ui.viewport_menu_popup(ctx, &self.document);
         if let Some(action) = action {
-            self.execute_action(action, ctx);
+            if action == Action::UniversalTransform {
+                self.dispatch(
+                    Command::TransformOperation(crate::viewport::TransformOperation::Universal),
+                    ctx,
+                );
+            } else {
+                self.execute_action(action, ctx);
+            }
         }
         if was_open || closed {
             self.viewport.wait_for_release();
@@ -326,7 +330,7 @@ mod tests {
             &ctx,
             egui::Modifiers::CTRL | egui::Modifiers::SHIFT,
             vec![key(
-                egui::Key::W,
+                egui::Key::X,
                 egui::Modifiers::CTRL | egui::Modifiers::SHIFT,
             )],
         );
@@ -438,7 +442,7 @@ mod tests {
         assert_eq!(old.visibility_hold, HoldBinding::visibility_default());
     }
     #[test]
-    fn quick_menus_route_q_w_e_and_keep_underlying_selection() {
+    fn quick_menus_route_q_x_e_and_keep_underlying_selection() {
         let tap = |code, modifiers| {
             let mut release = key(code, modifiers);
             if let egui::Event::Key { pressed, .. } = &mut release {
@@ -452,7 +456,7 @@ mod tests {
         let hold = egui::Modifiers::CTRL | egui::Modifiers::SHIFT;
         for (key_code, context) in [
             (egui::Key::Q, ViewportMenuContext::Modeling),
-            (egui::Key::W, ViewportMenuContext::Visibility),
+            (egui::Key::X, ViewportMenuContext::Visibility),
             (egui::Key::E, ViewportMenuContext::Transform),
         ] {
             frame(&mut app, &ctx, hold, tap(key_code, hold));

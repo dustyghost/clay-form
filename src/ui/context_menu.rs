@@ -306,6 +306,7 @@ impl UiState {
                 TransformOperation::Move,
                 TransformOperation::Rotate,
                 TransformOperation::Scale,
+                TransformOperation::Universal,
             ] {
                 choices.push((
                     operation.into(),

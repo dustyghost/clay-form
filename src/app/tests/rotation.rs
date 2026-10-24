@@ -353,3 +353,120 @@ fn rotation_shared_controls_report_rejected_transforms_without_changing_geometry
     assert_eq!(app.document.history_counts(), history);
     assert!(!app.document.is_dirty());
 }
+
+fn toggle_universal(app: &mut App, ctx: &egui::Context) {
+    let events = [true, false].map(|pressed| egui::Event::Key {
+        key: egui::Key::T,
+        physical_key: None,
+        pressed,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
+    });
+    let _ = ctx.run(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                Pos2::ZERO,
+                Vec2::new(1000., 800.),
+            )),
+            events: events.to_vec(),
+            ..Default::default()
+        },
+        |ctx| {
+            app.shortcuts(ctx);
+            egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+        },
+    );
+    navigation_frame(app, ctx, vec![]);
+}
+fn drag_universal(app: &mut App, ctx: &egui::Context, start: Pos2, end: Pos2) {
+    navigation_frame(
+        app,
+        ctx,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    assert!(app.viewport.gesture == Some(Gesture::Transform));
+    navigation_frame(app, ctx, vec![egui::Event::PointerMoved(end)]);
+    navigation_frame(app, ctx, vec![primary_event(end, false)]);
+}
+#[test]
+fn universal_gizmo_moves_scales_and_toggles_to_sculpt_without_pointer_leakage() {
+    for scaling in [false, true] {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        let rect = navigation_frame(&mut app, &ctx, vec![]);
+        let before = app.document.geometry_snapshot();
+        toggle_universal(&mut app, &ctx);
+        assert_eq!(
+            (app.ui.transform_mode, app.ui.transform_operation),
+            (Mode::World, Op::Universal)
+        );
+        assert_eq!(app.document.geometry_snapshot(), before);
+        let start = rect.center() + Vec2::new(if scaling { 52. } else { 130. }, 0.);
+        let end = start + Vec2::new(35., 0.);
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+        );
+        assert!(app.viewport.gesture == Some(Gesture::Transform));
+        navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+        let transformed = app.document.geometry_snapshot();
+        assert_ne!(transformed, before);
+        for (a, b) in before.mesh.vertices.iter().zip(&transformed.mesh.vertices) {
+            assert!((a.1 - b.1).abs() < 1e-6 && (a.2 - b.2).abs() < 1e-6);
+            if scaling {
+                assert!((b.0 - a.0 * 0.35_f32.exp()).abs() < 1e-5);
+            } else {
+                assert!(b.0 > a.0);
+            }
+        }
+        toggle_universal(&mut app, &ctx);
+        assert_eq!(app.ui.transform_mode, Mode::Sculpt);
+        assert!(!app.ui.modeling.active);
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(end + Vec2::splat(30.))],
+        );
+        navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+        assert_eq!(app.document.geometry_snapshot(), transformed);
+        assert_eq!(app.document.history_counts(), (1, 0));
+        app.document.undo();
+        assert_eq!(app.document.geometry_snapshot(), before);
+    }
+}
+#[test]
+fn universal_gizmo_pivot_moves_without_edit_and_rotation_and_scale_use_it() {
+    for scaling in [false, true] {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        let rect = navigation_frame(&mut app, &ctx, vec![]);
+        toggle_universal(&mut app, &ctx);
+        let before = app.document.geometry_snapshot();
+        let centre = rect.center();
+        let moved = centre + Vec2::new(40., -25.);
+        drag_universal(&mut app, &ctx, centre, moved);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert_eq!(app.document.history_counts(), (0, 0));
+        let scale = rect.width().min(rect.height()) * 0.35 * app.camera.zoom;
+        let pivot = Vec3(40. / scale, 25. / scale, 0.);
+        if scaling {
+            let start = moved + Vec2::splat(28.);
+            drag_universal(&mut app, &ctx, start, start + Vec2::new(30., -20.));
+            for (a, b) in before
+                .mesh
+                .vertices
+                .iter()
+                .zip(&app.document.mesh().vertices)
+            {
+                assert!((*b - (pivot + (*a - pivot) * 0.4_f32.exp())).len() < 1e-5);
+            }
+        } else {
+            quarter_turn(&mut app, &ctx, moved);
+            expect_quarter_turn(&before.mesh.vertices, &app.document.mesh().vertices, pivot);
+        }
+        assert_eq!(app.document.history_counts(), (1, 0));
+        app.document.undo();
+        assert_eq!(app.document.geometry_snapshot(), before);
+    }
+}

@@ -94,3 +94,4 @@ jobs:
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-visibility" cargo test --locked --lib visibility_selection_offscreen_review -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-temporary-mask" cargo test --locked --lib temporary_mask_offscreen_review -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-context-menu" cargo test --locked --lib viewport_context_menu_offscreen_review -- --ignored
+          CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-universal" cargo test --locked --lib universal_transform_offscreen_review -- --ignored

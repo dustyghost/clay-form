@@ -598,6 +598,15 @@ The Q menu shows functions for the current component mode and marks the active c
 
 Change or clear **Modeling quick menu** in **Settings → Key settings**. Its displayed tooltip follows the assigned shortcut; the default Q does not replace right-drag orbit or middle-drag pan. Existing custom bindings remain intact when preferences upgrade; if Q is already assigned, the new menu starts unbound.
 
-**Q** always opens Modeling. **W** opens the mask/visibility chooser, using the active hold to choose its initial tab. Both temporary holds and all three quick-menu bindings can be changed, cleared and reset in Key settings. Hold shortcuts support modifier-only and key-plus-modifier chords. Release the hold to restore the previous tool; unfinished gestures are cancelled. **Alt** temporarily reverses Add/Erase masking or Hide/Isolate visibility.
+**Q** always opens Modeling. **X** opens the mask/visibility chooser, using the active hold to choose its initial tab. Both temporary holds and all three quick-menu bindings can be changed, cleared and reset in Key settings. Hold shortcuts support modifier-only and key-plus-modifier chords. Release the hold to restore the previous tool; unfinished gestures are cancelled. **Alt** temporarily reverses Add/Erase masking or Hide/Isolate visibility.
 
 **E** opens transform options. In Modeling it offers Move/Rotate/Scale, Free/Gizmo/Axis interaction and applicable axis choices. Otherwise it offers object transforms, World axes/Action Line, pivot controls and Respect mask. Opening the menu makes no geometry edit; choose options and then an operation to begin using it.
+
+
+### Universal transform gizmo
+
+Press **T** to show the universal gizmo for the active object. All handles are available together: colored arrows move along X/Y/Z, colored squares scale along an axis, and colored rings rotate around an axis. The white circle moves freely in the view plane; the white square scales uniformly.
+
+Drag the **centre diamond** to move the pivot in the view plane without moving the mesh or adding an Undo step. Rotation and scaling then use that pivot. **Reset pivot** returns it to the model centre; **Place pivot** remains available for clicking a point on the surface. Pivot placement is session-only. The existing Respect mask setting applies to geometry transforms.
+
+Press **T** again to return to sculpting. T also returns to sculpting from the other object transform modes. Each geometry drag remains one Undo step. The shortcut can be rebound or cleared in Key settings; an existing custom T binding is preserved.

@@ -2618,3 +2618,45 @@ fn viewport_context_menu_offscreen_review() {
         g.app.viewport.destroy_renderer();
     }
 }
+
+#[test]
+#[ignore = "universal transform visual review; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn universal_transform_offscreen_review() {
+    let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    for size in [[1100, 800], [640, 480]] {
+        let mut g = Guide::new(&directory, size);
+        g.interactive = true;
+        g.app.camera.yaw = 0.55;
+        g.app.camera.pitch = 0.35;
+        g.app
+            .dispatch(Command::Action(Action::UniversalTransform), &g.ctx);
+        let rect = g.frame(vec![]).0;
+        let before = g.app.document.geometry_snapshot();
+        let history = g.app.document.history_counts();
+        g.save(&format!("universal-oblique-{}", size[0]));
+        let start = rect.center();
+        let end = start + Vec2::new(20., 10.);
+        g.frame(vec![
+            egui::Event::PointerMoved(start),
+            primary_event(start, true),
+        ]);
+        assert!(g.app.viewport.gesture == Some(Gesture::Transform));
+        g.frame(vec![egui::Event::PointerMoved(end)]);
+        g.frame(vec![primary_event(end, false)]);
+        g.save(&format!("universal-pivot-moved-{}", size[0]));
+        assert_eq!(g.app.document.geometry_snapshot(), before);
+        assert_eq!(g.app.document.history_counts(), history);
+        g.app.camera.yaw = 0.;
+        g.app.camera.pitch = 0.;
+        g.app.dispatch(Command::ResetTransformPivot, &g.ctx);
+        g.save(&format!("universal-front-{}", size[0]));
+        g.app
+            .dispatch(Command::Action(Action::UniversalTransform), &g.ctx);
+        assert_eq!(
+            g.app.ui.transform_mode,
+            crate::viewport::TransformMode::Sculpt
+        );
+        g.app.viewport.destroy_renderer();
+    }
+}

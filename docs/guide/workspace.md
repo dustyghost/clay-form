@@ -123,18 +123,19 @@ Shifted numbers use the physical number-row key, so `!` can bind as Shift+1. Oth
 | Save / Open / New sphere | Ctrl+S / Ctrl+O / Ctrl+N |
 | Undo / Redo | Ctrl+Z / Ctrl+Shift+Z |
 | Reset view | F |
-| Toggle symmetry / guides | X / G |
-| Toggle wireframe | Shift+W |
+| Toggle symmetry / guides | Shift+X / G |
+| Toggle wireframe | W |
 | Modeling quick menu | Q |
-| Mask / visibility quick menu | W |
+| Mask / visibility quick menu | X |
 | Transform quick menu | E |
+| Universal transform / return to sculpting | T |
 | Smaller / larger brush | [ / ] |
 | Previous / next brush | , / . |
 | Subdivide | Ctrl+D |
 | Lower / higher subdivision level | Shift+D / D |
 | Remesh in dynamic mode | Ctrl+R |
 
-The former default W wireframe binding upgrades to Shift+W when adding the mask/visibility quick menu. Custom bindings and explicit unbindings are preserved; if W or E is already assigned to a custom action, the corresponding new quick menu starts unbound.
+The mask/visibility menu now defaults to X; its previous stock W binding upgrades to X and stock symmetry moves to Shift+X. Wireframe returns to W when that key is free. Custom assignments and explicit unbindings are preserved. If a custom action already uses X, E or T, a newly introduced action for that key starts unbound; an existing menu binding is kept. All bindings can be changed in Key settings.
 
 ## Toolbar and brush previews
 
