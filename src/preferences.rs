@@ -1044,7 +1044,7 @@ mod tests {
                         physical_key: None,
                         pressed: true,
                         repeat: false,
-                        modifiers: Modifiers::SHIFT,
+                        modifiers: Modifiers::NONE,
                     },
                 ],
                 ..Default::default()
