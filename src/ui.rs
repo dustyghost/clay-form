@@ -361,6 +361,7 @@ impl UiState {
                     ui.separator();
                     self.builtin_menu(ui, BuiltinMenu::Visibility, document, camera, &mut commands);
                     self.builtin_menu(ui, BuiltinMenu::Mesh, document, camera, &mut commands);
+                    self.builtin_menu(ui, BuiltinMenu::Modeling, document, camera, &mut commands);
                     self.builtin_menu(ui, BuiltinMenu::Slice, document, camera, &mut commands);
                     self.builtin_menu(ui, BuiltinMenu::Transform, document, camera, &mut commands);
                     self.builtin_menu(ui, BuiltinMenu::Primitive, document, camera, &mut commands);

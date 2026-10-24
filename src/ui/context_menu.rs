@@ -46,18 +46,66 @@ fn menu_entry(
     } else {
         entry.label.clone()
     };
+    let width = if compact {
+        0.
+    } else {
+        ui.available_width().clamp(0., 230.)
+    };
     let response = ui
         .add_enabled(
             entry.enabled,
             egui::Button::new(label)
                 .selected(keyboard_selected)
-                .min_size(egui::vec2(if compact { 0. } else { 230. }, 32.)),
+                .min_size(egui::vec2(width, 32.)),
         )
         .on_hover_text(&entry.hint);
     if keyboard_selected && reveal {
         response.scroll_to_me(Some(egui::Align::Center));
     }
     response.clicked()
+}
+
+fn modeling_choices(
+    ui: &mut egui::Ui,
+    entries: &[ViewportMenuEntry],
+    keyboard_index: Option<usize>,
+    reveal: bool,
+) -> Option<(usize, Action)> {
+    let mut chosen = None;
+    let highlighted =
+        |i, entry: &ViewportMenuEntry| keyboard_index.map_or(entry.selected, |index| i == index);
+    ui.strong("Component");
+    ui.horizontal_wrapped(|ui| {
+        for (i, entry) in entries.iter().take(3).enumerate() {
+            if menu_entry(ui, entry, highlighted(i, entry), true, reveal) {
+                chosen = Some((i, entry.action.clone()));
+            }
+        }
+    });
+    ui.strong("Target");
+    ui.horizontal_wrapped(|ui| {
+        for (i, entry) in entries
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| matches!(entry.action, Action::ModelTarget(_)))
+        {
+            if menu_entry(ui, entry, highlighted(i, entry), true, reveal) {
+                chosen = Some((i, entry.action.clone()));
+            }
+        }
+    });
+    ui.separator();
+    ui.strong("Function");
+    for (i, entry) in entries
+        .iter()
+        .enumerate()
+        .filter(|(_, entry)| matches!(entry.action, Action::ModelTool(_)))
+    {
+        if menu_entry(ui, entry, highlighted(i, entry), false, reveal) {
+            chosen = Some((i, entry.action.clone()));
+        }
+    }
+    chosen
 }
 
 /// Modifier-only chords and key-plus-modifier chords share one persisted representation.
@@ -99,6 +147,23 @@ pub(crate) fn hold_binding_editor(
 }
 
 impl UiState {
+    pub(super) fn modeling_function_menu(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &Document,
+        commands: &mut Vec<Command>,
+        popup: bool,
+    ) {
+        let entries = self.viewport_menu_entries(ViewportMenuContext::Modeling, document);
+        if let Some((_, action)) = modeling_choices(ui, &entries, None, false) {
+            let function = matches!(action, Action::ModelTool(_));
+            commands.push(Command::Action(action));
+            if popup && function {
+                ui.close_kind(egui::UiKind::Menu);
+            }
+        }
+    }
+
     pub(crate) fn viewport_menu_entries(
         &self,
         context: ViewportMenuContext,
@@ -295,39 +360,15 @@ impl UiState {
         .show(ctx, |ui| {
             ui.weak("Up/Down choose · Enter apply · Escape close");
             if context == ViewportMenuContext::Modeling {
-                ui.strong("Component");
-                ui.horizontal_wrapped(|ui| {
-                    for (i, entry) in entries.iter().take(3).enumerate() {
-                        if menu_entry(ui, entry, i == index, true, navigated) {
-                            self.viewport_menu.selected = i;
-                            action = Some(entry.action.clone());
-                        }
-                    }
-                });
-                ui.strong("Target");
-                ui.horizontal_wrapped(|ui| {
-                    for (i, entry) in entries
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, entry)| matches!(entry.action, Action::ModelTarget(_)))
-                    {
-                        if menu_entry(ui, entry, i == index, true, navigated) {
-                            self.viewport_menu.selected = i;
-                            action = Some(entry.action.clone());
-                        }
-                    }
-                });
-                ui.separator();
-                ui.strong("Function");
-            }
-            for (i, entry) in entries.iter().enumerate() {
-                if context == ViewportMenuContext::Modeling
-                    && !matches!(entry.action, Action::ModelTool(_))
-                {
-                    continue;
+                if let Some((i, chosen)) = modeling_choices(ui, &entries, Some(index), navigated) {
+                    self.viewport_menu.selected = i;
+                    action = Some(chosen);
                 }
-                if menu_entry(ui, entry, i == index, false, navigated) {
-                    action = Some(entry.action.clone());
+            } else {
+                for (i, entry) in entries.iter().enumerate() {
+                    if menu_entry(ui, entry, i == index, false, navigated) {
+                        action = Some(entry.action.clone());
+                    }
                 }
             }
         });
