@@ -420,6 +420,12 @@ impl Default for Preferences {
                 .map(|(i, a)| {
                     let key = if a == Action::ViewportContextMenu {
                         Some((Key::Q, none))
+                    } else if a == Action::MaskVisibilityMenu {
+                        Some((Key::W, none))
+                    } else if a == Action::TransformMenu {
+                        Some((Key::E, none))
+                    } else if a == Action::Wireframe {
+                        Some((Key::W, Modifiers::SHIFT))
                     } else if a == Action::SaveAs {
                         Some((Key::S, ctrl | Modifiers::SHIFT))
                     } else {
@@ -884,6 +890,27 @@ pub(crate) fn save(path: &std::path::Path, prefs: &Preferences) -> Result<(), St
 }
 pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
     let mut prefs: Preferences = crate::persistence::read_json(&path.to_string_lossy())?;
+    // Move only the old stock wireframe binding when introducing W's quick menu.
+    // Preserve custom assignments and explicit unbindings.
+    if !prefs
+        .bindings
+        .iter()
+        .any(|(a, _)| *a == Action::MaskVisibilityMenu)
+        && prefs.shortcut(&Action::Wireframe) == Some(&Shortcut::new(Key::W, Modifiers::NONE))
+    {
+        let replacement = Shortcut::new(Key::W, Modifiers::SHIFT);
+        let available = !prefs
+            .bindings
+            .iter()
+            .any(|(_, b)| b.as_ref() == Some(&replacement));
+        if let Some((_, binding)) = prefs
+            .bindings
+            .iter_mut()
+            .find(|(a, _)| *a == Action::Wireframe)
+        {
+            *binding = available.then_some(replacement);
+        }
+    }
     // Add newly introduced actions without stealing existing shortcuts or clearing explicit unbindings.
     for (action, mut shortcut) in Preferences::default().bindings {
         if !prefs.bindings.iter().any(|(a, _)| *a == action) {
@@ -970,7 +997,7 @@ mod tests {
                 ..Default::default()
             },
             |ctx| {
-                assert_eq!(prefs.actions(ctx), vec![Action::Save]);
+                assert_eq!(prefs.actions(ctx), vec![Action::Save, Action::Wireframe]);
                 assert!(prefs.actions(ctx).is_empty());
             },
         );
@@ -1403,5 +1430,59 @@ mod sidebar_tests {
         restored.pinned_menus.clear();
         restored.sidebar_order.push(restored.sidebar_order[0]);
         assert!(restored.validate().is_err());
+    }
+}
+
+#[cfg(test)]
+mod quick_menu_migration_tests {
+    use super::*;
+    #[test]
+    fn quick_menu_migration_preserves_custom_bindings_and_moves_stock_wireframe() {
+        for custom_w in [false, true] {
+            let mut prefs = Preferences::default();
+            prefs
+                .bindings
+                .retain(|(a, _)| !matches!(a, Action::MaskVisibilityMenu | Action::TransformMenu));
+            prefs
+                .bind(
+                    if custom_w {
+                        Action::Guides
+                    } else {
+                        Action::Wireframe
+                    },
+                    Shortcut::new(Key::W, Modifiers::NONE),
+                )
+                .unwrap();
+            let path = std::env::temp_dir().join(format!(
+                "clay-quick-menu-{}-{custom_w}.json",
+                std::process::id()
+            ));
+            crate::persistence::write_json(&path.to_string_lossy(), &prefs).unwrap();
+            let loaded = load(&path).unwrap();
+            loaded.validate().unwrap();
+            assert_eq!(
+                loaded.shortcut(&Action::TransformMenu),
+                Some(&Shortcut::new(Key::E, Modifiers::NONE))
+            );
+            if custom_w {
+                assert!(loaded.shortcut(&Action::MaskVisibilityMenu).is_none());
+                assert_eq!(
+                    loaded.shortcut(&Action::Guides),
+                    prefs.shortcut(&Action::Guides)
+                );
+            } else {
+                assert_eq!(
+                    loaded.shortcut(&Action::MaskVisibilityMenu),
+                    Some(&Shortcut::new(Key::W, Modifiers::NONE))
+                );
+                assert_eq!(
+                    loaded.shortcut(&Action::Wireframe),
+                    Some(&Shortcut::new(Key::W, Modifiers::SHIFT))
+                );
+            }
+            save(&path, &loaded).unwrap();
+            assert_eq!(load(&path).unwrap(), loaded);
+            std::fs::remove_file(path).unwrap();
+        }
     }
 }

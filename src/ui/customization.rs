@@ -495,6 +495,10 @@ impl UiState {
             Action::SelectBrush(id) => brush.is_some_and(|b| b.identity() == *id),
             Action::ModelTool(tool) => self.modeling.active && self.modeling.tool == *tool,
             Action::ModelTarget(span) => self.modeling.active && self.modeling.span == *span,
+            Action::ModelAxis(axis) => self.modeling.active && self.modeling.axis == *axis,
+            Action::ModelInteraction(mode) => {
+                self.modeling.active && self.modeling.interaction == *mode
+            }
             Action::ModelProtectMask => self.modeling.protect_mask,
             Action::ModelSmoothPreview => self.modeling.smooth_preview,
             Action::ModelTapRepeat => self.modeling.tap_repeat,
@@ -958,7 +962,7 @@ impl UiState {
             }
             super::context_menu::hold_binding_editor(ui, "Hold to mask", &mut self.preferences.mask_hold);
             for conflict in self.mask_binding_conflicts() { ui.colored_label(egui::Color32::YELLOW, conflict); }
-            ui.weak("Masking takes priority over brush and navigation modifiers while held; visibility wins overlapping holds. Right/middle drag and wheel remain available.");
+            ui.weak("Alt reverses masking and visibility without changing the saved operation. Visibility wins overlapping holds. Right/middle drag and wheel remain available.");
             super::context_menu::hold_binding_editor(ui, "Hold for visibility", &mut self.preferences.visibility_hold);
             if self.preferences.visibility_hold.enabled() {
                 let h = &self.preferences.visibility_hold;

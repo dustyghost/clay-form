@@ -444,6 +444,7 @@ impl Viewport {
                 && options.transform_mode == TransformMode::Sculpt,
             options.select,
             matches!(options.select, Some(SelectionTool::MaskLine { .. }))
+                && !modifiers.alt
                 && (options.zoom_hold.active(modifiers) || options.pan_hold.active(modifiers)),
         ) {
             draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());

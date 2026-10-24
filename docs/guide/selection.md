@@ -15,14 +15,14 @@
 
 1. Open **Settings → Key settings** and assign **Hold to mask** (initially unbound), for example the **M** key. Modifier-only chords and key-plus-modifier chords are supported. **Clear** disables it; **Reset** returns it to unbound.
 2. Hover over an editable model in Sculpt or Modeling and hold your binding. The viewport shows the temporary mask shape and Add/Erase operation. Your original tool and Modeling selection stay intact.
-3. While holding, invoke your **Viewport tool menu** binding to choose **Surface brush**, **Through-depth lasso**, or **Through-depth line**, then **Add** or **Erase**. Line also offers **Flip side**. These choices are remembered between holds and restarts.
+3. While holding, press **W** (the default **Mask / visibility quick menu** binding) to choose **Surface brush**, **Through-depth lasso**, or **Through-depth line**, then **Add** or **Erase**. Line also offers **Flip side**. These choices are remembered between holds and restarts.
 4. Paint or draw the selection, release the pen to commit, then release the hold to return to the original tool. Each completed mask gesture is undoable.
 
 The **Mask → Hold to mask** section exposes the same choices and a Mask brush preset selector. Surface brushing uses that preset’s pressure, strength, alpha, spacing and stroke settings independently of the ordinary sculpt brush. Surface brushing respects brush symmetry; all three shapes protect hidden geometry. Through-depth lasso and line do not repeat with brush symmetry. Lasso and line select through every depth on the active model; they also work when the gesture begins in empty space.
 
 If you release the hold midway through a freehand stroke, already-painted mask dabs remain as one Undo step. Unfinished lasso, line and stamp previews are discarded. Escape or focus loss restores the prior tool; a still-down pen cannot leak into a new sculpt or Modeling gesture. Merely holding, changing the mask mode or opening/dismissing the menu makes no edit.
 
-Visibility wins when its hold and the mask hold both match. Otherwise masking takes priority over Smooth, Reverse, primary-drag zoom/pan and Modeling selection subtraction; select Add/Erase explicitly in the mask menu. Right-drag orbit, middle-drag pan and wheel zoom remain available between gestures. Other action shortcuts pause while masking. Key settings reports overlapping assignments; use different keys for the hold and menu invocation. The mode is unavailable during path editing, projection, Slice, transforms, reference arrangement, modal editors or on an unconverted primitive.
+Visibility wins when its hold and the mask hold both match. Otherwise masking takes priority over Smooth, Reverse, primary-drag zoom/pan and Modeling selection subtraction; hold **Alt** to temporarily reverse Add/Erase; releasing Alt restores the saved operation. Right-drag orbit, middle-drag pan and wheel zoom remain available between gestures. Other action shortcuts pause while masking. Key settings reports overlapping assignments; use different keys for the hold and menu invocation. The mode is unavailable during path editing, projection, Slice, transforms, reference arrangement, modal editors or on an unconverted primitive.
 
 ## Mask operations
 
@@ -48,7 +48,7 @@ If you protected the wrong side, choose **Invert mask**. To start over, use **Cl
 3. Press in empty viewport space above the model, draw a dividing line across it, and release below it. The tinted side and arrow show the affected half-plane; the line extends beyond both endpoints.
 4. Orbit to inspect the back. The same projected side is masked at every depth, in both orthographic and perspective views.
 
-During a drag, **Space** moves the whole line. **Escape** cancels without an edit; **Done** returns to normal sculpting. The existing navigation border and axis gizmo remain reserved for navigation. Away from those controls, an ordinary primary drag belongs to masking even when it starts off the model. Secondary-button orbit, middle-button pan, and your configured zoom/pan holds remain available between gestures. The configured zoom/pan holds take precedence when starting a primary drag.
+During a drag, **Space** moves the whole line. **Escape** cancels without an edit; **Done** returns to normal sculpting. The existing navigation border and axis gizmo remain reserved for navigation. Away from those controls, an ordinary primary drag belongs to masking even when it starts off the model. Secondary-button orbit, middle-button pan, and your configured zoom/pan holds remain available between gestures. Configured zoom/pan holds take precedence when starting a primary drag, except **Alt**, which reverses Add/Erase.
 
 Line masking changes only mask weights on the active model and all stored subdivision levels. It preserves other masks outside the affected side. Rear-facing surfaces are included; explicitly hidden faces and their boundary vertices stay protected. It never cuts geometry or resets levels. One completed gesture is one Undo step; empty or unchanged selections create no history entry.
 
@@ -137,7 +137,7 @@ Use **Select lasso**, hold **Alt**, draw the outline, and release:
 
 ### Line and editable closed path
 
-Choose **Visibility → Hide/Isolate: Line** or **Hide/Isolate: Closed path**. In the tool strip, select **Hide** or **Isolate** and optionally **Flip side / region**. These choices are remembered independently of the sculpt brush. Alt does not change the operation in this workflow.
+Choose **Visibility → Hide/Isolate: Line** or **Hide/Isolate: Closed path**. In the tool strip, select **Hide** or **Isolate** and optionally **Flip side / region**. These choices are remembered independently of the sculpt brush. Hold **Alt** to temporarily reverse Hide/Isolate; releasing Alt restores the saved operation.
 
 - **Line:** drag a dividing line, including from empty space. The line extends beyond its endpoints. Release to apply; Space moves the line while dragging.
 - **Closed path:** click at least three points around a region. The last point connects visibly to the first. Drag a point to move it, click an edge to insert a point, or use **Delete point**. Up to 64 points are supported. **Apply visibility** commits; **Clear path** discards the outline.
@@ -149,7 +149,7 @@ The new shape, operation, flip, Apply, Clear, and Delete point actions are avail
 
 ### Temporary Hide/Isolate
 
-Configure **Hold for visibility** and **Viewport tool menu** in **Settings → Key settings**. The default visibility hold is Ctrl+Shift; the UI shows your assigned binding. While holding it over the viewport, open the tool menu to choose Rectangle, Lasso, Line, or Closed path and Hide/Isolate. The chosen shape, operation, and flip state are remembered for the next hold and after restarting.
+Configure **Hold for visibility** and **Mask / visibility quick menu** in **Settings → Key settings**. The default visibility hold is Ctrl+Shift; the UI shows your assigned binding. While holding it over the viewport, open the tool menu to choose Rectangle, Lasso, Line, or Closed path and Hide/Isolate. The chosen shape, operation, and flip state are remembered for the next hold and after restarting.
 
 Release the hold to return to the prior sculpt or Modeling tool without losing its component selection. Keep the hold active until releasing a rectangle, lasso, or line, or applying a multi-click closed path. Releasing the hold first discards the unfinished gesture; it never commits an edit. Escape, focus loss, camera changes, and a change of model discard drafts without a geometry edit. Opening a menu never paints or applies visibility.
 
@@ -181,3 +181,9 @@ You need both visible and hidden faces. Apply/remove thickness modifier first. B
 
 [Model tools](modeling.md) · [Undo and redo](sculpting.md#undo-and-redo) · [Thickness modifier](modeling.md#thickness-modifier)
 
+
+### Quick menus
+
+**Q** always opens Modeling. **W** opens mask/visibility choices; the active hold selects the relevant tab, and either tab can be selected when configuring the remembered choices. **E** opens transform options for selected components in Modeling or the active object otherwise. All three bindings can be changed or cleared in Key settings.
+
+W changes remembered choices without starting a gesture. Keep using your configured hold to apply them. Surface brush, line and lasso masking support Add/Erase; visibility offers Rectangle, Lasso, Line and Closed path with Hide/Isolate. **Alt reverses the current operation**, including during a drag and when applying a closed path, without changing the shape, flipped side or saved preset. If Alt is itself part of a configured hold, it also reverses the operation; use a different hold to reserve Alt solely for reversal.

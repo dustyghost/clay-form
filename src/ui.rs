@@ -255,7 +255,7 @@ impl UiState {
                 if ui
                     .button("Tool menu")
                     .on_hover_text(format!(
-                        "Viewport functions · {binding} · assign in Key settings"
+                        "Modeling functions · {binding} · assign in Key settings"
                     ))
                     .customize(Action::ViewportContextMenu)
                     .clicked()

@@ -124,12 +124,17 @@ Shifted numbers use the physical number-row key, so `!` can bind as Shift+1. Oth
 | Undo / Redo | Ctrl+Z / Ctrl+Shift+Z |
 | Reset view | F |
 | Toggle symmetry / guides | X / G |
-| Toggle wireframe | W |
+| Toggle wireframe | Shift+W |
+| Modeling quick menu | Q |
+| Mask / visibility quick menu | W |
+| Transform quick menu | E |
 | Smaller / larger brush | [ / ] |
 | Previous / next brush | , / . |
 | Subdivide | Ctrl+D |
 | Lower / higher subdivision level | Shift+D / D |
 | Remesh in dynamic mode | Ctrl+R |
+
+The former default W wireframe binding upgrades to Shift+W when adding the mask/visibility quick menu. Custom bindings and explicit unbindings are preserved; if W or E is already assigned to a custom action, the corresponding new quick menu starts unbound.
 
 ## Toolbar and brush previews
 
@@ -138,4 +143,3 @@ The toolbar wraps as the window narrows. Brush tiles show the selected brush wit
 ## Related guides
 
 [Navigation](navigation.md) · [Brush settings](sculpting.md) · [Recovery saves](files.md#recovery-saves)
-

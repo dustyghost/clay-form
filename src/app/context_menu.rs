@@ -11,24 +11,10 @@ impl App {
             && !self.ui.paths_active
             && !self.ui.arrange_references
     }
-    pub(crate) fn viewport_menu_context(&self, ctx: &egui::Context) -> ViewportMenuContext {
-        if self.temporary_visibility_active(ctx) {
-            return ViewportMenuContext::Visibility;
-        }
-        if self.temporary_mask_requested(ctx) {
-            return ViewportMenuContext::Mask;
-        }
-        match self.ui.selection_tool {
-            Some(crate::viewport::SelectionTool::Visibility(_)) => ViewportMenuContext::Visibility,
-            Some(
-                crate::viewport::SelectionTool::MaskLasso
-                | crate::viewport::SelectionTool::MaskLassoOperation { .. }
-                | crate::viewport::SelectionTool::MaskLine { .. },
-            ) => ViewportMenuContext::Mask,
-            _ => ViewportMenuContext::Modeling,
-        }
-    }
     pub(crate) fn open_viewport_menu(&mut self, ctx: &egui::Context) {
+        self.open_quick_menu(ctx, Action::ViewportContextMenu);
+    }
+    pub(crate) fn open_quick_menu(&mut self, ctx: &egui::Context, action: Action) {
         if self.viewport.gesture.is_some()
             || self.viewport.modeling.dragging()
             || ctx.wants_keyboard_input()
@@ -44,7 +30,31 @@ impl App {
             .pointer_hover_pos()
             .filter(|p| rect.contains(*p))
             .unwrap_or(rect.center());
-        let context = self.viewport_menu_context(ctx);
+        let context = match action {
+            Action::TransformMenu => ViewportMenuContext::Transform,
+            Action::MaskVisibilityMenu => {
+                if self.temporary_visibility_active(ctx) {
+                    ViewportMenuContext::Visibility
+                } else if self.temporary_mask_requested(ctx) {
+                    ViewportMenuContext::Mask
+                } else {
+                    self.ui
+                        .viewport_menu
+                        .last_selection_context
+                        .unwrap_or_else(|| {
+                            if matches!(
+                                self.ui.selection_tool,
+                                Some(crate::viewport::SelectionTool::Visibility(_))
+                            ) {
+                                ViewportMenuContext::Visibility
+                            } else {
+                                ViewportMenuContext::Mask
+                            }
+                        })
+                }
+            }
+            _ => ViewportMenuContext::Modeling,
+        };
         self.ui.viewport_menu.context = Some(context);
         self.ui.viewport_menu.position = Some(position);
         self.ui.viewport_menu.selected = self
@@ -54,13 +64,14 @@ impl App {
             .position(|entry| matches!(entry.action, Action::ModelTool(_)))
             .unwrap_or(0);
         self.ui.viewport_menu.just_opened = true;
-        self.ui.viewport_menu.hold = if self.temporary_visibility_active(ctx) {
-            Some(self.ui.preferences.visibility_hold.clone())
-        } else if context == ViewportMenuContext::Mask && self.temporary_mask_requested(ctx) {
-            Some(self.ui.preferences.mask_hold.clone())
-        } else {
-            None
-        };
+        self.ui.viewport_menu.hold =
+            if action == Action::MaskVisibilityMenu && self.temporary_visibility_active(ctx) {
+                Some(self.ui.preferences.visibility_hold.clone())
+            } else if context == ViewportMenuContext::Mask && self.temporary_mask_requested(ctx) {
+                Some(self.ui.preferences.mask_hold.clone())
+            } else {
+                None
+            };
         self.viewport.wait_for_release();
     }
     pub(crate) fn show_viewport_menu(&mut self, ctx: &egui::Context) {
@@ -254,7 +265,7 @@ mod tests {
         app.ui
             .preferences
             .bind(
-                Action::ViewportContextMenu,
+                Action::MaskVisibilityMenu,
                 Shortcut::new(egui::Key::F2, egui::Modifiers::NONE),
             )
             .unwrap();
@@ -315,7 +326,7 @@ mod tests {
             &ctx,
             egui::Modifiers::CTRL | egui::Modifiers::SHIFT,
             vec![key(
-                egui::Key::Q,
+                egui::Key::W,
                 egui::Modifiers::CTRL | egui::Modifiers::SHIFT,
             )],
         );
@@ -425,5 +436,94 @@ mod tests {
         ));
         let old: Preferences = serde_json::from_str("{}").unwrap();
         assert_eq!(old.visibility_hold, HoldBinding::visibility_default());
+    }
+    #[test]
+    fn quick_menus_route_q_w_e_and_keep_underlying_selection() {
+        let tap = |code, modifiers| {
+            let mut release = key(code, modifiers);
+            if let egui::Event::Key { pressed, .. } = &mut release {
+                *pressed = false;
+            }
+            vec![key(code, modifiers), release]
+        };
+        let (mut app, ctx) = setup();
+        let before = app.document.geometry_snapshot();
+        let history = app.document.history_counts();
+        let hold = egui::Modifiers::CTRL | egui::Modifiers::SHIFT;
+        for (key_code, context) in [
+            (egui::Key::Q, ViewportMenuContext::Modeling),
+            (egui::Key::W, ViewportMenuContext::Visibility),
+            (egui::Key::E, ViewportMenuContext::Transform),
+        ] {
+            frame(&mut app, &ctx, hold, tap(key_code, hold));
+            assert_eq!(app.ui.viewport_menu.context, Some(context));
+            frame(&mut app, &ctx, hold, tap(egui::Key::Escape, hold));
+            assert!(app.ui.modeling.active);
+        }
+        frame(&mut app, &ctx, egui::Modifiers::NONE, vec![]);
+        frame(
+            &mut app,
+            &ctx,
+            egui::Modifiers::NONE,
+            tap(egui::Key::E, egui::Modifiers::NONE),
+        );
+        let entries = app
+            .ui
+            .viewport_menu_entries(ViewportMenuContext::Transform, &app.document);
+        assert_eq!(entries[0].action, Action::ModelTool(ModelTool::Move));
+        frame(
+            &mut app,
+            &ctx,
+            egui::Modifiers::NONE,
+            tap(egui::Key::Enter, egui::Modifiers::NONE),
+        );
+        assert_eq!(app.ui.modeling.tool, ModelTool::Move);
+        assert!(app.ui.viewport_menu.context.is_none());
+        app.dispatch(Command::ModelingMode(false), &ctx);
+        frame(
+            &mut app,
+            &ctx,
+            egui::Modifiers::NONE,
+            tap(egui::Key::E, egui::Modifiers::NONE),
+        );
+        let entries = app
+            .ui
+            .viewport_menu_entries(ViewportMenuContext::Transform, &app.document);
+        assert_eq!(entries[0].action, Action::Move);
+        frame(
+            &mut app,
+            &ctx,
+            egui::Modifiers::NONE,
+            tap(egui::Key::Enter, egui::Modifiers::NONE),
+        );
+        assert_eq!(app.ui.transform_mode, crate::viewport::TransformMode::World);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert_eq!(app.document.history_counts(), history);
+    }
+
+    #[test]
+    fn quick_selection_menu_configures_presets_without_starting_a_tool() {
+        let (mut app, ctx) = setup();
+        let before = app.document.geometry_snapshot();
+        app.open_quick_menu(&ctx, Action::MaskVisibilityMenu);
+        assert_eq!(
+            app.ui.viewport_menu.context,
+            Some(ViewportMenuContext::Mask)
+        );
+        assert!(
+            app.ui
+                .viewport_menu_entries(ViewportMenuContext::Mask, &app.document)
+                .iter()
+                .any(|entry| entry.action == Action::TemporaryMaskBrush)
+        );
+        app.ui.viewport_menu.context = Some(ViewportMenuContext::Visibility);
+        app.execute_action(Action::SelectVisibilityLine, &ctx);
+        assert!(app.ui.selection_tool.is_none());
+        assert!(app.ui.modeling.active);
+        assert_eq!(
+            app.ui.preferences.visibility_selection.shape,
+            crate::preferences::VisibilityShape::Line
+        );
+        assert_eq!(app.document.geometry_snapshot(), before);
     }
 }

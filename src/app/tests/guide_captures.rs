@@ -80,7 +80,7 @@ fn visibility_selection_offscreen_review() {
             .dispatch(Command::Action(Action::SelectVisibilityLine), &g.ctx);
         g.frame(vec![]);
         g.app
-            .dispatch(Command::Action(Action::ViewportContextMenu), &g.ctx);
+            .dispatch(Command::Action(Action::MaskVisibilityMenu), &g.ctx);
         g.app.ui.viewport_menu.position = Some(Pos2::new(size[0] as f32 - 5., size[1] as f32 - 5.));
         g.save(&format!("visibility-menu-{}", size[0]));
         assert!(g.text_positions.iter().any(|(t, _)| t == "Closed path"));
@@ -2569,6 +2569,49 @@ fn viewport_context_menu_offscreen_review() {
             click_guide_label(&mut g, "Parallel edges");
             assert_eq!(g.app.ui.modeling.span, crate::viewport::SelectionSpan::Ring);
             g.save(&format!("modeling-docked-{dock:?}-{}", size[0]));
+        }
+        g.app.ui.preferences.undock_menu(BuiltinMenu::Modeling);
+        g.app
+            .dispatch(Command::Action(Action::MaskVisibilityMenu), &g.ctx);
+        g.save(&format!("quick-mask-{}", size[0]));
+        assert!(
+            g.text_positions
+                .iter()
+                .any(|(t, _)| t.starts_with("Surface brush"))
+        );
+        let visibility = g
+            .text_positions
+            .iter()
+            .rev()
+            .find(|(t, _)| t == "Visibility")
+            .unwrap()
+            .1;
+        g.frame(vec![
+            egui::Event::PointerMoved(visibility),
+            primary_event(visibility, true),
+        ]);
+        g.frame(vec![
+            primary_event(visibility, false),
+            egui::Event::PointerGone,
+        ]);
+        g.save(&format!("quick-visibility-{}", size[0]));
+        assert_eq!(
+            g.app.ui.viewport_menu.context,
+            Some(crate::ui::context_menu::ViewportMenuContext::Visibility)
+        );
+        g.app.ui.viewport_menu.context = None;
+        for components in [true, false] {
+            g.app.dispatch(Command::ModelingMode(components), &g.ctx);
+            g.app
+                .dispatch(Command::Action(Action::TransformMenu), &g.ctx);
+            g.save(&format!("quick-transform-{components}-{}", size[0]));
+            let label = if components {
+                "Selected components"
+            } else {
+                "Active object"
+            };
+            assert!(g.text_positions.iter().any(|(t, _)| t == label));
+            g.app.ui.viewport_menu.context = None;
         }
         assert_eq!(g.app.document.geometry_snapshot(), before);
         assert_eq!(g.app.document.history_counts(), history);

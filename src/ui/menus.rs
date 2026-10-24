@@ -377,7 +377,7 @@ impl UiState {
                 ui.label(format!(
                     "Tool menu: {}",
                     self.preferences
-                        .shortcut(&Action::ViewportContextMenu)
+                        .shortcut(&Action::MaskVisibilityMenu)
                         .map_or("Unbound".into(), |s| s.label())
                 ));
                 ui.label("Rectangle click: hide group; last visible group flips visibility");

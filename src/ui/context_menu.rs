@@ -7,10 +7,12 @@ pub(crate) enum ViewportMenuContext {
     Modeling,
     Visibility,
     Mask,
+    Transform,
 }
 #[derive(Default)]
 pub(crate) struct ViewportMenuState {
     pub context: Option<ViewportMenuContext>,
+    pub last_selection_context: Option<ViewportMenuContext>,
     pub position: Option<egui::Pos2>,
     pub viewport_rect: Option<egui::Rect>,
     pub selected: usize,
@@ -260,23 +262,88 @@ impl UiState {
                     hint: "Remembered for the next hold. Red faces preview the result; no geometry is cut.".into(),
                 }).collect()
             }
-            ViewportMenuContext::Mask if self.mask_active || self.viewport_menu.hold.is_some() => {
-                self.temporary_mask_menu_entries(document)
+            ViewportMenuContext::Mask => self.temporary_mask_menu_entries(document),
+            ViewportMenuContext::Transform => self.transform_menu_entries(document),
+        }
+    }
+
+    fn transform_menu_entries(&self, document: &Document) -> Vec<ViewportMenuEntry> {
+        use crate::viewport::{ModelAxis, ModelInteraction, TransformMode, TransformOperation};
+        let mut choices = Vec::new();
+        if self.modeling.active {
+            for tool in [ModelTool::Move, ModelTool::Rotate, ModelTool::Scale] {
+                choices.push((
+                    Action::ModelTool(tool),
+                    tool.label().to_owned(),
+                    self.modeling.tool == tool,
+                ));
             }
-            ViewportMenuContext::Mask => [
-                (Action::MaskLasso, "Lasso"),
-                (Action::MaskLine, "Through-depth line"),
-            ]
+            for mode in [
+                ModelInteraction::Free,
+                ModelInteraction::Gizmo,
+                ModelInteraction::Axis,
+            ] {
+                choices.push((
+                    Action::ModelInteraction(mode),
+                    mode.label().to_owned(),
+                    self.modeling.interaction == mode,
+                ));
+            }
+            if self.modeling.interaction == ModelInteraction::Axis {
+                for axis in ModelAxis::ALL {
+                    if axis != ModelAxis::Uniform || self.modeling.tool == ModelTool::Scale {
+                        let action = Action::ModelAxis(axis);
+                        choices.push((
+                            action.clone(),
+                            action.label().to_owned(),
+                            self.modeling.axis == axis,
+                        ));
+                    }
+                }
+            }
+        } else {
+            for operation in [
+                TransformOperation::Move,
+                TransformOperation::Rotate,
+                TransformOperation::Scale,
+            ] {
+                choices.push((
+                    operation.into(),
+                    operation.label().to_owned(),
+                    self.transform_mode != TransformMode::Sculpt
+                        && self.transform_operation == operation,
+                ));
+            }
+            for (mode, label) in [
+                (TransformMode::World, "World axes"),
+                (TransformMode::ActionLine, "Action Line"),
+            ] {
+                choices.push((mode.into(), label.to_owned(), self.transform_mode == mode));
+            }
+            for action in [
+                Action::PlacePivot,
+                Action::PlaceLine,
+                Action::ResetPivot,
+                Action::RespectMask,
+            ] {
+                choices.push((
+                    action.clone(),
+                    action.label().to_owned(),
+                    matches!(action, Action::RespectMask) && self.respect_transform_mask,
+                ));
+            }
+        }
+        choices
             .into_iter()
-            .map(|(action, label)| ViewportMenuEntry {
+            .map(|(action, label, selected)| ViewportMenuEntry {
                 enabled: self.action_enabled(&action, document),
                 action,
-                label: label.into(),
-                selected: false,
-                hint: "Choose the masking shape without painting.".into(),
+                label,
+                selected,
+                hint: "Choose transform options. Geometry changes only when you use the tool."
+                    .into(),
             })
-            .collect(),
-        }
+            .collect()
     }
 
     pub(crate) fn viewport_menu_popup(
@@ -340,8 +407,9 @@ impl UiState {
         let mut open = true;
         let response = egui::Window::new(match context {
             ViewportMenuContext::Modeling => "Modeling functions",
-            ViewportMenuContext::Visibility => "Visibility selection",
-            ViewportMenuContext::Mask => "Masking",
+            ViewportMenuContext::Visibility => "Mask / visibility",
+            ViewportMenuContext::Mask => "Mask / visibility",
+            ViewportMenuContext::Transform => "Transform options",
         })
         .id(egui::Id::new("viewport_tool_menu"))
         .open(&mut open)
@@ -354,6 +422,40 @@ impl UiState {
         .order(egui::Order::Foreground)
         .show(ctx, |ui| {
             ui.weak("Up/Down choose · Enter apply · Escape close");
+            if matches!(
+                context,
+                ViewportMenuContext::Mask | ViewportMenuContext::Visibility
+            ) {
+                ui.horizontal(|ui| {
+                    for (choice, label) in [
+                        (ViewportMenuContext::Mask, "Mask"),
+                        (ViewportMenuContext::Visibility, "Visibility"),
+                    ] {
+                        if ui.selectable_label(context == choice, label).clicked() {
+                            self.viewport_menu.context = Some(choice);
+                            self.viewport_menu.selected = 0;
+                        }
+                    }
+                });
+                let hold = if context == ViewportMenuContext::Mask {
+                    &self.preferences.mask_hold
+                } else {
+                    &self.preferences.visibility_hold
+                };
+                if hold.enabled() {
+                    ui.weak(format!("Hold {} to use · Alt reverses", hold.label()));
+                } else {
+                    ui.weak("Assign Hold to mask in Key settings · Alt reverses");
+                }
+                self.viewport_menu.last_selection_context = self.viewport_menu.context;
+                ui.separator();
+            } else if context == ViewportMenuContext::Transform {
+                ui.strong(if self.modeling.active {
+                    "Selected components"
+                } else {
+                    "Active object"
+                });
+            }
             if context == ViewportMenuContext::Modeling {
                 if let Some((i, chosen)) = modeling_choices(ui, &entries, Some(index), navigated) {
                     self.viewport_menu.selected = i;
@@ -383,6 +485,11 @@ impl UiState {
                     | Action::ModelEdges
                     | Action::ModelVertices
                     | Action::ModelTarget(_)
+                    | Action::ModelInteraction(_)
+                    | Action::ModelAxis(_)
+                    | Action::Transform
+                    | Action::LineTransform
+                    | Action::RespectMask
             )
         );
         let closed = !open || outside || (action.is_some() && !selection_option);

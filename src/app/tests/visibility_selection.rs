@@ -173,7 +173,7 @@ fn visibility_new_choices_and_bindings_persist_and_clear() {
 }
 
 #[test]
-fn visibility_alt_hold_keeps_explicit_operation_and_cancels_every_shape_on_release() {
+fn visibility_alt_reverses_explicit_operation_and_hold_release_cancels() {
     for shape in VisibilityShape::ALL {
         let mut app = App::default();
         let ctx = egui::Context::default();
@@ -275,9 +275,77 @@ fn visibility_alt_hold_keeps_explicit_operation_and_cancels_every_shape_on_relea
     );
     assert_eq!(
         app.document.undo_label(),
-        Some("Isolate selection"),
-        "Alt used as hold never switches Isolate to Hide"
+        Some("Hide selection"),
+        "Alt reverses the saved Isolate operation"
     );
     assert_eq!(app.camera.pan, Vec2::ZERO);
     assert_eq!(app.camera.zoom, 1.);
+}
+
+#[test]
+fn visibility_alt_reverses_each_shape_at_commit_without_changing_settings() {
+    for shape in VisibilityShape::ALL {
+        let mut results = Vec::new();
+        for reverse in [false, true] {
+            let mut app = App::default();
+            let ctx = egui::Context::default();
+            tool(&mut app, &ctx, shape, false, false);
+            let before = app.document.geometry_snapshot();
+            let settings = app.ui.preferences.visibility_selection;
+            let points = [
+                Pos2::new(490., 180.),
+                Pos2::new(760., 180.),
+                Pos2::new(760., 650.),
+                Pos2::new(490., 650.),
+            ];
+            let modifiers = if reverse {
+                egui::Modifiers::ALT
+            } else {
+                egui::Modifiers::NONE
+            };
+            if shape == VisibilityShape::Path {
+                for point in points {
+                    add_point(&mut app, &ctx, point);
+                }
+                app.dispatch(Command::Action(Action::ApplyVisibilityPath), &ctx);
+                visibility_frame(&mut app, &ctx, modifiers, vec![]);
+            } else {
+                visibility_frame(
+                    &mut app,
+                    &ctx,
+                    egui::Modifiers::NONE,
+                    vec![
+                        egui::Event::PointerMoved(points[0]),
+                        primary_event(points[0], true),
+                    ],
+                );
+                let trail = match shape {
+                    VisibilityShape::Line => vec![points[3]],
+                    VisibilityShape::Rectangle => vec![points[2]],
+                    _ => points[1..].to_vec(),
+                };
+                let end = *trail.last().unwrap();
+                visibility_frame(
+                    &mut app,
+                    &ctx,
+                    modifiers,
+                    trail.into_iter().map(egui::Event::PointerMoved).collect(),
+                );
+                visibility_frame(&mut app, &ctx, modifiers, vec![primary_event(end, false)]);
+            }
+            assert!(app.document.mesh().hidden_face_count() > 0, "{shape:?}");
+            assert_eq!(app.ui.preferences.visibility_selection, settings);
+            results.push(
+                (0..app.document.mesh().triangles.len())
+                    .map(|i| app.document.mesh().face_visible(i))
+                    .collect::<Vec<_>>(),
+            );
+            app.document.undo();
+            assert_eq!(app.document.geometry_snapshot(), before);
+        }
+        assert!(
+            results[0].iter().zip(&results[1]).all(|(a, b)| a != b),
+            "Alt reverses the same {shape:?} region"
+        );
+    }
 }
