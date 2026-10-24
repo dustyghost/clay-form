@@ -52,7 +52,7 @@ impl Document {
         } else {
             self.geometry.scene.materials.push(asset);
         }
-        self.sync_material_brushes();
+        self.sync_material_brushes(&[]);
         self.dirty = true;
         self.display_changed();
         Ok(())
@@ -100,12 +100,14 @@ impl Document {
         self.display_changed();
         Ok(())
     }
-    pub(super) fn sync_material_brushes(&mut self) {
+    pub(super) fn sync_material_brushes(&mut self, previous_ids: &[u64]) {
         for brush in &mut self.brushes {
             if let Some(id) = brush.material.primary_asset() {
                 if let Some(asset) = self.geometry.scene.materials.iter().find(|a| a.id == id) {
                     brush.material = asset.material.with_link(id);
-                } else {
+                } else if previous_ids.contains(&id) {
+                    // Detach a definition removed by history, but preserve library
+                    // presets that have not been registered in this project yet.
                     brush.material = brush.material.unlinked();
                 }
             }

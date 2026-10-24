@@ -209,17 +209,19 @@ impl Document {
     pub fn undo(&mut self) {
         self.end_edit();
         self.end_stroke();
+        let previous_ids: Vec<_> = self.materials().iter().map(|a| a.id).collect();
         if self.history.undo(&mut self.geometry) {
             self.dirty = true;
             self.display_changed();
-            self.sync_material_brushes();
+            self.sync_material_brushes(&previous_ids);
         }
     }
     pub fn redo(&mut self) {
         self.end_edit();
         self.end_stroke();
+        let previous_ids: Vec<_> = self.materials().iter().map(|a| a.id).collect();
         if self.history.redo(&mut self.geometry) {
-            self.sync_material_brushes();
+            self.sync_material_brushes(&previous_ids);
             self.dirty = true;
             self.display_changed();
         }
