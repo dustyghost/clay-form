@@ -2695,7 +2695,12 @@ fn shared_selection_offscreen_review() {
     g.frame(vec![egui::Event::PointerMoved(rect.center())]);
     g.app.open_quick_menu(&g.ctx, Action::MaskVisibilityMenu);
     g.save("shared-selection-menu");
+    assert!(g.text_positions.iter().any(|(t, _)| t == "Clear mask"));
+    assert!(g.text_positions.iter().any(|(t, _)| t == "Show all"));
     click_tab(&mut g, "Mask");
+    g.save("shared-selection-mask-menu");
+    assert!(g.text_positions.iter().any(|(t, _)| t == "Clear mask"));
+    assert!(g.text_positions.iter().any(|(t, _)| t == "Show all"));
     g.app.ui.viewport_menu.context = None;
     g.frame(vec![egui::Event::PointerMoved(rect.center())]);
     g.save("shared-selection-mask");

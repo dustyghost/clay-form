@@ -426,6 +426,34 @@ impl UiState {
                 context,
                 ViewportMenuContext::Mask | ViewportMenuContext::Visibility
             ) {
+                ui.strong("Clear");
+                ui.horizontal(|ui| {
+                    for (clear, label, hint) in [
+                        (
+                            Action::ClearMask,
+                            "Clear mask",
+                            "Remove the active model's mask.",
+                        ),
+                        (
+                            Action::ShowAllFaces,
+                            "Show all",
+                            "Clear visibility hiding: show all faces of the active model.",
+                        ),
+                    ] {
+                        if ui
+                            .add_enabled(
+                                self.action_enabled(&clear, document),
+                                egui::Button::new(label),
+                            )
+                            .on_hover_text(hint)
+                            .customize(clear.clone())
+                            .clicked()
+                        {
+                            action = Some(clear);
+                        }
+                    }
+                });
+                ui.separator();
                 ui.horizontal(|ui| {
                     for (choice, label) in [
                         (ViewportMenuContext::Mask, "Mask"),
@@ -494,6 +522,8 @@ impl UiState {
                     | Action::Transform
                     | Action::LineTransform
                     | Action::RespectMask
+                    | Action::ClearMask
+                    | Action::ShowAllFaces
             )
         );
         let closed = !open || outside || (action.is_some() && !selection_option);
