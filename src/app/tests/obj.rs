@@ -99,12 +99,13 @@ fn failed_cancelled_and_interrupted_imports_leave_scene_and_history_intact() {
     app.dispatch(Command::Action(Action::ImportObj), &ctx);
     app.dispatch(Command::AcceptProjectFile(false), &ctx);
     app.dispatch(Command::CancelMeshJob, &ctx);
-    app.poll_mesh_job();
+    finish_mesh_job(&mut app);
     assert_eq!(app.document.geometry_snapshot(), before);
     assert_eq!(app.document.history_counts(), history);
     app.dispatch(Command::Action(Action::ImportObj), &ctx);
     app.dispatch(Command::AcceptProjectFile(false), &ctx);
     app.dispatch(Command::Request(PendingAction::New), &ctx);
+    finish_mesh_job(&mut app);
     assert!(app.mesh_job.is_none());
     assert_eq!(app.document.model_count(), 1);
     assert_eq!(app.document.current_path(), "untitled.clay");

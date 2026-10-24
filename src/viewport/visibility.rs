@@ -319,16 +319,17 @@ impl Viewport {
                 ..
             }))
         ) {
-            self.selection = None;
+            self.session.selection = None;
             return self.update_visibility_path(
                 ui, response, painter, scene, document, gizmo, enabled, select, navigate,
             );
         }
-        self.visibility_path = None;
+        self.session.visibility_path = None;
         let modifiers = ui.input(|i| i.modifiers);
         let requested = select.is_some()
             || ui.input(|i| {
-                self.visibility_hold
+                self.session
+                    .visibility_hold
                     .as_ref()
                     .unwrap_or(&crate::preferences::HoldBinding::visibility_default())
                     .active(i)
@@ -350,9 +351,9 @@ impl Viewport {
             response.rect.contains(p) && ui.ctx().layer_id_at(p) == Some(response.layer_id)
         });
         let mut started = false;
-        if self.selection.is_none()
+        if self.session.selection.is_none()
             && press.is_some()
-            && self.gesture.is_none()
+            && self.session.gesture.is_none()
             && enabled
             && requested
             && !navigate
@@ -366,7 +367,7 @@ impl Viewport {
                 .or_else(|| response.interact_pointer_pos())
                 .filter(|p| !gizmo.contains(*p))
         {
-            self.selection = Some(SelectionDrag {
+            self.session.selection = Some(SelectionDrag {
                 start: pos,
                 end: pos,
                 last: pos,
@@ -383,10 +384,10 @@ impl Viewport {
                 ),
                 hide: modifiers.alt,
             });
-            self.gesture = Some(Gesture::Select);
+            self.session.gesture = Some(Gesture::Select);
             started = true;
         }
-        let Some(drag) = self.selection.as_mut() else {
+        let Some(drag) = self.session.selection.as_mut() else {
             return false;
         };
         // A configurable flip action may update the side during the drag. Other
@@ -427,8 +428,8 @@ impl Viewport {
                     scene.eye_distance,
                 )
         {
-            self.selection = None;
-            self.gesture = None;
+            self.session.selection = None;
+            self.session.gesture = None;
             self.wait_for_release();
             return true;
         }
@@ -462,8 +463,8 @@ impl Viewport {
             true
         });
         if !valid {
-            self.selection = None;
-            self.gesture = None;
+            self.session.selection = None;
+            self.session.gesture = None;
             self.wait_for_release();
             self.status = Some(
                 "Selection cancelled: outline too long or invalid; draw a shorter lasso".into(),
@@ -584,8 +585,8 @@ impl Viewport {
         );
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
         if ui.input(|i| i.pointer.button_released(egui::PointerButton::Primary)) {
-            let drag = self.selection.take().unwrap();
-            self.gesture = None;
+            let drag = self.session.selection.take().unwrap();
+            self.session.gesture = None;
             if let SelectionTool::Visibility(settings) = drag.tool {
                 if rectangle_inverts {
                     let result = document.invert_visibility();
@@ -711,8 +712,8 @@ impl Viewport {
             };
             self.status = Some(result.err().unwrap_or_else(|| message.into()));
         } else if !ui.input(|i| i.pointer.primary_down()) {
-            self.selection = None;
-            self.gesture = None;
+            self.session.selection = None;
+            self.session.gesture = None;
         }
         true
     }

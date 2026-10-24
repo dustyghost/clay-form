@@ -16,7 +16,7 @@ impl App {
         self.open_quick_menu(ctx, Action::ViewportContextMenu);
     }
     pub(crate) fn open_quick_menu(&mut self, ctx: &egui::Context, action: Action) {
-        if self.viewport.gesture.is_some()
+        if self.viewport.session.gesture.is_some()
             || self.viewport.modeling.dragging()
             || ctx.wants_keyboard_input()
         {
@@ -361,10 +361,10 @@ mod tests {
             |ctx| app.show_viewport_menu(ctx),
         );
         assert!(app.ui.viewport_menu.context.is_none());
-        app.viewport.gesture = Some(crate::viewport::Gesture::Sculpt);
+        app.viewport.session.gesture = Some(crate::viewport::Gesture::Sculpt);
         app.open_viewport_menu(&ctx);
         assert!(app.ui.viewport_menu.context.is_none());
-        app.viewport.gesture = None;
+        app.viewport.session.gesture = None;
         app.ui.settings_open = true;
         frame(
             &mut app,

@@ -391,29 +391,6 @@ pub(crate) struct Preferences {
 }
 impl Default for Preferences {
     fn default() -> Self {
-        let ctrl = Modifiers::CTRL;
-        let none = Modifiers::NONE;
-        let keys = [
-            (Key::S, ctrl),
-            (Key::O, ctrl),
-            (Key::N, ctrl),
-            (Key::Z, ctrl),
-            (Key::Z, ctrl | Modifiers::SHIFT),
-            (Key::F, none),
-            (Key::X, none),
-            (Key::W, none),
-            (Key::G, none),
-            (Key::OpenBracket, none),
-            (Key::CloseBracket, none),
-            (Key::Comma, none),
-            (Key::Period, none),
-            (Key::D, ctrl),
-            (Key::D, Modifiers::SHIFT),
-            (Key::D, none),
-            (Key::R, ctrl),
-            (Key::Equals, none),
-            (Key::Minus, none),
-        ];
         Self {
             visibility_selection: VisibilitySettings::default(),
             modeling_presets: Vec::new(),
@@ -424,28 +401,10 @@ impl Default for Preferences {
             bindings: Action::ALL
                 .iter()
                 .cloned()
-                .enumerate()
-                .map(|(i, a)| {
-                    let key = if a == Action::ViewportContextMenu {
-                        Some((Key::Q, none))
-                    } else if a == Action::MaskVisibilityMenu {
-                        Some((Key::X, none))
-                    } else if a == Action::TransformMenu {
-                        Some((Key::E, none))
-                    } else if a == Action::UniversalTransform {
-                        Some((Key::T, none))
-                    } else if a == Action::Symmetry {
-                        Some((Key::X, Modifiers::SHIFT))
-                    } else if a == Action::Wireframe {
-                        Some((Key::W, none))
-                    } else if a == Action::SaveAs {
-                        Some((Key::S, ctrl | Modifiers::SHIFT))
-                    } else {
-                        keys.get(i).copied()
-                    };
-                    (a, key)
+                .map(|action| {
+                    let shortcut = action.default_shortcut();
+                    (action, shortcut)
                 })
-                .map(|(a, key)| (a, key.map(|(k, m)| Shortcut::new(k, m))))
                 .collect(),
             selection_mode: SelectionMode::default(),
             mask_hold: HoldBinding::default(),

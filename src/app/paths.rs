@@ -1,5 +1,6 @@
 //! Cancellable brush previews and commands for the persistent path editor.
 use super::*;
+use crate::background_job::BackgroundJob;
 use crate::{
     document::{PathStrokeOptions, PathStrokePreview},
     sculpt::{
@@ -7,37 +8,12 @@ use crate::{
         paths::{PathMode, SurfacePath},
     },
 };
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-    mpsc,
-};
+use std::sync::Arc;
 
-pub(crate) enum PathCommand {
-    Open,
-    New(PathMode),
-    NewRing,
-    Select(u64),
-    Save,
-    SaveAndSculpt,
-    Discard,
-    Delete,
-    Reproject,
-    Preview,
-    StrokeEntirePath,
-    Apply,
-    CancelPreview,
-    Close,
-}
+use crate::command::PathCommand;
 struct Worker {
-    receiver: mpsc::Receiver<Result<PathStrokePreview, String>>,
-    cancel: Arc<AtomicBool>,
+    job: BackgroundJob<PathStrokePreview>,
     auto_apply: bool,
-}
-impl Drop for Worker {
-    fn drop(&mut self) {
-        self.cancel.store(true, Ordering::Relaxed);
-    }
 }
 pub(crate) struct PathState {
     worker: Option<Worker>,
@@ -127,24 +103,25 @@ impl App {
             .and_then(|path| self.path_brush_radius(path));
     }
     pub(super) fn sync_path_history_state(&mut self) {
-        self.ui.paths_history_ready = !self.viewport.paths.active
-            || (!self.paths.busy() && !self.viewport.paths.dirty(&self.document));
+        self.ui.paths_active = self.viewport.paths.active;
+        self.ui.paths_preview_active = self.paths.busy() || self.paths.has_preview();
+        self.ui.paths_history_reason = if !self.viewport.paths.active {
+            None
+        } else if self.viewport.paths.dirty(&self.document) {
+            Some("Finish editing paths: save or discard the draft before Undo or Redo")
+        } else if self.paths.busy() {
+            Some("Cancel the running path stroke or wait for it to finish before Undo or Redo")
+        } else {
+            None
+        };
+        self.ui.paths_history_ready = self.ui.paths_history_reason.is_none();
     }
     pub(super) fn prepare_path_history(&mut self) -> Result<(), String> {
         if !self.viewport.paths.active {
             return Ok(());
         }
-        if self.viewport.paths.dirty(&self.document) {
-            return Err(
-                "Finish editing paths: save or discard the draft before Undo or Redo".into(),
-            );
-        }
-        if self.paths.busy() {
-            return Err(
-                "Cancel the running path stroke or wait for it to finish before Undo or Redo"
-                    .into(),
-            );
-        }
+        self.sync_path_history_state();
+        super::policy::EditorPolicy::new(&self.ui, &self.document).history()?;
         // A private preview is not history. Drop it before restoring committed state.
         self.paths.cancel();
         self.viewport.paths.frozen = false;
@@ -227,21 +204,8 @@ impl App {
             self.viewport.wait_for_release();
             return Ok(());
         }
-        if self.mesh_job.is_some()
-            || self.ui.projection.open
-            || self.ui.pending.is_some()
-            || self.ui.file_picker.is_some()
-            || self.ui.primitive_warning.is_some()
-            || self.ui.alphas.draft.is_some()
-            || self.ui.alphas.overwrite.is_some()
-            || self.ui.settings_open
-            || self.ui.layout_open
-            || self.ui.diagnostics_open
-            || self.ui.recovery_open
-            || self.ui.icon_capture_open()
-        {
-            return Err("Finish the active operation before editing paths".into());
-        }
+        self.sync_path_history_state();
+        super::policy::EditorPolicy::new(&self.ui, &self.document).path()?;
         if !matches!(
             command,
             PathCommand::Open | PathCommand::New(_) | PathCommand::NewRing
@@ -453,26 +417,9 @@ impl App {
                 }
                 let brush = &self.document.brushes()[self.ui.selected];
                 let request = self.document.prepare_path_stroke(id, brush, options)?;
-                let (sender, receiver) = mpsc::channel();
-                let cancel = Arc::new(AtomicBool::new(false));
-                let flag = cancel.clone();
-                std::thread::Builder::new()
-                    .name("clay-path-stroke".into())
-                    .spawn(move || {
-                        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            request.run(&|| flag.load(Ordering::Relaxed))
-                        }))
-                        .unwrap_or_else(|_| {
-                            Err("Path stroke failed; original geometry kept".into())
-                        });
-                        let _ = sender.send(result);
-                    })
-                    .map_err(|e| e.to_string())?;
-                self.paths.worker = Some(Worker {
-                    receiver,
-                    cancel,
-                    auto_apply,
-                });
+                let job =
+                    BackgroundJob::start("clay-path-stroke", move |cancel| request.run(&cancel))?;
+                self.paths.worker = Some(Worker { job, auto_apply });
                 self.ui.status = if auto_apply {
                     "Stroking the entire path… Cancel stops the operation before it commits."
                 } else {
@@ -526,17 +473,11 @@ impl App {
         Ok(())
     }
     pub(super) fn poll_paths(&mut self) {
-        let result =
-            self.paths
-                .worker
-                .as_ref()
-                .and_then(|worker| match worker.receiver.try_recv() {
-                    Ok(result) => Some(result),
-                    Err(mpsc::TryRecvError::Empty) => None,
-                    Err(mpsc::TryRecvError::Disconnected) => {
-                        Some(Err("Path stroke worker stopped".into()))
-                    }
-                });
+        let result = self
+            .paths
+            .worker
+            .as_mut()
+            .and_then(|worker| worker.job.poll());
         if let Some(result) = result {
             let auto_apply = self.paths.applying_entire_path();
             self.paths.worker = None;

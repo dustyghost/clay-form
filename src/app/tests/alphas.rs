@@ -122,7 +122,7 @@ fn alpha_stencil_stamp_escape_and_attachment_escape_leave_geometry_untouched() {
     assert!(!app.document.is_dirty());
     app.dispatch(Command::AttachStencil, &ctx);
     navigation_frame(&mut app, &ctx, vec![escape()]);
-    assert!(!app.viewport.attach_stencil);
+    assert!(!app.viewport.session.attach_stencil);
     assert!(app.document.project() == before);
     for action in [
         Action::ToggleStencil,

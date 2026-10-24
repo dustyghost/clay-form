@@ -1,5 +1,5 @@
 use super::*;
-use crate::app::paths::PathCommand;
+use crate::command::PathCommand;
 use crate::sculpt::paths::{PathMode, PathPoint};
 use crate::viewport::paths::PathTool;
 
@@ -450,7 +450,7 @@ fn repeat_guide_drag(app: &mut App, ctx: &egui::Context, rect: egui::Rect, id: u
         vec![egui::Event::PointerMoved(start), primary_event(start, true)],
     );
     assert!(
-        app.viewport.guided.dragging(),
+        app.viewport.session.guided.dragging(),
         "a repeated stroke must capture the visible guide: {}",
         app.ui.status
     );
@@ -461,7 +461,7 @@ fn repeat_guide_drag(app: &mut App, ctx: &egui::Context, rect: egui::Rect, id: u
             + Vec2::new(0., side * (5. + 15. * t));
         navigation_frame(app, ctx, vec![egui::Event::PointerMoved(end)]);
         assert!(
-            app.viewport.guided.dragging(),
+            app.viewport.session.guided.dragging(),
             "guided traversal ended at {t}: {}",
             app.ui.status
         );
@@ -546,7 +546,7 @@ fn path_only_start_policy_latches_rejection_until_release_and_allows_near_guide(
     let counts = app.document.history_counts();
     // Beginning outside the guide remains ignored even after crossing onto it.
     let end = live_drag(&mut app, &ctx, rect, 0.5, 0.);
-    assert!(!app.viewport.guided.dragging());
+    assert!(!app.viewport.session.guided.dragging());
     navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
     assert_eq!(app.document.geometry_snapshot(), before);
     assert_eq!(app.document.history_counts(), counts);
@@ -558,7 +558,7 @@ fn path_only_start_policy_latches_rejection_until_release_and_allows_near_guide(
     );
     navigation_frame(&mut app, &ctx, vec![]);
     let end = live_drag(&mut app, &ctx, rect, 0.02, 0.15);
-    assert!(app.viewport.guided.dragging());
+    assert!(app.viewport.session.guided.dragging());
     navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
     assert_ne!(app.document.mesh(), &before.mesh);
     assert_eq!(app.document.history_counts().0, counts.0 + 1);
@@ -581,7 +581,7 @@ fn freehand_is_available_when_path_only_policy_or_global_guidance_is_off() {
         let before = app.document.geometry_snapshot();
         let count = app.document.history_counts().0;
         let end = live_drag(&mut app, &ctx, rect, 0.5, 0.5);
-        assert!(!app.viewport.guided.dragging());
+        assert!(!app.viewport.session.guided.dragging());
         navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
         assert_ne!(
             app.document.mesh(),

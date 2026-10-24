@@ -121,7 +121,7 @@ impl Viewport {
             .and_then(|(_, r)| r.as_ref().ok());
         let fresh = self.modeling.selection_drag.is_none();
         if fresh {
-            if !pressed || self.gesture.is_some() {
+            if !pressed || self.session.gesture.is_some() {
                 return;
             }
             let origin = down
@@ -170,7 +170,7 @@ impl Viewport {
                 last: origin,
                 visited: BTreeSet::new(),
             });
-            self.gesture = Some(Gesture::Modeling);
+            self.session.gesture = Some(Gesture::Modeling);
         }
         let Some(drag) = self.modeling.selection_drag.as_mut() else {
             return;

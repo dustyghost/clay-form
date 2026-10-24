@@ -140,7 +140,7 @@ impl Document {
                 "Full pointer/pressure samples, settings changes during a continuous edit, timestamps and replay are unavailable. First-dab pressure/invert and effective brush are recorded for sculpt strokes.".into(),
                 "Historical reference images are not recorded; only the current project includes references. Camera/input can be unavailable for edits made without the UI.".into(),
                 "No full warning/error log, credentials, environment variables, project path or device paths are collected. Only available safe warning categories are included; exact OS version is unavailable.".into(),
-                "Retention estimates include geometry and serialized edit settings, not allocator overhead; the live project is separate. Export is capped at 512 MiB total and 128 MiB per file.".into(),
+                "Retention estimates include geometry and edit settings with shared image buffers counted once, not allocator overhead; the live project is separate. Export is capped at 512 MiB total and 128 MiB per file.".into(),
             ],
         }
     }

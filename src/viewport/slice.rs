@@ -83,16 +83,16 @@ impl Viewport {
         clicked: bool,
     ) {
         if path_mode {
-            self.slice = None;
+            self.session.slice = None;
             self.update_slice_path(
                 ui, scene, painter, document, pointer, enabled, options, clicked,
             );
             return;
         }
-        self.slice_path = None;
+        self.session.slice_path = None;
         if !enabled
             || ui.input(|i| i.key_pressed(egui::Key::Escape))
-            || self.slice.as_ref().is_some_and(|s| {
+            || self.session.slice.as_ref().is_some_and(|s| {
                 s.revision != document.display_revision()
                     || s.options != options
                     || s.projection
@@ -105,17 +105,17 @@ impl Viewport {
                         )
             })
         {
-            self.slice = None;
-            if self.gesture == Some(Gesture::Slice) {
-                self.gesture = None;
+            self.session.slice = None;
+            if self.session.gesture == Some(Gesture::Slice) {
+                self.session.gesture = None;
                 self.wait_for_release();
             }
             return;
         }
-        if self.gesture == Some(Gesture::Slice)
+        if self.session.gesture == Some(Gesture::Slice)
             && let Some(point) = pointer
         {
-            let drag = self.slice.get_or_insert(SliceDrag {
+            let drag = self.session.slice.get_or_insert(SliceDrag {
                 last: point,
                 start: point,
                 end: point,
@@ -136,7 +136,7 @@ impl Viewport {
             drag.end += delta;
             drag.last = point;
         }
-        if let Some(drag) = &mut self.slice {
+        if let Some(drag) = &mut self.session.slice {
             if let Some(point) = ui.input(|i| i.pointer.interact_pos()) {
                 let delta = point - drag.last;
                 if ui.input(|i| i.key_down(egui::Key::Space)) {
@@ -150,9 +150,9 @@ impl Viewport {
                 self.completed_slice = drag
                     .plane(scene)
                     .map(|plane| crate::mesh_job::Operation::Slice(plane, drag.options));
-                self.slice = None;
+                self.session.slice = None;
             } else if !ui.input(|i| i.pointer.primary_down()) {
-                self.slice = None;
+                self.session.slice = None;
             }
         }
         painter.text(
@@ -380,13 +380,13 @@ impl SlicePathDraft {
 }
 impl Viewport {
     pub(crate) fn pause_slice_path(&mut self, document: &mut Document) {
-        let mut draft = self.slice_path.take();
+        let mut draft = self.session.slice_path.take();
         if let Some(path) = &mut draft {
             path.dragging = false;
             path.corner_drag = None;
         }
         self.cancel(document);
-        self.slice_path = draft;
+        self.session.slice_path = draft;
     }
     #[allow(clippy::too_many_arguments)]
     fn update_slice_path(
@@ -401,7 +401,7 @@ impl Viewport {
         clicked: bool,
     ) {
         if ui.input(|i| i.key_pressed(egui::Key::Escape))
-            || self.slice_path.as_ref().is_some_and(|s| {
+            || self.session.slice_path.as_ref().is_some_and(|s| {
                 s.revision != document.display_revision()
                     || s.projection
                         != (
@@ -413,8 +413,8 @@ impl Viewport {
                         )
             })
         {
-            self.slice_path = None;
-            self.gesture = None;
+            self.session.slice_path = None;
+            self.session.gesture = None;
             self.wait_for_release();
             return;
         }
@@ -435,7 +435,7 @@ impl Viewport {
                         ui.label("Space-drag moves the whole path");
                         ui.label("Shift-drag snaps to 15°");
                         ui.label("Select a corner to reveal its handles");
-                        if let Some(path) = &mut self.slice_path {
+                        if let Some(path) = &mut self.session.slice_path {
                             ui.label(format!("{} / 24 points", path.points.len()));
                             if let Some(i) = path.selected {
                                 ui.horizontal(|ui| {
@@ -489,7 +489,10 @@ impl Viewport {
                         ui.horizontal(|ui| {
                             apply = ui
                                 .add_enabled(
-                                    self.slice_path.as_ref().is_some_and(|p| p.points.len() > 1),
+                                    self.session
+                                        .slice_path
+                                        .as_ref()
+                                        .is_some_and(|p| p.points.len() > 1),
                                     egui::Button::new("Apply cut"),
                                 )
                                 .clicked();
@@ -502,12 +505,12 @@ impl Viewport {
             .rect;
         let typing = ui.ctx().wants_keyboard_input();
         if clear {
-            self.slice_path = None;
-            self.gesture = None;
+            self.session.slice_path = None;
+            self.session.gesture = None;
             self.wait_for_release();
         }
         if !enabled {
-            if let Some(path) = &mut self.slice_path {
+            if let Some(path) = &mut self.session.slice_path {
                 path.dragging = false;
                 path.corner_drag = None;
             }
@@ -516,24 +519,27 @@ impl Viewport {
         let press = ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Primary));
         let space = ui.input(|i| i.key_down(egui::Key::Space));
         if press
-            && (self.gesture == Some(Gesture::Slice) || clicked)
+            && (self.session.gesture == Some(Gesture::Slice) || clicked)
             && let Some(point) = pointer.filter(|p| !editor.contains(*p))
         {
-            let path = self.slice_path.get_or_insert_with(|| SlicePathDraft {
-                points: Vec::new(),
-                selected: None,
-                dragging: false,
-                corner_drag: None,
-                last: point,
-                revision: document.display_revision(),
-                projection: (
-                    scene.right,
-                    scene.up,
-                    scene.center,
-                    scene.scale,
-                    scene.eye_distance,
-                ),
-            });
+            let path = self
+                .session
+                .slice_path
+                .get_or_insert_with(|| SlicePathDraft {
+                    points: Vec::new(),
+                    selected: None,
+                    dragging: false,
+                    corner_drag: None,
+                    last: point,
+                    revision: document.display_revision(),
+                    projection: (
+                        scene.right,
+                        scene.up,
+                        scene.center,
+                        scene.scale,
+                        scene.eye_distance,
+                    ),
+                });
             path.last = point;
             path.dragging = true;
             path.corner_drag = if space { None } else { path.corner_at(point) };
@@ -575,7 +581,7 @@ impl Viewport {
                 }
             }
         }
-        if let Some(path) = &mut self.slice_path {
+        if let Some(path) = &mut self.session.slice_path {
             if path.dragging
                 && !press
                 && let Some(point) = ui.input(|i| i.pointer.interact_pos())

@@ -54,22 +54,49 @@ impl EditSettings {
         ));
         text
     }
-    pub(crate) fn estimated_bytes(&self) -> usize {
-        // Count without allocating an extra serialized copy of image alphas.
-        let mut writer = Counter(0);
-        let _ = serde_json::to_writer(&mut writer, self);
-        writer.0
+    pub(crate) fn memory(&self) -> SettingsMemory {
+        use std::mem::size_of;
+        let mut memory = SettingsMemory {
+            owned: size_of::<Self>() + self.brushes.capacity() * size_of::<Brush>(),
+            shared: Vec::new(),
+        };
+        for brush in self.brushes.iter().chain(self.active_brush.iter()) {
+            memory.owned += brush.name.capacity() + brush.id.as_ref().map_or(0, String::capacity);
+            if let crate::sculpt::Alpha::Image { pixels, .. } = &brush.alpha {
+                memory.shared.push((
+                    pixels.as_ptr() as usize,
+                    std::mem::size_of_val(pixels.as_ref()),
+                ));
+            }
+            if let Some(icon) = &brush.icon {
+                memory
+                    .shared
+                    .push((icon.rgba.as_ptr() as usize, icon.rgba.len()));
+            }
+        }
+        memory.owned += self.view_input.as_ref().map_or(0, json_memory)
+            + self.first_dab.as_ref().map_or(0, json_memory);
+        memory
     }
 }
-struct Counter(usize);
-impl Write for Counter {
-    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-        self.0 += bytes.len();
-        Ok(bytes.len())
-    }
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
+/// Cached once per edit; shared allocations are counted once across undo and redo.
+#[derive(Default)]
+pub(crate) struct SettingsMemory {
+    pub owned: usize,
+    pub shared: Vec<(usize, usize)>,
+}
+fn json_memory(value: &serde_json::Value) -> usize {
+    use serde_json::Value;
+    std::mem::size_of::<Value>()
+        + match value {
+            Value::String(s) => s.capacity(),
+            Value::Array(values) => values.iter().map(json_memory).sum(),
+            Value::Object(values) => values
+                .iter()
+                .map(|(key, value)| key.capacity() + json_memory(value))
+                .sum(),
+            _ => 0,
+        }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

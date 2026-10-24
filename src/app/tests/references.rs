@@ -235,7 +235,7 @@ fn reference_drag_interrupted_by_undo_does_not_start_a_sculpt_stroke() {
         &ctx,
         vec![egui::Event::PointerMoved(center + Vec2::splat(30.))],
     );
-    assert!(app.viewport.gesture.is_none());
+    assert!(app.viewport.session.gesture.is_none());
     navigation_frame(&mut app, &ctx, vec![primary_event(center, false)]);
     assert_eq!(app.document.geometry_snapshot(), before);
     assert_eq!(app.document.history_counts(), history);

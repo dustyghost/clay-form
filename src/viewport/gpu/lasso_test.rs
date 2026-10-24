@@ -78,7 +78,7 @@ fn gpu_lasso_preview_and_commit() {
             if frame == 4 || frame == 6 {
                 if frame == 4 {
                     assert!(
-                        app.viewport.selection.is_some(),
+                        app.viewport.session.selection.is_some(),
                         "lasso must be active before release"
                     );
                     assert_eq!(app.document.geometry_snapshot(), before);
@@ -160,7 +160,7 @@ fn gpu_line_mask_preview_front_back_and_undo() {
             }
             let rgba = capture.render(&ctx, output);
             if frame == 4 {
-                assert!(app.viewport.selection.is_some());
+                assert!(app.viewport.session.selection.is_some());
                 assert_eq!(app.document.geometry_snapshot(), before);
             }
             if frame == 6 || frame == 8 {

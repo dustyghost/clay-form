@@ -1,5 +1,9 @@
 //! Execute UI commands and enforce edit boundaries.
 use super::*;
+mod brushes;
+mod mesh;
+mod modeling;
+mod scene;
 
 impl App {
     fn set_camera_projection(&mut self, perspective: bool, field_of_view: f32) {
@@ -67,6 +71,12 @@ impl App {
     pub(crate) fn dispatch(&mut self, command: Command, ctx: &egui::Context) {
         self.capture_diagnostic_context(ctx);
         self.sync_path_history_state();
+        if let Err(reason) =
+            super::policy::EditorPolicy::new(&self.ui, &self.document).command(&command)
+        {
+            self.ui.status = reason.into();
+            return;
+        }
         if let Command::Action(action) = command {
             self.execute_action(action, ctx);
             return;
@@ -78,187 +88,10 @@ impl App {
             self.sync_path_history_state();
             return;
         }
-        if self.viewport.paths.active
-            && !matches!(
-                command,
-                Command::UpdateBrush(..)
-                    | Command::Undo
-                    | Command::Redo
-                    | Command::ResetView
-                    | Command::ZoomIn
-                    | Command::ZoomOut
-                    | Command::SetZoom(_)
-                    | Command::SetPerspective(_)
-                    | Command::SetFieldOfView(_)
-            )
-        {
-            self.ui.status = "Finish editing paths before using another tool".into();
-            return;
-        }
         if matches!(command, Command::Undo | Command::Redo)
             && let Err(error) = self.prepare_path_history()
         {
             self.ui.status = error;
-            return;
-        }
-        if self.viewport.paths.active
-            && (self.paths.busy() || self.paths.has_preview())
-            && matches!(command, Command::UpdateBrush(..))
-        {
-            self.ui.status = "Apply or cancel the path preview before changing the brush".into();
-            return;
-        }
-        if self.ui.projection.open
-            && !matches!(
-                command,
-                Command::PreviewProjection
-                    | Command::ClearProjectionPreview
-                    | Command::ApplyProjection
-                    | Command::CancelProjection
-                    | Command::ResetView
-                    | Command::ZoomIn
-                    | Command::ZoomOut
-                    | Command::SetZoom(_)
-                    | Command::SetPerspective(_)
-                    | Command::SetFieldOfView(_)
-            )
-        {
-            self.ui.status = "Apply or cancel the projection before editing the scene".into();
-            return;
-        }
-        if self.mesh_job.is_some()
-            && matches!(
-                command,
-                Command::OpenProjection | Command::KeepProjectionReference
-            )
-        {
-            self.ui.status = "Wait for the mesh operation first".into();
-            return;
-        }
-        if self.ui.file_picker.is_some()
-            && !matches!(
-                command,
-                Command::NavigateProjectFiles(_)
-                    | Command::AcceptProjectFile(_)
-                    | Command::CancelProjectFile
-            )
-        {
-            return;
-        }
-        if matches!(
-            command,
-            Command::DeleteSubmodel
-                | Command::OpenProjection
-                | Command::KeepProjectionReference
-                | Command::AddReference(_)
-                | Command::BrowseAsset(_)
-                | Command::PlaceReference(..)
-                | Command::RemoveReference(_)
-                | Command::ArrangeReferences(_)
-                | Command::Mirror(..)
-                | Command::EditEdges(_)
-                | Command::RequestModelingPrimitive
-                | Command::ModelingMode(_)
-                | Command::ModelingComponent(_)
-                | Command::ClearModelSelection
-                | Command::ModelSelectLoop
-                | Command::ModelTopology(_)
-                | Command::ModelRepeat
-                | Command::ModelApply
-                | Command::ModelBoundary
-                | Command::ModelDissolveLoops
-                | Command::GroupModelSelection(..)
-        ) && (self.ui.pending.is_some()
-            || self.ui.recovery_open
-            || self.ui.diagnostics_open
-            || self.ui.settings_open
-            || self.ui.layout_open
-            || self.ui.icon_capture_open())
-        {
-            return;
-        }
-        if self.ui.primitive_warning.is_some()
-            && !matches!(
-                command,
-                Command::ConfirmPrimitive | Command::CancelPrimitive
-            )
-        {
-            self.ui.status = "Confirm or cancel primitive replacement first".into();
-            return;
-        }
-        if self.mesh_job.is_some()
-            && matches!(
-                command,
-                Command::AddReference(_)
-                    | Command::PlaceReference(..)
-                    | Command::RemoveReference(_)
-                    | Command::ArrangeReferences(_)
-                    | Command::RequestModelingPrimitive
-                    | Command::RequestPrimitive
-                    | Command::ConfirmPrimitive
-                    | Command::UpdatePrimitive(_)
-                    | Command::ConvertPrimitive
-                    | Command::Undo
-                    | Command::Redo
-                    | Command::EditSubmodel(..)
-                    | Command::ReorderSubmodel(..)
-                    | Command::AddGroup(_)
-                    | Command::RemoveGroup(_)
-                    | Command::ReorderGroup(..)
-                    | Command::GroupVisible(..)
-                    | Command::TransformMode(_)
-                    | Command::TransformOperation(_)
-                    | Command::RespectTransformMask(_)
-                    | Command::ResetTransformPivot
-                    | Command::SelectSubmodel(_)
-                    | Command::DuplicateModel
-                    | Command::DeleteSubmodel
-                    | Command::MergeDown
-                    | Command::ExtractMasked
-                    | Command::ClearMask
-                    | Command::InvertMask
-                    | Command::DeleteMasked
-                    | Command::SliceTool(_)
-                    | Command::SelectTool(_)
-                    | Command::ShowAllFaces
-                    | Command::InvertVisibility
-                    | Command::SplitHidden
-                    | Command::SetTemporaryThickness(_)
-                    | Command::ApplyThickness
-                    | Command::GrowMask(_)
-                    | Command::BlurMask
-                    | Command::SharpenMask
-                    | Command::MaskIntensity(_)
-                    | Command::MaskThreshold(_)
-                    | Command::CreateVertexGroup(..)
-                    | Command::AssignMaskToGroup(..)
-                    | Command::MaskVertexGroup(_)
-                    | Command::RenameVertexGroup(..)
-                    | Command::DeleteVertexGroup(_)
-                    | Command::VertexGroupVisible(..)
-                    | Command::SetMeshLevel(_)
-                    | Command::DeleteLowerLevels
-                    | Command::DeleteHigherLevels
-                    | Command::SetDynamicMesh(_)
-                    | Command::SetAdaptive(_)
-                    | Command::SetRemeshSettings(..)
-                    | Command::Subdivide
-                    | Command::Remesh
-                    | Command::Mirror(..)
-                    | Command::EditEdges(_)
-                    | Command::ModelingMode(_)
-                    | Command::ModelingComponent(_)
-                    | Command::ClearModelSelection
-                    | Command::ModelSelectLoop
-                    | Command::ModelTopology(_)
-                    | Command::ModelRepeat
-                    | Command::ModelApply
-                    | Command::ModelBoundary
-                    | Command::ModelDissolveLoops
-                    | Command::GroupModelSelection(..)
-            )
-        {
-            self.ui.status = "Wait for the mesh operation, or cancel it first".into();
             return;
         }
         let projection_changed = match command {
@@ -277,8 +110,8 @@ impl App {
         if matches!(
             command,
             Command::ZoomIn | Command::ZoomOut | Command::SetZoom(_) | Command::ResetView
-        ) && (self.viewport.gesture == Some(crate::viewport::Gesture::Transform)
-            || self.viewport.guided.dragging())
+        ) && (self.viewport.session.gesture == Some(crate::viewport::Gesture::Transform)
+            || self.viewport.session.guided.dragging())
         {
             self.viewport.finish_transform_drag(&mut self.document);
         }
@@ -302,166 +135,16 @@ impl App {
         self.document.prepare_edit(command.edit_kind());
         let result: Result<(), String> = match command {
             Command::Path(_) => unreachable!(),
-            Command::ModelingMode(active) => if active {
-                self.document.require_modeling()
-            } else {
-                Ok(())
-            }
-            .map(|()| {
-                self.viewport.cancel(&mut self.document);
-                self.ui.modeling.active = active;
-                self.ui.edges.selecting = false;
-                self.ui.selection_tool = None;
-                self.ui.slice_active = false;
-                self.ui.arrange_references = false;
-                self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
-                if active {
-                    self.ui.wire = true;
-                }
-            }),
-            Command::ModelingComponent(mode) => {
-                self.viewport.cancel(&mut self.document);
-                self.viewport.modeling.sync(&self.document);
-                self.viewport
-                    .modeling
-                    .convert_selection(self.document.mesh(), mode, false);
-                self.viewport.set_edge_selection(Vec::new(), &self.document);
-                self.ui.modeling.mode = mode;
-                self.ui.modeling.span = crate::viewport::SelectionSpan::Single;
-                self.ui
-                    .modeling
-                    .set_tool(crate::viewport::ModelTool::Select);
-                Ok(())
-            }
-            Command::ClearModelSelection => {
-                self.viewport.cancel(&mut self.document);
-                self.viewport.modeling.selected.clear();
-                self.viewport.set_edge_selection(Vec::new(), &self.document);
-                Ok(())
-            }
-            Command::ModelBoundary => {
-                self.viewport.cancel(&mut self.document);
-                self.viewport.modeling.sync(&self.document);
-                self.viewport.modeling.convert_selection(
-                    self.document.mesh(),
-                    crate::viewport::ComponentMode::Edge,
-                    true,
-                );
-                self.ui.modeling.mode = crate::viewport::ComponentMode::Edge;
-                self.ui
-                    .modeling
-                    .set_tool(crate::viewport::ModelTool::Select);
-                self.ui.modeling.span = crate::viewport::SelectionSpan::Single;
-                Ok(())
-            }
-            Command::ModelTopology(edit) => {
-                self.viewport.cancel(&mut self.document);
-                self.viewport.modeling.topology_edit(
-                    &mut self.document,
-                    edit,
-                    self.ui.modeling.protect_mask,
-                )
-            }
-            Command::ModelRepeat => {
-                self.viewport.cancel(&mut self.document);
-                self.viewport
-                    .modeling
-                    .repeat_last(
-                        &mut self.document,
-                        self.ui.modeling.mode,
-                        self.ui.modeling.protect_mask,
-                    )
-                    .map(|()| {
-                        if let Some(last) = self.viewport.modeling.last_edit {
-                            self.ui.modeling.load_options(last);
-                        }
-                    })
-            }
-            Command::ModelApply => {
-                self.viewport.cancel(&mut self.document);
-                let options = self.ui.modeling.options();
-                self.viewport
-                    .modeling
-                    .apply_amount(&mut self.document, options)
-            }
-            Command::ModelDissolveLoops => {
-                self.viewport.cancel(&mut self.document);
-                self.viewport.modeling.sync(&self.document);
-                let edges = self.viewport.selected_edges(&self.document).to_vec();
-                let revision = self.document.display_revision();
-                self.document
-                    .require_modeling()
-                    .and_then(|()| {
-                        let symmetry = crate::sculpt::ModelingSymmetry::new(
-                            self.document.mesh(),
-                            self.document.symmetry(),
-                        )?;
-                        let mesh = self
-                            .document
-                            .mesh()
-                            .dissolve_loops(&symmetry.edges(&edges))?;
-                        symmetry.validate_result(&mesh)?;
-                        self.document
-                            .mesh()
-                            .check_model_protection(&mesh, self.ui.modeling.protect_mask)?;
-                        Ok(mesh)
-                    })
-                    .and_then(|mesh| {
-                        self.document
-                            .commit_modeling(mesh, "Dissolve selected loops", revision)
-                    })
-                    .map(|()| {
-                        self.viewport.modeling.sync(&self.document);
-                        self.viewport.set_edge_selection(Vec::new(), &self.document);
-                    })
-            }
-            Command::ModelSelectLoop => {
-                self.viewport.cancel(&mut self.document);
-                self.viewport.modeling.sync(&self.document);
-                let edges = self.viewport.selected_edges(&self.document).to_vec();
-                crate::sculpt::ModelingSymmetry::new(self.document.mesh(), self.document.symmetry())
-                    .and_then(|symmetry| {
-                        self.document
-                            .mesh()
-                            .expand_edge_loop(&edges)
-                            .map(|edges| symmetry.edges(&edges))
-                    })
-                    .map(|edges| {
-                        self.viewport.set_model_edges(edges, &self.document);
-                    })
-            }
-            Command::GroupModelSelection(existing, remove) => {
-                self.viewport.modeling.sync(&self.document);
-                let vertices = self
-                    .viewport
-                    .modeling
-                    .selected_vertices(self.document.mesh());
-                let faces = (self.ui.modeling.mode == crate::viewport::ComponentMode::Face)
-                    .then(|| self.viewport.modeling.selected_faces());
-                let edges = self.viewport.selected_edges(&self.document).to_vec();
-                self.document
-                    .group_model_selection(
-                        &vertices,
-                        faces.as_deref(),
-                        &self.ui.modeling.group_name,
-                        existing,
-                        remove,
-                    )
-                    .map(|target| {
-                        self.ui.modeling.group = target.unwrap_or(0);
-                        self.ui.selected_vertex_group =
-                            target.map(|g| (self.document.active_model_index(), g));
-                        self.ui.vertex_group_rename = target
-                            .map(|g| self.document.mesh().vertex_groups[g].name.clone())
-                            .unwrap_or_default();
-                        if target.is_some_and(|i| !self.document.mesh().vertex_groups[i].visible) {
-                            self.viewport.modeling.sync(&self.document);
-                        } else {
-                            self.viewport.modeling.revision = self.document.display_revision();
-                            self.viewport.set_edge_selection(edges, &self.document);
-                        }
-                    })
-            }
+            command @ (Command::ModelingMode(..)
+            | Command::ModelingComponent(..)
+            | Command::ClearModelSelection
+            | Command::ModelBoundary
+            | Command::ModelTopology(..)
+            | Command::ModelRepeat
+            | Command::ModelApply
+            | Command::ModelDissolveLoops
+            | Command::ModelSelectLoop
+            | Command::GroupModelSelection(..)) => self.dispatch_modeling(command),
             Command::EditEdges(edit) => self.start_mesh_job(Operation::Edges(edit)),
             Command::Mirror(axis, source_positive) => {
                 self.start_mesh_job(Operation::Mirror(crate::sculpt::MirrorOptions {
@@ -567,7 +250,7 @@ impl App {
                     .map(|()| self.ui.status = format!("Exported {}", path.display()))
             }
             Command::Undo => {
-                let dragging = self.viewport.gesture.is_some();
+                let dragging = self.viewport.session.gesture.is_some();
                 self.viewport.cancel(&mut self.document);
                 if dragging {
                     self.viewport.wait_for_release();
@@ -580,7 +263,7 @@ impl App {
                 Ok(())
             }
             Command::Redo => {
-                let dragging = self.viewport.gesture.is_some();
+                let dragging = self.viewport.session.gesture.is_some();
                 self.viewport.cancel(&mut self.document);
                 if dragging {
                     self.viewport.wait_for_release();
@@ -706,75 +389,17 @@ impl App {
                 self.ui.respect_transform_mask = respect;
                 Ok(())
             }
-            Command::EditSubmodel(index, name, metadata) => {
-                self.viewport.cancel(&mut self.document);
-                self.document.set_model_metadata(index, name, metadata)
-            }
-            Command::ReorderSubmodel(from, to) => {
-                self.viewport.cancel(&mut self.document);
-                self.document.reorder_model(from, to)
-            }
-            Command::AddGroup(name) => {
-                self.viewport.cancel(&mut self.document);
-                self.document.add_group(name)
-            }
-            Command::RemoveGroup(name) => {
-                self.viewport.cancel(&mut self.document);
-                self.document.remove_group(&name)
-            }
-            Command::ReorderGroup(from, to) => {
-                self.viewport.cancel(&mut self.document);
-                self.document.reorder_group(from, to)
-            }
-            Command::GroupVisible(name, visible) => {
-                self.viewport.cancel(&mut self.document);
-                self.document.set_group_visible(&name, visible)
-            }
-            Command::SelectSubmodel(index) => {
-                self.viewport.cancel(&mut self.document);
-                self.document.select_submodel(index)
-            }
-            Command::DeleteSubmodel => {
-                self.viewport.cancel(&mut self.document);
-                let name = self
-                    .document
-                    .model(self.document.active_model_index())
-                    .unwrap()
-                    .name
-                    .to_owned();
-                if self.document.delete_submodel() {
-                    self.ui.selected_vertex_group = None;
-                    self.ui.projection.source = None;
-                    self.viewport.set_edge_selection(Vec::new(), &self.document);
-                    self.viewport.modeling.sync(&self.document);
-                    self.viewport
-                        .reset_transform_pivot(&self.document, self.ui.transform_mode);
-                    self.viewport.wait_for_release();
-                    self.ui.status = format!("Deleted {name}. Undo restores the submodel.");
-                } else {
-                    self.ui.status = "The last model slot is already empty".into();
-                }
-                Ok(())
-            }
-            Command::MergeDown => {
-                self.viewport.cancel(&mut self.document);
-                self.document.merge_down().map(|()| {
-                    self.ui.selected_vertex_group = None;
-                    self.ui.status =
-                        "Submodels merged; current surfaces kept, subdivision levels reset".into();
-                })
-            }
-            Command::DuplicateModel | Command::ExtractMasked => {
-                self.viewport.cancel(&mut self.document);
-                let extract = matches!(command, Command::ExtractMasked);
-                self.document.duplicate_model(extract).map(|()| {
-                    self.ui.status = if extract {
-                        "Masked surface extracted; source kept".into()
-                    } else {
-                        "Model duplicated".into()
-                    }
-                })
-            }
+            command @ (Command::EditSubmodel(..)
+            | Command::ReorderSubmodel(..)
+            | Command::AddGroup(..)
+            | Command::RemoveGroup(..)
+            | Command::ReorderGroup(..)
+            | Command::GroupVisible(..)
+            | Command::SelectSubmodel(..)
+            | Command::DeleteSubmodel
+            | Command::MergeDown
+            | Command::DuplicateModel
+            | Command::ExtractMasked) => self.dispatch_scene(command),
             Command::GrowMask(grow) => {
                 self.viewport.cancel(&mut self.document);
                 self.document.grow_mask(grow)
@@ -882,155 +507,36 @@ impl App {
                 self.cancel_projection();
                 Ok(())
             }
-            Command::Subdivide => self.start_mesh_job(Operation::Subdivide),
-            Command::Remesh => self.start_mesh_job(Operation::Remesh),
-            Command::CancelMeshJob => {
-                self.cancel_mesh_job();
-                Ok(())
-            }
-            Command::SetMeshLevel(level) => {
-                self.viewport.cancel(&mut self.document);
-                self.document.set_mesh_level(level)
-            }
-            Command::DeleteLowerLevels | Command::DeleteHigherLevels => {
-                let lower = matches!(command, Command::DeleteLowerLevels);
-                self.viewport.cancel(&mut self.document);
-                self.document.delete_mesh_levels(lower).map(|()| {
-                    self.ui.status = if lower {
-                        "Lower subdivision levels deleted"
-                    } else {
-                        "Higher subdivision levels deleted"
-                    }
-                    .into();
-                })
-            }
-            Command::SetAdaptive(settings) => {
-                self.viewport.cancel(&mut self.document);
-                self.document.set_adaptive(settings)
-            }
-            Command::SetDynamicMesh(enabled) => {
-                self.viewport.cancel(&mut self.document);
-                self.document.set_dynamic_mesh(enabled)
-            }
-            Command::SetRemeshSettings(resolution, auto) => {
-                self.document.set_remesh_settings(resolution, auto)
-            }
-            Command::ZoomIn | Command::ZoomOut => {
-                self.camera.zoom_step(matches!(command, Command::ZoomIn));
-                Ok(())
-            }
-            Command::SetZoom(zoom) => {
-                self.camera.set_zoom(zoom);
-                Ok(())
-            }
-            Command::ResetView => {
-                self.camera.reset();
-                Ok(())
-            }
-            Command::SetPerspective(enabled) => {
-                self.set_camera_projection(enabled, self.camera.field_of_view);
-                Ok(())
-            }
-            Command::SetFieldOfView(degrees) => {
-                if degrees.is_finite() {
-                    self.set_camera_projection(self.camera.perspective, degrees);
-                }
-                Ok(())
-            }
-            Command::SetSymmetry(symmetry) => {
-                let modeling_drag = self.viewport.modeling.dragging();
-                self.viewport.cancel(&mut self.document);
-                if modeling_drag {
-                    self.viewport.wait_for_release();
-                }
-                self.document.set_symmetry(symmetry)
-            }
-            Command::AddBrush(kind) => self
-                .document
-                .append_brush(crate::sculpt::Brush::new(kind))
-                .map(|index| self.ui.select_brush(index, &self.document)),
-            Command::AddAlphaDragBrush => self
-                .document
-                .append_brush(crate::sculpt::Brush::alpha_drag())
-                .map(|index| self.ui.select_brush(index, &self.document)),
-            Command::DuplicateBrush(index) => self
-                .document
-                .duplicate_brush(index)
-                .map(|index| self.ui.select_brush(index, &self.document)),
-            Command::UpdateBrush(index, brush) => self.document.update_brush(index, brush),
-            Command::SaveAlpha(index, asset) => self.document.save_alpha(index, asset).map(|i| {
-                self.ui.alphas.selected = Some(crate::ui::alphas::Selection::Project(i));
-                self.ui.alphas.draft = None;
-                self.ui.status =
-                    "Alpha saved in project library; choose Use on brush or Place stencil".into();
-            }),
-            Command::RemoveAlpha(index) => self
-                .document
-                .remove_alpha(index)
-                .map(|()| self.ui.alphas.selected = None),
-            Command::UseAlpha(index, brush) => self
-                .document
-                .alphas()
-                .get(index)
-                .cloned()
-                .ok_or("Alpha no longer exists".to_string())
-                .and_then(|asset| self.document.set_alpha(brush, asset.image)),
-            Command::ExportAlpha(index, replace) => {
-                let path = self.ui.alphas.export_path.clone();
-                if std::path::Path::new(&path).exists() && !replace {
-                    self.ui.alphas.overwrite = Some((index, path));
-                    Ok(())
-                } else {
-                    self.document
-                        .alphas()
-                        .get(index)
-                        .ok_or("Alpha no longer exists".to_string())
-                        .and_then(|asset| persistence::save_alpha(&path, &asset.image))
-                        .map(|()| {
-                            self.ui.alphas.overwrite = None;
-                            self.ui.status = format!("Exported 16-bit alpha: {path}");
-                        })
-                }
-            }
-            Command::SetStencil(stencil) => {
-                self.viewport.cancel(&mut self.document);
-                self.document.set_stencil(stencil)
-            }
-            Command::AttachStencil => {
-                self.viewport.cancel(&mut self.document);
-                self.viewport.attach_stencil = true;
-                Ok(())
-            }
-            Command::SavePreset(index) => {
-                persistence::save_brush(&self.ui.preset_path, &self.document.brushes()[index])
-                    .map(|()| self.ui.status = "Brush saved".into())
-            }
-            Command::CaptureBrushIcon(index) => {
-                self.viewport.cancel(&mut self.document);
-                crate::brush_icon::capture(self.document.mesh(), &self.camera).and_then(|icon| {
-                    let brush = self
-                        .document
-                        .brushes()
-                        .get(index)
-                        .ok_or("Brush no longer exists")?;
-                    self.ui.set_icon_shot(ctx, index, brush, icon);
-                    Ok(())
-                })
-            }
-            Command::ExportIconImage(path, icon) => image::save_buffer_with_format(
-                &path,
-                &icon.rgba,
-                icon.size as u32,
-                icon.size as u32,
-                image::ColorType::Rgba8,
-                image::ImageFormat::Png,
-            )
-            .map_err(|e| e.to_string())
-            .map(|()| self.ui.status = format!("Saved square capture: {path}")),
-            Command::ExportBrushLibrary => {
-                persistence::save_brush_library(&self.ui.library_path, self.document.brushes())
-                    .map(|()| self.ui.status = "Brush library exported".into())
-            }
+            command @ (Command::Subdivide
+            | Command::Remesh
+            | Command::CancelMeshJob
+            | Command::SetMeshLevel(..)
+            | Command::DeleteLowerLevels
+            | Command::DeleteHigherLevels
+            | Command::SetAdaptive(..)
+            | Command::SetDynamicMesh(..)
+            | Command::SetRemeshSettings(..)
+            | Command::ZoomIn
+            | Command::ZoomOut
+            | Command::SetZoom(..)
+            | Command::ResetView
+            | Command::SetPerspective(..)
+            | Command::SetFieldOfView(..)
+            | Command::SetSymmetry(..)) => self.dispatch_mesh(command),
+            command @ (Command::AddBrush(..)
+            | Command::AddAlphaDragBrush
+            | Command::DuplicateBrush(..)
+            | Command::UpdateBrush(..)
+            | Command::SaveAlpha(..)
+            | Command::RemoveAlpha(..)
+            | Command::UseAlpha(..)
+            | Command::ExportAlpha(..)
+            | Command::SetStencil(..)
+            | Command::AttachStencil
+            | Command::SavePreset(..)
+            | Command::CaptureBrushIcon(..)
+            | Command::ExportIconImage(..)
+            | Command::ExportBrushLibrary) => self.dispatch_brushes(command, ctx),
             Command::SaveAndContinue => {
                 if let Some(action) = self.ui.pending.clone() {
                     let path = self.ui.pending_save_path.clone();

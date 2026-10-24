@@ -1,10 +1,6 @@
 //! Background geometry work. Results are committed by the controller as one edit.
 use crate::sculpt::Geometry;
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-    mpsc::{self, Receiver, TryRecvError},
-};
+use crate::{background_job::BackgroundJob, sculpt::ValidatedGeometry};
 
 #[derive(Clone)]
 pub(crate) enum Operation {
@@ -39,79 +35,51 @@ impl Operation {
     }
 }
 pub(crate) struct MeshJob {
-    receiver: Receiver<Result<Geometry, String>>,
-    cancel: Arc<AtomicBool>,
+    worker: BackgroundJob<ValidatedGeometry>,
     pub operation: Operation,
 }
 impl MeshJob {
     pub fn start(mut geometry: Geometry, operation: Operation) -> Result<Self, String> {
-        let (sender, receiver) = mpsc::channel();
-        let cancel = Arc::new(AtomicBool::new(false));
-        let flag = cancel.clone();
         let worker_operation = operation.clone();
-        std::thread::Builder::new()
-            .name("clay-mesh-operation".into())
-            .spawn(move || {
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    match worker_operation {
-                        Operation::Edges(edit) => {
-                            geometry.edit_edges(&edit, &|| flag.load(Ordering::Relaxed))?
-                        }
-                        Operation::Mirror(options) => {
-                            geometry.mirror(options, &|| flag.load(Ordering::Relaxed))?;
-                        }
-                        Operation::ImportObj(path) => {
-                            let mesh = crate::persistence::load_obj_cancellable(&path, &|| {
-                                flag.load(Ordering::Relaxed)
-                            })?;
-                            let name = std::path::Path::new(&path)
-                                .file_stem()
-                                .and_then(|s| s.to_str())
-                                .unwrap_or("Imported OBJ");
-                            geometry.import_mesh(mesh, name)?;
-                        }
-                        Operation::SlicePath(path, options) => {
-                            geometry.slice_path(&path, options, &|| flag.load(Ordering::Relaxed))?
-                        }
-                        Operation::Slice(plane, options) => {
-                            geometry.slice(plane, options, &|| flag.load(Ordering::Relaxed))?
-                        }
-                        Operation::Subdivide => geometry.subdivide()?,
-                        Operation::Remesh => {
-                            if !geometry.settings.dynamic {
-                                return Err("Switch to dynamic mode first".into());
-                            }
-                            geometry.mesh = geometry
-                                .mesh
-                                .remesh_cancellable(geometry.settings.resolution, &|| {
-                                    flag.load(Ordering::Relaxed)
-                                })?;
-                        }
+        let worker = BackgroundJob::start("clay-mesh-operation", move |cancel| {
+            match worker_operation {
+                Operation::Edges(edit) => geometry.edit_edges(&edit, &cancel)?,
+                Operation::Mirror(options) => {
+                    geometry.mirror(options, &cancel)?;
+                }
+                Operation::ImportObj(path) => {
+                    let mesh = crate::persistence::load_obj_cancellable(&path, &cancel)?;
+                    let name = std::path::Path::new(&path)
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("Imported OBJ");
+                    geometry.import_mesh(mesh, name)?;
+                }
+                Operation::SlicePath(path, options) => {
+                    geometry.slice_path(&path, options, &cancel)?
+                }
+                Operation::Slice(plane, options) => geometry.slice(plane, options, &cancel)?,
+                Operation::Subdivide => geometry.subdivide_cancellable(&cancel)?,
+                Operation::Remesh => {
+                    if !geometry.settings.dynamic {
+                        return Err("Switch to dynamic mode first".into());
                     }
-                    Ok(geometry)
-                }))
-                .unwrap_or_else(|_| {
-                    Err("Mesh operation failed; the original mesh was kept".into())
-                });
-                let _ = sender.send(result);
-            })
-            .map_err(|e| e.to_string())?;
-        Ok(Self {
-            receiver,
-            cancel,
-            operation,
-        })
+                    geometry.mesh = geometry
+                        .mesh
+                        .remesh_cancellable(geometry.settings.resolution, &cancel)?;
+                }
+            }
+            ValidatedGeometry::new(geometry, &cancel)
+        })?;
+        Ok(Self { worker, operation })
     }
-    pub fn poll(&self) -> Option<Result<Geometry, String>> {
-        match self.receiver.try_recv() {
-            Ok(result) => Some(result),
-            Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Disconnected) => Some(Err("Mesh worker stopped unexpectedly".into())),
-        }
+    pub fn cancel(&self) {
+        self.worker.cancel();
     }
-}
-impl Drop for MeshJob {
-    fn drop(&mut self) {
-        self.cancel.store(true, Ordering::Relaxed);
+    pub fn is_cancelled(&self) -> bool {
+        self.worker.is_cancelled()
+    }
+    pub fn poll(&mut self) -> Option<Result<ValidatedGeometry, String>> {
+        self.worker.poll()
     }
 }

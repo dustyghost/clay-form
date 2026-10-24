@@ -81,7 +81,22 @@ impl Document {
         self.end_edit();
         self.end_stroke();
         self.record_edit("Select submodel");
-        self.install_models(self.ordered_models(), index);
+        let old_active = self.active_model_index();
+        let target = index - usize::from(index > old_active);
+        let mut selected = self.geometry.submodels.remove(target);
+        std::mem::swap(&mut self.geometry.mesh, &mut selected.mesh);
+        std::mem::swap(&mut self.geometry.settings, &mut selected.mesh_settings);
+        std::mem::swap(&mut self.geometry.name, &mut selected.name);
+        std::mem::swap(
+            &mut self.geometry.scene.active_metadata,
+            &mut selected.metadata,
+        );
+        self.geometry
+            .submodels
+            .insert(old_active - usize::from(old_active > index), selected);
+        self.geometry.scene.active_index = index;
+        self.dirty = true;
+        self.display_changed();
         Ok(())
     }
     /// Delete the active model as one scene edit. The final model becomes an
@@ -374,5 +389,31 @@ impl Document {
         self.dirty = true;
         self.display_changed();
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod selection_storage_tests {
+    use super::*;
+    #[test]
+    fn selection_moves_existing_mesh_buffers_and_undo_restores_scene_order() {
+        let mut document = Document::default();
+        document.duplicate_model(false).unwrap();
+        document.duplicate_model(false).unwrap();
+        for target in [2, 0, 1, 2, 1, 0] {
+            let before = document.project();
+            let buffers: Vec<_> = (0..document.model_count())
+                .map(|i| document.model(i).unwrap().mesh.vertices.as_ptr())
+                .collect();
+            document.select_submodel(target).unwrap();
+            assert_eq!(document.active_model_index(), target);
+            for (i, pointer) in buffers.iter().enumerate() {
+                assert_eq!(document.model(i).unwrap().mesh.vertices.as_ptr(), *pointer);
+            }
+            document.undo();
+            assert!(document.project() == before);
+            document.redo();
+            assert_eq!(document.active_model_index(), target);
+        }
     }
 }

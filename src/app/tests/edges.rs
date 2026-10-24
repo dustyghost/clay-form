@@ -221,7 +221,7 @@ fn edges_empty_space_drag_matches_normal_navigation_and_keeps_selection() {
                     },
                 );
                 if pressed == Some(true) {
-                    assert!(app.viewport.gesture == Some(Gesture::Orbit));
+                    assert!(app.viewport.session.gesture == Some(Gesture::Orbit));
                 }
             }
             assert_eq!(app.document.geometry_snapshot(), before);
@@ -255,9 +255,9 @@ fn edges_surface_drag_does_not_turn_into_orbit_or_sculpt() {
         &ctx,
         vec![egui::Event::PointerMoved(start), primary_event(start, true)],
     );
-    assert!(app.viewport.gesture == Some(Gesture::Edges));
+    assert!(app.viewport.session.gesture == Some(Gesture::Edges));
     navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
-    assert!(app.viewport.gesture == Some(Gesture::Edges));
+    assert!(app.viewport.session.gesture == Some(Gesture::Edges));
     navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
     assert_eq!(
         (app.camera.yaw, app.camera.pitch, app.camera.zoom),

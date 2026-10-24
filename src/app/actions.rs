@@ -50,18 +50,20 @@ impl App {
                 }
                 None
             }
-            Action::EditPaths => Some(Command::Path(paths::PathCommand::Open)),
-            Action::StrokeEntirePath => Some(Command::Path(paths::PathCommand::StrokeEntirePath)),
+            Action::EditPaths => Some(Command::Path(crate::command::PathCommand::Open)),
+            Action::StrokeEntirePath => {
+                Some(Command::Path(crate::command::PathCommand::StrokeEntirePath))
+            }
             Action::TogglePathOnlyStrokes => {
                 self.viewport.cancel(&mut self.document);
                 self.ui.path_starts_only = !self.ui.path_starts_only;
-                self.viewport.guided.path_starts_only = self.ui.path_starts_only;
+                self.viewport.session.guided.path_starts_only = self.ui.path_starts_only;
                 None
             }
             Action::TogglePathGuides => {
                 self.viewport.cancel(&mut self.document);
                 self.ui.guide_paths = !self.ui.guide_paths;
-                self.viewport.guided.enabled = self.ui.guide_paths;
+                self.viewport.session.guided.enabled = self.ui.guide_paths;
                 None
             }
             Action::PenModeling => Some(Command::ModelingMode(!self.ui.modeling.active)),

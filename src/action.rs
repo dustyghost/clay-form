@@ -195,6 +195,41 @@ pub(crate) enum Action {
     NewBrush(String),
 }
 impl Action {
+    /// Defaults follow stable action identities, independently of catalog ordering.
+    pub(crate) fn default_shortcut(&self) -> Option<crate::preferences::Shortcut> {
+        use eframe::egui::{Key, Modifiers};
+        let ctrl = Modifiers::CTRL;
+        let none = Modifiers::NONE;
+        let (key, modifiers) = match self {
+            Self::Save => (Key::S, ctrl),
+            Self::SaveAs => (Key::S, ctrl | Modifiers::SHIFT),
+            Self::Open => (Key::O, ctrl),
+            Self::New => (Key::N, ctrl),
+            Self::Undo => (Key::Z, ctrl),
+            Self::Redo => (Key::Z, ctrl | Modifiers::SHIFT),
+            Self::ResetView => (Key::F, none),
+            Self::Symmetry => (Key::X, Modifiers::SHIFT),
+            Self::Wireframe => (Key::W, none),
+            Self::Guides => (Key::G, none),
+            Self::Smaller => (Key::OpenBracket, none),
+            Self::Larger => (Key::CloseBracket, none),
+            Self::PreviousBrush => (Key::Comma, none),
+            Self::NextBrush => (Key::Period, none),
+            Self::Subdivide => (Key::D, ctrl),
+            Self::LowerLevel => (Key::D, Modifiers::SHIFT),
+            Self::HigherLevel => (Key::D, none),
+            Self::Remesh => (Key::R, ctrl),
+            Self::ZoomIn => (Key::Equals, none),
+            Self::ZoomOut => (Key::Minus, none),
+            Self::ViewportContextMenu => (Key::Q, none),
+            Self::MaskVisibilityMenu => (Key::X, none),
+            Self::TransformMenu => (Key::E, none),
+            Self::UniversalTransform => (Key::T, none),
+            _ => return None,
+        };
+        Some(crate::preferences::Shortcut::new(key, modifiers))
+    }
+
     pub const ALL: &'static [Self] = &[
         Self::Save,
         Self::Open,
@@ -701,6 +736,37 @@ impl From<crate::viewport::TransformOperation> for Action {
             TransformOperation::PlaceLine => Self::PlaceLine,
             TransformOperation::Rotate => Self::Rotate,
             TransformOperation::PlacePivot => Self::PlacePivot,
+        }
+    }
+}
+
+#[cfg(test)]
+mod shortcut_tests {
+    use super::*;
+    use eframe::egui::{Key, Modifiers};
+    #[test]
+    fn catalog_reordering_does_not_change_default_shortcut_identity() {
+        let expected = [
+            (Action::Save, Key::S, Modifiers::CTRL),
+            (Action::Undo, Key::Z, Modifiers::CTRL),
+            (Action::Redo, Key::Z, Modifiers::CTRL | Modifiers::SHIFT),
+            (Action::ViewportContextMenu, Key::Q, Modifiers::NONE),
+            (Action::MaskVisibilityMenu, Key::X, Modifiers::NONE),
+            (Action::TransformMenu, Key::E, Modifiers::NONE),
+            (Action::UniversalTransform, Key::T, Modifiers::NONE),
+            (Action::Symmetry, Key::X, Modifiers::SHIFT),
+        ];
+        let reversed: Vec<_> = Action::ALL
+            .iter()
+            .rev()
+            .map(|a| (a, a.default_shortcut()))
+            .collect();
+        for (action, key, modifiers) in expected {
+            let actual = reversed.iter().find(|(a, _)| **a == action).unwrap();
+            assert_eq!(
+                actual.1,
+                Some(crate::preferences::Shortcut::new(key, modifiers))
+            );
         }
     }
 }

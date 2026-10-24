@@ -850,20 +850,20 @@ impl Viewport {
         );
         if symmetry_error.is_some() {
             self.modeling.cancel();
-            if self.gesture == Some(Gesture::Modeling) {
-                self.gesture = None;
+            if self.session.gesture == Some(Gesture::Modeling) {
+                self.session.gesture = None;
                 self.wait_for_release();
             }
             return eligible.is_some_and(|p| scene.pick_model(p).is_some());
         }
         if !options.enabled {
             self.modeling.cancel();
-            if self.gesture == Some(Gesture::Modeling) {
-                self.gesture = None;
+            if self.session.gesture == Some(Gesture::Modeling) {
+                self.session.gesture = None;
             }
             return true;
         }
-        let lost_pointer = self.gesture == Some(Gesture::Modeling)
+        let lost_pointer = self.session.gesture == Some(Gesture::Modeling)
             && ui.input(|i| {
                 !i.pointer.button_released(egui::PointerButton::Primary)
                     && (!i.pointer.primary_down()
@@ -873,24 +873,24 @@ impl Viewport {
             });
         if lost_pointer || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.modeling.cancel();
-            self.gesture = None;
+            self.session.gesture = None;
             self.wait_for_release();
             return true;
         }
-        if self.gesture.is_some_and(|g| g != Gesture::Modeling) {
+        if self.session.gesture.is_some_and(|g| g != Gesture::Modeling) {
             return false;
         }
         let pressed =
             response.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_pressed());
         let clicked = response.clicked_by(egui::PointerButton::Primary);
         if let (true, Some(handle), Some(point)) = (pressed || clicked, transform_handle, eligible)
-            && self.gesture.is_none()
+            && self.session.gesture.is_none()
         {
             match self
                 .modeling
                 .begin_gizmo(document, scene, model, point, handle)
             {
-                Ok(()) => self.gesture = Some(Gesture::Modeling),
+                Ok(()) => self.session.gesture = Some(Gesture::Modeling),
                 Err(e) => self.status = Some(e),
             }
         }
@@ -908,8 +908,12 @@ impl Viewport {
                 pressed || clicked,
             );
         }
-        if self.gesture.is_none() && (pressed || clicked) && eligible.is_some() && hover.is_some() {
-            self.gesture = Some(Gesture::Modeling);
+        if self.session.gesture.is_none()
+            && (pressed || clicked)
+            && eligible.is_some()
+            && hover.is_some()
+        {
+            self.session.gesture = Some(Gesture::Modeling);
             if model.tool == ModelTool::Extrude
                 && let Some(Component::Face(face)) = hover
             {
@@ -974,7 +978,7 @@ impl Viewport {
                     .map(|d| d / axis.len().max(1e-8))
             };
             if self.modeling.loop_drag.is_none()
-                && self.gesture == Some(Gesture::Modeling)
+                && self.session.gesture == Some(Gesture::Modeling)
                 && (pressed || clicked)
                 && let Some(Component::Edge(edge)) = hover
             {
@@ -1067,9 +1071,9 @@ impl Viewport {
             }
         }
         if ui.input(|i| i.pointer.button_released(egui::PointerButton::Primary))
-            && self.gesture == Some(Gesture::Modeling)
+            && self.session.gesture == Some(Gesture::Modeling)
         {
-            self.gesture = None;
+            self.session.gesture = None;
             if self.modeling.edit_drag.is_some() {
                 if let Err(e) = self.modeling.commit_edit(document, model) {
                     self.status = Some(e);
@@ -1168,7 +1172,7 @@ impl Viewport {
         }
         // Preserve empty-space, navigation-frame and gizmo navigation; consume model
         // presses even if the chosen component has no hit (e.g. a face in vertex mode).
-        self.gesture == Some(Gesture::Modeling)
+        self.session.gesture == Some(Gesture::Modeling)
             || transform_handle.is_some()
             || eligible.is_some_and(|p| scene.pick_model(p).is_some())
     }

@@ -28,7 +28,20 @@ impl Document {
         label: &'static str,
         settings: Option<crate::diagnostics::EditSettings>,
     ) -> Result<(), String> {
-        geometry.settings.validate(&geometry.mesh)?;
+        let geometry = crate::sculpt::ValidatedGeometry::new(geometry, &|| false)?;
+        self.commit_validated_geometry(geometry, label, settings);
+        Ok(())
+    }
+    pub(crate) fn geometry_matches(&self, geometry: &Geometry) -> bool {
+        &self.geometry == geometry
+    }
+    pub(crate) fn commit_validated_geometry(
+        &mut self,
+        geometry: crate::sculpt::ValidatedGeometry,
+        label: &'static str,
+        settings: Option<crate::diagnostics::EditSettings>,
+    ) {
+        let geometry = geometry.into_geometry();
         self.end_edit();
         self.end_stroke();
         let previous = std::mem::replace(&mut self.geometry, geometry);
@@ -39,7 +52,6 @@ impl Document {
         }
         self.dirty = true;
         self.display_changed();
-        Ok(())
     }
     pub fn set_mesh_level(&mut self, level: usize) -> Result<(), String> {
         self.require_sculpt_mesh()?;
