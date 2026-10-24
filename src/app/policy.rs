@@ -117,6 +117,10 @@ impl<'a> EditorPolicy<'a> {
         }
         if self.action_supported(action) {
             Ok(())
+        } else if *action == Action::Undo {
+            Err("Nothing to undo")
+        } else if *action == Action::Redo {
+            Err("Nothing to redo")
         } else if *action == Action::Remesh && !self.document.mesh_settings().dynamic {
             Err("Switch to dynamic mode first")
         } else {

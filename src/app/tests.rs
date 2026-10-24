@@ -2024,6 +2024,7 @@ fn slice_path_fast_clicks_and_failed_cut_keep_an_editable_draft() {
     );
     assert!(app.mesh_job.is_some(), "draft was lost after failure");
     app.cancel_mesh_job();
+    finish_mesh_job(&mut app);
     navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Enter, false)]);
     navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Enter, true)]);
     assert!(app.mesh_job.is_some(), "draft was lost after cancellation");
@@ -3633,6 +3634,7 @@ fn delete_submodel_action_removes_hidden_reference_clears_targets_and_locks_duri
     app.dispatch(Command::DeleteSubmodel, &ctx);
     assert_eq!(app.document.geometry_snapshot(), after);
     app.dispatch(Command::CancelMeshJob, &ctx);
+    finish_mesh_job(&mut app);
     app.dispatch(Command::OpenProjection, &ctx);
     app.dispatch(Command::DeleteSubmodel, &ctx);
     assert_eq!(app.document.geometry_snapshot(), after);
