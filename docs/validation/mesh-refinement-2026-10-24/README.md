@@ -63,6 +63,7 @@ Additional regressions require meaningful spacing improvement and vertex travel 
 ```sh
 cargo test --locked --lib -- sculpt::relaxation:: app::tests::projection::relaxation_ modeling_double_ modeling_point_ring modeling_component_construction modeling_construction_presets viewport_menu_
 CLAY_GPU_SOFTWARE=1 LP_NUM_THREADS=2 CLAY_GUIDE_PREVIEW=/tmp/clay-mesh-refinement cargo test --locked --lib mesh_refinement_offscreen_review -- --ignored --nocapture
+CLAY_GPU_SOFTWARE=1 LP_NUM_THREADS=2 CLAY_GUIDE_PREVIEW=/tmp/clay-mesh-refinement cargo test --locked --lib inflate_relaxation_manual_capture -- --ignored --nocapture
 ```
 
 For a local export, generate a separate project with measured quality and volume:

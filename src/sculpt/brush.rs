@@ -15,9 +15,10 @@ pub enum Kind {
     Snake,
     Detail,
     Decimate,
+    Relax,
 }
 impl Kind {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Standard,
         Self::Clay,
         Self::Inflate,
@@ -31,6 +32,7 @@ impl Kind {
         Self::Snake,
         Self::Detail,
         Self::Decimate,
+        Self::Relax,
     ];
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -240,6 +242,12 @@ fn default_stabilizer_distance() -> f32 {
 fn default_stabilizer(value: &f32) -> bool {
     *value == default_stabilizer_distance()
 }
+fn default_relax_tolerance() -> f32 {
+    0.002
+}
+fn is_default_relax_tolerance(v: &f32) -> bool {
+    *v == default_relax_tolerance()
+}
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Brush {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -251,6 +259,11 @@ pub struct Brush {
     pub alpha: Alpha,
     pub radius: f32,
     pub strength: f32,
+    #[serde(
+        default = "default_relax_tolerance",
+        skip_serializing_if = "is_default_relax_tolerance"
+    )]
+    pub relax_tolerance: f32,
     pub falloff: f32,
     #[serde(default, skip_serializing_if = "zero_radius")]
     pub inner_radius: f32,
@@ -304,6 +317,7 @@ impl Brush {
                 Kind::Detail => 0.35,
                 _ => 0.25,
             },
+            relax_tolerance: default_relax_tolerance(),
             falloff: 1.5,
             inner_radius: 0.,
             surface_cursor: false,
@@ -328,7 +342,7 @@ impl Brush {
     }
 
     pub fn effective_stroke_mode(&self) -> StrokeMode {
-        if matches!(self.kind, Kind::Grab | Kind::Snake) {
+        if matches!(self.kind, Kind::Grab | Kind::Snake | Kind::Relax) {
             StrokeMode::Freehand
         } else {
             self.stroke_mode
@@ -428,6 +442,8 @@ pub fn validate_brush(b: &Brush) -> Result<(), String> {
         || !(1. ..=500.).contains(&b.radius)
         || !b.strength.is_finite()
         || !(0. ..=1.).contains(&b.strength)
+        || !b.relax_tolerance.is_finite()
+        || !(0.000001..=1.).contains(&b.relax_tolerance)
         || !b.inner_radius.is_finite()
         || !(0. ..=1.).contains(&b.inner_radius)
         || !b.falloff.is_finite()

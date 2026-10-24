@@ -875,7 +875,7 @@ impl UiState {
                 if b.kind == Kind::Decimate {
                     ui.label("Reduce triangles locally without smoothing. Requires Adaptive sculpt; Edge size and Simplify ratio control reduction.");
                 }
-                ui.add_enabled_ui(b.kind != Kind::Decimate, |ui| {
+                ui.add_enabled_ui(!matches!(b.kind, Kind::Decimate | Kind::Relax), |ui| {
                     ui.selectable_value(&mut b.subtract, false, "+ Add")
                         .customize(Action::BrushAdd);
                     ui.selectable_value(&mut b.subtract, true, "− Subtract")
@@ -885,8 +885,16 @@ impl UiState {
                 ui.add(egui::Slider::new(&mut b.inner_radius, 0. ..=1.).text("Inner radius (fraction)")).on_hover_text("Full-strength core; falloff fades from here to the outer radius. Applies to Soft and image alphas.");
                 design::checkbox(ui, &mut b.surface_cursor, "Surface footprint and normal");
                 ui.add(egui::Slider::new(&mut b.strength, 0. ..=1.).text("Strength"));
+                if b.kind == Kind::Relax {
+                    ui.add(
+                        egui::Slider::new(&mut b.relax_tolerance, 0.000001..=1.)
+                            .logarithmic(true)
+                            .text("Surface tolerance"),
+                    );
+                    ui.weak("Redistributes vertices without smoothing the shape. Consecutive Relax strokes share a fixed surface; another mesh edit or reopening captures a new reference. Boundaries, creases and hidden faces stay fixed. Esc cancels the stroke.");
+                }
                 ui.label("Stroke mode");
-                let supported = !matches!(b.kind, Kind::Grab | Kind::Snake);
+                let supported = !matches!(b.kind, Kind::Grab | Kind::Snake | Kind::Relax);
                 ui.add_enabled_ui(supported, |ui| {
                     egui::ComboBox::from_id_salt("brush_stroke_mode")
                         .selected_text(b.effective_stroke_mode().label())
@@ -910,7 +918,11 @@ impl UiState {
                 if supported {
                     ui.weak(b.stroke_mode.description());
                 } else {
-                    ui.weak("Grab and Snake use Freehand for continuous displacement.");
+                    ui.weak(if b.kind == Kind::Relax {
+                        "Relax uses Freehand to redistribute the surface continuously."
+                    } else {
+                        "Grab and Snake use Freehand for continuous displacement."
+                    });
                 }
                 ui.add(egui::Slider::new(&mut b.spacing, 0.01..=1.).text("Spacing"));
                 ui.add_enabled_ui(b.supports_stabilization(), |ui| {

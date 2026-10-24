@@ -305,8 +305,8 @@ impl Mesh {
         if b.kind == Kind::Smooth {
             return self.smooth_surface(b, dabs, stencils);
         }
-        if b.kind == Kind::Decimate {
-            return false; // Topology only; handled by adapt_stenciled.
+        if matches!(b.kind, Kind::Decimate | Kind::Relax) {
+            return false; // Decimate uses adapt_stenciled; Relax requires the document's retained surface.
         }
         let stable_dabs = (b.kind == Kind::Detail).then(|| self.detail_dabs(dabs));
         let dabs = stable_dabs.as_deref().unwrap_or(dabs);
@@ -407,7 +407,7 @@ impl Mesh {
                         plane_normal * (depth * (w * gain).min(1.) * sign)
                     }
                     Kind::Inflate => normals[i] * (radius * 0.15 * w * sign),
-                    Kind::Smooth | Kind::Decimate => unreachable!(),
+                    Kind::Smooth | Kind::Decimate | Kind::Relax => unreachable!(),
                     Kind::Flatten => {
                         let (center, normal) = flatten_planes[dab_index];
                         normal * (-(old[i] - center).dot(normal) * w.min(1.) * sign)

@@ -131,7 +131,9 @@ fn black_alpha_protects_from_every_brush() {
 #[test]
 fn repeated_brush_strokes_do_not_fold_or_flatten_faces() {
     for kind in Kind::ALL {
-        if kind == Kind::Mask {
+        // Relax needs a retained reference; its repeated-dab/stroke shape
+        // regression lives in document::relax rather than the stateless stamp API.
+        if matches!(kind, Kind::Mask | Kind::Relax) {
             continue;
         }
         let mut mesh = Mesh::sphere();

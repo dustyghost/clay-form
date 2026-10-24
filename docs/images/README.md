@@ -57,6 +57,7 @@ See [Development](../development.md#update-guide-screenshots) for prerequisites 
 | `modeling-tap-repeat.png`, `modeling-milestone-inset.png`, `modeling-milestone-smooth.png`, `modeling-milestone-preset.png` | [Integrated construction, presets and smooth preview](../guide/modeling.md#keep-useful-tool-setups-and-inspect-the-smooth-result) | `modeling_milestones_offscreen_review` |
 | `modeling-face-group-gap.png` | [Exact face selection groups](../guide/modeling.md#save-a-component-selection-as-a-vertex-group) | `modeling_face_group_gap_offscreen_review` |
 | `modeling-point-split.png`, `modeling-point-tube.png`, `modeling-edge-construction-preview.png`, `modeling-face-split.png` | [Edge, point and face-center construction](../guide/modeling.md#construct-from-edges-points-and-face-centers) | `modeling_component_construction_offscreen_review` |
+| `relax-brush-wire-before.png`, `relax-brush-wire-after.png`, `relax-brush-controls.png` | [Paint local surface-preserving redistribution](../guide/sculpting.md#redistribute-polygons-with-relax) | `relax_brush_manual_capture` (manual only) |
 | `modeling-new-mesh-warning.png`, `modeling-move-gizmo.png`, `modeling-scale-gizmo.png`, `modeling-rotate-gizmo.png` | [Modeling initialization and selection-local transforms](../guide/modeling.md#shared-targets-and-component-transforms) | `modeling_transform_gizmo_offscreen_review` |
 
 | `split-point-octagon-preview.png` | [Adjust and repeat eight-sided vertex patches](../guide/modeling.md#construct-from-edges-points-and-face-centers) | `mesh_refinement_offscreen_review` |
@@ -67,4 +68,3 @@ See [Development](../development.md#update-guide-screenshots) for prerequisites 
 [pyramid.obj](../examples/pyramid.obj) contains the imported sample. [Front study](../examples/front-study.png) and [Side study](../examples/side-study.png) are original renders of a scaled UV sphere, exported by the same model-icon renderer used in the app. They are input assets, not screenshots of controls.
 
 The recovery screenshot uses an isolated temporary directory whose name may change between captures. Readers' workspace and project names can differ too.
-

@@ -44,6 +44,7 @@ impl PathStrokeOptions {
 }
 
 pub struct PathStrokeRequest {
+    relax_surface: Option<crate::sculpt::RelaxationSurface>,
     source: Geometry,
     revision: u64,
     path: SurfacePath,
@@ -55,6 +56,7 @@ pub struct PathStrokeRequest {
 }
 
 pub struct PathStrokePreview {
+    relax_surface: Option<crate::sculpt::RelaxationSurface>,
     source: Geometry,
     result: Geometry,
     revision: u64,
@@ -225,9 +227,13 @@ impl PathStrokeSession {
             dab.normal = handle.normal;
         }
         let revision = self.work.display_revision();
-        let deformed = self
-            .work
-            .apply_dab_stenciled(&self.brush, dab, self.stencil.as_ref());
+        let deformed = if self.brush.kind == Kind::Relax {
+            self.work
+                .apply_relax_dab(&self.brush, dab, self.stencil.as_ref())?
+        } else {
+            self.work
+                .apply_dab_stenciled(&self.brush, dab, self.stencil.as_ref())
+        };
         if self.brush.kind == Kind::Snake
             && deformed
             && let Some(handle) = &mut self.snake
@@ -273,6 +279,12 @@ impl PathStrokeSession {
             return Err("Path stroke cancelled".into());
         }
         Ok(PathStrokePreview {
+            relax_surface: self
+                .work
+                .relax_surface
+                .take()
+                .filter(|(r, _)| *r == self.work.display_revision)
+                .map(|(_, s)| s),
             source: self.source,
             result: self.work.geometry,
             revision: self.revision,
@@ -286,6 +298,7 @@ impl PathStrokeRequest {
     /// Starts a streaming transaction without sampling or replaying the whole route.
     pub fn begin_live(self) -> PathStrokeSession {
         let work = Document {
+            relax_surface: self.relax_surface.map(|s| (0, s)),
             geometry: self.source.clone(),
             symmetry: self.symmetry,
             ..Document::default()
@@ -444,6 +457,11 @@ impl Document {
             "reverse": options.reverse, "invert": options.invert,
         }));
         Ok(PathStrokeRequest {
+            relax_surface: self
+                .relax_surface
+                .as_ref()
+                .filter(|(r, _)| brush.kind == Kind::Relax && *r == self.display_revision)
+                .map(|(_, s)| s.clone()),
             source: self.geometry.clone(),
             revision: self.display_revision(),
             path: path.clone(),
@@ -470,6 +488,7 @@ impl Document {
             "Path brush stroke",
             Some(preview.settings),
         )?;
+        self.relax_surface = preview.relax_surface.map(|s| (self.display_revision, s));
         Ok(true)
     }
 }
@@ -523,6 +542,7 @@ mod tests {
                 .collect(),
         };
         PathStrokeRequest {
+            relax_surface: None,
             source: doc.geometry.clone(),
             revision: doc.display_revision(),
             path,
@@ -841,59 +861,67 @@ mod tests {
 
     #[test]
     fn automatic_adaptive_stroke_matches_the_same_samples_with_live_frame_budgets() {
-        let mut primitive =
-            crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Cylinder);
-        primitive.segments = 32;
-        primitive.divisions[1] = 4;
-        let mut doc = Document {
-            geometry: Geometry::new(primitive.mesh().unwrap()),
-            ..Document::default()
-        };
-        doc.geometry.settings.adaptive.enabled = true;
-        doc.geometry.settings.adaptive.detail = 16.;
-        let make_request = || {
-            let mut request = request(&doc, Kind::Clay);
-            request.path.smoothing = 0.;
-            request.path.points = (0..=8)
-                .map(|i| {
-                    let angle = i as f32 * std::f32::consts::PI / 16.;
-                    let position = Vec3(angle.cos(), 0., angle.sin());
-                    PathPoint {
-                        position,
-                        normal: position,
-                    }
-                })
-                .collect();
-            request
-        };
-        let automatic = make_request().run(&|| false).unwrap();
-        let manual_request = make_request();
-        let samples = manual_request
-            .path
-            .samples_on_mesh(
-                doc.mesh(),
-                manual_request.options.radius * manual_request.brush.spacing,
-            )
-            .unwrap();
-        let options = manual_request.options;
-        let mut manual = manual_request.begin_live();
-        for sample in samples {
-            manual.begin_frame();
-            manual
-                .apply_sample(sample, options.pressure, options.invert)
+        for kind in [Kind::Clay, Kind::Detail] {
+            let mut primitive =
+                crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Cylinder);
+            primitive.segments = 32;
+            primitive.divisions[1] = 4;
+            let mut doc = Document {
+                geometry: Geometry::new(primitive.mesh().unwrap()),
+                ..Document::default()
+            };
+            doc.geometry.settings.adaptive.enabled = true;
+            doc.geometry.settings.adaptive.detail = 16.;
+            let make_request = || {
+                let mut request = request(&doc, kind);
+                if kind == Kind::Detail {
+                    // Keep the routine parity regression small; the opt-in
+                    // profiler exercises complete dense default-spacing paths.
+                    request.brush.spacing = 0.3;
+                    request.options.radius = 0.3;
+                }
+                request.path.smoothing = 0.;
+                request.path.points = (0..=8)
+                    .map(|i| {
+                        let angle = i as f32 * std::f32::consts::PI / 16.;
+                        let position = Vec3(angle.cos(), 0., angle.sin());
+                        PathPoint {
+                            position,
+                            normal: position,
+                        }
+                    })
+                    .collect();
+                request
+            };
+            let automatic = make_request().run(&|| false).unwrap();
+            let manual_request = make_request();
+            let samples = manual_request
+                .path
+                .samples_on_mesh(
+                    doc.mesh(),
+                    manual_request.options.radius * manual_request.brush.spacing,
+                )
                 .unwrap();
+            let options = manual_request.options;
+            let mut manual = manual_request.begin_live();
+            for sample in samples {
+                manual.begin_frame();
+                manual
+                    .apply_sample(sample, options.pressure, options.invert)
+                    .unwrap();
+            }
+            let manual = manual.finish().unwrap();
+            eprintln!(
+                "Adaptive same-samples comparison: original={}, automatic={}, live={}",
+                doc.mesh().vertices.len(),
+                automatic.mesh().vertices.len(),
+                manual.mesh().vertices.len()
+            );
+            assert!(
+                automatic.mesh() == manual.mesh(),
+                "A whole-path stroke must not consume one frame's adaptive allowance for the entire route"
+            );
         }
-        let manual = manual.finish().unwrap();
-        eprintln!(
-            "Adaptive same-samples comparison: original={}, automatic={}, live={}",
-            doc.mesh().vertices.len(),
-            automatic.mesh().vertices.len(),
-            manual.mesh().vertices.len()
-        );
-        assert!(
-            automatic.mesh() == manual.mesh(),
-            "A whole-path stroke must not consume one frame's adaptive allowance for the entire route"
-        );
     }
 
     #[test]

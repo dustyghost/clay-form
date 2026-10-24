@@ -67,7 +67,7 @@ fn clay_viewport_stroke_restores_geometry_and_topology_with_one_undo() {
 
 #[cfg(target_os = "linux")]
 #[test]
-#[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
+#[ignore = "manual visual review; requires a Vulkan adapter (software lavapipe supported)"]
 fn clay_buildup_offscreen_preview() {
     let mut capture = crate::viewport::UiCapture::new([1000, 800]);
     for (kind, flat, adaptive) in [

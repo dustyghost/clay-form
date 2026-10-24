@@ -478,6 +478,10 @@ impl App {
             self.ui.status = status;
         }
         if self.viewport.completed_stroke
+            && self.document.undo_label() != Some("Relax stroke")
+            && selected.is_none_or(|index| {
+                self.document.brushes()[index].kind != crate::sculpt::Kind::Relax
+            })
             && !self.document.stencil().is_some_and(|s| s.enabled)
             && self.document.mesh_settings().dynamic
             && self.document.mesh_settings().auto_remesh

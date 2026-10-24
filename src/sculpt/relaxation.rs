@@ -98,16 +98,28 @@ impl Mesh {
         options: RelaxationOptions,
         cancel: &impl Fn() -> bool,
     ) -> Result<(Mesh, RelaxationReport), String> {
-        options.validate()?;
         self.validate()?;
+        RelaxationSurface::new(reference, cancel)?.apply(self, options, None, cancel)
+    }
+}
+
+/// Cached connected-surface data, shared by mesh commands and local brush dabs.
+/// Reference positions never change during a sequence of Relax strokes.
+#[derive(Clone)]
+pub(crate) struct RelaxationSurface {
+    reference: Mesh,
+    incident: Vec<Vec<usize>>,
+    face_normals: Vec<Vec3>,
+    editable: Vec<bool>,
+    neighbors: Vec<Vec<usize>>,
+    patches: Vec<Vec<usize>>,
+    anchors: Vec<usize>,
+    sample_anchors: Vec<[usize; 4]>,
+}
+impl RelaxationSurface {
+    pub(crate) fn new(reference: &Mesh, cancel: &impl Fn() -> bool) -> Result<Self, String> {
         reference.validate()?;
-        if self.triangles != reference.triangles
-            || self.quads != reference.quads
-            || self.vertices.len() != reference.vertices.len()
-        {
-            return Err("Relaxation reference topology changed; capture a new reference".into());
-        }
-        let n = self.vertices.len();
+        let n = reference.vertices.len();
         let mut incident = vec![Vec::new(); n];
         let mut edges: BTreeMap<[usize; 2], Vec<usize>> = BTreeMap::new();
         let mut face_normals = Vec::new();
@@ -124,10 +136,7 @@ impl Mesh {
                 edges.entry([a.min(b), a.max(b)]).or_default().push(f);
             }
         }
-        let mut editable = self.sculptable_vertices();
-        for (i, can) in editable.iter_mut().enumerate() {
-            *can &= self.mask[i] < 1. && !incident[i].is_empty();
-        }
+        let mut editable = vec![true; n];
         for (&[a, b], faces) in &edges {
             if faces.len() != 2
                 || face_normals[faces[0]]
@@ -139,21 +148,21 @@ impl Mesh {
                 editable[b] = false;
             }
         }
-        for &[a, b] in &self.creases {
+        for &[a, b] in &reference.creases {
             editable[a] = false;
             editable[b] = false;
         }
         // Polygon edges avoid bias from the diagonals used only for rendering quads.
         let mut neighbors = vec![Vec::new(); n];
-        for [a, b] in self.polygon_edges() {
+        for [a, b] in reference.polygon_edges() {
             neighbors[a].push(b);
             neighbors[b].push(a);
         }
-        let mut patches = Vec::with_capacity(self.triangles.len());
+        let mut patches = Vec::with_capacity(reference.triangles.len());
         if incident.iter().any(|faces| faces.len() > 64) {
             return Err("Relaxation supports at most 64 triangles at a vertex; simplify the crowded junction first".into());
         }
-        for (f, t) in self.triangles.iter().enumerate() {
+        for (f, t) in reference.triangles.iter().enumerate() {
             if f % 256 == 0 && cancel() {
                 return Err("Relaxation cancelled".into());
             }
@@ -165,12 +174,58 @@ impl Mesh {
             patch.dedup();
             patches.push(patch);
         }
-        let mut anchors: Vec<_> = incident
+        let anchors: Vec<_> = incident
             .iter()
             .map(|faces| faces.first().copied().unwrap_or(0))
             .collect();
-        let mut sample_anchors: Vec<_> = (0..self.triangles.len()).map(|f| [f; 4]).collect();
-        let mut out = self.clone();
+        let sample_anchors: Vec<_> = (0..reference.triangles.len()).map(|f| [f; 4]).collect();
+        Ok(Self {
+            reference: reference.clone(),
+            incident,
+            face_normals,
+            editable,
+            neighbors,
+            patches,
+            anchors,
+            sample_anchors,
+        })
+    }
+    pub(crate) fn apply(
+        &mut self,
+        mesh: &Mesh,
+        options: RelaxationOptions,
+        weights: Option<&[f32]>,
+        cancel: &impl Fn() -> bool,
+    ) -> Result<(Mesh, RelaxationReport), String> {
+        options.validate()?;
+        let reference = &self.reference;
+        if mesh.triangles != reference.triangles
+            || mesh.quads != reference.quads
+            || mesh.vertices.len() != reference.vertices.len()
+        {
+            return Err("Relaxation reference topology changed; capture a new reference".into());
+        }
+        let n = mesh.vertices.len();
+        if weights.is_some_and(|w| {
+            w.len() != n || w.iter().any(|x| !x.is_finite() || !(0. ..=1.).contains(x))
+        }) {
+            return Err("Invalid Relax brush weights".into());
+        }
+        let incident = &self.incident;
+        let face_normals = &self.face_normals;
+        let neighbors = &self.neighbors;
+        let patches = &self.patches;
+        let anchors = &mut self.anchors;
+        let sample_anchors = &mut self.sample_anchors;
+        let mut editable = mesh.sculptable_vertices();
+        for (i, can) in editable.iter_mut().enumerate() {
+            *can &= self.editable[i] && mesh.mask[i] < 1. && !incident[i].is_empty();
+        }
+        for &[a, b] in &mesh.creases {
+            editable[a] = false;
+            editable[b] = false;
+        }
+        let mut out = mesh.clone();
         let mut budget = 80_000_000;
         let mut limited = vec![false; n];
         for _ in 0..options.iterations {
@@ -183,7 +238,7 @@ impl Mesh {
                 if i % 256 == 0 && cancel() {
                     return Err("Relaxation cancelled".into());
                 }
-                if !editable[i] || neighbors[i].is_empty() {
+                if !editable[i] || weights.is_some_and(|w| w[i] <= 0.) || neighbors[i].is_empty() {
                     continue;
                 }
                 let mean = neighbors[i]
@@ -191,8 +246,8 @@ impl Mesh {
                     .fold(Vec3::default(), |p, &j| p + old[j])
                     * (1. / neighbors[i].len() as f32);
                 let d = mean - old[i];
-                let d =
-                    (d - normals[i] * d.dot(normals[i])) * (options.strength * (1. - self.mask[i]));
+                let d = (d - normals[i] * d.dot(normals[i]))
+                    * (options.strength * weights.map_or(1., |w| w[i]) * (1. - mesh.mask[i]));
                 let shortest = neighbors[i]
                     .iter()
                     .map(|&j| (old[j] - old[i]).len())
@@ -201,22 +256,17 @@ impl Mesh {
                 if d.len() < 1e-8 {
                     continue;
                 }
-                out.vertices[i] = nearest(
-                    reference,
-                    &patches,
-                    old[i] + d,
-                    &mut anchors[i],
-                    &mut budget,
-                )?;
+                out.vertices[i] =
+                    nearest(reference, patches, old[i] + d, &mut anchors[i], &mut budget)?;
             }
             // Backtrack constrained moves before freezing them. Recheck only faces
             // touching changed vertices; unaffected faces already passed this iteration.
             let mut safe = false;
-            let mut pending = vec![true; self.triangles.len()];
+            let mut pending = vec![true; mesh.triangles.len()];
             for attempt in 0..16 {
                 let mut reject = vec![false; n];
                 let mut invalid = false;
-                for (f, &t) in self.triangles.iter().enumerate() {
+                for (f, &t) in mesh.triangles.iter().enumerate() {
                     if f % 256 == 0 && cancel() {
                         return Err("Relaxation cancelled".into());
                     }
@@ -231,7 +281,7 @@ impl Mesh {
                     for (s, point) in samples(p).into_iter().enumerate() {
                         if (nearest(
                             reference,
-                            &patches,
+                            patches,
                             point,
                             &mut sample_anchors[f][s],
                             &mut budget,
@@ -264,7 +314,7 @@ impl Mesh {
                         out.vertices[i] = if attempt < 8 {
                             nearest(
                                 reference,
-                                &patches,
+                                patches,
                                 (old[i] + out.vertices[i]) * 0.5,
                                 &mut anchors[i],
                                 &mut budget,
@@ -287,7 +337,7 @@ impl Mesh {
             moved: out
                 .vertices
                 .iter()
-                .zip(&self.vertices)
+                .zip(&mesh.vertices)
                 .filter(|(a, b)| a != b)
                 .count(),
             protected: editable.iter().filter(|&&v| !v).count(),
@@ -305,7 +355,7 @@ impl Mesh {
                 report.max_deviation = report.max_deviation.max(
                     (nearest(
                         reference,
-                        &patches,
+                        patches,
                         p,
                         &mut sample_anchors[f][s],
                         &mut budget,
@@ -317,7 +367,9 @@ impl Mesh {
         if report.max_deviation > options.max_deviation + 1e-6 {
             return Err("The current surface already exceeds this tolerance against the retained reference; Undo the previous relaxation or use a larger tolerance".into());
         }
-        out.validate()?;
+        if weights.is_none() {
+            out.validate()?;
+        }
         Ok((out, report))
     }
 }

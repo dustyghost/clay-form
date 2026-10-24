@@ -3587,6 +3587,7 @@ mod navigation_smooth;
 
 mod clay;
 mod detail;
+mod relax;
 
 #[cfg(target_os = "linux")]
 mod guide_captures;
