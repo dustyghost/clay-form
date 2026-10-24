@@ -344,12 +344,36 @@ pub(super) fn menu(
     glyph: Glyph,
     label: &str,
     selected: bool,
+    keep_open: bool,
     contents: impl FnOnce(&mut egui::Ui),
 ) -> bool {
-    egui::containers::menu::MenuButton::from_button(button(ui, glyph, label).selected(selected))
-        .ui(ui, contents)
-        .0
-        .clicked()
+    let menu = egui::containers::menu::MenuButton::from_button(
+        button(ui, glyph, label).selected(selected),
+    );
+    let menu = if keep_open {
+        menu.config(
+            egui::containers::menu::MenuConfig::new()
+                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
+        )
+    } else {
+        menu
+    };
+    let (response, popup) = menu.ui(ui, contents);
+    if keep_open && popup.is_some() {
+        // The popup has handled Escape; don't also exit the underlying tool.
+        ui.input_mut(|input| {
+            input.events.retain(|event| {
+                !matches!(
+                    event,
+                    egui::Event::Key {
+                        key: egui::Key::Escape,
+                        ..
+                    }
+                )
+            });
+        });
+    }
+    response.clicked()
 }
 /// Keep native checkbox semantics while making the whole settings row clickable.
 /// Horizontal groups (for example X/Y/Z) retain their natural width.
