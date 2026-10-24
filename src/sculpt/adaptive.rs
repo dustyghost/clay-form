@@ -156,7 +156,7 @@ impl Mesh {
             )
             || matches!(
                 brush.kind,
-                Kind::Mask | Kind::Smooth | Kind::Relax | Kind::Decimate
+                Kind::Mask | Kind::Paint | Kind::Smooth | Kind::Relax | Kind::Decimate
             )
             || brush.strength <= 0.
             || dabs.is_empty()
@@ -232,7 +232,10 @@ impl Mesh {
         let Region { dabs, stencils } = region;
         if !self.creases.is_empty()
             || !settings.enabled
-            || matches!(brush.kind, Kind::Mask | Kind::Smooth | Kind::Relax)
+            || matches!(
+                brush.kind,
+                Kind::Mask | Kind::Paint | Kind::Smooth | Kind::Relax
+            )
             || brush.strength <= 0.
             || dabs.is_empty()
             || matches!(&brush.alpha,Alpha::Image { pixels,.. } if pixels.iter().all(|&p|p==0.))
@@ -669,6 +672,12 @@ impl Mesh {
             self.vertices
                 .push((self.vertices[a] + self.vertices[b]) * 0.5);
             self.mask.push((self.mask[a] + self.mask[b]) * 0.5);
+            if !self.materials.is_empty() {
+                self.materials.push(super::Material::blend([
+                    (self.material(a), 0.5),
+                    (self.material(b), 0.5),
+                ]));
+            }
             for g in &mut self.vertex_groups {
                 g.weights.push((g.weights[a] + g.weights[b]) * 0.5);
             }
@@ -966,6 +975,10 @@ impl Mesh {
         for (&b, &a) in &merged {
             self.vertices[a] = (self.vertices[a] + self.vertices[b]) * 0.5;
             self.mask[a] = (self.mask[a] + self.mask[b]) * 0.5;
+            if !self.materials.is_empty() {
+                self.materials[a] =
+                    super::Material::blend([(self.material(a), 0.5), (self.material(b), 0.5)]);
+            }
             for g in &mut self.vertex_groups {
                 g.weights[a] = (g.weights[a] + g.weights[b]) * 0.5;
             }
@@ -1012,6 +1025,8 @@ impl Mesh {
                 .map(|(_, w)| *w)
                 .collect();
         }
+        self.materials =
+            self.reindex_materials((0..self.vertices.len()).filter(|i| !merged.contains_key(i)));
         self.vertices = vertices;
         self.mask = mask;
         self.quads.clear();

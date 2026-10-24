@@ -238,6 +238,7 @@ impl Mesh {
                         let index = *intersections.entry(key(a, b)).or_insert_with(|| {
                             let t = (da / (da - db)) as f32;
                             let index = work.vertices.len();
+                            work.append_material(self, &[(a, 1. - t), (b, t)]);
                             work.vertices
                                 .push(self.vertices[a] + (self.vertices[b] - self.vertices[a]) * t);
                             work.mask
@@ -428,6 +429,7 @@ impl Mesh {
         }
         out.vertices = vertices.iter().map(|&i| self.vertices[i]).collect();
         out.mask = vertices.iter().map(|&i| self.mask[i]).collect();
+        out.materials = self.reindex_materials(vertices.iter().copied());
         for (g, original) in out.vertex_groups.iter_mut().zip(&self.vertex_groups) {
             g.weights = vertices.iter().map(|&i| original.weights[i]).collect();
         }

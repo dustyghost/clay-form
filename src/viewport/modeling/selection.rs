@@ -385,6 +385,7 @@ mod angle_tests {
             quads: vec![],
             mask: vec![],
             creases: vec![],
+            materials: Vec::new(),
             vertex_groups: vec![],
             polygroups: vec![],
             hidden_faces: vec![],

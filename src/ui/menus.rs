@@ -529,6 +529,8 @@ impl UiState {
                     }
                 }
                 ui.separator();
+                ui.collapsing("Lighting", |ui| self.preferences.lighting.controls(ui));
+                ui.separator();
                 design::checkbox(ui, &mut self.show_polygroups, "Show vertex group colors")
                     .customize(Action::PolygroupColors);
                 design::checkbox(ui, &mut self.show_backfaces, "Faint back-facing surfaces").customize(Action::Backfaces).on_hover_text("Show the reverse side of open surfaces translucently. Front-facing surfaces stay solid.");

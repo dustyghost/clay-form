@@ -244,6 +244,25 @@ impl App {
                 }
                 Ok(())
             }
+            Command::SaveMaterial(asset) => self.document.save_material(asset),
+            Command::RemoveMaterial(id) => self.document.remove_material(id).map(|()| {
+                self.ui.preferences.materials.remove(id);
+                self.ui.status =
+                    "Removed material; existing paint is preserved. Undo restores the material."
+                        .into();
+            }),
+            Command::FillAllMaterial(brush) => self.document.fill_all_material(&brush),
+            Command::FillMaterial(brush) => self.document.fill_material(&brush),
+            Command::BrowseExport(format) => {
+                self.browse_export(format);
+                Ok(())
+            }
+            Command::CancelExport => {
+                if let Some(job) = &self.export_job {
+                    job.cancel();
+                }
+                Ok(())
+            }
             Command::Export => {
                 let path = std::path::Path::new(&self.ui.path).with_extension("obj");
                 persistence::export_obj(&path.to_string_lossy(), self.document.mesh())
@@ -256,7 +275,19 @@ impl App {
                     self.viewport.wait_for_release();
                 }
                 let label = self.document.undo_label();
+                let materials =
+                    (label == Some("Remove material")).then(|| self.document.materials().to_vec());
                 self.document.undo();
+                if let Some(before) = materials {
+                    for asset in self
+                        .document
+                        .materials()
+                        .iter()
+                        .filter(|a| !before.iter().any(|b| a.id == b.id))
+                    {
+                        self.ui.preferences.materials.restore(asset);
+                    }
+                }
                 self.refresh_path_after_history();
                 self.ui.status =
                     label.map_or("Nothing to undo".into(), |label| format!("Undid: {label}"));
@@ -269,7 +300,17 @@ impl App {
                     self.viewport.wait_for_release();
                 }
                 let label = self.document.redo_label();
+                let materials =
+                    (label == Some("Remove material")).then(|| self.document.materials().to_vec());
                 self.document.redo();
+                if let Some(before) = materials {
+                    for asset in before
+                        .iter()
+                        .filter(|a| !self.document.materials().iter().any(|b| a.id == b.id))
+                    {
+                        self.ui.preferences.materials.remove(asset.id);
+                    }
+                }
                 self.refresh_path_after_history();
                 self.ui.status =
                     label.map_or("Nothing to redo".into(), |label| format!("Redid: {label}"));

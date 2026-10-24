@@ -450,7 +450,7 @@ impl<'a> EditorPolicy<'a> {
             Command::ConfirmPrimitive | Command::CancelPrimitive => Intent::Primitive,
             Command::SaveAlpha(..) | Command::ExportAlpha(..) => Intent::Alpha,
             Command::ExportIconImage(..) => Intent::Icon,
-            Command::CancelMeshJob => Intent::CancelJob,
+            Command::CancelMeshJob | Command::CancelExport => Intent::CancelJob,
             Command::Request(_) => Intent::Request,
             _ => Intent::Edit,
         };

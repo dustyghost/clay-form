@@ -5,10 +5,12 @@ use crate::{
 };
 use std::collections::HashMap;
 
+#[derive(Clone)]
 pub(crate) struct DisplayMesh {
     pub mesh: Mesh,
     pub shading: SurfaceShading,
     pub owners: Vec<usize>,
+    muted_vertices: Vec<bool>,
     pub source_faces: Vec<usize>,
     pub poly_colors: Vec<[u8; 4]>,
     pub edge_colors: HashMap<(usize, usize), eframe::egui::Color32>,
@@ -18,6 +20,59 @@ pub(crate) struct DisplayMesh {
     pub(super) depth_extent: f32,
 }
 impl DisplayMesh {
+    /// Reuse the smoothing fans while dragging a dense, fixed-topology mesh.
+    /// Paint retains exact normals; deformation uses cheap temporary normals.
+    /// The renderer rebuilds full angle-weighted shading when the stroke ends.
+    pub(super) fn during_stroke(&self, document: &Document) -> Option<Self> {
+        let source = document.mesh();
+        if !document.stroke_active()
+            || document.model_count() != 1
+            || !document.active_visible()
+            || source.vertices.len() < 20_000
+            || source.has_hidden_faces()
+            || document.model(0)?.metadata.temporary_thickness != 0.
+            || document.primitive().is_some()
+            || !source.creases.is_empty()
+            || self.mesh.vertices.len() != source.vertices.len()
+            || self.mesh.triangles != source.triangles
+            || self.mesh.quads != source.quads
+        {
+            return None;
+        }
+        let mut next = Self {
+            mesh: source.clone(),
+            shading: self.shading.clone(),
+            owners: self.owners.clone(),
+            muted_vertices: self.muted_vertices.clone(),
+            source_faces: self.source_faces.clone(),
+            poly_colors: self.poly_colors.clone(),
+            edge_colors: self.edge_colors.clone(),
+            outlines: self.outlines.clone(),
+            active_vertices: self.active_vertices,
+            active: self.active,
+            depth_extent: self.depth_extent,
+        };
+        if self.mesh.vertices != source.vertices {
+            let mut normals = vec![Vec3::default(); next.shading.vertices.len()];
+            for (ids, fans) in source.triangles.iter().zip(&next.shading.triangles) {
+                let [a, b, c] = ids.map(|i| source.vertices[i]);
+                let face = (b - a).cross(c - a);
+                for &i in fans {
+                    normals[i] = normals[i] + face;
+                }
+            }
+            for ((_, normal), sum) in next.shading.vertices.iter_mut().zip(normals) {
+                *normal = sum.norm();
+            }
+            next.depth_extent = source
+                .vertices
+                .iter()
+                .map(|p| p.len())
+                .fold(1_f32, f32::max)
+                + 1.;
+        }
+        Some(next)
+    }
     pub fn new(document: &Document) -> Self {
         Self::build(document, false, None)
     }
@@ -31,6 +86,7 @@ impl DisplayMesh {
         let active = document.active_model_index();
         let mut mesh = Mesh {
             creases: Vec::new(),
+            materials: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
             polygroups: Vec::new(),
@@ -42,6 +98,7 @@ impl DisplayMesh {
         let mut edge_colors = HashMap::new();
         let mut shading = SurfaceShading::default();
         let mut owners = Vec::new();
+        let mut muted_vertices = Vec::new();
         let mut source_faces = Vec::new();
         let mut poly_colors = Vec::new();
         let mut outlines = Vec::new();
@@ -107,6 +164,16 @@ impl DisplayMesh {
             }
             mesh.vertices.extend_from_slice(&surface.vertices);
             mesh.mask.extend_from_slice(&surface.mask);
+            muted_vertices.extend(std::iter::repeat_n(
+                index != active && surface.materials.is_empty(),
+                surface.vertices.len(),
+            ));
+            if !mesh.materials.is_empty() || !surface.materials.is_empty() {
+                mesh.materials
+                    .resize(offset, crate::sculpt::Material::default());
+                mesh.materials
+                    .extend((0..surface.vertices.len()).map(|i| surface.material(i)));
+            }
             let surface_shading = surface.surface_shading();
             let shading_offset = shading.vertices.len();
             shading.vertices.extend(
@@ -159,6 +226,7 @@ impl DisplayMesh {
             mesh,
             shading,
             owners,
+            muted_vertices,
             source_faces,
             poly_colors,
             edge_colors,
@@ -168,36 +236,55 @@ impl DisplayMesh {
             depth_extent,
         }
     }
-    pub(super) fn vertices(&self) -> Vec<f32> {
-        self.shading
-            .vertices
+    pub fn material(&self, i: usize) -> crate::sculpt::Material {
+        if self.muted_vertices[i] {
+            crate::sculpt::Material::from_srgb([130., 143., 155.].map(|v| v / 255.), 0.85, 0.)
+        } else {
+            self.mesh.material(i)
+        }
+    }
+    pub(super) fn vertex_stride(&self) -> usize {
+        if self
+            .mesh
+            .materials
             .iter()
-            .flat_map(|&(i, n)| {
-                let p = self.mesh.vertices[i];
-                let color = if i < self.active_vertices {
-                    [190., 155., 125.]
-                } else {
-                    [130., 143., 155.]
-                };
-                let mask = if i < self.active_vertices {
-                    self.mesh.mask[i]
-                } else {
-                    -1.
-                };
-                [
-                    p.0,
-                    p.1,
-                    p.2,
-                    n.0,
-                    n.1,
-                    n.2,
-                    color[0] / 255.,
-                    color[1] / 255.,
-                    color[2] / 255.,
-                    mask,
-                ]
-            })
-            .collect()
+            .any(|m| m.needs_extended_shading())
+        {
+            crate::sculpt::material::layers::VERTEX_STRIDE
+        } else {
+            12
+        }
+    }
+    pub(super) fn vertices(&self, stride: usize) -> Vec<f32> {
+        let mut vertices = Vec::with_capacity(self.shading.vertices.len() * stride);
+        for &(i, n) in &self.shading.vertices {
+            let p = self.mesh.vertices[i];
+            let material = self.material(i);
+            let color = material.base_color;
+            let mask = if i < self.active_vertices {
+                self.mesh.mask[i]
+            } else {
+                -1.
+            };
+            vertices.extend_from_slice(&[
+                p.0,
+                p.1,
+                p.2,
+                n.0,
+                n.1,
+                n.2,
+                color[0],
+                color[1],
+                color[2],
+                mask,
+                material.roughness,
+                material.metallic,
+            ]);
+            if stride > 12 {
+                vertices.extend_from_slice(&material.values()[5..]);
+            }
+        }
+        vertices
     }
     /// Adjacent face normals let the shader reject back-facing edges without
     /// rebuilding edge buffers on every camera movement.

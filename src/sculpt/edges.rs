@@ -282,6 +282,7 @@ impl Mesh {
         position: Vec3,
     ) -> usize {
         let index = self.vertices.len();
+        self.append_material(source, weights);
         self.vertices.push(position);
         self.mask.push(
             weights

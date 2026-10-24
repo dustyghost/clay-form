@@ -15,7 +15,7 @@ impl App {
         let initial = self.ui.asset_path_mut(asset).clone();
         self.browse_files(initial, false, false, Some(asset));
     }
-    fn browse_files(
+    pub(super) fn browse_files(
         &mut self,
         initial: String,
         save: bool,
@@ -43,6 +43,8 @@ impl App {
         };
         self.ui.file_picker = Some(crate::ui::FilePicker {
             asset,
+            export: None,
+            include_lights: false,
             save,
             resume_pending,
             directory: std::env::current_dir().unwrap_or_else(|_| ".".into()),
@@ -114,6 +116,30 @@ impl App {
         let mut path = picker.directory.join(picker.filename.trim());
         if path.is_dir() {
             self.navigate_project_files(&path.to_string_lossy());
+            return;
+        }
+        if let Some(format) = picker.export {
+            if path.extension().is_none() {
+                path.set_extension(format.extension());
+            }
+            if path
+                .extension()
+                .and_then(|e| e.to_str())
+                .is_none_or(|e| !e.eq_ignore_ascii_case(format.extension()))
+            {
+                picker.error = format!("Choose a .{} file name", format.extension());
+                return;
+            }
+            if path.exists() && !(overwrite && picker.overwrite.as_ref() == Some(&path)) {
+                picker.overwrite = Some(path);
+                return;
+            }
+            let include_lights = picker.include_lights;
+            match self.start_export(path, format, include_lights) {
+                Ok(()) => self.ui.file_picker = None,
+                Err(error) => self.ui.file_picker.as_mut().unwrap().error = error,
+            }
+            self.viewport.wait_for_release();
             return;
         }
         if let Some(asset) = picker.asset {

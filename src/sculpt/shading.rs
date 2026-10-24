@@ -2,7 +2,7 @@
 use super::{Mesh, Vec3};
 use std::collections::HashMap;
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct SurfaceShading {
     /// Original mesh vertex and its normal in this smoothing fan.
     pub vertices: Vec<(usize, Vec3)>,

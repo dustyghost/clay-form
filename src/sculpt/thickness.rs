@@ -106,6 +106,12 @@ impl Mesh {
         }
         let mut shell = Mesh {
             creases: Vec::new(),
+            materials: self
+                .materials
+                .iter()
+                .chain(&self.materials)
+                .cloned()
+                .collect(),
             vertex_groups: self
                 .vertex_groups
                 .iter()
@@ -186,6 +192,7 @@ impl Mesh {
                 let id = shell.vertices.len();
                 shell.vertices.push(position);
                 shell.mask.push(self.mask[v]);
+                shell.append_material(self, &[(v, 1.)]);
                 for (g, old) in shell.vertex_groups.iter_mut().zip(&self.vertex_groups) {
                     g.weights.push(old.weights[v]);
                 }

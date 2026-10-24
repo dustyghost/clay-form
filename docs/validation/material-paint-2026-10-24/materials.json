@@ -1,0 +1,74 @@
+[
+  [
+    "Matte clay",
+    {
+      "base_color": [
+        0.5149178,
+        0.32777813,
+        0.2050787
+      ],
+      "roughness": 0.85,
+      "metallic": 0.0
+    }
+  ],
+  [
+    "Glazed ceramic",
+    {
+      "base_color": [
+        0.013411746,
+        0.26327342,
+        0.38005632
+      ],
+      "roughness": 0.18,
+      "metallic": 0.0
+    }
+  ],
+  [
+    "Rubber",
+    {
+      "base_color": [
+        0.006571403,
+        0.0071944077,
+        0.008540383
+      ],
+      "roughness": 0.92,
+      "metallic": 0.0
+    }
+  ],
+  [
+    "Satin aluminium",
+    {
+      "base_color": [
+        0.8073461,
+        0.827571,
+        0.8480884
+      ],
+      "roughness": 0.38,
+      "metallic": 1.0
+    }
+  ],
+  [
+    "Copper",
+    {
+      "base_color": [
+        0.8900055,
+        0.3672465,
+        0.1788675
+      ],
+      "roughness": 0.24,
+      "metallic": 1.0
+    }
+  ],
+  [
+    "Red plastic",
+    {
+      "base_color": [
+        0.47699985,
+        0.0035010155,
+        0.0019349846
+      ],
+      "roughness": 0.3,
+      "metallic": 0.0
+    }
+  ]
+]

@@ -22,6 +22,12 @@ impl Mesh {
         let mut merged = self.clone();
         merged.vertices.extend_from_slice(&other.vertices);
         merged.mask.extend_from_slice(&other.mask);
+        if !self.materials.is_empty() || !other.materials.is_empty() {
+            merged.materials = (0..self.vertices.len())
+                .map(|i| self.material(i))
+                .chain((0..other.vertices.len()).map(|i| other.material(i)))
+                .collect();
+        }
         merged
             .triangles
             .extend(other.triangles.iter().map(|t| t.map(|i| i + offset)));

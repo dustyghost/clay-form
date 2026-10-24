@@ -228,6 +228,7 @@ impl Path {
                 .map(|p| self.position(p.0 * sign + offset, p.1)),
         );
         mesh.mask = cap.mask;
+        mesh.materials = cap.materials;
         mesh.vertex_groups = cap.vertex_groups;
         mesh.triangles.truncate(first);
         mesh.polygroups.truncate(first);

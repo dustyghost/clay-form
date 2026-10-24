@@ -245,27 +245,36 @@ impl Scene {
             crate::preferences::viewport_background(painter.ctx()),
         );
         if renderer.is_none() {
-            let light = (view + up * 0.7 + right * (-0.5)).norm();
+            let lighting = crate::lighting::Lighting::current(painter.ctx());
             let mut rendered = egui::Mesh::default();
             for &(i, normal) in &geometry.shading.vertices {
                 let v = mesh.vertices[i];
-                let illumination = 0.25 + 0.75 * normal.dot(light).max(0.);
                 let mask = if i < active_vertices {
                     1. - mesh.mask[i] * 0.75
                 } else {
                     1.
                 };
-                let base = if i < active_vertices {
-                    [190., 155., 125.]
-                } else {
-                    [130., 143., 155.]
-                };
+                let base = geometry
+                    .material(i)
+                    .lit_color_many(
+                        normal,
+                        (view
+                            - v * (if self.eye_distance > 0. {
+                                1. / self.eye_distance
+                            } else {
+                                0.
+                            }))
+                        .norm(),
+                        lighting.samples(v, right, up, view),
+                        lighting.fill,
+                    )
+                    .map(|c| c * 255.);
                 rendered.colored_vertex(
                     project(v),
                     Color32::from_rgb(
-                        (base[0] * illumination * mask) as u8,
-                        (base[1] * illumination * mask) as u8,
-                        (base[2] * illumination * mask) as u8,
+                        (base[0] * mask) as u8,
+                        (base[1] * mask) as u8,
+                        (base[2] * mask) as u8,
                     ),
                 );
             }
@@ -557,6 +566,31 @@ impl Scene {
         let (p, normal, face) = pick_surface(self, &self.all_faces, point)?;
         Some((self.geometry.owners[face], p, normal))
     }
+    /// Sample the underlying surface colour, independent of lighting and group overlays.
+    pub(super) fn pick_colour(&self, point: Pos2) -> Option<[f32; 3]> {
+        let (p, _, face) = pick_surface(self, &self.all_faces, point)?;
+        let mesh = &self.geometry.mesh;
+        let ids = mesh.triangles[face];
+        let [a, b, c] = ids.map(|i| mesh.vertices[i]);
+        let (u, v, w) = (b - a, c - a, p - a);
+        let (uu, uv, vv, wu, wv) = (u.dot(u), u.dot(v), v.dot(v), w.dot(u), w.dot(v));
+        let denominator = uu * vv - uv * uv;
+        if denominator <= 1e-20 {
+            return Some(mesh.material(ids[0]).base_color);
+        }
+        let y = ((vv * wu - uv * wv) / denominator).clamp(0., 1.);
+        let z = ((uu * wv - uv * wu) / denominator).clamp(0., 1.);
+        let x = (1. - y - z).max(0.);
+        let total = x + y + z;
+        Some(
+            crate::sculpt::Material::blend(
+                ids.into_iter()
+                    .zip([x, y, z])
+                    .map(|(i, weight)| (mesh.material(i), weight / total)),
+            )
+            .base_color,
+        )
+    }
     pub(super) fn pick_face(&self, point: Pos2) -> Option<usize> {
         let (_, _, face) = pick_surface(self, &self.all_faces, point)?;
         (self.geometry.owners[face] == self.active).then_some(self.geometry.source_faces[face])
@@ -801,6 +835,32 @@ mod tests {
             ));
         });
         scene.unwrap()
+    }
+    #[test]
+    fn material_sampler_interpolates_surface_colours_without_display_shading() {
+        use crate::sculpt::{Geometry, Material, Primitive, PrimitiveKind};
+        let mut plane = Primitive::for_kind(PrimitiveKind::Plane);
+        plane.divisions = [2, 2, 1];
+        let mut mesh = plane.mesh().unwrap();
+        mesh.materials = mesh
+            .vertices
+            .iter()
+            .map(|p| Material {
+                base_color: [(p.0 + 1.) * 0.5, 0.2, 0.4],
+                ..Default::default()
+            })
+            .collect();
+        mesh.mask.fill(1.);
+        let mut d = Document::default();
+        d.replace_geometry(Geometry::new(mesh)).unwrap();
+        let view = scene(&d);
+        let p = Vec3(0.25, 0., 0.);
+        let sampled = view.pick_colour(view.project(p)).unwrap();
+        for (a, b) in sampled.into_iter().zip([0.625, 0.2, 0.4]) {
+            assert!((a - b).abs() < 1e-5);
+        }
+        d.select_face_region(|_| true, true).unwrap();
+        assert!(scene(&d).pick_colour(view.project(p)).is_none());
     }
     #[test]
     fn surface_cursor_renders_on_clay_and_falls_back_off_surface() {

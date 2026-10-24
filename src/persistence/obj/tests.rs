@@ -1,5 +1,21 @@
 use super::*;
 const SQUARE: &str = "v 2 3 4\nv 4 3 4\nv 4 5 4\nv 2 5 4\n";
+#[test]
+fn material_obj_vertex_colors_load_in_linear_light_and_lossy_export_reports_limit() {
+    let mesh = read("v 0 0 0 0.5 0.1 1\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
+    assert_eq!(mesh.materials.len(), 3);
+    assert!((mesh.materials[0].base_color[0] - 0.21404114).abs() < 1e-6);
+    assert!(mesh.materials[1].is_default());
+    let path =
+        std::env::temp_dir().join(format!("clay-material-export-{}.obj", std::process::id()));
+    assert!(
+        crate::persistence::export_obj(&path.to_string_lossy(), &mesh)
+            .unwrap_err()
+            .contains(".clay")
+    );
+    assert!(!path.exists());
+    assert!(parse("v 0 0 0 2 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3", &|| false).is_err());
+}
 fn read(s: &str) -> Mesh {
     parse(s, &|| false).unwrap()
 }

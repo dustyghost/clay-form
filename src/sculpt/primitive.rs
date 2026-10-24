@@ -182,6 +182,7 @@ impl Primitive {
 fn empty() -> Mesh {
     Mesh {
         creases: Vec::new(),
+        materials: Vec::new(),
         vertex_groups: Vec::new(),
         hidden_faces: Vec::new(),
         polygroups: Vec::new(),

@@ -16,9 +16,10 @@ pub enum Kind {
     Detail,
     Decimate,
     Relax,
+    Paint,
 }
 impl Kind {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Standard,
         Self::Clay,
         Self::Inflate,
@@ -33,6 +34,7 @@ impl Kind {
         Self::Detail,
         Self::Decimate,
         Self::Relax,
+        Self::Paint,
     ];
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -259,6 +261,10 @@ pub struct Brush {
     pub alpha: Alpha,
     pub radius: f32,
     pub strength: f32,
+    #[serde(default, skip_serializing_if = "super::Material::is_default")]
+    pub material: super::Material,
+    #[serde(default, skip_serializing_if = "super::PaintChannels::is_default")]
+    pub paint_channels: super::PaintChannels,
     #[serde(
         default = "default_relax_tolerance",
         skip_serializing_if = "is_default_relax_tolerance"
@@ -317,6 +323,12 @@ impl Brush {
                 Kind::Detail => 0.35,
                 _ => 0.25,
             },
+            material: if kind == Kind::Paint {
+                super::Material::examples()[1].1.with_link(2)
+            } else {
+                super::Material::default()
+            },
+            paint_channels: super::PaintChannels::default(),
             relax_tolerance: default_relax_tolerance(),
             falloff: 1.5,
             inner_radius: 0.,
@@ -473,6 +485,7 @@ pub fn validate_brush(b: &Brush) -> Result<(), String> {
     if let Some(icon) = &b.icon {
         icon.validate()?;
     }
+    b.material.validate()?;
     b.alpha.validate()?;
     Ok(())
 }

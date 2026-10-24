@@ -9,6 +9,7 @@ Build a rounded form, cut a fold, or pull out a horn: choose the brush for the s
 - [Cut a fine fold](#detail-brush)
 - [Choose a stroke mode](#stroke-modes)
 - [Guide a live brush stroke with an editable 3D path](paths.md#sculpt-along-a-saved-guide)
+- [Paint colours and materials](materials.md)
 - [Mirror a stroke](#symmetry)
 - [Add local detail](#snake-brush-and-adaptive-sculpting)
 - [Undo an edit](#undo-and-redo)

@@ -23,6 +23,9 @@ pub struct Mesh {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub quads: Vec<[usize; 4]>,
     pub mask: Vec<f32>,
+    /// Linear-light base colour and scalar surface properties; empty means default clay.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub materials: Vec<super::Material>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub vertex_groups: Vec<super::VertexGroup>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -39,6 +42,7 @@ impl Mesh {
     pub fn extract_masked_threshold(&self, threshold: f32) -> Result<Self, String> {
         let mut result = Self {
             creases: Vec::new(),
+            materials: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
             polygroups: Vec::new(),
@@ -128,6 +132,7 @@ impl Mesh {
             .collect();
         let mut result = Self {
             creases: Vec::new(),
+            materials: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
             polygroups: Vec::new(),
@@ -208,6 +213,7 @@ impl Mesh {
         n.into_iter().map(Vec3::norm).collect()
     }
     pub fn validate(&self) -> Result<(), String> {
+        self.validate_materials()?;
         self.validate_groups()?;
         self.validate_creases()?;
         if self.vertices.len() > super::subdivision::MAX_VERTICES
@@ -302,6 +308,9 @@ impl Mesh {
         stencils: &[super::alpha::Projection],
         flatten_planes: &[(Vec3, Vec3)],
     ) -> bool {
+        if b.kind == Kind::Paint {
+            return self.paint_material(b, dabs, stencils);
+        }
         if b.kind == Kind::Smooth {
             return self.smooth_surface(b, dabs, stencils);
         }
@@ -407,7 +416,7 @@ impl Mesh {
                         plane_normal * (depth * (w * gain).min(1.) * sign)
                     }
                     Kind::Inflate => normals[i] * (radius * 0.15 * w * sign),
-                    Kind::Smooth | Kind::Decimate | Kind::Relax => unreachable!(),
+                    Kind::Smooth | Kind::Decimate | Kind::Relax | Kind::Paint => unreachable!(),
                     Kind::Flatten => {
                         let (center, normal) = flatten_planes[dab_index];
                         normal * (-(old[i] - center).dot(normal) * w.min(1.) * sign)

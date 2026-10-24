@@ -8,6 +8,7 @@ use crate::{
 use eframe::egui::{self, Color32, Sense, Vec2};
 pub(crate) mod alphas;
 mod design;
+mod material;
 use design::Glyph;
 pub(crate) mod context_menu;
 mod customization;
@@ -82,6 +83,9 @@ pub(crate) struct UiState {
     pub preset_path: String,
     pub alpha_path: String,
     pub alphas: alphas::AlphaControls,
+    pub materials: material::MaterialControls,
+    pub light_controls: crate::lighting::LightControls,
+    pub export_busy: bool,
     pub status: String,
     pub pending: Option<PendingAction>,
     pub pending_save_path: String,
@@ -159,6 +163,9 @@ impl Default for UiState {
             preset_path: "brush.brush.json".into(),
             alpha_path: String::new(),
             alphas: Default::default(),
+            materials: Default::default(),
+            light_controls: Default::default(),
+            export_busy: false,
             status: "Ready • Drag clay to sculpt; Alt-drag empty space to pan; Shift smooths"
                 .into(),
             pending: None,
@@ -241,6 +248,14 @@ impl UiState {
     }
 
     pub(crate) fn select_brush(&mut self, index: usize, document: &Document) {
+        self.materials.sampling = false;
+        if document
+            .brushes()
+            .get(index)
+            .is_some_and(|b| b.kind == Kind::Paint)
+        {
+            self.show_polygroups = false;
+        }
         // Remember both the preset being left and a newly chosen Smooth variation.
         for i in [self.selected, index] {
             if let Some(brush) = document.brushes().get(i)
@@ -288,6 +303,42 @@ impl UiState {
                 self.builtin_menu(ui, BuiltinMenu::Edit, document, camera, &mut commands);
                 self.builtin_menu(ui, BuiltinMenu::Settings, document, camera, &mut commands);
                 self.custom_menu_bar(ui, document, &mut commands);
+                ui.menu_button("Export", |ui| {
+                    if ui
+                        .button("OBJ")
+                        .customize(Action::Export)
+                        .on_hover_text("Geometry only; use PLY or Blender for painted models")
+                        .clicked()
+                    {
+                        commands.push(Command::Export);
+                        ui.close();
+                    }
+                    for (format, label) in [
+                        (
+                            crate::persistence::material_export::ExportFormat::Ply,
+                            "PLY…",
+                        ),
+                        (
+                            crate::persistence::material_export::ExportFormat::Blender,
+                            "Blender…",
+                        ),
+                    ] {
+                        if ui
+                            .add_enabled(!self.export_busy, egui::Button::new(label))
+                            .on_hover_text(format.description())
+                            .clicked()
+                        {
+                            commands.push(Command::BrowseExport(format));
+                            ui.close();
+                        }
+                    }
+                });
+                if self.export_busy {
+                    ui.spinner();
+                    if ui.button("Cancel export").clicked() {
+                        commands.push(Command::CancelExport);
+                    }
+                }
                 if self.preferences.compact_toolbar {
                     if self.mesh_busy {
                         ui.spinner();
@@ -330,13 +381,6 @@ impl UiState {
                 }
                 if ui.button("Save as…").customize(Action::SaveAs).clicked() {
                     commands.push(Command::BrowseProject(true));
-                }
-                if ui
-                    .add(design::button(ui, Glyph::Export, "Export OBJ"))
-                    .customize(Action::Export)
-                    .clicked()
-                {
-                    commands.push(Command::Export);
                 }
 
                 if self.mesh_busy {
@@ -872,6 +916,25 @@ impl UiState {
                             ui.selectable_value(&mut b.kind, k, format!("{k:?}"));
                         }
                     });
+                if b.kind == Kind::Paint {
+                    ui.horizontal_wrapped(|ui| {
+                    if ui.add(design::button(ui, Glyph::Edit, "Fill all"))
+                        .customize(Action::FillAllMaterial)
+                        .on_hover_text("Apply the selected channels at full strength to the entire active model, including masked and hidden vertices. One undo restores the previous materials.")
+                        .clicked() {
+                        commands.push(Command::FillAllMaterial(b.clone()));
+                    }
+                    if ui
+                        .add(design::button(ui, Glyph::Edit, "Fill unmasked vertices"))
+                        .customize(Action::FillMaterial)
+                        .clicked()
+                    {
+                        commands.push(Command::FillMaterial(b.clone()));
+                    }
+                    });
+                    self.materials
+                        .show(ui, b, &mut self.preferences.materials, document, commands);
+                }
                 if b.kind == Kind::Decimate {
                     ui.label("Reduce triangles locally without smoothing. Requires Adaptive sculpt; Edge size and Simplify ratio control reduction.");
                 }

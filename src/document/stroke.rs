@@ -13,6 +13,7 @@ impl Document {
         }
     }
     pub fn end_stroke(&mut self) -> bool {
+        self.finish_paint_stroke();
         let deformed = self.stroke_active && self.stroke_deformed;
         if let Some((_, settings)) = self.relax_stroke.take()
             && deformed
@@ -53,6 +54,12 @@ impl Document {
         }
         if stencil.is_some() && matches!(brush.kind, Kind::Grab | Kind::Snake | Kind::Detail) {
             return false;
+        }
+        if brush.kind == Kind::Paint {
+            return self.apply_paint_dab(brush, dab, stencil);
+        }
+        if self.paint_stroke.is_some() {
+            self.end_stroke();
         }
         if brush.kind == Kind::Relax {
             return self.apply_relax_dab(brush, dab, stencil).unwrap_or(false);

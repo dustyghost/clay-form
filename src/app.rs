@@ -16,6 +16,7 @@ mod actions;
 mod commands;
 mod context_menu;
 mod diagnostics;
+mod exports;
 mod files;
 mod jobs;
 mod masking;
@@ -38,6 +39,7 @@ pub struct App {
     paths: paths::PathState,
     closing: bool,
     mesh_job: Option<MeshJob>,
+    export_job: Option<crate::background_job::BackgroundJob<(std::path::PathBuf, Vec<u8>)>>,
     recovery: Option<crate::recovery::Recovery>,
     recovery_entries: Vec<crate::recovery::Entry>,
     recovery_error: Option<String>,
@@ -60,6 +62,7 @@ impl Default for App {
             paths: Default::default(),
             closing: false,
             mesh_job: None,
+            export_job: None,
             recovery: None,
             recovery_entries: Vec::new(),
             recovery_error: None,
@@ -197,6 +200,7 @@ impl App {
     }
 
     pub(crate) fn show_viewport(&mut self, ui: &mut egui::Ui) {
+        self.ui.preferences.lighting.install(ui.ctx());
         let mask_consumes_escape = self.update_temporary_mask(ui);
         self.ui.viewport_menu.viewport_rect = Some(ui.available_rect_before_wrap());
         if !ui.input(|i| self.ui.preferences.visibility_hold.active(i)) {
@@ -317,6 +321,14 @@ impl App {
         let over_toolbar = toolbar_rect.is_some_and(|rect| {
             ui.input(|i| i.pointer.hover_pos().is_some_and(|p| rect.contains(p)))
         });
+        let light_input = self.ui.light_controls.show(
+            ui.ctx(),
+            ui.available_rect_before_wrap(),
+            &self.camera,
+            &mut self.ui.preferences.lighting,
+            enabled && self.viewport.session.gesture.is_none(),
+        );
+        self.ui.preferences.lighting.install(ui.ctx());
         let selected = self.ui.brush_index_for_context(&self.document, ui.ctx());
         self.capture_diagnostic_context(ui.ctx());
         self.viewport.session.projection_preview = self
@@ -333,6 +345,15 @@ impl App {
         } else {
             self.ui.preferences.visibility_hold.clone()
         });
+        self.ui.materials.sampling &= self
+            .document
+            .brushes()
+            .get(self.ui.selected)
+            .is_some_and(|b| b.kind == crate::sculpt::Kind::Paint);
+        if self.ui.materials.sampling && !self.viewport.sample_colour {
+            self.viewport.cancel(&mut self.document);
+        }
+        self.viewport.sample_colour = self.ui.materials.sampling;
         self.viewport.show(
             ui,
             &mut self.document,
@@ -385,6 +406,7 @@ impl App {
                 show_guides: self.ui.show_symmetry_guides,
                 guide_opacity: self.ui.guide_opacity,
                 enabled: enabled
+                    && !light_input
                     && (self.viewport.session.guided.dragging()
                         || (!over_toolbar
                             && !over_editor
@@ -406,6 +428,17 @@ impl App {
                 },
             },
         );
+        self.ui.materials.sampling = self.viewport.sample_colour;
+        if let Some(colour) = self.viewport.sampled_colour.take() {
+            let mut brush = self.document.brushes()[self.ui.selected].clone();
+            brush.material = brush.material.unlinked();
+            brush.material.base_color = colour;
+            if let Err(error) = self.document.update_brush(self.ui.selected, brush) {
+                self.ui.status = error;
+            } else {
+                self.ui.status = "Colour sampled; use + Colour to save it to the palette".into();
+            }
+        }
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         if self.ui.mask_active || temporary_visibility {
             self.viewport
@@ -503,6 +536,7 @@ impl eframe::App for App {
     }
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         self.poll_mesh_job();
+        self.poll_export(ctx);
         self.poll_projection();
         self.poll_paths();
         let native_pressure = ctx.input(|i| {

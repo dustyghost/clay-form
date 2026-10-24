@@ -164,7 +164,7 @@ pub struct Manifest {
 impl Manifest {
     pub fn validate(&self) -> Result<(), String> {
         if self.schema_version != SCHEMA_VERSION
-            || self.project_version != crate::sculpt::Project::VERSION
+            || !(1..=crate::sculpt::Project::VERSION).contains(&self.project_version)
         {
             return Err("Unsupported diagnostic or project schema version".into());
         }

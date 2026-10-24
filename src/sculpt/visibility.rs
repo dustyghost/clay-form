@@ -88,6 +88,7 @@ impl Mesh {
             triangles: Vec::new(),
             quads: Vec::new(),
             mask: Vec::new(),
+            materials: Vec::new(),
             vertex_groups: Vec::new(),
             polygroups: Vec::new(),
             hidden_faces: Vec::new(),

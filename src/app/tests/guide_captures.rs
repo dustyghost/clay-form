@@ -637,17 +637,24 @@ impl Guide {
                 commands.extend(self.app.ui.projection_window(ctx, &self.app.document));
             },
         );
-        self.text_positions = output
-            .shapes
-            .iter()
-            .filter_map(|shape| match &shape.shape {
-                egui::Shape::Text(text) => Some((
+        fn collect_text(shape: &egui::Shape, out: &mut Vec<(String, Pos2)>) {
+            match shape {
+                egui::Shape::Text(text) => out.push((
                     text.galley.text().to_owned(),
                     text.pos + text.galley.size() * 0.5,
                 )),
-                _ => None,
-            })
-            .collect();
+                egui::Shape::Vec(shapes) => {
+                    for shape in shapes {
+                        collect_text(shape, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+        self.text_positions.clear();
+        for shape in &output.shapes {
+            collect_text(&shape.shape, &mut self.text_positions);
+        }
         let rgba = self.capture.render(&self.ctx, output);
         if self.interactive {
             for command in commands {
@@ -3025,4 +3032,697 @@ fn relax_brush_manual_capture() {
     g.panel(Tool::Brush, Dock::Right);
     g.save("relax-brush-controls");
     g.app.viewport.destroy_renderer();
+}
+
+#[test]
+#[ignore = "manual material gallery and paint controls; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn material_examples_manual_capture() {
+    use crate::sculpt::Material;
+    let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(
+        directory.join("materials.json"),
+        serde_json::to_string_pretty(&Material::examples()).unwrap(),
+    )
+    .unwrap();
+    let mut g = Guide::new(&directory, [1200, 1400]);
+    g.interactive = true;
+    g.app.ui.show_polygroups = true;
+    g.app
+        .dispatch(Command::Action(Action::NewBrush("Paint".into())), &g.ctx);
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    assert!(!g.app.ui.show_polygroups);
+    g.panel(Tool::Brush, Dock::Right);
+    g.frame(vec![]);
+    let handle = g
+        .text_positions
+        .iter()
+        .find(|(text, _)| text == "Drag to resize materials")
+        .unwrap()
+        .1;
+    g.frame(vec![
+        egui::Event::PointerMoved(handle),
+        primary_event(handle, true),
+    ]);
+    let end = handle + Vec2::new(0., 176.);
+    g.frame(vec![egui::Event::PointerMoved(end)]);
+    g.frame(vec![primary_event(end, false)]);
+    for (index, (name, material)) in Material::examples().into_iter().enumerate() {
+        click_guide_label(&mut g, name);
+        let brush = g.app.document.brushes()[g.app.ui.selected].clone();
+        g.app.dispatch(Command::FillAllMaterial(brush), &g.ctx);
+        assert!(
+            (0..g.app.document.mesh().vertices.len())
+                .all(|i| g.app.document.mesh().material(i) == material.with_link(index as u64 + 1)),
+            "{name}: brush {:?}, sample {:?}",
+            g.app.document.brushes()[g.app.ui.selected].material,
+            g.app.document.mesh().material(0)
+        );
+        g.save(&format!("material-{index}"));
+    }
+    // Verify a real pointer stroke paints only its footprint and leaves geometry fixed.
+    let before = g.app.document.geometry_snapshot();
+    let mut brush = g.app.document.brushes()[g.app.ui.selected].clone();
+    brush.material = Material::examples()[1].1.clone();
+    brush.radius = 45.;
+    g.app
+        .document
+        .update_brush(g.app.ui.selected, brush)
+        .unwrap();
+    let rect = g.frame(vec![]).0;
+    let point = rect.center();
+    g.frame(vec![
+        egui::Event::PointerMoved(point),
+        primary_event(point, true),
+    ]);
+    g.frame(vec![egui::Event::PointerMoved(point + Vec2::new(60., 30.))]);
+    g.frame(vec![
+        primary_event(point + Vec2::new(60., 30.), false),
+        egui::Event::PointerGone,
+    ]);
+    assert_ne!(g.app.document.mesh().materials, before.mesh.materials);
+    assert_eq!(g.app.document.mesh().vertices, before.mesh.vertices);
+    g.save("material-painted-stroke");
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+}
+
+#[test]
+#[ignore = "requires Vulkan; clicks material swatches, copy, palette, sampler and fill and checks viewport pixels"]
+fn material_controls_offscreen_review() {
+    use crate::sculpt::{Kind, Material};
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir().join("clay-material-controls"));
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1200, 1000]);
+    g.interactive = true;
+    g.app.ui.show_polygroups = true;
+    g.app.dispatch(Command::AddBrush(Kind::Paint), &g.ctx);
+    assert!(!g.app.ui.show_polygroups);
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    g.panel(Tool::Brush, Dock::Right);
+    let handle = |g: &Guide| {
+        g.text_positions
+            .iter()
+            .find_map(|(text, pos)| (text == "Drag to resize materials").then_some(*pos))
+            .unwrap()
+    };
+    g.frame(vec![]);
+    let geometry = g.app.document.geometry_snapshot();
+    let material = g.app.document.brushes()[g.app.ui.selected].material.clone();
+    for delta in [72., -72.] {
+        let start = handle(&g);
+        g.frame(vec![
+            egui::Event::PointerMoved(start),
+            primary_event(start, true),
+        ]);
+        let end = start + Vec2::new(0., delta);
+        g.frame(vec![egui::Event::PointerMoved(end)]);
+        g.frame(vec![primary_event(end, false)]);
+        g.frame(vec![]);
+        assert!(
+            (handle(&g).y - start.y - delta).abs() < 2.,
+            "Material library resizes by the drag distance"
+        );
+        if delta > 0. {
+            g.save("material-library-expanded");
+        }
+    }
+    assert_eq!(g.app.document.geometry_snapshot(), geometry);
+    assert_eq!(
+        g.app.document.brushes()[g.app.ui.selected].material,
+        material
+    );
+    click_guide_label(&mut g, "Copper");
+    assert_eq!(
+        g.app.document.brushes()[g.app.ui.selected].material,
+        Material::examples()[4].1.with_link(5)
+    );
+    let before = g.app.document.geometry_snapshot();
+    let (rect, pixels_before) = g.frame(vec![egui::Event::PointerGone]);
+    let point = rect.center();
+    g.stroke(point - Vec2::new(40., 0.), point + Vec2::new(40., 0.));
+    let (_, pixels_after) = g.frame(vec![egui::Event::PointerGone]);
+    assert_ne!(
+        g.app.document.mesh().materials,
+        before.mesh.materials,
+        "Pointer must apply paint at {point:?} in {rect:?}"
+    );
+    let changed = (point.y as usize - 60..point.y as usize + 60)
+        .flat_map(|y| {
+            (point.x as usize - 80..point.x as usize + 80).map(move |x| ((999 - y) * 1200 + x) * 4)
+        })
+        .filter(|&i| {
+            pixels_before[i..i + 3]
+                .iter()
+                .zip(&pixels_after[i..i + 3])
+                .any(|(a, b)| a.abs_diff(*b) > 8)
+        })
+        .count();
+    assert!(
+        changed > 500,
+        "Paint on the startup sphere must visibly change its pixels: {changed}"
+    );
+    assert_eq!(g.app.document.mesh().vertices, before.mesh.vertices);
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    click_guide_label(&mut g, "Fill all");
+    assert!(
+        g.app
+            .document
+            .mesh()
+            .materials
+            .iter()
+            .all(|m| *m == Material::examples()[4].1.with_link(5))
+    );
+    click_guide_label(&mut g, "Copy material");
+    assert_eq!(g.app.ui.preferences.materials.copies.len(), 1);
+    click_guide_label(&mut g, "+ Colour");
+    assert!(
+        g.app
+            .ui
+            .preferences
+            .materials
+            .palette
+            .contains(&Material::examples()[4].1.clone().base_color)
+    );
+    click_guide_label(&mut g, "Red plastic");
+    click_guide_label(&mut g, "Sample colour");
+    assert!(
+        g.app.ui.materials.sampling,
+        "Sampler stays armed while pointer is over its button"
+    );
+    let before_sample = g.app.document.geometry_snapshot();
+    let history = g.app.document.history_counts();
+    g.frame(vec![
+        egui::Event::PointerMoved(point),
+        primary_event(point, true),
+    ]);
+    g.frame(vec![primary_event(point, false)]);
+    assert!(!g.app.ui.materials.sampling);
+    for (a, b) in g.app.document.brushes()[g.app.ui.selected]
+        .material
+        .base_color
+        .into_iter()
+        .zip(Material::examples()[4].1.clone().base_color)
+    {
+        assert!((a - b).abs() < 1e-6);
+    }
+    assert_eq!(g.app.document.geometry_snapshot(), before_sample);
+    assert_eq!(g.app.document.history_counts(), history);
+    g.save("material-controls");
+    // A preceding library exhausts the sidebar's suggested height, as in the reported layout.
+    g.panel(Tool::Library, Dock::Right);
+    for _ in 0..30 {
+        g.frame(vec![]);
+        if g.text_positions
+            .iter()
+            .any(|(text, pos)| text == "Materials" && (230. ..620.).contains(&pos.y))
+        {
+            break;
+        }
+        let margin = 1200. - g.app.ui.preferences.right_width + 12.;
+        g.frame(vec![
+            egui::Event::PointerMoved(Pos2::new(margin, 500.)),
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: Vec2::new(0., -80.),
+                modifiers: Default::default(),
+            },
+        ]);
+    }
+    g.frame(vec![]);
+    let header = g
+        .text_positions
+        .iter()
+        .find(|(text, _)| text == "Materials")
+        .unwrap()
+        .1;
+    assert!(
+        (230. ..620.).contains(&header.y),
+        "Materials can be reached by scrolling the crowded sidebar"
+    );
+    assert!(
+        handle(&g).y - header.y > 190.,
+        "The chosen grid height must not be squeezed by preceding controls"
+    );
+    let row = g
+        .text_positions
+        .iter()
+        .find(|(text, _)| text == "Red plastic")
+        .unwrap()
+        .1;
+    assert!(
+        row.y < handle(&g).y - 20.,
+        "The complete second row fits above the resize handle"
+    );
+    click_guide_label(&mut g, "Red plastic");
+    assert_eq!(
+        g.app.document.brushes()[g.app.ui.selected].material,
+        Material::examples()[5].1.with_link(6)
+    );
+    let name_field = g
+        .text_positions
+        .iter()
+        .rev()
+        .find(|(text, _)| text == "Red plastic")
+        .unwrap()
+        .1;
+    g.frame(vec![
+        egui::Event::PointerMoved(name_field),
+        primary_event(name_field, true),
+    ]);
+    g.frame(vec![primary_event(name_field, false)]);
+    g.modifiers = egui::Modifiers {
+        ctrl: true,
+        command: true,
+        ..Default::default()
+    };
+    g.frame(vec![egui::Event::Key {
+        key: egui::Key::A,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: g.modifiers,
+    }]);
+    g.modifiers = egui::Modifiers::NONE;
+    g.frame(vec![egui::Event::Text("Warm resin".into())]);
+    g.frame(vec![]);
+    assert_eq!(g.app.ui.preferences.materials.names[5], "Warm resin");
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(text, _)| text == "Warm resin")
+    );
+    g.save("material-library-crowded");
+    // Layer edits must update the selected definition and already filled geometry.
+    g.panel(Tool::Library, Dock::Hidden);
+    let brush = g.app.document.brushes()[g.app.ui.selected].clone();
+    g.app.dispatch(Command::FillAllMaterial(brush), &g.ctx);
+    let margin = 1200. - g.app.ui.preferences.right_width + 12.;
+    g.frame(vec![
+        egui::Event::PointerMoved(Pos2::new(margin, 500.)),
+        egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: Vec2::new(0., 10000.),
+            modifiers: Default::default(),
+        },
+    ]);
+    let before_layers = g.app.document.mesh().material(0);
+    let reach = |g: &mut Guide, label: &str| {
+        for _ in 0..35 {
+            g.frame(vec![]);
+            if g.text_positions
+                .iter()
+                .any(|(text, p)| text == label && (230. ..900.).contains(&p.y))
+            {
+                return;
+            }
+            let margin = 1200. - g.app.ui.preferences.right_width + 12.;
+            g.frame(vec![
+                egui::Event::PointerMoved(Pos2::new(margin, 500.)),
+                egui::Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    delta: Vec2::new(0., -60.),
+                    modifiers: Default::default(),
+                },
+            ]);
+        }
+        panic!("{label} is reachable");
+    };
+    reach(&mut g, "Material layers");
+    click_guide_label(&mut g, "Material layers");
+    reach(&mut g, "Add layer");
+    click_guide_label(&mut g, "Add layer");
+    g.frame(vec![]);
+    assert_eq!(g.app.document.mesh().material(0).layers[0].weight, 0.5);
+    assert_ne!(g.app.document.mesh().material(0), before_layers);
+    assert_eq!(
+        g.app
+            .document
+            .materials()
+            .iter()
+            .find(|a| a.id == 6)
+            .unwrap()
+            .material
+            .layers[0]
+            .weight,
+        0.5
+    );
+    g.save("material-layer-controls");
+    reach(&mut g, "Layer 1");
+    click_guide_label(&mut g, "Layer 1");
+    g.save("material-layers");
+    g.app.document.end_edit(); // Match the application's pointer-release boundary.
+    let with_layer = g.app.document.geometry_snapshot();
+    reach(&mut g, "Remove layer");
+    click_guide_label(&mut g, "Remove layer");
+    g.frame(vec![]);
+    assert_eq!(g.app.document.mesh().material(0), before_layers);
+    assert!(
+        g.app
+            .document
+            .materials()
+            .iter()
+            .find(|a| a.id == 6)
+            .unwrap()
+            .material
+            .layers
+            .iter()
+            .all(|l| l.is_empty())
+    );
+    assert!(!g.text_positions.iter().any(|(text, _)| text == "Layer 1"));
+    g.save("material-layer-removed");
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), with_layer);
+    g.frame(vec![
+        egui::Event::PointerMoved(Pos2::new(margin, 500.)),
+        egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: Vec2::new(0., 10000.),
+            modifiers: Default::default(),
+        },
+    ]);
+    reach(&mut g, "Reset material");
+    click_guide_label(&mut g, "Reset material");
+    g.frame(vec![]);
+    assert_eq!(g.app.document.mesh().material(0), before_layers);
+    let reset = g
+        .app
+        .document
+        .materials()
+        .iter()
+        .find(|a| a.id == 6)
+        .unwrap();
+    assert_eq!(reset.name, "Warm resin");
+    assert_eq!(reset.material, Material::examples()[5].1);
+    g.save("material-reset");
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), with_layer);
+    reach(&mut g, "Remove material");
+    click_guide_label(&mut g, "Remove material");
+    g.frame(vec![]);
+    assert!(!g.app.document.materials().iter().any(|a| a.id == 6));
+    assert!(g.app.ui.preferences.materials.hidden_builtins.contains(&6));
+    assert!(
+        !g.text_positions
+            .iter()
+            .any(|(text, _)| text == "Warm resin")
+    );
+    assert_eq!(
+        g.app.document.mesh().material(0).values(),
+        with_layer.mesh.material(0).values()
+    );
+    assert!(g.app.document.mesh().material(0).links.is_empty());
+    g.save("material-removed");
+    g.app.dispatch(Command::Undo, &g.ctx);
+    g.frame(vec![]);
+    assert_eq!(g.app.document.geometry_snapshot(), with_layer);
+    assert!(!g.app.ui.preferences.materials.hidden_builtins.contains(&6));
+    g.app.dispatch(Command::Redo, &g.ctx);
+    g.frame(vec![]);
+    reach(&mut g, "Restore built-in materials");
+    click_guide_label(&mut g, "Restore built-in materials");
+    g.frame(vec![]);
+    assert!(g.app.ui.preferences.materials.hidden_builtins.is_empty());
+    assert!(
+        !g.app.document.materials().iter().any(|a| a.id == 6),
+        "Restoring a swatch must not rebind existing paint"
+    );
+    click_guide_label(&mut g, "Export");
+    click_guide_label(&mut g, "PLY…");
+    assert_eq!(
+        g.app.ui.file_picker.as_ref().unwrap().export,
+        Some(crate::persistence::material_export::ExportFormat::Ply)
+    );
+    g.save("material-export-picker");
+    g.app.dispatch(Command::CancelProjectFile, &g.ctx);
+}
+
+#[test]
+#[ignore = "requires Vulkan; moves viewport lights through real controls and checks rendered changes"]
+fn viewport_lighting_offscreen_review() {
+    use crate::{
+        lighting::{Light, LightKind, Lighting},
+        sculpt::{Brush, Kind, Material},
+    };
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir().join("clay-lighting-review"));
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1200, 1000]);
+    g.interactive = true;
+    let mut brush = Brush::new(Kind::Paint);
+    brush.material = Material::examples()[4].1.clone();
+    g.app.document.fill_all_material(&brush).unwrap();
+    g.app
+        .ui
+        .preferences
+        .dock_menu(BuiltinMenu::View, Dock::Right);
+    click_guide_label(&mut g, "Lighting");
+    g.frame(vec![]);
+    let (rect, before_pixels) = g.frame(vec![egui::Event::PointerGone]);
+    let before = g.app.document.geometry_snapshot();
+    let history = g.app.document.history_counts();
+    let start = g
+        .text_positions
+        .iter()
+        .find(|(s, _)| s == "Drag to move light")
+        .unwrap()
+        .1;
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    let end = start + Vec2::new(90., 30.);
+    g.frame(vec![egui::Event::PointerMoved(end)]);
+    g.frame(vec![primary_event(end, false), egui::Event::PointerGone]);
+    let (_, after_pixels) = g.frame(vec![]);
+    let changed = (rect.top() as usize..rect.bottom() as usize)
+        .flat_map(|y| {
+            (rect.left() as usize..rect.right() as usize).map(move |x| ((999 - y) * 1200 + x) * 4)
+        })
+        .filter(|&i| {
+            before_pixels[i..i + 3]
+                .iter()
+                .zip(&after_pixels[i..i + 3])
+                .any(|(a, b)| a.abs_diff(*b) > 12)
+        })
+        .count();
+    assert!(changed > 500, "Moving the light changes the rendered model");
+    assert!(
+        (g.app.ui.preferences.lighting.lights[0].azimuth - Light::default().azimuth - 54.).abs()
+            < 1.
+    );
+    click_guide_label(&mut g, "Point light");
+    assert_eq!(
+        g.app.ui.preferences.lighting.lights[0].kind,
+        LightKind::Point
+    );
+    g.save("lighting-point");
+    click_guide_label(&mut g, "Reset studio lighting");
+    assert_eq!(g.app.ui.preferences.lighting, Lighting::default());
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    assert_eq!(g.app.document.history_counts(), history);
+    g.save("lighting-studio");
+    assert!(!g.app.ui.preferences.lighting.show_controls);
+    assert!(
+        !g.text_positions
+            .iter()
+            .any(|(text, _)| text == "Drag light")
+    );
+    click_guide_label(&mut g, "Show light controls");
+    // The viewport widget moves a world-space light in screen directions, while
+    // retaining its pointer even after dragging out over the model.
+    g.app.camera.yaw = 0.8;
+    g.app.camera.pitch = -0.4;
+    g.app.ui.preferences.lighting.lights[0].camera_relative = false;
+    let camera = g.app.camera;
+    let lighting = g.app.ui.preferences.lighting.clone();
+    let (_, widget_before) = g.frame(vec![]);
+    let pad = |g: &Guide| {
+        g.text_positions
+            .iter()
+            .find(|(text, _)| text == "Drag light")
+            .unwrap()
+            .1
+            - Vec2::new(0., 48.)
+    };
+    let start = pad(&g);
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    let end = start + Vec2::new(-95., 20.);
+    g.frame(vec![egui::Event::PointerMoved(end)]);
+    g.frame(vec![primary_event(end, false), egui::Event::PointerGone]);
+    let (_, widget_after) = g.frame(vec![]);
+    assert_ne!(
+        g.app.ui.preferences.lighting.lights[0].azimuth,
+        lighting.lights[0].azimuth
+    );
+    let changed = ((rect.center().y - 100.) as usize..(rect.center().y + 100.) as usize)
+        .flat_map(|y| {
+            ((rect.center().x - 100.) as usize..(rect.center().x + 100.) as usize)
+                .map(move |x| ((999 - y) * 1200 + x) * 4)
+        })
+        .filter(|&i| {
+            widget_before[i..i + 3]
+                .iter()
+                .zip(&widget_after[i..i + 3])
+                .any(|(a, b)| a.abs_diff(*b) > 12)
+        })
+        .count();
+    assert!(
+        changed > 500,
+        "The light widget changes model pixels, not just the overlay"
+    );
+    assert_eq!(
+        (
+            g.app.camera.yaw,
+            g.app.camera.pitch,
+            g.app.camera.zoom,
+            g.app.camera.pan
+        ),
+        (camera.yaw, camera.pitch, camera.zoom, camera.pan)
+    );
+    let lighting = g.app.ui.preferences.lighting.clone();
+    let start = pad(&g);
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    g.frame(vec![egui::Event::PointerMoved(
+        start + Vec2::new(40., -10.),
+    )]);
+    assert_ne!(g.app.ui.preferences.lighting, lighting);
+    g.frame(vec![slice_key(egui::Key::Escape, true)]);
+    assert_eq!(g.app.ui.preferences.lighting, lighting);
+    g.frame(vec![
+        slice_key(egui::Key::Escape, false),
+        egui::Event::PointerMoved(rect.center()),
+        primary_event(rect.center(), false),
+    ]);
+    click_guide_label(&mut g, "Point");
+    assert_eq!(
+        g.app.ui.preferences.lighting.lights[0].kind,
+        LightKind::Point
+    );
+    g.frame(vec![]);
+    let distance = g.app.ui.preferences.lighting.lights[0].distance;
+    let start = g
+        .text_positions
+        .iter()
+        .find(|(text, _)| text == "Distance")
+        .unwrap()
+        .1
+        + Vec2::new(20., 23.);
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    let end = start + Vec2::new(35., 0.);
+    g.frame(vec![egui::Event::PointerMoved(end)]);
+    g.frame(vec![primary_event(end, false), egui::Event::PointerGone]);
+    assert_ne!(g.app.ui.preferences.lighting.lights[0].distance, distance);
+    let (right, up, view) = camera.basis();
+    let side = g.app.ui.preferences.lighting.lights[0]
+        .vector(right, up, view)
+        .dot(view);
+    click_guide_label(&mut g, "Front / back");
+    let flipped = g.app.ui.preferences.lighting.lights[0]
+        .vector(right, up, view)
+        .dot(view);
+    assert!((flipped + side).abs() < 1e-4);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    assert_eq!(g.app.document.history_counts(), history);
+    assert_eq!(
+        (
+            g.app.camera.yaw,
+            g.app.camera.pitch,
+            g.app.camera.zoom,
+            g.app.camera.pan
+        ),
+        (camera.yaw, camera.pitch, camera.zoom, camera.pan)
+    );
+    g.save("lighting-viewport-widget");
+    click_guide_label(&mut g, "Light");
+    g.frame(vec![]);
+    assert!(
+        !g.text_positions
+            .iter()
+            .any(|(text, _)| text == "Drag light")
+    );
+    g.save("lighting-widget-collapsed");
+    click_guide_label(&mut g, "Close light controls");
+    g.frame(vec![]);
+    assert!(!g.app.ui.preferences.lighting.show_controls);
+    assert!(
+        !g.text_positions
+            .iter()
+            .any(|(text, _)| text == "Close light controls")
+    );
+    let first = g.app.ui.preferences.lighting.lights[0];
+    click_guide_label(&mut g, "Add light");
+    assert_eq!(g.app.ui.preferences.lighting.lights.len(), 2);
+    assert_eq!(g.app.ui.preferences.lighting.selected, 1);
+    click_guide_label(&mut g, "Point light");
+    assert_eq!(g.app.ui.preferences.lighting.lights[0], first);
+    assert_eq!(
+        g.app.ui.preferences.lighting.lights[1].kind,
+        LightKind::Point
+    );
+    let second = g.app.ui.preferences.lighting.lights[1];
+    click_guide_label(&mut g, "Show light controls");
+    click_guide_label(&mut g, "Light"); // Reopen the collapsed orbit controls.
+    g.save("lighting-multiple-lights");
+    click_guide_label(&mut g, "Light 2");
+    click_guide_label(&mut g, "Light 1");
+    assert_eq!(g.app.ui.preferences.lighting.selected, 0);
+    g.frame(vec![]);
+    let start = pad(&g);
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    let end = start + Vec2::new(30., 20.);
+    g.frame(vec![egui::Event::PointerMoved(end)]);
+    g.frame(vec![primary_event(end, false)]);
+    assert_ne!(g.app.ui.preferences.lighting.lights[0], first);
+    assert_eq!(g.app.ui.preferences.lighting.lights[1], second);
+    click_guide_label(&mut g, "Remove light");
+    assert_eq!(g.app.ui.preferences.lighting.lights, vec![second]);
+    assert_eq!(g.app.ui.preferences.lighting.selected, 0);
+    click_guide_label(&mut g, "Remove light");
+    assert!(g.app.ui.preferences.lighting.lights.is_empty());
+    g.save("lighting-ambient-only");
+    click_guide_label(&mut g, "Reset studio lighting");
+    click_guide_label(&mut g, "Close light controls");
+    assert_eq!(g.app.ui.preferences.lighting, Lighting::default());
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    assert_eq!(g.app.document.history_counts(), history);
+    g.app.dispatch(
+        Command::BrowseExport(crate::persistence::material_export::ExportFormat::Blender),
+        &g.ctx,
+    );
+    g.frame(vec![]);
+    assert!(!g.app.ui.file_picker.as_ref().unwrap().include_lights);
+    click_guide_label(&mut g, "Include viewport lights");
+    assert!(g.app.ui.file_picker.as_ref().unwrap().include_lights);
+    g.save("lighting-blender-export-option");
+    g.app.dispatch(Command::CancelProjectFile, &g.ctx);
+    g.app.dispatch(
+        Command::BrowseExport(crate::persistence::material_export::ExportFormat::Ply),
+        &g.ctx,
+    );
+    g.frame(vec![]);
+    assert!(
+        !g.text_positions
+            .iter()
+            .any(|(text, _)| text == "Include viewport lights")
+    );
+    g.app.dispatch(Command::CancelProjectFile, &g.ctx);
 }
