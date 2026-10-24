@@ -67,10 +67,25 @@ impl App {
         self.viewport.wait_for_release();
     }
     pub(crate) fn show_viewport_menu(&mut self, ctx: &egui::Context) {
-        let was_open = self.ui.viewport_menu.context.is_some();
+        let context = self.ui.viewport_menu.context;
+        let was_open = context.is_some();
         let (action, closed) = self.ui.viewport_menu_popup(ctx, &self.document);
         if let Some(action) = action {
-            if action == Action::UniversalTransform {
+            if context == Some(ViewportMenuContext::Visibility)
+                && matches!(
+                    action,
+                    Action::SelectVisibilityLine | Action::SelectVisibilityPath
+                )
+            {
+                // The popup may already be closed. Its choices configure the hold,
+                // whereas the same actions elsewhere start persistent selection tools.
+                self.ui.preferences.visibility_selection.shape =
+                    if action == Action::SelectVisibilityLine {
+                        preferences::VisibilityShape::Line
+                    } else {
+                        preferences::VisibilityShape::Path
+                    };
+            } else if action == Action::UniversalTransform {
                 self.dispatch(
                     Command::TransformOperation(crate::viewport::TransformOperation::Universal),
                     ctx,
@@ -502,29 +517,38 @@ mod tests {
 
     #[test]
     fn quick_selection_menu_configures_presets_without_starting_a_tool() {
-        let (mut app, ctx) = setup();
-        app.ui.preferences.selection_mode = preferences::SelectionMode::Mask;
-        let before = app.document.geometry_snapshot();
-        app.open_quick_menu(&ctx, Action::MaskVisibilityMenu);
-        assert_eq!(
-            app.ui.viewport_menu.context,
-            Some(ViewportMenuContext::Mask)
-        );
-        assert!(
-            app.ui
-                .viewport_menu_entries(ViewportMenuContext::Mask, &app.document)
+        use crate::preferences::VisibilityShape;
+        for (action, shape) in [
+            (Action::SelectVisibilityLine, VisibilityShape::Line),
+            (Action::SelectVisibilityPath, VisibilityShape::Path),
+        ] {
+            let (mut app, ctx) = setup();
+            let before = app.document.geometry_snapshot();
+            let history = app.document.history_counts();
+            app.open_quick_menu(&ctx, Action::MaskVisibilityMenu);
+            app.ui.viewport_menu.selected = app
+                .ui
+                .viewport_menu_entries(ViewportMenuContext::Visibility, &app.document)
                 .iter()
-                .any(|entry| entry.action == Action::TemporaryMaskBrush)
-        );
-        app.ui.viewport_menu.context = Some(ViewportMenuContext::Visibility);
-        app.execute_action(Action::SelectVisibilityLine, &ctx);
-        assert!(app.ui.selection_tool.is_none());
-        assert!(app.ui.modeling.active);
-        assert_eq!(
-            app.ui.preferences.visibility_selection.shape,
-            crate::preferences::VisibilityShape::Line
-        );
-        assert_eq!(app.document.geometry_snapshot(), before);
+                .position(|entry| entry.action == action)
+                .unwrap();
+            // Exercise the real popup closing before its chosen action is dispatched.
+            frame(
+                &mut app,
+                &ctx,
+                egui::Modifiers::NONE,
+                vec![key(egui::Key::Enter, egui::Modifiers::NONE)],
+            );
+            assert!(app.ui.viewport_menu.context.is_none());
+            assert!(
+                app.ui.selection_tool.is_none(),
+                "Choosing {shape:?} must only set the hold preset"
+            );
+            assert!(app.ui.modeling.active);
+            assert_eq!(app.ui.preferences.visibility_selection.shape, shape);
+            assert_eq!(app.document.geometry_snapshot(), before);
+            assert_eq!(app.document.history_counts(), history);
+        }
     }
 
     #[test]
