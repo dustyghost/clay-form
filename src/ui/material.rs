@@ -26,6 +26,7 @@ impl MaterialControls {
             .iter()
             .zip(&library.values)
             .enumerate()
+            .filter(|(i, _)| !library.hidden_builtins.contains(&(*i as u64 + 1)))
             .map(|(i, (name, m))| Asset {
                 id: i as u64 + 1,
                 name: name.clone(),
@@ -161,7 +162,8 @@ impl MaterialControls {
             .and_then(|id| presets.iter().find(|a| a.id == id))
             .map(Asset::reset_material)
             .unwrap_or_else(|| before.unlinked());
-        ui.horizontal(|ui| {
+        let mut remove_material = None;
+        ui.horizontal_wrapped(|ui| {
             if ui.add_enabled(library.copies.len() < 64, egui::Button::new("Copy material"))
                 .on_hover_text("Create an independent editable material").clicked()
                 && let Some(index) = library.copy(&edited_name, brush.material.clone())
@@ -185,6 +187,29 @@ impl MaterialControls {
                 brush.material = selected.map_or_else(|| original.clone(), |id| original.with_link(id));
             }
         });
+        if ui.add_enabled(selected.is_some(), egui::Button::new("Remove material"))
+            .on_hover_text("Remove this swatch and detach its painted uses, keeping their appearance. Undo restores the material.")
+            .clicked() {
+            remove_material = selected;
+        }
+        if !library.hidden_builtins.is_empty() && ui.button("Restore built-in materials").clicked()
+        {
+            library.hidden_builtins.clear();
+        }
+        if let Some(id) = remove_material {
+            // Register an unlinked matching preset before removal so Undo can restore it.
+            if !document.materials().iter().any(|a| a.id == id)
+                && !commands
+                    .iter()
+                    .any(|c| matches!(c, Command::SaveMaterial(a) if a.id == id))
+                && let Some(asset) = presets.iter().find(|a| a.id == id)
+            {
+                commands.push(Command::SaveMaterial(asset.clone()));
+            }
+            brush.material.detach_asset(id);
+            commands.push(Command::RemoveMaterial(id));
+            return;
+        }
         egui::ComboBox::from_label("Paint channels")
             .selected_text(brush.paint_channels.label())
             .show_ui(ui, |ui| {

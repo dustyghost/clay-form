@@ -145,3 +145,107 @@ fn material_sampler_does_not_paint_and_p_toggles_group_view() {
         },
     );
 }
+
+#[test]
+fn material_removal_preserves_paint_other_bindings_levels_and_library_undo() {
+    use crate::sculpt::{Brush, Material, material::layers::Asset};
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let mut cube = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Cube);
+    cube.divisions = [1; 3];
+    app.document
+        .replace_geometry(crate::sculpt::Geometry::new(cube.mesh().unwrap()))
+        .unwrap();
+    let base = Material::examples()[7].1.clone();
+    let index = app
+        .ui
+        .preferences
+        .materials
+        .copy("Wax", base.clone())
+        .unwrap();
+    let copy = app.ui.preferences.materials.copies[index].clone();
+    let asset = Asset {
+        id: copy.id,
+        name: copy.name.clone(),
+        material: base.clone(),
+        original: copy.original.clone(),
+    };
+    app.dispatch(Command::SaveMaterial(asset.clone()), &ctx);
+    let other = Asset {
+        id: 5,
+        name: "Copper".into(),
+        material: Material::examples()[4].1.clone(),
+        original: None,
+    };
+    app.dispatch(Command::SaveMaterial(other.clone()), &ctx);
+    let mut brush = Brush::new(Kind::Paint);
+    brush.material = other.material.with_link(other.id);
+    app.dispatch(Command::FillAllMaterial(brush.clone()), &ctx);
+    brush.material = base.with_link(asset.id);
+    brush.strength = 0.5;
+    app.dispatch(Command::FillMaterial(brush), &ctx);
+    let mut geometry = app.document.geometry_snapshot();
+    geometry.subdivide().unwrap();
+    geometry.subdivide().unwrap();
+    app.document.replace_geometry(geometry).unwrap();
+    app.document.set_mesh_level(1).unwrap();
+    app.document.duplicate_model(false).unwrap();
+    let before = app.document.geometry_snapshot();
+    app.dispatch(Command::RemoveMaterial(asset.id), &ctx);
+    assert!(app.ui.preferences.materials.copies.is_empty());
+    assert_eq!(app.document.materials().len(), 1);
+    let meshes = |g: &crate::sculpt::Geometry| {
+        let mut meshes = vec![g.mesh.clone()];
+        meshes.extend(g.settings.lower.clone());
+        meshes.extend(g.settings.upper.clone());
+        for model in &g.submodels {
+            meshes.push(model.mesh.clone());
+            meshes.extend(model.mesh_settings.lower.clone());
+            meshes.extend(model.mesh_settings.upper.clone());
+        }
+        meshes
+    };
+    let after = app.document.geometry_snapshot();
+    for (old, new) in meshes(&before).iter().zip(meshes(&after)) {
+        assert_eq!(old.vertices, new.vertices);
+        for (old, new) in old.materials.iter().zip(&new.materials) {
+            assert_eq!(
+                old.values(),
+                new.values(),
+                "Removal preserves the rendered surface"
+            );
+            assert!(new.links.iter().all(|l| l.id != asset.id));
+            assert_eq!(
+                new.links.iter().find(|l| l.id == other.id),
+                old.links.iter().find(|l| l.id == other.id)
+            );
+        }
+    }
+    let project = app.document.project();
+    project.validate().unwrap();
+    let restored: crate::sculpt::Project =
+        serde_json::from_slice(&serde_json::to_vec(&project).unwrap()).unwrap();
+    assert_eq!(restored.scene.materials, project.scene.materials);
+    assert_eq!(restored.mesh.materials, project.mesh.materials);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert_eq!(app.ui.preferences.materials.copies, vec![copy]);
+    app.dispatch(Command::Redo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), after);
+    assert!(app.ui.preferences.materials.copies.is_empty());
+    // Built-ins remain hidden across preferences saves and Undo restores them too.
+    app.dispatch(Command::RemoveMaterial(other.id), &ctx);
+    assert!(
+        app.ui
+            .preferences
+            .materials
+            .hidden_builtins
+            .contains(&other.id)
+    );
+    let prefs: crate::preferences::Preferences =
+        serde_json::from_slice(&serde_json::to_vec(&app.ui.preferences).unwrap()).unwrap();
+    prefs.validate().unwrap();
+    assert_eq!(prefs.materials.hidden_builtins, vec![other.id]);
+    app.dispatch(Command::Undo, &ctx);
+    assert!(app.ui.preferences.materials.hidden_builtins.is_empty());
+}

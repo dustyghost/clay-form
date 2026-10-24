@@ -24,6 +24,8 @@ These are editable starting values. Ceramic uses a simple glossy dielectric; sat
 
 **Reset material** restores a built-in material’s original surface settings and layers, or a copy’s settings from when it was created. It keeps your material name, updates painted uses, and supports Undo. Reset settings are saved with personal copies and project definitions. Older custom materials without saved reset settings use their values when first opened in this version as the starting point.
 
+**Remove material** removes the selected swatch from the library and its named definition from the current project. Painted surfaces keep their current appearance across all submodels and subdivision levels; they are detached from that definition. Undo restores the definition, paint links and swatch. Personal copies are removed from your saved library. Removed built-in swatches stay hidden until you choose **Restore built-in materials**, which makes them available again without changing existing paint. Other saved projects keep their own definitions.
+
 Click a palette swatch to select its colour. **+ Colour** saves the current colour; right-click a swatch to remove it. **Sample colour** lets you click a visible surface to pick its underlying paint colour without lighting, mask shading or vertex-group tint. It samples once; **Escape** cancels.
 
 ![Paint brush settings and copper example](../images/material-copper.png)

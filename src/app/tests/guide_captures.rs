@@ -3422,6 +3422,36 @@ fn material_controls_offscreen_review() {
     g.save("material-reset");
     g.app.dispatch(Command::Undo, &g.ctx);
     assert_eq!(g.app.document.geometry_snapshot(), with_layer);
+    reach(&mut g, "Remove material");
+    click_guide_label(&mut g, "Remove material");
+    g.frame(vec![]);
+    assert!(!g.app.document.materials().iter().any(|a| a.id == 6));
+    assert!(g.app.ui.preferences.materials.hidden_builtins.contains(&6));
+    assert!(
+        !g.text_positions
+            .iter()
+            .any(|(text, _)| text == "Warm resin")
+    );
+    assert_eq!(
+        g.app.document.mesh().material(0).values(),
+        with_layer.mesh.material(0).values()
+    );
+    assert!(g.app.document.mesh().material(0).links.is_empty());
+    g.save("material-removed");
+    g.app.dispatch(Command::Undo, &g.ctx);
+    g.frame(vec![]);
+    assert_eq!(g.app.document.geometry_snapshot(), with_layer);
+    assert!(!g.app.ui.preferences.materials.hidden_builtins.contains(&6));
+    g.app.dispatch(Command::Redo, &g.ctx);
+    g.frame(vec![]);
+    reach(&mut g, "Restore built-in materials");
+    click_guide_label(&mut g, "Restore built-in materials");
+    g.frame(vec![]);
+    assert!(g.app.ui.preferences.materials.hidden_builtins.is_empty());
+    assert!(
+        !g.app.document.materials().iter().any(|a| a.id == 6),
+        "Restoring a swatch must not rebind existing paint"
+    );
     click_guide_label(&mut g, "Export");
     click_guide_label(&mut g, "PLY…");
     assert_eq!(

@@ -44,3 +44,7 @@ Blender validation should run outside a sandbox that denies its audio/runtime IP
 ## Layer removal and material reset follow-up
 
 The focused material run passed 21 tests. The real-control walkthrough also passed: remove an added layer, verify its row disappears and the painted surface returns to its previous values, Undo, reset the renamed material to its factory preset, retain the name, then Undo again. Captures `material-layer-removed.png` and `material-reset.png` were visually inspected. Additional checks preserve remaining layer order and muted layers, retain copy reset settings through preferences persistence, and restore shared material values across subdivision levels.
+
+## Whole-material removal follow-up
+
+A focused regression removes a personal material blended over another definition on a small mesh with lower and higher subdivision levels and a duplicated submodel. All surface values and other definition weights remain unchanged. Project serialization, removal of the personal library entry, Undo/Redo restoration and persisted built-in visibility pass. The real-control walkthrough removes the renamed swatch, verifies it disappears while paint stays unchanged, then exercises Undo/Redo and restoring built-in swatches without rebinding paint. The `material-removed.png` capture was visually inspected.

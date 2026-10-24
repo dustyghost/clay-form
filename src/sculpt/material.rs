@@ -184,6 +184,11 @@ impl Material {
         .into();
         m
     }
+    pub fn detach_asset(&mut self, id: u64) {
+        if self.links.iter().any(|link| link.id == id) {
+            std::sync::Arc::make_mut(&mut self.links).retain(|link| link.id != id);
+        }
+    }
     pub fn unlinked(&self) -> Self {
         let mut m = self.clone();
         m.links = Default::default();

@@ -57,6 +57,49 @@ impl Document {
         self.display_changed();
         Ok(())
     }
+    pub fn remove_material(&mut self, id: u64) -> Result<(), String> {
+        let index = self
+            .materials()
+            .iter()
+            .position(|a| a.id == id)
+            .ok_or("Material no longer exists")?;
+        self.end_edit();
+        self.end_stroke();
+        self.record_edit("Remove material");
+        let detach = |mesh: &mut Mesh| {
+            for material in &mut mesh.materials {
+                material.detach_asset(id);
+            }
+        };
+        detach(&mut self.geometry.mesh);
+        for mesh in self
+            .geometry
+            .settings
+            .lower
+            .iter_mut()
+            .chain(&mut self.geometry.settings.upper)
+        {
+            detach(mesh);
+        }
+        for model in &mut self.geometry.submodels {
+            detach(&mut model.mesh);
+            for mesh in model
+                .mesh_settings
+                .lower
+                .iter_mut()
+                .chain(&mut model.mesh_settings.upper)
+            {
+                detach(mesh);
+            }
+        }
+        self.geometry.scene.materials.remove(index);
+        for brush in &mut self.brushes {
+            brush.material.detach_asset(id);
+        }
+        self.dirty = true;
+        self.display_changed();
+        Ok(())
+    }
     pub(super) fn sync_material_brushes(&mut self) {
         for brush in &mut self.brushes {
             if let Some(id) = brush.material.primary_asset() {

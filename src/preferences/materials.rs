@@ -19,6 +19,8 @@ pub(crate) struct MaterialLibrary {
     #[serde(default = "builtin_values", deserialize_with = "read_values")]
     pub values: Vec<Material>,
     pub copies: Vec<MaterialPreset>,
+    #[serde(default)]
+    pub hidden_builtins: Vec<u64>,
     pub palette: Vec<[f32; 3]>,
 }
 fn builtin_values() -> Vec<Material> {
@@ -45,6 +47,7 @@ impl Default for MaterialLibrary {
             names: builtin_names(),
             values: builtin_values(),
             copies: Vec::new(),
+            hidden_builtins: Vec::new(),
             palette: [
                 [0.95, 0.94, 0.90],
                 [0.07, 0.08, 0.09],
@@ -61,6 +64,27 @@ impl Default for MaterialLibrary {
     }
 }
 impl MaterialLibrary {
+    pub fn remove(&mut self, id: u64) {
+        self.copies.retain(|p| p.id != id);
+        if (1..=self.names.len() as u64).contains(&id) && !self.hidden_builtins.contains(&id) {
+            self.hidden_builtins.push(id);
+        }
+    }
+    pub fn restore(&mut self, asset: &crate::sculpt::material::layers::Asset) {
+        self.hidden_builtins.retain(|id| *id != asset.id);
+        if asset.id > self.names.len() as u64
+            && !self.copies.iter().any(|p| p.id == asset.id)
+            && self.copies.len() < 64
+        {
+            self.copies.push(MaterialPreset {
+                id: asset.id,
+                name: asset.name.clone(),
+                material: asset.material.clone(),
+                original: asset.original.clone(),
+            });
+        }
+    }
+
     pub fn copy(&mut self, name: &str, material: Material) -> Option<usize> {
         if self.copies.len() >= 64 {
             return None;
@@ -90,6 +114,11 @@ impl MaterialLibrary {
             || self.values.len() != self.names.len()
             || self.copies.len() > 64
             || self.palette.len() > 32
+            || self.hidden_builtins.len() > self.names.len()
+            || self
+                .hidden_builtins
+                .iter()
+                .any(|id| !(1..=self.names.len() as u64).contains(id))
         {
             return Err("Material library is too large".into());
         }

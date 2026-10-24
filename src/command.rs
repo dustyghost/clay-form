@@ -32,6 +32,7 @@ pub(crate) enum Command {
     BrowseExport(crate::persistence::material_export::ExportFormat),
     CancelExport,
     SaveMaterial(crate::sculpt::material::layers::Asset),
+    RemoveMaterial(u64),
     FillMaterial(Brush),
     FillAllMaterial(Brush),
     OpenProjection,
