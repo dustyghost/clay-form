@@ -201,6 +201,19 @@ impl UiState {
         self.mask_active || self.viewport_menu.visibility_was_active
     }
 
+    /// Selection holds borrow brush settings without selecting a brush in the UI.
+    pub(crate) fn highlighted_brush_index(
+        &self,
+        document: &Document,
+        ctx: &egui::Context,
+    ) -> Option<usize> {
+        if self.selection_brush_active() {
+            None
+        } else {
+            self.brush_index_for_context(document, ctx)
+        }
+    }
+
     pub(crate) fn brush_index_for_context(
         &self,
         document: &Document,
@@ -769,14 +782,15 @@ impl UiState {
                     .show(ui, |ui| {
                         for (i, b) in document.brushes().iter().enumerate() {
                             let id = self.brush_texture(ui.ctx(), i, b);
-                            let label = if self.selection_brush_active() && active == Some(i) {
-                                "Selection"
-                            } else {
-                                &b.name
-                            };
-                            if design::brush_tile(ui, id, label, active == Some(i), width)
-                                .customize(Action::SelectBrush(b.identity()))
-                                .clicked()
+                            if design::brush_tile(
+                                ui,
+                                id,
+                                &b.name,
+                                self.highlighted_brush_index(document, ui.ctx()) == Some(i),
+                                width,
+                            )
+                            .customize(Action::SelectBrush(b.identity()))
+                            .clicked()
                             {
                                 self.select_brush(i, document);
                             }

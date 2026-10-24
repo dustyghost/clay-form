@@ -2700,7 +2700,25 @@ fn shared_selection_offscreen_review() {
     g.frame(vec![egui::Event::PointerMoved(rect.center())]);
     g.save("shared-selection-mask");
     assert!(g.app.ui.mask_active);
-    assert!(g.text_positions.iter().any(|(t, _)| t == "Selection"));
+    assert!(
+        g.app
+            .ui
+            .highlighted_brush_index(&g.app.document, &g.ctx)
+            .is_none()
+    );
+    let mask = g
+        .app
+        .ui
+        .preferences
+        .mask_preset
+        .brush_index(&g.app.document)
+        .unwrap();
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(t, _)| t == &g.app.document.brushes()[mask].name)
+    );
+    assert!(!g.text_positions.iter().any(|(t, _)| t == "Selection"));
     g.app.open_quick_menu(&g.ctx, Action::MaskVisibilityMenu);
     g.frame(vec![]);
     click_tab(&mut g, "Visibility");
@@ -2709,12 +2727,30 @@ fn shared_selection_offscreen_review() {
     g.save("shared-selection-visibility");
     assert!(!g.app.ui.mask_active);
     assert!(g.app.temporary_visibility_active(&g.ctx));
-    assert!(g.text_positions.iter().any(|(t, _)| t == "Selection"));
+    assert!(
+        g.app
+            .ui
+            .highlighted_brush_index(&g.app.document, &g.ctx)
+            .is_none()
+    );
+    let mask = g
+        .app
+        .ui
+        .preferences
+        .mask_preset
+        .brush_index(&g.app.document)
+        .unwrap();
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(t, _)| t == &g.app.document.brushes()[mask].name)
+    );
+    assert!(!g.text_positions.iter().any(|(t, _)| t == "Selection"));
     g.modifiers = egui::Modifiers::NONE;
     g.save("shared-selection-released");
     assert!(!g.app.ui.selection_brush_active());
     assert_eq!(
-        g.app.ui.brush_index_for_context(&g.app.document, &g.ctx),
+        g.app.ui.highlighted_brush_index(&g.app.document, &g.ctx),
         Some(selected)
     );
     assert_eq!(g.app.document.geometry_snapshot(), before);

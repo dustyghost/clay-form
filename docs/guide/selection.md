@@ -15,8 +15,8 @@
 
 1. Press **X** and choose **Mask** or **Visibility**. That tab determines what **Ctrl+Shift** does. The mode and each tab’s shape/operation are remembered between holds and restarts.
 2. For Mask, choose **Surface brush**, **Through-depth lasso**, or **Through-depth line**, then **Add** or **Erase**. Line also offers **Flip side**. Visibility offers Rectangle, Lasso, Line and Closed path with Hide/Isolate.
-3. Hold **Ctrl+Shift** over the model. The brush UI temporarily selects **Selection**, using the remembered Mask brush preset for painting. The viewport shows the active mode and shape.
-4. Paint or draw, release the pen to commit, then release Ctrl+Shift to restore the original sculpt brush or Modeling tool. **Alt** reverses the operation while held.
+3. Hold **Ctrl+Shift** over the model. All brush highlights clear while the hold is active, and brush names stay unchanged. Mask painting still uses the remembered Mask brush preset. The viewport shows the active mode and shape.
+4. Paint or draw, release the pen to commit, then release Ctrl+Shift to restore the original brush highlight and sculpt or Modeling tool. **Alt** reverses the operation while held.
 
 Change **Hold for selection (X menu)** in **Settings → Key settings** to rebind the shared hold. The optional **Dedicated mask hold** remains available for existing custom bindings.
 The **Mask → Hold to mask** section exposes the same choices and a Mask brush preset selector. Surface brushing uses that preset’s pressure, strength, alpha, spacing and stroke settings independently of the ordinary sculpt brush. Surface brushing respects brush symmetry; all three shapes protect hidden geometry. Through-depth lasso and line do not repeat with brush symmetry. Lasso and line select through every depth on the active model; they also work when the gesture begins in empty space.

@@ -496,7 +496,9 @@ impl UiState {
         let brush = active.map(|index| &document.brushes()[index]);
         match action {
             Action::ToggleStencil => document.stencil().is_some_and(|s| s.enabled),
-            Action::SelectBrush(id) => brush.is_some_and(|b| b.identity() == *id),
+            Action::SelectBrush(id) => self
+                .highlighted_brush_index(document, ctx)
+                .is_some_and(|index| document.brushes()[index].identity() == *id),
             Action::ModelTool(tool) => self.modeling.active && self.modeling.tool == *tool,
             Action::ModelTarget(span) => self.modeling.active && self.modeling.span == *span,
             Action::ModelAxis(axis) => self.modeling.active && self.modeling.axis == *axis,
