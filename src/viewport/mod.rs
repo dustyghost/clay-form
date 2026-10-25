@@ -1,4 +1,5 @@
 //! Converts viewport gestures into camera movement and document sculpt dabs.
+mod brush_preview;
 mod controls;
 mod edges;
 mod interaction;
@@ -53,6 +54,8 @@ pub(crate) enum Gesture {
 }
 #[derive(Default)]
 pub(crate) struct Viewport {
+    pub(crate) size_preview: Option<Brush>,
+    last_brush_position: Option<Pos2>,
     pub(crate) sample_colour: bool,
     pub(crate) sampled_colour: Option<[f32; 3]>,
     pub(crate) session: interaction::InteractionSession,
@@ -277,6 +280,20 @@ impl Viewport {
         if let Some(renderer) = &self.renderer {
             renderer.set_backfaces(options.backface_opacity);
             renderer.set_polygroups(options.show_polygroups);
+        }
+        if let Some(brush) = &self.size_preview {
+            let position = self
+                .last_brush_position
+                .filter(|p| rect.contains(*p))
+                .unwrap_or(scene.center);
+            self.paint_brush_outline(
+                &scene,
+                &painter,
+                position,
+                brush.radius,
+                brush,
+                Color32::from_rgb(125, 210, 245),
+            );
         }
         if self.sample_colour {
             if ui.input(|i| i.key_pressed(egui::Key::Escape) || !i.focused) {
@@ -1005,12 +1022,14 @@ impl Viewport {
             self.session.sculpt.stabilizer = None;
         }
         if let Some(pos) = pointer.filter(|p| {
-            options.select.is_none()
+            self.size_preview.is_none()
+                && options.select.is_none()
                 && (!navigation::contains(rect, *p) || self.session.sculpt.pending_stroke.is_some())
                 && !gizmo_rect.contains(*p)
                 && self.session.gesture != Some(Gesture::Orbit)
                 && self.session.gesture != Some(Gesture::Gizmo)
         }) {
+            self.last_brush_position = Some(pos);
             let b = brush;
             if drawing
                 && self.session.sculpt.last.is_none()
@@ -1039,27 +1058,7 @@ impl Viewport {
             } else {
                 pos
             };
-            let surface = if b.surface_cursor {
-                if let Some(renderer) = &self.renderer {
-                    renderer.set_brush(&scene, pos, radius, &b, color);
-                    scene.brush_cursor_with_footprint(&painter, pos, radius, &b, color, false)
-                } else {
-                    scene.brush_cursor(&painter, pos, radius, &b, color)
-                }
-            } else {
-                false
-            };
-            if !surface {
-                for fraction in [1., b.inner_radius] {
-                    if fraction > 0. {
-                        painter.circle_stroke(
-                            pos,
-                            radius * fraction,
-                            egui::Stroke::new(1.5_f32, color),
-                        );
-                    }
-                }
-            }
+            self.paint_brush_outline(&scene, &painter, pos, radius, &b, color);
             if drawing {
                 let previous = self.session.sculpt.last.unwrap_or(pos);
                 let distance = pos.distance(previous);

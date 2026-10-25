@@ -277,7 +277,9 @@ impl App {
         for command in primitive_commands {
             self.dispatch(command, ui.ctx());
         }
-        let enabled = !menu_was_open
+        let enabled = !self.ui.customization.popup_blocks_viewport
+            && self.ui.customization.popup_menu.is_none()
+            && !menu_was_open
             && self.ui.viewport_menu.context.is_none()
             && self.ui.alphas.draft.is_none()
             && self.ui.alphas.overwrite.is_none()
@@ -360,6 +362,11 @@ impl App {
             self.viewport.cancel(&mut self.document);
         }
         self.viewport.sample_colour = self.ui.materials.sampling;
+        self.viewport.size_preview = self
+            .ui
+            .brush_size_preview
+            .filter(|(frame, _)| *frame == ui.ctx().cumulative_frame_nr())
+            .and_then(|(_, index)| self.document.brushes().get(index).cloned());
         self.viewport.show(
             ui,
             &mut self.document,

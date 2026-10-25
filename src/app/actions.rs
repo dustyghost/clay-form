@@ -652,6 +652,7 @@ impl App {
             | Action::StrokeDragRect
             | Action::StrokeDragDot
             | Action::StrokeStabilisation
+            | Action::SurfaceFootprint
             | Action::AlphaSoft
             | Action::AlphaHard
             | Action::AlphaSquare => {
@@ -660,6 +661,7 @@ impl App {
                 use crate::sculpt::{Alpha, StrokeMode};
                 match action {
                     Action::RestoreBrushIcon => brush.icon = None,
+                    Action::SurfaceFootprint => brush.surface_cursor = !brush.surface_cursor,
                     Action::ResetBrushSettings => brush.reset_settings(),
                     Action::BrushAdd => brush.subtract = false,
                     Action::BrushSubtract => brush.subtract = true,
@@ -740,7 +742,24 @@ impl App {
                 None
             }
             Action::OpenMenu(id) => {
-                self.ui.customization.popup_menu = Some(id);
+                if self.viewport.session.gesture.is_some() || self.viewport.modeling.dragging() {
+                    return;
+                }
+                if self.ui.customization.popup_menu == Some(id) {
+                    self.ui.customization.popup_menu = None;
+                } else {
+                    self.ui.customization.popup_menu = Some(id);
+                    self.ui.customization.popup_position = ctx.pointer_hover_pos();
+                }
+                self.viewport.wait_for_release();
+                None
+            }
+            Action::BrushIcon
+            | Action::BrushSize
+            | Action::BrushInnerRadius
+            | Action::BrushStrength
+            | Action::StrokeMode => {
+                self.execute_action(Action::ShowPanel(crate::preferences::Tool::Brush), ctx);
                 None
             }
             Action::NewBrush(name) if name == "Alpha Drag" => Some(Command::AddAlphaDragBrush),

@@ -2496,6 +2496,7 @@ fn custom_menu_shortcut_and_all_shelf_placements_render_without_document_edits()
     use crate::preferences::{Action, CustomItem, Placement, Shortcut};
     let mut app = App::default();
     let ctx = egui::Context::default();
+    app.ui.preferences.menus.clear();
     let id = app.ui.preferences.add_menu();
     app.ui.preferences.menus[0].items = vec![
         CustomItem::action(Action::Wireframe),
@@ -3659,3 +3660,5 @@ mod paths;
 mod ring_diagnostics;
 
 mod paint;
+
+mod brush_controls;

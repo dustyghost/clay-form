@@ -10,6 +10,8 @@ pub(crate) struct Customization {
     chosen: Option<Action>,
     workspace_name: String,
     pub popup_menu: Option<u64>,
+    pub popup_position: Option<egui::Pos2>,
+    pub popup_blocks_viewport: bool,
 }
 #[derive(Clone)]
 enum Request {
@@ -132,7 +134,7 @@ fn custom_dock_options(ui: &mut egui::Ui, menu: &CustomMenu) {
 }
 pub(super) fn menu_options(ui: &mut egui::Ui, menu: &CustomMenu) {
     if !matches!(menu.placement, Placement::LeftPanel | Placement::RightPanel) {
-        custom_dock_options(ui, menu);
+        custom_dock_options(ui, &menu);
         ui.separator();
     }
     if ui.button("Edit this menu…").clicked() {
@@ -359,14 +361,103 @@ impl UiState {
             _ => false,
         }
     }
+    fn custom_item_widget(
+        &mut self,
+        ui: &mut egui::Ui,
+        menu: &CustomMenu,
+        index: usize,
+        document: &Document,
+        commands: &mut Vec<Command>,
+        vertical: bool,
+    ) {
+        let item = &menu.items[index];
+        if let Some(action) = &item.action {
+            if super::brush_controls::is_control(action) {
+                self.brush_control(ui, action, &item.label, document, commands)
+                    .custom_item(Some(action.clone()), menu.id, index);
+                return;
+            }
+            let label = if item.label.trim().is_empty() {
+                self.action_label(action, document)
+            } else {
+                item.label.clone()
+            };
+            let shortcut = self
+                .preferences
+                .shortcut(action)
+                .map_or(String::new(), |s| s.label());
+            let button = egui::Button::new(label)
+                .wrap()
+                .selected(self.action_selected(action, document, ui.ctx()))
+                .shortcut_text(shortcut);
+            let available = self.action_enabled(action, document);
+            let response = ui.add_enabled(available, button);
+            let response = if available {
+                response
+            } else {
+                ui.interact(
+                    response.rect,
+                    response.id.with("edit_disabled_item"),
+                    egui::Sense::click(),
+                )
+            };
+            if self
+                .edge_help(response, action, document)
+                .custom_item(Some(action.clone()), menu.id, index)
+                .clicked()
+                && available
+            {
+                commands.push(Command::Action(action.clone()));
+                if vertical {
+                    ui.close();
+                }
+            }
+        } else {
+            let response = ui.separator();
+            ui.interact(
+                response.rect.expand(3.),
+                response.id.with("edit_separator"),
+                egui::Sense::click(),
+            )
+            .custom_item(None, menu.id, index);
+        }
+    }
     fn custom_items(
-        &self,
+        &mut self,
         ui: &mut egui::Ui,
         menu: &CustomMenu,
         document: &Document,
         commands: &mut Vec<Command>,
         vertical: bool,
     ) {
+        // Live controls retain their natural widths on horizontal shelves and wrap on small screens.
+        if !vertical
+            && matches!(menu.placement, Placement::Top | Placement::Bottom)
+            && menu.items.iter().any(|i| {
+                i.action
+                    .as_ref()
+                    .is_some_and(super::brush_controls::is_control)
+            })
+        {
+            ui.horizontal_wrapped(|ui| {
+                for index in 0..menu.items.len() {
+                    let item = &menu.items[index];
+                    let width = item.action.as_ref().map_or(12., |action| {
+                        self.brush_control_width(ui, action, &item.label, document)
+                    });
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(width, 32.),
+                        egui::Layout::left_to_right(egui::Align::Center),
+                        |ui| {
+                            ui.push_id(("custom_control", menu.id, index), |ui| {
+                                self.custom_item_widget(ui, menu, index, document, commands, false);
+                            });
+                        },
+                    );
+                }
+            });
+            return;
+        }
         let columns = if vertical {
             1
         } else {
@@ -383,58 +474,7 @@ impl UiState {
                 for (index, item) in menu.items.iter().enumerate() {
                     ui.push_id(index, |ui| {
                         ui.set_max_width(cell_width);
-                        if let Some(action) = &item.action {
-                            let label = if item.label.trim().is_empty() {
-                                self.action_label(action, document)
-                            } else {
-                                item.label.clone()
-                            };
-                            let shortcut = self
-                                .preferences
-                                .shortcut(action)
-                                .map_or(String::new(), |s| s.label());
-                            let button = egui::Button::new(label)
-                                .wrap()
-                                .selected(self.action_selected(action, document, ui.ctx()))
-                                .shortcut_text(shortcut);
-                            let available = self.action_enabled(action, document)
-                                && (*action != Action::StrokeStabilisation
-                                    || self
-                                        .brush_index_for_context(document, ui.ctx())
-                                        .is_some_and(|index| {
-                                            document.brushes()[index].supports_stabilization()
-                                        }));
-                            let response = ui.add_enabled(available, button);
-                            // Disabled operations can still be removed from a custom menu.
-                            let response = if available {
-                                response
-                            } else {
-                                ui.interact(
-                                    response.rect,
-                                    response.id.with("edit_disabled_item"),
-                                    egui::Sense::click(),
-                                )
-                            };
-                            let response = self.edge_help(response, action, document);
-                            if response
-                                .custom_item(Some(action.clone()), menu.id, index)
-                                .clicked()
-                                && available
-                            {
-                                commands.push(Command::Action(action.clone()));
-                                if vertical {
-                                    ui.close();
-                                }
-                            }
-                        } else {
-                            let response = ui.separator();
-                            ui.interact(
-                                response.rect.expand(3.),
-                                response.id.with("edit_separator"),
-                                egui::Sense::click(),
-                            )
-                            .custom_item(None, menu.id, index);
-                        }
+                        self.custom_item_widget(ui, menu, index, document, commands, vertical);
                     });
                     column += 1;
                     if column == columns || item.action.is_none() {
@@ -448,29 +488,30 @@ impl UiState {
             });
     }
     pub fn custom_menu_bar(
-        &self,
+        &mut self,
         ui: &mut egui::Ui,
         document: &Document,
         commands: &mut Vec<Command>,
     ) {
-        for menu in &self.preferences.menus {
+        for menu in self.preferences.menus.clone() {
             if menu.placement == Placement::Menu {
                 ui.push_id(menu.id, |ui| {
                     let response = ui.menu_button(&menu.name, |ui| {
-                        custom_dock_options(ui, menu);
+                        custom_dock_options(ui, &menu);
                         ui.separator();
-                        self.custom_items(ui, menu, document, commands, true)
+                        self.custom_items(ui, &menu, document, commands, true)
                     });
                     // The context menu needs a different popup ID from the primary menu.
                     egui::Popup::context_menu(&response.response)
                         .id(response.response.id.with("custom_menu_options"))
-                        .show(|ui| menu_options(ui, menu));
+                        .show(|ui| menu_options(ui, &menu));
                 });
             }
         }
     }
     pub fn custom_surfaces(&mut self, ctx: &egui::Context, document: &Document) -> Vec<Command> {
         let mut commands = Vec::new();
+        self.customization.popup_blocks_viewport = self.customization.popup_menu.is_some();
         // Edge shelves are laid out before built-in side panels and the central viewport.
         for (dock_index, placement) in [
             Placement::Top,
@@ -493,7 +534,21 @@ impl UiState {
             }
             let id = egui::Id::new(("custom_dock", format!("{placement:?}")));
             let size = self.preferences.shelf_sizes[dock_index];
+            let fit_controls = matches!(placement, Placement::Top | Placement::Bottom)
+                && menus.iter().any(|menu| {
+                    menu.items.iter().any(|item| {
+                        item.action
+                            .as_ref()
+                            .is_some_and(super::brush_controls::is_control)
+                    })
+                });
             let mut contents = |ui: &mut egui::Ui| {
+                if fit_controls {
+                    for menu in &menus {
+                        self.custom_section(ui, menu, document, &mut commands);
+                    }
+                    return;
+                }
                 let height = ui.available_height();
                 egui::ScrollArea::both().max_height(height).show(ui, |ui| {
                     for menu in &menus {
@@ -502,6 +557,12 @@ impl UiState {
                 });
             };
             let response = match placement {
+                Placement::Top if fit_controls => egui::TopBottomPanel::top(id)
+                    .resizable(false)
+                    .show(ctx, &mut contents),
+                Placement::Bottom if fit_controls => egui::TopBottomPanel::bottom(id)
+                    .resizable(false)
+                    .show(ctx, &mut contents),
                 Placement::Top => egui::TopBottomPanel::top(id)
                     .resizable(true)
                     .default_height(size)
@@ -562,17 +623,32 @@ impl UiState {
         {
             let mut open = !ctx.input(|i| i.key_pressed(egui::Key::Escape));
             let before = commands.len();
-            egui::Window::new(&menu.name)
+            let response = egui::Window::new(&menu.name)
                 .id(egui::Id::new("custom_shortcut_popup"))
+                .collapsible(false)
+                .resizable(false)
+                .auto_sized()
+                .default_width(310.)
+                .max_height((ctx.content_rect().height() - 32.).max(100.))
                 .open(&mut open)
-                .default_pos(ctx.pointer_hover_pos().unwrap_or(egui::pos2(350., 160.)))
+                .current_pos(
+                    self.customization
+                        .popup_position
+                        .unwrap_or(egui::pos2(350., 160.)),
+                )
                 .vscroll(true)
                 .show(ctx, |ui| {
                     custom_dock_options(ui, &menu);
                     ui.separator();
                     self.custom_items(ui, &menu, document, &mut commands, true)
                 });
-            if !open || before != commands.len() {
+            let chose_action = commands[before..]
+                .iter()
+                .any(|c| !matches!(c, Command::UpdateBrush(..)));
+            let outside = response.is_some_and(|r| r.response.clicked_elsewhere())
+                && !egui::Popup::is_any_open(ctx)
+                && before == commands.len();
+            if !open || chose_action || outside {
                 self.customization.popup_menu = None;
             }
         }
@@ -717,7 +793,7 @@ impl UiState {
                 let defaults = Preferences::default();
                 self.preferences.visibility_hold = defaults.visibility_hold;
                 self.preferences.mask_hold = defaults.mask_hold;
-                self.preferences.bindings = defaults.bindings; self.preferences.smooth = defaults.smooth;
+                self.preferences.reset_key_bindings(); self.preferences.smooth = defaults.smooth;
                 self.preferences.reverse = defaults.reverse; self.preferences.zoom_hold = defaults.zoom_hold; self.preferences.pan_hold = defaults.pan_hold;
                 self.capturing = None; self.settings_message.clear();
             }
@@ -1122,8 +1198,28 @@ impl UiState {
             if ui.button("Start a default workspace").clicked() {
                 self.preferences.sync_active_workspace();
                 self.preferences.active_workspace = None;
-                self.preferences
-                    .apply_workspace(&Preferences::default().workspace(String::new()));
+                // Keep the brush-menu shortcut identity across named workspaces.
+                let brush_id = self
+                    .preferences
+                    .menus
+                    .iter()
+                    .find(|m| m.items.iter().any(|i| i.action == Some(Action::BrushSize)))
+                    .map(|m| m.id)
+                    .unwrap_or_else(|| self.preferences.add_menu());
+                let mut defaults = Preferences::default().workspace(String::new());
+                defaults.menus[0].id = brush_id;
+                self.preferences.apply_workspace(&defaults);
+                if !self
+                    .preferences
+                    .bindings
+                    .iter()
+                    .any(|(a, _)| *a == Action::OpenMenu(brush_id))
+                {
+                    let _ = self.preferences.bind(
+                        Action::OpenMenu(brush_id),
+                        Shortcut::new(egui::Key::S, egui::Modifiers::NONE),
+                    );
+                }
                 self.customization.selected_menu = None;
                 self.customization.popup_menu = None;
                 reset_panel_memory(ui.ctx());

@@ -1,5 +1,44 @@
 use super::*;
 
+#[test]
+fn default_brush_control_can_be_removed_from_its_context_menu() {
+    let ctx = egui::Context::default();
+    ctx.style_mut(|s| s.animation_time = 0.);
+    let doc = Document::default();
+    let mut state = UiState::default();
+    frame(&mut state, &ctx, &doc, vec![]);
+    let (output, _) = frame(&mut state, &ctx, &doc, vec![]);
+    let size = text_center(&output, "Size");
+    click(&mut state, &ctx, &doc, size, egui::PointerButton::Secondary);
+    let (output, _) = frame(&mut state, &ctx, &doc, vec![]);
+    let remove = text_center(&output, "Remove item from this menu");
+    click(&mut state, &ctx, &doc, remove, egui::PointerButton::Primary);
+    assert!(
+        !state.preferences.menus[0]
+            .items
+            .iter()
+            .any(|i| i.action == Some(Action::BrushSize))
+    );
+    assert!(
+        state.preferences.menus[0]
+            .items
+            .iter()
+            .any(|i| i.action == Some(Action::BrushStrength))
+    );
+}
+
+// These tests build a workspace from scratch; default brush controls have their own coverage.
+fn empty_state() -> UiState {
+    let mut state = UiState::default();
+    state.preferences.menus.clear();
+    state
+        .preferences
+        .bindings
+        .retain(|(a, _)| !matches!(a, Action::OpenMenu(_)));
+    state.preferences.next_menu_id = 1;
+    state
+}
+
 fn frame(
     state: &mut UiState,
     ctx: &egui::Context,
@@ -88,7 +127,7 @@ fn source_context_menu_builds_a_shelf_and_captures_shift_number() {
     let ctx = egui::Context::default();
     ctx.style_mut(|s| s.animation_time = 0.);
     let doc = Document::default();
-    let mut state = UiState::default();
+    let mut state = empty_state();
     frame(&mut state, &ctx, &doc, vec![]);
     let (output, _) = frame(&mut state, &ctx, &doc, vec![]);
     let source = text_center(&output, "Source mask button");
@@ -173,7 +212,7 @@ fn either_sidebar_can_create_and_collapse_custom_menus() {
         let ctx = egui::Context::default();
         ctx.style_mut(|s| s.animation_time = 0.);
         let doc = Document::default();
-        let mut state = UiState::default();
+        let mut state = empty_state();
         // Keep the panel contents short so the test can target its empty background.
         for panel in &mut state.preferences.panels {
             panel.open = false;
@@ -243,7 +282,7 @@ fn either_sidebar_can_create_and_collapse_custom_menus() {
 fn toolbar_switches_workspace_and_applies_colours() {
     let ctx = egui::Context::default();
     let doc = Document::default();
-    let mut state = UiState::default();
+    let mut state = empty_state();
     state.preferences.save_workspace_as("Sculpt").unwrap();
     state.preferences.save_workspace_as("Light tools").unwrap();
     state.preferences.appearance = Appearance::light();
@@ -282,7 +321,7 @@ fn custom_item_and_menu_removal_preserve_other_workspaces_and_shortcuts() {
     let ctx = egui::Context::default();
     ctx.style_mut(|s| s.animation_time = 0.);
     let doc = Document::default();
-    let mut state = UiState::default();
+    let mut state = empty_state();
     let id = state.preferences.add_menu();
     state.preferences.menus[0].name = "Removable tools".into();
     state.preferences.menus[0].collapsible = false;
@@ -358,7 +397,7 @@ fn unavailable_custom_buttons_can_still_be_removed() {
     let ctx = egui::Context::default();
     ctx.style_mut(|s| s.animation_time = 0.);
     let doc = Document::default();
-    let mut state = UiState::default();
+    let mut state = empty_state();
     state.preferences.add_menu();
     state.preferences.menus[0].placement = Placement::LeftPanel;
     state.preferences.menus[0].items.push(CustomItem {
@@ -404,7 +443,7 @@ fn whole_menu_converts_collapses_reorders_with_tools_and_returns_to_toolbar() {
     let ctx = egui::Context::default();
     ctx.style_mut(|s| s.animation_time = 0.);
     let doc = Document::default();
-    let mut state = UiState::default();
+    let mut state = empty_state();
     for panel in &mut state.preferences.panels {
         panel.open = false;
     }
@@ -496,7 +535,7 @@ fn custom_menu_converts_as_one_section_and_moves_past_builtin_tools() {
     let ctx = egui::Context::default();
     ctx.style_mut(|s| s.animation_time = 0.);
     let doc = Document::default();
-    let mut state = UiState::default();
+    let mut state = empty_state();
     for panel in &mut state.preferences.panels {
         panel.open = false;
     }
@@ -565,7 +604,7 @@ fn custom_menu_converts_as_one_section_and_moves_past_builtin_tools() {
 #[test]
 fn typing_in_brush_settings_keeps_the_preset_that_received_focus() {
     for temporary in [false, true] {
-        let mut state = UiState::default();
+        let mut state = empty_state();
         let doc = Document::default();
         let ctx = egui::Context::default();
         let render = |state: &mut UiState, modifiers, events| {
@@ -704,7 +743,7 @@ fn modeling_buttons_offer_menu_and_shortcut_customization() {
         let mut doc = Document::default();
         doc.group_model_selection(&[0], None, "Test", None, false)
             .unwrap();
-        let mut state = UiState::default();
+        let mut state = empty_state();
         state.modeling.active = true;
         state.modeling.mode = mode;
         state.modeling.tool = tool;

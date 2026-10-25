@@ -26,6 +26,28 @@ or docked in a sidebar. The **Panel** strip offers pin, dock left and dock right
 controls in each location. Hover an icon for its name. Existing saved workspace
 placements and shortcuts continue to apply.
 
+### Brush controls
+
+The default **Brush controls** custom menu opens at the top of the left sidebar. It shows the
+active brush icon, draggable **Size** (radius in pixels), **Inner radius** (percent of
+the outer radius), and **Strength** (percent),
+**Surface footprint and normal**, **Stroke mode**, and **Stroke stabilisation**
+with its trailing distance. You can move it to a top shelf, where it wraps to fit narrower windows.
+
+Press **S** to open the same menu near the pointer. Drag a size or strength value
+left/right, or double-click it to type. Adjusting **Size** or **Inner radius** keeps
+the brush outline visible at its last viewport position (or the model centre if you
+have not hovered it yet), with both the outer and inner boundaries updating live.
+Adjustments keep the popup open; press
+**S** again, **Escape**, or click outside to dismiss it. Controls follow the active
+brush, and unsupported stroke options are disabled.
+
+This is an ordinary custom menu: right-click its header or an item to edit it,
+or use **Settings → Customize workspace** to rename, reorder, remove, or move its
+controls. The menu remains visible with the compact toolbar. Existing preferences
+receive it once; later customisations are preserved. An existing custom **S**
+binding is retained rather than overwritten.
+
 ## Key settings and workspace
 
 ### Pin a menu open
@@ -130,6 +152,7 @@ Shifted numbers use the physical number-row key, so `!` can bind as Shift+1. Oth
 | Transform quick menu | E |
 | Universal transform / return to sculpting | T |
 | Smaller / larger brush | [ / ] |
+| Brush controls popup | S |
 | Previous / next brush | , / . |
 | Subdivide | Ctrl+D |
 | Lower / higher subdivision level | Shift+D / D |

@@ -16,6 +16,7 @@ mod customization;
 mod edges;
 mod files;
 pub(crate) use files::{FileEntry, FilePicker};
+mod brush_controls;
 mod icons;
 mod masking;
 mod menus;
@@ -75,6 +76,7 @@ pub(crate) struct UiState {
     pub(crate) mask_suppressed: bool,
     smooth_brush: Option<String>,
     brush_editor_focus: Option<(egui::Id, String)>,
+    pub(crate) brush_size_preview: Option<(u64, usize)>,
     pub file_picker: Option<FilePicker>,
     pub path: String,
     pub obj_path: String,
@@ -156,6 +158,7 @@ impl Default for UiState {
             mask_suppressed: false,
             smooth_brush: None,
             brush_editor_focus: None,
+            brush_size_preview: None,
             file_picker: None,
             path: "sculpt.clay".into(),
             obj_path: "model.obj".into(),
@@ -961,10 +964,18 @@ impl UiState {
                     ui.selectable_value(&mut b.subtract, true, "− Subtract")
                         .customize(Action::BrushSubtract);
                 });
-                ui.add(egui::Slider::new(&mut b.radius, 1. ..=500.).text("Radius (px)"));
-                ui.add(egui::Slider::new(&mut b.inner_radius, 0. ..=1.).text("Inner radius (fraction)")).on_hover_text("Full-strength core; falloff fades from here to the outer radius. Applies to Soft and image alphas.");
-                design::checkbox(ui, &mut b.surface_cursor, "Surface footprint and normal");
-                ui.add(egui::Slider::new(&mut b.strength, 0. ..=1.).text("Strength"));
+                let radius = ui
+                    .add(egui::Slider::new(&mut b.radius, 1. ..=500.).text("Radius (px)"))
+                    .customize(Action::BrushSize);
+                self.preview_brush_size(&radius, selected);
+                let inner = ui.add(egui::Slider::new(&mut b.inner_radius, 0. ..=1.).text("Inner radius (fraction)"))
+                    .customize(Action::BrushInnerRadius)
+                    .on_hover_text("Full-strength core; falloff fades from here to the outer radius. Applies to Soft and image alphas.");
+                self.preview_brush_size(&inner, selected);
+                design::checkbox(ui, &mut b.surface_cursor, "Surface footprint and normal")
+                    .customize(Action::SurfaceFootprint);
+                ui.add(egui::Slider::new(&mut b.strength, 0. ..=1.).text("Strength"))
+                    .customize(Action::BrushStrength);
                 if b.kind == Kind::Relax {
                     ui.add(
                         egui::Slider::new(&mut b.relax_tolerance, 0.000001..=1.)
