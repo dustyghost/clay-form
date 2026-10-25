@@ -1,7 +1,7 @@
 use super::*;
-use crate::sculpt::texture::{Channel, Exchange, Texture};
+use crate::sculpt::texture::{Channel, Exchange, Precision, Texture};
 pub(crate) enum TextureCommand {
-    Create(Channel, u32),
+    Create(Channel, u32, Precision),
     Paint(Option<Channel>),
     Remove(Channel),
     Copy(Channel),
@@ -25,7 +25,7 @@ impl App {
                 .ok_or_else(|| "Create or import a texture for this channel first".to_string())
         };
         match command {
-            Create(channel, size) => {
+            Create(channel, size, precision) => {
                 if self
                     .document
                     .mesh()
@@ -40,12 +40,17 @@ impl App {
                     );
                 }
                 let brush = &self.document.brushes()[self.ui.selected];
-                self.document
-                    .assign_texture(Texture::new(channel, size, &brush.material)?)?;
+                self.document.assign_texture(Texture::new_with_precision(
+                    channel,
+                    size,
+                    &brush.material,
+                    precision,
+                )?)?;
             }
             Paint(channel) => {
                 if let Some(channel) = channel {
                     get(&self.document, channel)?;
+                    self.document.require_texture_history()?;
                     if !self.document.mesh().uv.current(self.document.mesh()) {
                         return Err("Generate current UVs before painting a texture".into());
                     }
@@ -110,9 +115,9 @@ impl App {
                 let path = std::path::Path::new(&path);
                 if !path
                     .extension()
-                    .is_some_and(|s| s.eq_ignore_ascii_case("png"))
+                    .is_some_and(|s| s.eq_ignore_ascii_case("png") || s.eq_ignore_ascii_case("exr"))
                 {
-                    return Err("Export texture to a .png file".into());
+                    return Err("Export texture to .png (16-bit) or .exr (float)".into());
                 }
                 if path.exists() && !overwrite {
                     self.ui.uv.export_overwrite = Some(path.to_string_lossy().into());
@@ -120,15 +125,23 @@ impl App {
                 }
                 persistence::texture::save(path, &texture)?;
                 self.ui.uv.export_overwrite = None;
-                self.ui.status = format!("Exported {} as 16-bit PNG", path.display());
+                self.ui.status = format!("Exported texture to {}", path.display());
             }
             EditExternal(channel) => {
                 let mut texture = get(&self.document, channel)?;
                 let directory = std::env::temp_dir().join("clay-form-texture-exchange");
                 std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
-                let path =
-                    directory.join(format!("texture-{}-{}.png", texture.id, Texture::new_id()));
-                persistence::texture::save(&path, &texture)?;
+                let extension = if texture.pixels.precision() == Precision::Float32 {
+                    "exr"
+                } else {
+                    "png"
+                };
+                let path = directory.join(format!(
+                    "texture-{}-{}.{extension}",
+                    texture.id,
+                    Texture::new_id()
+                ));
+                persistence::texture::save_gimp(&path, &texture)?;
                 let executable = if self.ui.preferences.gimp_path.trim().is_empty() {
                     "gimp"
                 } else {
@@ -161,7 +174,7 @@ impl App {
                     baseline: texture.fingerprint(),
                 });
                 self.document.assign_texture(texture)?;
-                self.ui.status="In GIMP, export the edited image to the exchange PNG, then click Reload. Save layered work separately as XCF.".into();
+                self.ui.status="In GIMP, export the edited image to the exchange image, then click Reload. Save layered work separately as XCF.".into();
             }
             Reload(channel, discard_local) => {
                 let texture = get(&self.document, channel)?;
@@ -174,6 +187,11 @@ impl App {
                     return Err("This texture changed in Clay Form since export. Keep local edits, or explicitly replace them with the external image".into());
                 }
                 let mut next = persistence::texture::load(&exchange.path, channel)?;
+                if texture.pixels.precision() == Precision::Float32
+                    && next.pixels.precision() != Precision::Float32
+                {
+                    return Err("External image lost float precision. Export a float EXR from the editor before reloading; the current image is unchanged".into());
+                }
                 next.id = texture.id;
                 next.name = texture.name;
                 next.exchange = Some(Exchange {
@@ -203,7 +221,7 @@ mod tests {
         app.document
             .replace_geometry(crate::sculpt::Geometry::new(mesh))
             .unwrap();
-        app.texture_command(TextureCommand::Create(Channel::Color, 16))
+        app.texture_command(TextureCommand::Create(Channel::Color, 16, Precision::U16))
             .unwrap();
         let mut texture = app.document.mesh().uv.textures[0].clone();
         let path = std::env::temp_dir().join(format!("clay-reload-{}.png", texture.id));
@@ -214,7 +232,7 @@ mod tests {
         app.document.assign_texture(texture.clone()).unwrap();
         let before = app.document.geometry_snapshot();
         let mut external = Texture::new(Channel::Color, 32, &Default::default()).unwrap();
-        std::sync::Arc::make_mut(&mut external.pixels)[0] = 12345;
+        external.pixels.u16_mut()[0] = 12345;
         persistence::texture::save(&path, &external).unwrap();
         app.texture_command(TextureCommand::Reload(Channel::Color, false))
             .unwrap();
@@ -226,7 +244,7 @@ mod tests {
         assert_eq!(app.document.geometry_snapshot(), before);
         app.document.redo();
         let mut local = updated.clone();
-        std::sync::Arc::make_mut(&mut local.pixels)[0] = 54321;
+        local.pixels.u16_mut()[0] = 54321;
         app.document.assign_texture(local).unwrap();
         let local = app.document.geometry_snapshot();
         assert!(
@@ -383,6 +401,7 @@ mod tests {
         let after = app.document.mesh().uv.textures[0].pixels.clone();
         assert!(
             after
+                .u16()
                 .as_chunks::<4>()
                 .0
                 .iter()

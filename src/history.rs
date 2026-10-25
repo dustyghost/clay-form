@@ -2,7 +2,7 @@
 use crate::sculpt::Geometry;
 use std::collections::VecDeque;
 const UNDO_LIMIT: usize = 24;
-const MEMORY_LIMIT: usize = 128 * 1024 * 1024;
+const MEMORY_LIMIT: usize = 1024 * 1024 * 1024;
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct Retention {
@@ -79,11 +79,25 @@ impl History {
     pub fn retained_bytes(&self) -> usize {
         let mut shared = std::collections::HashMap::new();
         let mut owned = 0;
+        let mut textures = std::collections::HashMap::new();
         for entry in self.undo.iter().chain(&self.redo) {
+            for mesh in std::iter::once(&entry.geometry.mesh)
+                .chain(&entry.geometry.settings.lower)
+                .chain(&entry.geometry.settings.upper)
+                .chain(entry.geometry.submodels.iter().flat_map(|m| {
+                    std::iter::once(&m.mesh)
+                        .chain(&m.mesh_settings.lower)
+                        .chain(&m.mesh_settings.upper)
+                }))
+            {
+                for texture in &mesh.uv.textures {
+                    textures.insert(texture.pixels.storage_id(), texture.pixels.byte_len());
+                }
+            }
             owned += entry.bytes + entry.settings_memory.owned;
             shared.extend(entry.settings_memory.shared.iter().copied());
         }
-        owned + shared.values().sum::<usize>()
+        owned + shared.values().sum::<usize>() + textures.values().sum::<usize>()
     }
     pub fn enforce_limits(&mut self) {
         while self.undo.len() + self.redo.len() > self.retention.edits

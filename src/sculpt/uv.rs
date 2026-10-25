@@ -196,10 +196,7 @@ impl UvMap {
                 .textures
                 .iter()
                 .map(|t| {
-                    t.pixels.len() * 2
-                        + t.name.len()
-                        + t.profile.len()
-                        + t.exchange.as_ref().map_or(0, |e| e.path.len())
+                    t.name.len() + t.profile.len() + t.exchange.as_ref().map_or(0, |e| e.path.len())
                 })
                 .sum::<usize>()
     }

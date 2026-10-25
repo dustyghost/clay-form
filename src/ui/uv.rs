@@ -9,12 +9,14 @@ pub(crate) struct UvControls {
     pub image_path: String,
     pub export_overwrite: Option<String>,
     pub reload_conflict: bool,
-    image_preview: Option<((u64, u64), egui::TextureHandle)>,
+    image_preview: Option<((u64, u64, u32), egui::TextureHandle)>,
     geometry_hash: Option<u64>,
     size: u32,
+    precision: crate::sculpt::texture::Precision,
     export_path: String,
     pub open: bool,
     pub checker: bool,
+    pub exposure: f32,
     pub selected: Vec<usize>,
     padding: f32,
     offset: [f32; 2],
@@ -123,21 +125,57 @@ impl UiState {
             egui::ComboBox::from_id_salt("texture_resolution")
                 .selected_text(format!("{} × {}", self.uv.size, self.uv.size))
                 .show_ui(ui, |ui| {
-                    for size in [256, 512, 1024, 2048] {
+                    for size in [256, 512, 1024, 2048, 4096] {
                         ui.selectable_value(&mut self.uv.size, size, size.to_string());
                     }
                 });
+            use crate::sculpt::texture::Precision;
+            egui::ComboBox::from_id_salt("texture_precision")
+                .selected_text(if self.uv.precision == Precision::U16 {
+                    "16-bit integer / PNG"
+                } else {
+                    "32-bit float / EXR"
+                })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut self.uv.precision,
+                        Precision::U16,
+                        "16-bit integer / PNG",
+                    );
+                    ui.selectable_value(
+                        &mut self.uv.precision,
+                        Precision::Float32,
+                        "32-bit float / EXR",
+                    );
+                });
             if ui.button("Create texture").clicked() {
-                commands.push(Command::Texture(T::Create(self.uv.channel, self.uv.size)));
+                commands.push(Command::Texture(T::Create(
+                    self.uv.channel,
+                    self.uv.size,
+                    self.uv.precision,
+                )));
             }
-            if ui.button("Import PNG / JPEG…").clicked() {
+            if ui.button("Import PNG / JPEG / EXR…").clicked() {
                 commands.push(Command::BrowseAsset(crate::command::AssetKind::Texture));
             }
         });
         if let Some(texture) = uv.textures.iter().find(|t| t.channel == self.uv.channel) {
+            if self.uv.export_path == "texture.png"
+                && texture.pixels.precision() == crate::sculpt::texture::Precision::Float32
+            {
+                self.uv.export_path = "texture.exr".into();
+            }
+
             ui.label(format!(
-                "{} · {} × {} · RGBA16",
-                texture.name, texture.width, texture.height
+                "{} · {} × {} · {}",
+                texture.name,
+                texture.width,
+                texture.height,
+                if texture.pixels.precision() == crate::sculpt::texture::Precision::Float32 {
+                    "RGBA32 float · linear"
+                } else {
+                    "RGBA16 integer"
+                }
             ));
             ui.horizontal_wrapped(|ui| {
                 if ui
@@ -161,9 +199,9 @@ impl UiState {
             });
             ui.label("Images are shared by duplicated models. Make independent to edit only this model. Overlapping UVs share pixels.");
             ui.horizontal_wrapped(|ui| {
-                ui.label("PNG export");
+                ui.label("PNG / EXR export");
                 ui.text_edit_singleline(&mut self.uv.export_path);
-                if ui.button("Export PNG").clicked() {
+                if ui.button("Export image").clicked() {
                     commands.push(Command::Texture(T::Export(
                         self.uv.channel,
                         self.uv.export_path.clone(),
@@ -174,7 +212,7 @@ impl UiState {
             if let Some(path) = self.uv.export_overwrite.clone() {
                 ui.horizontal_wrapped(|ui| {
                     ui.label(format!("Replace {path}?"));
-                    if ui.button("Replace PNG").clicked() {
+                    if ui.button("Replace image").clicked() {
                         commands.push(Command::Texture(T::Export(self.uv.channel, path, true)));
                     }
                     if ui.button("Keep existing file").clicked() {
@@ -213,7 +251,7 @@ impl UiState {
             if let Some(exchange) = &texture.exchange {
                 ui.label(format!("Exchange image: {}", exchange.path));
             }
-            ui.label("GIMP: export back to the exchange PNG before Reload. Save layered XCF separately. Imported pixels are embedded in the project.");
+            ui.label("GIMP: export back to the exchange PNG or EXR before Reload. Save layered XCF separately. Imported pixels are embedded in the project.");
         }
         ui.horizontal(|ui| {
             ui.label("GIMP executable");
@@ -264,6 +302,10 @@ impl UiState {
         model_faces: &[usize],
         commands: &mut Vec<Command>,
     ) {
+        ui.add(egui::Slider::new(&mut self.uv.exposure, -12. ..=12.).text("Preview exposure (EV)"))
+            .on_hover_text(
+                "View adjustment only; exported pixels are unchanged. Useful for HDR EXR images.",
+            );
         let ctx = ui.ctx().clone();
         let mesh = document.mesh();
         let uv = &mesh.uv;
@@ -327,22 +369,45 @@ impl UiState {
             }
         }
         if let Some(texture) = uv.textures.iter().find(|t| t.channel == self.uv.channel) {
-            let id = (texture.id, document.display_revision());
+            let id = (
+                texture.id,
+                document.display_revision(),
+                self.uv.exposure.to_bits(),
+            );
             if self
                 .uv
                 .image_preview
                 .as_ref()
                 .is_none_or(|(old, _)| *old != id)
             {
-                let rgba: Vec<u8> = texture.pixels.iter().map(|v| (*v / 257) as u8).collect();
+                // The panel is at most 500 pixels wide; keep its preview bounded at 4K.
+                let width = texture.width.min(512) as usize;
+                let height = texture.height.min(512) as usize;
+                let mut rgba = Vec::with_capacity(width * height * 4);
+                for y in 0..height {
+                    for x in 0..width {
+                        let source = (y * texture.height as usize / height)
+                            * texture.width as usize
+                            + x * texture.width as usize / width;
+                        let mut p = texture.pixels.pixel(source);
+                        if texture.channel == crate::sculpt::texture::Channel::Color
+                            && texture.pixels.precision()
+                                == crate::sculpt::texture::Precision::Float32
+                        {
+                            for v in &mut p[..3] {
+                                *v = crate::sculpt::material::linear_to_srgb(
+                                    *v * self.uv.exposure.exp2(),
+                                );
+                            }
+                        }
+                        rgba.extend(p.map(|v| (v.clamp(0., 1.) * 255.).round() as u8));
+                    }
+                }
                 self.uv.image_preview = Some((
                     id,
                     ctx.load_texture(
                         "uv_texture_image",
-                        egui::ColorImage::from_rgba_unmultiplied(
-                            [texture.width as usize, texture.height as usize],
-                            &rgba,
-                        ),
+                        egui::ColorImage::from_rgba_unmultiplied([width, height], &rgba),
                         egui::TextureOptions::LINEAR,
                     ),
                 ));

@@ -16,9 +16,8 @@ impl AssetKind {
     }
     pub(crate) fn filter_label(self) -> &'static str {
         match self {
-            Self::Reference | Self::Alpha | Self::Texture => {
-                "PNG / JPEG images (.png, .jpg, .jpeg)"
-            }
+            Self::Texture => "PNG / JPEG / OpenEXR (.png, .jpg, .jpeg, .exr)",
+            Self::Reference | Self::Alpha => "PNG / JPEG images (.png, .jpg, .jpeg)",
             Self::Obj => "Wavefront models (.obj)",
             Self::Brush => "Brush presets (.brush.json, .json)",
             Self::BrushLibrary => "Brush libraries (.brushes.json, .json)",
@@ -29,7 +28,8 @@ impl AssetKind {
             return false;
         };
         let extensions: &[&str] = match self {
-            Self::Reference | Self::Alpha | Self::Texture => &["png", "jpg", "jpeg"],
+            Self::Texture => &["png", "jpg", "jpeg", "exr"],
+            Self::Reference | Self::Alpha => &["png", "jpg", "jpeg"],
             Self::Obj => &["obj"],
             Self::Brush | Self::BrushLibrary => &["json"],
         };

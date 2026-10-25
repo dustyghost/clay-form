@@ -8,16 +8,18 @@ pub(crate) use obj::load_obj_cancellable;
 use crate::sculpt::{Alpha, Brush, Mesh, Project, validate_brush};
 pub(crate) fn read_json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, String> {
     let meta = std::fs::metadata(path).map_err(|e| e.to_string())?;
-    if meta.len() > 128 * 1024 * 1024 {
-        return Err("File exceeds 128 MB limit".into());
+    if meta.len() > 2 * 1024 * 1024 * 1024 {
+        return Err("File exceeds 2 GiB limit".into());
     }
     serde_json::from_slice(&std::fs::read(path).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())
 }
 pub(crate) fn json_bytes<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, String> {
     let bytes = serde_json::to_vec(value).map_err(|e| e.to_string())?;
-    if bytes.len() > 128 * 1024 * 1024 {
-        return Err("File exceeds 128 MB limit; reduce mesh or group data before saving".into());
+    if bytes.len() > 2 * 1024 * 1024 * 1024 {
+        return Err(
+            "File exceeds 2 GiB limit; reduce mesh, texture or group data before saving".into(),
+        );
     }
     Ok(bytes)
 }

@@ -8,7 +8,8 @@ use std::collections::HashMap;
 #[derive(Clone)]
 pub(crate) struct DisplayMesh {
     pub mesh: Mesh,
-    pub texture_pixels: Vec<[f32; 4]>,
+    pub texture_pixels: Vec<[u32; 2]>,
+    pub texture_info: Vec<[u32; 4]>,
     pub uv_corners: Vec<[[f32; 4]; 3]>,
     pub shading: SurfaceShading,
     pub owners: Vec<usize>,
@@ -46,6 +47,7 @@ impl DisplayMesh {
             mesh: source.clone(),
             uv_corners: self.uv_corners.clone(),
             texture_pixels: self.texture_pixels.clone(),
+            texture_info: self.texture_info.clone(),
             shading: self.shading.clone(),
             owners: self.owners.clone(),
             muted_vertices: self.muted_vertices.clone(),
@@ -102,7 +104,8 @@ impl DisplayMesh {
             mask: Vec::new(),
         };
         let mut uv_corners = Vec::new();
-        let mut texture_pixels = vec![[0.; 4]];
+        let mut texture_pixels = Vec::new();
+        let mut texture_info = vec![[0; 4]];
         let mut texture_ids = HashMap::new();
         let mut edge_colors = HashMap::new();
         let mut shading = SurfaceShading::default();
@@ -196,14 +199,20 @@ impl DisplayMesh {
             if uv_current {
                 for texture in &surface.uv.textures {
                     let id = *texture_ids.entry(texture.id).or_insert_with(|| {
-                        let id = texture_pixels.len();
-                        texture_pixels.push([
-                            texture.width as f32,
-                            texture.height as f32,
-                            (id + 1) as f32,
-                            0.,
+                        let id = texture_info.len();
+                        texture_info.push([
+                            texture.width,
+                            texture.height,
+                            texture_pixels.len() as u32,
+                            (if texture.pixels.precision()
+                                == crate::sculpt::texture::Precision::Float32
+                            {
+                                2
+                            } else {
+                                u32::from(texture.channel == crate::sculpt::texture::Channel::Color)
+                            }),
                         ]);
-                        texture_pixels.extend(texture.linear_pixels());
+                        texture_pixels.extend(texture.packed_pixels());
                         id
                     });
                     texture_channels[texture.channel.index()] = id as f32;
@@ -269,6 +278,7 @@ impl DisplayMesh {
             mesh,
             uv_corners,
             texture_pixels,
+            texture_info,
             shading,
             owners,
             muted_vertices,

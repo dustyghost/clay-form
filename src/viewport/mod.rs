@@ -1186,6 +1186,11 @@ pub(crate) enum WireMode {
 }
 
 impl Viewport {
+    pub(crate) fn set_texture_exposure(&self, stops: f32) {
+        if let Some(renderer) = &self.renderer {
+            renderer.set_texture_exposure(stops);
+        }
+    }
     pub(crate) fn set_uv_checker(&self, enabled: bool) {
         if let Some(renderer) = &self.renderer {
             renderer.set_uv_checker(enabled);

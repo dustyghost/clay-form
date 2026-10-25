@@ -585,6 +585,11 @@ impl eframe::App for App {
         ) {
             self.dispatch(command, ctx);
         }
+        self.viewport.set_texture_exposure(if self.ui.uv.open {
+            self.ui.uv.exposure
+        } else {
+            0.
+        });
         self.viewport
             .set_uv_checker(self.ui.uv.open && self.ui.uv.checker);
         self.ui.settings(ctx, &self.document);

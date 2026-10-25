@@ -11,7 +11,8 @@ struct Uniforms {
 @group(0) @binding(3) var<storage,read> indices: array<u32>;
 @group(0) @binding(4) var<storage,read> groups: array<vec4f>;
 @group(0) @binding(5) var<storage,read> uv_corners: array<vec4f>;
-@group(0) @binding(6) var<storage,read> texture_pixels: array<vec4f>;
+@group(0) @binding(6) var texture_pixels: texture_2d_array<u32>;
+@group(0) @binding(7) var<storage,read> texture_info: array<vec4u>;
 fn project(p: vec3f) -> vec4f {
  let z=dot(p,u.view.xyz);
  let w=1.-z*u.perspective.x;
@@ -104,10 +105,22 @@ fn channel(v: Surface, offset: u32) -> f32 {
  return dot(vec3f(vertices[v.ids.x*stride+offset],vertices[v.ids.y*stride+offset],vertices[v.ids.z*stride+offset]),v.bary);
 }
 fn channels(v: Surface, offset: u32) -> vec3f { return vec3f(channel(v,offset),channel(v,offset+1u),channel(v,offset+2u)); }
+fn image_words(index:u32)->vec2u {
+ return textureLoad(texture_pixels,vec2i(i32(index%1024u),i32((index/1024u)%1024u)),i32(index/1048576u),0).xy;
+}
+fn image_pixel(index:u32, encoding:u32)->vec4f {
+ let packed=image_words(index);
+ var raw:vec4f;
+ if encoding==2u { raw=bitcast<vec4f>(vec4u(packed,image_words(index+1u))); }
+ else { raw=vec4f(f32(packed.x&65535u),f32(packed.x>>16u),f32(packed.y&65535u),f32(packed.y>>16u))/65535.; }
+ var rgb=raw.rgb;
+ if encoding==1u { rgb=select(pow((rgb+0.055)/1.055,vec3f(2.4)),rgb/12.92,rgb<=vec3f(0.04045)); }
+ return vec4f(rgb*raw.a,raw.a);
+}
 fn texture_sample(id:u32,uv:vec2f)->vec4f {
  if id==0u {return vec4f(0.);}
- let info=texture_pixels[id];let size=vec2u(info.xy);let xy=clamp(vec2f(uv.x,1.-uv.y),vec2f(0.),vec2f(1.))*vec2f(size)-0.5;let lo=vec2u(clamp(floor(xy),vec2f(0.),vec2f(size)-1.));let hi=vec2u(clamp(floor(xy)+1.,vec2f(0.),vec2f(size)-1.));let t=fract(xy);let first=u32(info.z);
- let a=texture_pixels[first+lo.y*size.x+lo.x];let b=texture_pixels[first+lo.y*size.x+hi.x];let c=texture_pixels[first+hi.y*size.x+lo.x];let d=texture_pixels[first+hi.y*size.x+hi.x];let result=mix(mix(a,b,t.x),mix(c,d,t.x),t.y);return vec4f(result.rgb/max(result.a,0.000001),result.a);
+ let info=texture_info[id];let size=info.xy;let xy=clamp(vec2f(uv.x,1.-uv.y),vec2f(0.),vec2f(1.))*vec2f(size)-0.5;let lo=vec2u(clamp(floor(xy),vec2f(0.),vec2f(size)-1.));let hi=vec2u(clamp(floor(xy)+1.,vec2f(0.),vec2f(size)-1.));let t=fract(xy);let first=info.z;let stride=select(1u,2u,info.w==2u);
+ let a=image_pixel(first+(lo.y*size.x+lo.x)*stride,info.w);let b=image_pixel(first+(lo.y*size.x+hi.x)*stride,info.w);let c=image_pixel(first+(hi.y*size.x+lo.x)*stride,info.w);let d=image_pixel(first+(hi.y*size.x+hi.x)*stride,info.w);let result=mix(mix(a,b,t.x),mix(c,d,t.x),t.y);return vec4f(result.rgb/max(result.a,0.000001),result.a);
 }
 @fragment fn surface_fragment(v: Surface) -> @location(0) vec4f {
  let delta=u.light_position[0].xyz-v.position*u.light_position[0].w;
@@ -124,7 +137,7 @@ fn texture_sample(id:u32,uv:vec2f)->vec4f {
    linear=linear*(1.-weight*(1.-add))+layer*weight;
   }
  }
- var rgb=display_rgb(linear);
+ var rgb=display_rgb(linear*exp2(u.material_info.z));
  if u.material_info.y>0.5 && v.uv.z>0.5 {let cell=vec2i(floor(v.uv.xy*16.));rgb=vec3f(select(0.15,0.85,(cell.x+cell.y)%2==0))*shade;}
  if u.flags.x==1. && v.group.a>0.5 { rgb=mix(rgb,v.group.rgb*shade,mix(0.5,1.,v.is_active)); }
  rgb*=1.-v.mask*0.75;

@@ -11,7 +11,7 @@ Use this reference when changing these systems. Start with the overview for owne
 | `main.rs` | Create the desktop window and application. |
 | `app.rs`, `app/`, `command.rs` | Own the application frame; resolve actions, dispatch commands, coordinate files and background jobs in separate modules. |
 | `document.rs`, `document/` | Own persistent state and history; implement scene, mesh, masks, attributes, brushes, strokes, primitives, thickness, and transforms in focused modules. Expose read-only content to views. |
-| `history.rs` | Keep geometry snapshots within 24 entries and a 128 MB budget, undo/redo, and invalidate redo on a new mesh edit. |
+| `history.rs` | Keep geometry snapshots within 24 entries and a 1024 MiB budget, undo/redo, and invalidate redo on a new mesh edit. |
 | `sculpt/` | Geometry math, brush/alpha data, mesh deformation, project schema and validation. No egui, files, or tablet dependencies. |
 | `persistence.rs` | Read/write version 1 JSON, import image alphas, and export OBJ. |
 | `mesh_job.rs` | Compute subdivision/remesh on a cancellable background worker; deliver results for transactional controller commits. |

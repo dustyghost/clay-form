@@ -19,7 +19,7 @@ The main paths through the app are:
 | --- | --- | --- |
 | Commands, files, or background jobs | `app.rs`, `app/`, `command/`, `background_job.rs` | `app/policy.rs` shares availability rules between controls and dispatch; feature handlers execute after edit-boundary checks. |
 | Persistent scene state or edits | `document.rs`, `document/` | Document content is private. Views receive read-only data. |
-| Undo and redo | `history.rs` | History is bounded to 24 entries and 128 MB. |
+| Undo and redo | `history.rs` | History is bounded to 24 entries and 1024 MiB. |
 | Brushes, topology, or validation | `sculpt/` | Scene data lives in `sculpt/geometry.rs`; subdivision algorithms live in `sculpt/subdivision.rs`. |
 | Project files, image alphas, or OBJ export | `persistence.rs` | Preserve version 1 compatibility. |
 | Subdivision or remesh jobs | `mesh_job.rs` | Compute privately; commit through the controller. |

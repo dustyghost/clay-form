@@ -108,6 +108,9 @@ impl Renderer {
     pub fn set_backfaces(&self, opacity: f32) {
         self.preview.lock().unwrap().backface_opacity = opacity.clamp(0., 1.);
     }
+    pub fn set_texture_exposure(&self, stops: f32) {
+        self.preview.lock().unwrap().texture_exposure = stops.clamp(-12., 12.);
+    }
     pub fn set_uv_checker(&self, enabled: bool) {
         self.preview.lock().unwrap().uv_checker = enabled;
     }
@@ -264,7 +267,8 @@ struct Gpu {
     back_uniform: wgpu::Buffer,
     meshes: Vec<MeshBuffers>,
     vertex_stride: usize,
-    texture_pixels: wgpu::Buffer,
+    texture_pixels: wgpu::Texture,
+    texture_info: wgpu::Buffer,
     edges: Option<Vec<(wgpu::Buffer, u32)>>,
     triangle_edges: Option<Vec<(wgpu::Buffer, u32)>>,
     uploaded: Option<Arc<DisplayMesh>>,
@@ -314,11 +318,11 @@ impl Gpu {
                 count: None,
             },
         ];
-        for binding in 2..=6 {
+        for binding in (2..=7).filter(|&b| b != 6) {
             entries.push(wgpu::BindGroupLayoutEntry {
                 binding,
                 visibility: wgpu::ShaderStages::VERTEX
-                    | if binding == 2 || binding == 6 {
+                    | if binding == 2 || binding == 7 {
                         wgpu::ShaderStages::FRAGMENT
                     } else {
                         wgpu::ShaderStages::empty()
@@ -331,6 +335,16 @@ impl Gpu {
                 count: None,
             });
         }
+        entries.push(wgpu::BindGroupLayoutEntry {
+            binding: 6,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Uint,
+                view_dimension: wgpu::TextureViewDimension::D2Array,
+                multisampled: false,
+            },
+            count: None,
+        });
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("viewport inputs"),
             entries: &entries,
@@ -524,10 +538,11 @@ impl Gpu {
             uniform: uniform(),
             back_uniform: uniform(),
             meshes: vec![Self::mesh_buffers(device, &[], &[], &[], &[])],
-            texture_pixels: buffer(
+            texture_pixels: Self::pixel_texture(device, queue, &[]),
+            texture_info: buffer(
                 device,
-                "texture pixels",
-                bytemuck::cast_slice(&[[0_f32; 4]]),
+                "texture descriptors",
+                &[],
                 wgpu::BufferUsages::STORAGE,
             ),
             vertex_stride: 12,
@@ -623,10 +638,11 @@ impl Gpu {
     // A document may contain several maximum-density models. Chunk the display
     // data at the device binding limit instead of imposing a new geometry limit.
     fn upload_meshes(&mut self, data: &DisplayMesh, limit: usize) {
-        self.texture_pixels = buffer(
+        self.texture_pixels = Self::pixel_texture(&self.device, &self.queue, &data.texture_pixels);
+        self.texture_info = buffer(
             &self.device,
-            "texture pixels",
-            bytemuck::cast_slice(&data.texture_pixels),
+            "texture descriptors",
+            bytemuck::cast_slice(&data.texture_info),
             wgpu::BufferUsages::STORAGE,
         );
         self.vertex_stride = data.vertex_stride();
@@ -718,7 +734,7 @@ impl Gpu {
         u.material_info = [
             self.vertex_stride as f32,
             f32::from(preview.uv_checker),
-            0.,
+            preview.texture_exposure,
             0.,
         ];
         u.right = vector(p.right, 0.);
@@ -853,10 +869,70 @@ impl Gpu {
                 },
                 wgpu::BindGroupEntry {
                     binding: 6,
-                    resource: self.texture_pixels.as_entire_binding(),
+                    resource: wgpu::BindingResource::TextureView(&self.texture_pixels.create_view(
+                        &wgpu::TextureViewDescriptor {
+                            dimension: Some(wgpu::TextureViewDimension::D2Array),
+                            ..Default::default()
+                        },
+                    )),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 7,
+                    resource: self.texture_info.as_entire_binding(),
                 },
             ],
         })
+    }
+    fn pixel_texture(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        pixels: &[[u32; 2]],
+    ) -> wgpu::Texture {
+        const SIDE: usize = 1024;
+        const PAGE: usize = SIDE * SIDE;
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("lossless image pixel pages"),
+            size: wgpu::Extent3d {
+                width: SIDE as u32,
+                height: SIDE as u32,
+                depth_or_array_layers: pixels.len().div_ceil(PAGE).max(1) as u32,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rg32Uint,
+            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        for (layer, pixels) in pixels.chunks(PAGE).enumerate() {
+            let rows = pixels.len().div_ceil(SIDE);
+            let mut bytes = bytemuck::cast_slice(pixels).to_vec();
+            bytes.resize(rows * SIDE * 8, 0);
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d {
+                        x: 0,
+                        y: 0,
+                        z: layer as u32,
+                    },
+                    aspect: wgpu::TextureAspect::All,
+                },
+                &bytes,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some((SIDE * 8) as u32),
+                    rows_per_image: Some(rows as u32),
+                },
+                wgpu::Extent3d {
+                    width: SIDE as u32,
+                    height: rows as u32,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
+        texture
     }
     fn target(&mut self, size: [u32; 2]) {
         if self.target.as_ref().is_some_and(|t| t.size == size) {

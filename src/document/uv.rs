@@ -1,5 +1,14 @@
 use super::*;
 impl Document {
+    pub(crate) fn require_texture_history(&self) -> Result<(), String> {
+        let mut history = crate::history::History::default();
+        history.retention = self.history.retention;
+        history.record_owned(self.geometry.clone(), "Texture history check", None);
+        if history.undo.is_empty() {
+            return Err("This textured scene exceeds the current Undo memory budget. Increase History retention in the diagnostic settings before painting (up to 1024 MiB)".into());
+        }
+        Ok(())
+    }
     pub(crate) fn sync_texture_uses(&mut self) {
         let textures = self.geometry.mesh.uv.textures.clone();
         let sync = |mesh: &mut Mesh| {
@@ -180,7 +189,7 @@ mod tests {
         doc.duplicate_model(false).unwrap();
         let before = doc.geometry_snapshot();
         let mut changed = doc.mesh().uv.textures[0].clone();
-        std::sync::Arc::make_mut(&mut changed.pixels)[0] = 12345;
+        changed.pixels.u16_mut()[0] = 12345;
         doc.assign_texture(changed.clone()).unwrap();
         assert_eq!(doc.geometry.submodels[0].mesh.uv.textures[0], changed);
         let after = doc.geometry_snapshot();

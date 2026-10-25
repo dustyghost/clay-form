@@ -2,6 +2,11 @@
 use super::{Brush, Dab, Mesh, Vec3};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+pub const MAX_SIZE: u32 = 4096;
+pub const MAX_PIXELS: usize = 3 * 4096 * 4096;
+mod pixel_storage;
+mod pixels;
+pub use pixels::{Pixels, Precision};
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Channel {
     #[default]
@@ -13,7 +18,7 @@ impl Channel {
     pub const ALL: [Self; 3] = [Self::Color, Self::Roughness, Self::Metallic];
     pub fn label(self) -> &'static str {
         match self {
-            Self::Color => "Base colour (sRGB)",
+            Self::Color => "Base colour",
             Self::Roughness => "Roughness (linear)",
             Self::Metallic => "Metallic (linear)",
         }
@@ -38,30 +43,12 @@ pub struct Texture {
     pub width: u32,
     pub height: u32,
     /// RGBA16, straight alpha. Colour pixels are display encoded; data pixels are not.
-    pub pixels: Arc<Vec<u16>>,
+    #[serde(with = "pixel_storage")]
+    pub pixels: Pixels,
 }
 impl Texture {
     pub fn new(channel: Channel, size: u32, material: &super::Material) -> Result<Self, String> {
-        let value = match channel {
-            Channel::Color => material.base_color.map(super::material::linear_to_srgb),
-            Channel::Roughness => [material.roughness; 3],
-            Channel::Metallic => [material.metallic; 3],
-        };
-        if !(16..=2048).contains(&size) {
-            return Err("Texture size must be 16–2048 pixels".into());
-        }
-        let pixel =
-            [value[0], value[1], value[2], 1.].map(|v| (v.clamp(0., 1.) * 65535.).round() as u16);
-        Ok(Self {
-            profile: Vec::new(),
-            exchange: None,
-            id: Self::new_id(),
-            name: channel.label().into(),
-            channel,
-            width: size,
-            height: size,
-            pixels: Arc::new(pixel.repeat((size * size) as usize)),
-        })
+        Self::new_with_precision(channel, size, material, Precision::U16)
     }
     pub fn new_id() -> u64 {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -79,35 +66,90 @@ impl Texture {
             || self.exchange.as_ref().is_some_and(|e| e.path.len() > 4096)
             || self.width == 0
             || self.height == 0
-            || self.width > 2048
-            || self.height > 2048
+            || self.width > MAX_SIZE
+            || self.height > MAX_SIZE
             || self.pixels.len() != self.width as usize * self.height as usize * 4
         {
-            return Err("Invalid texture asset (maximum 2048 × 2048 RGBA16)".into());
+            return Err("Invalid texture asset (maximum 4096 × 4096 RGBA)".into());
+        }
+        if let Pixels::Float32(pixels) = &self.pixels {
+            if pixels.iter().any(|v| !v.is_finite())
+                || pixels
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .any(|p| !(0. ..=1.).contains(&p[3]))
+            {
+                return Err("Float textures require finite values and alpha inside 0–1".into());
+            }
+            if !self.profile.is_empty() {
+                return Err("Float EXR colour uses linear Rec.709, not an ICC profile".into());
+            }
         }
         Ok(())
     }
-    pub fn linear_pixels(&self) -> Vec<[f32; 4]> {
-        self.pixels
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .map(|p| {
-                let mut q = std::array::from_fn(|i| p[i] as f32 / 65535.);
-                if self.channel == Channel::Color {
-                    for v in &mut q[..3] {
-                        *v = super::material::srgb_to_linear(*v);
-                    }
-                }
-                for i in 0..3 {
-                    q[i] *= q[3];
-                }
-                q
-            })
-            .collect()
+    pub fn new_with_precision(
+        channel: Channel,
+        size: u32,
+        material: &super::Material,
+        precision: Precision,
+    ) -> Result<Self, String> {
+        let value = match channel {
+            Channel::Color if precision == Precision::U16 => {
+                material.base_color.map(super::material::linear_to_srgb)
+            }
+            Channel::Color => material.base_color,
+            Channel::Roughness => [material.roughness; 3],
+            Channel::Metallic => [material.metallic; 3],
+        };
+        if !(16..=MAX_SIZE).contains(&size) {
+            return Err("Texture size must be 16–4096 pixels".into());
+        }
+        let pixel = [value[0], value[1], value[2], 1.];
+        let pixels = match precision {
+            Precision::U16 => Pixels::U16(Arc::new(
+                pixel
+                    .map(|v| (v.clamp(0., 1.) * 65535.).round() as u16)
+                    .repeat((size * size) as usize),
+            )),
+            Precision::Float32 => Pixels::Float32(Arc::new(pixel.repeat((size * size) as usize))),
+        };
+        Ok(Self {
+            profile: Vec::new(),
+            exchange: None,
+            id: Self::new_id(),
+            name: channel.label().into(),
+            channel,
+            width: size,
+            height: size,
+            pixels,
+        })
+    }
+
+    pub fn linear_pixel(&self, index: usize) -> [f32; 4] {
+        let mut p = self.pixels.pixel(index);
+        if self.channel == Channel::Color && self.pixels.precision() == Precision::U16 {
+            for v in &mut p[..3] {
+                *v = super::material::srgb_to_linear(*v);
+            }
+        }
+        p
+    }
+    pub fn packed_pixels(&self) -> Box<dyn Iterator<Item = [u32; 2]> + '_> {
+        match &self.pixels {
+            Pixels::U16(p) => Box::new(p.as_chunks::<4>().0.iter().map(|p| {
+                [
+                    u32::from(p[0]) | (u32::from(p[1]) << 16),
+                    u32::from(p[2]) | (u32::from(p[3]) << 16),
+                ]
+            })),
+            Pixels::Float32(p) => {
+                Box::new(p.as_chunks::<2>().0.iter().map(|p| p.map(f32::to_bits)))
+            }
+        }
     }
 }
-/// One 2048² image or several smaller images; keeps the shared GPU buffer under 128 MB.
+/// Three 4096² images or an equivalent mix, uploaded as bounded texture-array pages.
 pub(crate) fn validate_budget<'a>(
     meshes: impl IntoIterator<Item = &'a Mesh>,
 ) -> Result<(), String> {
@@ -117,8 +159,8 @@ pub(crate) fn validate_budget<'a>(
             assets.insert(texture.id, texture.width as usize * texture.height as usize);
         }
     }
-    if assets.values().sum::<usize>() > 2048 * 2048 {
-        Err("Texture budget exceeded: use at most 4 million unique pixels across this project, or smaller images".into())
+    if assets.values().sum::<usize>() > MAX_PIXELS {
+        Err("Texture budget exceeded: use at most three 4K images (48 million unique pixels) across this project, or smaller images".into())
     } else {
         Ok(())
     }
@@ -189,15 +231,15 @@ impl Mesh {
                     }
                     occupied[j] = true;
                     next.push(j);
-                    let values = pixels.get_or_insert_with(|| texture.pixels.as_ref().clone());
-                    let sample: [u16; 4] = values[i * 4..i * 4 + 4].try_into().unwrap();
-                    values[j * 4..j * 4 + 4].copy_from_slice(&sample);
+                    let values = pixels.get_or_insert_with(|| texture.pixels.clone());
+                    let sample = values.pixel(i);
+                    values.set_pixel(j, sample);
                 }
             }
             frontier = next;
         }
         if let Some(pixels) = pixels {
-            self.uv.textures[i].pixels = Arc::new(pixels);
+            self.uv.textures[i].pixels = pixels;
         }
     }
     /// Rasterize visible surface triangles into UV space. The dab's frontmost depth
@@ -359,31 +401,25 @@ impl Mesh {
             if weight <= 0. {
                 continue;
             }
-            let old: &[u16] = &texture.pixels[pixel * 4..pixel * 4 + 4];
-            let mut next: [u16; 4] = old.try_into().unwrap();
+            let old = texture.linear_pixel(pixel);
+            let mut next = old;
             if erase {
-                next[3] = (old[3] as f32 * (1. - weight)).round() as u16;
+                next[3] = old[3] * (1. - weight);
             } else {
-                let alpha = old[3] as f32 / 65535.;
+                let alpha = old[3];
                 let out_alpha = weight + alpha * (1. - weight);
                 for c in 0..3 {
-                    let mut previous = old[c] as f32 / 65535.;
-                    if channel == Channel::Color {
-                        previous = super::material::srgb_to_linear(previous);
-                    }
-                    let mut v = (value[c] * weight + previous * alpha * (1. - weight))
-                        / out_alpha.max(1e-10);
-                    if channel == Channel::Color {
-                        v = super::material::linear_to_srgb(v);
-                    }
-                    next[c] = (v.clamp(0., 1.) * 65535.).round() as u16;
+                    next[c] =
+                        (value[c] * weight + old[c] * alpha * (1. - weight)) / out_alpha.max(1e-10);
                 }
-                next[3] = (out_alpha * 65535.).round() as u16;
+                next[3] = out_alpha;
             }
-            if next != old {
-                Arc::make_mut(&mut texture.pixels)[pixel * 4..pixel * 4 + 4].copy_from_slice(&next);
-                changed = true;
+            if channel == Channel::Color && texture.pixels.precision() == Precision::U16 {
+                for v in &mut next[..3] {
+                    *v = super::material::linear_to_srgb(*v);
+                }
             }
+            changed |= texture.pixels.set_pixel(pixel, next);
         }
         changed
     }
@@ -423,10 +459,10 @@ pub struct Exchange {
 }
 impl Texture {
     pub fn fingerprint(&self) -> u64 {
-        self.pixels
-            .iter()
+        self.packed_pixels()
+            .flatten()
             .fold((self.width as u64) << 32 | self.height as u64, |h, v| {
-                (h ^ *v as u64).wrapping_mul(1099511628211)
+                (h ^ u64::from(v)).wrapping_mul(1099511628211)
             })
     }
 }
@@ -434,6 +470,31 @@ impl Texture {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    #[test]
+    fn float_texture_paint_preserves_hdr_outside_the_stroke() {
+        let mut mesh = sheets();
+        mesh.uv.textures[0].pixels =
+            Pixels::Float32(Arc::new([-0.25, 4., 16., 1.].repeat(64 * 64)));
+        let before = mesh.uv.textures[0].pixels.clone();
+        let mut brush = Brush::new(super::super::Kind::Paint);
+        brush.material = super::super::Material::from_srgb([1., 0., 0.], 0.5, 0.);
+        brush.strength = 1.;
+        assert!(mesh.paint_texture(Channel::Color, &brush, &[dab()], &[], &[]));
+        assert_eq!(
+            mesh.uv.textures[0].pixels.pixel(32 * 64 + 48),
+            before.pixel(32 * 64 + 48)
+        );
+        assert_ne!(
+            mesh.uv.textures[0].pixels.pixel(32 * 64 + 16),
+            before.pixel(32 * 64 + 16)
+        );
+        assert!(
+            mesh.uv.textures[0].pixels.pixel(32 * 64 + 16)[2] > 1.,
+            "painting blends HDR values without clipping"
+        );
+        mesh.pad_texture(Channel::Color);
+        assert_eq!(mesh.uv.textures[0].pixels.precision(), Precision::Float32);
+    }
     pub(crate) fn sheets() -> Mesh {
         let mut mesh = Mesh::default();
         for z in [0., -0.001] {
@@ -484,11 +545,11 @@ pub(crate) mod tests {
         brush.strength = 1.;
         brush.pressure = true;
         assert!(mesh.paint_texture(Channel::Color, &brush, &[dab()], &[], &[]));
-        let pixels = &mesh.uv.textures[0].pixels;
+        let pixels = mesh.uv.textures[0].pixels.u16();
         let front = (32 * 64 + 16) * 4;
         let back = (32 * 64 + 48) * 4;
         assert!(pixels[front] > 10000 && pixels[front] < 65535);
-        assert_eq!(&pixels[back..back + 4], &before[back..back + 4]);
+        assert_eq!(&pixels[back..back + 4], &before.u16()[back..back + 4]);
         let mut barrier = sheets();
         for p in &mut barrier.vertices {
             p.2 += 0.01;
@@ -502,16 +563,16 @@ pub(crate) mod tests {
         let mut hidden = sheets();
         hidden.hidden_faces = vec![true, true, false, false];
         assert!(hidden.paint_texture(Channel::Color, &brush, &[dab()], &[], &[]));
-        assert_eq!(hidden.uv.textures[0].pixels[front], 0);
-        assert!(hidden.uv.textures[0].pixels[back] > 0);
+        assert_eq!(hidden.uv.textures[0].pixels.u16()[front], 0);
+        assert!(hidden.uv.textures[0].pixels.u16()[back] > 0);
         mesh.pad_texture(Channel::Color);
         assert!(
-            mesh.uv.textures[0].pixels[(32 * 64 + 2) * 4] > 0,
+            mesh.uv.textures[0].pixels.u16()[(32 * 64 + 2) * 4] > 0,
             "gutter extends painted edge"
         );
         assert_eq!(
-            &mesh.uv.textures[0].pixels[back..back + 4],
-            &before[back..back + 4]
+            &mesh.uv.textures[0].pixels.u16()[back..back + 4],
+            &before.u16()[back..back + 4]
         );
     }
 }
