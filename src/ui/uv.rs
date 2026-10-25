@@ -12,7 +12,7 @@ pub(crate) struct UvControls {
     drag: Option<interaction::Drag>,
     report: crate::sculpt::uv::Report,
     stretch: bool,
-    texture_tab: bool,
+    pub(super) texture_tab: bool,
     pub channel: crate::sculpt::texture::Channel,
     pub image_path: String,
     pub export_overwrite: Option<String>,
@@ -269,6 +269,13 @@ impl UiState {
                     self.uv.precision,
                 )));
             }
+            if ui.button("Create & paint on model").clicked() {
+                commands.push(Command::Texture(T::CreateAndPaint(
+                    self.uv.channel,
+                    self.uv.size,
+                    self.uv.precision,
+                )));
+            }
             if ui.button("Import PNG / JPEG / EXR…").clicked() {
                 commands.push(Command::BrowseAsset(crate::command::AssetKind::Texture));
             }
@@ -295,7 +302,7 @@ impl UiState {
                 if ui
                     .selectable_label(
                         document.texture_paint == Some(self.uv.channel),
-                        "Paint this texture",
+                        "Paint on model",
                     )
                     .clicked()
                 {
@@ -312,6 +319,7 @@ impl UiState {
                 }
             });
             ui.label("Images are shared by duplicated models. Make independent to edit only this model. Overlapping UVs share pixels.");
+            ui.weak("Paint on model returns to the 3D view. Strokes there update this image; this canvas previews the texture.");
             ui.horizontal_wrapped(|ui| {
                 ui.label("PNG / EXR export");
                 ui.add(egui::TextEdit::singleline(&mut self.uv.export_path).desired_width(150.));
@@ -592,14 +600,21 @@ impl UiState {
         } else {
             self.uv.image_preview = None;
         }
-        let selection: std::collections::BTreeSet<_> = self.uv.selected.iter().copied().collect();
+        let mut selection = vec![false; uv.corners.len()];
+        for &f in &self.uv.selected {
+            if let Some(selected) = selection.get_mut(f) {
+                *selected = true;
+            }
+        }
+        let mask_shape = painter.add(egui::Shape::Noop);
+        let mut overlay = egui::Mesh::default();
         for (f, t) in uv
             .corners
             .iter()
             .enumerate()
             .filter(|(f, _)| current && uv.mapped(*f))
         {
-            let color = if selection.contains(&f) {
+            let color = if selection[f] {
                 Color32::from_rgb(255, 185, 70)
             } else if crate::sculpt::uv::area(*t).abs() < 1e-10 {
                 Color32::RED
@@ -609,20 +624,22 @@ impl UiState {
             } else {
                 Color32::from_rgb(115, 185, 215)
             };
-            if !self.uv.texture_tab {
-                let mut overlay = egui::Mesh::default();
+            if !self.uv.texture_tab && (0..3).any(|c| uv.mask(f, c) > 0.) {
+                let first = overlay.vertices.len() as u32;
                 for (c, &q) in t.iter().enumerate() {
                     overlay.colored_vertex(
                         map(q),
                         Color32::from_rgba_unmultiplied(170, 75, 220, (uv.mask(f, c) * 180.) as u8),
                     );
                 }
-                overlay.add_triangle(0, 1, 2);
-                painter.add(egui::Shape::mesh(overlay));
+                overlay.add_triangle(first, first + 1, first + 2);
             }
             for c in 0..3 {
                 painter.line_segment([map(t[c]), map(t[(c + 1) % 3])], (1., color));
             }
+        }
+        if !overlay.indices.is_empty() {
+            painter.set(mask_shape, egui::Shape::mesh(overlay));
         }
         if !self.uv.texture_tab {
             self.uv_paint_handles(ui, &response, uv);

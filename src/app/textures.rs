@@ -2,6 +2,7 @@ use super::*;
 use crate::sculpt::texture::{Channel, Exchange, Precision, Texture};
 pub(crate) enum TextureCommand {
     Create(Channel, u32, Precision),
+    CreateAndPaint(Channel, u32, Precision),
     Paint(Option<Channel>),
     Remove(Channel),
     Copy(Channel),
@@ -25,6 +26,15 @@ impl App {
                 .ok_or_else(|| "Create or import a texture for this channel first".to_string())
         };
         match command {
+            CreateAndPaint(channel, size, precision) => {
+                if !self.document.mesh().uv.current(self.document.mesh()) {
+                    return Err(
+                        "Use Automatic unwrap in UV layout before creating a paint texture".into(),
+                    );
+                }
+                self.texture_command(Create(channel, size, precision))?;
+                self.texture_command(Paint(Some(channel)))?;
+            }
             Create(channel, size, precision) => {
                 if self
                     .document
@@ -84,26 +94,36 @@ impl App {
                     {
                         return Err("Pack UV islands inside 0–1 before painting; tiled UV painting is not supported".into());
                     }
-                    if let Some(index) = self
-                        .document
-                        .brushes()
-                        .iter()
-                        .position(|b| b.kind == crate::sculpt::Kind::Paint)
-                    {
-                        self.ui.selected = index;
-                    } else {
-                        self.ui.selected = self
-                            .document
-                            .append_brush(crate::sculpt::Brush::new(crate::sculpt::Kind::Paint))?;
-                    }
-                    self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
-                    self.ui.slice_active = false;
-                    self.ui.selection_tool = None;
-                    self.ui.edges.selecting = false;
-                    self.ui.modeling.active = false;
-                    self.ui.uv.checker = false;
-                    self.ui.show_polygroups = false;
                 }
+                let brushes = self.document.brushes();
+                let paint_index = brushes
+                    .get(self.ui.selected)
+                    .filter(|b| b.kind == crate::sculpt::Kind::Paint)
+                    .map(|_| self.ui.selected)
+                    .or_else(|| {
+                        brushes
+                            .iter()
+                            .position(|b| b.kind == crate::sculpt::Kind::Paint)
+                    });
+                if let Some(index) = paint_index {
+                    self.ui.selected = index;
+                } else {
+                    self.ui.selected = self
+                        .document
+                        .append_brush(crate::sculpt::Brush::new(crate::sculpt::Kind::Paint))?;
+                }
+                self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
+                self.ui.slice_active = false;
+                self.ui.selection_tool = None;
+                self.ui.edges.selecting = false;
+                self.ui.modeling.active = false;
+                self.ui.uv.checker = false;
+                self.ui.show_polygroups = false;
+                self.ui.uv.open = false;
+                self.ui.status = format!(
+                    "Paint {} directly on the 3D model. Choose a colour in Brush settings.",
+                    channel.map_or("vertex materials", |c| c.label())
+                );
                 self.document.texture_paint = channel;
             }
             Remove(channel) => {
@@ -219,6 +239,25 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn paint_target_keeps_custom_preset_and_leaves_component_selection() {
+        let mut app = App::default();
+        let mut brush = crate::sculpt::Brush::new(crate::sculpt::Kind::Paint);
+        brush.paint_effect.mode = crate::sculpt::PaintMode::Spray;
+        brush.name = "Custom spray".into();
+        let index = app.document.append_brush(brush).unwrap();
+        app.ui.selected = index;
+        app.ui.modeling.active = true;
+        app.ui.uv.open = true;
+        app.texture_command(TextureCommand::Paint(None)).unwrap();
+        assert_eq!(app.ui.selected, index);
+        assert_eq!(
+            app.document.brushes()[index].paint_effect.mode,
+            crate::sculpt::PaintMode::Spray
+        );
+        assert!(!app.ui.modeling.active && !app.ui.uv.open);
+        assert_eq!(app.document.texture_paint, None);
+    }
     #[test]
     fn external_texture_reload_preserves_identity_checks_conflicts_and_keeps_last_valid_image() {
         let mut app = App::default();
@@ -367,7 +406,7 @@ mod tests {
         }
         capture.render(&ctx, frame(&mut app, vec![]));
         let out = frame(&mut app, vec![]);
-        let p = point(&out, "Create texture");
+        let p = point(&out, "Create & paint on model");
         capture.render(&ctx, out);
         for events in [
             vec![egui::Event::PointerMoved(p), button(p, true)],
@@ -376,15 +415,7 @@ mod tests {
             capture.render(&ctx, frame(&mut app, events));
         }
         assert_eq!(app.document.mesh().uv.textures.len(), 1);
-        let out = frame(&mut app, vec![]);
-        let p = point(&out, "Paint this texture");
-        capture.render(&ctx, out);
-        for events in [
-            vec![egui::Event::PointerMoved(p), button(p, true)],
-            vec![button(p, false)],
-        ] {
-            capture.render(&ctx, frame(&mut app, events));
-        }
+        assert!(!app.ui.uv.open, "painting returns to the 3D model");
         assert_eq!(app.document.texture_paint, Some(Channel::Color));
         let mut brush = app.document.brushes()[app.ui.selected].clone();
         brush.material = crate::sculpt::Material::from_srgb([0.95, 0.04, 0.01], 0.7, 0.);
@@ -425,6 +456,7 @@ mod tests {
         assert_eq!(app.document.mesh().uv.textures[0].pixels, before);
         app.dispatch(Command::Redo, &ctx);
         assert_eq!(app.document.mesh().uv.textures[0].pixels, after);
+        app.ui.uv.open = true;
         let output = frame(&mut app, vec![egui::Event::PointerGone]);
         let pixels = capture.render(&ctx, output);
         capture.save(std::env::temp_dir().join("clay-uv-textures.png"), &pixels);

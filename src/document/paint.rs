@@ -37,6 +37,7 @@ impl Document {
         stencil: Option<&crate::sculpt::alpha::Projection>,
     ) -> bool {
         if self.paint_stroke.is_none() {
+            self.paint_sequence = 0;
             self.end_stroke();
             let dirty = self.dirty;
             self.begin_stroke();
@@ -45,6 +46,10 @@ impl Document {
             self.paint_stroke = Some((dirty, settings));
         }
         let dabs = self.symmetry.dabs(dab);
+        let mut sampled_brush = brush.clone();
+        sampled_brush.paint_effect.seed = self.paint_sequence;
+        self.paint_sequence = self.paint_sequence.wrapping_add(1);
+        let brush = &sampled_brush;
         let stencils = stencil.map_or_else(Vec::new, |s| s.copies(&self.symmetry));
         let changed = if let Some(channel) = self.texture_paint {
             let occluders: Vec<_> = self

@@ -35,6 +35,7 @@ pub(super) struct SculptSession {
     pub pending_stroke: Option<stroke::PendingStroke>,
     pub stabilizer: Option<stabilizer::Stabilizer>,
     pub last: Option<Pos2>,
+    pub paint_time: Option<f64>,
     pub snake: Option<SnakeStroke>,
 }
 

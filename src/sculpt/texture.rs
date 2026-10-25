@@ -334,7 +334,7 @@ impl Mesh {
                         return;
                     }
                     let mask = (0..3).map(|c| self.mask[t[c]] * w[c]).sum::<f32>();
-                    let weight = brush.weight(q[0], q[1])
+                    let weight = brush.paint_weight(q[0], q[1])
                         * brush.strength
                         * (1. - mask)
                         * if brush.pressure {
@@ -481,6 +481,41 @@ impl Texture {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    #[test]
+    fn spray_respects_zero_pressure_masks_and_occluding_surfaces() {
+        let mut brush = Brush::new(super::super::Kind::Paint);
+        brush.paint_effect.mode = super::super::PaintMode::Spray;
+        brush.paint_effect.density = 1.;
+        brush.paint_effect.dot_size = 0.08;
+        brush.material = super::super::Material::from_srgb([1., 0., 0.], 0.5, 0.);
+        brush.strength = 1.;
+        let original = sheets();
+        let mut mesh = original.clone();
+        assert!(!mesh.paint_texture(
+            Channel::Color,
+            &brush,
+            &[Dab {
+                pressure: 0.,
+                ..dab()
+            }],
+            &[],
+            &[]
+        ));
+        mesh.mask.fill(1.);
+        assert!(!mesh.paint_texture(Channel::Color, &brush, &[dab()], &[], &[]));
+        assert_eq!(mesh.uv.textures[0].pixels, original.uv.textures[0].pixels);
+        mesh.mask.fill(0.);
+        assert!(mesh.paint_texture(Channel::Color, &brush, &[dab()], &[], &[]));
+        for y in 0..64 {
+            for x in 32..64 {
+                assert_eq!(
+                    mesh.uv.textures[0].pixels.pixel(y * 64 + x),
+                    original.uv.textures[0].pixels.pixel(y * 64 + x),
+                    "spray cannot reach the covered back sheet"
+                );
+            }
+        }
+    }
     #[test]
     fn float_texture_paint_preserves_hdr_outside_the_stroke() {
         let mut mesh = sheets();

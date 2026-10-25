@@ -539,31 +539,38 @@ impl Viewport {
             }
         }
     }
-    fn paint_component(
-        component: Component,
+    fn paint_components(
+        components: impl IntoIterator<Item = Component>,
         mesh: &Mesh,
         scene: &Scene,
         painter: &egui::Painter,
         color: Color32,
     ) {
-        match component {
-            Component::Vertex(v) => {
-                if let Some(&p) = mesh.vertices.get(v) {
-                    painter.circle_filled(scene.project(p), 5., color);
+        let components: Vec<_> = components.into_iter().collect();
+        let polygons = components
+            .iter()
+            .any(|c| matches!(c, Component::Face(_)))
+            .then(|| mesh.polygons());
+        for component in components {
+            match component {
+                Component::Vertex(v) => {
+                    if let Some(&p) = mesh.vertices.get(v) {
+                        painter.circle_filled(scene.project(p), 5., color);
+                    }
                 }
-            }
-            Component::Edge([a, b]) => {
-                if let Some(points) = scene.clip_segment([mesh.vertices[a], mesh.vertices[b]]) {
-                    painter.line_segment(points, egui::Stroke::new(3_f32, color));
+                Component::Edge([a, b]) => {
+                    if let Some(points) = scene.clip_segment([mesh.vertices[a], mesh.vertices[b]]) {
+                        painter.line_segment(points, egui::Stroke::new(3_f32, color));
+                    }
                 }
-            }
-            Component::Face(i) => {
-                if let Some(p) = mesh.polygons().get(i) {
-                    for (a, b) in p.edges() {
-                        if let Some(points) =
-                            scene.clip_segment([mesh.vertices[a], mesh.vertices[b]])
-                        {
-                            painter.line_segment(points, egui::Stroke::new(3_f32, color));
+                Component::Face(i) => {
+                    if let Some(p) = polygons.as_ref().and_then(|p| p.get(i)) {
+                        for (a, b) in p.edges() {
+                            if let Some(points) =
+                                scene.clip_segment([mesh.vertices[a], mesh.vertices[b]])
+                            {
+                                painter.line_segment(points, egui::Stroke::new(3_f32, color));
+                            }
                         }
                     }
                 }
@@ -643,9 +650,7 @@ impl Viewport {
                 } else {
                     BTreeSet::new()
                 };
-                for component in components {
-                    Self::paint_component(component, &result.mesh, scene, painter, highlighted);
-                }
+                Self::paint_components(components, &result.mesh, scene, painter, highlighted);
                 if model.tool.construction_kind().is_some() {
                     let key = |mesh: &Mesh, [a, b]: [usize; 2]| {
                         let p = |v: usize| {
@@ -681,9 +686,13 @@ impl Viewport {
                 }
             }
         } else {
-            for &component in self.modeling.selection() {
-                Self::paint_component(component, document.mesh(), scene, painter, selected);
-            }
+            Self::paint_components(
+                self.modeling.selection().iter().copied(),
+                document.mesh(),
+                scene,
+                painter,
+                selected,
+            );
             if let Some(component) = self
                 .modeling
                 .loop_drag
@@ -713,9 +722,7 @@ impl Viewport {
                 } else {
                     vec![component]
                 };
-                for target in targets {
-                    Self::paint_component(target, document.mesh(), scene, painter, highlighted);
-                }
+                Self::paint_components(targets, document.mesh(), scene, painter, highlighted);
             }
         }
         if matches!(
@@ -766,8 +773,8 @@ impl Viewport {
                         anchor,
                         model.construction.other_side,
                     ) {
-                        Self::paint_component(
-                            Component::Face(f),
+                        Self::paint_components(
+                            [Component::Face(f)],
                             document.mesh(),
                             scene,
                             painter,

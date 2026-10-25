@@ -3749,3 +3749,88 @@ fn interchange_export_controls_offscreen_review() {
         assert!(g.app.ui.file_picker.is_none());
     }
 }
+
+#[test]
+#[ignore = "requires Vulkan; paints stationary airbrush/spray and clicks paint mode controls"]
+fn paint_modes_offscreen_review() {
+    use crate::{
+        app::textures::TextureCommand as T,
+        sculpt::{
+            Geometry, PaintMode,
+            texture::{Channel, Precision},
+        },
+    };
+    let directory = std::path::PathBuf::from("/tmp/clay-paint-modes");
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1400, 1000]);
+    g.interactive = true;
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    let mut mesh = Primitive::for_kind(PrimitiveKind::Plane).mesh().unwrap();
+    mesh.uv = mesh.unwrap_uv(true, 0.02, &|| false).unwrap();
+    g.app
+        .document
+        .replace_geometry(Geometry::new(mesh))
+        .unwrap();
+    g.app
+        .texture_command(T::CreateAndPaint(Channel::Color, 256, Precision::U16))
+        .unwrap();
+    g.panel(Tool::Brush, Dock::Right);
+    let mut brush = g.app.document.brushes()[g.app.ui.selected].clone();
+    brush.material = crate::sculpt::Material::from_srgb([0.95, 0.03, 0.02], 0.5, 0.);
+    brush.radius = 130.;
+    brush.strength = 0.7;
+    brush.paint_effect.dot_size = 0.07;
+    g.app
+        .dispatch(Command::UpdateBrush(g.app.ui.selected, brush), &g.ctx);
+    g.save("paint-target-controls");
+    for (mode, label, name) in [
+        (PaintMode::Airbrush, "Airbrush", "airbrush"),
+        (PaintMode::Spray, "Spray dots", "spray"),
+    ] {
+        click_guide_label(
+            &mut g,
+            if mode == PaintMode::Airbrush {
+                "Regular stroke"
+            } else {
+                "Airbrush"
+            },
+        );
+        click_guide_label(&mut g, label);
+        assert_eq!(
+            g.app.document.brushes()[g.app.ui.selected]
+                .paint_effect
+                .mode,
+            mode
+        );
+        g.save(&format!("{name}-controls"));
+        assert!(g.text_positions.iter().any(|(t, _)| t == "Flow"));
+        if mode == PaintMode::Spray {
+            for label in ["Dot density", "Dot size / radius"] {
+                assert!(g.text_positions.iter().any(|(t, _)| t == label));
+            }
+        }
+        let rect = g.frame(vec![]).0;
+        let point = rect.center();
+        let before = g.app.document.mesh().uv.textures[0].pixels.clone();
+        g.frame(vec![
+            egui::Event::PointerMoved(point),
+            primary_event(point, true),
+        ]);
+        let first = g.app.document.mesh().uv.textures[0].pixels.clone();
+        for _ in 0..5 {
+            g.frame(vec![]);
+        }
+        assert_ne!(g.app.document.mesh().uv.textures[0].pixels, first);
+        g.frame(vec![primary_event(point, false)]);
+        g.save(&format!("{name}-painted"));
+        crate::persistence::texture::save(
+            &directory.join(format!("{name}-image.png")),
+            &g.app.document.mesh().uv.textures[0],
+        )
+        .unwrap();
+        assert_ne!(g.app.document.mesh().uv.textures[0].pixels, before);
+        g.app.dispatch(Command::Undo, &g.ctx);
+        assert_eq!(g.app.document.mesh().uv.textures[0].pixels, before);
+    }
+}

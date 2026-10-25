@@ -22,6 +22,7 @@ mod masking;
 mod menus;
 mod mirror;
 mod modeling;
+mod paint;
 pub(crate) mod paths;
 mod primitive;
 mod projection;
@@ -937,6 +938,7 @@ impl UiState {
                         }
                     });
                 if b.kind == Kind::Paint {
+                    self.paint_controls(ui, b, document, commands);
                     ui.horizontal_wrapped(|ui| {
                     if ui.add(design::button(ui, Glyph::Edit, "Fill all"))
                         .customize(Action::FillAllMaterial)

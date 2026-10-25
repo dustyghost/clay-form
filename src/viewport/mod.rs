@@ -228,6 +228,7 @@ impl Viewport {
             self.session.sculpt.stabilizer = None;
             self.session.sculpt.last = None;
             self.session.sculpt.snake = None;
+            self.session.sculpt.paint_time = None;
             self.session.sculpt.stroke = false;
         }
         if (!options.enabled
@@ -1002,6 +1003,7 @@ impl Viewport {
             }
         }
         if !drawing {
+            self.session.sculpt.paint_time = None;
             if let Some((vertices, faces)) = self.session.sculpt.decimate_removed.take() {
                 self.status = Some(if vertices > 0 {
                     format!("Decimate: removed {vertices} vertices and {faces} faces")
@@ -1061,6 +1063,18 @@ impl Viewport {
             self.paint_brush_outline(&scene, &painter, pos, radius, &b, color);
             if drawing {
                 let previous = self.session.sculpt.last.unwrap_or(pos);
+                let now = ui.input(|i| i.time);
+                let continuous = b.continuous_paint();
+                let elapsed = self
+                    .session
+                    .sculpt
+                    .paint_time
+                    .map_or(0.05, |last| (now - last).clamp(0., 0.1))
+                    as f32;
+                if continuous {
+                    ui.ctx()
+                        .request_repaint_after(std::time::Duration::from_millis(50));
+                }
                 let distance = pos.distance(previous);
                 let spacing = (radius
                     * if b.kind == Kind::Snake {
@@ -1073,6 +1087,7 @@ impl Viewport {
                 .max(1.);
                 if self.session.sculpt.last.is_none()
                     || distance >= spacing
+                    || continuous && elapsed >= 0.05
                     || matches!(b.kind, Kind::Grab | Kind::Snake)
                 {
                     let steps = if b.kind == Kind::Grab {
@@ -1082,7 +1097,10 @@ impl Viewport {
                     };
                     for step in 1..=steps {
                         let point = previous + (pos - previous) * (step as f32 / steps as f32);
-                        let brush = b.clone();
+                        let mut brush = b.clone();
+                        if continuous {
+                            brush.strength = b.paint_strength_for_time(elapsed / steps as f32);
+                        }
                         let hit = if brush.kind == Kind::Snake {
                             if self.session.sculpt.snake.is_none()
                                 && let Some((center, normal)) = scene.pick(point)
@@ -1151,6 +1169,9 @@ impl Viewport {
                                     snake.center + brush.snake_motion(dab) * snake.mobility;
                             }
                         }
+                    }
+                    if continuous {
+                        self.session.sculpt.paint_time = Some(now);
                     }
                     self.session.sculpt.last = Some(pos);
                 }

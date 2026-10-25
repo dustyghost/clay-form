@@ -1,6 +1,8 @@
 //! Sculpting data and algorithms, independent of windowing and UI.
 mod adaptive;
 mod brush;
+mod paint_effect;
+pub use paint_effect::{PaintEffect, PaintMode};
 mod clay;
 mod deformation;
 mod detail;

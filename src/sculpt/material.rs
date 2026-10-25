@@ -524,7 +524,7 @@ impl Mesh {
                 {
                     continue;
                 }
-                let weight = brush.weight(
+                let weight = brush.paint_weight(
                     offset.dot(dab.right) / dab.radius,
                     offset.dot(dab.up) / dab.radius,
                 ) * brush.strength
