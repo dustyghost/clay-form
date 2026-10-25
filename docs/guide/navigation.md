@@ -99,7 +99,7 @@ Enable **View → Faint back-facing surfaces** to see the back of an open surfac
 
 First check that your desktop tablet driver moves the cursor and registers the pen tip. Then open **Tablet & navigation** and press lightly and firmly: the live pressure value should change.
 
-Clay Form accepts native pen/touch pressure where available. On Linux it also reads Huion pressure from `/dev/input/event*`, using `/sys/class/input` to find devices. Without pressure input, strokes use full pressure.
+Clay Form accepts native pen/touch pressure where available and retains it between input events until contact ends. On Linux it observes all accessible pressure-capable pen endpoints from `/dev/input/event*`, using `/sys/class/input` capabilities rather than a vendor name. This includes physical Huion devices and OpenTabletDriver virtual artist tablets. Without pressure input, strokes use full pressure.
 
 The **Tablet & navigation** panel shows live pressure and connection errors. Tilt, eraser detection, and express-key configuration are not implemented. Physical Huion pressure has not yet been verified.
 
@@ -114,7 +114,9 @@ sudo udevadm control --reload-rules
 
 Reconnect the tablet and restart Clay Form. The rule grants the active desktop user access to this device through [systemd uaccess](https://cgit.freedesktop.org/systemd/systemd/tree/src/login/70-uaccess.rules).
 
-Other models need their own vendor/model rule. If pressure reports permission denied, grant your normal user device-specific access; do not run the app as root. Devices whose names do not contain “Huion” need a discovery extension.
+For OpenTabletDriver's virtual artist tablet, install `packaging/linux/72-clay-form-opentabletdriver.rules` into `/etc/udev/rules.d/` using the same command pattern, reload the rules, then restart OpenTabletDriver to recreate the virtual device. This rule grants access only to the artist tablet, not its virtual keyboard. Physical and virtual pen endpoints are monitored together, so an idle endpoint cannot hide pressure from the one in use.
+
+Other devices may need their own narrowly scoped permission rule. If pressure reports permission denied, grant your normal user device-specific access; do not run the app as root. In **Brush settings**, enable **Pressure → strength**; **Pressure → radius** can stay off. The default curve of 1 is linear: 25% pressure produces one quarter of the full-pressure strength.
 
 ## Related guides
 

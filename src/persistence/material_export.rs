@@ -4,22 +4,30 @@ use crate::sculpt::{
     material::layers::{VALUE_COUNT, group},
 };
 use std::{io::Write, path::PathBuf};
+mod interchange;
+pub use interchange::{ExportBundle, prepare_export};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExportFormat {
     Ply,
     Blender,
+    OpenUsd,
+    Fbx,
 }
 impl ExportFormat {
     pub fn extension(self) -> &'static str {
         match self {
             Self::Ply => "ply",
             Self::Blender => "blend",
+            Self::OpenUsd => "usda",
+            Self::Fbx => "fbx",
         }
     }
     pub fn title(self) -> &'static str {
         match self {
             Self::Ply => "Export PLY",
             Self::Blender => "Export Blender",
+            Self::OpenUsd => "Export OpenUSD",
+            Self::Fbx => "Export FBX",
         }
     }
     pub fn description(self) -> &'static str {
@@ -27,6 +35,12 @@ impl ExportFormat {
             Self::Ply => "Active model · geometry and base vertex colours only; no material layers",
             Self::Blender => {
                 "Active model · vertex paint and editable material layers; requires Blender 4.0 or newer on PATH"
+            }
+            Self::OpenUsd => {
+                "Active model · UVs, normals and base PBR textures + companion folder; save .clay for editable layers and masks"
+            }
+            Self::Fbx => {
+                "Active model · UVs, normals and base PBR textures + companion folder; requires Blender 4.0+ on PATH; material support varies by importer"
             }
         }
     }
@@ -82,6 +96,9 @@ pub fn export_bytes(
     match format {
         ExportFormat::Ply => ply(project, cancel),
         ExportFormat::Blender => blender(project, lighting, cancel),
+        ExportFormat::OpenUsd | ExportFormat::Fbx => {
+            Err("Use the export bundle to retain companion textures".into())
+        }
     }
 }
 fn ply(project: &Project, cancel: &dyn Fn() -> bool) -> Result<Vec<u8>, String> {
@@ -193,6 +210,23 @@ fn exchange(
     serde_json::to_vec(&data).map_err(|e| e.to_string())
 }
 struct Temporary(PathBuf);
+impl Temporary {
+    fn new() -> Result<Self, String> {
+        let directory = std::env::temp_dir().join(format!(
+            "clay-export-{}-{}",
+            std::process::id(),
+            crate::sculpt::texture::Texture::new_id()
+        ));
+        let mut builder = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder.create(&directory).map_err(|e| e.to_string())?;
+        Ok(Self(directory))
+    }
+}
 impl Drop for Temporary {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
@@ -203,27 +237,25 @@ fn blender(
     lighting: Option<&ExportLighting>,
     cancel: &dyn Fn() -> bool,
 ) -> Result<Vec<u8>, String> {
-    let directory = std::env::temp_dir().join(format!(
-        "clay-export-{}-{}",
-        std::process::id(),
-        crate::sculpt::material::layers::fresh_id()
-    ));
-    let mut builder = std::fs::DirBuilder::new();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
-    }
-    builder.create(&directory).map_err(|e| e.to_string())?;
-    let temporary = Temporary(directory);
+    let temporary = Temporary::new()?;
     let input = temporary.0.join("material.json");
     let script = temporary.0.join("export.py");
     let output = temporary.0.join("model.blend");
     std::fs::write(&input, exchange(project, lighting, cancel)?).map_err(|e| e.to_string())?;
     std::fs::write(&script, include_str!("export_blender.py")).map_err(|e| e.to_string())?;
-    let log_path = temporary.0.join("blender.log");
+    run_blender(&input, &output, &script, cancel)?;
+    std::fs::read(output).map_err(|e| format!("Blender did not produce a file: {e}"))
+}
+fn run_blender(
+    input: &std::path::Path,
+    output: &std::path::Path,
+    script: &std::path::Path,
+    cancel: &dyn Fn() -> bool,
+) -> Result<(), String> {
+    let log_path = input.with_extension("log");
     let log = std::fs::File::create(&log_path).map_err(|e| e.to_string())?;
     let mut process = std::process::Command::new("blender")
+        .env("ALSOFT_DRIVERS", "null")
         .args([
             "--background",
             "--factory-startup",
@@ -232,10 +264,10 @@ fn blender(
             "1",
             "--python",
         ])
-        .arg(&script)
+        .arg(script)
         .arg("--")
-        .arg(&input)
-        .arg(&output)
+        .arg(input)
+        .arg(output)
         .stdout(log.try_clone().map_err(|e| e.to_string())?)
         .stderr(log)
         .spawn()
@@ -269,8 +301,7 @@ fn blender(
                             .collect::<String>()
                     ));
                 }
-                return std::fs::read(output)
-                    .map_err(|e| format!("Blender did not produce a file: {e}"));
+                return Ok(());
             }
             Ok(None) => std::thread::sleep(std::time::Duration::from_millis(50)),
             Err(e) => {

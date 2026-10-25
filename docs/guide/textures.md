@@ -22,6 +22,18 @@ Position-only sculpting and transforms retain UVs. Extraction/deletion preserve 
 
 OBJ import/export retains face-corner UVs without splitting sculpt vertices. Consistent quads stay quads on export. Faces with missing UV corners are treated as unmapped and stay unmapped when exported. UV masks are a native `.clay` feature; OBJ carries mapping and seams through its face corners. OBJ does not import material libraries or image assignments. Save the editable project as `.clay` and export images separately as PNG or EXR.
 
+## Export to Maya, Cinema 4D and other DCCs
+
+Use **Export → OpenUSD…** for an ASCII `.usda` stage, or **Export → FBX…** for binary FBX. OpenUSD export is built in. FBX requires Blender 4.0 or newer on PATH. Both export the **active model at its current subdivision level**, with triangle topology, split normals, face-corner UVs and base metallic/roughness materials. Positions are Y-up; one Clay Form unit is exported as one metre. Check scene scale on import. Maya needs its USD plug-in enabled for OpenUSD.
+
+Keep the model beside its generated **`clay-assets-…` folder** when moving or sharing it. Texture references are relative. Every export creates a fresh folder so re-exporting cannot overwrite older texture assets. Old folders can be removed after checking that no model references them. Export cancellation leaves the existing model untouched. A filesystem failure during final publication may leave an unused companion folder.
+
+Preview textures combine base vertex paint with image coverage, keeping the mesh opaque. Existing images keep their dimensions, including 4K; integer previews use 16-bit PNG and float previews use full 32-bit EXR without clipping HDR or negative samples. Channels without images are baked from base vertex paint at 1024². The `source_…` images retain the original paint coverage and precision. Colour PNG previews use sRGB, colour EXRs use linear Rec.709, and roughness/metallic are linear data. Importer colour management may need adjustment.
+
+Arrange islands inside 0–1 before export. Overlapping islands share the same preview pixels; where their underlying vertex materials differ, the last face rasterized wins. Removed UV mappings keep their geometry, receive zero UV coordinates and use the untextured base material. OpenUSD uses vertex primvars for that material; FBX retains vertex colours and uses averaged base material values for untextured faces. Some FBX importers require reconnecting the supplied roughness and metallic maps.
+
+The companion `clay_metadata.json` retains original UV corners, painted UV masks, seam pairs, removed-mapping flags and material definitions. USD also exposes masks and mapped flags as primvars; FBX points to the metadata through a custom object property. Other DCCs do **not** automatically turn this metadata into editing locks or seam tools. Layered BSDFs, subsurface, emission and scene lighting are not translated by these base PBR exporters. Save **`.clay` as the editing master**; use the Blender export for editable layered material definitions. Native Maya/Cinema 4D import behavior should be checked in the versions used by your production.
+
 ## Paint an image
 
 In **Texture images**, choose **Base colour**, **Roughness** or **Metallic**. Choose a resolution from 256 to **4096 × 4096 (4K)** and **16-bit integer / PNG** or **32-bit float / EXR** precision. Create an image using the current brush material as its initial value, or import PNG/JPEG/EXR. Click **Paint this texture**, select a colour/material in the Paint brush settings, and paint on the model. The toolbar displays the active texture channel. **Paint vertices** returns to vertex painting.

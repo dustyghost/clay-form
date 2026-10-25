@@ -391,3 +391,39 @@ fn material_export_picker_confirms_overwrite_and_cancellation_keeps_destination(
             .contains(".blend")
     );
 }
+
+#[test]
+fn interchange_picker_uses_native_extensions_and_cancel_keeps_old_export() {
+    use crate::persistence::material_export::ExportFormat;
+    let folder = Folder::new();
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.ui.path = folder.0.join("paint.clay").to_string_lossy().into();
+    for format in [ExportFormat::OpenUsd, ExportFormat::Fbx] {
+        let path = folder.0.join(format!("paint.{}", format.extension()));
+        std::fs::write(&path, b"previous export").unwrap();
+        app.dispatch(Command::BrowseExport(format), &ctx);
+        app.dispatch(Command::AcceptProjectFile(false), &ctx);
+        assert_eq!(
+            app.ui.file_picker.as_ref().unwrap().overwrite.as_ref(),
+            Some(&path)
+        );
+        app.dispatch(Command::AcceptProjectFile(true), &ctx);
+        app.dispatch(Command::CancelExport, &ctx);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while app.export_job.is_some() {
+            app.poll_export(&ctx);
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+        assert_eq!(std::fs::read(&path).unwrap(), b"previous export");
+        assert_eq!(
+            std::fs::read_dir(&folder.0).unwrap().count(),
+            if format == ExportFormat::OpenUsd {
+                1
+            } else {
+                2
+            }
+        );
+    }
+}

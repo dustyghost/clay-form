@@ -324,6 +324,14 @@ impl UiState {
                     }
                     for (format, label) in [
                         (
+                            crate::persistence::material_export::ExportFormat::OpenUsd,
+                            "OpenUSD…",
+                        ),
+                        (
+                            crate::persistence::material_export::ExportFormat::Fbx,
+                            "FBX…",
+                        ),
+                        (
                             crate::persistence::material_export::ExportFormat::Ply,
                             "PLY…",
                         ),

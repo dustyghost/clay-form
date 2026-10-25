@@ -68,10 +68,10 @@ impl App {
             // Tablet status can contain device paths and OS error text. Export categories only.
             let status = self.tablet.status();
             environment.input = Some(
-                if status.starts_with("Huion:") {
-                    "Huion tablet detected"
+                if status.starts_with("Tablet:") {
+                    "Pen tablet detected"
                 } else {
-                    "Mouse/native touch; Huion pressure unavailable or disconnected"
+                    "Mouse/native touch; tablet pressure unavailable or disconnected"
                 }
                 .into(),
             );

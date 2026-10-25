@@ -28,3 +28,20 @@ cargo test --locked --lib gimp_texture_float_exr_review -- --ignored
 The script writes deterministic `/tmp/clay-gimp-*` fixtures. GIMP interoperability stays outside routine CI. The GPU pixel test and real-control interaction test run in CI.
 
 Initial limits: RGB/roughness/metallic images only, up to 4096² and three 4K images per scene, 0–1 painting, surface occlusion, four-pixel gutter padding. Whole-scene Blender round-trip, UDIM painting, normal/height image painting, and topology reprojection are separate work. UV changes move image placement without rebaking pixels. Native files use losslessly compressed pixel payloads with a 2 GiB file cap. Float EXR support covers non-deep single-layer RGB/RGBA, linear Rec.709 colour and raw data channels; full OCIO/ACES, arbitrary AOVs and deep files remain separate work.
+
+## OpenUSD, FBX and pressure follow-up
+
+OpenUSD export was parsed with Pixar OpenUSD Python bindings and accepted by `usdchecker`. Binary FBX 7400 was re-imported by Blender 5.2.2. The fixture checks geometry/axes, face-corner UVs, normals, material bindings, vertex colours and relative texture resolution. Source EXR pixels preserve negative/HDR values and coverage exactly; preview pixels composite coverage onto the base material with opaque alpha. Tests also verify UV masks/removal metadata, stale-UV rejection, cancellation, overwrite confirmation and separate companion folders on re-export. Interactive Vulkan checks click both export menu items and Cancel; picker captures were visually inspected. Maya and Cinema 4D were not available for native import validation.
+
+```sh
+cargo test --locked --lib interchange_manual_review -- --ignored
+python3 scripts/validate-interchange-usd.py /tmp/clay-interchange-review
+usdchecker /tmp/clay-interchange-review/model.usda
+ALSOFT_DRIVERS=null blender -b -noaudio --python-exit-code 1 --python scripts/validate-interchange-fbx.py -- /tmp/clay-interchange-review
+```
+
+On this Arch host, Pixar's Python bindings need `LD_PRELOAD=/usr/lib/libjemalloc.so.2` to avoid a static-TLS loader error. Blender's audio shutdown hung in the sandbox after its validation assertions completed; the null audio driver avoids that unrelated dependency. Export fixtures remain manual and require installed Blender/OpenUSD tools.
+
+The previous 4K regression's absolute 16 MiB compressed-project assertion failed after tighter UV packing increased the painted pixel footprint. The reopened pixels were exact and the file was 19,102,237 bytes versus 512 MiB raw image storage. The check now requires better than 16:1 compression on this fixture, retaining a meaningful bound without assuming a particular atlas footprint.
+
+Pressure regressions verify capability discovery for Huion and OpenTabletDriver, rejection of keyboard endpoints, normalized light/firm samples, held pressure, contact release and native pressure retention across frames without new events. Standard freehand displacement at 25% pressure is one quarter of full-pressure displacement with unchanged radius. The host exposes two accessible Huion pressure endpoints, while the virtual OpenTabletDriver artist tablet requires an additional permission rule. That narrow udev rule passes `udevadm verify`; physical feel still needs the artist's check in the updated app.

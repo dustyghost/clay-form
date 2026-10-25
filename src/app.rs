@@ -40,7 +40,12 @@ pub struct App {
     paths: paths::PathState,
     closing: bool,
     mesh_job: Option<MeshJob>,
-    export_job: Option<crate::background_job::BackgroundJob<(std::path::PathBuf, Vec<u8>)>>,
+    export_job: Option<
+        crate::background_job::BackgroundJob<(
+            std::path::PathBuf,
+            crate::persistence::material_export::ExportBundle,
+        )>,
+    >,
     recovery: Option<crate::recovery::Recovery>,
     recovery_entries: Vec<crate::recovery::Entry>,
     recovery_error: Option<String>,
@@ -540,13 +545,10 @@ impl eframe::App for App {
         self.poll_export(ctx);
         self.poll_projection();
         self.poll_paths();
-        let native_pressure = ctx.input(|i| {
-            i.events.iter().rev().find_map(|event| match event {
-                egui::Event::Touch { force: Some(p), .. } => Some(*p),
-                _ => None,
-            })
-        });
-        self.pressure = self.tablet.pressure().or(native_pressure).unwrap_or(1.);
+        let native_pressure = ctx.input(|i| self.tablet.update_native(&i.events));
+        self.pressure = native_pressure
+            .or_else(|| self.tablet.pressure())
+            .unwrap_or(1.);
         if ctx.input(|i| i.viewport().close_requested()) && self.ui.projection.open {
             self.cancel_projection();
         }

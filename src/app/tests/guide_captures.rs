@@ -3726,3 +3726,26 @@ fn viewport_lighting_offscreen_review() {
     );
     g.app.dispatch(Command::CancelProjectFile, &g.ctx);
 }
+
+#[test]
+#[ignore = "requires Vulkan; checks OpenUSD and FBX export menu controls"]
+fn interchange_export_controls_offscreen_review() {
+    use crate::persistence::material_export::ExportFormat;
+    let directory = std::path::PathBuf::from("/tmp/clay-interchange-ui");
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1200, 900]);
+    g.interactive = true;
+    g.frame(vec![]);
+    for (format, label, capture) in [
+        (ExportFormat::OpenUsd, "OpenUSD…", "openusd-picker"),
+        (ExportFormat::Fbx, "FBX…", "fbx-picker"),
+    ] {
+        click_guide_label(&mut g, "Export");
+        click_guide_label(&mut g, label);
+        assert_eq!(g.app.ui.file_picker.as_ref().unwrap().export, Some(format));
+        g.frame(vec![]);
+        g.save(capture);
+        click_guide_label(&mut g, "Cancel");
+        assert!(g.app.ui.file_picker.is_none());
+    }
+}

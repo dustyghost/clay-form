@@ -197,53 +197,7 @@ impl Mesh {
                 occupied[y * width + x] = true
             });
         }
-        let mut frontier = Vec::new();
-        for i in 0..occupied.len() {
-            if !occupied[i] {
-                continue;
-            }
-            let (x, y) = (i % width, i / width);
-            if x == 0
-                || y == 0
-                || x + 1 == width
-                || y + 1 == height
-                || !occupied[i - 1]
-                || !occupied[i + 1]
-                || !occupied[i - width]
-                || !occupied[i + width]
-            {
-                frontier.push(i);
-            }
-        }
-        let mut pixels = None;
-        for _ in 0..4 {
-            let mut next = Vec::new();
-            for i in frontier {
-                let (x, y) = (i % width, i / width);
-                for j in [
-                    x.checked_sub(1).map(|x| y * width + x),
-                    (x + 1 < width).then_some(i + 1),
-                    y.checked_sub(1).map(|y| y * width + x),
-                    (y + 1 < height).then_some(i + width),
-                ]
-                .into_iter()
-                .flatten()
-                {
-                    if occupied[j] {
-                        continue;
-                    }
-                    occupied[j] = true;
-                    next.push(j);
-                    let values = pixels.get_or_insert_with(|| texture.pixels.clone());
-                    let sample = values.pixel(i);
-                    values.set_pixel(j, sample);
-                }
-            }
-            frontier = next;
-        }
-        if let Some(pixels) = pixels {
-            self.uv.textures[i].pixels = pixels;
-        }
+        pad_pixels(&mut self.uv.textures[i], occupied);
     }
     /// Rasterize visible surface triangles into UV space. The dab's frontmost depth
     /// field excludes occluded sheets, while sampling either side of seams in 3D.
@@ -430,7 +384,58 @@ impl Mesh {
         changed
     }
 }
-fn raster(
+pub(crate) fn pad_pixels(texture: &mut Texture, mut occupied: Vec<bool>) {
+    let width = texture.width as usize;
+    let height = texture.height as usize;
+    let mut frontier = Vec::new();
+    for i in 0..occupied.len() {
+        if !occupied[i] {
+            continue;
+        }
+        let (x, y) = (i % width, i / width);
+        if x == 0
+            || y == 0
+            || x + 1 == width
+            || y + 1 == height
+            || !occupied[i - 1]
+            || !occupied[i + 1]
+            || !occupied[i - width]
+            || !occupied[i + width]
+        {
+            frontier.push(i);
+        }
+    }
+    let mut pixels = None;
+    for _ in 0..4 {
+        let mut next = Vec::new();
+        for i in frontier {
+            let (x, y) = (i % width, i / width);
+            for j in [
+                x.checked_sub(1).map(|x| y * width + x),
+                (x + 1 < width).then_some(i + 1),
+                y.checked_sub(1).map(|y| y * width + x),
+                (y + 1 < height).then_some(i + width),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if occupied[j] {
+                    continue;
+                }
+                occupied[j] = true;
+                next.push(j);
+                let values = pixels.get_or_insert_with(|| texture.pixels.clone());
+                let sample = values.pixel(i);
+                values.set_pixel(j, sample);
+            }
+        }
+        frontier = next;
+    }
+    if let Some(pixels) = pixels {
+        texture.pixels = pixels;
+    }
+}
+pub(crate) fn raster(
     t: [[f32; 2]; 3],
     width: usize,
     height: usize,

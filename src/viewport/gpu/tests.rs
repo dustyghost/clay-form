@@ -131,8 +131,16 @@ fn gpu_4k_texture_workflow_keeps_precision_and_bounded_buffers() {
     let reopened = crate::persistence::load_project(path.to_str().unwrap()).unwrap();
     assert_eq!(reopened.mesh.uv, doc.mesh().uv);
     assert!(
-        std::fs::metadata(&path).unwrap().len() < 16 * 1024 * 1024,
-        "native texture pixels are compressed"
+        std::fs::metadata(&path).unwrap().len()
+            < doc
+                .mesh()
+                .uv
+                .textures
+                .iter()
+                .map(|t| t.pixels.byte_len() as u64)
+                .sum::<u64>()
+                / 16,
+        "native texture pixels compress to less than one sixteenth of raw storage; atlas packing changes painted pixel counts"
     );
     drop(reopened);
     let exchange = std::env::temp_dir().join("clay-4k-workflow.exr");
