@@ -10,7 +10,7 @@ Choose **Focus Paint workspace** to keep one painting sidebar and give the model
 
 In **Brush settings**, the Paint target shows the active model and whether strokes update **Vertices** or an image. Image targets show their dimensions and precision, including **32-bit float**, independently of export format. **Set up texture painting…** creates an image workflow; **UV / image view** opens the linked UV editor. Switching to a model without the selected image returns the target to Vertices.
 
-Use **Brush colour**, the palette and **Sample colour** for future strokes. These controls do not recolour existing paint or edit a shared material. Roughness and metallic targets show only their relevant scalar control. With Vertices selected, **Paint channels** offers **Whole material**, **Colour only**, **Roughness only** or **Metallic only**.
+Use **Brush colour**, the palette and **Sample colour** for future strokes. These controls do not recolour existing paint or edit a shared material. Image painting currently exposes base colour only; roughness and metallic remain available as vertex material properties. With Vertices selected, **Paint channels** offers **Whole material**, **Colour only**, **Roughness only** or **Metallic only**.
 
 Open **Material presets and shared editor** to choose a rendered material swatch. Drag **Drag to resize materials** to change the swatch area; larger libraries scroll within it. Choosing a material affects future strokes. Open **Edit shared project material** deliberately when you want to update existing painted uses; it shows how many models and vertices share that definition.
 
@@ -72,7 +72,7 @@ Lighting controls do not edit paint or geometry.
 
 The default viewport lighting uses a studio light and neutral fill. Roughness changes highlight width; metallic changes the diffuse/specular balance and tints metal reflections. The same material appearance is used for the active and inactive painted models. Unpainted inactive models retain their blue-grey selection tint.
 
-The initial surface is opaque. UV image paint supports base colour, roughness and metallic. Normal maps, height/displacement maps, anisotropy and arbitrary shader graphs are not editable material channels yet. The viewport does not simulate scene reflections, cast shadows or indirect lighting. See the [material channel contract](../materials.md) for Blender mapping and validation.
+The initial surface is opaque. UV image painting currently exposes base colour only. Existing roughness and metallic images remain preserved and rendered; their authoring controls are deferred in [#70](https://github.com/dustyghost/clay-form/issues/70). Normal maps, height/displacement maps, anisotropy and arbitrary shader graphs are not editable material channels yet. The viewport does not simulate scene reflections, cast shadows or indirect lighting. See the [material channel contract](../materials.md) for Blender mapping and validation.
 
 ## Shared surfaces and layers
 

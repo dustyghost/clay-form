@@ -238,7 +238,13 @@ impl App {
             } else {
                 self.document.assign_textures(textures)?;
                 self.ui.uv.reload_conflict = false;
-                Ok(if job.bake { "Baked unlit paint/material maps. Use Paint on model to continue painting, or Edit in external paint app. Undo restores the previous textures." } else { "Reloaded saved paint layers without the UV guide; Undo restores the previous texture" })
+                Ok(if job.bake {
+                    if matches!(&retry, TextureCommand::Bake(true, _, _)) {
+                        "Baked material maps. Undo restores the previous textures."
+                    } else {
+                        "Captured vertex colour into the colour texture. Use Paint on model to continue painting. Undo restores the previous image."
+                    }
+                } else { "Reloaded saved paint layers without the UV guide; Undo restores the previous texture" })
             }
         });
         match result {
@@ -284,7 +290,7 @@ impl App {
         let description = if options.composite {
             "Baking surface colour and material maps"
         } else {
-            "Capturing vertex surface into texture"
+            "Capturing vertex colour into colour texture"
         };
         self.texture_exchange = Some(ExchangeJob {
             geometry,
@@ -742,6 +748,78 @@ mod tests {
     }
 
     #[test]
+    fn colour_capture_preserves_existing_scalar_images_and_float_precision() {
+        let mut app = App::default();
+        let mut mesh = crate::sculpt::texture::tests::sheets();
+        let material = crate::sculpt::Material::from_srgb([0.8, 0.15, 0.3], 0.7, 0.25);
+        mesh.materials = vec![material.clone(); mesh.vertices.len()];
+        mesh.uv.textures = vec![
+            Texture::new_with_precision(
+                Channel::Color,
+                64,
+                &Default::default(),
+                Precision::Float32,
+            )
+            .unwrap(),
+            Texture::new_with_precision(Channel::Roughness, 32, &material, Precision::U16).unwrap(),
+            Texture::new_with_precision(Channel::Metallic, 16, &material, Precision::Float32)
+                .unwrap(),
+        ];
+        app.document
+            .replace_geometry(crate::sculpt::Geometry::new(mesh))
+            .unwrap();
+        let before = app.document.geometry_snapshot();
+        let scalar_maps: Vec<_> = app
+            .document
+            .mesh()
+            .uv
+            .textures
+            .iter()
+            .filter(|image| image.channel != Channel::Color)
+            .cloned()
+            .collect();
+        let history = app.document.history_counts();
+        // Capture preserves the existing colour image even when new-image defaults differ.
+        app.texture_command(TextureCommand::Bake(false, 32, Precision::U16))
+            .unwrap();
+        finish_exchange(&mut app);
+        assert!(app.ui.status.contains("Captured vertex colour"));
+        assert_eq!(app.document.history_counts().0, history.0 + 1);
+        assert_eq!(
+            app.document
+                .mesh()
+                .uv
+                .textures
+                .iter()
+                .filter(|image| image.channel != Channel::Color)
+                .cloned()
+                .collect::<Vec<_>>(),
+            scalar_maps
+        );
+        let colour = app
+            .document
+            .mesh()
+            .uv
+            .textures
+            .iter()
+            .find(|image| image.channel == Channel::Color)
+            .unwrap();
+        assert_eq!(
+            (colour.width, colour.height, colour.pixels.precision()),
+            (64, 64, Precision::Float32)
+        );
+        let captured = app.document.geometry_snapshot();
+        assert_ne!(
+            captured.mesh.uv.textures[0].pixels,
+            before.mesh.uv.textures[0].pixels
+        );
+        app.document.undo();
+        assert_eq!(app.document.geometry_snapshot(), before);
+        app.document.redo();
+        assert_eq!(app.document.geometry_snapshot(), captured);
+    }
+
+    #[test]
     fn texture_bake_is_one_undo_and_rejects_stale_background_results() {
         let mut app = App::default();
         app.document
@@ -998,10 +1076,33 @@ mod tests {
         assert_eq!(app.document.mesh().uv.textures[0].pixels, before);
         app.dispatch(Command::Redo, &ctx);
         assert_eq!(app.document.mesh().uv.textures[0].pixels, after);
+        // Older scalar assets remain embedded and renderable, but are not image editing targets.
+        for (channel, precision) in [
+            (Channel::Roughness, Precision::U16),
+            (Channel::Metallic, Precision::Float32),
+        ] {
+            app.document
+                .assign_texture(
+                    Texture::new_with_precision(channel, 32, &Default::default(), precision)
+                        .unwrap(),
+                )
+                .unwrap();
+        }
+        let scalar_maps: Vec<_> = app
+            .document
+            .mesh()
+            .uv
+            .textures
+            .iter()
+            .filter(|image| image.channel != Channel::Color)
+            .cloned()
+            .collect();
+        let before_capture = app.document.geometry_snapshot();
+        app.ui.uv.channel = Channel::Metallic;
         app.ui.uv.open = true;
         capture.render(&ctx, frame(&mut app, vec![egui::Event::PointerGone]));
         let out = frame(&mut app, vec![]);
-        let p = point(&out, "Capture and bake");
+        let p = point(&out, "Capture colour to texture");
         capture.render(&ctx, out);
         for events in [
             vec![egui::Event::PointerMoved(p), button(p, true)],
@@ -1010,7 +1111,9 @@ mod tests {
             capture.render(&ctx, frame(&mut app, events));
         }
         let out = frame(&mut app, vec![]);
-        let p = point(&out, "Bake material maps");
+        assert_eq!(app.ui.uv.channel, Channel::Color);
+        assert!(!out.shapes.iter().any(|shape| matches!(&shape.shape, egui::Shape::Text(text) if matches!(text.galley.text(), "Roughness (linear)" | "Metallic (linear)" | "Bake material maps"))));
+        let p = point(&out, "Capture vertex colour");
         capture.render(&ctx, out);
         for events in [
             vec![egui::Event::PointerMoved(p), button(p, true)],
@@ -1019,7 +1122,7 @@ mod tests {
             capture.render(&ctx, frame(&mut app, events));
         }
         let out = frame(&mut app, vec![]);
-        let p = point(&out, "Replace with bake");
+        let p = point(&out, "Replace colour image");
         capture.render(&ctx, out);
         let history = app.document.history_counts();
         for events in [
@@ -1036,9 +1139,33 @@ mod tests {
             app.ui.status
         );
         assert_eq!(app.document.history_counts().0, history.0 + 1);
+        assert_eq!(
+            app.document
+                .mesh()
+                .uv
+                .textures
+                .iter()
+                .filter(|image| image.channel != Channel::Color)
+                .cloned()
+                .collect::<Vec<_>>(),
+            scalar_maps
+        );
+        let captured = app.document.geometry_snapshot();
         app.dispatch(Command::Undo, &ctx);
-        assert_eq!(app.document.mesh().uv.textures.len(), 1);
+        assert_eq!(app.document.geometry_snapshot(), before_capture);
         app.dispatch(Command::Redo, &ctx);
+        assert_eq!(app.document.geometry_snapshot(), captured);
+        assert_eq!(
+            app.document
+                .mesh()
+                .uv
+                .textures
+                .iter()
+                .filter(|image| image.channel != Channel::Color)
+                .cloned()
+                .collect::<Vec<_>>(),
+            scalar_maps
+        );
         let output = frame(&mut app, vec![egui::Event::PointerGone]);
         let pixels = capture.render(&ctx, output);
         capture.save(std::env::temp_dir().join("clay-uv-textures.png"), &pixels);

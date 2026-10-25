@@ -627,6 +627,12 @@ impl eframe::App for App {
         });
         self.viewport
             .set_uv_checker(self.ui.uv.open && self.ui.uv.checker);
+        if matches!(
+            self.ui.preferences.paint_inspection,
+            crate::viewport::InspectionMode::Roughness | crate::viewport::InspectionMode::Metallic
+        ) {
+            self.ui.preferences.paint_inspection = crate::viewport::InspectionMode::Lit;
+        }
         self.viewport
             .set_inspection_mode(self.ui.preferences.paint_inspection);
         self.ui.settings(ctx, &self.document);

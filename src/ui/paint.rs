@@ -16,8 +16,20 @@ impl UiState {
             },
             viewport::InspectionMode,
         };
+        let paint_target = document
+            .texture_paint
+            .filter(|channel| *channel == Channel::Color);
+        if paint_target != document.texture_paint {
+            commands.push(Command::Texture(T::Paint(None)));
+        }
+        if matches!(
+            self.preferences.paint_inspection,
+            InspectionMode::Roughness | InspectionMode::Metallic
+        ) {
+            self.preferences.paint_inspection = InspectionMode::Lit;
+        }
         let mesh = document.mesh();
-        let texture = document.texture_paint.and_then(|channel| {
+        let texture = paint_target.and_then(|channel| {
             mesh.uv
                 .textures
                 .iter()
@@ -51,15 +63,20 @@ impl UiState {
             }))
             .show_ui(ui, |ui| {
                 if ui
-                    .selectable_label(document.texture_paint.is_none(), "Vertices")
+                    .selectable_label(paint_target.is_none(), "Vertices")
                     .clicked()
                 {
                     commands.push(Command::Texture(T::Paint(None)));
                 }
-                for texture in &mesh.uv.textures {
+                for texture in mesh
+                    .uv
+                    .textures
+                    .iter()
+                    .filter(|texture| texture.channel == Channel::Color)
+                {
                     if ui
                         .selectable_label(
-                            document.texture_paint == Some(texture.channel),
+                            paint_target == Some(texture.channel),
                             format!("{} image", texture.channel.label()),
                         )
                         .clicked()
@@ -122,8 +139,6 @@ impl UiState {
                 for mode in [
                     InspectionMode::Lit,
                     InspectionMode::Color,
-                    InspectionMode::Roughness,
-                    InspectionMode::Metallic,
                     InspectionMode::UvChecker,
                 ] {
                     ui.selectable_value(
@@ -133,7 +148,7 @@ impl UiState {
                     );
                 }
             });
-        if document.texture_paint.is_none() {
+        if paint_target.is_none() {
             egui::ComboBox::from_label("Paint channels")
                 .selected_text(brush.paint_channels.label())
                 .show_ui(ui, |ui| {
@@ -142,20 +157,20 @@ impl UiState {
                     }
                 });
         }
-        let colour = matches!(document.texture_paint, Some(Channel::Color))
-            || (document.texture_paint.is_none()
+        let colour = matches!(paint_target, Some(Channel::Color))
+            || (paint_target.is_none()
                 && matches!(
                     brush.paint_channels,
                     PaintChannels::Material | PaintChannels::Color
                 ));
-        let roughness = matches!(document.texture_paint, Some(Channel::Roughness))
-            || (document.texture_paint.is_none()
+        let roughness = matches!(paint_target, Some(Channel::Roughness))
+            || (paint_target.is_none()
                 && matches!(
                     brush.paint_channels,
                     PaintChannels::Material | PaintChannels::Roughness
                 ));
-        let metallic = matches!(document.texture_paint, Some(Channel::Metallic))
-            || (document.texture_paint.is_none()
+        let metallic = matches!(paint_target, Some(Channel::Metallic))
+            || (paint_target.is_none()
                 && matches!(
                     brush.paint_channels,
                     PaintChannels::Material | PaintChannels::Metallic
@@ -188,24 +203,26 @@ impl UiState {
         if texture.is_some_and(|t| {
             t.channel == Channel::Color && t.pixels.precision() == Precision::Float32
         }) {
-            let mut values = brush.texture_colour.unwrap_or(brush.material.base_color);
-            let mut edited = false;
-            ui.label("Linear RGB (float)");
-            ui.horizontal(|ui| {
-                for (label, value) in ["R: ", "G: ", "B: "].into_iter().zip(&mut values) {
-                    edited |= ui
-                        .add(
-                            egui::DragValue::new(value)
-                                .prefix(label)
-                                .speed(0.01)
-                                .max_decimals(4),
-                        )
-                        .changed();
+            ui.collapsing("HDR colour values", |ui| {
+                let mut values = brush.texture_colour.unwrap_or(brush.material.base_color);
+                let mut edited = false;
+                ui.label("Linear RGB (float)");
+                ui.horizontal(|ui| {
+                    for (label, value) in ["R: ", "G: ", "B: "].into_iter().zip(&mut values) {
+                        edited |= ui
+                            .add(
+                                egui::DragValue::new(value)
+                                    .prefix(label)
+                                    .speed(0.01)
+                                    .max_decimals(4),
+                            )
+                            .changed();
+                    }
+                });
+                if edited {
+                    brush.texture_colour = Some(values);
                 }
             });
-            if edited {
-                brush.texture_colour = Some(values);
-            }
         }
         if colour {
             self.materials

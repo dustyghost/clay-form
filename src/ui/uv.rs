@@ -53,6 +53,13 @@ impl UiState {
         if !self.uv.open {
             return commands;
         }
+        // Colour is the editable image workflow; retained scalar assets still render/export.
+        if self.uv.channel != crate::sculpt::texture::Channel::Color {
+            self.uv.channel = crate::sculpt::texture::Channel::Color;
+            self.uv.reload_conflict = false;
+            self.uv.export_overwrite = None;
+            self.uv.bake_replace = None;
+        }
         if self.uv.revision.is_none() {
             self.uv.padding = 0.01;
             self.uv.export_path = "texture.png".into();
@@ -257,16 +264,7 @@ impl UiState {
                 commands.push(Command::Texture(retry));
             }
         }
-        ui.horizontal_wrapped(|ui| {
-            for channel in Channel::ALL {
-                if ui
-                    .selectable_value(&mut self.uv.channel, channel, channel.label())
-                    .changed()
-                {
-                    self.uv.reload_conflict = false;
-                }
-            }
-        });
+        ui.strong("Base colour texture");
         if self.uv.size == 0 {
             self.uv.size = 512;
         }
@@ -280,7 +278,7 @@ impl UiState {
                     .selected_text(match self.uv.initial {
                         TextureStart::Surface => "Use existing surface / vertex colour",
                         TextureStart::Transparent => "Blank transparent",
-                        TextureStart::Solid => "Solid brush colour / value",
+                        TextureStart::Solid => "Solid brush colour",
                     })
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
@@ -296,7 +294,7 @@ impl UiState {
                         ui.selectable_value(
                             &mut self.uv.initial,
                             TextureStart::Solid,
-                            "Solid brush colour / value",
+                            "Solid brush colour",
                         );
                     });
                 let can_create = ready
@@ -357,102 +355,41 @@ impl UiState {
                 });
             });
         ui.separator();
-        ui.collapsing("Capture and bake", |ui| {
-        ui.checkbox(
-            &mut self.uv.bake_override,
-            "Override existing bake size and precision",
-        );
-        ui.weak(if self.uv.bake_override { "All baked maps use the size and precision in New texture / import." }
-            else { "Bake preserves each existing map's size and precision. New maps use the settings in New texture / import." });
-        ui.horizontal_wrapped(|ui| {
-            for (all, label) in [
-                (false, "Capture vertex paint"),
-                (true, "Bake material maps"),
-            ] {
-                if ui
-                    .add_enabled(ready && !self.uv.exchange_busy, egui::Button::new(label))
-                    .clicked()
-                {
-                    if uv
-                        .textures
-                        .iter()
-                        .any(|t| all || t.channel == crate::sculpt::texture::Channel::Color)
-                    {
-                        self.uv.bake_replace = Some(all);
-                    } else {
-                        commands.push(Command::Texture(T::Bake(
-                            all,
-                            self.uv.size,
-                            self.uv.precision,
-                        )));
-                    }
-                }
-            }
-        });
-        ui.weak("Capture copies vertex colour. Bake creates unlit base colour, roughness and metallic maps, including existing texture paint.");
-        if let Some(all) = self.uv.bake_replace {
-            ui.label("This replaces existing texture maps. One Undo restores them.");
-            for channel in Channel::ALL
-                .into_iter()
-                .filter(|c| all || *c == Channel::Color)
-            {
-                let old = uv.textures.iter().find(|t| t.channel == channel);
-                let (width, height, precision) = old
-                    .filter(|_| !self.uv.bake_override)
-                    .map_or((self.uv.size, self.uv.size, self.uv.precision), |t| {
-                        (t.width, t.height, t.pixels.precision())
-                    });
-                let describe = |w, h, p| {
-                    format!(
-                        "{w} × {h}, {}",
-                        if p == Precision::Float32 {
-                            "32-bit float"
-                        } else {
-                            "16-bit integer"
-                        }
-                    )
-                };
-                let before = old.map_or("new map".into(), |t| {
-                    describe(t.width, t.height, t.pixels.precision())
-                });
-                ui.label(format!(
-                    "{}: {before} → {}",
-                    channel.label(),
-                    describe(width, height, precision)
-                ));
-                if let Some(texture) = old {
-                    let users = (0..document.model_count())
-                        .filter(|&i| {
-                            document.model(i).is_some_and(|m| {
-                                m.mesh.uv.textures.iter().any(|t| t.id == texture.id)
-                            })
-                        })
-                        .count();
-                    if users > 1 {
-                        ui.colored_label(Color32::YELLOW, format!("Updates {users} linked models"));
-                    }
-                }
-            }
-            ui.horizontal_wrapped(|ui| {
-                if ui
-                    .add_enabled(
-                        !self.uv.exchange_busy,
-                        egui::Button::new("Replace with bake"),
-                    )
-                    .clicked()
-                {
-                    commands.push(Command::Texture(T::Bake(
-                        all,
-                        self.uv.size,
-                        self.uv.precision,
-                    )));
-                    self.uv.bake_replace = None;
-                }
-                if ui.button("Cancel bake").clicked() {
-                    self.uv.bake_replace = None;
-                }
+        ui.collapsing("Capture colour to texture", |ui| {
+            ui.checkbox(&mut self.uv.bake_override, "Override colour image size and precision");
+            ui.weak(if self.uv.bake_override {
+                "Capture uses the size and precision in New texture / import."
+            } else {
+                "Capture keeps the current colour image's size and precision. New images use New texture / import settings."
             });
-        }
+            if ui.add_enabled(ready && !self.uv.exchange_busy, egui::Button::new("Capture vertex colour")).clicked() {
+                if uv.textures.iter().any(|texture| texture.channel == Channel::Color) {
+                    self.uv.bake_replace = Some(false);
+                } else {
+                    commands.push(Command::Texture(T::Bake(false, self.uv.size, self.uv.precision)));
+                }
+            }
+            ui.weak("Copies vertex paint into the colour image without lighting or shading.");
+            if self.uv.bake_replace.is_some() {
+                ui.label("Replace the colour image with captured vertex paint? One Undo restores it.");
+                let old = uv.textures.iter().find(|texture| texture.channel == Channel::Color);
+                let (width, height, precision) = old.filter(|_| !self.uv.bake_override)
+                    .map_or((self.uv.size, self.uv.size, self.uv.precision), |texture| (texture.width, texture.height, texture.pixels.precision()));
+                let describe = |width, height, precision| format!("{width} × {height}, {}", if precision == Precision::Float32 { "32-bit float" } else { "16-bit integer" });
+                let before = old.map_or("new image".into(), |texture| describe(texture.width, texture.height, texture.pixels.precision()));
+                ui.label(format!("Base colour: {before} → {}", describe(width, height, precision)));
+                if let Some(texture) = old {
+                    let users = (0..document.model_count()).filter(|&index| document.model(index).is_some_and(|model| model.mesh.uv.textures.iter().any(|image| image.id == texture.id))).count();
+                    if users > 1 { ui.colored_label(Color32::YELLOW, format!("Updates {users} linked models")); }
+                }
+                ui.horizontal_wrapped(|ui| {
+                    if ui.add_enabled(!self.uv.exchange_busy, egui::Button::new("Replace colour image")).clicked() {
+                        commands.push(Command::Texture(T::Bake(false, self.uv.size, self.uv.precision)));
+                        self.uv.bake_replace = None;
+                    }
+                    if ui.button("Cancel capture").clicked() { self.uv.bake_replace = None; }
+                });
+            }
         });
         if let Some(texture) = uv.textures.iter().find(|t| t.channel == self.uv.channel) {
             if self.uv.export_path == "texture.png"
@@ -467,9 +404,9 @@ impl UiState {
                 texture.width,
                 texture.height,
                 if texture.pixels.precision() == crate::sculpt::texture::Precision::Float32 {
-                    "RGBA32 float · linear"
+                    "32-bit float colour"
                 } else {
-                    "RGBA16 integer"
+                    "16-bit integer colour"
                 }
             ));
             ui.horizontal_wrapped(|ui| {
@@ -598,7 +535,7 @@ impl UiState {
         });
             });
             if self.uv.completed {
-                ui.label("Texture ready. One Undo restores the previous maps.");
+                ui.label("Colour texture ready. One Undo restores the previous image.");
                 ui.weak(
                     "Continue with Paint on model, inspect the image here, or Export image above.",
                 );

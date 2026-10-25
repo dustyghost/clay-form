@@ -3846,12 +3846,48 @@ fn paint_target_scope_inspection_offscreen_review() {
         .document
         .assign_texture(Texture::new(Channel::Roughness, 32, &colour).unwrap())
         .unwrap();
+    g.app
+        .document
+        .assign_texture(
+            Texture::new_with_precision(Channel::Metallic, 16, &colour, Precision::Float32)
+                .unwrap(),
+        )
+        .unwrap();
+    let scalar_maps: Vec<_> = g
+        .app
+        .document
+        .mesh()
+        .uv
+        .textures
+        .iter()
+        .filter(|image| image.channel != Channel::Color)
+        .cloned()
+        .collect();
+    g.app.ui.preferences.paint_inspection = InspectionMode::Roughness;
+
     g.app.dispatch(Command::AddBrush(Kind::Paint), &g.ctx);
     g.app
         .texture_command(T::Paint(Some(Channel::Color)))
         .unwrap();
     g.panel(Tool::Brush, Dock::Right);
     g.frame(vec![]);
+    assert_eq!(
+        g.app.ui.preferences.paint_inspection,
+        InspectionMode::Lit,
+        "Old scalar inspection preferences return to normal material shading"
+    );
+    assert!(
+        !g.text_positions
+            .iter()
+            .any(|(text, _)| text == "Linear RGB (float)")
+    );
+    click_paint_control(&mut g, "HDR colour values");
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(text, _)| text == "Linear RGB (float)")
+    );
+    click_paint_control(&mut g, "HDR colour values");
     assert!(
         g.text_positions
             .iter()
@@ -3861,13 +3897,28 @@ fn paint_target_scope_inspection_offscreen_review() {
     g.frame(vec![]);
     assert!(g.app.ui.preferences.paint_workspace_backup.is_some());
     click_paint_control(&mut g, "Lit material");
+    assert!(
+        !g.text_positions
+            .iter()
+            .any(|(text, _)| matches!(text.as_str(), "Roughness" | "Metallic"))
+    );
     click_guide_label(&mut g, "Unlit colour");
     assert_eq!(g.app.ui.preferences.paint_inspection, InspectionMode::Color);
     g.save("paint-inspection-unlit");
     click_paint_control(&mut g, "Base colour image");
-    click_guide_label(&mut g, "Roughness (linear) image");
+    assert!(!g.text_positions.iter().any(|(text, _)| matches!(
+        text.as_str(),
+        "Roughness (linear) image" | "Metallic (linear) image"
+    )));
+    click_guide_label(&mut g, "Vertices");
+    click_paint_control(&mut g, "Whole material");
+    click_guide_label(&mut g, "Roughness only");
     g.frame(vec![]);
-    assert_eq!(g.app.document.texture_paint, Some(Channel::Roughness));
+    assert_eq!(g.app.document.texture_paint, None);
+    assert_eq!(
+        g.app.document.brushes()[g.app.ui.selected].paint_channels,
+        crate::sculpt::PaintChannels::Roughness
+    );
     assert!(
         g.text_positions
             .iter()
@@ -3894,8 +3945,8 @@ fn paint_target_scope_inspection_offscreen_review() {
         sampled.base_color, brush_colour,
         "scalar sampling preserves brush colour"
     );
-    click_paint_control(&mut g, "Roughness (linear) image");
-    click_guide_label(&mut g, "Vertices");
+    click_paint_control(&mut g, "Roughness only");
+    click_guide_label(&mut g, "Whole material");
     let geometry = g.app.document.geometry_snapshot();
     let materials = g.app.document.materials().to_vec();
     let history = g.app.document.history_counts();
@@ -3917,6 +3968,18 @@ fn paint_target_scope_inspection_offscreen_review() {
     assert_eq!(g.app.document.geometry_snapshot(), geometry);
     assert_eq!(g.app.document.materials(), materials);
     assert_eq!(g.app.document.history_counts(), history);
+    assert_eq!(
+        g.app
+            .document
+            .mesh()
+            .uv
+            .textures
+            .iter()
+            .filter(|image| image.channel != Channel::Color)
+            .cloned()
+            .collect::<Vec<_>>(),
+        scalar_maps
+    );
     click_paint_control(&mut g, "Vertices");
     click_guide_label(&mut g, "Base colour image");
     g.app.dispatch(Command::SelectSubmodel(untextured), &g.ctx);
