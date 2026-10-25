@@ -73,6 +73,68 @@ fn gpu_uv_texture_pixels_and_checker_survive_batching() {
         checker[center + 1],
         "checker overrides painted colour"
     );
+
+    // Paint across a geometric edge whose two UV copies are far apart in the atlas.
+    // Compare rendered fragments across the seam, not only rasterized UV coverage.
+    let mut seam = crate::sculpt::texture::tests::sheets();
+    seam.vertices.truncate(4);
+    seam.mask.truncate(4);
+    seam.triangles.truncate(2);
+    seam.uv.topology = seam.triangles.clone();
+    seam.uv.corners = vec![
+        [[0.05, 0.05], [0.45, 0.05], [0.45, 0.95]],
+        [[0.55, 0.05], [0.95, 0.95], [0.55, 0.95]],
+    ];
+    seam.uv.textures[0] = Texture::new(Channel::Color, 256, &Material::default()).unwrap();
+    let mut brush = crate::sculpt::Brush::new(crate::sculpt::Kind::Paint);
+    brush.material = red;
+    brush.strength = 1.;
+    brush.pressure = false;
+    assert!(seam.paint_texture(
+        Channel::Color,
+        &brush,
+        &[crate::sculpt::texture::tests::dab()],
+        &[],
+        &[],
+    ));
+    seam.pad_texture(Channel::Color);
+    crate::persistence::texture::save(
+        std::path::Path::new("/tmp/clay-painted-seam-atlas.png"),
+        &seam.uv.textures[0],
+    )
+    .unwrap();
+    doc.replace_geometry(Geometry::new(seam)).unwrap();
+    gpu.upload(&Arc::new(DisplayMesh::new(&doc)));
+    gpu.paint(
+        &params,
+        [256, 256],
+        false,
+        WireMode::Visible,
+        false,
+        &Preview::default(),
+    );
+    let seam_pixels = gpu.read();
+    for y in 118..138 {
+        for x in 118..138 {
+            let i = (y * 256 + x) * 4;
+            assert!(
+                seam_pixels[i] > seam_pixels[i + 1] * 2,
+                "paint covers both sides of the UV seam"
+            );
+            assert!(
+                seam_pixels[i].abs_diff(seam_pixels[center]) < 12,
+                "no dark filtering line at the UV seam"
+            );
+        }
+    }
+    image::save_buffer(
+        "/tmp/clay-painted-seam.png",
+        &seam_pixels,
+        256,
+        256,
+        image::ColorType::Rgba8,
+    )
+    .unwrap();
 }
 
 #[cfg(target_os = "linux")]

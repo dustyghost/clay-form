@@ -430,7 +430,7 @@ impl Texture {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     pub(crate) fn sheets() -> Mesh {
         let mut mesh = Mesh::default();
