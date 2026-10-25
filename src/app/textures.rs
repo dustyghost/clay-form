@@ -383,7 +383,9 @@ mod tests {
         let after = app.document.mesh().uv.textures[0].pixels.clone();
         assert!(
             after
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .any(|p| p[0] as u32 > p[1] as u32 * 2 && p[0] as u32 > p[2] as u32 * 2),
             "painted pixels retain the chosen red brush colour"
         );

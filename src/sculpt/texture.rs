@@ -89,7 +89,9 @@ impl Texture {
     }
     pub fn linear_pixels(&self) -> Vec<[f32; 4]> {
         self.pixels
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|p| {
                 let mut q = std::array::from_fn(|i| p[i] as f32 / 65535.);
                 if self.channel == Channel::Color {
