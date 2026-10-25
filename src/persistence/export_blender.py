@@ -31,107 +31,208 @@ obj['clay_source_axes'] = 'Y-up; Blender positions are (x, -z, y)'
 material = bpy.data.materials.new('Clay painted surface')
 material.use_nodes = True
 mesh.materials.append(material)
-tree = material.node_tree
-tree.nodes.clear()
-
-def node(kind, label=''):
-    n = tree.nodes.new(kind)
-    n.label = label
-    return n
-
-def attribute(name, values):
-    attr = mesh.attributes.new(name, 'FLOAT', 'POINT')
-    attr.data.foreach_set('value', values)
-    n = node('ShaderNodeAttribute', name)
-    n.attribute_name = name
-    return n.outputs['Fac']
-
-def math_node(operation, a, b, label=''):
-    n = node('ShaderNodeMath', label)
-    n.operation = operation
-    for socket, value in zip(n.inputs, (a, b)):
-        if isinstance(value, (int, float)):
-            socket.default_value = value
-        else:
-            tree.links.new(value, socket)
-    return n.outputs[0]
-
+# Keep unused source fields as metadata, not shader inputs. The former exporter
+# read all 70 fields even for plain clay, exceeding EEVEE's attribute limit.
+from array import array
+root_tree = material.node_tree
+root_tree.nodes.clear()
 properties = ['Colour R', 'Colour G', 'Colour B', 'Roughness', 'Metallic', 'IOR', 'Specular', 'Emission R', 'Emission G', 'Emission B', 'Emission strength', 'Subsurface weight', 'Radius R', 'Radius G', 'Radius B', 'Subsurface scale']
 labels = ['Base · ' + p for p in properties]
 for i in range(3):
     labels.extend([f'Layer {i+1} · ' + p for p in properties + ['Weight', 'Add (0 = Mix)']])
 
+def group(c):
+    return 0 if c < 3 else 1 if c == 3 else 2 if c == 4 else 3
+
 def limits(c):
     prop = c if c < 16 else (c - 16) % 18
     return (1, 4) if prop == 5 else (0, 100) if prop == 10 else (0, 10) if 12 <= prop <= 15 else (0, 1)
 
-def group(c):
-    return 0 if c < 3 else 1 if c == 3 else 2 if c == 4 else 3
+# A linked definition can activate a currently zero-weight layer after export.
+live_layers = [i for i in range(3) if any(data['channels'][32+i*18]) or any(any(w[3] for w in a['weights']) for a in data['assets'])]
+complex_material = bool(data['assets'] or live_layers)
+if complex_material:
+    tree = bpy.data.node_groups.new('Clay layered surface', 'ShaderNodeTree')
+    tree.interface.new_socket(name='Surface', in_out='OUTPUT', socket_type='NodeSocketShader')
+    instance = root_tree.nodes.new('ShaderNodeGroup')
+    instance.node_tree = tree
+    instance.label = 'Painted layers · shared material controls inside'
+    instance.location = (0, 0)
+    out = root_tree.nodes.new('ShaderNodeOutputMaterial')
+    out.location = (340, 0)
+    root_tree.links.new(instance.outputs['Surface'], out.inputs['Surface'])
+else:
+    tree = root_tree
+
+node_columns = {}
+def node(kind, label='', column=0):
+    n = tree.nodes.new(kind)
+    n.label = label
+    row = node_columns.get(column, 0)
+    n.location = (column * 300, -row * 210)
+    n.width = 240 if kind in ('ShaderNodeTexImage', 'ShaderNodeBsdfPrincipled') else 180
+    node_columns[column] = row + 1
+    return n
+
+def connect(value, socket):
+    if isinstance(value, (int, float, tuple, list)):
+        socket.default_value = value[:3] if socket.type == 'VECTOR' and isinstance(value, (tuple, list)) else value
+    else:
+        tree.links.new(value, socket)
+
+# Deduplicate varying fields and pack four float values per shader attribute.
+# Constants go directly into sockets. Original POINT values remain inspectable.
+packed, varying = [], {}
+def attribute(name, values):
+    attr = mesh.attributes.new(name, 'FLOAT', 'POINT')
+    attr.data.foreach_set('value', values)
+    if not values or all(v == values[0] for v in values):
+        return values[0] if values else 0.
+    key = array('f', values).tobytes()
+    if key in varying:
+        return varying[key]
+    if not packed or len(packed[-1]['fields']) == 4:
+        if len(packed) >= 12:
+            raise RuntimeError('This painted material needs more independent vertex data than Blender material preview supports. Reduce independent material layers or bindings before exporting; no incomplete blend was saved.')
+        name = f'clay_paint_data_{len(packed):02}'
+        attr_node = node('ShaderNodeAttribute', 'Packed vertex paint', -4)
+        attr_node.attribute_name = name
+        split = node('ShaderNodeSeparateColor', 'Paint components', -3)
+        split.mode = 'RGB'
+        tree.links.new(attr_node.outputs['Color'], split.inputs[0])
+        packed.append({'name':name, 'fields':[], 'sockets':list(split.outputs[:3])+[attr_node.outputs['Alpha']]})
+    pack = packed[-1]
+    socket = pack['sockets'][len(pack['fields'])]
+    pack['fields'].append(values)
+    varying[key] = socket
+    return socket
+
+def math_node(operation, a, b, label=''):
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return {'ADD':lambda:a+b, 'SUBTRACT':lambda:a-b, 'MULTIPLY':lambda:a*b, 'MINIMUM':lambda:min(a,b), 'MAXIMUM':lambda:max(a,b)}[operation]()
+    if operation == 'MULTIPLY':
+        if isinstance(a, (int,float)) and a == 0 or isinstance(b, (int,float)) and b == 0: return 0.
+        if isinstance(a, (int,float)) and a == 1: return b
+        if isinstance(b, (int,float)) and b == 1: return a
+    if operation == 'ADD':
+        if isinstance(a, (int,float)) and a == 0: return b
+        if isinstance(b, (int,float)) and b == 0: return a
+    n = node('ShaderNodeMath', label, -2)
+    n.operation = operation
+    connect(a, n.inputs[0]); connect(b, n.inputs[1])
+    return n.outputs[0]
 
 assets = []
 for asset in data['assets']:
-    # Edit the labelled Value nodes inside this shared group to change every use.
     definition = bpy.data.node_groups.new(asset['name'], 'ShaderNodeTree')
     definition['clay_material_id'] = asset['id']
     definition['clay_layer_order'] = 'Base, Layer 1, Layer 2, Layer 3'
     output = definition.nodes.new('NodeGroupOutput')
-    output.location = (550, 0)
+    output.location = (850, 0)
     for c, (label, value) in enumerate(zip(labels, asset['values'])):
-        socket = definition.interface.new_socket(name=label, in_out='OUTPUT', socket_type='NodeSocketFloat')
+        definition.interface.new_socket(name=label, in_out='OUTPUT', socket_type='NodeSocketFloat')
         n = definition.nodes.new('ShaderNodeValue')
-        n.label = label
-        n.name = label
+        n.label = n.name = label
         n.outputs[0].default_value = value
-        n.location = ((c // 13) * 180 - 500, -(c % 13) * 90)
+        layer = 0 if c < 16 else 1+(c-16)//18
+        row = c if c < 16 else (c-16)%18
+        n.location = (layer*200, -row*90)
         definition.links.new(n.outputs[0], output.inputs[c])
-    instance = node('ShaderNodeGroup', asset['name'])
+    instance = node('ShaderNodeGroup', asset['name'], -5)
     instance.node_tree = definition
+    instance.hide = True
     weights = [attribute(f"clay_weight_{asset['id']}_{g}", [w[g] for w in asset['weights']]) for g in range(4)]
     assets.append((instance, weights))
 
-channels = []
+needed = set(range(16))
+for i in live_layers: needed.update(range(16+i*18, 34+i*18))
+channels = {}
 for c, values in enumerate(data['channels']):
+    if c not in needed:
+        attr = mesh.attributes.new(f'clay_residual_{c:02}', 'FLOAT', 'POINT')
+        attr.data.foreach_set('value', values)
+        continue
     value = attribute(f'clay_residual_{c:02}', values)
     for definition, weights in assets:
         value = math_node('ADD', value, math_node('MULTIPLY', definition.outputs[c], weights[group(c)]))
     lo, hi = limits(c)
-    channels.append(math_node('MINIMUM', math_node('MAXIMUM', value, lo), hi, labels[c]))
+    channels[c] = math_node('MINIMUM', math_node('MAXIMUM', value, lo), hi, labels[c])
+
+for pack in packed:
+    attr = mesh.color_attributes.new(pack['name'], 'FLOAT_COLOR', 'POINT')
+    fields = pack['fields'] + [[0.]*len(mesh.vertices)]*(4-len(pack['fields']))
+    attr.data.foreach_set('color', [v for row in zip(*fields) for v in row])
+material['clay_shader_attribute_count'] = len(packed)
 
 def rgb(offset):
-    n = node('ShaderNodeCombineColor')
+    values = [channels[offset+i] for i in range(3)]
+    if all(isinstance(v, (int,float)) for v in values): return tuple(values)+(1.,)
+    n = node('ShaderNodeCombineColor', labels[offset].split(' · ')[0], -1)
     n.mode = 'RGB'
-    for i in range(3):
-        tree.links.new(channels[offset+i], n.inputs[i])
+    for i, value in enumerate(values): connect(value, n.inputs[i])
+    return n.outputs[0]
+
+# UV/image paint is embedded so moving the .blend cannot lose its textures.
+images = {}
+if data.get('uv'):
+    uv = mesh.uv_layers.new(name='Clay UV')
+    uv.data.foreach_set('uv', [v for face in data['uv'] for corner in face for v in corner])
+    uv_node = node('ShaderNodeUVMap', 'Paint UVs', -2)
+    uv_node.uv_map = uv.name
+    mapped = data.get('mapped', [True]*len(mesh.polygons))
+    coverage = 1.
+    if not all(mapped):
+        attr = mesh.attributes.new('clay_uv_mapped', 'FLOAT', 'FACE')
+        attr.data.foreach_set('value', [float(v) for v in mapped])
+        n = node('ShaderNodeAttribute', 'Mapped faces', -3)
+        n.attribute_name = attr.name
+        coverage = n.outputs['Fac']
+    for texture in data.get('textures', []):
+        image = bpy.data.images.load(str((Path(input_path).parent / texture['path']).resolve()), check_existing=False)
+        image.colorspace_settings.name = 'Non-Color' if texture['channel'] != 'Color' else 'Linear Rec.709' if texture['linear'] else 'sRGB'
+        image.alpha_mode = 'PREMUL' if texture['linear'] and texture['path'].endswith('.exr') else 'STRAIGHT'
+        image.pack()
+        image.filepath = '//'+Path(texture['path']).name
+        n = node('ShaderNodeTexImage', 'Painted '+texture['channel'].lower(), -1)
+        n.image = image
+        n.extension = 'EXTEND'
+        n.interpolation = 'Linear'
+        tree.links.new(uv_node.outputs['UV'], n.inputs['Vector'])
+        images[texture['channel']] = (n.outputs['Color'], math_node('MULTIPLY', n.outputs['Alpha'], coverage))
+
+def image_over(value, name):
+    if name not in images: return value
+    colour, alpha = images[name]
+    n = node('ShaderNodeMixRGB', name+' paint coverage', 0)
+    n.blend_type = 'MIX'
+    if isinstance(value,(int,float)): value=(value,value,value,1.)
+    connect(alpha,n.inputs[0]); connect(value,n.inputs[1]); connect(colour,n.inputs[2])
     return n.outputs[0]
 
 def surface(offset, label):
-    n = node('ShaderNodeBsdfPrincipled', label)
-    for name, value in [('Base Color', rgb(offset)), ('Roughness', channels[offset+3]), ('Metallic', channels[offset+4]), ('IOR', channels[offset+5]), ('Specular IOR Level', channels[offset+6]), ('Emission Color', rgb(offset+7)), ('Emission Strength', channels[offset+10]), ('Subsurface Weight',channels[offset+11]), ('Subsurface Radius',rgb(offset+12)), ('Subsurface Scale',channels[offset+15])]:
-        tree.links.new(value, n.inputs[name])
+    n = node('ShaderNodeBsdfPrincipled', label, 1)
+    for name, value in [('Base Color', image_over(rgb(offset),'Color')), ('Roughness',image_over(channels[offset+3],'Roughness')), ('Metallic',image_over(channels[offset+4],'Metallic')), ('IOR',channels[offset+5]), ('Specular IOR Level',channels[offset+6]), ('Emission Color',rgb(offset+7)), ('Emission Strength',channels[offset+10]), ('Subsurface Weight',channels[offset+11]), ('Subsurface Radius',rgb(offset+12)), ('Subsurface Scale',channels[offset+15])]:
+        connect(value,n.inputs[name])
     return n.outputs['BSDF']
 
 def weighted(shader, weight, label):
-    # An unconnected first shader is zero, so this scales the second BSDF.
-    n = node('ShaderNodeMixShader', label)
-    tree.links.new(weight, n.inputs[0])
-    tree.links.new(shader, n.inputs[2])
+    if isinstance(weight,(int,float)) and weight == 1: return shader
+    n = node('ShaderNodeMixShader', label, 2)
+    connect(weight,n.inputs[0]); connect(shader,n.inputs[2])
     return n.outputs[0]
 
 shader = surface(0, 'Base surface')
-for i in range(3):
-    offset = 16 + i*18
-    weight, add = channels[offset+16:offset+18]
-    base_weight = math_node('SUBTRACT', 1, math_node('MULTIPLY', weight, math_node('SUBTRACT', 1, add)))
-    n = node('ShaderNodeAddShader', f'Layer {i+1}: Mix / Add')
-    tree.links.new(weighted(shader, base_weight, f'Layer {i+1} base weight'), n.inputs[0])
-    tree.links.new(weighted(surface(offset, f'Layer {i+1} surface'), weight, f'Layer {i+1} weight'), n.inputs[1])
+for i in live_layers:
+    offset = 16+i*18
+    weight, add = channels[offset+16], channels[offset+17]
+    base_weight = math_node('SUBTRACT',1,math_node('MULTIPLY',weight,math_node('SUBTRACT',1,add)))
+    n = node('ShaderNodeAddShader', f'Layer {i+1}: Mix / Add', 3)
+    connect(weighted(shader,base_weight,f'Layer {i+1} base weight'),n.inputs[0])
+    connect(weighted(surface(offset,f'Layer {i+1} surface'),weight,f'Layer {i+1} weight'),n.inputs[1])
     shader = n.outputs[0]
-output = node('ShaderNodeOutputMaterial')
-tree.links.new(shader, output.inputs['Surface'])
-# Group asset nodes separately and place the generated evaluation chain in columns.
-for i, n in enumerate(tree.nodes):
-    n.location = ((i // 25) * 230, -(i % 25) * 100)
-material['clay_mapping'] = 'Linear RGB; Principled IOR/specular/emission; three weighted Mix/Add layers. Edit named definition groups.'
+output = node('NodeGroupOutput' if complex_material else 'ShaderNodeOutputMaterial', column=4 if complex_material else 2)
+connect(shader,output.inputs['Surface'])
+material['clay_mapping'] = 'Linear painted values; packed vertex fields; only active unlinked layers. Image alpha is paint coverage, not surface transparency. Edit named shared definition groups inside Clay layered surface.'
 # A neutral scene and fitted camera make the exported model immediately inspectable.
 scene = bpy.context.scene
 scene.world.color = (0.12, 0.12, 0.12)

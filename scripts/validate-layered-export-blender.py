@@ -29,9 +29,18 @@ for asset in data['assets']:
         weights = obj.data.attributes[f"clay_weight_{asset['id']}_{g}"].data
         assert max(abs(v.value-w[g]) for v, w in zip(weights, asset['weights'])) < 1e-6
 material = obj.data.materials[0]
-assert sum(n.type == 'BSDF_PRINCIPLED' for n in material.node_tree.nodes) == 4
-assert sum(n.type == 'ADD_SHADER' for n in material.node_tree.nodes) == 3
-for n in material.node_tree.nodes:
+assert len(material.node_tree.nodes) == 2
+assert material['clay_shader_attribute_count'] == 2
+# Every packed component must exactly retain one original varying field,
+# including signed residuals and the fourth (alpha) component.
+fields = [values for values in data['channels'] if min(values) != max(values)]
+packed = [a for a in obj.data.color_attributes if a.name.startswith('clay_paint_data_')]
+for values in fields:
+    assert any(max(abs(v.color[c]-ref) for v,ref in zip(a.data,values)) < 1e-6 for a in packed for c in range(4))
+tree = next(n.node_tree for n in material.node_tree.nodes if n.type == 'GROUP')
+assert sum(n.type == 'BSDF_PRINCIPLED' for n in tree.nodes) == 4
+assert sum(n.type == 'ADD_SHADER' for n in tree.nodes) == 3
+for n in tree.nodes:
     if n.type == 'BSDF_PRINCIPLED':
         assert all(n.inputs[name].is_linked for name in ['Subsurface Weight', 'Subsurface Radius', 'Subsurface Scale'])
 assert material.node_tree.nodes.get('Material Output').inputs['Surface'].is_linked
@@ -53,6 +62,11 @@ def render(name):
     bpy.data.images.remove(image)
     return pixels
 
+scene.render.engine = 'BLENDER_EEVEE' if bpy.app.version >= (5, 0, 0) else 'BLENDER_EEVEE_NEXT' if bpy.app.version >= (4, 2, 0) else 'BLENDER_EEVEE'
+preview = render('blender-layered-preview.png')
+pink = sum(preview[i] > 0.9 and preview[i+1] < 0.05 and preview[i+2] > 0.9 for i in range(0,len(preview),4))
+assert pink < 10, f'Broken pink preview: {pink} pixels'
+scene.render.engine = 'CYCLES'
 before = render('blender-layered-before.png')
 definition.nodes['Layer 1 · Emission strength'].outputs[0].default_value = 20
 for channel, value in zip('RGB', (1, 0, 0)):
