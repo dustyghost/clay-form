@@ -3,8 +3,10 @@ use super::*;
 #[test]
 fn previous_brush_menu_gains_inner_radius_and_preserves_custom_placement() {
     for placement in [Placement::Top, Placement::LeftPanel, Placement::Floating] {
-        let mut prefs = Preferences::default();
-        prefs.brush_controls_version = 1;
+        let mut prefs = Preferences {
+            brush_controls_version: 1,
+            ..Default::default()
+        };
         prefs.menus[0].placement = placement;
         prefs.menus[0].columns = 6;
         prefs.menus[0].collapsible = false;

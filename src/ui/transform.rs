@@ -67,7 +67,11 @@ impl UiState {
                     };
                     ui.set_max_width((viewport.width() - 32.).clamp(160., width));
                     ui.add_enabled_ui(enabled, |ui| {
-                        self.menu_placement_controls(ui, BuiltinMenu::Transform, false);
+                        let compact = self.transform_operation == Operation::Universal
+                            && viewport.height() < 260.;
+                        if !compact {
+                            self.menu_placement_controls(ui, BuiltinMenu::Transform, false);
+                        }
                         if self.transform_operation == Operation::Universal {
                             ui.horizontal_wrapped(|ui| {
                                 ui.strong("Universal")
@@ -83,6 +87,9 @@ impl UiState {
                                     commands.push(Command::TransformMode(Mode::Sculpt));
                                 }
                             });
+                            if compact {
+                                return;
+                            }
                             ui.weak("Drag centre diamond to move pivot");
                             let key = self
                                 .preferences

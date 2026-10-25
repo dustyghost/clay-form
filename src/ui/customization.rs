@@ -134,7 +134,7 @@ fn custom_dock_options(ui: &mut egui::Ui, menu: &CustomMenu) {
 }
 pub(super) fn menu_options(ui: &mut egui::Ui, menu: &CustomMenu) {
     if !matches!(menu.placement, Placement::LeftPanel | Placement::RightPanel) {
-        custom_dock_options(ui, &menu);
+        custom_dock_options(ui, menu);
         ui.separator();
     }
     if ui.button("Edit this menu…").clicked() {

@@ -98,6 +98,15 @@ impl NativePressure {
     }
 }
 
+impl Drop for Tablet {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -129,13 +138,5 @@ mod tests {
             None
         );
         assert_eq!(native.update(&[]), None);
-    }
-}
-impl Drop for Tablet {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
-        if let Some(worker) = self.worker.take() {
-            let _ = worker.join();
-        }
     }
 }
