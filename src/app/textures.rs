@@ -188,6 +188,19 @@ impl App {
         Ok(())
     }
 
+    #[cfg(test)]
+    pub(crate) fn finish_texture_exchange_for_test(&mut self, ctx: &egui::Context) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while self.texture_exchange.is_some() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "Texture operation timed out"
+            );
+            self.poll_texture_exchange(ctx);
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
+
     pub(super) fn poll_texture_exchange(&mut self, ctx: &egui::Context) {
         let Some(job) = &mut self.texture_exchange else {
             return;
@@ -233,10 +246,10 @@ impl App {
                 self.ui.status = message.into();
                 self.ui.uv.completed = true;
                 self.ui.uv.retry = None;
-                if let Some(channel) = resume_paint {
-                    if let Err(error) = self.texture_command(TextureCommand::Paint(Some(channel))) {
-                        self.ui.status = error;
-                    }
+                if let Some(channel) = resume_paint
+                    && let Err(error) = self.texture_command(TextureCommand::Paint(Some(channel)))
+                {
+                    self.ui.status = error;
                 }
             }
             Err(error) => {
@@ -607,12 +620,7 @@ impl App {
 mod tests {
     use super::*;
     fn finish_exchange(app: &mut App) {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        while app.texture_exchange.is_some() {
-            assert!(std::time::Instant::now() < deadline);
-            app.poll_texture_exchange(&egui::Context::default());
-            std::thread::sleep(std::time::Duration::from_millis(5));
-        }
+        app.finish_texture_exchange_for_test(&egui::Context::default());
     }
     #[test]
     fn hdr_sampling_paints_float_colour_and_bounds_vertex_materials() {
@@ -630,8 +638,10 @@ mod tests {
             .unwrap();
         app.texture_command(TextureCommand::Paint(Some(Channel::Color)))
             .unwrap();
-        let mut sampled = crate::sculpt::Material::default();
-        sampled.base_color = [2., -0.25, 0.5];
+        let sampled = crate::sculpt::Material {
+            base_color: [2., -0.25, 0.5],
+            ..Default::default()
+        };
         app.sample_surface_material(sampled.clone()).unwrap();
         let mut brush = app.document.brushes()[app.ui.selected].clone();
         assert_eq!(brush.texture_colour, Some(sampled.base_color));

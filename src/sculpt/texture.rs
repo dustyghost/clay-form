@@ -385,7 +385,11 @@ fn apply_pixels(
         Channel::Metallic => [brush.material.metallic; 3],
     };
     let mut changed = false;
-    let mut dirty = usize::MAX..0;
+    // Sentinel bounds accumulate changed pixels; this range is never iterated.
+    let mut dirty = std::ops::Range {
+        start: usize::MAX,
+        end: 0,
+    };
     for (pixel, (weight, erase)) in weights {
         if weight <= 0. {
             continue;
@@ -481,7 +485,11 @@ pub(crate) fn pad_pixels(texture: &mut Texture, mut occupied: Vec<bool>) {
             frontier.push(i);
         }
     }
-    let mut dirty = usize::MAX..0;
+    // Sentinel bounds accumulate changed pixels; this range is never iterated.
+    let mut dirty = std::ops::Range {
+        start: usize::MAX,
+        end: 0,
+    };
     for _ in 0..4 {
         let mut next = Vec::new();
         for i in frontier {

@@ -896,9 +896,7 @@ mod tests {
         mesh.materials = vec![material.clone(); mesh.vertices.len()];
         mesh.mask.fill(1.);
         mesh.uv = mesh.unwrap_uv(true, 0.02, &|| false).unwrap();
-        for corners in &mut mesh.uv.corners {
-            *corners = [[0.5, 0.5]; 3];
-        }
+        mesh.uv.corners.fill([[0.5, 0.5]; 3]);
         for channel in Channel::ALL {
             let mut texture =
                 Texture::new_with_precision(channel, 16, &material, Precision::Float32).unwrap();

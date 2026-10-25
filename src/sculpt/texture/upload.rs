@@ -41,7 +41,11 @@ impl TextureUpload {
             .changes
             .iter()
             .position(|(from, _, _)| *from == revision)?;
-        let mut range = usize::MAX..0;
+        // Sentinel bounds accumulate changed pixels; this range is never iterated.
+        let mut range = std::ops::Range {
+            start: usize::MAX,
+            end: 0,
+        };
         for (_, _, dirty) in self.changes.iter().skip(start) {
             range.start = range.start.min(dirty.start);
             range.end = range.end.max(dirty.end);

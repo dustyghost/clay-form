@@ -267,6 +267,8 @@ fn uv_island_controls_offscreen_review() {
     assert_eq!(h.canvas(), big, "image controls stay in the sidebar too");
     assert!(h.label("Create texture").x > big.right());
     h.click("Create texture");
+    h.app.finish_texture_exchange_for_test(&h.ctx);
+    h.frame(vec![]);
     assert_eq!(h.app.document.mesh().uv.textures.len(), 1);
     assert_eq!(h.canvas(), big);
     h.click("UV layout");

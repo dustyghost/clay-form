@@ -3229,8 +3229,10 @@ fn material_controls_offscreen_review() {
     let pixels_after = g.frame(vec![]).1;
     assert!(
         pixels_before
-            .chunks_exact(4)
-            .zip(pixels_after.chunks_exact(4))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(pixels_after.as_chunks::<4>().0.iter())
             .filter(|(a, b)| a[..3].iter().zip(&b[..3]).any(|(a, b)| a.abs_diff(*b) > 8))
             .count()
             > 500

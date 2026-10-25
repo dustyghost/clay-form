@@ -87,7 +87,11 @@ impl Mesh {
         let before = before.filter(|old| {
             cache.initialized == Some((old.id, old.upload.revision(), old.pixels.storage_id()))
         });
-        let mut dirty = usize::MAX..0;
+        // Sentinel bounds accumulate changed pixels; this range is never iterated.
+        let mut dirty = std::ops::Range {
+            start: usize::MAX,
+            end: 0,
+        };
         for &(source, dest) in &cache.copies {
             let sample = texture.pixels.pixel(source);
             if before.is_some_and(|old| old.pixels.pixel(source) == sample) {

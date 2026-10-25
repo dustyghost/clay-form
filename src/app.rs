@@ -452,10 +452,10 @@ impl App {
             })
         });
         self.viewport.sampled_colour = None;
-        if let Some(sampled) = sampled {
-            if let Err(error) = self.sample_surface_material(sampled) {
-                self.ui.status = error;
-            }
+        if let Some(sampled) = sampled
+            && let Err(error) = self.sample_surface_material(sampled)
+        {
+            self.ui.status = error;
         }
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         if self.ui.mask_active || temporary_visibility {

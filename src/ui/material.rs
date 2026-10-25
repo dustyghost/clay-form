@@ -73,10 +73,10 @@ impl MaterialControls {
         {
             self.pending = None;
         }
-        if let Some((_, draft)) = &self.pending {
-            if let Some(asset) = presets.iter_mut().find(|asset| asset.id == draft.id) {
-                *asset = draft.clone();
-            }
+        if let Some((_, draft)) = &self.pending
+            && let Some(asset) = presets.iter_mut().find(|asset| asset.id == draft.id)
+        {
+            *asset = draft.clone();
         }
         if !ui.input(|input| input.pointer.any_down())
             && let Some((_, asset)) = self.pending.take()
@@ -330,13 +330,12 @@ impl MaterialControls {
                 original: Some(original),
             }));
         }
-        if let Some(id) = selected {
-            if ui.button("Hide personal library preset")
+        if let Some(id) = selected
+            && ui.button("Hide personal library preset")
                 .on_hover_text("Hide this preset in future projects. Existing project materials and painted surfaces are unchanged; project Undo does not affect your library.")
                 .clicked()
             {
                 library.remove(id);
-            }
         }
         });
     }
