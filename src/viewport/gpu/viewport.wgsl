@@ -10,6 +10,8 @@ struct Uniforms {
 @group(0) @binding(2) var<storage,read> vertices: array<f32>;
 @group(0) @binding(3) var<storage,read> indices: array<u32>;
 @group(0) @binding(4) var<storage,read> groups: array<vec4f>;
+@group(0) @binding(5) var<storage,read> uv_corners: array<vec4f>;
+@group(0) @binding(6) var<storage,read> texture_pixels: array<vec4f>;
 fn project(p: vec3f) -> vec4f {
  let z=dot(p,u.view.xyz);
  let w=1.-z*u.perspective.x;
@@ -20,6 +22,8 @@ fn project(p: vec3f) -> vec4f {
  dot(p,u.up.xyz)*u.projection.y+u.projection.w*w,(depth+w)*0.5,w);
 }
 struct Surface {
+ @location(9) uv: vec3f,
+ @location(10) @interpolate(flat) texture_ids:vec3u,
  @builtin(position) clip: vec4f,
  @location(0) normal: vec3f, @location(1) color: vec3f, @location(2) position: vec3f,
  @location(6) material: vec2f,
@@ -31,6 +35,8 @@ struct Surface {
  let p=vec3f(vertices[i],vertices[i+1u],vertices[i+2u]);
  let mask=vertices[i+9u];
  var out: Surface;
+ out.uv=uv_corners[index].xyz;
+ let uv_face=index/3u*3u;out.texture_ids=vec3u(u32(uv_corners[uv_face].w),u32(uv_corners[uv_face+1u].w),u32(uv_corners[uv_face+2u].w));
  let face=index/3u*3u; out.ids=vec3u(indices[face],indices[face+1u],indices[face+2u]);
  out.bary=vec3f(select(0.,1.,index%3u==0u),select(0.,1.,index%3u==1u),select(0.,1.,index%3u==2u));
  out.clip=project(p); out.position=p;
@@ -98,21 +104,28 @@ fn channel(v: Surface, offset: u32) -> f32 {
  return dot(vec3f(vertices[v.ids.x*stride+offset],vertices[v.ids.y*stride+offset],vertices[v.ids.z*stride+offset]),v.bary);
 }
 fn channels(v: Surface, offset: u32) -> vec3f { return vec3f(channel(v,offset),channel(v,offset+1u),channel(v,offset+2u)); }
+fn texture_sample(id:u32,uv:vec2f)->vec4f {
+ if id==0u {return vec4f(0.);}
+ let info=texture_pixels[id];let size=vec2u(info.xy);let xy=clamp(vec2f(uv.x,1.-uv.y),vec2f(0.),vec2f(1.))*vec2f(size)-0.5;let lo=vec2u(clamp(floor(xy),vec2f(0.),vec2f(size)-1.));let hi=vec2u(clamp(floor(xy)+1.,vec2f(0.),vec2f(size)-1.));let t=fract(xy);let first=u32(info.z);
+ let a=texture_pixels[first+lo.y*size.x+lo.x];let b=texture_pixels[first+lo.y*size.x+hi.x];let c=texture_pixels[first+hi.y*size.x+lo.x];let d=texture_pixels[first+hi.y*size.x+hi.x];let result=mix(mix(a,b,t.x),mix(c,d,t.x),t.y);return vec4f(result.rgb/max(result.a,0.000001),result.a);
+}
 @fragment fn surface_fragment(v: Surface) -> @location(0) vec4f {
  let delta=u.light_position[0].xyz-v.position*u.light_position[0].w;
  let light=delta/max(length(delta),0.000001);
  let shade=0.25+0.75*max(dot(normalize(v.normal)*select(1.,-1.,u.flags.z==1.),light),0.);
  let normal=normalize(v.normal)*select(1.,-1.,u.flags.z==1.);
  let eye=normalize(u.view.xyz-v.position*u.perspective.x);
- var linear=surface_lighting(v.color,clamp(v.material.x,0.,1.),clamp(v.material.y,0.,1.),channel(v,12u),channel(v,13u),channel(v,18u),channels(v,19u),channel(v,22u),normal,eye,v.position)+channels(v,14u)*channel(v,17u);
+ let colour_map=texture_sample(v.texture_ids.x,v.uv.xy);let rough_map=texture_sample(v.texture_ids.y,v.uv.xy);let metal_map=texture_sample(v.texture_ids.z,v.uv.xy);
+ var linear=surface_lighting(mix(v.color,colour_map.rgb,colour_map.a),clamp(mix(v.material.x,rough_map.r,rough_map.a),0.,1.),clamp(mix(v.material.y,metal_map.r,metal_map.a),0.,1.),channel(v,12u),channel(v,13u),channel(v,18u),channels(v,19u),channel(v,22u),normal,eye,v.position)+channels(v,14u)*channel(v,17u);
  for(var i=0u;i<3u;i++) {
   let start=23u+i*18u; let weight=channel(v,start+16u); let add=channel(v,start+17u);
   if weight>0. {
-   let layer=surface_lighting(channels(v,start),channel(v,start+3u),channel(v,start+4u),channel(v,start+5u),channel(v,start+6u),channel(v,start+11u),channels(v,start+12u),channel(v,start+15u),normal,eye,v.position)+channels(v,start+7u)*channel(v,start+10u);
+   let layer=surface_lighting(mix(channels(v,start),colour_map.rgb,colour_map.a),mix(channel(v,start+3u),rough_map.r,rough_map.a),mix(channel(v,start+4u),metal_map.r,metal_map.a),channel(v,start+5u),channel(v,start+6u),channel(v,start+11u),channels(v,start+12u),channel(v,start+15u),normal,eye,v.position)+channels(v,start+7u)*channel(v,start+10u);
    linear=linear*(1.-weight*(1.-add))+layer*weight;
   }
  }
  var rgb=display_rgb(linear);
+ if u.material_info.y>0.5 && v.uv.z>0.5 {let cell=vec2i(floor(v.uv.xy*16.));rgb=vec3f(select(0.15,0.85,(cell.x+cell.y)%2==0))*shade;}
  if u.flags.x==1. && v.group.a>0.5 { rgb=mix(rgb,v.group.rgb*shade,mix(0.5,1.,v.is_active)); }
  rgb*=1.-v.mask*0.75;
  // Derivatives must be evaluated uniformly, before per-fragment conditions.

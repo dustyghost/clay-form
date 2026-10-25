@@ -30,6 +30,7 @@ mod stroke;
 mod tests;
 mod thickness;
 mod transform;
+mod uv;
 pub(crate) use edit::EditKind;
 use edit::EditSession;
 
@@ -41,7 +42,7 @@ pub struct ModelRef<'a> {
 }
 impl ModelRef<'_> {
     pub fn display_mesh(&self, active: bool) -> &Mesh {
-        if active || !self.mesh.materials.is_empty() {
+        if active || !self.mesh.materials.is_empty() || !self.mesh.uv.textures.is_empty() {
             self.mesh
         } else {
             self.settings.lower.first().unwrap_or(self.mesh)
@@ -63,6 +64,7 @@ pub struct Document {
     stroke_active: bool,
     relax_surface: Option<(u64, crate::sculpt::RelaxationSurface)>,
     relax_stroke: Option<(bool, crate::diagnostics::EditSettings)>,
+    pub(crate) texture_paint: Option<crate::sculpt::texture::Channel>,
     paint_stroke: Option<(bool, crate::diagnostics::EditSettings)>,
     pub(crate) relax_status: Option<String>,
     stroke_deformed: bool,
@@ -93,6 +95,7 @@ impl Default for Document {
             stroke_active: false,
             relax_surface: None,
             relax_stroke: None,
+            texture_paint: None,
             paint_stroke: None,
             relax_status: None,
             stroke_deformed: false,
@@ -173,6 +176,7 @@ impl Document {
     }
     pub fn new_sphere(&mut self) {
         self.end_edit();
+        self.texture_paint = None;
         self.references.clear();
         self.stencil = None;
         self.geometry = Geometry::new(Mesh::starting_sphere());
@@ -186,6 +190,7 @@ impl Document {
     /// Validate before changing anything, so an invalid open leaves the current document intact.
     pub fn replace_project(&mut self, project: Project, path: &str) -> Result<(), String> {
         project.validate()?;
+        self.texture_paint = None;
         self.end_edit();
         self.geometry = Geometry {
             paths: project.paths,

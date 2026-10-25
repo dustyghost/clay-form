@@ -6,6 +6,7 @@ use std::path::PathBuf;
 impl AssetKind {
     pub(crate) fn title(self) -> &'static str {
         match self {
+            Self::Texture => "Import material texture",
             Self::Reference => "Add reference image",
             Self::Alpha => "Preview alpha image",
             Self::Obj => "Import OBJ",
@@ -15,7 +16,9 @@ impl AssetKind {
     }
     pub(crate) fn filter_label(self) -> &'static str {
         match self {
-            Self::Reference | Self::Alpha => "PNG / JPEG images (.png, .jpg, .jpeg)",
+            Self::Reference | Self::Alpha | Self::Texture => {
+                "PNG / JPEG images (.png, .jpg, .jpeg)"
+            }
             Self::Obj => "Wavefront models (.obj)",
             Self::Brush => "Brush presets (.brush.json, .json)",
             Self::BrushLibrary => "Brush libraries (.brushes.json, .json)",
@@ -26,7 +29,7 @@ impl AssetKind {
             return false;
         };
         let extensions: &[&str] = match self {
-            Self::Reference | Self::Alpha => &["png", "jpg", "jpeg"],
+            Self::Reference | Self::Alpha | Self::Texture => &["png", "jpg", "jpeg"],
             Self::Obj => &["obj"],
             Self::Brush | Self::BrushLibrary => &["json"],
         };
@@ -58,6 +61,7 @@ pub(crate) struct FilePicker {
 impl UiState {
     pub(crate) fn asset_path_mut(&mut self, asset: AssetKind) -> &mut String {
         match asset {
+            AssetKind::Texture => &mut self.uv.image_path,
             AssetKind::Reference => &mut self.reference_path,
             AssetKind::Alpha => &mut self.alpha_path,
             AssetKind::Obj => &mut self.obj_path,

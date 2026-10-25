@@ -376,6 +376,11 @@ impl Mesh {
         old_vertices: &[usize],
         old_faces: &[usize],
     ) {
+        if self.uv.current(self) {
+            result.uv.textures = self.uv.textures.clone();
+            result.uv.corners = old_faces.iter().map(|&f| self.uv.corners[f]).collect();
+            result.uv.topology = result.triangles.clone();
+        }
         result.materials = self.reindex_materials(old_vertices.iter().copied());
         result.vertex_groups = self
             .vertex_groups

@@ -21,6 +21,7 @@ Linux needs a working Wayland or X11 desktop and a Vulkan-capable GPU and driver
 | [Sculpting and brushes](docs/guide/sculpting.md) | Brushes, alphas, symmetry, stroke modes, adaptive sculpting, undo/redo |
 | [Editable 3D paths](docs/guide/paths.md) | Surface and free paths, one-drag rings, live brush guidance, automatic strokes, seam control |
 | [Models and mesh tools](docs/guide/modeling.md) | Modeling, face extrusion, tunnels, component selection, submodels, primitives, transforms, remeshing and detail projection |
+| [UVs, textures and GIMP](docs/guide/textures.md) | Seam-aware UVs, island editing, image painting and external texture editing |
 | [Paint colours and materials](docs/guide/materials.md) | Vertex painting, material swatches, colour palette/sampler, fill and saving |
 | [Edge loops and creases](docs/guide/edges.md) | Hole borders, support loops, edge selection, creasing, smooth subdivision, thickness rims |
 | [Masks and selection](docs/guide/selection.md) | Mask editing, vertex groups, rectangle/lasso selection, visibility, split hidden |
@@ -48,5 +49,5 @@ When a feature changes, update its user guide alongside the code.
 
 ## Scope
 
-This is a desktop sculpting prototype. Meshes retain quad topology where available and use triangles for rendering and picking. The viewport supports orthographic and perspective viewing with wgpu rendering; sculpting, picking, and topology operations run on the CPU. Subdivision, voxel remeshing, and local adaptive topology are implemented. Vertex colour and metallic/roughness painting are supported; quad retopology, sculpt layers and texture painting are future work. Meshes are limited to 500,000 vertices and 1,000,000 triangles; large scenes can still be limited by CPU editing and picking work. Mesh/alpha file sizes are bounded on load.
+This is a desktop sculpting prototype. Meshes retain quad topology where available and use triangles for rendering and picking. The viewport supports orthographic and perspective viewing with wgpu rendering; sculpting, picking, and topology operations run on the CPU. Subdivision, voxel remeshing, and local adaptive topology are implemented. Vertex and texture colour/metallic/roughness painting, UV unwrapping and GIMP image exchange are supported; quad retopology and sculpt layers are future work. Meshes are limited to 500,000 vertices and 1,000,000 triangles; large scenes can still be limited by CPU editing and picking work. Mesh/alpha file sizes are bounded on load.
 

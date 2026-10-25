@@ -297,6 +297,7 @@ dependencies = [
  "eframe",
  "image",
  "libc",
+ "moxcms",
  "pollster",
  "serde",
  "serde_json",

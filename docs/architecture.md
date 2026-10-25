@@ -56,7 +56,7 @@ Introduce a trait when a second implementation needs one. Current concrete modul
 
 ## Compatibility and storage
 
-The `.clay` and `.brush.json` formats remain version 1. Optional fields omit defaults, keeping older single-model files valid. Camera and undo state are never saved in a project; preferences use an independent versioned JSON file.
+New `.clay` projects use version 3 for UVs and texture images; versions 1 and 2 remain readable. The `.brush.json` format remains version 1. Optional fields omit defaults, keeping older single-model files valid. Camera and undo state are never saved in a project; preferences use an independent versioned JSON file.
 
 Use `tests/fixtures/v1-project.json` to check legacy compatibility. See [storage details](architecture/integration.md#compatibility-and-storage) for references, shared image buffers, and fixture coverage.
 

@@ -41,7 +41,13 @@ impl Document {
         label: &'static str,
         settings: Option<crate::diagnostics::EditSettings>,
     ) {
-        let geometry = geometry.into_geometry();
+        let mut geometry = geometry.into_geometry();
+        if geometry.scene.active_index == self.geometry.scene.active_index
+            && geometry.mesh.uv.is_empty()
+            && !self.geometry.mesh.uv.is_empty()
+        {
+            geometry.mesh.uv = self.geometry.mesh.uv.clone();
+        }
         self.end_edit();
         self.end_stroke();
         let previous = std::mem::replace(&mut self.geometry, geometry);

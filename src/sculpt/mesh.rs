@@ -14,6 +14,9 @@ pub struct Dab {
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Mesh {
+    /// Face-corner coordinates keep UV seams independent of sculpt vertices.
+    #[serde(default, skip_serializing_if = "super::uv::UvMap::is_empty")]
+    pub uv: super::uv::UvMap,
     /// Persistent hard polygon edges, sorted and unique.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub creases: Vec<[usize; 2]>,
@@ -41,6 +44,7 @@ impl Mesh {
     }
     pub fn extract_masked_threshold(&self, threshold: f32) -> Result<Self, String> {
         let mut result = Self {
+            uv: Default::default(),
             creases: Vec::new(),
             materials: Vec::new(),
             vertex_groups: Vec::new(),
@@ -131,6 +135,7 @@ impl Mesh {
             })
             .collect();
         let mut result = Self {
+            uv: Default::default(),
             creases: Vec::new(),
             materials: Vec::new(),
             vertex_groups: Vec::new(),
@@ -213,6 +218,7 @@ impl Mesh {
         n.into_iter().map(Vec3::norm).collect()
     }
     pub fn validate(&self) -> Result<(), String> {
+        self.uv.validate()?;
         self.validate_materials()?;
         self.validate_groups()?;
         self.validate_creases()?;

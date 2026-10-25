@@ -71,7 +71,7 @@ impl Document {
             writer.text(&directory.join("README.txt"), &manifest.summary())?;
             writer.json(&directory.join("manifest.json"), &manifest)?;
             for (i, (geometry, settings)) in self.diagnostic_stages().into_iter().enumerate() {
-                let project = if i == manifest.current_stage {
+                let mut project = if i == manifest.current_stage {
                     self.project()
                 } else {
                     Project {
@@ -92,6 +92,19 @@ impl Document {
                         symmetry: settings.map_or_else(Symmetry::default, |s| s.symmetry.clone()),
                     }
                 };
+                for mesh in std::iter::once(&mut project.mesh)
+                    .chain(project.mesh_settings.lower.iter_mut())
+                    .chain(project.mesh_settings.upper.iter_mut())
+                    .chain(project.submodels.iter_mut().flat_map(|m| {
+                        std::iter::once(&mut m.mesh)
+                            .chain(m.mesh_settings.lower.iter_mut())
+                            .chain(m.mesh_settings.upper.iter_mut())
+                    }))
+                {
+                    for texture in &mut mesh.uv.textures {
+                        texture.exchange = None;
+                    }
+                }
                 project.validate()?;
                 writer.json(&directory.join(&manifest.stages[i].file), &project)?;
             }

@@ -162,7 +162,7 @@ fn geometry_bytes(geometry: &Geometry) -> usize {
                 .chain(model.mesh_settings.upper.iter())
         }))
         .map(|mesh| {
-            mesh.vertices.len() * std::mem::size_of::<crate::sculpt::Vec3>()
+            mesh.uv.retained_bytes() + mesh.vertices.len() * std::mem::size_of::<crate::sculpt::Vec3>()
                 + mesh.mask.len() * std::mem::size_of::<f32>()
                 + mesh.materials.len() * std::mem::size_of::<crate::sculpt::Material>()
                 + mesh.materials.iter().filter(|m|layer_allocations.insert(m.layers.storage_id())).count()*std::mem::size_of::<[crate::sculpt::material::layers::Layer;3]>()
@@ -193,6 +193,7 @@ mod tests {
     fn oldest_snapshots_are_evicted_at_the_limit() {
         let mut history = History::default();
         let mut mesh = Geometry::new(Mesh {
+            uv: Default::default(),
             creases: Vec::new(),
             materials: Vec::new(),
             vertex_groups: Vec::new(),

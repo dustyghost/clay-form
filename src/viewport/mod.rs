@@ -4,8 +4,8 @@ mod edges;
 mod interaction;
 mod modeling;
 pub(crate) use modeling::{
-    ComponentMode, ModelAxis, ModelConstruction, ModelInteraction, ModelTool, ModelingOptions,
-    SelectionChange, SelectionSpan,
+    Component, ComponentMode, ModelAxis, ModelConstruction, ModelInteraction, ModelTool,
+    ModelingOptions, SelectionChange, SelectionSpan,
 };
 mod gizmo;
 mod gpu;
@@ -1183,4 +1183,12 @@ pub(crate) enum WireMode {
     Visible,
     Front,
     Transparent,
+}
+
+impl Viewport {
+    pub(crate) fn set_uv_checker(&self, enabled: bool) {
+        if let Some(renderer) = &self.renderer {
+            renderer.set_uv_checker(enabled);
+        }
+    }
 }

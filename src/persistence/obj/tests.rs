@@ -1,6 +1,20 @@
 use super::*;
 const SQUARE: &str = "v 2 3 4\nv 4 3 4\nv 4 5 4\nv 2 5 4\n";
 #[test]
+fn uv_obj_roundtrip_preserves_seams_and_quad_topology() {
+    let mesh = read(
+        "v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nv 2 0 0\nv 2 1 0\nvt 0 0\nvt 0.4 0\nvt 0.4 1\nvt 0 1\nvt 0.6 0\nvt 1 0\nvt 1 1\nvt 0.6 1\nf 1/1 2/2 3/3 4/4\nf 2/5 5/6 6/7 3/8\n",
+    );
+    let path = std::env::temp_dir().join(format!("clay-uv-roundtrip-{}.obj", std::process::id()));
+    crate::persistence::export_obj(path.to_str().unwrap(), &mesh).unwrap();
+    let loaded = load_obj(path.to_str().unwrap()).unwrap();
+    assert_eq!(loaded.vertices, mesh.vertices);
+    assert_eq!(loaded.quads, mesh.quads);
+    assert_eq!(loaded.uv.corners, mesh.uv.corners);
+    assert_eq!(loaded.uv.islands().len(), 2);
+    let _ = std::fs::remove_file(path);
+}
+#[test]
 fn material_obj_vertex_colors_load_in_linear_light_and_lossy_export_reports_limit() {
     let mesh = read("v 0 0 0 0.5 0.1 1\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
     assert_eq!(mesh.materials.len(), 3);

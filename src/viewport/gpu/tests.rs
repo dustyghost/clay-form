@@ -8,6 +8,75 @@ use crate::{
 
 #[cfg(target_os = "linux")]
 #[test]
+#[ignore = "requires Vulkan; verifies image pixels, checker and UV buffer batching"]
+fn gpu_uv_texture_pixels_and_checker_survive_batching() {
+    use crate::sculpt::{
+        Material,
+        texture::{Channel, Texture},
+    };
+    let headless = Headless::new();
+    let renderer = Renderer::new(&headless.state).unwrap();
+    let mut gpu = renderer.gpu.lock().unwrap();
+    let mut mesh = Primitive::for_kind(PrimitiveKind::Plane).mesh().unwrap();
+    mesh.uv = mesh.unwrap_uv(true, 0.02, &|| false).unwrap();
+    let red = Material::from_srgb([0.8, 0.02, 0.01], 0.85, 0.);
+    mesh.uv
+        .textures
+        .push(Texture::new(Channel::Color, 16, &red).unwrap());
+    let mut doc = Document::default();
+    doc.replace_geometry(Geometry::new(mesh)).unwrap();
+    let display = Arc::new(DisplayMesh::new(&doc));
+    gpu.upload(&display);
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(256.));
+    let (right, up, view) = (Vec3(1., 0., 0.), Vec3(0., 1., 0.), Vec3(0., 0., 1.));
+    let params = Params::new(rect, right, up, view, 90., rect.center(), 3.);
+    gpu.paint(
+        &params,
+        [256, 256],
+        false,
+        WireMode::Visible,
+        false,
+        &Preview::default(),
+    );
+    let rgba = gpu.read();
+    let center = (128 * 256 + 128) * 4;
+    assert!(
+        rgba[center] > rgba[center + 1] * 2,
+        "texture must colour actual surface fragments"
+    );
+    gpu.upload_meshes(&display, 1024);
+    gpu.paint(
+        &params,
+        [256, 256],
+        false,
+        WireMode::Visible,
+        false,
+        &Preview::default(),
+    );
+    assert_eq!(gpu.read(), rgba);
+    let preview = Preview {
+        uv_checker: true,
+        ..Default::default()
+    };
+    gpu.paint(
+        &params,
+        [256, 256],
+        false,
+        WireMode::Visible,
+        false,
+        &preview,
+    );
+    let checker = gpu.read();
+    assert_ne!(checker, rgba);
+    assert_eq!(
+        checker[center],
+        checker[center + 1],
+        "checker overrides painted colour"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 #[ignore = "requires Vulkan; checks material pixels, interpolation, masks and buffer batching"]
 fn gpu_material_channels_match_linear_reference_and_survive_batching() {
     use crate::sculpt::{Material, Vec3};
@@ -330,6 +399,7 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
                 .any(|p| *p != [23, 26, 31, 255])
         );
         let make_preview = |alpha: Alpha| Preview {
+            uv_checker: false,
             show_polygroups: false,
             backface_opacity: 0.,
             brush: Some(BrushPreview {
@@ -465,6 +535,7 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             ..Default::default()
         };
         let preview = Preview {
+            uv_checker: false,
             show_polygroups: false,
             backface_opacity: 0.,
             brush: None,
@@ -488,6 +559,7 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         let grouped = renderer.geometry(&document);
         gpu.upload(&grouped);
         let colored = Preview {
+            uv_checker: false,
             show_polygroups: true,
             ..Default::default()
         };
@@ -866,6 +938,7 @@ fn gpu_batches_preserve_face_colors_and_depth() {
         display.depth_extent,
     );
     let preview = Preview {
+        uv_checker: false,
         show_polygroups: true,
         backface_opacity: 0.3,
         ..Default::default()

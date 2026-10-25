@@ -1,6 +1,7 @@
 //! Filesystem adapter: versioned projects, presets, image alphas, and OBJ import/export.
 pub mod material_export;
 mod obj;
+pub mod texture;
 pub use obj::load_obj;
 pub(crate) use obj::load_obj_cancellable;
 
@@ -196,6 +197,14 @@ pub fn export_obj(path: &str, mesh: &Mesh) -> Result<(), String> {
     mesh.validate()?;
     if !mesh.materials.is_empty() {
         return Err("OBJ cannot preserve painted material properties. Save as .clay to keep colour, roughness and metallic. Material exchange is not yet supported.".into());
+    }
+    if mesh.uv.current(mesh) {
+        return obj::export_uv_obj(path, mesh);
+    }
+    if !mesh.uv.corners.is_empty() {
+        return Err(
+            "UVs are out of date after topology editing. Unwrap again before OBJ export".into(),
+        );
     }
     let mut text = String::from("# Clay Form mesh\n");
     for v in &mesh.vertices {

@@ -25,6 +25,7 @@ pub(crate) mod policy;
 mod projection;
 mod recovery;
 mod references;
+pub(crate) mod textures;
 
 pub struct App {
     pub(crate) document: Document,
@@ -577,6 +578,15 @@ impl eframe::App for App {
         for command in self.ui.projection_window(ctx, &self.document) {
             self.dispatch(command, ctx);
         }
+        for command in self.ui.uv_window(
+            ctx,
+            &self.document,
+            &self.viewport.modeling.selected_faces(),
+        ) {
+            self.dispatch(command, ctx);
+        }
+        self.viewport
+            .set_uv_checker(self.ui.uv.open && self.ui.uv.checker);
         self.ui.settings(ctx, &self.document);
         self.shortcuts(ctx);
         if self.recovery_error.is_some() {

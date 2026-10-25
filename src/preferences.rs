@@ -358,6 +358,8 @@ pub(crate) enum SelectionMode {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct Preferences {
+    #[serde(default)]
+    pub gimp_path: String,
     pub materials: MaterialLibrary,
     pub lighting: crate::lighting::Lighting,
     #[serde(default)]
@@ -398,6 +400,7 @@ pub(crate) struct Preferences {
 impl Default for Preferences {
     fn default() -> Self {
         Self {
+            gimp_path: String::new(),
             materials: MaterialLibrary::default(),
             lighting: Default::default(),
             paint_shortcuts_version: 1,

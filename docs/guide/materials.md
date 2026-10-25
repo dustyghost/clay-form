@@ -42,7 +42,7 @@ Painting never moves vertices or changes topology, including when Adaptive sculp
 
 ## Detail, topology and saving
 
-Paint is stored on vertices, so the mesh resolution determines the finest colour boundary you can draw. Subdivide before painting fine details. This is vertex painting; it does not create a UV map or texture image.
+Paint is stored on vertices, so the mesh resolution determines the finest colour boundary you can draw. Subdivide before painting fine details. For image detail independent of mesh density, use [UVs and texture painting](textures.md). Vertex painting and texture images are separate targets.
 
 Subdivision and newly created modeling vertices interpolate the painted channels. Slicing, extraction, mirroring, thickness and merging carry the values to their corresponding vertices. Adaptive edge splits interpolate endpoints; edge collapse averages them. Coarse topology can soften small painted features. Voxel remeshing samples the nearest original triangle and interpolates its values; close or overlapping sheets can sample the other surface, so inspect the result and Undo if needed. Detail projection keeps the target's paint while changing its shape.
 

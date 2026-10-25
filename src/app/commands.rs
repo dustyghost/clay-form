@@ -134,6 +134,56 @@ impl App {
         }
         self.document.prepare_edit(command.edit_kind());
         let result: Result<(), String> = match command {
+            Command::Texture(command) => self.texture_command(command),
+            Command::UvUnwrap(automatic, padding) => {
+                self.start_mesh_job(Operation::UvUnwrap(automatic, padding))
+            }
+            Command::UvPack(padding) => self
+                .document
+                .edit_uv("Pack UV islands", |uv| uv.pack(padding)),
+            Command::UvTransform(faces, offset, scale, angle) => {
+                self.document.edit_uv("Transform UV islands", |uv| {
+                    uv.transform(&faces, offset, scale, angle)
+                })
+            }
+            Command::UvSeams(mark) => {
+                let edges = self
+                    .viewport
+                    .modeling
+                    .selected
+                    .iter()
+                    .filter_map(|c| {
+                        if let crate::viewport::Component::Edge(e) = c {
+                            Some(*e)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                self.document.mark_uv_seams(edges, mark).map(|()| {
+                    self.ui.wire = true;
+                    self.viewport.modeling.revision = self.document.display_revision();
+                })
+            }
+            Command::UvSelect(faces) => {
+                let selected: std::collections::BTreeSet<_> = faces.into_iter().collect();
+                self.viewport.modeling.selected =
+                    crate::sculpt::uv::polygon_triangles(self.document.mesh())
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, fs)| fs.iter().any(|f| selected.contains(f)))
+                        .map(|(i, _)| crate::viewport::Component::Face(i))
+                        .collect();
+                self.viewport.modeling.revision = self.document.display_revision();
+                self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
+                self.ui.slice_active = false;
+                self.ui.selection_tool = None;
+                self.ui.edges.selecting = false;
+                self.ui.modeling.active = true;
+                self.ui.modeling.mode = crate::viewport::ComponentMode::Face;
+                self.ui.modeling.tool = crate::viewport::ModelTool::Select;
+                Ok(())
+            }
             Command::Path(_) => unreachable!(),
             command @ (Command::ModelingMode(..)
             | Command::ModelingComponent(..)

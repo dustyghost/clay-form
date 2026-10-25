@@ -46,7 +46,23 @@ impl Document {
         }
         let dabs = self.symmetry.dabs(dab);
         let stencils = stencil.map_or_else(Vec::new, |s| s.copies(&self.symmetry));
-        let changed = self.geometry.mesh.paint_material(brush, &dabs, &stencils);
+        let changed = if let Some(channel) = self.texture_paint {
+            let occluders: Vec<_> = self
+                .geometry
+                .submodels
+                .iter()
+                .filter(|m| m.metadata.visible)
+                .map(|m| &m.mesh)
+                .collect();
+            self.geometry
+                .mesh
+                .paint_texture(channel, brush, &dabs, &stencils, &occluders)
+        } else {
+            self.geometry.mesh.paint_material(brush, &dabs, &stencils)
+        };
+        if changed && self.texture_paint.is_some() {
+            self.sync_texture_uses();
+        }
         if changed {
             self.dirty = true;
             self.display_changed();
@@ -54,12 +70,30 @@ impl Document {
         changed
     }
     pub(super) fn finish_paint_stroke(&mut self) {
+        if self.paint_stroke.is_some()
+            && self
+                .stroke_before
+                .as_ref()
+                .is_some_and(|before| before.mesh.uv.textures != self.geometry.mesh.uv.textures)
+            && let Some(channel) = self.texture_paint
+        {
+            self.geometry.mesh.pad_texture(channel);
+            self.sync_texture_uses();
+            self.display_changed();
+        }
         if let Some((_, settings)) = self.paint_stroke.take()
             && let Some(before) = self.stroke_before.take()
             && before != self.geometry
         {
-            self.history
-                .record_owned(before, "Paint material", Some(settings));
+            self.history.record_owned(
+                before,
+                if self.texture_paint.is_some() {
+                    "Paint texture"
+                } else {
+                    "Paint material"
+                },
+                Some(settings),
+            );
         }
     }
     pub(crate) fn cancel_paint_stroke(&mut self) -> bool {

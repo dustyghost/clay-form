@@ -9,6 +9,7 @@ use eframe::egui::{self, Color32, Sense, Vec2};
 pub(crate) mod alphas;
 mod design;
 mod material;
+mod uv;
 use design::Glyph;
 pub(crate) mod context_menu;
 mod customization;
@@ -29,6 +30,7 @@ mod sidebar;
 mod transform;
 use customization::ActionResponse;
 pub(crate) struct UiState {
+    pub uv: uv::UvControls,
     pub viewport_menu: context_menu::ViewportMenuState,
     icons: icons::Icons,
     pinned_menu_rects: Vec<egui::Rect>,
@@ -101,6 +103,7 @@ pub(crate) struct UiState {
 impl Default for UiState {
     fn default() -> Self {
         Self {
+            uv: Default::default(),
             viewport_menu: Default::default(),
             icons: Default::default(),
             pinned_menu_rects: Vec::new(),
@@ -284,6 +287,12 @@ impl UiState {
             ui.spacing_mut().item_spacing = Vec2::new(6., 5.);
             ui.horizontal_wrapped(|ui| {
                 ui.strong("CLAY FORM");
+                if ui.button("UVs / Textures").clicked() {
+                    self.uv.open = !self.uv.open;
+                }
+                if let Some(channel) = document.texture_paint {
+                    ui.label(format!("Texture: {}", channel.label()));
+                }
                 self.workspace_selector(ui);
                 let binding = self
                     .preferences

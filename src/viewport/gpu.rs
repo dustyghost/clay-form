@@ -108,6 +108,9 @@ impl Renderer {
     pub fn set_backfaces(&self, opacity: f32) {
         self.preview.lock().unwrap().backface_opacity = opacity.clamp(0., 1.);
     }
+    pub fn set_uv_checker(&self, enabled: bool) {
+        self.preview.lock().unwrap().uv_checker = enabled;
+    }
     pub fn set_polygroups(&self, enabled: bool) {
         self.preview.lock().unwrap().show_polygroups = enabled;
     }
@@ -242,6 +245,7 @@ struct MeshBuffers {
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
     colors: wgpu::Buffer,
+    uv: wgpu::Buffer,
     count: u32,
 }
 struct Gpu {
@@ -260,6 +264,7 @@ struct Gpu {
     back_uniform: wgpu::Buffer,
     meshes: Vec<MeshBuffers>,
     vertex_stride: usize,
+    texture_pixels: wgpu::Buffer,
     edges: Option<Vec<(wgpu::Buffer, u32)>>,
     triangle_edges: Option<Vec<(wgpu::Buffer, u32)>>,
     uploaded: Option<Arc<DisplayMesh>>,
@@ -309,11 +314,11 @@ impl Gpu {
                 count: None,
             },
         ];
-        for binding in 2..=4 {
+        for binding in 2..=6 {
             entries.push(wgpu::BindGroupLayoutEntry {
                 binding,
                 visibility: wgpu::ShaderStages::VERTEX
-                    | if binding == 2 {
+                    | if binding == 2 || binding == 6 {
                         wgpu::ShaderStages::FRAGMENT
                     } else {
                         wgpu::ShaderStages::empty()
@@ -518,7 +523,13 @@ impl Gpu {
             composite_layout,
             uniform: uniform(),
             back_uniform: uniform(),
-            meshes: vec![Self::mesh_buffers(device, &[], &[], &[])],
+            meshes: vec![Self::mesh_buffers(device, &[], &[], &[], &[])],
+            texture_pixels: buffer(
+                device,
+                "texture pixels",
+                bytemuck::cast_slice(&[[0_f32; 4]]),
+                wgpu::BufferUsages::STORAGE,
+            ),
             vertex_stride: 12,
             edges: None,
             triangle_edges: None,
@@ -534,15 +545,22 @@ impl Gpu {
         self.uploaded = None;
         self.edges = None;
         self.triangle_edges = None;
-        self.meshes = vec![Self::mesh_buffers(&self.device, &[], &[], &[])];
+        self.meshes = vec![Self::mesh_buffers(&self.device, &[], &[], &[], &[])];
     }
     fn mesh_buffers(
         device: &wgpu::Device,
         vertices: &[f32],
         indices: &[u32],
         colors: &[[f32; 4]],
+        uv: &[[[f32; 4]; 3]],
     ) -> MeshBuffers {
         MeshBuffers {
+            uv: buffer(
+                device,
+                "face UVs",
+                bytemuck::cast_slice(uv),
+                wgpu::BufferUsages::STORAGE,
+            ),
             vertices: buffer(
                 device,
                 "mesh vertices",
@@ -605,6 +623,12 @@ impl Gpu {
     // A document may contain several maximum-density models. Chunk the display
     // data at the device binding limit instead of imposing a new geometry limit.
     fn upload_meshes(&mut self, data: &DisplayMesh, limit: usize) {
+        self.texture_pixels = buffer(
+            &self.device,
+            "texture pixels",
+            bytemuck::cast_slice(&data.texture_pixels),
+            wgpu::BufferUsages::STORAGE,
+        );
         self.vertex_stride = data.vertex_stride();
         let stride = self.vertex_stride;
         let vertices = data.vertices(stride);
@@ -613,7 +637,7 @@ impl Gpu {
             .iter()
             .map(|c| c.map(|n| n as f32 / 255.))
             .collect();
-        if vertices.len() * 4 <= limit && data.shading.triangles.len() * 16 <= limit {
+        if vertices.len() * 4 <= limit && data.shading.triangles.len() * 48 <= limit {
             let indices: Vec<u32> = data
                 .shading
                 .triangles
@@ -626,6 +650,7 @@ impl Gpu {
                 &vertices,
                 &indices,
                 &colors,
+                &data.uv_corners,
             )];
             return;
         }
@@ -649,11 +674,12 @@ impl Gpu {
                 &packed,
                 &indices,
                 &colors[start..start + triangles.len()],
+                &data.uv_corners[start..start + triangles.len()],
             ));
         }
         if self.meshes.is_empty() {
             self.meshes
-                .push(Self::mesh_buffers(&self.device, &[], &[], &[]));
+                .push(Self::mesh_buffers(&self.device, &[], &[], &[], &[]));
         }
     }
     fn upload_edges(&mut self) {
@@ -689,7 +715,12 @@ impl Gpu {
     fn uniforms(&mut self, p: &Params, preview: &Preview, mode: WireMode) -> Uniforms {
         let vector = |v: Vec3, w| [v.0, v.1, v.2, w];
         let mut u: Uniforms = bytemuck::Zeroable::zeroed();
-        u.material_info = [self.vertex_stride as f32, 0., 0., 0.];
+        u.material_info = [
+            self.vertex_stride as f32,
+            f32::from(preview.uv_checker),
+            0.,
+            0.,
+        ];
         u.right = vector(p.right, 0.);
         u.up = vector(p.up, 0.);
         u.view = vector(p.view, 0.);
@@ -815,6 +846,14 @@ impl Gpu {
                 wgpu::BindGroupEntry {
                     binding: 4,
                     resource: mesh.colors.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: mesh.uv.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: self.texture_pixels.as_entire_binding(),
                 },
             ],
         })

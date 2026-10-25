@@ -12,6 +12,7 @@ pub(crate) enum PendingAction {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum AssetKind {
+    Texture,
     Reference,
     Alpha,
     Obj,
@@ -19,6 +20,12 @@ pub(crate) enum AssetKind {
     BrushLibrary,
 }
 pub(crate) enum Command {
+    Texture(crate::app::textures::TextureCommand),
+    UvUnwrap(bool, f32),
+    UvSeams(bool),
+    UvPack(f32),
+    UvTransform(Vec<usize>, [f32; 2], f32, f32),
+    UvSelect(Vec<usize>),
     Path(PathCommand),
     Action(crate::action::Action),
     Request(PendingAction),

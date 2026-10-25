@@ -8,6 +8,8 @@ use std::collections::HashMap;
 #[derive(Clone)]
 pub(crate) struct DisplayMesh {
     pub mesh: Mesh,
+    pub texture_pixels: Vec<[f32; 4]>,
+    pub uv_corners: Vec<[[f32; 4]; 3]>,
     pub shading: SurfaceShading,
     pub owners: Vec<usize>,
     muted_vertices: Vec<bool>,
@@ -32,6 +34,7 @@ impl DisplayMesh {
             || source.has_hidden_faces()
             || document.model(0)?.metadata.temporary_thickness != 0.
             || document.primitive().is_some()
+            || !source.uv.textures.is_empty()
             || !source.creases.is_empty()
             || self.mesh.vertices.len() != source.vertices.len()
             || self.mesh.triangles != source.triangles
@@ -41,6 +44,8 @@ impl DisplayMesh {
         }
         let mut next = Self {
             mesh: source.clone(),
+            uv_corners: self.uv_corners.clone(),
+            texture_pixels: self.texture_pixels.clone(),
             shading: self.shading.clone(),
             owners: self.owners.clone(),
             muted_vertices: self.muted_vertices.clone(),
@@ -85,6 +90,7 @@ impl DisplayMesh {
     fn build(document: &Document, preview: bool, active_mesh: Option<&Mesh>) -> Self {
         let active = document.active_model_index();
         let mut mesh = Mesh {
+            uv: Default::default(),
             creases: Vec::new(),
             materials: Vec::new(),
             vertex_groups: Vec::new(),
@@ -95,6 +101,9 @@ impl DisplayMesh {
             quads: Vec::new(),
             mask: Vec::new(),
         };
+        let mut uv_corners = Vec::new();
+        let mut texture_pixels = vec![[0.; 4]];
+        let mut texture_ids = HashMap::new();
         let mut edge_colors = HashMap::new();
         let mut shading = SurfaceShading::default();
         let mut owners = Vec::new();
@@ -156,6 +165,14 @@ impl DisplayMesh {
                     })
                     .map(|q| q.map(|i| i + offset)),
             );
+            if surface.uv.corners.is_empty() || surface.uv.current(surface) {
+                for &[a, b] in &surface.uv.seams {
+                    edge_colors.insert(
+                        (a + offset, b + offset),
+                        eframe::egui::Color32::from_rgb(195, 115, 235),
+                    );
+                }
+            }
             for &[a, b] in &surface.creases {
                 edge_colors.insert(
                     (a + offset, b + offset),
@@ -174,6 +191,24 @@ impl DisplayMesh {
                 mesh.materials
                     .extend((0..surface.vertices.len()).map(|i| surface.material(i)));
             }
+            let uv_current = surface.uv.current(surface);
+            let mut texture_channels = [0.; 3];
+            if uv_current {
+                for texture in &surface.uv.textures {
+                    let id = *texture_ids.entry(texture.id).or_insert_with(|| {
+                        let id = texture_pixels.len();
+                        texture_pixels.push([
+                            texture.width as f32,
+                            texture.height as f32,
+                            (id + 1) as f32,
+                            0.,
+                        ]);
+                        texture_pixels.extend(texture.linear_pixels());
+                        id
+                    });
+                    texture_channels[texture.channel.index()] = id as f32;
+                }
+            }
             let surface_shading = surface.surface_shading();
             let shading_offset = shading.vertices.len();
             shading.vertices.extend(
@@ -186,6 +221,14 @@ impl DisplayMesh {
                 if !surface.face_visible(face) {
                     continue;
                 }
+                uv_corners.push(if uv_current {
+                    std::array::from_fn(|c| {
+                        let q = surface.uv.corners[face][c];
+                        [q[0], q[1], 1., texture_channels[c]]
+                    })
+                } else {
+                    [[0.; 4]; 3]
+                });
                 mesh.triangles.push(triangle.map(|i| i + offset));
                 shading
                     .triangles
@@ -224,6 +267,8 @@ impl DisplayMesh {
         let depth_extent = mesh.vertices.iter().map(|p| p.len()).fold(1_f32, f32::max) + 1.;
         Self {
             mesh,
+            uv_corners,
+            texture_pixels,
             shading,
             owners,
             muted_vertices,

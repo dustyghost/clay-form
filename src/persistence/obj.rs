@@ -12,6 +12,7 @@ const MAX_LINE: usize = 1024 * 1024;
 const MAX_CORNERS: usize = 256;
 struct Face {
     vertices: Vec<usize>,
+    uv: Vec<Option<usize>>,
     groups: Vec<usize>,
     line: usize,
 }
@@ -116,6 +117,7 @@ fn parse(text: &str, cancelled: &impl Fn() -> bool) -> Result<Mesh, String> {
     let mut has_colors = false;
     let mut faces = Vec::new();
     let (mut textures, mut normals) = (0, 0);
+    let mut texcoords = Vec::new();
     let (mut texture_ref, mut normal_ref) = (0, 0);
     let mut names = Vec::new();
     let mut ids = HashMap::new();
@@ -180,7 +182,10 @@ fn parse(text: &str, cancelled: &impl Fn() -> bool) -> Result<Mesh, String> {
                             }
                             materials.push(material);
                         }
-                        "vt" => textures += 1,
+                        "vt" => {
+                            textures += 1;
+                            texcoords.push([p[0], p.get(1).copied().unwrap_or(0.)]);
+                        }
                         _ => normals += 1,
                     }
                     if textures > MAX_TRIANGLES * 3 || normals > MAX_TRIANGLES * 3 {
@@ -197,6 +202,7 @@ fn parse(text: &str, cancelled: &impl Fn() -> bool) -> Result<Mesh, String> {
                         return Err("OBJ exceeds 1,000,000 triangles after triangulation".into());
                     }
                     let mut face = Vec::with_capacity(corners.len());
+                    let mut uv = Vec::with_capacity(corners.len());
                     for corner in corners {
                         let parts: Vec<_> = corner.split('/').collect();
                         if parts.len() > 3
@@ -209,7 +215,11 @@ fn parse(text: &str, cancelled: &impl Fn() -> bool) -> Result<Mesh, String> {
                         }
                         face.push(index(parts[0], vertices.len())?);
                         if parts.len() > 1 && !parts[1].is_empty() {
-                            texture_ref = texture_ref.max(index(parts[1], textures)? + 1);
+                            let i = index(parts[1], textures)?;
+                            texture_ref = texture_ref.max(i + 1);
+                            uv.push(Some(i));
+                        } else {
+                            uv.push(None);
                         }
                         if parts.len() == 3 {
                             normal_ref = normal_ref.max(index(parts[2], normals)? + 1);
@@ -220,6 +230,7 @@ fn parse(text: &str, cancelled: &impl Fn() -> bool) -> Result<Mesh, String> {
                     }
                     faces.push(Face {
                         vertices: face,
+                        uv,
                         groups: groups.clone(),
                         line: start,
                     });
@@ -257,6 +268,7 @@ fn parse(text: &str, cancelled: &impl Fn() -> bool) -> Result<Mesh, String> {
         return Err("OBJ texture or normal index is out of range".into());
     }
     let mut mesh = Mesh {
+        uv: Default::default(),
         creases: Vec::new(),
         mask: vec![0.; vertices.len()],
         materials: if has_colors { materials } else { Vec::new() },
@@ -274,6 +286,7 @@ fn parse(text: &str, cancelled: &impl Fn() -> bool) -> Result<Mesh, String> {
         polygroups: Vec::with_capacity(triangle_count),
         hidden_faces: Vec::new(),
     };
+    let has_uv = faces.iter().any(|f| f.uv.iter().any(Option::is_some));
     for face in faces {
         check_cancel(cancelled)?;
         let triangles = triangulate(&mesh.vertices, &face.vertices, cancelled)
@@ -287,10 +300,22 @@ fn parse(text: &str, cancelled: &impl Fn() -> bool) -> Result<Mesh, String> {
             face.groups.first().copied().unwrap_or(0),
             triangles.len(),
         ));
+        if has_uv {
+            mesh.uv.corners.extend(triangles.iter().map(|t| {
+                t.map(|v| {
+                    face.uv[face.vertices.iter().position(|&i| i == v).unwrap()]
+                        .map(|i| texcoords[i])
+                        .unwrap_or([0.; 2])
+                })
+            }));
+        }
         mesh.triangles.extend(triangles);
         if face.vertices.len() == 4 {
             mesh.quads.push(face.vertices.try_into().unwrap());
         }
+    }
+    if has_uv {
+        mesh.uv.topology = mesh.triangles.clone();
     }
     mesh.canonicalize_polygroups();
     mesh.validate()?;
@@ -410,3 +435,85 @@ fn triangulate(
 
 #[cfg(test)]
 mod tests;
+
+/// Emit a quad only when both rendering triangles agree at their shared UV corners.
+pub(super) fn export_uv_obj(path: &str, mesh: &Mesh) -> Result<(), String> {
+    use std::fmt::Write;
+    let mut text = String::from("# Clay Form seam-aware UV mesh\n");
+    for v in &mesh.vertices {
+        writeln!(text, "v {} {} {}", v.0, v.1, v.2).unwrap();
+    }
+    for q in mesh.uv.corners.iter().flatten() {
+        writeln!(text, "vt {} {}", q[0], q[1]).unwrap();
+    }
+    let mut corner_ids = HashMap::<(usize, [usize; 3]), usize>::new();
+    let key = |mut t: [usize; 3]| {
+        t.sort_unstable();
+        t
+    };
+    for (f, t) in mesh.triangles.iter().enumerate() {
+        for (c, &v) in t.iter().enumerate() {
+            corner_ids.insert((v, key(*t)), f * 3 + c + 1);
+        }
+    }
+    let mut used = HashSet::new();
+    for polygon in mesh.polygons() {
+        let mut ids = HashMap::new();
+        let mut faces = Vec::new();
+        let mut coherent = true;
+        // A polygon has at most four corners; find its triangles by their keys.
+        let candidates: Vec<_> = if polygon.vertices.len() == 4 {
+            let v = &polygon.vertices;
+            vec![
+                [v[0], v[1], v[2]],
+                [v[0], v[2], v[3]],
+                [v[0], v[1], v[3]],
+                [v[1], v[2], v[3]],
+            ]
+        } else {
+            vec![polygon.vertices.clone().try_into().unwrap()]
+        };
+        for t in candidates {
+            if let Some(&first) = corner_ids.get(&(t[0], key(t))) {
+                let f = (first - 1) / 3;
+                faces.push(f);
+                for c in 0..3 {
+                    let v = mesh.triangles[f][c];
+                    let id = f * 3 + c + 1;
+                    if let Some(&old) = ids.get(&v) {
+                        let old: usize = old;
+                        if mesh.uv.corners[(old - 1) / 3][(old - 1) % 3] != mesh.uv.corners[f][c] {
+                            coherent = false;
+                        }
+                    } else {
+                        ids.insert(v, id);
+                    }
+                }
+            }
+        }
+        if !coherent || faces.is_empty() {
+            continue;
+        }
+        if polygon.group > 0 {
+            writeln!(text, "g group_{}", polygon.group).unwrap();
+        } else {
+            writeln!(text, "g").unwrap();
+        }
+        text.push('f');
+        for v in polygon.vertices {
+            write!(text, " {}/{}", v + 1, ids[&v]).unwrap();
+        }
+        text.push('\n');
+        used.extend(faces);
+    }
+    for (f, t) in mesh.triangles.iter().enumerate() {
+        if !used.contains(&f) {
+            text.push('f');
+            for (c, v) in t.iter().enumerate() {
+                write!(text, " {}/{}", v + 1, f * 3 + c + 1).unwrap();
+            }
+            text.push('\n');
+        }
+    }
+    std::fs::write(path, text).map_err(|e| e.to_string())
+}
