@@ -852,12 +852,14 @@ impl UiState {
                     commands,
                 );
                 let columns = (ui.available_width() / 76.).floor().clamp(1., 4.) as usize;
-                let width =
-                    ((ui.available_width() - 6. * (columns - 1) as f32) / columns as f32).max(32.);
-                egui::Grid::new("brush_tiles")
-                    .num_columns(columns)
-                    .spacing(Vec2::splat(6.))
-                    .show(ui, |ui| {
+                let width = ((ui.available_width() - 6. * (columns - 1) as f32) / columns as f32)
+                    .floor()
+                    .max(32.);
+                // Fixed-size tiles do not need a grid's cached column widths:
+                // those widths lag a sidebar drag and force it back open.
+                ui.push_id("brush_tiles", |ui| {
+                    ui.spacing_mut().item_spacing = Vec2::splat(6.);
+                    ui.horizontal_wrapped(|ui| {
                         for (i, b) in document.brushes().iter().enumerate() {
                             let id = self.brush_texture(ui.ctx(), i, b);
                             if design::brush_tile(
@@ -877,6 +879,7 @@ impl UiState {
                             }
                         }
                     });
+                });
                 ui.add_space(4.);
                 if active.is_none() {
                     ui.weak(if self.selection_brush_active() {

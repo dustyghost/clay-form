@@ -80,6 +80,7 @@ jobs:
           cargo test --locked --lib recovery_and_menu_placement_offscreen_preview -- --ignored
           cargo test --locked --lib obj_import_offscreen_preview -- --ignored
           cargo test --locked --lib material_controls_offscreen_review -- --ignored
+          cargo test --locked --lib brush_sidebar_resize_offscreen_review -- --ignored
           cargo test --locked --lib uv_texture_controls_offscreen_review -- --ignored
           cargo test --locked --lib uv_island_controls_offscreen_review -- --ignored
           cargo test --locked --lib viewport_lighting_offscreen_review -- --ignored

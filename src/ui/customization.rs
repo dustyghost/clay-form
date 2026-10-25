@@ -430,22 +430,42 @@ impl UiState {
         commands: &mut Vec<Command>,
         vertical: bool,
     ) {
-        // Live controls retain their natural widths on horizontal shelves and wrap on small screens.
+        // Live controls have different natural widths. A grid shares each column's
+        // width across rows, leaving large gaps and forcing narrow sidebars wider
+        // than their painted bounds. Pack these groups independently instead.
         if !vertical
-            && matches!(menu.placement, Placement::Top | Placement::Bottom)
             && menu.items.iter().any(|i| {
                 i.action
                     .as_ref()
                     .is_some_and(super::brush_controls::is_control)
             })
         {
+            let available_width = ui.available_width();
+            let max_columns = if matches!(menu.placement, Placement::Top | Placement::Bottom) {
+                usize::MAX
+            } else {
+                menu.columns.max(1)
+            };
             ui.horizontal_wrapped(|ui| {
+                let mut columns = 0;
+                let mut used_width = 0.;
                 for index in 0..menu.items.len() {
                     let item = &menu.items[index];
-                    let width = item.action.as_ref().map_or(12., |action| {
-                        self.brush_control_width(ui, action, &item.label, document)
-                    });
-                    ui.allocate_ui_with_layout(
+                    let width = item
+                        .action
+                        .as_ref()
+                        .map_or(12., |action| {
+                            self.brush_control_width(ui, action, &item.label, document)
+                        })
+                        .min(available_width);
+                    if columns > 0
+                        && (columns == max_columns || used_width + width > available_width)
+                    {
+                        ui.end_row();
+                        columns = 0;
+                        used_width = 0.;
+                    }
+                    let response = ui.allocate_ui_with_layout(
                         egui::vec2(width, 32.),
                         egui::Layout::left_to_right(egui::Align::Center),
                         |ui| {
@@ -454,6 +474,8 @@ impl UiState {
                             });
                         },
                     );
+                    columns += 1;
+                    used_width += response.response.rect.width() + ui.spacing().item_spacing.x;
                 }
             });
             return;

@@ -21,6 +21,61 @@ struct Guide {
 }
 
 #[test]
+#[ignore = "renders and resizes brush sidebars; requires Vulkan"]
+fn brush_sidebar_resize_offscreen_review() {
+    let directory = std::env::temp_dir().join("clay-brush-sidebar-resize");
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1200, 900]);
+    g.interactive = true;
+    g.panel(Tool::Library, Dock::Left);
+    g.app.ui.preferences.left_width = 600.;
+    let menu = g
+        .app
+        .ui
+        .preferences
+        .menus
+        .iter_mut()
+        .find(|m| m.items.iter().any(|i| i.action == Some(Action::BrushSize)))
+        .unwrap();
+    menu.columns = 4;
+    menu.placement = crate::preferences::Placement::LeftPanel;
+    menu.expanded = true;
+    g.save("wide-before-resize");
+    assert!(
+        g.app.ui.preferences.left_width <= 601.,
+        "content expanded beyond the painted sidebar: {}",
+        g.app.ui.preferences.left_width
+    );
+    for width in [340., 220., 180., 500.] {
+        let start = Pos2::new(g.app.ui.preferences.left_width - 1., 450.);
+        let end = Pos2::new(width, 450.);
+        g.frame(vec![
+            egui::Event::PointerMoved(start),
+            primary_event(start, true),
+        ]);
+        g.frame(vec![egui::Event::PointerMoved(end)]);
+        g.frame(vec![primary_event(end, false)]);
+        g.save(&format!("width-{width}"));
+        assert!(
+            (g.app.ui.preferences.left_width - width).abs() <= 2.,
+            "sidebar should follow resize to {width}, got {}",
+            g.app.ui.preferences.left_width
+        );
+        for label in ["Size", "Inner radius", "Strength", "Freehand"] {
+            let pos = g
+                .text_positions
+                .iter()
+                .find_map(|(text, pos)| (text == label).then_some(*pos))
+                .unwrap_or_else(|| panic!("missing {label}"));
+            assert!(
+                pos.x < width - 6.,
+                "{label} clipped outside sidebar: {pos:?}"
+            );
+        }
+    }
+}
+
+#[test]
 #[ignore = "visibility selection visual review; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn visibility_selection_offscreen_review() {
     use crate::preferences::{VisibilitySettings, VisibilityShape};

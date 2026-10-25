@@ -80,7 +80,7 @@ impl UiState {
             .unwrap_or_else(|| document.brushes()[index].clone());
         let before = brush.clone();
         let response = ui.add_enabled_ui(self.action_enabled(action, document), |ui| {
-            ui.horizontal(|ui| match action {
+            ui.horizontal_wrapped(|ui| match action {
                 Action::BrushIcon => {
                     let texture = self.brush_texture(ui.ctx(), index, &brush);
                     ui.add(egui::Image::new((texture, egui::vec2(32., 32.))).sense(Sense::click()))
@@ -113,11 +113,16 @@ impl UiState {
                     label.union(value)
                 }
                 Action::SurfaceFootprint => {
-                    design::checkbox(ui, &mut brush.surface_cursor,
-                        if label.is_empty() { "Surface footprint and normal" } else { label })
+                    ui.add(egui::Checkbox::new(&mut brush.surface_cursor,
+                        if label.is_empty() { "Surface footprint and normal" } else { label }))
                 }
                 Action::StrokeMode => {
                     let label = ui.add(egui::Label::new(if label.is_empty() { "Stroke mode" } else { label }).sense(Sense::click()));
+                    // The enabled scope cannot advertise the combo's width to
+                    // the wrapping layout before it lays out its contents.
+                    if ui.available_size_before_wrap().x < 100. {
+                        ui.end_row();
+                    }
                     label.union(ui.add_enabled_ui(!matches!(brush.kind, Kind::Grab | Kind::Snake | Kind::Relax), |ui| {
                         egui::ComboBox::from_id_salt("stroke_mode").width(90.)
                             .selected_text(brush.effective_stroke_mode().label())
@@ -131,8 +136,8 @@ impl UiState {
                 }
                 Action::StrokeStabilisation => {
                     ui.add_enabled_ui(brush.supports_stabilization(), |ui| {
-                        let checkbox = design::checkbox(ui, &mut brush.stabilize,
-                            if label.is_empty() { "Stroke stabilisation" } else { label });
+                        let checkbox = ui.add(egui::Checkbox::new(&mut brush.stabilize,
+                            if label.is_empty() { "Stroke stabilisation" } else { label }));
                         checkbox.union(ui.add_enabled(brush.stabilize,
                             egui::DragValue::new(&mut brush.stabilizer_distance)
                                 .speed(1.).range(1. ..=200.).suffix(" px"))
