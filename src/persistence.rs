@@ -1,22 +1,26 @@
 //! Filesystem adapter: versioned projects, presets, image alphas, and OBJ import/export.
+pub(crate) mod gimp;
 pub mod material_export;
 mod obj;
+pub mod texture;
 pub use obj::load_obj;
 pub(crate) use obj::load_obj_cancellable;
 
 use crate::sculpt::{Alpha, Brush, Mesh, Project, validate_brush};
 pub(crate) fn read_json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, String> {
     let meta = std::fs::metadata(path).map_err(|e| e.to_string())?;
-    if meta.len() > 128 * 1024 * 1024 {
-        return Err("File exceeds 128 MB limit".into());
+    if meta.len() > 2 * 1024 * 1024 * 1024 {
+        return Err("File exceeds 2 GiB limit".into());
     }
     serde_json::from_slice(&std::fs::read(path).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())
 }
 pub(crate) fn json_bytes<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, String> {
     let bytes = serde_json::to_vec(value).map_err(|e| e.to_string())?;
-    if bytes.len() > 128 * 1024 * 1024 {
-        return Err("File exceeds 128 MB limit; reduce mesh or group data before saving".into());
+    if bytes.len() > 2 * 1024 * 1024 * 1024 {
+        return Err(
+            "File exceeds 2 GiB limit; reduce mesh, texture or group data before saving".into(),
+        );
     }
     Ok(bytes)
 }
@@ -196,6 +200,14 @@ pub fn export_obj(path: &str, mesh: &Mesh) -> Result<(), String> {
     mesh.validate()?;
     if !mesh.materials.is_empty() {
         return Err("OBJ cannot preserve painted material properties. Save as .clay to keep colour, roughness and metallic. Material exchange is not yet supported.".into());
+    }
+    if mesh.uv.current(mesh) {
+        return obj::export_uv_obj(path, mesh);
+    }
+    if !mesh.uv.corners.is_empty() {
+        return Err(
+            "UVs are out of date after topology editing. Unwrap again before OBJ export".into(),
+        );
     }
     let mut text = String::from("# Clay Form mesh\n");
     for v in &mesh.vertices {

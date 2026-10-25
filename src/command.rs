@@ -12,6 +12,8 @@ pub(crate) enum PendingAction {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum AssetKind {
+    Texture,
+    PaintWorking,
     Reference,
     Alpha,
     Obj,
@@ -19,6 +21,16 @@ pub(crate) enum AssetKind {
     BrushLibrary,
 }
 pub(crate) enum Command {
+    Texture(crate::app::textures::TextureCommand),
+    UvUnwrap(bool, f32),
+    UvSeams(bool),
+    UvPack(f32),
+    UvPackSelected(Vec<usize>, f32),
+    UvTransform(Vec<usize>, [f32; 2], f32, f32),
+    UvSelect(Vec<usize>),
+    UvReplace(Box<crate::sculpt::uv::UvMap>),
+    UvRemove(Vec<usize>),
+    UvClearMask,
     Path(PathCommand),
     Action(crate::action::Action),
     Request(PendingAction),
@@ -32,6 +44,7 @@ pub(crate) enum Command {
     BrowseExport(crate::persistence::material_export::ExportFormat),
     CancelExport,
     SaveMaterial(crate::sculpt::material::layers::Asset),
+    SaveMaterialToLibrary(crate::sculpt::material::layers::Asset),
     RemoveMaterial(u64),
     FillMaterial(Brush),
     FillAllMaterial(Brush),

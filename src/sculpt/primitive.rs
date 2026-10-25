@@ -181,6 +181,7 @@ impl Primitive {
 }
 fn empty() -> Mesh {
     Mesh {
+        uv: Default::default(),
         creases: Vec::new(),
         materials: Vec::new(),
         vertex_groups: Vec::new(),

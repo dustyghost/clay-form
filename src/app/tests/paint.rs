@@ -147,7 +147,7 @@ fn material_sampler_does_not_paint_and_p_toggles_group_view() {
 }
 
 #[test]
-fn material_removal_preserves_paint_other_bindings_levels_and_library_undo() {
+fn material_removal_preserves_paint_other_bindings_levels_and_personal_library() {
     use crate::sculpt::{Brush, Material, material::layers::Asset};
     let mut app = App::default();
     let ctx = egui::Context::default();
@@ -157,20 +157,27 @@ fn material_removal_preserves_paint_other_bindings_levels_and_library_undo() {
         .replace_geometry(crate::sculpt::Geometry::new(cube.mesh().unwrap()))
         .unwrap();
     let base = Material::examples()[7].1.clone();
-    let index = app
-        .ui
-        .preferences
-        .materials
-        .copy("Wax", base.clone())
-        .unwrap();
-    let copy = app.ui.preferences.materials.copies[index].clone();
     let asset = Asset {
-        id: copy.id,
-        name: copy.name.clone(),
+        id: crate::sculpt::material::layers::fresh_id(),
+        name: "Wax copy".into(),
         material: base.clone(),
-        original: copy.original.clone(),
+        original: Some(base.clone()),
     };
+    let original_library = app.ui.preferences.materials.clone();
     app.dispatch(Command::SaveMaterial(asset.clone()), &ctx);
+    assert_eq!(
+        app.ui.preferences.materials, original_library,
+        "Creating a project material does not publish it to the personal library"
+    );
+    let history_before_save = app.document.history_counts();
+    app.dispatch(Command::SaveMaterialToLibrary(asset.clone()), &ctx);
+    assert_eq!(
+        app.document.history_counts(),
+        history_before_save,
+        "Personal library saves do not add project Undo steps"
+    );
+    let copy = app.ui.preferences.materials.copies[0].clone();
+    let personal_library = app.ui.preferences.materials.clone();
     let other = Asset {
         id: 5,
         name: "Copper".into(),
@@ -192,7 +199,7 @@ fn material_removal_preserves_paint_other_bindings_levels_and_library_undo() {
     app.document.duplicate_model(false).unwrap();
     let before = app.document.geometry_snapshot();
     app.dispatch(Command::RemoveMaterial(asset.id), &ctx);
-    assert!(app.ui.preferences.materials.copies.is_empty());
+    assert_eq!(app.ui.preferences.materials, personal_library);
     assert_eq!(app.document.materials().len(), 1);
     let meshes = |g: &crate::sculpt::Geometry| {
         let mut meshes = vec![g.mesh.clone()];
@@ -229,25 +236,44 @@ fn material_removal_preserves_paint_other_bindings_levels_and_library_undo() {
     assert_eq!(restored.mesh.materials, project.mesh.materials);
     app.dispatch(Command::Undo, &ctx);
     assert_eq!(app.document.geometry_snapshot(), before);
-    assert_eq!(app.ui.preferences.materials.copies, vec![copy]);
+    assert_eq!(app.ui.preferences.materials.copies, vec![copy.clone()]);
     app.dispatch(Command::Redo, &ctx);
     assert_eq!(app.document.geometry_snapshot(), after);
-    assert!(app.ui.preferences.materials.copies.is_empty());
-    // Built-ins remain hidden across preferences saves and Undo restores them too.
+    assert_eq!(app.ui.preferences.materials, personal_library);
+    // Removing a built-in project definition leaves its personal swatch available.
     app.dispatch(Command::RemoveMaterial(other.id), &ctx);
-    assert!(
-        app.ui
-            .preferences
-            .materials
-            .hidden_builtins
-            .contains(&other.id)
-    );
+    assert_eq!(app.ui.preferences.materials, personal_library);
+    // Explicitly hiding a preset is independent of project removal and Undo.
+    app.ui.preferences.materials.remove(other.id);
+    app.ui.preferences.materials.remove(copy.id);
     let prefs: crate::preferences::Preferences =
         serde_json::from_slice(&serde_json::to_vec(&app.ui.preferences).unwrap()).unwrap();
     prefs.validate().unwrap();
     assert_eq!(prefs.materials.hidden_builtins, vec![other.id]);
+    assert!(prefs.materials.copies.is_empty());
     app.dispatch(Command::Undo, &ctx);
+    assert!(
+        app.document
+            .materials()
+            .iter()
+            .any(|material| material.id == other.id)
+    );
+    assert_eq!(app.ui.preferences.materials, prefs.materials);
+    app.dispatch(Command::Undo, &ctx);
+    assert!(
+        app.document
+            .materials()
+            .iter()
+            .any(|material| material.id == asset.id)
+    );
+    assert_eq!(app.ui.preferences.materials, prefs.materials);
+    // Publishing again restores availability without changing project history.
+    let history = app.document.history_counts();
+    app.dispatch(Command::SaveMaterialToLibrary(asset), &ctx);
+    app.dispatch(Command::SaveMaterialToLibrary(other), &ctx);
+    assert_eq!(app.document.history_counts(), history);
     assert!(app.ui.preferences.materials.hidden_builtins.is_empty());
+    assert_eq!(app.ui.preferences.materials.copies, vec![copy]);
 }
 
 #[test]

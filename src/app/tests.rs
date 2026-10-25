@@ -2496,6 +2496,7 @@ fn custom_menu_shortcut_and_all_shelf_placements_render_without_document_edits()
     use crate::preferences::{Action, CustomItem, Placement, Shortcut};
     let mut app = App::default();
     let ctx = egui::Context::default();
+    app.ui.preferences.menus.clear();
     let id = app.ui.preferences.add_menu();
     app.ui.preferences.menus[0].items = vec![
         CustomItem::action(Action::Wireframe),
@@ -3659,3 +3660,154 @@ mod paths;
 mod ring_diagnostics;
 
 mod paint;
+
+mod brush_controls;
+
+#[test]
+fn continuous_texture_paint_builds_while_stationary_and_stops_on_release_or_cancel() {
+    use crate::app::textures::TextureCommand as T;
+    use crate::sculpt::{
+        Geometry, Material, PaintMode, Primitive, PrimitiveKind,
+        texture::{Channel, Precision},
+    };
+    for mode in [PaintMode::Stroke, PaintMode::Airbrush, PaintMode::Spray] {
+        let mut app = App::default();
+        let ctx = egui::Context::default();
+        let mut mesh = Primitive::for_kind(PrimitiveKind::Plane).mesh().unwrap();
+        mesh.uv = mesh.unwrap_uv(true, 0.02, &|| false).unwrap();
+        app.document.replace_geometry(Geometry::new(mesh)).unwrap();
+        app.camera.yaw = 0.;
+        app.camera.pitch = 0.;
+        app.ui.uv.open = true;
+        app.texture_command(T::CreateAndPaint(Channel::Color, 128, Precision::U16))
+            .unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while app.texture_exchange.is_some() {
+            assert!(std::time::Instant::now() < deadline);
+            app.poll_texture_exchange(&ctx);
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(!app.ui.uv.open && !app.ui.modeling.active);
+        let mut brush = app.document.brushes()[app.ui.selected].clone();
+        brush.paint_effect.mode = mode;
+        brush.paint_effect.dot_size = 0.08;
+        brush.paint_effect.density = 0.8;
+        brush.paint_effect.flow = 0.8;
+        brush.material = Material::from_srgb([1., 0., 0.], 0.5, 0.);
+        brush.radius = 100.;
+        brush.strength = 0.6;
+        app.dispatch(Command::UpdateBrush(app.ui.selected, brush), &ctx);
+        let pixels = |app: &App| app.document.mesh().uv.textures[0].pixels.clone();
+        let original = pixels(&app);
+        let vertices = app.document.mesh().vertices.clone();
+        let mut now = 0.;
+        let mut frame = |app: &mut App, events| {
+            now += 0.1;
+            let _ = ctx.run(
+                egui::RawInput {
+                    time: Some(now),
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        Pos2::ZERO,
+                        Vec2::new(1000., 800.),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+                },
+            );
+        };
+        frame(&mut app, vec![]);
+        let point = Pos2::new(500., 400.);
+        frame(
+            &mut app,
+            vec![egui::Event::PointerMoved(point), primary_event(point, true)],
+        );
+        let first = pixels(&app);
+        assert_ne!(first, original);
+        for _ in 0..8 {
+            frame(&mut app, vec![]);
+        }
+        let held = pixels(&app);
+        if mode == PaintMode::Stroke {
+            assert_eq!(held, first);
+        } else {
+            assert_ne!(held, first);
+        }
+        frame(&mut app, vec![primary_event(point, false)]);
+        let after = pixels(&app);
+        for _ in 0..3 {
+            frame(&mut app, vec![]);
+        }
+        assert_eq!(pixels(&app), after);
+        assert_eq!(app.document.mesh().vertices, vertices);
+        app.dispatch(Command::Undo, &ctx);
+        assert_eq!(pixels(&app), original);
+        app.dispatch(Command::Redo, &ctx);
+        assert_eq!(pixels(&app), after);
+        frame(&mut app, vec![primary_event(point, true)]);
+        for _ in 0..3 {
+            frame(&mut app, vec![]);
+        }
+        frame(
+            &mut app,
+            vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Default::default(),
+            }],
+        );
+        frame(&mut app, vec![primary_event(point, false)]);
+        assert_eq!(pixels(&app), after, "Escape restores the whole held stroke");
+    }
+}
+
+#[test]
+fn uv_island_selection_highlight_does_not_rebuild_topology_for_every_face() {
+    use crate::sculpt::{Geometry, Mesh, Primitive, PrimitiveKind};
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let mut plane = Primitive::for_kind(PrimitiveKind::Plane);
+    plane.divisions = [32, 32, 1];
+    let mut mesh = plane.mesh().unwrap();
+    mesh.uv.topology = mesh.triangles.clone();
+    mesh.uv.corners = mesh
+        .triangles
+        .iter()
+        .map(|t| {
+            t.map(|i| {
+                [
+                    (mesh.vertices[i].0 + 1.) * 0.5,
+                    (mesh.vertices[i].1 + 1.) * 0.5,
+                ]
+            })
+        })
+        .collect();
+    app.document.replace_geometry(Geometry::new(mesh)).unwrap();
+    navigation_frame(&mut app, &ctx, vec![]);
+    let revision = app.document.display_revision();
+    let history = app.document.history_counts();
+    let start = std::time::Instant::now();
+    app.dispatch(
+        Command::UvSelect((0..app.document.mesh().triangles.len()).collect()),
+        &ctx,
+    );
+    let builds = Mesh::polygon_build_count();
+    navigation_frame(&mut app, &ctx, vec![]);
+    let builds = Mesh::polygon_build_count() - builds;
+    eprintln!(
+        "UV island: {} selected polygons, {builds} polygon builds, selection + CPU viewport frame {:?}",
+        app.viewport.modeling.selected.len(),
+        start.elapsed()
+    );
+    assert_eq!(app.viewport.modeling.selected.len(), 1024);
+    assert!(
+        builds < 12,
+        "highlight must build topology a bounded number of times, not per selected face: {builds}"
+    );
+    assert_eq!(app.document.display_revision(), revision);
+    assert_eq!(app.document.history_counts(), history);
+}

@@ -567,7 +567,12 @@ impl Scene {
         Some((self.geometry.owners[face], p, normal))
     }
     /// Sample the underlying surface colour, independent of lighting and group overlays.
+    #[cfg(test)]
     pub(super) fn pick_colour(&self, point: Pos2) -> Option<[f32; 3]> {
+        Some(self.sample_material(point)?.base_color)
+    }
+    /// Sample stored colour and scalar maps, before lights, exposure or overlays.
+    pub(super) fn sample_material(&self, point: Pos2) -> Option<crate::sculpt::Material> {
         let (p, _, face) = pick_surface(self, &self.all_faces, point)?;
         let mesh = &self.geometry.mesh;
         let ids = mesh.triangles[face];
@@ -576,20 +581,33 @@ impl Scene {
         let (uu, uv, vv, wu, wv) = (u.dot(u), u.dot(v), v.dot(v), w.dot(u), w.dot(v));
         let denominator = uu * vv - uv * uv;
         if denominator <= 1e-20 {
-            return Some(mesh.material(ids[0]).base_color);
+            return Some(mesh.material(ids[0]));
         }
         let y = ((vv * wu - uv * wv) / denominator).clamp(0., 1.);
         let z = ((uu * wv - uv * wu) / denominator).clamp(0., 1.);
         let x = (1. - y - z).max(0.);
         let total = x + y + z;
-        Some(
-            crate::sculpt::Material::blend(
-                ids.into_iter()
-                    .zip([x, y, z])
-                    .map(|(i, weight)| (mesh.material(i), weight / total)),
-            )
-            .base_color,
-        )
+        let weights = [x / total, y / total, z / total];
+        let mut material = crate::sculpt::Material::blend(
+            ids.into_iter()
+                .zip(weights)
+                .map(|(i, weight)| (mesh.material(i), weight)),
+        );
+        let corners = self.geometry.uv_corners[face];
+        if corners[0][2] > 0.5 {
+            let uv =
+                std::array::from_fn(|c| corners.iter().zip(weights).map(|(p, w)| p[c] * w).sum());
+            let maps = corners.map(|corner| self.geometry.sample_texture(corner[3] as usize, uv));
+            for c in 0..3 {
+                material.base_color[c] =
+                    material.base_color[c] * (1. - maps[0][3]) + maps[0][c] * maps[0][3];
+            }
+            material.roughness =
+                (material.roughness * (1. - maps[1][3]) + maps[1][0] * maps[1][3]).clamp(0., 1.);
+            material.metallic =
+                (material.metallic * (1. - maps[2][3]) + maps[2][0] * maps[2][3]).clamp(0., 1.);
+        }
+        Some(material)
     }
     pub(super) fn pick_face(&self, point: Pos2) -> Option<usize> {
         let (_, _, face) = pick_surface(self, &self.all_faces, point)?;
@@ -861,6 +879,49 @@ mod tests {
         }
         d.select_face_region(|_| true, true).unwrap();
         assert!(scene(&d).pick_colour(view.project(p)).is_none());
+    }
+    #[test]
+    fn sampler_filters_hdr_colour_by_coverage_and_reads_scalar_maps() {
+        use crate::sculpt::{
+            Geometry, Material, Primitive, PrimitiveKind,
+            texture::{Channel, Precision, Texture},
+        };
+        let material = Material {
+            base_color: [0.2, 0.3, 0.4],
+            roughness: 0.8,
+            metallic: 0.1,
+            ..Default::default()
+        };
+        let mut mesh = Primitive::for_kind(PrimitiveKind::Plane).mesh().unwrap();
+        mesh.materials = vec![material.clone(); mesh.vertices.len()];
+        mesh.mask.fill(1.);
+        mesh.uv = mesh.unwrap_uv(true, 0.02, &|| false).unwrap();
+        mesh.uv.corners.fill([[0.5, 0.5]; 3]);
+        for channel in Channel::ALL {
+            let mut texture =
+                Texture::new_with_precision(channel, 16, &material, Precision::Float32).unwrap();
+            for i in 0..256 {
+                let value = match channel {
+                    Channel::Color if i % 16 < 8 => [2., 0., 0., 1.],
+                    Channel::Color => [0., 0., 10., 0.],
+                    Channel::Roughness => [0.25, 0.25, 0.25, 0.5],
+                    Channel::Metallic => [0.75, 0.75, 0.75, 1.],
+                };
+                texture.pixels.set_pixel(i, value);
+            }
+            mesh.uv.textures.push(texture);
+        }
+        let mut document = Document::default();
+        document.replace_geometry(Geometry::new(mesh)).unwrap();
+        let view = scene(&document);
+        let sample = view
+            .sample_material(view.project(Vec3(0.1, 0.1, 0.)))
+            .unwrap();
+        for (actual, expected) in sample.base_color.into_iter().zip([1.1, 0.15, 0.2]) {
+            assert!((actual - expected).abs() < 1e-5, "{actual} != {expected}");
+        }
+        assert!((sample.roughness - 0.525).abs() < 1e-5);
+        assert!((sample.metallic - 0.75).abs() < 1e-5);
     }
     #[test]
     fn surface_cursor_renders_on_clay_and_falls_back_off_surface() {

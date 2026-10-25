@@ -30,7 +30,7 @@ Document group edits affect the active mesh and its stored levels transactionall
 
 User-facing assignment replaces prior memberships in the selected region, preserves corners required by remaining categorical faces, and clears obsolete weights when a face group loses its last face. Empty registries are compacted using the union of usage across all subdivision levels, remapping face IDs and the UI target together. Low-level mesh construction retains independent weighted storage.
 
-Midpoint/center subdivision and adaptive edits interpolate weights; cuts compact them alongside geometry. Voxel remeshing uses spatial nearest-neighbor transfer for weights and face centroids for categories. History memory accounting includes the new arrays; saving enforces the same 128 MB cap as loading.
+Midpoint/center subdivision and adaptive edits interpolate weights; cuts compact them alongside geometry. Voxel remeshing uses spatial nearest-neighbor transfer for weights and face centroids for categories. History memory accounting includes the new arrays; saving enforces the same 2 GiB cap as loading.
 
 ### Mask filters
 

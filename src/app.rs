@@ -25,6 +25,7 @@ pub(crate) mod policy;
 mod projection;
 mod recovery;
 mod references;
+pub(crate) mod textures;
 
 pub struct App {
     pub(crate) document: Document,
@@ -39,7 +40,13 @@ pub struct App {
     paths: paths::PathState,
     closing: bool,
     mesh_job: Option<MeshJob>,
-    export_job: Option<crate::background_job::BackgroundJob<(std::path::PathBuf, Vec<u8>)>>,
+    texture_exchange: Option<textures::ExchangeJob>,
+    export_job: Option<
+        crate::background_job::BackgroundJob<(
+            std::path::PathBuf,
+            crate::persistence::material_export::ExportBundle,
+        )>,
+    >,
     recovery: Option<crate::recovery::Recovery>,
     recovery_entries: Vec<crate::recovery::Entry>,
     recovery_error: Option<String>,
@@ -62,6 +69,7 @@ impl Default for App {
             paths: Default::default(),
             closing: false,
             mesh_job: None,
+            texture_exchange: None,
             export_job: None,
             recovery: None,
             recovery_entries: Vec::new(),
@@ -271,7 +279,9 @@ impl App {
         for command in primitive_commands {
             self.dispatch(command, ui.ctx());
         }
-        let enabled = !menu_was_open
+        let enabled = !self.ui.customization.popup_blocks_viewport
+            && self.ui.customization.popup_menu.is_none()
+            && !menu_was_open
             && self.ui.viewport_menu.context.is_none()
             && self.ui.alphas.draft.is_none()
             && self.ui.alphas.overwrite.is_none()
@@ -354,6 +364,11 @@ impl App {
             self.viewport.cancel(&mut self.document);
         }
         self.viewport.sample_colour = self.ui.materials.sampling;
+        self.viewport.size_preview = self
+            .ui
+            .brush_size_preview
+            .filter(|(frame, _)| *frame == ui.ctx().cumulative_frame_nr())
+            .and_then(|(_, index)| self.document.brushes().get(index).cloned());
         self.viewport.show(
             ui,
             &mut self.document,
@@ -429,15 +444,18 @@ impl App {
             },
         );
         self.ui.materials.sampling = self.viewport.sample_colour;
-        if let Some(colour) = self.viewport.sampled_colour.take() {
-            let mut brush = self.document.brushes()[self.ui.selected].clone();
-            brush.material = brush.material.unlinked();
-            brush.material.base_color = colour;
-            if let Err(error) = self.document.update_brush(self.ui.selected, brush) {
-                self.ui.status = error;
-            } else {
-                self.ui.status = "Colour sampled; use + Colour to save it to the palette".into();
-            }
+        let sampled = self.viewport.sampled_material.take().or_else(|| {
+            self.viewport.sampled_colour.take().map(|colour| {
+                let mut material = self.document.brushes()[self.ui.selected].material.clone();
+                material.base_color = colour;
+                material
+            })
+        });
+        self.viewport.sampled_colour = None;
+        if let Some(sampled) = sampled
+            && let Err(error) = self.sample_surface_material(sampled)
+        {
+            self.ui.status = error;
         }
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         if self.ui.mask_active || temporary_visibility {
@@ -537,15 +555,33 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         self.poll_mesh_job();
         self.poll_export(ctx);
+        self.poll_texture_exchange(ctx);
+        if self.texture_exchange.is_some() && !self.ui.uv.open {
+            let mut cancel = false;
+            egui::TopBottomPanel::top("texture_operation").show(ctx, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.spinner();
+                    ui.label(&self.ui.uv.operation);
+                    if let Some(progress) = self.ui.uv.operation_progress {
+                        ui.add(
+                            egui::ProgressBar::new(progress)
+                                .desired_width(160.)
+                                .show_percentage(),
+                        );
+                    }
+                    cancel = ui.button("Cancel texture operation").clicked();
+                });
+            });
+            if cancel {
+                let _ = self.texture_command(textures::TextureCommand::Cancel);
+            }
+        }
         self.poll_projection();
         self.poll_paths();
-        let native_pressure = ctx.input(|i| {
-            i.events.iter().rev().find_map(|event| match event {
-                egui::Event::Touch { force: Some(p), .. } => Some(*p),
-                _ => None,
-            })
-        });
-        self.pressure = self.tablet.pressure().or(native_pressure).unwrap_or(1.);
+        let native_pressure = ctx.input(|i| self.tablet.update_native(&i.events));
+        self.pressure = native_pressure
+            .or_else(|| self.tablet.pressure())
+            .unwrap_or(1.);
         if ctx.input(|i| i.viewport().close_requested()) && self.ui.projection.open {
             self.cancel_projection();
         }
@@ -577,6 +613,28 @@ impl eframe::App for App {
         for command in self.ui.projection_window(ctx, &self.document) {
             self.dispatch(command, ctx);
         }
+        for command in self.ui.uv_window(
+            ctx,
+            &self.document,
+            &self.viewport.modeling.selected_faces(),
+        ) {
+            self.dispatch(command, ctx);
+        }
+        self.viewport.set_texture_exposure(if self.ui.uv.open {
+            self.ui.uv.exposure
+        } else {
+            0.
+        });
+        self.viewport
+            .set_uv_checker(self.ui.uv.open && self.ui.uv.checker);
+        if matches!(
+            self.ui.preferences.paint_inspection,
+            crate::viewport::InspectionMode::Roughness | crate::viewport::InspectionMode::Metallic
+        ) {
+            self.ui.preferences.paint_inspection = crate::viewport::InspectionMode::Lit;
+        }
+        self.viewport
+            .set_inspection_mode(self.ui.preferences.paint_inspection);
         self.ui.settings(ctx, &self.document);
         self.shortcuts(ctx);
         if self.recovery_error.is_some() {

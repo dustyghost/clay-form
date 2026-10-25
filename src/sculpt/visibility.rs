@@ -83,6 +83,7 @@ impl Mesh {
             .filter(|&i| self.face_visible(i) == visible)
             .collect();
         let mut result = Self {
+            uv: Default::default(),
             creases: Vec::new(),
             vertices: Vec::new(),
             triangles: Vec::new(),

@@ -107,6 +107,7 @@ jobs:
           install -m 0644 README.md "$stage/README.md"
           cp -R docs "$stage/docs"
           install -D -m 0644 packaging/linux/72-clay-form-huion.rules "$stage/packaging/linux/72-clay-form-huion.rules"
+          install -D -m 0644 packaging/linux/72-clay-form-opentabletdriver.rules "$stage/packaging/linux/72-clay-form-opentabletdriver.rules"
           tar -C dist -czf "dist/$ARCHIVE_NAME.tar.gz" "$ARCHIVE_NAME"
           (cd dist && sha256sum "$ARCHIVE_NAME.tar.gz" > SHA256SUMS)
 

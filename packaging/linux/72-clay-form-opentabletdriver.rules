@@ -1,0 +1,2 @@
+# Only the virtual artist tablet; never grant access to OTD's virtual keyboard.
+ACTION!="remove", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="OpenTabletDriver Virtual Artist Tablet", TAG+="uaccess"

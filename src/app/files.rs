@@ -201,6 +201,13 @@ impl App {
     }
     pub(super) fn import_asset(&mut self, asset: AssetKind, path: String) -> Result<(), String> {
         match asset {
+            AssetKind::PaintWorking => self.texture_command(
+                crate::app::textures::TextureCommand::Relink(self.ui.uv.channel, path.clone()),
+            )?,
+            AssetKind::Texture => {
+                let texture = persistence::texture::load(&path, self.ui.uv.channel)?;
+                self.document.assign_texture(texture)?;
+            }
             AssetKind::Reference => self.add_reference(egui::DroppedFile {
                 path: Some(path.clone().into()),
                 ..Default::default()

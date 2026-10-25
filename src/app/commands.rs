@@ -133,7 +133,86 @@ impl App {
             self.viewport.cancel_reference_drag();
         }
         self.document.prepare_edit(command.edit_kind());
+        let uv_attributes = matches!(
+            command,
+            Command::UvPack(_)
+                | Command::UvPackSelected(..)
+                | Command::UvTransform(..)
+                | Command::UvReplace(_)
+                | Command::UvRemove(_)
+                | Command::UvClearMask
+                | Command::UvSeams(_)
+        );
         let result: Result<(), String> = match command {
+            Command::Texture(command) => self.texture_command(command),
+            Command::UvUnwrap(automatic, padding) => {
+                self.start_mesh_job(Operation::UvUnwrap(automatic, padding))
+            }
+            Command::UvPack(padding) => self
+                .document
+                .edit_uv("Auto arrange UV islands", |uv| uv.pack(padding)),
+            Command::UvPackSelected(faces, padding) => {
+                self.document.edit_uv("Arrange selected UV islands", |uv| {
+                    uv.pack_selected(&faces, padding)
+                })
+            }
+            Command::UvTransform(faces, offset, scale, angle) => {
+                self.document.edit_uv("Transform UV islands", |uv| {
+                    uv.transform(&faces, offset, scale, angle)
+                })
+            }
+            Command::UvReplace(next) => self.document.edit_uv("Edit UV islands", |uv| {
+                if uv.topology != next.topology {
+                    return Err("UV edit is out of date".into());
+                }
+                *uv = *next;
+                Ok(())
+            }),
+            Command::UvRemove(faces) => self
+                .document
+                .edit_uv("Remove UV islands", |uv| uv.remove_islands(&faces)),
+            Command::UvClearMask => self.document.edit_uv("Clear UV mask", |uv| {
+                uv.masks.clear();
+                Ok(())
+            }),
+            Command::UvSeams(mark) => {
+                let edges = self
+                    .viewport
+                    .modeling
+                    .selected
+                    .iter()
+                    .filter_map(|c| {
+                        if let crate::viewport::Component::Edge(e) = c {
+                            Some(*e)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                self.document.mark_uv_seams(edges, mark).map(|()| {
+                    self.ui.wire = true;
+                    self.viewport.modeling.revision = self.document.display_revision();
+                })
+            }
+            Command::UvSelect(faces) => {
+                let selected: std::collections::BTreeSet<_> = faces.into_iter().collect();
+                self.viewport.modeling.selected =
+                    crate::sculpt::uv::polygon_triangles(self.document.mesh())
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, fs)| fs.iter().any(|f| selected.contains(f)))
+                        .map(|(i, _)| crate::viewport::Component::Face(i))
+                        .collect();
+                self.viewport.modeling.revision = self.document.display_revision();
+                self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
+                self.ui.slice_active = false;
+                self.ui.selection_tool = None;
+                self.ui.edges.selecting = false;
+                self.ui.modeling.active = true;
+                self.ui.modeling.mode = crate::viewport::ComponentMode::Face;
+                self.ui.modeling.tool = crate::viewport::ModelTool::Select;
+                Ok(())
+            }
             Command::Path(_) => unreachable!(),
             command @ (Command::ModelingMode(..)
             | Command::ModelingComponent(..)
@@ -245,8 +324,14 @@ impl App {
                 Ok(())
             }
             Command::SaveMaterial(asset) => self.document.save_material(asset),
+            Command::SaveMaterialToLibrary(asset) => {
+                self.ui.preferences.materials.save_asset(&asset).map(|()| {
+                    self.ui.status =
+                        "Saved to personal library. Project Undo does not change library presets."
+                            .into();
+                })
+            }
             Command::RemoveMaterial(id) => self.document.remove_material(id).map(|()| {
-                self.ui.preferences.materials.remove(id);
                 self.ui.status =
                     "Removed material; existing paint is preserved. Undo restores the material."
                         .into();
@@ -275,19 +360,7 @@ impl App {
                     self.viewport.wait_for_release();
                 }
                 let label = self.document.undo_label();
-                let materials =
-                    (label == Some("Remove material")).then(|| self.document.materials().to_vec());
                 self.document.undo();
-                if let Some(before) = materials {
-                    for asset in self
-                        .document
-                        .materials()
-                        .iter()
-                        .filter(|a| !before.iter().any(|b| a.id == b.id))
-                    {
-                        self.ui.preferences.materials.restore(asset);
-                    }
-                }
                 self.refresh_path_after_history();
                 self.ui.status =
                     label.map_or("Nothing to undo".into(), |label| format!("Undid: {label}"));
@@ -300,17 +373,7 @@ impl App {
                     self.viewport.wait_for_release();
                 }
                 let label = self.document.redo_label();
-                let materials =
-                    (label == Some("Remove material")).then(|| self.document.materials().to_vec());
                 self.document.redo();
-                if let Some(before) = materials {
-                    for asset in before
-                        .iter()
-                        .filter(|a| !self.document.materials().iter().any(|b| a.id == b.id))
-                    {
-                        self.ui.preferences.materials.remove(asset.id);
-                    }
-                }
                 self.refresh_path_after_history();
                 self.ui.status =
                     label.map_or("Nothing to redo".into(), |label| format!("Redid: {label}"));
@@ -607,6 +670,11 @@ impl App {
                 Ok(())
             }
         };
+        if result.is_ok() && uv_attributes {
+            self.viewport
+                .modeling
+                .accept_attribute_revision(&self.document);
+        }
         if let Err(error) = result {
             self.diagnostic_warning("An application command failed; detailed error text withheld to exclude personal paths");
             self.ui.status = error;

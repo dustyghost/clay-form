@@ -1,13 +1,28 @@
 //! Cached display geometry and camera-independent wire topology.
+use super::atlas::Atlas;
 use crate::{
     document::Document,
     sculpt::{Mesh, SurfaceShading, Vec3},
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 #[derive(Clone)]
 pub(crate) struct DisplayMesh {
+    geometry: Arc<DisplayGeometry>,
+    pub(super) texture_pixels: Atlas,
+    pub texture_info: Vec<[u32; 4]>,
+    texture_sources: Vec<TextureSource>,
+}
+#[derive(Clone)]
+struct TextureSource {
+    id: u64,
+    storage: usize,
+    revision: u64,
+}
+#[derive(Clone)]
+pub(crate) struct DisplayGeometry {
     pub mesh: Mesh,
+    pub uv_corners: Vec<[[f32; 4]; 3]>,
     pub shading: SurfaceShading,
     pub owners: Vec<usize>,
     muted_vertices: Vec<bool>,
@@ -19,7 +34,58 @@ pub(crate) struct DisplayMesh {
     pub active: usize,
     pub(super) depth_extent: f32,
 }
+impl std::ops::Deref for DisplayMesh {
+    type Target = DisplayGeometry;
+    fn deref(&self) -> &Self::Target {
+        &self.geometry
+    }
+}
 impl DisplayMesh {
+    pub(super) fn shares_geometry(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.geometry, &other.geometry)
+    }
+    /// Retain geometry/shading and copy only atlas chunks touched since the last frame.
+    pub(super) fn with_texture_updates(&self, document: &Document) -> Option<Self> {
+        let mut next = self.clone();
+        let mut sources = HashMap::new();
+        let active = document.active_model_index();
+        let models: Vec<_> = std::iter::once(active)
+            .chain((0..document.model_count()).filter(|i| *i != active))
+            .map(|i| document.model(i).map(|model| (i, model)))
+            .collect::<Option<_>>()?;
+        for (i, model) in &models {
+            for texture in &model.display_mesh(*i == active).uv.textures {
+                sources.entry(texture.id).or_insert(texture);
+            }
+        }
+        for (i, previous) in next.texture_sources.iter_mut().enumerate() {
+            let texture = *sources.get(&previous.id)?;
+            let info = next.texture_info[i + 1];
+            let encoding = if matches!(texture.pixels, crate::sculpt::texture::Pixels::Float32(_)) {
+                2
+            } else {
+                u32::from(texture.channel == crate::sculpt::texture::Channel::Color)
+            };
+            if info[0] != texture.width || info[1] != texture.height || info[3] != encoding {
+                return None;
+            }
+            let revision = texture.upload.revision();
+            let storage = texture.pixels.storage_id();
+            if revision != previous.revision || storage != previous.storage {
+                let dirty = if revision == previous.revision {
+                    None
+                } else {
+                    texture.upload.changes_since(previous.revision)
+                }
+                .unwrap_or(0..texture.width as usize * texture.height as usize);
+                next.texture_pixels.update(texture, info[2] as usize, dirty);
+                previous.revision = revision;
+                previous.storage = storage;
+            }
+        }
+        Some(next)
+    }
+
     /// Reuse the smoothing fans while dragging a dense, fixed-topology mesh.
     /// Paint retains exact normals; deformation uses cheap temporary normals.
     /// The renderer rebuilds full angle-weighted shading when the stroke ends.
@@ -32,6 +98,7 @@ impl DisplayMesh {
             || source.has_hidden_faces()
             || document.model(0)?.metadata.temporary_thickness != 0.
             || document.primitive().is_some()
+            || !source.uv.textures.is_empty()
             || !source.creases.is_empty()
             || self.mesh.vertices.len() != source.vertices.len()
             || self.mesh.triangles != source.triangles
@@ -39,8 +106,9 @@ impl DisplayMesh {
         {
             return None;
         }
-        let mut next = Self {
+        let mut geometry = DisplayGeometry {
             mesh: source.clone(),
+            uv_corners: self.uv_corners.clone(),
             shading: self.shading.clone(),
             owners: self.owners.clone(),
             muted_vertices: self.muted_vertices.clone(),
@@ -53,25 +121,30 @@ impl DisplayMesh {
             depth_extent: self.depth_extent,
         };
         if self.mesh.vertices != source.vertices {
-            let mut normals = vec![Vec3::default(); next.shading.vertices.len()];
-            for (ids, fans) in source.triangles.iter().zip(&next.shading.triangles) {
+            let mut normals = vec![Vec3::default(); geometry.shading.vertices.len()];
+            for (ids, fans) in source.triangles.iter().zip(&geometry.shading.triangles) {
                 let [a, b, c] = ids.map(|i| source.vertices[i]);
                 let face = (b - a).cross(c - a);
                 for &i in fans {
                     normals[i] = normals[i] + face;
                 }
             }
-            for ((_, normal), sum) in next.shading.vertices.iter_mut().zip(normals) {
+            for ((_, normal), sum) in geometry.shading.vertices.iter_mut().zip(normals) {
                 *normal = sum.norm();
             }
-            next.depth_extent = source
+            geometry.depth_extent = source
                 .vertices
                 .iter()
                 .map(|p| p.len())
                 .fold(1_f32, f32::max)
                 + 1.;
         }
-        Some(next)
+        Some(Self {
+            geometry: Arc::new(geometry),
+            texture_pixels: self.texture_pixels.clone(),
+            texture_info: self.texture_info.clone(),
+            texture_sources: self.texture_sources.clone(),
+        })
     }
     pub fn new(document: &Document) -> Self {
         Self::build(document, false, None)
@@ -85,6 +158,7 @@ impl DisplayMesh {
     fn build(document: &Document, preview: bool, active_mesh: Option<&Mesh>) -> Self {
         let active = document.active_model_index();
         let mut mesh = Mesh {
+            uv: Default::default(),
             creases: Vec::new(),
             materials: Vec::new(),
             vertex_groups: Vec::new(),
@@ -95,6 +169,11 @@ impl DisplayMesh {
             quads: Vec::new(),
             mask: Vec::new(),
         };
+        let mut uv_corners = Vec::new();
+        let mut texture_pixels = Atlas::default();
+        let mut texture_sources = Vec::new();
+        let mut texture_info = vec![[0; 4]];
+        let mut texture_ids = HashMap::new();
         let mut edge_colors = HashMap::new();
         let mut shading = SurfaceShading::default();
         let mut owners = Vec::new();
@@ -156,6 +235,14 @@ impl DisplayMesh {
                     })
                     .map(|q| q.map(|i| i + offset)),
             );
+            if surface.uv.corners.is_empty() || surface.uv.current(surface) {
+                for &[a, b] in &surface.uv.seams {
+                    edge_colors.insert(
+                        (a + offset, b + offset),
+                        eframe::egui::Color32::from_rgb(195, 115, 235),
+                    );
+                }
+            }
             for &[a, b] in &surface.creases {
                 edge_colors.insert(
                     (a + offset, b + offset),
@@ -174,6 +261,35 @@ impl DisplayMesh {
                 mesh.materials
                     .extend((0..surface.vertices.len()).map(|i| surface.material(i)));
             }
+            let uv_current = surface.uv.current(surface);
+            let mut texture_channels = [0.; 3];
+            if uv_current {
+                for texture in &surface.uv.textures {
+                    let id = *texture_ids.entry(texture.id).or_insert_with(|| {
+                        let id = texture_info.len();
+                        texture_info.push([
+                            texture.width,
+                            texture.height,
+                            texture_pixels.len() as u32,
+                            (if texture.pixels.precision()
+                                == crate::sculpt::texture::Precision::Float32
+                            {
+                                2
+                            } else {
+                                u32::from(texture.channel == crate::sculpt::texture::Channel::Color)
+                            }),
+                        ]);
+                        texture_pixels.append(texture);
+                        texture_sources.push(TextureSource {
+                            id: texture.id,
+                            storage: texture.pixels.storage_id(),
+                            revision: texture.upload.revision(),
+                        });
+                        id
+                    });
+                    texture_channels[texture.channel.index()] = id as f32;
+                }
+            }
             let surface_shading = surface.surface_shading();
             let shading_offset = shading.vertices.len();
             shading.vertices.extend(
@@ -186,6 +302,14 @@ impl DisplayMesh {
                 if !surface.face_visible(face) {
                     continue;
                 }
+                uv_corners.push(if uv_current && surface.uv.mapped(face) {
+                    std::array::from_fn(|c| {
+                        let q = surface.uv.corners[face][c];
+                        [q[0], q[1], 1., texture_channels[c]]
+                    })
+                } else {
+                    [[0.; 4]; 3]
+                });
                 mesh.triangles.push(triangle.map(|i| i + offset));
                 shading
                     .triangles
@@ -223,18 +347,79 @@ impl DisplayMesh {
         }
         let depth_extent = mesh.vertices.iter().map(|p| p.len()).fold(1_f32, f32::max) + 1.;
         Self {
-            mesh,
-            shading,
-            owners,
-            muted_vertices,
-            source_faces,
-            poly_colors,
-            edge_colors,
-            outlines,
-            active_vertices,
-            active,
-            depth_extent,
+            texture_pixels,
+            texture_info,
+            texture_sources,
+            geometry: Arc::new(DisplayGeometry {
+                mesh,
+                uv_corners,
+                shading,
+                owners,
+                muted_vertices,
+                source_faces,
+                poly_colors,
+                edge_colors,
+                outlines,
+                active_vertices,
+                active,
+                depth_extent,
+            }),
         }
+    }
+    /// Bilinear, coverage-aware linear sample matching the fragment shader.
+    pub(crate) fn sample_texture(&self, id: usize, uv: [f32; 2]) -> [f32; 4] {
+        if id == 0 {
+            return [0.; 4];
+        }
+        let [width, height, first, encoding] = self.texture_info[id];
+        let xy = [
+            uv[0].clamp(0., 1.) * width as f32 - 0.5,
+            (1. - uv[1]).clamp(0., 1.) * height as f32 - 0.5,
+        ];
+        let size = [width, height];
+        let lo = std::array::from_fn::<_, 2, _>(|i| {
+            xy[i].floor().clamp(0., size[i] as f32 - 1.) as usize
+        });
+        let hi = std::array::from_fn::<_, 2, _>(|i| {
+            (xy[i].floor() + 1.).clamp(0., size[i] as f32 - 1.) as usize
+        });
+        let t = xy.map(|v| v - v.floor());
+        let pixel = |x: usize, y: usize| {
+            let index =
+                first as usize + (y * width as usize + x) * if encoding == 2 { 2 } else { 1 };
+            let a = self.texture_pixels.get(index);
+            let mut rgba = if encoding == 2 {
+                let b = self.texture_pixels.get(index + 1);
+                [a[0], a[1], b[0], b[1]].map(f32::from_bits)
+            } else {
+                [a[0] & 65535, a[0] >> 16, a[1] & 65535, a[1] >> 16].map(|v| v as f32 / 65535.)
+            };
+            for c in 0..3 {
+                if encoding == 1 {
+                    rgba[c] = crate::sculpt::material::srgb_to_linear(rgba[c]);
+                }
+                rgba[c] *= rgba[3];
+            }
+            rgba
+        };
+        let samples = [
+            pixel(lo[0], lo[1]),
+            pixel(hi[0], lo[1]),
+            pixel(lo[0], hi[1]),
+            pixel(hi[0], hi[1]),
+        ];
+        let weights = [
+            (1. - t[0]) * (1. - t[1]),
+            t[0] * (1. - t[1]),
+            (1. - t[0]) * t[1],
+            t[0] * t[1],
+        ];
+        let mut result: [f32; 4] =
+            std::array::from_fn(|c| samples.iter().zip(weights).map(|(p, w)| p[c] * w).sum());
+        for c in 0..3 {
+            result[c] /= result[3].max(0.000001);
+        }
+        result
     }
     pub fn material(&self, i: usize) -> crate::sculpt::Material {
         if self.muted_vertices[i] {
@@ -380,6 +565,42 @@ fn span_edge_axis(p: &crate::sculpt::Primitive, a: Vec3, b: Vec3) -> Option<usiz
 mod tests {
     use super::*;
     use crate::sculpt::{Geometry, Primitive, PrimitiveKind};
+    #[test]
+    fn texture_update_reuses_geometry_and_unmodified_atlas_chunks() {
+        use crate::sculpt::{
+            Material,
+            texture::{Channel, Texture},
+        };
+        let mut mesh = Primitive::for_kind(PrimitiveKind::Plane).mesh().unwrap();
+        mesh.uv = mesh.unwrap_uv(true, 0.02, &|| false).unwrap();
+        let texture = Texture::new(Channel::Color, 256, &Material::default()).unwrap();
+        mesh.uv.textures.push(texture);
+        let mut document = Document::default();
+        document
+            .replace_geometry(Geometry::new(mesh.clone()))
+            .unwrap();
+        let old = DisplayMesh::new(&document);
+        mesh.uv.textures[0]
+            .pixels
+            .set_pixel(20_000, [1., 0., 0., 1.]);
+        mesh.uv.textures[0].upload.record(20_000..20_001);
+        document.replace_geometry(Geometry::new(mesh)).unwrap();
+        let next = old.with_texture_updates(&document).unwrap();
+        assert!(old.shares_geometry(&next));
+        for i in 0..old.texture_pixels.chunks.len() {
+            assert_eq!(
+                Arc::ptr_eq(
+                    &old.texture_pixels.chunks[i],
+                    &next.texture_pixels.chunks[i]
+                ),
+                i != 20_000 / super::super::atlas::CHUNK
+            );
+        }
+        assert_ne!(
+            old.texture_pixels.get(20_000),
+            next.texture_pixels.get(20_000)
+        );
+    }
     #[test]
     fn span_cut_colors_follow_local_axes_after_rotation_and_scaling() {
         let mut p = Primitive::for_kind(PrimitiveKind::Cube);

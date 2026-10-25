@@ -9,17 +9,20 @@ use eframe::egui::{self, Color32, Sense, Vec2};
 pub(crate) mod alphas;
 mod design;
 mod material;
+mod uv;
 use design::Glyph;
 pub(crate) mod context_menu;
 mod customization;
 mod edges;
 mod files;
 pub(crate) use files::{FileEntry, FilePicker};
+mod brush_controls;
 mod icons;
 mod masking;
 mod menus;
 mod mirror;
 mod modeling;
+mod paint;
 pub(crate) mod paths;
 mod primitive;
 mod projection;
@@ -29,6 +32,7 @@ mod sidebar;
 mod transform;
 use customization::ActionResponse;
 pub(crate) struct UiState {
+    pub uv: uv::UvControls,
     pub viewport_menu: context_menu::ViewportMenuState,
     icons: icons::Icons,
     pinned_menu_rects: Vec<egui::Rect>,
@@ -73,6 +77,7 @@ pub(crate) struct UiState {
     pub(crate) mask_suppressed: bool,
     smooth_brush: Option<String>,
     brush_editor_focus: Option<(egui::Id, String)>,
+    pub(crate) brush_size_preview: Option<(u64, usize)>,
     pub file_picker: Option<FilePicker>,
     pub path: String,
     pub obj_path: String,
@@ -101,6 +106,7 @@ pub(crate) struct UiState {
 impl Default for UiState {
     fn default() -> Self {
         Self {
+            uv: Default::default(),
             viewport_menu: Default::default(),
             icons: Default::default(),
             pinned_menu_rects: Vec::new(),
@@ -153,6 +159,7 @@ impl Default for UiState {
             mask_suppressed: false,
             smooth_brush: None,
             brush_editor_focus: None,
+            brush_size_preview: None,
             file_picker: None,
             path: "sculpt.clay".into(),
             obj_path: "model.obj".into(),
@@ -284,6 +291,12 @@ impl UiState {
             ui.spacing_mut().item_spacing = Vec2::new(6., 5.);
             ui.horizontal_wrapped(|ui| {
                 ui.strong("CLAY FORM");
+                if ui.button("UVs / Textures").clicked() {
+                    self.uv.open = !self.uv.open;
+                }
+                if let Some(channel) = document.texture_paint {
+                    ui.label(format!("Texture: {}", channel.label()));
+                }
                 self.workspace_selector(ui);
                 let binding = self
                     .preferences
@@ -315,6 +328,14 @@ impl UiState {
                     }
                     for (format, label) in [
                         (
+                            crate::persistence::material_export::ExportFormat::OpenUsd,
+                            "OpenUSD…",
+                        ),
+                        (
+                            crate::persistence::material_export::ExportFormat::Fbx,
+                            "FBX…",
+                        ),
+                        (
                             crate::persistence::material_export::ExportFormat::Ply,
                             "PLY…",
                         ),
@@ -338,6 +359,14 @@ impl UiState {
                     if ui.button("Cancel export").clicked() {
                         commands.push(Command::CancelExport);
                     }
+                }
+                if self.preferences.paint_workspace_backup.is_some()
+                    && ui
+                        .button("Restore workspace")
+                        .on_hover_text("Return to the layout from before Paint focus")
+                        .clicked()
+                {
+                    self.preferences.restore_paint_workspace();
                 }
                 if self.preferences.compact_toolbar {
                     if self.mesh_busy {
@@ -823,12 +852,14 @@ impl UiState {
                     commands,
                 );
                 let columns = (ui.available_width() / 76.).floor().clamp(1., 4.) as usize;
-                let width =
-                    ((ui.available_width() - 6. * (columns - 1) as f32) / columns as f32).max(32.);
-                egui::Grid::new("brush_tiles")
-                    .num_columns(columns)
-                    .spacing(Vec2::splat(6.))
-                    .show(ui, |ui| {
+                let width = ((ui.available_width() - 6. * (columns - 1) as f32) / columns as f32)
+                    .floor()
+                    .max(32.);
+                // Fixed-size tiles do not need a grid's cached column widths:
+                // those widths lag a sidebar drag and force it back open.
+                ui.push_id("brush_tiles", |ui| {
+                    ui.spacing_mut().item_spacing = Vec2::splat(6.);
+                    ui.horizontal_wrapped(|ui| {
                         for (i, b) in document.brushes().iter().enumerate() {
                             let id = self.brush_texture(ui.ctx(), i, b);
                             if design::brush_tile(
@@ -848,6 +879,7 @@ impl UiState {
                             }
                         }
                     });
+                });
                 ui.add_space(4.);
                 if active.is_none() {
                     ui.weak(if self.selection_brush_active() {
@@ -877,8 +909,11 @@ impl UiState {
                 }
             }
             Tool::Brush => {
-                let id = self.brush_texture(ui.ctx(), selected, b);
-                ui.horizontal(|ui| {
+                let paint_focus =
+                    b.kind == Kind::Paint && self.preferences.paint_workspace_backup.is_some();
+                let mut preset_controls = |ui: &mut egui::Ui| {
+                    let id = self.brush_texture(ui.ctx(), selected, b);
+                    ui.horizontal(|ui| {
                     ui.image((id, Vec2::splat(64.)));
                     ui.vertical(|ui| {
                         if ui
@@ -908,32 +943,37 @@ impl UiState {
                         }
                     });
                 });
-                ui.text_edit_singleline(&mut b.name);
-                egui::ComboBox::from_label("Operation")
-                    .selected_text(format!("{:?}", b.kind))
-                    .show_ui(ui, |ui| {
-                        for k in Kind::ALL {
-                            ui.selectable_value(&mut b.kind, k, format!("{k:?}"));
-                        }
-                    });
+                    ui.text_edit_singleline(&mut b.name);
+                    egui::ComboBox::from_label("Operation")
+                        .selected_text(format!("{:?}", b.kind))
+                        .show_ui(ui, |ui| {
+                            for k in Kind::ALL {
+                                ui.selectable_value(&mut b.kind, k, format!("{k:?}"));
+                            }
+                        });
+                };
+                if paint_focus {
+                    ui.collapsing("Brush preset settings", preset_controls);
+                } else {
+                    preset_controls(ui);
+                }
                 if b.kind == Kind::Paint {
+                    self.paint_controls(ui, b, document, commands);
                     ui.horizontal_wrapped(|ui| {
-                    if ui.add(design::button(ui, Glyph::Edit, "Fill all"))
+                    if ui.add(design::button(ui, Glyph::Edit, if document.texture_paint.is_some() { "Fill mapped image" } else { "Fill all vertices" }))
                         .customize(Action::FillAllMaterial)
-                        .on_hover_text("Apply the selected channels at full strength to the entire active model, including masked and hidden vertices. One undo restores the previous materials.")
+                        .on_hover_text("Fill the active target at full strength, including masked and hidden regions. One Undo restores the previous paint.")
                         .clicked() {
                         commands.push(Command::FillAllMaterial(b.clone()));
                     }
                     if ui
-                        .add(design::button(ui, Glyph::Edit, "Fill unmasked vertices"))
+                        .add(design::button(ui, Glyph::Edit, if document.texture_paint.is_some() { "Fill unmasked image" } else { "Fill unmasked vertices" }))
                         .customize(Action::FillMaterial)
                         .clicked()
                     {
                         commands.push(Command::FillMaterial(b.clone()));
                     }
                     });
-                    self.materials
-                        .show(ui, b, &mut self.preferences.materials, document, commands);
                 }
                 if b.kind == Kind::Decimate {
                     ui.label("Reduce triangles locally without smoothing. Requires Adaptive sculpt; Edge size and Simplify ratio control reduction.");
@@ -944,10 +984,18 @@ impl UiState {
                     ui.selectable_value(&mut b.subtract, true, "− Subtract")
                         .customize(Action::BrushSubtract);
                 });
-                ui.add(egui::Slider::new(&mut b.radius, 1. ..=500.).text("Radius (px)"));
-                ui.add(egui::Slider::new(&mut b.inner_radius, 0. ..=1.).text("Inner radius (fraction)")).on_hover_text("Full-strength core; falloff fades from here to the outer radius. Applies to Soft and image alphas.");
-                design::checkbox(ui, &mut b.surface_cursor, "Surface footprint and normal");
-                ui.add(egui::Slider::new(&mut b.strength, 0. ..=1.).text("Strength"));
+                let radius = ui
+                    .add(egui::Slider::new(&mut b.radius, 1. ..=500.).text("Radius (px)"))
+                    .customize(Action::BrushSize);
+                self.preview_brush_size(&radius, selected);
+                let inner = ui.add(egui::Slider::new(&mut b.inner_radius, 0. ..=1.).text("Inner radius (fraction)"))
+                    .customize(Action::BrushInnerRadius)
+                    .on_hover_text("Full-strength core; falloff fades from here to the outer radius. Applies to Soft and image alphas.");
+                self.preview_brush_size(&inner, selected);
+                design::checkbox(ui, &mut b.surface_cursor, "Surface footprint and normal")
+                    .customize(Action::SurfaceFootprint);
+                ui.add(egui::Slider::new(&mut b.strength, 0. ..=1.).text("Strength"))
+                    .customize(Action::BrushStrength);
                 if b.kind == Kind::Relax {
                     ui.add(
                         egui::Slider::new(&mut b.relax_tolerance, 0.000001..=1.)
@@ -956,7 +1004,11 @@ impl UiState {
                     );
                     ui.weak("Redistributes vertices without smoothing the shape. Consecutive Relax strokes share a fixed surface; another mesh edit or reopening captures a new reference. Boundaries, creases and hidden faces stay fixed. Esc cancels the stroke.");
                 }
-                ui.label("Stroke mode");
+                ui.label(if b.kind == Kind::Paint {
+                    "Stroke path"
+                } else {
+                    "Stroke mode"
+                });
                 let supported = !matches!(b.kind, Kind::Grab | Kind::Snake | Kind::Relax);
                 ui.add_enabled_ui(supported, |ui| {
                     egui::ComboBox::from_id_salt("brush_stroke_mode")
@@ -999,6 +1051,18 @@ impl UiState {
                 design::checkbox(ui, &mut b.pressure, "Pressure → strength");
                 design::checkbox(ui, &mut b.pressure_radius, "Pressure → radius");
                 ui.add(egui::Slider::new(&mut b.pressure_curve, 0.1..=4.).text("Pressure curve"));
+                if b.kind == Kind::Paint {
+                    ui.separator();
+                    ui.collapsing("Material presets and shared editor", |ui| {
+                        self.materials.show(
+                            ui,
+                            b,
+                            &mut self.preferences.materials,
+                            document,
+                            commands,
+                        );
+                    });
+                }
             }
             Tool::Alpha => {
                 self.alpha_panel(ui, document, selected, b, commands);

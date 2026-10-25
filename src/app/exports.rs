@@ -1,5 +1,5 @@
 use super::*;
-use crate::persistence::material_export::{ExportFormat, export_bytes};
+use crate::persistence::material_export::{ExportFormat, prepare_export};
 impl App {
     pub(super) fn browse_export(&mut self, format: ExportFormat) {
         if self.export_job.is_some() {
@@ -31,7 +31,7 @@ impl App {
         self.export_job = Some(crate::background_job::BackgroundJob::start(
             "material-export",
             move |cancel| {
-                let bytes = export_bytes(&project, format, lighting.as_ref(), cancel)?;
+                let bytes = prepare_export(&project, format, lighting.as_ref(), cancel)?;
                 Ok((path, bytes))
             },
         )?);
@@ -47,7 +47,7 @@ impl App {
             self.export_job = None;
             self.ui.export_busy = false;
             self.ui.status = match result.and_then(|(path, bytes)| {
-                persistence::write_bytes(&path, &bytes)?;
+                bytes.write(&path)?;
                 Ok(path)
             }) {
                 Ok(path) => format!("Exported {}", path.display()),

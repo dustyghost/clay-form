@@ -2,6 +2,8 @@
 use super::{Geometry, MAX_TRIANGLES, MAX_VERTICES, Mesh, MeshSettings, Vec3};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+#[cfg(test)]
+thread_local! { static POLYGON_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
 
 pub(super) type Edge = [usize; 2];
 pub(super) fn edge(a: usize, b: usize) -> Edge {
@@ -87,7 +89,13 @@ pub(super) fn cancelled(cancel: &impl Fn() -> bool) -> Result<(), String> {
 }
 
 impl Mesh {
+    #[cfg(test)]
+    pub(crate) fn polygon_build_count() -> usize {
+        POLYGON_BUILDS.get()
+    }
     pub(crate) fn polygons(&self) -> Vec<Polygon> {
+        #[cfg(test)]
+        POLYGON_BUILDS.set(POLYGON_BUILDS.get() + 1);
         let key = |mut t: [usize; 3]| {
             t.sort_unstable();
             t

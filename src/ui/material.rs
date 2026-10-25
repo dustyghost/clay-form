@@ -1,6 +1,6 @@
 use crate::{
     preferences::MaterialLibrary,
-    sculpt::{Brush, Material, PaintChannels, Vec3},
+    sculpt::{Brush, Material, Vec3},
 };
 use eframe::egui;
 
@@ -9,6 +9,8 @@ pub(crate) struct MaterialControls {
     textures: Vec<(Material, egui::TextureHandle)>,
 
     pub sampling: bool,
+    usage: Option<(u64, u64, usize, usize)>,
+    pending: Option<(u64, crate::sculpt::material::layers::Asset)>,
 }
 impl MaterialControls {
     pub fn show(
@@ -61,6 +63,27 @@ impl MaterialControls {
         for asset in &mut presets {
             asset.original = Some(asset.reset_material());
         }
+        // Keep slider scrubbing local to the brush. Rebase the scene once on
+        // release, rather than traversing every painted level every frame.
+        if self
+            .pending
+            .as_ref()
+            .is_some_and(|(revision, _)| *revision != document.display_revision())
+            || ui.input(|input| input.key_pressed(egui::Key::Escape))
+        {
+            self.pending = None;
+        }
+        if let Some((_, draft)) = &self.pending
+            && let Some(asset) = presets.iter_mut().find(|asset| asset.id == draft.id)
+        {
+            *asset = draft.clone();
+        }
+        if !ui.input(|input| input.pointer.any_down())
+            && let Some((_, asset)) = self.pending.take()
+        {
+            commands.push(Command::SaveMaterial(asset));
+        }
+
         if let Some(id) = brush.material.primary_asset()
             && let Some(asset) = presets.iter().find(|a| a.id == id)
         {
@@ -69,13 +92,8 @@ impl MaterialControls {
                 commands.push(Command::SaveMaterial(asset.clone()));
             }
         }
-        let mut selected = brush.material.primary_asset().or_else(|| {
-            presets
-                .iter()
-                .find(|a| a.material.values() == brush.material.values())
-                .map(|a| a.id)
-        });
-        ui.strong("Materials");
+        let mut selected = brush.material.primary_asset();
+        ui.weak("Choose a material for future strokes. Existing paint changes only in the shared material editor below.");
         ui.scope(|ui| {
             let height_id = ui.make_persistent_id("material_library_height");
             let mut height = ui
@@ -148,6 +166,19 @@ impl MaterialControls {
             .and_then(|id| presets.iter().find(|a| a.id == id))
             .map_or("Custom material", |a| a.name.as_str())
             .to_owned();
+        ui.label(format!("Brush material: {name}"));
+        ui.collapsing("Edit shared project material", |ui| {
+        if let Some(id) = selected {
+            let revision = document.display_revision();
+            if !self.usage.is_some_and(|(r, i, _, _)| r == revision && i == id) {
+                let (models, vertices) = document.material_usage(id);
+                self.usage = Some((revision, id, models, vertices));
+            }
+            let (_, _, models, vertices) = self.usage.unwrap();
+            ui.weak(format!("Edits update {vertices} painted vertices across {models} models, including stored subdivision levels. Project Undo restores them."));
+        } else {
+            ui.weak("Create a named project material from this brush. Future strokes can share its settings.");
+        }
         let mut edited_name = name.clone();
         ui.horizontal(|ui| {
             ui.label("Material name");
@@ -164,19 +195,19 @@ impl MaterialControls {
             .unwrap_or_else(|| before.unlinked());
         let mut remove_material = None;
         ui.horizontal_wrapped(|ui| {
-            if ui.add_enabled(library.copies.len() < 64, egui::Button::new("Copy material"))
-                .on_hover_text("Create an independent editable material").clicked()
-                && let Some(index) = library.copy(&edited_name, brush.material.clone())
+            if ui.add_enabled(document.materials().len() < 256, egui::Button::new("Copy material"))
+                .on_hover_text("Create an independent project material for future strokes; existing paint keeps its current material.")
+                .clicked()
             {
-                let copy = &library.copies[index];
-                selected = Some(copy.id);
-                edited_name = copy.name.clone();
-                original = copy.material.unlinked();
-                brush.material = copy.material.with_link(copy.id);
+                let id = crate::sculpt::material::layers::fresh_id();
+                selected = Some(id);
+                edited_name = format!("{} copy", name.chars().take(24).collect::<String>());
+                original = brush.material.unlinked();
+                brush.material = original.with_link(id);
                 commands.push(Command::SaveMaterial(Asset {
-                    id: copy.id,
-                    name: copy.name.clone(),
-                    material: copy.material.clone(),
+                    id,
+                    name: edited_name.clone(),
+                    material: original.clone(),
                     original: Some(original.clone()),
                 }));
             }
@@ -187,8 +218,8 @@ impl MaterialControls {
                 brush.material = selected.map_or_else(|| original.clone(), |id| original.with_link(id));
             }
         });
-        if ui.add_enabled(selected.is_some(), egui::Button::new("Remove material"))
-            .on_hover_text("Remove this swatch and detach its painted uses, keeping their appearance. Undo restores the material.")
+        if ui.add_enabled(selected.is_some(), egui::Button::new("Remove from project"))
+            .on_hover_text("Remove this project definition and detach painted uses, preserving their appearance. Personal library presets remain available. Undo restores the project material.")
             .clicked() {
             remove_material = selected;
         }
@@ -210,65 +241,13 @@ impl MaterialControls {
             commands.push(Command::RemoveMaterial(id));
             return;
         }
-        egui::ComboBox::from_label("Paint channels")
-            .selected_text(brush.paint_channels.label())
-            .show_ui(ui, |ui| {
-                for channel in PaintChannels::ALL {
-                    ui.selectable_value(&mut brush.paint_channels, channel, channel.label());
-                }
-            });
         ui.horizontal(|ui| {
-            ui.label("Colour");
+            ui.label("Shared colour");
             let mut color = brush.material.base_color;
             if ui.color_edit_button_rgb(&mut color).changed() {
                 brush.material.base_color = color;
             }
-            if ui
-                .selectable_label(self.sampling, "Sample colour")
-                .on_hover_text("Click a visible surface to sample its paint colour. Esc cancels.")
-                .clicked()
-            {
-                self.sampling = !self.sampling;
-            }
         });
-        let mut remove = None;
-        ui.horizontal_wrapped(|ui| {
-            for (index, &colour) in library.palette.iter().enumerate() {
-                let colour32 =
-                    egui::Color32::from(egui::Rgba::from_rgb(colour[0], colour[1], colour[2]));
-                let response = ui
-                    .add(
-                        egui::Button::new("")
-                            .fill(colour32)
-                            .min_size(egui::vec2(24., 24.))
-                            .stroke(if brush.material.base_color == colour {
-                                ui.visuals().selection.stroke
-                            } else {
-                                egui::Stroke::NONE
-                            }),
-                    )
-                    .on_hover_text("Select colour · right-click to remove");
-                if response.clicked() {
-                    brush.material.base_color = colour;
-                }
-                response.context_menu(|ui| {
-                    if ui.button("Remove colour").clicked() {
-                        remove = Some(index);
-                        ui.close();
-                    }
-                });
-            }
-            if ui
-                .add_enabled(library.palette.len() < 32, egui::Button::new("+ Colour"))
-                .on_hover_text("Save the current colour to your palette")
-                .clicked()
-            {
-                library.add_colour(brush.material.base_color);
-            }
-        });
-        if let Some(index) = remove {
-            library.palette.remove(index);
-        }
         ui.add(egui::Slider::new(&mut brush.material.roughness, 0. ..=1.).text("Roughness"));
         ui.add(egui::Slider::new(&mut brush.material.metallic, 0. ..=1.).text("Metallic"));
         ui.collapsing("Surface options", |ui| {
@@ -326,20 +305,98 @@ impl MaterialControls {
             let id = selected.unwrap_or_else(crate::sculpt::material::layers::fresh_id);
             let material = brush.material.unlinked();
             brush.material = material.with_link(id);
-            if (1..=library.names.len() as u64).contains(&id) {
-                library.names[id as usize - 1] = edited_name.clone();
-                library.values[id as usize - 1] = material.clone();
-            } else if let Some(p) = library.copies.iter_mut().find(|p| p.id == id) {
-                p.name = edited_name.clone();
-                p.material = material.clone();
-                p.original = Some(original.clone());
+            let asset = Asset {
+                id,
+                name: edited_name.clone(),
+                material,
+                original: Some(original.clone()),
+            };
+            if ui.input(|input| input.pointer.any_down()) {
+                self.pending = Some((document.display_revision(), asset));
+            } else {
+                commands.push(Command::SaveMaterial(asset));
             }
-            commands.push(Command::SaveMaterial(Asset {
+        }
+        if self.pending.is_some() { ui.weak("Release to apply to shared painted surfaces. Esc cancels."); }
+        if ui.button("Save to personal library")
+            .on_hover_text("Save these settings for future projects. This explicit library change is independent of project Undo.")
+            .clicked()
+        {
+            let id = brush.material.primary_asset().unwrap_or_else(crate::sculpt::material::layers::fresh_id);
+            commands.push(Command::SaveMaterialToLibrary(Asset {
                 id,
                 name: edited_name,
-                material,
+                material: brush.material.unlinked(),
                 original: Some(original),
             }));
+        }
+        if let Some(id) = selected
+            && ui.button("Hide personal library preset")
+                .on_hover_text("Hide this preset in future projects. Existing project materials and painted surfaces are unchanged; project Undo does not affect your library.")
+                .clicked()
+            {
+                library.remove(id);
+        }
+        });
+    }
+
+    pub(super) fn sample_control(&mut self, ui: &mut egui::Ui, label: &str) {
+        if ui.selectable_label(self.sampling, label)
+            .on_hover_text("Click the visible surface to sample the active paint channel into this brush. Esc cancels.")
+            .clicked()
+        {
+            self.sampling = !self.sampling;
+        }
+    }
+
+    /// Ordinary brush colour changes never edit a shared project definition.
+    pub(super) fn brush_palette(
+        &mut self,
+        ui: &mut egui::Ui,
+        brush: &mut Brush,
+        library: &mut MaterialLibrary,
+    ) {
+        self.sample_control(ui, "Sample colour");
+        let mut remove = None;
+        ui.horizontal_wrapped(|ui| {
+            for (index, &colour) in library.palette.iter().enumerate() {
+                let colour32 =
+                    egui::Color32::from(egui::Rgba::from_rgb(colour[0], colour[1], colour[2]));
+                let response = ui
+                    .add(
+                        egui::Button::new("")
+                            .fill(colour32)
+                            .min_size(egui::vec2(20., 20.))
+                            .stroke(if brush.material.base_color == colour {
+                                ui.visuals().selection.stroke
+                            } else {
+                                egui::Stroke::NONE
+                            }),
+                    )
+                    .on_hover_text(
+                        "Brush colour · existing paint stays unchanged · right-click to remove",
+                    );
+                if response.clicked() {
+                    brush.material = brush.material.unlinked();
+                    brush.material.base_color = colour;
+                }
+                response.context_menu(|ui| {
+                    if ui.button("Remove colour").clicked() {
+                        remove = Some(index);
+                        ui.close();
+                    }
+                });
+            }
+            if ui
+                .add_enabled(library.palette.len() < 32, egui::Button::new("+ Colour"))
+                .on_hover_text("Save this brush colour to your personal palette")
+                .clicked()
+            {
+                library.add_colour(brush.material.base_color);
+            }
+        });
+        if let Some(index) = remove {
+            library.palette.remove(index);
         }
     }
 

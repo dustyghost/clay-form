@@ -140,3 +140,7 @@ If a recovery save fails, earlier copies remain available and an error stays vis
 ### Painted materials and OBJ
 
 Save painted meshes as `.clay` to retain vertex colour, roughness and metallic. OBJ import accepts conventional sRGB vertex colours, with opaque alpha only; material libraries are not imported. OBJ export reports a limitation for painted meshes because it cannot preserve all material channels. See [Paint colours and materials](materials.md).
+
+## UV and texture exchange
+
+[UVs / Textures](textures.md) retains seam-aware UV coordinates through OBJ import/export and exports texture images as 16-bit PNG. Native `.clay` version 3 saves embed images and retain UVs, channels and external-edit associations. Older version 1 and 2 projects remain readable. External exchange paths are omitted from diagnostic bundles.

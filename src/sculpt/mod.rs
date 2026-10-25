@@ -1,6 +1,8 @@
 //! Sculpting data and algorithms, independent of windowing and UI.
 mod adaptive;
 mod brush;
+mod paint_effect;
+pub use paint_effect::{PaintEffect, PaintMode};
 mod clay;
 mod deformation;
 mod detail;
@@ -75,6 +77,8 @@ mod projection;
 pub use projection::{ProjectionOptions, ProjectionReport};
 
 pub mod alpha;
+pub mod texture;
+pub mod uv;
 
 pub mod path_geometry;
 pub mod paths;

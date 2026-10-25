@@ -290,6 +290,11 @@ pub struct Brush {
     pub pressure: bool,
     pub pressure_radius: bool,
     pub pressure_curve: f32,
+    #[serde(default, skip_serializing_if = "super::PaintEffect::is_default")]
+    pub paint_effect: super::PaintEffect,
+    /// Linear HDR colour for float texture targets; vertex materials remain bounded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub texture_colour: Option<[f32; 3]>,
 }
 impl Brush {
     /// A ready-to-place image stamp, independent of the Standard preset's identity.
@@ -342,6 +347,8 @@ impl Brush {
             pressure: true,
             pressure_radius: false,
             pressure_curve: 1.,
+            paint_effect: Default::default(),
+            texture_colour: None,
         }
     }
     /// Reset behavior for this operation without replacing the user's preset identity.
@@ -449,7 +456,10 @@ impl Brush {
     }
 }
 pub fn validate_brush(b: &Brush) -> Result<(), String> {
-    if b.name.len() > 256
+    if b.texture_colour
+        .is_some_and(|c| c.iter().any(|v| !v.is_finite()))
+        || !b.paint_effect.valid()
+        || b.name.len() > 256
         || !b.radius.is_finite()
         || !(1. ..=500.).contains(&b.radius)
         || !b.strength.is_finite()

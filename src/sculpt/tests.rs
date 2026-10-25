@@ -407,6 +407,7 @@ fn check_long_snake_drag(curved: bool) {
 #[test]
 fn detail_carves_sharp_center_raised_shoulders_and_inverts_depth() {
     let mut plane = Mesh {
+        uv: Default::default(),
         creases: Vec::new(),
         materials: Vec::new(),
         vertex_groups: Vec::new(),
@@ -519,4 +520,46 @@ fn drag_relief_has_visible_depth_and_preserves_pressure_and_mask_opacity() {
     let mut masked = original;
     masked.stamp(&brush, dab);
     assert!((masked.mask.iter().copied().fold(0_f32, f32::max) - brush.strength).abs() < 1e-6);
+}
+
+#[test]
+fn standard_freehand_pressure_scales_strength_without_changing_radius() {
+    let mut plane = Primitive::for_kind(PrimitiveKind::Plane);
+    plane.divisions = [10, 10, 1];
+    let original = plane.mesh().unwrap();
+    let brush = Brush::new(Kind::Standard);
+    assert!(brush.pressure && !brush.pressure_radius);
+    let dab = Dab {
+        center: Vec3::default(),
+        normal: Vec3(0., 0., 1.),
+        right: Vec3(1., 0., 0.),
+        up: Vec3(0., 1., 0.),
+        radius: 0.5,
+        pressure: 1.,
+        delta: Vec3::default(),
+        invert: false,
+    };
+    let mut firm = original.clone();
+    firm.stamp(&brush, dab);
+    let mut light = original.clone();
+    light.stamp(
+        &brush,
+        Dab {
+            pressure: 0.25,
+            ..dab
+        },
+    );
+    let mut changed = 0;
+    for ((a, b), before) in firm
+        .vertices
+        .iter()
+        .zip(&light.vertices)
+        .zip(&original.vertices)
+    {
+        let full = *a - *before;
+        let soft = *b - *before;
+        assert!((soft - full * 0.25).len() < 1e-6);
+        changed += usize::from(full.len() > 1e-6);
+    }
+    assert!(changed > 4);
 }

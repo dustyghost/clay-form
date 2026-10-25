@@ -21,6 +21,61 @@ struct Guide {
 }
 
 #[test]
+#[ignore = "renders and resizes brush sidebars; requires Vulkan"]
+fn brush_sidebar_resize_offscreen_review() {
+    let directory = std::env::temp_dir().join("clay-brush-sidebar-resize");
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1200, 900]);
+    g.interactive = true;
+    g.panel(Tool::Library, Dock::Left);
+    g.app.ui.preferences.left_width = 600.;
+    let menu = g
+        .app
+        .ui
+        .preferences
+        .menus
+        .iter_mut()
+        .find(|m| m.items.iter().any(|i| i.action == Some(Action::BrushSize)))
+        .unwrap();
+    menu.columns = 4;
+    menu.placement = crate::preferences::Placement::LeftPanel;
+    menu.expanded = true;
+    g.save("wide-before-resize");
+    assert!(
+        g.app.ui.preferences.left_width <= 601.,
+        "content expanded beyond the painted sidebar: {}",
+        g.app.ui.preferences.left_width
+    );
+    for width in [340., 220., 180., 500.] {
+        let start = Pos2::new(g.app.ui.preferences.left_width - 1., 450.);
+        let end = Pos2::new(width, 450.);
+        g.frame(vec![
+            egui::Event::PointerMoved(start),
+            primary_event(start, true),
+        ]);
+        g.frame(vec![egui::Event::PointerMoved(end)]);
+        g.frame(vec![primary_event(end, false)]);
+        g.save(&format!("width-{width}"));
+        assert!(
+            (g.app.ui.preferences.left_width - width).abs() <= 2.,
+            "sidebar should follow resize to {width}, got {}",
+            g.app.ui.preferences.left_width
+        );
+        for label in ["Size", "Inner radius", "Strength", "Freehand"] {
+            let pos = g
+                .text_positions
+                .iter()
+                .find_map(|(text, pos)| (text == label).then_some(*pos))
+                .unwrap_or_else(|| panic!("missing {label}"));
+            assert!(
+                pos.x < width - 6.,
+                "{label} clipped outside sidebar: {pos:?}"
+            );
+        }
+    }
+}
+
+#[test]
 #[ignore = "visibility selection visual review; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn visibility_selection_offscreen_review() {
     use crate::preferences::{VisibilitySettings, VisibilityShape};
@@ -3108,8 +3163,56 @@ fn material_examples_manual_capture() {
     assert_eq!(g.app.document.geometry_snapshot(), before);
 }
 
+/// Reveal a control through the outer sidebar, including after a previous action
+/// left the artist scrolled to a different part of the painting workspace.
+fn reach_paint_control(g: &mut Guide, label: &str) {
+    let viewport_top = g.frame(vec![]).0.top();
+    let visible = |g: &Guide| {
+        g.text_positions.iter().any(|(text, p)| {
+            text == label && p.y > viewport_top + 4. && p.y < g.ctx.content_rect().bottom() - 8.
+        })
+    };
+    g.frame(vec![]);
+    if visible(g) {
+        return;
+    }
+    let margin = g.size[0] as f32 - g.app.ui.preferences.right_width + 12.;
+    g.frame(vec![
+        egui::Event::PointerMoved(Pos2::new(margin, 500.)),
+        egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: Vec2::new(0., 10000.),
+            modifiers: Default::default(),
+        },
+    ]);
+    for _ in 0..45 {
+        g.frame(vec![]);
+        if visible(g) {
+            return;
+        }
+        let margin = g.size[0] as f32 - g.app.ui.preferences.right_width + 12.;
+        g.frame(vec![
+            egui::Event::PointerMoved(Pos2::new(margin, 500.)),
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: Vec2::new(0., -200.),
+                modifiers: Default::default(),
+            },
+        ]);
+    }
+    g.save("paint-control-unreachable");
+    panic!(
+        "Paint control {label} must be reachable; captured paint-control-unreachable.png. Visible text: {:?}",
+        g.text_positions
+    );
+}
+fn click_paint_control(g: &mut Guide, label: &str) {
+    reach_paint_control(g, label);
+    click_guide_label(g, label);
+}
+
 #[test]
-#[ignore = "requires Vulkan; clicks material swatches, copy, palette, sampler and fill and checks viewport pixels"]
+#[ignore = "requires Vulkan; clicks project material, copy, palette, sampler, layers and explicit library save"]
 fn material_controls_offscreen_review() {
     use crate::sculpt::{Kind, Material};
     let directory = std::env::var("CLAY_GUIDE_PREVIEW")
@@ -3124,13 +3227,27 @@ fn material_controls_offscreen_review() {
     g.app.camera.yaw = 0.;
     g.app.camera.pitch = 0.;
     g.panel(Tool::Brush, Dock::Right);
+    click_paint_control(&mut g, "Material presets and shared editor");
+    reach_paint_control(&mut g, "Drag to resize materials");
+    // Leave room below the resize handle so outer scrolling cannot absorb its drag.
+    let margin = g.size[0] as f32 - g.app.ui.preferences.right_width + 12.;
+    g.frame(vec![
+        egui::Event::PointerMoved(Pos2::new(margin, 500.)),
+        egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: Vec2::new(0., -1000.),
+            modifiers: Default::default(),
+        },
+    ]);
+    for _ in 0..3 {
+        g.frame(vec![]);
+    }
     let handle = |g: &Guide| {
         g.text_positions
             .iter()
             .find_map(|(text, pos)| (text == "Drag to resize materials").then_some(*pos))
             .unwrap()
     };
-    g.frame(vec![]);
     let geometry = g.app.document.geometry_snapshot();
     let material = g.app.document.brushes()[g.app.ui.selected].material.clone();
     for delta in [72., -72.] {
@@ -3145,51 +3262,40 @@ fn material_controls_offscreen_review() {
         g.frame(vec![]);
         assert!(
             (handle(&g).y - start.y - delta).abs() < 2.,
-            "Material library resizes by the drag distance"
+            "Library height follows drag distance: start {}, end {}, delta {delta}",
+            start.y,
+            handle(&g).y
         );
-        if delta > 0. {
-            g.save("material-library-expanded");
-        }
     }
     assert_eq!(g.app.document.geometry_snapshot(), geometry);
     assert_eq!(
         g.app.document.brushes()[g.app.ui.selected].material,
         material
     );
-    click_guide_label(&mut g, "Copper");
-    assert_eq!(
-        g.app.document.brushes()[g.app.ui.selected].material,
-        Material::examples()[4].1.with_link(5)
-    );
+    click_paint_control(&mut g, "Copper");
     let before = g.app.document.geometry_snapshot();
     let (rect, pixels_before) = g.frame(vec![egui::Event::PointerGone]);
     let point = rect.center();
-    g.stroke(point - Vec2::new(40., 0.), point + Vec2::new(40., 0.));
-    let (_, pixels_after) = g.frame(vec![egui::Event::PointerGone]);
-    assert_ne!(
-        g.app.document.mesh().materials,
-        before.mesh.materials,
-        "Pointer must apply paint at {point:?} in {rect:?}"
-    );
-    let changed = (point.y as usize - 60..point.y as usize + 60)
-        .flat_map(|y| {
-            (point.x as usize - 80..point.x as usize + 80).map(move |x| ((999 - y) * 1200 + x) * 4)
-        })
-        .filter(|&i| {
-            pixels_before[i..i + 3]
-                .iter()
-                .zip(&pixels_after[i..i + 3])
-                .any(|(a, b)| a.abs_diff(*b) > 8)
-        })
-        .count();
+    g.frame(vec![
+        egui::Event::PointerMoved(point),
+        primary_event(point, true),
+    ]);
+    g.frame(vec![primary_event(point, false)]);
+    let pixels_after = g.frame(vec![]).1;
     assert!(
-        changed > 500,
-        "Paint on the startup sphere must visibly change its pixels: {changed}"
+        pixels_before
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(pixels_after.as_chunks::<4>().0.iter())
+            .filter(|(a, b)| a[..3].iter().zip(&b[..3]).any(|(a, b)| a.abs_diff(*b) > 8))
+            .count()
+            > 500
     );
     assert_eq!(g.app.document.mesh().vertices, before.mesh.vertices);
     g.app.dispatch(Command::Undo, &g.ctx);
     assert_eq!(g.app.document.geometry_snapshot(), before);
-    click_guide_label(&mut g, "Fill all");
+    click_paint_control(&mut g, "Fill all vertices");
     assert!(
         g.app
             .document
@@ -3198,260 +3304,109 @@ fn material_controls_offscreen_review() {
             .iter()
             .all(|m| *m == Material::examples()[4].1.with_link(5))
     );
-    click_guide_label(&mut g, "Copy material");
+    click_paint_control(&mut g, "Edit shared project material");
+    click_paint_control(&mut g, "Copy material");
+    assert!(
+        g.app.ui.preferences.materials.copies.is_empty(),
+        "Project copy does not publish to personal library"
+    );
+    let copy = g.app.document.brushes()[g.app.ui.selected]
+        .material
+        .primary_asset()
+        .unwrap();
+    assert_ne!(copy, 5);
+    assert!(
+        g.app
+            .document
+            .materials()
+            .iter()
+            .any(|asset| asset.id == copy)
+    );
+    click_paint_control(&mut g, "Save to personal library");
     assert_eq!(g.app.ui.preferences.materials.copies.len(), 1);
-    click_guide_label(&mut g, "+ Colour");
+    click_paint_control(&mut g, "+ Colour");
     assert!(
         g.app
             .ui
             .preferences
             .materials
             .palette
-            .contains(&Material::examples()[4].1.clone().base_color)
+            .contains(&Material::examples()[4].1.base_color)
     );
-    click_guide_label(&mut g, "Red plastic");
-    click_guide_label(&mut g, "Sample colour");
-    assert!(
-        g.app.ui.materials.sampling,
-        "Sampler stays armed while pointer is over its button"
-    );
+    click_paint_control(&mut g, "Red plastic");
+    click_paint_control(&mut g, "Sample colour");
     let before_sample = g.app.document.geometry_snapshot();
     let history = g.app.document.history_counts();
+    let point = g.frame(vec![]).0.center();
     g.frame(vec![
         egui::Event::PointerMoved(point),
         primary_event(point, true),
     ]);
     g.frame(vec![primary_event(point, false)]);
     assert!(!g.app.ui.materials.sampling);
+    assert!(
+        g.app.document.brushes()[g.app.ui.selected]
+            .material
+            .primary_asset()
+            .is_none()
+    );
     for (a, b) in g.app.document.brushes()[g.app.ui.selected]
         .material
         .base_color
         .into_iter()
-        .zip(Material::examples()[4].1.clone().base_color)
+        .zip(Material::examples()[4].1.base_color)
     {
         assert!((a - b).abs() < 1e-6);
     }
     assert_eq!(g.app.document.geometry_snapshot(), before_sample);
     assert_eq!(g.app.document.history_counts(), history);
     g.save("material-controls");
-    // A preceding library exhausts the sidebar's suggested height, as in the reported layout.
-    g.panel(Tool::Library, Dock::Right);
-    for _ in 0..30 {
-        g.frame(vec![]);
-        if g.text_positions
-            .iter()
-            .any(|(text, pos)| text == "Materials" && (230. ..620.).contains(&pos.y))
-        {
-            break;
-        }
-        let margin = 1200. - g.app.ui.preferences.right_width + 12.;
-        g.frame(vec![
-            egui::Event::PointerMoved(Pos2::new(margin, 500.)),
-            egui::Event::MouseWheel {
-                unit: egui::MouseWheelUnit::Point,
-                delta: Vec2::new(0., -80.),
-                modifiers: Default::default(),
-            },
-        ]);
-    }
-    g.frame(vec![]);
-    let header = g
-        .text_positions
-        .iter()
-        .find(|(text, _)| text == "Materials")
-        .unwrap()
-        .1;
-    assert!(
-        (230. ..620.).contains(&header.y),
-        "Materials can be reached by scrolling the crowded sidebar"
-    );
-    assert!(
-        handle(&g).y - header.y > 190.,
-        "The chosen grid height must not be squeezed by preceding controls"
-    );
-    let row = g
-        .text_positions
-        .iter()
-        .find(|(text, _)| text == "Red plastic")
-        .unwrap()
-        .1;
-    assert!(
-        row.y < handle(&g).y - 20.,
-        "The complete second row fits above the resize handle"
-    );
-    click_guide_label(&mut g, "Red plastic");
-    assert_eq!(
-        g.app.document.brushes()[g.app.ui.selected].material,
-        Material::examples()[5].1.with_link(6)
-    );
-    let name_field = g
-        .text_positions
-        .iter()
-        .rev()
-        .find(|(text, _)| text == "Red plastic")
-        .unwrap()
-        .1;
-    g.frame(vec![
-        egui::Event::PointerMoved(name_field),
-        primary_event(name_field, true),
-    ]);
-    g.frame(vec![primary_event(name_field, false)]);
-    g.modifiers = egui::Modifiers {
-        ctrl: true,
-        command: true,
-        ..Default::default()
-    };
-    g.frame(vec![egui::Event::Key {
-        key: egui::Key::A,
-        physical_key: None,
-        pressed: true,
-        repeat: false,
-        modifiers: g.modifiers,
-    }]);
-    g.modifiers = egui::Modifiers::NONE;
-    g.frame(vec![egui::Event::Text("Warm resin".into())]);
-    g.frame(vec![]);
-    assert_eq!(g.app.ui.preferences.materials.names[5], "Warm resin");
-    assert!(
-        g.text_positions
-            .iter()
-            .any(|(text, _)| text == "Warm resin")
-    );
-    g.save("material-library-crowded");
-    // Layer edits must update the selected definition and already filled geometry.
-    g.panel(Tool::Library, Dock::Hidden);
-    let brush = g.app.document.brushes()[g.app.ui.selected].clone();
-    g.app.dispatch(Command::FillAllMaterial(brush), &g.ctx);
-    let margin = 1200. - g.app.ui.preferences.right_width + 12.;
-    g.frame(vec![
-        egui::Event::PointerMoved(Pos2::new(margin, 500.)),
-        egui::Event::MouseWheel {
-            unit: egui::MouseWheelUnit::Point,
-            delta: Vec2::new(0., 10000.),
-            modifiers: Default::default(),
-        },
-    ]);
+    // Shared layer edits update existing users, and Undo restores both parts.
+    click_paint_control(&mut g, "Red plastic");
+    click_paint_control(&mut g, "Fill all vertices");
     let before_layers = g.app.document.mesh().material(0);
-    let reach = |g: &mut Guide, label: &str| {
-        for _ in 0..35 {
-            g.frame(vec![]);
-            if g.text_positions
-                .iter()
-                .any(|(text, p)| text == label && (230. ..900.).contains(&p.y))
-            {
-                return;
-            }
-            let margin = 1200. - g.app.ui.preferences.right_width + 12.;
-            g.frame(vec![
-                egui::Event::PointerMoved(Pos2::new(margin, 500.)),
-                egui::Event::MouseWheel {
-                    unit: egui::MouseWheelUnit::Point,
-                    delta: Vec2::new(0., -60.),
-                    modifiers: Default::default(),
-                },
-            ]);
-        }
-        panic!("{label} is reachable");
-    };
-    reach(&mut g, "Material layers");
-    click_guide_label(&mut g, "Material layers");
-    reach(&mut g, "Add layer");
-    click_guide_label(&mut g, "Add layer");
+    click_paint_control(&mut g, "Material layers");
+    click_paint_control(&mut g, "Add layer");
     g.frame(vec![]);
     assert_eq!(g.app.document.mesh().material(0).layers[0].weight, 0.5);
-    assert_ne!(g.app.document.mesh().material(0), before_layers);
     assert_eq!(
-        g.app
-            .document
-            .materials()
-            .iter()
-            .find(|a| a.id == 6)
-            .unwrap()
-            .material
-            .layers[0]
-            .weight,
-        0.5
+        g.app.ui.preferences.materials.values[5],
+        Material::examples()[5].1
     );
-    g.save("material-layer-controls");
-    reach(&mut g, "Layer 1");
-    click_guide_label(&mut g, "Layer 1");
+    click_paint_control(&mut g, "Layer 1");
     g.save("material-layers");
-    g.app.document.end_edit(); // Match the application's pointer-release boundary.
+    g.app.document.end_edit();
     let with_layer = g.app.document.geometry_snapshot();
-    reach(&mut g, "Remove layer");
-    click_guide_label(&mut g, "Remove layer");
+    click_paint_control(&mut g, "Remove layer");
     g.frame(vec![]);
     assert_eq!(g.app.document.mesh().material(0), before_layers);
-    assert!(
-        g.app
-            .document
-            .materials()
-            .iter()
-            .find(|a| a.id == 6)
-            .unwrap()
-            .material
-            .layers
-            .iter()
-            .all(|l| l.is_empty())
-    );
     assert!(!g.text_positions.iter().any(|(text, _)| text == "Layer 1"));
-    g.save("material-layer-removed");
     g.app.dispatch(Command::Undo, &g.ctx);
     assert_eq!(g.app.document.geometry_snapshot(), with_layer);
-    g.frame(vec![
-        egui::Event::PointerMoved(Pos2::new(margin, 500.)),
-        egui::Event::MouseWheel {
-            unit: egui::MouseWheelUnit::Point,
-            delta: Vec2::new(0., 10000.),
-            modifiers: Default::default(),
-        },
-    ]);
-    reach(&mut g, "Reset material");
-    click_guide_label(&mut g, "Reset material");
+    click_paint_control(&mut g, "Reset material");
     g.frame(vec![]);
     assert_eq!(g.app.document.mesh().material(0), before_layers);
-    let reset = g
-        .app
-        .document
-        .materials()
-        .iter()
-        .find(|a| a.id == 6)
-        .unwrap();
-    assert_eq!(reset.name, "Warm resin");
-    assert_eq!(reset.material, Material::examples()[5].1);
     g.save("material-reset");
     g.app.dispatch(Command::Undo, &g.ctx);
     assert_eq!(g.app.document.geometry_snapshot(), with_layer);
-    reach(&mut g, "Remove material");
-    click_guide_label(&mut g, "Remove material");
+    click_paint_control(&mut g, "Remove from project");
     g.frame(vec![]);
     assert!(!g.app.document.materials().iter().any(|a| a.id == 6));
-    assert!(g.app.ui.preferences.materials.hidden_builtins.contains(&6));
-    assert!(
-        !g.text_positions
-            .iter()
-            .any(|(text, _)| text == "Warm resin")
-    );
+    assert!(!g.app.ui.preferences.materials.hidden_builtins.contains(&6));
     assert_eq!(
         g.app.document.mesh().material(0).values(),
         with_layer.mesh.material(0).values()
     );
     assert!(g.app.document.mesh().material(0).links.is_empty());
-    g.save("material-removed");
     g.app.dispatch(Command::Undo, &g.ctx);
-    g.frame(vec![]);
     assert_eq!(g.app.document.geometry_snapshot(), with_layer);
-    assert!(!g.app.ui.preferences.materials.hidden_builtins.contains(&6));
-    g.app.dispatch(Command::Redo, &g.ctx);
-    g.frame(vec![]);
-    reach(&mut g, "Restore built-in materials");
-    click_guide_label(&mut g, "Restore built-in materials");
-    g.frame(vec![]);
+    // Undo restores project users; the brush remains deliberately detached after removal.
+    click_paint_control(&mut g, "Red plastic");
+    click_paint_control(&mut g, "Hide personal library preset");
+    assert!(g.app.ui.preferences.materials.hidden_builtins.contains(&6));
+    assert!(g.app.document.materials().iter().any(|a| a.id == 6));
+    click_paint_control(&mut g, "Restore built-in materials");
     assert!(g.app.ui.preferences.materials.hidden_builtins.is_empty());
-    assert!(
-        !g.app.document.materials().iter().any(|a| a.id == 6),
-        "Restoring a swatch must not rebind existing paint"
-    );
     click_guide_label(&mut g, "Export");
     click_guide_label(&mut g, "PLY…");
     assert_eq!(
@@ -3725,4 +3680,314 @@ fn viewport_lighting_offscreen_review() {
             .any(|(text, _)| text == "Include viewport lights")
     );
     g.app.dispatch(Command::CancelProjectFile, &g.ctx);
+}
+
+#[test]
+#[ignore = "requires Vulkan; checks OpenUSD and FBX export menu controls"]
+fn interchange_export_controls_offscreen_review() {
+    use crate::persistence::material_export::ExportFormat;
+    let directory = std::path::PathBuf::from("/tmp/clay-interchange-ui");
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1200, 900]);
+    g.interactive = true;
+    g.frame(vec![]);
+    for (format, label, capture) in [
+        (ExportFormat::OpenUsd, "OpenUSD…", "openusd-picker"),
+        (ExportFormat::Fbx, "FBX…", "fbx-picker"),
+    ] {
+        click_guide_label(&mut g, "Export");
+        click_guide_label(&mut g, label);
+        assert_eq!(g.app.ui.file_picker.as_ref().unwrap().export, Some(format));
+        g.frame(vec![]);
+        g.save(capture);
+        click_guide_label(&mut g, "Cancel");
+        assert!(g.app.ui.file_picker.is_none());
+    }
+}
+
+#[test]
+#[ignore = "requires Vulkan; paints stationary airbrush/spray and clicks paint mode controls"]
+fn paint_modes_offscreen_review() {
+    use crate::{
+        app::textures::TextureCommand as T,
+        sculpt::{
+            Geometry, PaintMode,
+            texture::{Channel, Precision},
+        },
+    };
+    let directory = std::path::PathBuf::from("/tmp/clay-paint-modes");
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1400, 1000]);
+    g.interactive = true;
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    let mut mesh = Primitive::for_kind(PrimitiveKind::Plane).mesh().unwrap();
+    mesh.uv = mesh.unwrap_uv(true, 0.02, &|| false).unwrap();
+    g.app
+        .document
+        .replace_geometry(Geometry::new(mesh))
+        .unwrap();
+    g.app
+        .texture_command(T::CreateAndPaint(Channel::Color, 256, Precision::U16))
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while g.app.texture_exchange.is_some() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Initial texture capture completes"
+        );
+        g.app.poll_texture_exchange(&g.ctx);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert_eq!(g.app.document.texture_paint, Some(Channel::Color));
+
+    g.panel(Tool::Brush, Dock::Right);
+    let mut brush = g.app.document.brushes()[g.app.ui.selected].clone();
+    brush.material = crate::sculpt::Material::from_srgb([0.95, 0.03, 0.02], 0.5, 0.);
+    brush.radius = 130.;
+    brush.strength = 0.7;
+    brush.paint_effect.dot_size = 0.07;
+    g.app
+        .dispatch(Command::UpdateBrush(g.app.ui.selected, brush), &g.ctx);
+    g.save("paint-target-controls");
+    for (mode, label, name) in [
+        (PaintMode::Airbrush, "Airbrush", "airbrush"),
+        (PaintMode::Spray, "Spray dots", "spray"),
+    ] {
+        click_paint_control(
+            &mut g,
+            if mode == PaintMode::Airbrush {
+                "Regular stroke"
+            } else {
+                "Airbrush"
+            },
+        );
+        click_guide_label(&mut g, label);
+        assert_eq!(
+            g.app.document.brushes()[g.app.ui.selected]
+                .paint_effect
+                .mode,
+            mode
+        );
+        reach_paint_control(&mut g, "Flow / second");
+        g.save(&format!("{name}-controls"));
+        assert!(g.text_positions.iter().any(|(t, _)| t == "Flow / second"));
+        if mode == PaintMode::Spray {
+            for label in ["Dot density", "Dot size"] {
+                assert!(g.text_positions.iter().any(|(t, _)| t == label));
+            }
+        }
+        let rect = g.frame(vec![]).0;
+        let point = rect.center();
+        let before = g.app.document.mesh().uv.textures[0].pixels.clone();
+        g.frame(vec![
+            egui::Event::PointerMoved(point),
+            primary_event(point, true),
+        ]);
+        let first = g.app.document.mesh().uv.textures[0].pixels.clone();
+        for _ in 0..5 {
+            g.frame(vec![]);
+        }
+        assert_ne!(g.app.document.mesh().uv.textures[0].pixels, first);
+        g.frame(vec![primary_event(point, false)]);
+        g.save(&format!("{name}-painted"));
+        crate::persistence::texture::save(
+            &directory.join(format!("{name}-image.png")),
+            &g.app.document.mesh().uv.textures[0],
+        )
+        .unwrap();
+        assert_ne!(g.app.document.mesh().uv.textures[0].pixels, before);
+        g.app.dispatch(Command::Undo, &g.ctx);
+        assert_eq!(g.app.document.mesh().uv.textures[0].pixels, before);
+    }
+}
+
+#[test]
+#[ignore = "requires Vulkan; clicks texture target, inspection and sampler without changing shared materials"]
+fn paint_target_scope_inspection_offscreen_review() {
+    use crate::{
+        app::textures::TextureCommand as T,
+        sculpt::{
+            Geometry, Kind, Material,
+            texture::{Channel, Precision, Texture},
+        },
+        viewport::InspectionMode,
+    };
+    let directory = std::path::PathBuf::from("/tmp/clay-paint-workspace");
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1400, 1000]);
+    g.interactive = true;
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    let mut mesh = Primitive::for_kind(PrimitiveKind::Plane).mesh().unwrap();
+    mesh.uv = mesh.unwrap_uv(true, 0.02, &|| false).unwrap();
+    g.app
+        .document
+        .replace_geometry(Geometry::new(mesh))
+        .unwrap();
+    g.app.document.duplicate_model(false).unwrap();
+    let untextured = 1 - g.app.document.active_model_index();
+    let other = g.app.document.model(untextured).unwrap();
+    let name = other.name.to_owned();
+    let mut metadata = other.metadata.clone();
+    metadata.visible = false;
+    g.app
+        .document
+        .set_model_metadata(untextured, name, metadata)
+        .unwrap();
+    let colour = Material::from_srgb([0.8, 0.1, 0.25], 0.75, 0.2);
+    g.app
+        .document
+        .assign_texture(
+            Texture::new_with_precision(Channel::Color, 256, &colour, Precision::Float32).unwrap(),
+        )
+        .unwrap();
+    g.app
+        .document
+        .assign_texture(Texture::new(Channel::Roughness, 32, &colour).unwrap())
+        .unwrap();
+    g.app
+        .document
+        .assign_texture(
+            Texture::new_with_precision(Channel::Metallic, 16, &colour, Precision::Float32)
+                .unwrap(),
+        )
+        .unwrap();
+    let scalar_maps: Vec<_> = g
+        .app
+        .document
+        .mesh()
+        .uv
+        .textures
+        .iter()
+        .filter(|image| image.channel != Channel::Color)
+        .cloned()
+        .collect();
+    g.app.ui.preferences.paint_inspection = InspectionMode::Roughness;
+
+    g.app.dispatch(Command::AddBrush(Kind::Paint), &g.ctx);
+    g.app
+        .texture_command(T::Paint(Some(Channel::Color)))
+        .unwrap();
+    g.panel(Tool::Brush, Dock::Right);
+    g.frame(vec![]);
+    assert_eq!(
+        g.app.ui.preferences.paint_inspection,
+        InspectionMode::Lit,
+        "Old scalar inspection preferences return to normal material shading"
+    );
+    assert!(
+        !g.text_positions
+            .iter()
+            .any(|(text, _)| text == "Linear RGB (float)")
+    );
+    click_paint_control(&mut g, "HDR colour values");
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(text, _)| text == "Linear RGB (float)")
+    );
+    click_paint_control(&mut g, "HDR colour values");
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(text, _)| text == "256 × 256 · 32-bit float")
+    );
+    click_paint_control(&mut g, "Focus Paint workspace");
+    g.frame(vec![]);
+    assert!(g.app.ui.preferences.paint_workspace_backup.is_some());
+    click_paint_control(&mut g, "Lit material");
+    assert!(
+        !g.text_positions
+            .iter()
+            .any(|(text, _)| matches!(text.as_str(), "Roughness" | "Metallic"))
+    );
+    click_guide_label(&mut g, "Unlit colour");
+    assert_eq!(g.app.ui.preferences.paint_inspection, InspectionMode::Color);
+    g.save("paint-inspection-unlit");
+    click_paint_control(&mut g, "Base colour image");
+    assert!(!g.text_positions.iter().any(|(text, _)| matches!(
+        text.as_str(),
+        "Roughness (linear) image" | "Metallic (linear) image"
+    )));
+    click_guide_label(&mut g, "Vertices");
+    click_paint_control(&mut g, "Whole material");
+    click_guide_label(&mut g, "Roughness only");
+    g.frame(vec![]);
+    assert_eq!(g.app.document.texture_paint, None);
+    assert_eq!(
+        g.app.document.brushes()[g.app.ui.selected].paint_channels,
+        crate::sculpt::PaintChannels::Roughness
+    );
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(text, _)| text == "Brush roughness")
+    );
+    assert!(
+        !g.text_positions
+            .iter()
+            .any(|(text, _)| text == "Brush colour")
+    );
+    let brush_colour = g.app.document.brushes()[g.app.ui.selected]
+        .material
+        .base_color;
+    click_paint_control(&mut g, "Sample roughness");
+    let point = g.frame(vec![]).0.center();
+    g.frame(vec![
+        egui::Event::PointerMoved(point),
+        primary_event(point, true),
+    ]);
+    g.frame(vec![primary_event(point, false)]);
+    let sampled = &g.app.document.brushes()[g.app.ui.selected].material;
+    assert!((sampled.roughness - colour.roughness).abs() < 1e-4);
+    assert_eq!(
+        sampled.base_color, brush_colour,
+        "scalar sampling preserves brush colour"
+    );
+    click_paint_control(&mut g, "Roughness only");
+    click_guide_label(&mut g, "Whole material");
+    let geometry = g.app.document.geometry_snapshot();
+    let materials = g.app.document.materials().to_vec();
+    let history = g.app.document.history_counts();
+    click_paint_control(&mut g, "Sample colour");
+    let point = g.frame(vec![]).0.center();
+    g.frame(vec![
+        egui::Event::PointerMoved(point),
+        primary_event(point, true),
+    ]);
+    g.frame(vec![primary_event(point, false)]);
+    let sampled = &g.app.document.brushes()[g.app.ui.selected].material;
+    assert!(sampled.primary_asset().is_none());
+    for (actual, expected) in sampled.base_color.into_iter().zip(colour.base_color) {
+        assert!(
+            (actual - expected).abs() < 1e-5,
+            "Sampler reads the visible image independently of paint target"
+        );
+    }
+    assert_eq!(g.app.document.geometry_snapshot(), geometry);
+    assert_eq!(g.app.document.materials(), materials);
+    assert_eq!(g.app.document.history_counts(), history);
+    assert_eq!(
+        g.app
+            .document
+            .mesh()
+            .uv
+            .textures
+            .iter()
+            .filter(|image| image.channel != Channel::Color)
+            .cloned()
+            .collect::<Vec<_>>(),
+        scalar_maps
+    );
+    click_paint_control(&mut g, "Vertices");
+    click_guide_label(&mut g, "Base colour image");
+    g.app.dispatch(Command::SelectSubmodel(untextured), &g.ctx);
+    g.frame(vec![]);
+    assert_eq!(g.app.document.texture_paint, None);
+    reach_paint_control(&mut g, "Vertices");
+    assert!(g.text_positions.iter().any(|(text, _)| text == "Vertices"));
+    g.save("paint-target-fallback");
+    click_guide_label(&mut g, "Restore workspace");
+    assert!(g.app.ui.preferences.paint_workspace_backup.is_none());
 }

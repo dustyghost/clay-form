@@ -10,6 +10,8 @@ mod masking;
 mod materials;
 pub(crate) use masking::{MaskPreset, MaskShape};
 pub(crate) use materials::MaterialLibrary;
+#[cfg(test)]
+mod brush_controls_tests;
 mod hold_binding;
 pub(crate) use hold_binding::HoldBinding;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -358,10 +360,16 @@ pub(crate) enum SelectionMode {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct Preferences {
+    #[serde(default)]
+    pub gimp_path: String,
+    pub external_paint_app: String,
     pub materials: MaterialLibrary,
+    pub paint_inspection: crate::viewport::InspectionMode,
     pub lighting: crate::lighting::Lighting,
     #[serde(default)]
     pub paint_shortcuts_version: u32,
+    #[serde(default)]
+    pub brush_controls_version: u32,
     pub selection_mode: SelectionMode,
     pub visibility_selection: VisibilitySettings,
     pub modeling_presets: Vec<ModelingPreset>,
@@ -389,6 +397,7 @@ pub(crate) struct Preferences {
     pub workspaces: Vec<Workspace>,
     pub next_menu_id: u64,
     pub active_workspace: Option<usize>,
+    pub paint_workspace_backup: Option<(Workspace, Option<usize>)>,
     pub compact_toolbar: bool,
     #[serde(default = "default_shelf_sizes")]
     pub shelf_sizes: [f32; 4],
@@ -397,10 +406,14 @@ pub(crate) struct Preferences {
 }
 impl Default for Preferences {
     fn default() -> Self {
-        Self {
+        let mut prefs = Self {
+            gimp_path: String::new(),
+            external_paint_app: String::new(),
             materials: MaterialLibrary::default(),
+            paint_inspection: Default::default(),
             lighting: Default::default(),
             paint_shortcuts_version: 1,
+            brush_controls_version: 2,
             visibility_selection: VisibilitySettings::default(),
             modeling_presets: Vec::new(),
             next_modeling_preset_id: 1,
@@ -446,10 +459,13 @@ impl Default for Preferences {
             workspaces: Vec::new(),
             next_menu_id: 1,
             active_workspace: None,
+            paint_workspace_backup: None,
             appearance: Appearance::default(),
             compact_toolbar: false,
             shelf_sizes: default_shelf_sizes(),
-        }
+        };
+        prefs.add_brush_controls();
+        prefs
     }
 }
 impl Preferences {
@@ -526,7 +542,11 @@ impl Preferences {
                 return Err("Duplicate sidebar section order".into());
             }
         }
-        for workspace in &self.workspaces {
+        for workspace in self.workspaces.iter().chain(
+            self.paint_workspace_backup
+                .iter()
+                .map(|(workspace, _)| workspace),
+        ) {
             let prefs = Self {
                 panels: workspace.panels.clone(),
                 menus: workspace.menus.clone(),
@@ -719,6 +739,26 @@ impl Preferences {
             *binding = None;
         }
     }
+    pub fn reset_key_bindings(&mut self) {
+        self.bindings = Action::ALL
+            .iter()
+            .cloned()
+            .map(|action| {
+                let shortcut = action.default_shortcut();
+                (action, shortcut)
+            })
+            .collect();
+        if let Some(menu) = self
+            .menus
+            .iter()
+            .find(|m| m.items.iter().any(|i| i.action == Some(Action::BrushSize)))
+        {
+            self.bindings.push((
+                Action::OpenMenu(menu.id),
+                Some(Shortcut::new(Key::S, Modifiers::NONE)),
+            ));
+        }
+    }
     pub fn actions(&self, ctx: &egui::Context) -> Vec<Action> {
         ctx.input_mut(|input| {
             let mut actions = Vec::new();
@@ -731,6 +771,11 @@ impl Preferences {
                     .iter()
                     .find(|(_, b)| b.as_ref() == Some(&shortcut))
                 {
+                    if matches!(action, Action::OpenMenu(_))
+                        && matches!(event, egui::Event::Key { repeat: true, .. })
+                    {
+                        return false;
+                    }
                     if !actions.contains(action) {
                         actions.push(action.clone());
                     }
@@ -765,6 +810,77 @@ impl Preferences {
         });
         id
     }
+    fn add_brush_controls(&mut self) {
+        let id = self.add_menu();
+        let menu = self.menus.last_mut().unwrap();
+        menu.name = "Brush controls".into();
+        menu.placement = Placement::LeftPanel;
+        menu.columns = 1;
+        menu.collapsible = true;
+        menu.items = [
+            Action::BrushIcon,
+            Action::BrushSize,
+            Action::BrushInnerRadius,
+            Action::BrushStrength,
+            Action::SurfaceFootprint,
+            Action::StrokeMode,
+            Action::StrokeStabilisation,
+        ]
+        .into_iter()
+        .map(CustomItem::action)
+        .collect();
+        let shortcut = Shortcut::new(Key::S, Modifiers::NONE);
+        if !self
+            .bindings
+            .iter()
+            .any(|(_, b)| b.as_ref() == Some(&shortcut))
+        {
+            self.bindings.push((Action::OpenMenu(id), Some(shortcut)));
+        }
+        // Existing named workspaces gain the strip once as well; later edits are respected.
+        let menu = self.menus.last().unwrap().clone();
+        for workspace in &mut self.workspaces {
+            workspace.menus.push(menu.clone());
+        }
+    }
+    /// A reversible layout preset; keep the backup in preferences so a restart
+    /// cannot strand the artist without their original workspace.
+    pub fn focus_paint_workspace(&mut self) {
+        if self.paint_workspace_backup.is_some() {
+            return;
+        }
+        self.sync_active_workspace();
+        self.paint_workspace_backup = Some((
+            self.workspace("Before Paint focus".into()),
+            self.active_workspace,
+        ));
+        self.active_workspace = None;
+        for panel in &mut self.panels {
+            panel.dock = if panel.tool == Tool::Brush {
+                Dock::Right
+            } else {
+                Dock::Hidden
+            };
+            panel.open = panel.tool == Tool::Brush;
+        }
+        for menu in &mut self.menus {
+            if menu.placement != Placement::Hidden {
+                menu.placement = Placement::Menu;
+            }
+        }
+        self.pinned_menus.clear();
+        self.menu_sections.clear();
+        self.sidebar_order.clear();
+        self.right_width = 320.;
+        self.compact_toolbar = true;
+    }
+    pub fn restore_paint_workspace(&mut self) {
+        if let Some((workspace, active)) = self.paint_workspace_backup.take() {
+            self.apply_workspace(&workspace);
+            self.active_workspace = active.filter(|index| *index < self.workspaces.len());
+        }
+    }
+
     pub fn workspace(&self, name: String) -> Workspace {
         Workspace {
             name,
@@ -948,7 +1064,8 @@ pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
         }
     }
     // Add newly introduced actions without stealing existing shortcuts or clearing explicit unbindings.
-    for (action, mut shortcut) in Preferences::default().bindings {
+    for action in Action::ALL.iter().cloned() {
+        let mut shortcut = action.default_shortcut();
         if !prefs.bindings.iter().any(|(a, _)| *a == action) {
             if shortcut.is_some() && prefs.bindings.iter().any(|(_, b)| *b == shortcut) {
                 shortcut = None;
@@ -974,6 +1091,76 @@ pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
                 position: [600., 180.],
             });
         }
+    }
+    if prefs.brush_controls_version == 0 {
+        // A file with no menus field has already received the new default menu.
+        if !prefs.menus.iter().any(|menu| {
+            menu.items
+                .iter()
+                .any(|item| item.action == Some(Action::BrushSize))
+        }) {
+            prefs.add_brush_controls();
+        } else if let Some(menu) = prefs
+            .menus
+            .iter()
+            .find(|m| m.items.iter().any(|i| i.action == Some(Action::BrushSize)))
+        {
+            let action = Action::OpenMenu(menu.id);
+            let shortcut = Shortcut::new(Key::S, Modifiers::NONE);
+            if !prefs
+                .bindings
+                .iter()
+                .any(|(a, b)| *a == action || b.as_ref() == Some(&shortcut))
+            {
+                prefs.bindings.push((action, Some(shortcut)));
+            }
+        }
+        prefs.brush_controls_version = 1;
+    }
+    if prefs.brush_controls_version < 2 {
+        for menu in prefs
+            .menus
+            .iter_mut()
+            .chain(prefs.workspaces.iter_mut().flat_map(|w| &mut w.menus))
+        {
+            let stock = [
+                Action::BrushIcon,
+                Action::BrushSize,
+                Action::BrushStrength,
+                Action::SurfaceFootprint,
+                Action::StrokeMode,
+                Action::StrokeStabilisation,
+            ];
+            if menu.name == "Brush controls"
+                && menu.placement == Placement::Top
+                && menu.items
+                    == stock
+                        .into_iter()
+                        .map(CustomItem::action)
+                        .collect::<Vec<_>>()
+            {
+                menu.placement = Placement::LeftPanel;
+                menu.columns = 1;
+                menu.collapsible = true;
+            }
+            if menu
+                .items
+                .iter()
+                .any(|i| i.action == Some(Action::BrushIcon))
+                && !menu
+                    .items
+                    .iter()
+                    .any(|i| i.action == Some(Action::BrushInnerRadius))
+                && let Some(index) = menu
+                    .items
+                    .iter()
+                    .position(|i| i.action == Some(Action::BrushSize))
+            {
+                menu.items
+                    .insert(index + 1, CustomItem::action(Action::BrushInnerRadius));
+            }
+        }
+        prefs.brush_controls_version = 2;
     }
     prefs.validate()?;
     Ok(prefs)
@@ -1194,6 +1381,10 @@ mod customization_tests {
         let path =
             std::env::temp_dir().join(format!("clay-custom-interface-{}.json", std::process::id()));
         let mut prefs = Preferences::default();
+        prefs.menus.clear();
+        prefs
+            .bindings
+            .retain(|(a, _)| !matches!(a, Action::OpenMenu(_)));
         let id = prefs.add_menu();
         prefs.pan_hold = Hold::Shift;
         prefs.menus[0].name = "My sculpt tools".into();
@@ -1233,6 +1424,7 @@ mod customization_tests {
         let object = old.as_object_mut().unwrap();
         for key in [
             "menus",
+            "brush_controls_version",
             "workspaces",
             "compact_toolbar",
             "next_menu_id",
@@ -1257,6 +1449,10 @@ mod customization_tests {
     #[test]
     fn workspace_switching_remembers_live_edits_and_colours() {
         let mut prefs = Preferences::default();
+        prefs.menus.clear();
+        prefs
+            .bindings
+            .retain(|(a, _)| !matches!(a, Action::OpenMenu(_)));
         prefs.add_menu();
         prefs.menus[0].placement = Placement::LeftPanel;
         prefs.menus[0]
@@ -1297,6 +1493,10 @@ mod customization_tests {
     #[test]
     fn old_menus_and_saved_workspaces_gain_safe_defaults() {
         let mut prefs = Preferences::default();
+        prefs.menus.clear();
+        prefs
+            .bindings
+            .retain(|(a, _)| !matches!(a, Action::OpenMenu(_)));
         prefs.add_menu();
         prefs.save_workspace_as("Legacy").unwrap();
         let mut value = serde_json::to_value(prefs).unwrap();
@@ -1318,6 +1518,10 @@ mod customization_tests {
     #[test]
     fn duplicate_custom_bindings_and_invalid_layouts_are_rejected() {
         let mut prefs = Preferences::default();
+        prefs.menus.clear();
+        prefs
+            .bindings
+            .retain(|(a, _)| !matches!(a, Action::OpenMenu(_)));
         let id = prefs.add_menu();
         prefs
             .bind(
@@ -1391,6 +1595,10 @@ mod sidebar_tests {
     #[test]
     fn mixed_sidebar_order_and_collapsed_menus_survive_workspace_switch_and_reload() {
         let mut prefs = Preferences::default();
+        prefs.menus.clear();
+        prefs
+            .bindings
+            .retain(|(a, _)| !matches!(a, Action::OpenMenu(_)));
         let id = prefs.add_menu();
         prefs.menus[0].placement = Placement::LeftPanel;
         prefs.save_workspace_as("Original").unwrap();

@@ -8,6 +8,351 @@ use crate::{
 
 #[cfg(target_os = "linux")]
 #[test]
+#[ignore = "requires Vulkan; float pixels retain HDR range through the GPU and exposure preview"]
+fn gpu_float_texture_hdr_values_survive_upload_and_filtering() {
+    use crate::sculpt::texture::{Channel, Pixels, Precision, Texture};
+    let headless = Headless::new();
+    let renderer = Renderer::new(&headless.state).unwrap();
+    let mut gpu = renderer.gpu.lock().unwrap();
+    let mut mesh = Primitive::for_kind(PrimitiveKind::Plane).mesh().unwrap();
+    mesh.uv = mesh.unwrap_uv(true, 0.02, &|| false).unwrap();
+    let mut texture =
+        Texture::new_with_precision(Channel::Color, 16, &Default::default(), Precision::Float32)
+            .unwrap();
+    texture.pixels = Pixels::Float32(Arc::new([4., 0.05, 0.01, 1.].repeat(256)));
+    mesh.uv.textures.push(texture);
+    let mut doc = Document::default();
+    doc.replace_geometry(Geometry::new(mesh)).unwrap();
+    gpu.upload(&Arc::new(DisplayMesh::new(&doc)));
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(128.));
+    let params = Params::new(
+        rect,
+        Vec3(1., 0., 0.),
+        Vec3(0., 1., 0.),
+        Vec3(0., 0., 1.),
+        45.,
+        rect.center(),
+        3.,
+    );
+    let preview = Preview {
+        texture_exposure: -4.,
+        ..Default::default()
+    };
+    gpu.paint(
+        &params,
+        [128, 128],
+        false,
+        WireMode::Visible,
+        false,
+        &preview,
+    );
+    let hdr = gpu.read();
+    let mut texture = doc.mesh().uv.textures[0].clone();
+    texture.pixels = Pixels::Float32(Arc::new([1., 0.05, 0.01, 1.].repeat(256)));
+    doc.assign_texture(texture).unwrap();
+    gpu.upload(&Arc::new(DisplayMesh::new(&doc)));
+    gpu.paint(
+        &params,
+        [128, 128],
+        false,
+        WireMode::Visible,
+        false,
+        &preview,
+    );
+    let clipped = gpu.read();
+    let center = (64 * 128 + 64) * 4;
+    assert!(
+        hdr[center] > clipped[center] + 20,
+        "float RGB above one reaches the shader intact"
+    );
+    assert!(hdr[center] > hdr[center + 1] * 2);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "requires Vulkan; validates three 4K channels, painting, history and persistence"]
+fn gpu_4k_texture_workflow_keeps_precision_and_bounded_buffers() {
+    use crate::sculpt::{
+        Brush, Kind, Material,
+        texture::{Channel, Precision, Texture},
+    };
+    let headless = Headless::new();
+    let renderer = Renderer::new(&headless.state).unwrap();
+    let mut gpu = renderer.gpu.lock().unwrap();
+    let mut mesh = Primitive::for_kind(PrimitiveKind::Plane).mesh().unwrap();
+    mesh.uv = mesh.unwrap_uv(true, 0.02, &|| false).unwrap();
+    let material = Material::from_srgb([0.05, 0.1, 0.2], 0.7, 0.);
+    for channel in Channel::ALL {
+        mesh.uv.textures.push(
+            Texture::new_with_precision(
+                channel,
+                4096,
+                &material,
+                if channel == Channel::Color {
+                    Precision::Float32
+                } else {
+                    Precision::U16
+                },
+            )
+            .unwrap(),
+        );
+    }
+    let mut doc = Document::default();
+    doc.replace_geometry(Geometry::new(mesh)).unwrap();
+    doc.texture_paint = Some(Channel::Color);
+    doc.set_symmetry(crate::sculpt::Symmetry {
+        enabled: false,
+        ..Default::default()
+    })
+    .unwrap();
+    let before = doc.mesh().uv.textures[0].pixels.clone();
+    let mut brush = Brush::new(Kind::Paint);
+    brush.material = Material::from_srgb([1., 0., 0.], 0.7, 0.);
+    brush.strength = 1.;
+    brush.pressure = false;
+    let mut dab = crate::sculpt::texture::tests::dab();
+    dab.radius = 0.2;
+    assert!(doc.apply_dab(&brush, dab));
+    doc.end_stroke();
+    let painted = doc.mesh().uv.textures[0].pixels.clone();
+    assert_ne!(painted, before);
+    doc.undo();
+    assert_eq!(
+        doc.mesh().uv.textures[0].pixels,
+        before,
+        "default retention keeps a 4K stroke undoable"
+    );
+    doc.redo();
+    assert_eq!(doc.mesh().uv.textures[0].pixels, painted);
+    drop(before);
+    drop(painted);
+    let path = std::env::temp_dir().join("clay-4k-workflow.clay");
+    crate::persistence::save_project(path.to_str().unwrap(), &doc.project()).unwrap();
+    let reopened = crate::persistence::load_project(path.to_str().unwrap()).unwrap();
+    assert_eq!(reopened.mesh.uv, doc.mesh().uv);
+    assert!(
+        std::fs::metadata(&path).unwrap().len()
+            < doc
+                .mesh()
+                .uv
+                .textures
+                .iter()
+                .map(|t| t.pixels.byte_len() as u64)
+                .sum::<u64>()
+                / 16,
+        "native texture pixels compress to less than one sixteenth of raw storage; atlas packing changes painted pixel counts"
+    );
+    drop(reopened);
+    let exchange = std::env::temp_dir().join("clay-4k-workflow.exr");
+    crate::persistence::texture::save(&exchange, &doc.mesh().uv.textures[0]).unwrap();
+    let imported =
+        crate::persistence::texture::load(exchange.to_str().unwrap(), Channel::Color).unwrap();
+    assert_eq!(imported.pixels, doc.mesh().uv.textures[0].pixels);
+    drop(imported);
+    let display = Arc::new(DisplayMesh::new(&doc));
+    gpu.upload(&display);
+    assert_eq!(gpu.texture_pixels.depth_or_array_layers(), 64);
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(256.));
+    let params = Params::new(
+        rect,
+        Vec3(1., 0., 0.),
+        Vec3(0., 1., 0.),
+        Vec3(0., 0., 1.),
+        90.,
+        rect.center(),
+        3.,
+    );
+    gpu.paint(
+        &params,
+        [256, 256],
+        false,
+        WireMode::Visible,
+        false,
+        &Preview::default(),
+    );
+    let pixels = gpu.read();
+    let center = (128 * 256 + 128) * 4;
+    assert!(
+        pixels[center] > pixels[center + 1] * 2,
+        "4K stroke is visible on the model"
+    );
+    let _ = std::fs::remove_file(path);
+    let _ = std::fs::remove_file(exchange);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "requires Vulkan; verifies image pixels, checker and UV buffer batching"]
+fn gpu_uv_texture_pixels_and_checker_survive_batching() {
+    use crate::sculpt::{
+        Material,
+        texture::{Channel, Texture},
+    };
+    let headless = Headless::new();
+    let renderer = Renderer::new(&headless.state).unwrap();
+    let mut gpu = renderer.gpu.lock().unwrap();
+    let mut mesh = Primitive::for_kind(PrimitiveKind::Plane).mesh().unwrap();
+    mesh.uv = mesh.unwrap_uv(true, 0.02, &|| false).unwrap();
+    let red = Material::from_srgb([0.8, 0.02, 0.01], 0.85, 0.);
+    mesh.uv
+        .textures
+        .push(Texture::new(Channel::Color, 16, &red).unwrap());
+    let mut doc = Document::default();
+    doc.replace_geometry(Geometry::new(mesh)).unwrap();
+    let display = Arc::new(DisplayMesh::new(&doc));
+    gpu.upload(&display);
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(256.));
+    let (right, up, view) = (Vec3(1., 0., 0.), Vec3(0., 1., 0.), Vec3(0., 0., 1.));
+    let params = Params::new(rect, right, up, view, 90., rect.center(), 3.);
+    gpu.paint(
+        &params,
+        [256, 256],
+        false,
+        WireMode::Visible,
+        false,
+        &Preview::default(),
+    );
+    let rgba = gpu.read();
+    let center = (128 * 256 + 128) * 4;
+    assert!(
+        rgba[center] > rgba[center + 1] * 2,
+        "texture must colour actual surface fragments"
+    );
+    gpu.upload_meshes(&display, 1024);
+    gpu.paint(
+        &params,
+        [256, 256],
+        false,
+        WireMode::Visible,
+        false,
+        &Preview::default(),
+    );
+    assert_eq!(gpu.read(), rgba);
+    let preview = Preview {
+        uv_checker: true,
+        ..Default::default()
+    };
+    gpu.paint(
+        &params,
+        [256, 256],
+        false,
+        WireMode::Visible,
+        false,
+        &preview,
+    );
+    let checker = gpu.read();
+    assert_ne!(checker, rgba);
+    assert_eq!(
+        checker[center],
+        checker[center + 1],
+        "checker overrides painted colour"
+    );
+
+    doc.edit_uv("Remove UV mapping", |uv| {
+        uv.remove_islands(&(0..uv.corners.len()).collect::<Vec<_>>())
+    })
+    .unwrap();
+    gpu.upload(&Arc::new(DisplayMesh::new(&doc)));
+    gpu.paint(
+        &params,
+        [256, 256],
+        false,
+        WireMode::Visible,
+        false,
+        &Preview::default(),
+    );
+    let unmapped = gpu.read();
+    assert_ne!(unmapped, rgba, "removed UVs stop sampling the texture");
+    gpu.paint(
+        &params,
+        [256, 256],
+        false,
+        WireMode::Visible,
+        false,
+        &preview,
+    );
+    assert_eq!(
+        gpu.read(),
+        unmapped,
+        "unmapped faces also bypass the UV checker"
+    );
+    doc.undo();
+    gpu.upload(&Arc::new(DisplayMesh::new(&doc)));
+    gpu.paint(
+        &params,
+        [256, 256],
+        false,
+        WireMode::Visible,
+        false,
+        &Preview::default(),
+    );
+    assert_eq!(gpu.read(), rgba, "Undo restores texture sampling");
+
+    // Paint across a geometric edge whose two UV copies are far apart in the atlas.
+    // Compare rendered fragments across the seam, not only rasterized UV coverage.
+    let mut seam = crate::sculpt::texture::tests::sheets();
+    seam.vertices.truncate(4);
+    seam.mask.truncate(4);
+    seam.triangles.truncate(2);
+    seam.uv.topology = seam.triangles.clone();
+    seam.uv.corners = vec![
+        [[0.05, 0.05], [0.45, 0.05], [0.45, 0.95]],
+        [[0.55, 0.05], [0.95, 0.95], [0.55, 0.95]],
+    ];
+    seam.uv.textures[0] = Texture::new(Channel::Color, 256, &Material::default()).unwrap();
+    let mut brush = crate::sculpt::Brush::new(crate::sculpt::Kind::Paint);
+    brush.material = red;
+    brush.strength = 1.;
+    brush.pressure = false;
+    assert!(seam.paint_texture(
+        Channel::Color,
+        &brush,
+        &[crate::sculpt::texture::tests::dab()],
+        &[],
+        &[],
+    ));
+    seam.pad_texture(Channel::Color);
+    crate::persistence::texture::save(
+        std::path::Path::new("/tmp/clay-painted-seam-atlas.png"),
+        &seam.uv.textures[0],
+    )
+    .unwrap();
+    doc.replace_geometry(Geometry::new(seam)).unwrap();
+    gpu.upload(&Arc::new(DisplayMesh::new(&doc)));
+    gpu.paint(
+        &params,
+        [256, 256],
+        false,
+        WireMode::Visible,
+        false,
+        &Preview::default(),
+    );
+    let seam_pixels = gpu.read();
+    for y in 118..138 {
+        for x in 118..138 {
+            let i = (y * 256 + x) * 4;
+            assert!(
+                seam_pixels[i] > seam_pixels[i + 1] * 2,
+                "paint covers both sides of the UV seam"
+            );
+            assert!(
+                seam_pixels[i].abs_diff(seam_pixels[center]) < 12,
+                "no dark filtering line at the UV seam"
+            );
+        }
+    }
+    image::save_buffer(
+        "/tmp/clay-painted-seam.png",
+        &seam_pixels,
+        256,
+        256,
+        image::ColorType::Rgba8,
+    )
+    .unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 #[ignore = "requires Vulkan; checks material pixels, interpolation, masks and buffer batching"]
 fn gpu_material_channels_match_linear_reference_and_survive_batching() {
     use crate::sculpt::{Material, Vec3};
@@ -173,7 +518,7 @@ fn similarly_named_groups_display_distinct_muted_colors_and_renames_keep_them() 
         .unwrap();
     let mut document = Document::default();
     document.replace_geometry(Geometry::new(mesh)).unwrap();
-    let before = DisplayMesh::new(&document).poly_colors;
+    let before = DisplayMesh::new(&document).poly_colors.clone();
     let distinct: std::collections::HashSet<_> = before.iter().copied().collect();
     assert_eq!(
         distinct.len(),
@@ -330,6 +675,9 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
                 .any(|p| *p != [23, 26, 31, 255])
         );
         let make_preview = |alpha: Alpha| Preview {
+            uv_checker: false,
+            inspection: InspectionMode::Lit,
+            texture_exposure: 0.,
             show_polygroups: false,
             backface_opacity: 0.,
             brush: Some(BrushPreview {
@@ -465,6 +813,9 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             ..Default::default()
         };
         let preview = Preview {
+            uv_checker: false,
+            inspection: InspectionMode::Lit,
+            texture_exposure: 0.,
             show_polygroups: false,
             backface_opacity: 0.,
             brush: None,
@@ -488,6 +839,9 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         let grouped = renderer.geometry(&document);
         gpu.upload(&grouped);
         let colored = Preview {
+            uv_checker: false,
+            inspection: InspectionMode::Lit,
+            texture_exposure: 0.,
             show_polygroups: true,
             ..Default::default()
         };
@@ -866,6 +1220,9 @@ fn gpu_batches_preserve_face_colors_and_depth() {
         display.depth_extent,
     );
     let preview = Preview {
+        uv_checker: false,
+        inspection: InspectionMode::Lit,
+        texture_exposure: 0.,
         show_polygroups: true,
         backface_opacity: 0.3,
         ..Default::default()
@@ -1227,4 +1584,105 @@ fn gpu_dense_stroke_display_finishes_with_exact_shading() {
     assert_eq!(final_display.shading.vertices, expected.shading.vertices);
     assert_eq!(final_display.shading.triangles, expected.shading.triangles);
     assert!(Arc::ptr_eq(&final_display, &renderer.geometry(&doc)));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "requires Vulkan; verifies paint inspection channels and incremental image uploads"]
+fn gpu_paint_inspection_and_incremental_texture_upload_match_stored_channels() {
+    use crate::sculpt::{
+        Material,
+        texture::{Channel, Precision, Texture},
+    };
+    let headless = Headless::new();
+    let renderer = Renderer::new(&headless.state).unwrap();
+    renderer.set_inspection_mode(InspectionMode::Roughness);
+    renderer.set_uv_checker(true);
+    renderer.set_texture_exposure(-2.);
+    renderer.clear_preview();
+    {
+        let preview = renderer.preview.lock().unwrap();
+        assert_eq!(preview.inspection, InspectionMode::Roughness);
+        assert!(preview.uv_checker);
+        assert_eq!(preview.texture_exposure, -2.);
+    }
+    let mut gpu = renderer.gpu.lock().unwrap();
+    let material = Material {
+        base_color: [0.04, 0.16, 0.36],
+        roughness: 0.25,
+        metallic: 0.75,
+        ..Default::default()
+    };
+    let mut mesh = Primitive::for_kind(PrimitiveKind::Plane).mesh().unwrap();
+    mesh.mask.fill(1.);
+    mesh.uv = mesh.unwrap_uv(true, 0.02, &|| false).unwrap();
+    for channel in Channel::ALL {
+        mesh.uv
+            .textures
+            .push(Texture::new_with_precision(channel, 16, &material, Precision::Float32).unwrap());
+    }
+    let mut doc = Document::default();
+    doc.replace_geometry(Geometry::new(mesh.clone())).unwrap();
+    let display = Arc::new(DisplayMesh::new(&doc));
+    gpu.upload(&display);
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(128.));
+    let params = Params::new(
+        rect,
+        Vec3(1., 0., 0.),
+        Vec3(0., 1., 0.),
+        Vec3(0., 0., 1.),
+        45.,
+        rect.center(),
+        3.,
+    );
+    let center = (64 * 128 + 64) * 4;
+    for (mode, expected) in [
+        (
+            InspectionMode::Color,
+            material
+                .base_color
+                .map(|v| crate::sculpt::material::linear_to_srgb(v) * 255.),
+        ),
+        (InspectionMode::Roughness, [0.25 * 255.; 3]),
+        (InspectionMode::Metallic, [0.75 * 255.; 3]),
+    ] {
+        gpu.paint(
+            &params,
+            [128, 128],
+            false,
+            WireMode::Visible,
+            false,
+            &Preview {
+                inspection: mode,
+                ..Default::default()
+            },
+        );
+        let rgba = gpu.read();
+        for (actual, expected) in rgba[center..center + 3].iter().zip(expected) {
+            assert!(
+                (*actual as f32 - expected).abs() <= 1.,
+                "{mode:?}: {actual} != {expected}"
+            );
+        }
+    }
+    for i in 0..256 {
+        mesh.uv.textures[0].pixels.set_pixel(i, [1., 0., 0., 1.]);
+    }
+    mesh.uv.textures[0].upload.record(0..256);
+    doc.replace_geometry(Geometry::new(mesh)).unwrap();
+    let next = Arc::new(display.with_texture_updates(&doc).unwrap());
+    assert!(display.shares_geometry(&next));
+    gpu.upload(&next);
+    gpu.paint(
+        &params,
+        [128, 128],
+        false,
+        WireMode::Visible,
+        false,
+        &Preview {
+            inspection: InspectionMode::Color,
+            ..Default::default()
+        },
+    );
+    assert_eq!(&gpu.read()[center..center + 4], &[255, 0, 0, 255]);
 }

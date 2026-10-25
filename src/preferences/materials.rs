@@ -64,27 +64,41 @@ impl Default for MaterialLibrary {
     }
 }
 impl MaterialLibrary {
+    /// Explicitly publish a project material into the independent personal library.
+    pub fn save_asset(
+        &mut self,
+        asset: &crate::sculpt::material::layers::Asset,
+    ) -> Result<(), String> {
+        crate::sculpt::material::layers::validate_assets(std::slice::from_ref(asset))?;
+        if (1..=self.names.len() as u64).contains(&asset.id) {
+            self.names[asset.id as usize - 1] = asset.name.clone();
+            self.values[asset.id as usize - 1] = asset.material.unlinked();
+        } else {
+            let preset = MaterialPreset {
+                id: asset.id,
+                name: asset.name.clone(),
+                material: asset.material.unlinked(),
+                original: asset.original.clone(),
+            };
+            if let Some(existing) = self.copies.iter_mut().find(|p| p.id == asset.id) {
+                *existing = preset;
+            } else {
+                if self.copies.len() >= 64 {
+                    return Err("The personal material library holds up to 64 custom presets. Hide a preset before saving another.".into());
+                }
+                self.copies.push(preset);
+            }
+        }
+        self.hidden_builtins.retain(|id| *id != asset.id);
+        Ok(())
+    }
     pub fn remove(&mut self, id: u64) {
         self.copies.retain(|p| p.id != id);
         if (1..=self.names.len() as u64).contains(&id) && !self.hidden_builtins.contains(&id) {
             self.hidden_builtins.push(id);
         }
     }
-    pub fn restore(&mut self, asset: &crate::sculpt::material::layers::Asset) {
-        self.hidden_builtins.retain(|id| *id != asset.id);
-        if asset.id > self.names.len() as u64
-            && !self.copies.iter().any(|p| p.id == asset.id)
-            && self.copies.len() < 64
-        {
-            self.copies.push(MaterialPreset {
-                id: asset.id,
-                name: asset.name.clone(),
-                material: asset.material.clone(),
-                original: asset.original.clone(),
-            });
-        }
-    }
-
+    #[cfg(test)]
     pub fn copy(&mut self, name: &str, material: Material) -> Option<usize> {
         if self.copies.len() >= 64 {
             return None;
@@ -159,6 +173,80 @@ impl MaterialLibrary {
 mod tests {
     use super::*;
     use crate::preferences::{Action, Key, Modifiers, Preferences, Shortcut, load, save};
+    #[test]
+    fn focused_paint_workspace_restores_layout_after_preferences_reload() {
+        let mut prefs = Preferences::default();
+        let before = prefs.workspace("Before Paint focus".into());
+        prefs.focus_paint_workspace();
+        assert!(prefs.paint_workspace_backup.is_some());
+        assert!(
+            prefs
+                .panels
+                .iter()
+                .filter(|panel| panel.dock != crate::preferences::Dock::Hidden)
+                .all(|panel| panel.tool == crate::preferences::Tool::Brush)
+        );
+        prefs.validate().unwrap();
+        let mut restored: Preferences =
+            serde_json::from_slice(&serde_json::to_vec(&prefs).unwrap()).unwrap();
+        restored.restore_paint_workspace();
+        assert_eq!(restored.workspace("Before Paint focus".into()), before);
+        assert!(restored.paint_workspace_backup.is_none());
+        restored.validate().unwrap();
+    }
+
+    #[test]
+    fn project_material_edits_and_undo_do_not_publish_personal_presets() {
+        use crate::{document::Document, sculpt::material::layers::Asset};
+        let mut library = MaterialLibrary::default();
+        let original = library.clone();
+        let mut document = Document::default();
+        let mut asset = Asset {
+            id: 2,
+            name: "Project clay".into(),
+            material: library.values[1].clone(),
+            original: None,
+        };
+        document.save_material(asset.clone()).unwrap();
+        document.end_edit();
+        asset.material.roughness = 0.23;
+        document.save_material(asset.clone()).unwrap();
+        document.end_edit();
+        assert_eq!(library, original);
+        document.undo();
+        assert_eq!(library, original);
+        document.redo();
+        assert_eq!(document.materials()[0].material.roughness, 0.23);
+        library.save_asset(&asset).unwrap();
+        document.undo();
+        assert_eq!(library.values[1].roughness, 0.23);
+        assert_eq!(library.names[1], "Project clay");
+        assert_ne!(document.materials()[0].material.roughness, 0.23);
+    }
+
+    #[test]
+    fn explicit_personal_save_updates_by_id_and_restores_hidden_preset() {
+        use crate::sculpt::material::layers::{Asset, fresh_id};
+        let mut library = MaterialLibrary::default();
+        let mut asset = Asset {
+            id: fresh_id(),
+            name: "My paint".into(),
+            material: Material::default(),
+            original: None,
+        };
+        library.save_asset(&asset).unwrap();
+        asset.material.metallic = 0.8;
+        library.save_asset(&asset).unwrap();
+        assert_eq!(library.copies.len(), 1);
+        assert_eq!(library.copies[0].material.metallic, 0.8);
+        asset.id = 1;
+        library.remove(1);
+        library.save_asset(&asset).unwrap();
+        assert!(!library.hidden_builtins.contains(&1));
+        assert_eq!(library.values[0].metallic, 0.8);
+        library.validate().unwrap();
+    }
+
     #[test]
     fn material_library_migrates_six_presets_without_losing_custom_names_or_values() {
         let mut library = MaterialLibrary::default();

@@ -176,6 +176,7 @@ impl Mesh {
             })
             .collect();
         let mut mesh = Mesh {
+            uv: Default::default(),
             creases: Vec::new(),
             materials: Vec::new(),
             vertex_groups: Vec::new(),
@@ -307,6 +308,7 @@ mod tests {
     use super::*;
     fn cube(offset: Vec3) -> Mesh {
         Mesh {
+            uv: Default::default(),
             creases: Vec::new(),
             materials: Vec::new(),
             vertex_groups: Vec::new(),

@@ -11,8 +11,31 @@ use eframe::{
 use std::sync::{Arc, Mutex};
 use wgpu::util::DeviceExt;
 
+/// Inspect stored paint independently of the scene lights.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) enum InspectionMode {
+    #[default]
+    Lit,
+    Color,
+    Roughness,
+    Metallic,
+    UvChecker,
+}
+impl InspectionMode {
+    fn shader_value(self) -> f32 {
+        match self {
+            Self::Lit => 0.,
+            Self::Color => 1.,
+            Self::Roughness => 2.,
+            Self::Metallic => 3.,
+            Self::UvChecker => 4.,
+        }
+    }
+}
+
 pub(super) struct Renderer {
     revision: Option<u64>,
+    geometry_revision: Option<u64>,
     live_display: bool,
     geometry: Option<Arc<DisplayMesh>>,
     render_geometry: Option<Arc<DisplayMesh>>,
@@ -24,6 +47,7 @@ impl Renderer {
         Ok(Self {
             preview: Arc::new(Mutex::new(Preview::default())),
             revision: None,
+            geometry_revision: None,
             live_display: false,
             geometry: None,
             render_geometry: None,
@@ -38,23 +62,50 @@ impl Renderer {
         if self.revision != Some(document.display_revision())
             || (self.live_display && !document.stroke_active())
         {
-            let preview = self
-                .geometry
-                .as_ref()
-                .and_then(|display| display.during_stroke(document));
-            self.live_display = preview.is_some();
-            self.geometry = Some(Arc::new(
-                preview.unwrap_or_else(|| DisplayMesh::new(document)),
-            ));
-            self.render_geometry = Some(
-                if (0..document.model_count())
-                    .any(|i| document.model(i).unwrap().metadata.temporary_thickness > 0.)
-                {
-                    Arc::new(DisplayMesh::preview(document))
+            let textures_only = self.geometry_revision
+                == Some(document.geometry_display_revision())
+                && !(self.live_display && !document.stroke_active());
+            let updated = textures_only
+                .then(|| self.geometry.as_ref()?.with_texture_updates(document))
+                .flatten();
+            if let Some(updated) = updated {
+                let shared = self
+                    .geometry
+                    .as_ref()
+                    .zip(self.render_geometry.as_ref())
+                    .is_some_and(|(a, b)| Arc::ptr_eq(a, b));
+                self.geometry = Some(Arc::new(updated));
+                self.render_geometry = if shared {
+                    self.geometry.clone()
                 } else {
-                    self.geometry.as_ref().unwrap().clone()
-                },
-            );
+                    self.render_geometry
+                        .as_ref()
+                        .and_then(|display| display.with_texture_updates(document))
+                        .map(Arc::new)
+                };
+                if self.render_geometry.is_none() {
+                    self.render_geometry = Some(Arc::new(DisplayMesh::preview(document)));
+                }
+            } else {
+                let preview = self
+                    .geometry
+                    .as_ref()
+                    .and_then(|display| display.during_stroke(document));
+                self.live_display = preview.is_some();
+                self.geometry = Some(Arc::new(
+                    preview.unwrap_or_else(|| DisplayMesh::new(document)),
+                ));
+                self.render_geometry = Some(
+                    if (0..document.model_count())
+                        .any(|i| document.model(i).unwrap().metadata.temporary_thickness > 0.)
+                    {
+                        Arc::new(DisplayMesh::preview(document))
+                    } else {
+                        self.geometry.as_ref().unwrap().clone()
+                    },
+                );
+            }
+            self.geometry_revision = Some(document.geometry_display_revision());
             self.revision = Some(document.display_revision());
         }
         self.geometry.as_ref().unwrap().clone()
@@ -103,10 +154,31 @@ impl Renderer {
     }
 
     pub fn clear_preview(&self) {
-        *self.preview.lock().unwrap() = Preview::default();
+        let mut preview = self.preview.lock().unwrap();
+        // App-level display choices are set before Viewport::show clears transient guides.
+        let (inspection, uv_checker, texture_exposure) = (
+            preview.inspection,
+            preview.uv_checker,
+            preview.texture_exposure,
+        );
+        *preview = Preview {
+            inspection,
+            uv_checker,
+            texture_exposure,
+            ..Default::default()
+        };
     }
     pub fn set_backfaces(&self, opacity: f32) {
         self.preview.lock().unwrap().backface_opacity = opacity.clamp(0., 1.);
+    }
+    pub fn set_texture_exposure(&self, stops: f32) {
+        self.preview.lock().unwrap().texture_exposure = stops.clamp(-12., 12.);
+    }
+    pub fn set_inspection_mode(&self, mode: InspectionMode) {
+        self.preview.lock().unwrap().inspection = mode;
+    }
+    pub fn set_uv_checker(&self, enabled: bool) {
+        self.preview.lock().unwrap().uv_checker = enabled;
     }
     pub fn set_polygroups(&self, enabled: bool) {
         self.preview.lock().unwrap().show_polygroups = enabled;
@@ -143,6 +215,7 @@ impl Renderer {
     }
 }
 
+mod atlas;
 mod state;
 use state::{BrushPreview, Params, Preview};
 
@@ -242,6 +315,7 @@ struct MeshBuffers {
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
     colors: wgpu::Buffer,
+    uv: wgpu::Buffer,
     count: u32,
 }
 struct Gpu {
@@ -260,6 +334,8 @@ struct Gpu {
     back_uniform: wgpu::Buffer,
     meshes: Vec<MeshBuffers>,
     vertex_stride: usize,
+    texture_pixels: wgpu::Texture,
+    texture_info: wgpu::Buffer,
     edges: Option<Vec<(wgpu::Buffer, u32)>>,
     triangle_edges: Option<Vec<(wgpu::Buffer, u32)>>,
     uploaded: Option<Arc<DisplayMesh>>,
@@ -309,11 +385,11 @@ impl Gpu {
                 count: None,
             },
         ];
-        for binding in 2..=4 {
+        for binding in (2..=7).filter(|&b| b != 6) {
             entries.push(wgpu::BindGroupLayoutEntry {
                 binding,
                 visibility: wgpu::ShaderStages::VERTEX
-                    | if binding == 2 {
+                    | if binding == 2 || binding == 7 {
                         wgpu::ShaderStages::FRAGMENT
                     } else {
                         wgpu::ShaderStages::empty()
@@ -326,6 +402,16 @@ impl Gpu {
                 count: None,
             });
         }
+        entries.push(wgpu::BindGroupLayoutEntry {
+            binding: 6,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Uint,
+                view_dimension: wgpu::TextureViewDimension::D2Array,
+                multisampled: false,
+            },
+            count: None,
+        });
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("viewport inputs"),
             entries: &entries,
@@ -518,7 +604,14 @@ impl Gpu {
             composite_layout,
             uniform: uniform(),
             back_uniform: uniform(),
-            meshes: vec![Self::mesh_buffers(device, &[], &[], &[])],
+            meshes: vec![Self::mesh_buffers(device, &[], &[], &[], &[])],
+            texture_pixels: Self::pixel_texture(device, queue, &atlas::Atlas::default()),
+            texture_info: buffer(
+                device,
+                "texture descriptors",
+                &[],
+                wgpu::BufferUsages::STORAGE,
+            ),
             vertex_stride: 12,
             edges: None,
             triangle_edges: None,
@@ -534,15 +627,22 @@ impl Gpu {
         self.uploaded = None;
         self.edges = None;
         self.triangle_edges = None;
-        self.meshes = vec![Self::mesh_buffers(&self.device, &[], &[], &[])];
+        self.meshes = vec![Self::mesh_buffers(&self.device, &[], &[], &[], &[])];
     }
     fn mesh_buffers(
         device: &wgpu::Device,
         vertices: &[f32],
         indices: &[u32],
         colors: &[[f32; 4]],
+        uv: &[[[f32; 4]; 3]],
     ) -> MeshBuffers {
         MeshBuffers {
+            uv: buffer(
+                device,
+                "face UVs",
+                bytemuck::cast_slice(uv),
+                wgpu::BufferUsages::STORAGE,
+            ),
             vertices: buffer(
                 device,
                 "mesh vertices",
@@ -598,13 +698,57 @@ impl Gpu {
             data,
             self.device.limits().max_storage_buffer_binding_size as usize,
         );
-        self.edges = None;
-        self.triangle_edges = None;
+        if !self
+            .uploaded
+            .as_ref()
+            .is_some_and(|old| old.shares_geometry(data))
+        {
+            self.edges = None;
+            self.triangle_edges = None;
+        }
         self.uploaded = Some(data.clone());
     }
     // A document may contain several maximum-density models. Chunk the display
     // data at the device binding limit instead of imposing a new geometry limit.
     fn upload_meshes(&mut self, data: &DisplayMesh, limit: usize) {
+        if let Some(old) = &self.uploaded
+            && old.texture_pixels.len() == data.texture_pixels.len()
+        {
+            for (index, (before, after)) in old
+                .texture_pixels
+                .chunks
+                .iter()
+                .zip(&data.texture_pixels.chunks)
+                .enumerate()
+            {
+                if !Arc::ptr_eq(before, after) {
+                    Self::write_pixel_chunk(&self.queue, &self.texture_pixels, index, after);
+                }
+            }
+        } else {
+            self.texture_pixels =
+                Self::pixel_texture(&self.device, &self.queue, &data.texture_pixels);
+        }
+        if !self
+            .uploaded
+            .as_ref()
+            .is_some_and(|old| old.texture_info == data.texture_info)
+        {
+            self.texture_info = buffer(
+                &self.device,
+                "texture descriptors",
+                bytemuck::cast_slice(&data.texture_info),
+                wgpu::BufferUsages::STORAGE,
+            );
+        }
+        if limit == self.device.limits().max_storage_buffer_binding_size as usize
+            && self
+                .uploaded
+                .as_ref()
+                .is_some_and(|old| old.shares_geometry(data))
+        {
+            return;
+        }
         self.vertex_stride = data.vertex_stride();
         let stride = self.vertex_stride;
         let vertices = data.vertices(stride);
@@ -613,7 +757,7 @@ impl Gpu {
             .iter()
             .map(|c| c.map(|n| n as f32 / 255.))
             .collect();
-        if vertices.len() * 4 <= limit && data.shading.triangles.len() * 16 <= limit {
+        if vertices.len() * 4 <= limit && data.shading.triangles.len() * 48 <= limit {
             let indices: Vec<u32> = data
                 .shading
                 .triangles
@@ -626,6 +770,7 @@ impl Gpu {
                 &vertices,
                 &indices,
                 &colors,
+                &data.uv_corners,
             )];
             return;
         }
@@ -649,11 +794,12 @@ impl Gpu {
                 &packed,
                 &indices,
                 &colors[start..start + triangles.len()],
+                &data.uv_corners[start..start + triangles.len()],
             ));
         }
         if self.meshes.is_empty() {
             self.meshes
-                .push(Self::mesh_buffers(&self.device, &[], &[], &[]));
+                .push(Self::mesh_buffers(&self.device, &[], &[], &[], &[]));
         }
     }
     fn upload_edges(&mut self) {
@@ -689,7 +835,16 @@ impl Gpu {
     fn uniforms(&mut self, p: &Params, preview: &Preview, mode: WireMode) -> Uniforms {
         let vector = |v: Vec3, w| [v.0, v.1, v.2, w];
         let mut u: Uniforms = bytemuck::Zeroable::zeroed();
-        u.material_info = [self.vertex_stride as f32, 0., 0., 0.];
+        u.material_info = [
+            self.vertex_stride as f32,
+            if preview.uv_checker {
+                4.
+            } else {
+                preview.inspection.shader_value()
+            },
+            preview.texture_exposure,
+            0.,
+        ];
         u.right = vector(p.right, 0.);
         u.up = vector(p.up, 0.);
         u.view = vector(p.view, 0.);
@@ -816,8 +971,87 @@ impl Gpu {
                     binding: 4,
                     resource: mesh.colors.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: mesh.uv.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: wgpu::BindingResource::TextureView(&self.texture_pixels.create_view(
+                        &wgpu::TextureViewDescriptor {
+                            dimension: Some(wgpu::TextureViewDimension::D2Array),
+                            ..Default::default()
+                        },
+                    )),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 7,
+                    resource: self.texture_info.as_entire_binding(),
+                },
             ],
         })
+    }
+    fn pixel_texture(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        pixels: &atlas::Atlas,
+    ) -> wgpu::Texture {
+        const SIDE: usize = 1024;
+        const PAGE: usize = SIDE * SIDE;
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("lossless image pixel pages"),
+            size: wgpu::Extent3d {
+                width: SIDE as u32,
+                height: SIDE as u32,
+                depth_or_array_layers: pixels.len().div_ceil(PAGE).max(1) as u32,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rg32Uint,
+            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        for (index, chunk) in pixels.chunks.iter().enumerate() {
+            Self::write_pixel_chunk(queue, &texture, index, chunk);
+        }
+        texture
+    }
+    fn write_pixel_chunk(
+        queue: &wgpu::Queue,
+        texture: &wgpu::Texture,
+        index: usize,
+        pixels: &[[u32; 2]],
+    ) {
+        let offset = index * atlas::CHUNK;
+        let rows = pixels.len().div_ceil(1024);
+        let mut bytes = std::borrow::Cow::Borrowed(bytemuck::cast_slice(pixels));
+        if !pixels.len().is_multiple_of(1024) {
+            bytes.to_mut().resize(rows * 1024 * 8, 0);
+        }
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: 0,
+                    y: ((offset / 1024) % 1024) as u32,
+                    z: (offset / (1024 * 1024)) as u32,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            &bytes,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(1024 * 8),
+                rows_per_image: Some(rows as u32),
+            },
+            wgpu::Extent3d {
+                width: 1024,
+                height: rows as u32,
+                depth_or_array_layers: 1,
+            },
+        );
     }
     fn target(&mut self, size: [u32; 2]) {
         if self.target.as_ref().is_some_and(|t| t.size == size) {

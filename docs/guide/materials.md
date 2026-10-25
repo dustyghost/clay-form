@@ -4,7 +4,15 @@
 
 Choose **Paint** in the brush library, or **Add brush → Paint** in the brush library when opening an older project that has no Paint preset. Convert a parametric primitive to a sculpt mesh first.
 
-In **Brush settings**, select a rendered sphere in **Materials**, then paint on the model. Drag **Drag to resize materials** up or down to set its height; larger libraries scroll within that area. **Whole material** paints all surface controls and layers together. Choose **Colour only**, **Roughness only** or **Metallic only** to change one property without replacing the others.
+Choose **Focus Paint workspace** to keep one painting sidebar and give the model more screen space. **Restore workspace** in the top toolbar returns your previous layout, including after restarting the app. The model selector switches the active model directly from this workspace.
+
+![Focused Paint workspace with image target and inspection controls](../images/paint-focused-workspace.png)
+
+In **Brush settings**, the Paint target shows the active model and whether strokes update **Vertices** or an image. Image targets show their dimensions and precision, including **32-bit float**, independently of export format. **Set up texture painting…** creates an image workflow; **UV / image view** opens the linked UV editor. Switching to a model without the selected image returns the target to Vertices.
+
+Use **Brush colour**, the palette and **Sample colour** for future strokes. These controls do not recolour existing paint or edit a shared material. Image painting currently exposes base colour only; roughness and metallic remain available as vertex material properties. With Vertices selected, **Paint channels** offers **Whole material**, **Colour only**, **Roughness only** or **Metallic only**.
+
+Open **Material presets and shared editor** to choose a rendered material swatch. Drag **Drag to resize materials** to change the swatch area; larger libraries scroll within it. Choosing a material affects future strokes. Open **Edit shared project material** deliberately when you want to update existing painted uses; it shows how many models and vertices share that definition.
 
 | Example | Appearance | Roughness | Metallic |
 | --- | --- | --- | --- |
@@ -20,19 +28,21 @@ In **Brush settings**, select a rendered sphere in **Materials**, then paint on 
 | Warm skin | Warm skin with a subtle surface sheen | 0.62 | 0 |
 | Deep skin | Deep brown skin with a subtle surface sheen | 0.58 | 0 |
 
-These are editable starting values. Ceramic uses a simple glossy dielectric; satin aluminium uses isotropic roughness, without directional brush marks or a separate coating layer. Edit **Colour**, **Roughness** and **Metallic** to make a custom material. Edit **Material name** to rename the selected swatch, including a built-in material. Use **Copy material** to save a separate editable copy, then adjust its channels. Copies and the colour palette are saved in your preferences and available across projects.
+These are editable starting values. Ceramic uses a simple glossy dielectric; satin aluminium uses isotropic roughness, without directional brush marks or a separate coating layer. Inside **Edit shared project material**, edit **Shared colour**, **Roughness**, **Metallic** or **Material name** to update the named project material and its painted uses. Shared slider changes apply when you release the pointer; Escape cancels a drag. **Copy material** creates an independent project definition for future strokes, leaving earlier paint linked to its original material.
 
-**Reset material** restores a built-in material’s original surface settings and layers, or a copy’s settings from when it was created. It keeps your material name, updates painted uses, and supports Undo. Reset settings are saved with personal copies and project definitions. Older custom materials without saved reset settings use their values when first opened in this version as the starting point.
+Project material edits, copies and resets stay in the `.clay` project and support Undo. **Save to personal library** explicitly publishes the current settings for future projects. Personal library saves and palette changes persist in preferences independently of project Undo.
 
-**Remove material** removes the selected swatch from the library and its named definition from the current project. Painted surfaces keep their current appearance across all submodels and subdivision levels; they are detached from that definition. Undo restores the definition, paint links and swatch. Personal copies are removed from your saved library. Removed built-in swatches stay hidden until you choose **Restore built-in materials**, which makes them available again without changing existing paint. Other saved projects keep their own definitions.
+**Reset material** restores a built-in material's original settings, or a custom material's saved starting settings. It keeps the name and updates painted uses. **Remove from project** removes the definition and detaches its painted uses while preserving their appearance; Undo restores it. Personal presets remain available. **Hide personal library preset** hides/removes the preset for future projects without changing current project paint. **Restore built-in materials** makes hidden built-ins available again.
 
-Click a palette swatch to select its colour. **+ Colour** saves the current colour; right-click a swatch to remove it. **Sample colour** lets you click a visible surface to pick its underlying paint colour without lighting, mask shading or vertex-group tint. It samples once; **Escape** cancels.
+Click a palette swatch to select a brush colour. **+ Colour** saves it to your personal palette; right-click a swatch to remove it. **Sample colour** picks the visible surface's colour, including image paint, without lighting, mask shading or vertex-group tint. It samples once; **Escape** cancels.
+
+**Application** chooses Regular stroke, Airbrush or Spray dots, while **Stroke path** controls Freehand, Line or stamps. Continuous **Flow / second** is available for Freehand; hold the pen still to build up paint. Spray offers density and dot size as a percentage of brush radius. Use **Inspect** to switch between Lit material, Unlit colour, Roughness, Metallic and UV checker without editing paint.
 
 ![Paint brush settings and copper example](../images/material-copper.png)
 
 **Strength**, pressure, radius, falloff, alpha, stencil and symmetry work with painting. Repeated strokes approach the chosen values. Mirrored copies do not double the strength where their footprints overlap. **Subtract**, or the configured reverse modifier, blends the selected channels toward default clay. **Escape** cancels an active stroke; release records one Undo step.
 
-**Fill all** applies the selected channels at full strength to every vertex of the active model, including masked and hidden vertices. It uses the chosen material even when Subtract is selected, updates every stored subdivision level, and creates one Undo step. Other submodels are unchanged.
+**Fill all vertices** applies the selected channels at full strength to every vertex of the active model, including masked and hidden vertices. It uses the chosen material even when Subtract is selected, updates every stored subdivision level, and creates one Undo step. Other submodels are unchanged.
 
 **Fill unmasked vertices** applies the selected channels to the active model at the current Strength. Set Strength to 1 for the exact material values. The fill respects partial masks and hidden faces and updates stored subdivision levels in one undoable operation. The fill action can also be added to a custom menu or assigned a shortcut.
 
@@ -42,7 +52,7 @@ Painting never moves vertices or changes topology, including when Adaptive sculp
 
 ## Detail, topology and saving
 
-Paint is stored on vertices, so the mesh resolution determines the finest colour boundary you can draw. Subdivide before painting fine details. This is vertex painting; it does not create a UV map or texture image.
+Paint is stored on vertices, so the mesh resolution determines the finest colour boundary you can draw. Subdivide before painting fine details. For image detail independent of mesh density, use [UVs and texture painting](textures.md). Vertex painting and texture images are separate targets.
 
 Subdivision and newly created modeling vertices interpolate the painted channels. Slicing, extraction, mirroring, thickness and merging carry the values to their corresponding vertices. Adaptive edge splits interpolate endpoints; edge collapse averages them. Coarse topology can soften small painted features. Voxel remeshing samples the nearest original triangle and interpolates its values; close or overlapping sheets can sample the other surface, so inspect the result and Undo if needed. Detail projection keeps the target's paint while changing its shape.
 
@@ -62,13 +72,13 @@ Lighting controls do not edit paint or geometry.
 
 The default viewport lighting uses a studio light and neutral fill. Roughness changes highlight width; metallic changes the diffuse/specular balance and tints metal reflections. The same material appearance is used for the active and inactive painted models. Unpainted inactive models retain their blue-grey selection tint.
 
-The initial surface is opaque. Transparency, normal maps, height/displacement maps, UV textures, anisotropy and arbitrary shader graphs are not editable material channels yet. The viewport does not simulate scene reflections, cast shadows or indirect lighting. See the [material channel contract](../materials.md) for Blender mapping and validation.
+The initial surface is opaque. UV image painting currently exposes base colour only. Existing roughness and metallic images remain preserved and rendered; their authoring controls are deferred in [#70](https://github.com/dustyghost/clay-form/issues/70). Normal maps, height/displacement maps, anisotropy and arbitrary shader graphs are not editable material channels yet. The viewport does not simulate scene reflections, cast shadows or indirect lighting. See the [material channel contract](../materials.md) for Blender mapping and validation.
 
 ## Shared surfaces and layers
 
 Editing a named material now updates surfaces painted with it, in proportion to each stroke's contribution. **Copy material** creates an independent version before you experiment. Rename it with **Material name**. These definitions travel with the project, and Undo restores changes to both the definition and painted surfaces.
 
-Open **Surface options** for IOR, specular level, emission colour and emission strength. Open **Material layers** to combine up to three additional surfaces over the base. Each layer has the same surface controls, a weight and **Mix** or **Add** blending. **Start from** supplies a surface preset; **Move up** changes the order and **Remove layer**, at the top of an expanded layer, deletes it and closes the gap in the stack. Empty slots are hidden, and **Add layer** creates a new layer. Undo restores a removed layer and its effect on painted surfaces. A layer with weight zero remains available for editing. Mix at full weight replaces the earlier surface; Add accumulates another contribution. Transmission and texture maps are not available yet.
+Open **Surface options** for IOR, specular level, emission colour and emission strength. Open **Material layers** to combine up to three additional surfaces over the base. Each layer has the same surface controls, a weight and **Mix** or **Add** blending. **Start from** supplies a surface preset; **Move up** changes the order and **Remove layer**, at the top of an expanded layer, deletes it and closes the gap in the stack. Empty slots are hidden, and **Add layer** creates a new layer. Undo restores a removed layer and its effect on painted surfaces. A layer with weight zero remains available for editing. Mix at full weight replaces the earlier surface; Add accumulates another contribution. Transmission is not available; image paint is managed through the Paint target and UV / image view.
 
 Open **Subsurface scattering** for weight, RGB scattering radius and scale. Beeswax, Ivory wax, Warm skin and Deep skin include starting settings and a subtle specular layer; all colours and controls remain editable. The viewport uses a fast soft-diffuse approximation, while Blender export uses full Principled scattering. The approximation does not account for actual model thickness, so check final translucency in Blender.
 

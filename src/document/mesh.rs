@@ -9,7 +9,9 @@ impl Document {
         &self.geometry.settings
     }
     pub(crate) fn geometry_snapshot(&self) -> Geometry {
-        self.geometry.clone()
+        let mut geometry = self.geometry.clone();
+        Self::sync_geometry_texture_uses(&mut geometry);
+        geometry
     }
     #[cfg(test)]
     pub(crate) fn replace_geometry(&mut self, geometry: Geometry) -> Result<(), String> {
@@ -41,7 +43,13 @@ impl Document {
         label: &'static str,
         settings: Option<crate::diagnostics::EditSettings>,
     ) {
-        let geometry = geometry.into_geometry();
+        let mut geometry = geometry.into_geometry();
+        if geometry.scene.active_index == self.geometry.scene.active_index
+            && geometry.mesh.uv.is_empty()
+            && !self.geometry.mesh.uv.is_empty()
+        {
+            geometry.mesh.uv = self.geometry.mesh.uv.clone();
+        }
         self.end_edit();
         self.end_stroke();
         let previous = std::mem::replace(&mut self.geometry, geometry);
@@ -52,6 +60,7 @@ impl Document {
         }
         self.dirty = true;
         self.display_changed();
+        self.reconcile_paint_target();
     }
     pub fn set_mesh_level(&mut self, level: usize) -> Result<(), String> {
         self.require_sculpt_mesh()?;

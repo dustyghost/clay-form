@@ -143,8 +143,11 @@ pub struct Project {
     pub mesh_settings: MeshSettings,
 }
 impl Project {
-    pub const VERSION: u32 = 2;
+    pub const VERSION: u32 = 3;
     pub fn validate(&self) -> Result<(), String> {
+        super::texture::validate_budget(
+            std::iter::once(&self.mesh).chain(self.submodels.iter().map(|m| &m.mesh)),
+        )?;
         super::paths::validate_library(&self.paths)?;
         super::material::layers::validate_assets(&self.scene.materials)?;
         let mut model_ids = std::collections::HashSet::new();

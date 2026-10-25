@@ -243,6 +243,7 @@ impl Mesh {
             return Err("Subdivision would exceed the one-million-face limit".into());
         }
         let mut result = Self {
+            uv: Default::default(),
             creases: Vec::new(),
             materials: self.materials.clone(),
             vertex_groups: self.vertex_groups.clone(),
@@ -445,6 +446,7 @@ mod tests {
     }
     fn tetrahedron() -> Mesh {
         Mesh {
+            uv: Default::default(),
             creases: Vec::new(),
             materials: Vec::new(),
             vertex_groups: Vec::new(),

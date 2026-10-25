@@ -366,6 +366,29 @@ impl PaintChannels {
         if matches!(self, Self::Material) && weight >= 1. {
             return target;
         }
+        if self != Self::Material {
+            let w = weight.clamp(0., 1.);
+            let mut result = old.clone();
+            let mix = |a: f32, b: f32| if w >= 1. { b } else { a + (b - a) * w };
+            match self {
+                Self::Color => {
+                    result.base_color =
+                        std::array::from_fn(|c| mix(old.base_color[c], target.base_color[c]))
+                }
+                Self::Roughness => result.roughness = mix(old.roughness, target.roughness),
+                Self::Metallic => result.metallic = mix(old.metallic, target.metallic),
+                Self::Material => unreachable!(),
+            }
+            let channel = match self {
+                Self::Color => 0,
+                Self::Roughness => 1,
+                _ => 2,
+            };
+            let weights = std::array::from_fn(|i| if i == channel { w } else { 0. });
+            result.links =
+                Material::combine_links([(old, weights.map(|w| 1. - w)), (target, weights)]);
+            return result;
+        }
         let (a, b) = (old.values(), target.values());
         let weights: [f32; 4] = std::array::from_fn(|g| {
             if matches!(self, Self::Material)
@@ -507,39 +530,67 @@ impl Mesh {
         dabs: &[Dab],
         stencils: &[super::alpha::Projection],
     ) -> bool {
-        let normals = self.normals();
-        let eligible = self.sculptable_vertices();
-        let mut changed = false;
-        for i in 0..self.vertices.len() {
-            if !eligible[i] || self.mask[i] >= 1. {
+        self.paint_material_with_scratch(
+            brush,
+            dabs,
+            stencils,
+            &[],
+            &mut super::texture::PaintScratch::default(),
+        )
+    }
+    pub(crate) fn paint_material_with_scratch(
+        &mut self,
+        brush: &Brush,
+        dabs: &[Dab],
+        stencils: &[super::alpha::Projection],
+        occluders: &[&Mesh],
+        scratch: &mut super::texture::PaintScratch,
+    ) -> bool {
+        if scratch.normals.len() != self.vertices.len() {
+            scratch.normals = self.normals();
+            scratch.eligible = self.sculptable_vertices();
+        }
+        for i in scratch.touched.drain(..) {
+            scratch.weights[i] = (0., false);
+        }
+        scratch.weights.resize(self.vertices.len(), (0., false));
+        for (j, dab) in dabs.iter().enumerate() {
+            if dab.radius <= 0. {
                 continue;
             }
-            let mut strongest = 0.;
-            let mut erase = false;
-            for (j, dab) in dabs.iter().enumerate() {
-                let offset = self.vertices[i] - dab.center;
-                if dab.radius <= 0.
+            scratch.depth.prepare(self, dab, occluders);
+            for &i in &scratch.depth.active_vertices {
+                let point = self.vertices[i];
+                let offset = point - dab.center;
+                if !scratch.eligible[i]
+                    || self.mask[i] >= 1.
                     || offset.len() > dab.radius * 1.5
-                    || normals[i].dot(dab.normal) < 0.1
+                    || scratch.normals[i].dot(dab.normal) < 0.1
                 {
                     continue;
                 }
-                let weight = brush.weight(
+                let local = brush.paint_weight(
                     offset.dot(dab.right) / dab.radius,
                     offset.dot(dab.up) / dab.radius,
-                ) * brush.strength
-                    * (1. - self.mask[i])
+                ) * (1. - self.mask[i])
                     * if brush.pressure {
                         dab.pressure.powf(brush.pressure_curve)
                     } else {
                         1.
                     }
-                    * stencils.get(j).map_or(1., |s| s.weight(self.vertices[i]));
-                if weight > strongest {
-                    strongest = weight;
-                    erase = brush.subtract ^ dab.invert;
+                    * stencils.get(j).map_or(1., |s| s.weight(point));
+                let weight = brush.paint_opacity(local);
+                if weight > scratch.weights[i].0 && scratch.depth.visible(point, dab, None) {
+                    if scratch.weights[i].0 == 0. {
+                        scratch.touched.push(i);
+                    }
+                    scratch.weights[i] = (weight, brush.subtract ^ dab.invert);
                 }
             }
+        }
+        let mut changed = false;
+        for &i in &scratch.touched {
+            let (strongest, erase) = scratch.weights[i];
             if strongest <= 0. {
                 continue;
             }
@@ -568,3 +619,63 @@ impl Mesh {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod paint_regressions {
+    use super::*;
+    #[test]
+    fn vertex_paint_rejects_occluded_sheets_and_other_models() {
+        let mut mesh = super::super::texture::tests::sheets();
+        let mut brush = Brush::new(super::super::Kind::Paint);
+        brush.alpha = super::super::Alpha::Hard;
+        brush.strength = 1.;
+        brush.pressure = false;
+        brush.material = Material::from_srgb([1., 0., 0.], 0.5, 0.);
+        let dab = super::super::texture::tests::dab();
+        let old = mesh.material(0);
+        assert!(mesh.paint_material(&brush, &[dab], &[]));
+        assert!(mesh.materials[..4].iter().all(|m| *m == brush.material));
+        assert!(mesh.materials[4..].iter().all(|m| *m == old));
+        let mut barrier = mesh.clone();
+        for p in &mut barrier.vertices {
+            p.2 += 0.01;
+        }
+        let mut covered = super::super::texture::tests::sheets();
+        assert!(!covered.paint_material_with_scratch(
+            &brush,
+            &[dab],
+            &[],
+            &[&barrier],
+            &mut Default::default()
+        ));
+        covered.hidden_faces = vec![true, true, false, false];
+        assert!(covered.paint_material(&brush, &[dab], &[]));
+        assert!(covered.materials[..4].iter().all(|m| *m == old));
+        assert!(covered.materials[4..].iter().all(|m| *m == brush.material));
+    }
+    #[test]
+    fn channel_edits_retain_layer_storage_and_unselected_values() {
+        let mut old = Material::default();
+        old.layers[0].weight = 0.5;
+        let id = old.layers.storage_id();
+        let target = Material::from_srgb([1., 0., 0.], 0.1, 1.);
+        for channel in [
+            PaintChannels::Color,
+            PaintChannels::Roughness,
+            PaintChannels::Metallic,
+        ] {
+            let changed = channel.apply(old.clone(), target.clone(), 0.4);
+            assert_eq!(changed.layers.storage_id(), id);
+            let group = match channel {
+                PaintChannels::Color => 0,
+                PaintChannels::Roughness => 1,
+                _ => 2,
+            };
+            for (i, (a, b)) in old.values().into_iter().zip(changed.values()).enumerate() {
+                if layers::group(i) != group {
+                    assert_eq!(a, b);
+                }
+            }
+        }
+    }
+}

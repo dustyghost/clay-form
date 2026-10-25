@@ -3,6 +3,9 @@ use super::*;
 
 #[derive(Default)]
 pub(super) struct Preview {
+    pub(super) uv_checker: bool,
+    pub(super) inspection: InspectionMode,
+    pub(super) texture_exposure: f32,
     pub(super) show_polygroups: bool,
     pub(super) backface_opacity: f32,
     pub(super) brush: Option<BrushPreview>,
