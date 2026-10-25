@@ -2,6 +2,39 @@
 use super::*;
 
 impl Document {
+    /// Keep the global brush target usable after switching model or restoring history.
+    /// Returns true when an unavailable image target fell back to vertices.
+    pub(crate) fn reconcile_paint_target(&mut self) -> bool {
+        let Some(channel) = self.texture_paint else {
+            return false;
+        };
+        let mesh = self.mesh();
+        let valid = mesh.uv.current(mesh)
+            && mesh
+                .uv
+                .textures
+                .iter()
+                .any(|texture| texture.channel == channel)
+            && (0..mesh.uv.corners.len()).any(|face| mesh.uv.mapped(face))
+            && mesh
+                .uv
+                .corners
+                .iter()
+                .enumerate()
+                .filter(|(face, _)| mesh.uv.mapped(*face))
+                .all(|(_, corners)| {
+                    crate::sculpt::uv::area(*corners).abs() >= 1e-12
+                        && corners
+                            .iter()
+                            .flatten()
+                            .all(|value| (0. ..=1.).contains(value))
+                });
+        if !valid {
+            self.texture_paint = None;
+        }
+        !valid
+    }
+
     pub fn active_model_index(&self) -> usize {
         self.geometry.scene.active_index
     }
@@ -67,6 +100,7 @@ impl Document {
         self.geometry.scene.active_metadata = selected.metadata;
         self.geometry.scene.active_index = active;
         self.geometry.submodels = models;
+        self.reconcile_paint_target();
         self.dirty = true;
         self.display_changed();
     }
@@ -95,6 +129,7 @@ impl Document {
             .submodels
             .insert(old_active - usize::from(old_active > index), selected);
         self.geometry.scene.active_index = index;
+        self.reconcile_paint_target();
         self.dirty = true;
         self.display_changed();
         Ok(())
@@ -145,6 +180,8 @@ impl Document {
             self.require_sculpt_mesh()?;
         }
         self.end_edit();
+        // Finish texture padding and synchronize shared uses before cloning.
+        self.end_stroke();
         let mesh = if extract {
             self.mesh()
                 .extract_masked_threshold(self.geometry.scene.active_metadata.mask_threshold)?
@@ -156,8 +193,6 @@ impl Document {
         } else {
             self.geometry.settings.clone()
         };
-        self.end_edit();
-        self.end_stroke();
         self.record_edit(if extract {
             "Extract masked submodel"
         } else {
@@ -395,6 +430,42 @@ impl Document {
 #[cfg(test)]
 mod selection_storage_tests {
     use super::*;
+    #[test]
+    fn texture_target_reconciles_when_switching_to_a_model_without_that_image() {
+        use crate::sculpt::{
+            Primitive, PrimitiveKind,
+            texture::{Channel, Texture},
+        };
+        let mut document = Document::default();
+        let mut mesh = Primitive::for_kind(PrimitiveKind::Plane).mesh().unwrap();
+        mesh.uv = mesh.unwrap_uv(true, 0.02, &|| false).unwrap();
+        document
+            .replace_geometry(crate::sculpt::Geometry::new(mesh))
+            .unwrap();
+        document
+            .assign_texture(Texture::new(Channel::Color, 32, &Default::default()).unwrap())
+            .unwrap();
+        document.texture_paint = Some(Channel::Color);
+        assert!(!document.reconcile_paint_target());
+        document.duplicate_model(false).unwrap();
+        assert_eq!(document.texture_paint, Some(Channel::Color));
+        document.geometry.submodels[0].mesh.uv.textures.clear();
+        let other = 1 - document.active_model_index();
+        document.select_submodel(other).unwrap();
+        assert_eq!(document.texture_paint, None);
+        // A retained image does not make stale or entirely removed UVs paintable.
+        document
+            .geometry
+            .mesh
+            .uv
+            .textures
+            .push(Texture::new(Channel::Color, 32, &Default::default()).unwrap());
+        document.texture_paint = Some(Channel::Color);
+        document.geometry.mesh.uv.removed = vec![true; document.mesh().triangles.len()];
+        assert!(document.reconcile_paint_target());
+        assert_eq!(document.texture_paint, None);
+    }
+
     #[test]
     fn selection_moves_existing_mesh_buffers_and_undo_restores_scene_order() {
         let mut document = Document::default();

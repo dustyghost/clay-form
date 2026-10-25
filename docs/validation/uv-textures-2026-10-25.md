@@ -65,3 +65,36 @@ CI's existing universal-transform interaction check also exposed a small-viewpor
 - The prior graphics CI failure in material Fill all was reproduced locally. The quick colour picker could round-trip values even without an edit; its temporary values now commit only on an explicit edit. The material interaction check scrolls the outer sidebar to reach the palette below the additional paint controls.
 
 Full tests, lint and graphics remain assigned to PR CI; no release build was run.
+
+## Painting, material and workflow review implementation
+
+The engineering and UX review led to these connected changes:
+
+| Reviewed problem | Result |
+| --- | --- |
+| Vertex paint could reach a covered, same-facing surface | Vertex and texture painting share projected front-surface eligibility, including other visible models. |
+| Stroke spacing and airbrush buildup depended on event timing | Paint uses fixed distance samples with pressure interpolation and elapsed-time substeps; weighted falloff/masks enter the exponential deposition rate. |
+| Texture target became stale after model/history/topology changes | Invalid targets reconcile to vertices on model changes, history, geometry commits and UV edits. |
+| Sampling and Fill ignored the selected image | Sampling filters unlit image colour and scalar maps with coverage; float colour uses a separate linear HDR brush value so sampling can paint the same values back. Fill follows the active target with separate protected/all modes. |
+| Shared images copied on every dab | Linked uses resolve the active image during drawing and synchronize at completion; save/autosave snapshots canonicalize all linked references. |
+| Texture-only edits rebuilt geometry and every image upload | Display geometry and GPU mesh buffers are reused; dirty history updates shared 128 KiB atlas chunks and affected upload rows. |
+| Each dab scanned/rebuilt full surface state | A stroke-local world-space hierarchy finds candidate triangles, including distant occluders; normals, eligibility and working buffers are reused. Vertex changes visit touched entries. |
+| Release rebuilt all UV gutters | Cached UV-to-gutter correspondence copies only changed edge sources. New layouts and replacement/undo images initialize all gutter destinations before resuming incremental updates. |
+| Partial material channels rebuilt untouched layers | Colour/roughness/metallic edits retain untouched layer storage and values. |
+| Shared sliders rebased every model on every frame | Sliders keep a local draft and commit on release; repeated material values reuse the rebased result. |
+| Brush colour, shared material editing and personal presets had ambiguous scope | Brush controls affect future strokes; shared project editing shows painted uses; personal-library saving is explicit and separate from project Undo. |
+| Texture setup replaced existing colour | New images default to capturing the existing surface, with transparent and solid-value alternatives and a UV-readiness action. |
+| Painting controls competed for screen space | Focus Paint temporarily leaves one sidebar and restores the previous layout; model/target/precision/shared-use status and inspection modes are grouped together. Creation, bake and external settings fold away. |
+| Precision was confused with format | Storage choices say 16-bit integer or 32-bit float; PNG/EXR export and PSD/XCF working formats are separate. |
+| Bake silently reduced map dimensions and used nearest-neighbour filtering | Existing maps preserve their own dimensions/precision by default; overrides show before/after and linked users. Area downsampling and bilinear enlargement filter linear premultiplied colour. |
+| External editing always generated another temporary PSD | Reopen, new snapshot and file relinking operate on persistent working documents. Saved projects keep them in an adjacent `.textures` directory. |
+| Float PSD could not be saved without precision loss in default GIMP | Automatic format uses float XCF with GIMP; explicit incompatible float PSD/GIMP output is rejected before creation. Native float PSD and EXR remain available. |
+| Generic background status lacked cancellation/recovery | Operations identify capture, bake or layer reload, expose Cancel and bake progress, retain stale-result protection, and offer Retry/relink recovery. |
+
+Focused regressions cover protected float pixels as exact no-ops, covered surfaces, pressure/time partitioning, shared-image allocation reuse, canonical snapshots, gutter cache invalidation, target-aware Fill, sampler coverage/scalars, project/library Undo separation, focus-layout persistence, bake filtering/precision/cancellation and working-file relinking. The spatial fixture narrows 260 triangles to four active candidates while retaining an occluder 100 units in front. The atlas fixture changes only the chunk intersecting an edited float pixel; this is structural evidence, not an end-to-end latency benchmark.
+
+`float_xcf_working_document_survives_save_reload` ran through installed GIMP 3.2.6: native float PSD → layered XCF → ordinary XCF Save → guide-free EXR reload. Negative values, HDR values, fractional alpha and precision survive; source XCF bytes remain unchanged by reload. The conversion uses GIMP's documented [file_save API](https://developer.gimp.org/api/3.0/libgimp/func.file_save.html). Layered interoperability tests remain manual; routine CI retains GPU pixel/depth/clipping and real-control interaction checks.
+
+First-dab hierarchy/normal setup and the first gutter-occupancy calculation after changing UV layout or image dimensions still have a setup cost. The linked 2D image view remains a preview: direct 2D brush painting, UDIMs, layered-BSDF baking and full colour-management pipelines remain separate features. No release build was run; full tests, formatting, lint and configured graphics checks run on the PR commit in CI.
+
+Rendered interaction checks exercise texture creation/bake replacement, target and scalar sampling, Focus Paint/Restore, material copy/reset/layer edits and explicit library save/hide. Captures are reviewed for visible controls and usable layout; the GPU pixel test separately checks unlit/scalar output and incremental image updates.

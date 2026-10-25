@@ -10,6 +10,7 @@ pub(crate) use modeling::{
 };
 mod gizmo;
 mod gpu;
+pub(crate) use gpu::InspectionMode;
 pub(crate) mod paths;
 mod projection;
 #[cfg(all(test, target_os = "linux"))]
@@ -58,6 +59,7 @@ pub(crate) struct Viewport {
     last_brush_position: Option<Pos2>,
     pub(crate) sample_colour: bool,
     pub(crate) sampled_colour: Option<[f32; 3]>,
+    pub(crate) sampled_material: Option<crate::sculpt::Material>,
     pub(crate) session: interaction::InteractionSession,
     pub(crate) paths: paths::PathEditor,
     pub(crate) modeling: modeling::ModelingState,
@@ -228,7 +230,7 @@ impl Viewport {
             self.session.sculpt.stabilizer = None;
             self.session.sculpt.last = None;
             self.session.sculpt.snake = None;
-            self.session.sculpt.paint_time = None;
+            self.session.sculpt.paint = Default::default();
             self.session.sculpt.stroke = false;
         }
         if (!options.enabled
@@ -303,9 +305,10 @@ impl Viewport {
             } else if options.enabled
                 && response.clicked_by(egui::PointerButton::Primary)
                 && let Some(pos) = response.interact_pointer_pos()
-                && let Some(colour) = scene.pick_colour(pos)
+                && let Some(material) = scene.sample_material(pos)
             {
-                self.sampled_colour = Some(colour);
+                self.sampled_colour = Some(material.base_color);
+                self.sampled_material = Some(material);
                 self.sample_colour = false;
                 self.wait_for_release();
             }
@@ -1003,7 +1006,48 @@ impl Viewport {
             }
         }
         if !drawing {
-            self.session.sculpt.paint_time = None;
+            if self.session.sculpt.stroke
+                && brush.continuous_paint()
+                && ui.input(|i| i.pointer.button_released(egui::PointerButton::Primary))
+                && let Some(pos) = self.session.sculpt.last
+            {
+                let now = ui.input(|i| i.time);
+                let samples = self.session.sculpt.paint.sample(
+                    pos,
+                    options.pressure,
+                    now,
+                    brush.radius * brush.spacing,
+                    true,
+                    true,
+                );
+                for sample in samples {
+                    if let Some((center, normal)) = scene.pick(sample.point) {
+                        let mut timed = brush.clone();
+                        timed.paint_effect.seconds = sample.seconds;
+                        let radius = brush.radius
+                            * if brush.pressure_radius {
+                                sample.pressure.powf(brush.pressure_curve).max(0.05)
+                            } else {
+                                1.
+                            };
+                        document.apply_dab_stenciled(
+                            &timed,
+                            Dab {
+                                center,
+                                normal,
+                                right,
+                                up,
+                                radius: radius / scene.scale_at(center),
+                                pressure: sample.pressure,
+                                delta: Vec3::default(),
+                                invert: options.reverse.active(modifiers),
+                            },
+                            stencil.as_ref(),
+                        );
+                    }
+                }
+            }
+            self.session.sculpt.paint = Default::default();
             if let Some((vertices, faces)) = self.session.sculpt.decimate_removed.take() {
                 self.status = Some(if vertices > 0 {
                     format!("Decimate: removed {vertices} vertices and {faces} faces")
@@ -1020,6 +1064,7 @@ impl Viewport {
             self.session.sculpt.stabilizer = None;
         }
         if pointer.is_some_and(|p| navigation::contains(rect, p)) {
+            self.session.sculpt.paint = Default::default();
             self.session.sculpt.last = None;
             self.session.sculpt.stabilizer = None;
         }
@@ -1065,29 +1110,34 @@ impl Viewport {
                 let previous = self.session.sculpt.last.unwrap_or(pos);
                 let now = ui.input(|i| i.time);
                 let continuous = b.continuous_paint();
-                let elapsed = self
-                    .session
-                    .sculpt
-                    .paint_time
-                    .map_or(0.05, |last| (now - last).clamp(0., 0.1))
-                    as f32;
                 if continuous {
                     ui.ctx()
                         .request_repaint_after(std::time::Duration::from_millis(50));
                 }
                 let distance = pos.distance(previous);
-                let spacing = (radius
-                    * if b.kind == Kind::Snake {
-                        // Drag displacement must remain small compared with the
-                        // support, even when a preset requests widely spaced dabs.
-                        b.spacing.min(0.1)
-                    } else {
-                        b.spacing
-                    })
+                let spacing = (if b.kind == Kind::Paint {
+                    b.radius
+                } else {
+                    radius
+                } * if b.kind == Kind::Snake {
+                    // Drag displacement must remain small compared with the
+                    // support, even when a preset requests widely spaced dabs.
+                    b.spacing.min(0.1)
+                } else {
+                    b.spacing
+                })
                 .max(1.);
-                if self.session.sculpt.last.is_none()
+                let samples = if b.kind == Kind::Paint {
+                    self.session.sculpt.paint.sample(
+                        pos,
+                        options.pressure,
+                        now,
+                        spacing,
+                        continuous,
+                        false,
+                    )
+                } else if self.session.sculpt.last.is_none()
                     || distance >= spacing
-                    || continuous && elapsed >= 0.05
                     || matches!(b.kind, Kind::Grab | Kind::Snake)
                 {
                     let steps = if b.kind == Kind::Grab {
@@ -1095,12 +1145,22 @@ impl Viewport {
                     } else {
                         (distance / spacing).ceil().clamp(1., 128.) as usize
                     };
-                    for step in 1..=steps {
-                        let point = previous + (pos - previous) * (step as f32 / steps as f32);
+                    (1..=steps)
+                        .map(|step| interaction::PaintSample {
+                            point: previous + (pos - previous) * (step as f32 / steps as f32),
+                            pressure: options.pressure,
+                            seconds: 0.,
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                if !samples.is_empty() || b.kind == Kind::Paint {
+                    let steps = samples.len().max(1);
+                    for sample in samples {
+                        let point = sample.point;
                         let mut brush = b.clone();
-                        if continuous {
-                            brush.strength = b.paint_strength_for_time(elapsed / steps as f32);
-                        }
+                        brush.paint_effect.seconds = sample.seconds;
                         let hit = if brush.kind == Kind::Snake {
                             if self.session.sculpt.snake.is_none()
                                 && let Some((center, normal)) = scene.pick(point)
@@ -1142,8 +1202,14 @@ impl Viewport {
                                 normal: n,
                                 right,
                                 up,
-                                radius: radius / scale,
-                                pressure: options.pressure,
+                                radius: brush.radius
+                                    * if brush.pressure_radius {
+                                        sample.pressure.powf(brush.pressure_curve).max(0.05)
+                                    } else {
+                                        1.
+                                    }
+                                    / scale,
+                                pressure: sample.pressure,
                                 delta: d,
                                 invert: options.reverse.active(modifiers),
                             };
@@ -1169,9 +1235,6 @@ impl Viewport {
                                     snake.center + brush.snake_motion(dab) * snake.mobility;
                             }
                         }
-                    }
-                    if continuous {
-                        self.session.sculpt.paint_time = Some(now);
                     }
                     self.session.sculpt.last = Some(pos);
                 }
@@ -1209,6 +1272,11 @@ impl Viewport {
     pub(crate) fn set_texture_exposure(&self, stops: f32) {
         if let Some(renderer) = &self.renderer {
             renderer.set_texture_exposure(stops);
+        }
+    }
+    pub(crate) fn set_inspection_mode(&self, mode: InspectionMode) {
+        if let Some(renderer) = &self.renderer {
+            renderer.set_inspection_mode(mode);
         }
     }
     pub(crate) fn set_uv_checker(&self, enabled: bool) {

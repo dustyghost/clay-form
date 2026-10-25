@@ -91,22 +91,48 @@ fn run_script(
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn prepare(
-    mut texture: Texture,
+    texture: Texture,
     uv: &UvMap,
     cancel: &dyn Fn() -> bool,
 ) -> Result<Texture, String> {
+    prepare_working(texture, uv, &directory()?, false, "gimp", cancel)
+}
+
+/// Create a persistent working document in an already chosen session directory.
+pub(crate) fn prepare_working(
+    mut texture: Texture,
+    uv: &UvMap,
+    directory: &Path,
+    xcf_format: bool,
+    reader: &str,
+    cancel: &dyn Fn() -> bool,
+) -> Result<Texture, String> {
     texture.validate()?;
-    let directory = directory()?;
+    std::fs::create_dir_all(directory).map_err(|e| e.to_string())?;
+    let directory = directory.canonicalize().map_err(|e| e.to_string())?;
     let guide = directory.join("uv-guide.png");
     let xcf = directory.join("texture-with-uv.psd");
     let guide_pixels = guide_image(uv, texture.width, texture.height);
     guide_pixels.save(&guide).map_err(|e| e.to_string())?;
     super::write_bytes(&xcf, &psd::encode(&texture, &guide_pixels, cancel)?)?;
+    let working = if xcf_format {
+        let working = directory.join("texture-with-uv.xcf");
+        run(
+            reader,
+            serde_json::json!({"operation":"prepare-xcf", "xcf":xcf, "output":working,
+            "float":texture.pixels.precision() == Precision::Float32}),
+            cancel,
+        )?;
+        working
+    } else {
+        xcf
+    };
     texture.exchange = Some(Exchange {
-        path: xcf.to_string_lossy().into(),
+        path: working.to_string_lossy().into(),
         baseline: texture.fingerprint(),
-        layered_path: Some(xcf.to_string_lossy().into()),
+        layered_path: Some(working.to_string_lossy().into()),
     });
     Ok(texture)
 }
@@ -290,6 +316,61 @@ mod tests {
         let old: Exchange =
             serde_json::from_str(r#"{"path":"texture.png","baseline":42}"#).unwrap();
         assert!(old.layered_path.is_none());
+    }
+
+    #[test]
+    #[ignore = "requires installed GIMP 3 with Python; writes temporary layered documents"]
+    fn float_xcf_working_document_survives_save_reload() {
+        let uv = UvMap {
+            corners: vec![[[0.1, 0.1], [0.85, 0.2], [0.25, 0.9]]],
+            ..Default::default()
+        };
+        let mut texture = Texture::new_with_precision(
+            Channel::Color,
+            32,
+            &Default::default(),
+            Precision::Float32,
+        )
+        .unwrap();
+        texture.pixels = Pixels::Float32(Arc::new([-0.25, 4.5, 0.12345678, 0.5].repeat(32 * 32)));
+        let sent = prepare_working(
+            texture.clone(),
+            &uv,
+            &directory().unwrap(),
+            true,
+            "gimp",
+            &|| false,
+        )
+        .unwrap();
+        let path = sent
+            .exchange
+            .as_ref()
+            .unwrap()
+            .layered_path
+            .as_ref()
+            .unwrap();
+        assert!(path.ends_with(".xcf"));
+        run_script(
+            "gimp",
+            serde_json::json!({"xcf":path, "edit":"save"}),
+            &|| false,
+            include_str!("../../scripts/validate-psd-exchange.py"),
+        )
+        .unwrap();
+        let before = std::fs::read(path).unwrap();
+        let loaded = reload(&sent, "gimp", &|| false).unwrap();
+        assert_eq!(loaded.pixels.precision(), Precision::Float32);
+        for i in 0..32 * 32 {
+            for (actual, expected) in loaded
+                .pixels
+                .pixel(i)
+                .into_iter()
+                .zip(texture.pixels.pixel(i))
+            {
+                assert!((actual - expected).abs() < 0.0001, "{actual} != {expected}");
+            }
+        }
+        assert_eq!(before, std::fs::read(path).unwrap());
     }
 
     #[test]

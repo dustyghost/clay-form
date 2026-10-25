@@ -4,7 +4,12 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 pub const MAX_SIZE: u32 = 4096;
 pub const MAX_PIXELS: usize = 3 * 4096 * 4096;
-mod bake;
+pub(crate) mod bake;
+mod padding;
+mod surface;
+mod upload;
+pub(crate) use surface::PaintScratch;
+pub(crate) use upload::TextureUpload;
 mod pixel_storage;
 mod pixels;
 pub use pixels::{Pixels, Precision};
@@ -34,6 +39,8 @@ impl Channel {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Texture {
+    #[serde(skip)]
+    pub(crate) upload: TextureUpload,
     #[serde(default)]
     pub profile: Vec<u8>,
     #[serde(default)]
@@ -116,6 +123,7 @@ impl Texture {
             Precision::Float32 => Pixels::Float32(Arc::new(pixel.repeat((size * size) as usize))),
         };
         Ok(Self {
+            upload: TextureUpload::default(),
             profile: Vec::new(),
             exchange: None,
             id: Self::new_id(),
@@ -150,6 +158,7 @@ impl Texture {
         }
     }
     /// Bulk-copy native little-endian samples into the lossless GPU page layout.
+    #[cfg(test)]
     pub(crate) fn append_packed_pixels(&self, output: &mut Vec<[u32; 2]>) {
         #[cfg(target_endian = "little")]
         {
@@ -196,27 +205,11 @@ pub fn barycentric(q: [f32; 2], t: [[f32; 2]; 3]) -> Option<[f32; 3]> {
 impl Mesh {
     /// Extend edge pixels into unused atlas gutters without touching another island.
     pub(crate) fn pad_texture(&mut self, channel: Channel) {
-        if !self.uv.current(self) {
-            return;
-        }
-        let Some(i) = self.uv.textures.iter().position(|t| t.channel == channel) else {
-            return;
-        };
-        let texture = &self.uv.textures[i];
-        let (width, height) = (texture.width as usize, texture.height as usize);
-        let mut occupied = vec![false; width * height];
-        for (f, t) in self.uv.corners.iter().enumerate() {
-            if !self.uv.mapped(f) {
-                continue;
-            }
-            raster(t.map(|q| [q[0], 1. - q[1]]), width, height, |x, y, _| {
-                occupied[y * width + x] = true
-            });
-        }
-        pad_pixels(&mut self.uv.textures[i], occupied);
+        self.pad_texture_cached(channel, None, &mut padding::GutterCache::default());
     }
     /// Rasterize visible surface triangles into UV space. The dab's frontmost depth
     /// field excludes occluded sheets, while sampling either side of seams in 3D.
+    #[cfg(test)]
     pub(crate) fn paint_texture(
         &mut self,
         channel: Channel,
@@ -225,7 +218,28 @@ impl Mesh {
         stencils: &[super::alpha::Projection],
         occluders: &[&Mesh],
     ) -> bool {
-        if !self.uv.current(self) {
+        self.paint_texture_with_scratch(
+            channel,
+            brush,
+            dabs,
+            stencils,
+            occluders,
+            &mut PaintScratch::default(),
+        )
+    }
+    pub(crate) fn paint_texture_with_scratch(
+        &mut self,
+        channel: Channel,
+        brush: &Brush,
+        dabs: &[Dab],
+        stencils: &[super::alpha::Projection],
+        occluders: &[&Mesh],
+        scratch: &mut PaintScratch,
+    ) -> bool {
+        if !*scratch
+            .uv_current
+            .get_or_insert_with(|| self.uv.current(self))
+        {
             return false;
         }
         let Some(index) = self.uv.textures.iter().position(|t| t.channel == channel) else {
@@ -234,72 +248,15 @@ impl Mesh {
         let texture = &self.uv.textures[index];
         let width = texture.width as usize;
         let height = texture.height as usize;
-        let mut weights = std::collections::HashMap::<usize, (f32, bool)>::new();
+        let weights = &mut scratch.pixels;
+        weights.clear();
         for (di, dab) in dabs.iter().enumerate() {
             if dab.radius <= 0. {
                 continue;
             }
-            // Projected triangle bins accelerate exact frontmost-surface queries.
-            const DEPTH: usize = 128;
-            let mut depth = vec![Vec::<usize>::new(); DEPTH * DEPTH];
-            let projected: Vec<_> = self
-                .vertices
-                .iter()
-                .map(|p| {
-                    let q = *p - dab.center;
-                    [
-                        q.dot(dab.right) / dab.radius,
-                        q.dot(dab.up) / dab.radius,
-                        q.dot(dab.normal),
-                    ]
-                })
-                .collect();
-            let mut depth_faces: Vec<_> = self
-                .triangles
-                .iter()
-                .map(|t| t.map(|i| projected[i]))
-                .collect();
-            let mut visible: Vec<_> = (0..self.triangles.len())
-                .map(|f| self.face_visible(f))
-                .collect();
-            for mesh in occluders {
-                for (f, t) in mesh.triangles.iter().enumerate() {
-                    depth_faces.push(t.map(|i| {
-                        let q = mesh.vertices[i] - dab.center;
-                        [
-                            q.dot(dab.right) / dab.radius,
-                            q.dot(dab.up) / dab.radius,
-                            q.dot(dab.normal),
-                        ]
-                    }));
-                    visible.push(mesh.face_visible(f));
-                }
-            }
-            for (f, q) in depth_faces.iter().enumerate() {
-                if !visible[f] {
-                    continue;
-                }
-                let xy = q.map(|p| [(p[0] + 1.) * 0.5, (1. - p[1]) * 0.5]);
-                if (0..2).any(|k| xy.iter().all(|p| p[k] < 0.) || xy.iter().all(|p| p[k] > 1.)) {
-                    continue;
-                }
-                let lo: [usize; 2] = std::array::from_fn(|k| {
-                    (xy.iter().map(|p| p[k]).fold(f32::INFINITY, f32::min) * DEPTH as f32)
-                        .floor()
-                        .clamp(0., (DEPTH - 1) as f32) as usize
-                });
-                let hi: [usize; 2] = std::array::from_fn(|k| {
-                    (xy.iter().map(|p| p[k]).fold(f32::NEG_INFINITY, f32::max) * DEPTH as f32)
-                        .floor()
-                        .clamp(0., (DEPTH - 1) as f32) as usize
-                });
-                for y in lo[1]..=hi[1] {
-                    for x in lo[0]..=hi[0] {
-                        depth[y * DEPTH + x].push(f);
-                    }
-                }
-            }
-            for (f, t) in self.triangles.iter().enumerate() {
+            scratch.depth.prepare(self, dab, occluders);
+            for &f in &scratch.depth.active_faces {
+                let t = &self.triangles[f];
                 if !self.face_visible(f) {
                     continue;
                 }
@@ -308,7 +265,7 @@ impl Mesh {
                 if normal.dot(dab.normal) < 0.1 {
                     continue;
                 }
-                let projected_face = t.map(|i| projected[i]);
+                let projected_face = scratch.depth.projected_face(f);
                 if (0..2).any(|k| {
                     projected_face.iter().all(|p| p[k] < -1.)
                         || projected_face.iter().all(|p| p[k] > 1.)
@@ -335,26 +292,12 @@ impl Mesh {
                     if q[0].abs() > 1. || q[1].abs() > 1. {
                         return;
                     }
-                    let dx = (((q[0] + 1.) * 0.5 * DEPTH as f32) as usize).min(DEPTH - 1);
-                    let dy = (((1. - q[1]) * 0.5 * DEPTH as f32) as usize).min(DEPTH - 1);
-                    let query = [(q[0] + 1.) * 0.5, (1. - q[1]) * 0.5];
-                    let occluded = depth[dy * DEPTH + dx].iter().any(|&other| {
-                        if other == f {
-                            return false;
-                        }
-                        let face = depth_faces[other];
-                        let xy = face.map(|p| [(p[0] + 1.) * 0.5, (1. - p[1]) * 0.5]);
-                        barycentric(query, xy).is_some_and(|w| {
-                            (0..3).map(|c| face[c][2] * w[c]).sum::<f32>()
-                                > offset.dot(dab.normal) + dab.radius * 1e-5
-                        })
-                    });
-                    if occluded {
+                    if !scratch.depth.visible(point, dab, Some(f)) {
                         return;
                     }
-                    let mask = (0..3).map(|c| self.mask[t[c]] * w[c]).sum::<f32>();
+                    let mask = (0..3).map(|c| self.mask[t[c]] * w[c]).sum::<f32>()
+                        / w.iter().sum::<f32>().max(1e-10);
                     let weight = brush.paint_weight(q[0], q[1])
-                        * brush.strength
                         * (1. - mask)
                         * if brush.pressure {
                             dab.pressure.powf(brush.pressure_curve)
@@ -362,6 +305,7 @@ impl Mesh {
                             1.
                         }
                         * stencils.get(di).map_or(1., |s| s.weight(point));
+                    let weight = brush.paint_opacity(weight);
                     if weight <= 0. {
                         return;
                     }
@@ -372,39 +316,107 @@ impl Mesh {
                 });
             }
         }
-        let value = match channel {
-            Channel::Color => brush.material.base_color,
-            Channel::Roughness => [brush.material.roughness; 3],
-            Channel::Metallic => [brush.material.metallic; 3],
-        };
-        let mut changed = false;
-        let texture = &mut self.uv.textures[index];
-        for (pixel, (weight, erase)) in weights {
-            if weight <= 0. {
+        apply_pixels(&mut self.uv.textures[index], brush, weights.drain())
+    }
+
+    pub(crate) fn fill_texture(
+        &mut self,
+        channel: Channel,
+        brush: &Brush,
+        all: bool,
+    ) -> Result<bool, String> {
+        if !self.uv.current(self) {
+            return Err("Generate current UVs before filling a texture".into());
+        }
+        let index = self
+            .uv
+            .textures
+            .iter()
+            .position(|t| t.channel == channel)
+            .ok_or("Create or assign the selected texture before filling")?;
+        let texture = &self.uv.textures[index];
+        let (width, height) = (texture.width as usize, texture.height as usize);
+        let mut weights = vec![0f32; width * height];
+        for (f, triangle) in self.triangles.iter().enumerate() {
+            if !self.uv.mapped(f) || (!all && !self.face_visible(f)) {
                 continue;
             }
-            let old = texture.linear_pixel(pixel);
-            let mut next = old;
-            if erase {
-                next[3] = old[3] * (1. - weight);
-            } else {
-                let alpha = old[3];
-                let out_alpha = weight + alpha * (1. - weight);
-                for c in 0..3 {
-                    next[c] =
-                        (value[c] * weight + old[c] * alpha * (1. - weight)) / out_alpha.max(1e-10);
-                }
-                next[3] = out_alpha;
-            }
-            if channel == Channel::Color && texture.pixels.precision() == Precision::U16 {
-                for v in &mut next[..3] {
-                    *v = super::material::linear_to_srgb(*v);
-                }
-            }
-            changed |= texture.pixels.set_pixel(pixel, next);
+            raster(
+                self.uv.corners[f].map(|p| [p[0], 1. - p[1]]),
+                width,
+                height,
+                |x, y, w| {
+                    let weight = if all {
+                        1.
+                    } else {
+                        brush.strength
+                            * (1.
+                                - (0..3).map(|c| self.mask[triangle[c]] * w[c]).sum::<f32>()
+                                    / w.iter().sum::<f32>().max(1e-10))
+                    }
+                    .clamp(0., 1.);
+                    let entry = &mut weights[y * width + x];
+                    *entry = entry.max(weight);
+                },
+            );
         }
-        changed
+        Ok(apply_pixels(
+            &mut self.uv.textures[index],
+            brush,
+            weights
+                .into_iter()
+                .enumerate()
+                .map(|(i, w)| (i, (w, !all && brush.subtract))),
+        ))
     }
+}
+
+fn apply_pixels(
+    texture: &mut Texture,
+    brush: &Brush,
+    weights: impl IntoIterator<Item = (usize, (f32, bool))>,
+) -> bool {
+    let value = match texture.channel {
+        Channel::Color if texture.pixels.precision() == Precision::Float32 => {
+            brush.texture_colour.unwrap_or(brush.material.base_color)
+        }
+        Channel::Color => brush.material.base_color,
+        Channel::Roughness => [brush.material.roughness; 3],
+        Channel::Metallic => [brush.material.metallic; 3],
+    };
+    let mut changed = false;
+    let mut dirty = usize::MAX..0;
+    for (pixel, (weight, erase)) in weights {
+        if weight <= 0. {
+            continue;
+        }
+        let old = texture.linear_pixel(pixel);
+        let mut next = old;
+        if erase {
+            next[3] = old[3] * (1. - weight);
+        } else {
+            let out_alpha = weight + old[3] * (1. - weight);
+            for c in 0..3 {
+                next[c] =
+                    (value[c] * weight + old[c] * old[3] * (1. - weight)) / out_alpha.max(1e-10);
+            }
+            next[3] = out_alpha;
+        }
+        if texture.channel == Channel::Color && texture.pixels.precision() == Precision::U16 {
+            for v in &mut next[..3] {
+                *v = super::material::linear_to_srgb(*v);
+            }
+        }
+        if texture.pixels.set_pixel(pixel, next) {
+            changed = true;
+            dirty.start = dirty.start.min(pixel);
+            dirty.end = dirty.end.max(pixel + 1);
+        }
+    }
+    if changed {
+        texture.upload.record(dirty);
+    }
+    changed
 }
 
 /// Clip a projected triangle to the dab square while carrying UV coordinates.
@@ -469,7 +481,7 @@ pub(crate) fn pad_pixels(texture: &mut Texture, mut occupied: Vec<bool>) {
             frontier.push(i);
         }
     }
-    let mut pixels = None;
+    let mut dirty = usize::MAX..0;
     for _ in 0..4 {
         let mut next = Vec::new();
         for i in frontier {
@@ -488,15 +500,17 @@ pub(crate) fn pad_pixels(texture: &mut Texture, mut occupied: Vec<bool>) {
                 }
                 occupied[j] = true;
                 next.push(j);
-                let values = pixels.get_or_insert_with(|| texture.pixels.clone());
-                let sample = values.pixel(i);
-                values.set_pixel(j, sample);
+                let sample = texture.pixels.pixel(i);
+                if texture.pixels.set_pixel(j, sample) {
+                    dirty.start = dirty.start.min(j);
+                    dirty.end = dirty.end.max(j + 1);
+                }
             }
         }
         frontier = next;
     }
-    if let Some(pixels) = pixels {
-        texture.pixels = pixels;
+    if dirty.start < dirty.end {
+        texture.upload.record(dirty);
     }
 }
 pub(crate) fn raster(

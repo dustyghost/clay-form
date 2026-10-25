@@ -8,6 +8,12 @@ impl Document {
             .brushes
             .get_mut(index)
             .ok_or("Brush no longer exists")?;
+        if (brush.material.base_color != target.material.base_color
+            || brush.material.primary_asset() != target.material.primary_asset())
+            && brush.texture_colour == target.texture_colour
+        {
+            brush.texture_colour = None;
+        }
         brush.id = Some(target.identity());
         if *target != brush {
             *target = brush;

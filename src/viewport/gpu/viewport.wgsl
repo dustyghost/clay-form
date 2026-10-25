@@ -138,9 +138,12 @@ fn texture_sample(id:u32,uv:vec2f)->vec4f {
   }
  }
  var rgb=display_rgb(linear*exp2(u.material_info.z));
- if u.material_info.y>0.5 && v.uv.z>0.5 {let cell=vec2i(floor(v.uv.xy*16.));rgb=vec3f(select(0.15,0.85,(cell.x+cell.y)%2==0))*shade;}
- if u.flags.x==1. && v.group.a>0.5 { rgb=mix(rgb,v.group.rgb*shade,mix(0.5,1.,v.is_active)); }
- rgb*=1.-v.mask*0.75;
+ if u.material_info.y==1. { rgb=display_rgb(mix(v.color,colour_map.rgb,colour_map.a)*exp2(u.material_info.z)); }
+ if u.material_info.y==2. { rgb=vec3f(clamp(mix(v.material.x,rough_map.r,rough_map.a),0.,1.)); }
+ if u.material_info.y==3. { rgb=vec3f(clamp(mix(v.material.y,metal_map.r,metal_map.a),0.,1.)); }
+ if u.material_info.y==4. && v.uv.z>0.5 {let cell=vec2i(floor(v.uv.xy*16.));rgb=vec3f(select(0.15,0.85,(cell.x+cell.y)%2==0))*shade;}
+ if u.material_info.y==0. && u.flags.x==1. && v.group.a>0.5 { rgb=mix(rgb,v.group.rgb*shade,mix(0.5,1.,v.is_active)); }
+ if u.material_info.y==0. { rgb*=1.-v.mask*0.75; }
  // Derivatives must be evaluated uniformly, before per-fragment conditions.
  var widths: array<f32,32>;
  for(var i=0u;i<u32(u.right.w);i++) { widths[i]=fwidth(dot(v.position-u.guide_center.xyz,u.guide_normals[i].xyz)); }

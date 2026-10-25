@@ -3681,6 +3681,12 @@ fn continuous_texture_paint_builds_while_stationary_and_stops_on_release_or_canc
         app.ui.uv.open = true;
         app.texture_command(T::CreateAndPaint(Channel::Color, 128, Precision::U16))
             .unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while app.texture_exchange.is_some() {
+            assert!(std::time::Instant::now() < deadline);
+            app.poll_texture_exchange(&ctx);
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
         assert!(!app.ui.uv.open && !app.ui.modeling.active);
         let mut brush = app.document.brushes()[app.ui.selected].clone();
         brush.paint_effect.mode = mode;

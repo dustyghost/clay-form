@@ -518,7 +518,7 @@ fn similarly_named_groups_display_distinct_muted_colors_and_renames_keep_them() 
         .unwrap();
     let mut document = Document::default();
     document.replace_geometry(Geometry::new(mesh)).unwrap();
-    let before = DisplayMesh::new(&document).poly_colors;
+    let before = DisplayMesh::new(&document).poly_colors.clone();
     let distinct: std::collections::HashSet<_> = before.iter().copied().collect();
     assert_eq!(
         distinct.len(),
@@ -676,6 +676,7 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         );
         let make_preview = |alpha: Alpha| Preview {
             uv_checker: false,
+            inspection: InspectionMode::Lit,
             texture_exposure: 0.,
             show_polygroups: false,
             backface_opacity: 0.,
@@ -813,6 +814,7 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         };
         let preview = Preview {
             uv_checker: false,
+            inspection: InspectionMode::Lit,
             texture_exposure: 0.,
             show_polygroups: false,
             backface_opacity: 0.,
@@ -838,6 +840,7 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         gpu.upload(&grouped);
         let colored = Preview {
             uv_checker: false,
+            inspection: InspectionMode::Lit,
             texture_exposure: 0.,
             show_polygroups: true,
             ..Default::default()
@@ -1218,6 +1221,7 @@ fn gpu_batches_preserve_face_colors_and_depth() {
     );
     let preview = Preview {
         uv_checker: false,
+        inspection: InspectionMode::Lit,
         texture_exposure: 0.,
         show_polygroups: true,
         backface_opacity: 0.3,
@@ -1580,4 +1584,105 @@ fn gpu_dense_stroke_display_finishes_with_exact_shading() {
     assert_eq!(final_display.shading.vertices, expected.shading.vertices);
     assert_eq!(final_display.shading.triangles, expected.shading.triangles);
     assert!(Arc::ptr_eq(&final_display, &renderer.geometry(&doc)));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "requires Vulkan; verifies paint inspection channels and incremental image uploads"]
+fn gpu_paint_inspection_and_incremental_texture_upload_match_stored_channels() {
+    use crate::sculpt::{
+        Material,
+        texture::{Channel, Precision, Texture},
+    };
+    let headless = Headless::new();
+    let renderer = Renderer::new(&headless.state).unwrap();
+    renderer.set_inspection_mode(InspectionMode::Roughness);
+    renderer.set_uv_checker(true);
+    renderer.set_texture_exposure(-2.);
+    renderer.clear_preview();
+    {
+        let preview = renderer.preview.lock().unwrap();
+        assert_eq!(preview.inspection, InspectionMode::Roughness);
+        assert!(preview.uv_checker);
+        assert_eq!(preview.texture_exposure, -2.);
+    }
+    let mut gpu = renderer.gpu.lock().unwrap();
+    let material = Material {
+        base_color: [0.04, 0.16, 0.36],
+        roughness: 0.25,
+        metallic: 0.75,
+        ..Default::default()
+    };
+    let mut mesh = Primitive::for_kind(PrimitiveKind::Plane).mesh().unwrap();
+    mesh.mask.fill(1.);
+    mesh.uv = mesh.unwrap_uv(true, 0.02, &|| false).unwrap();
+    for channel in Channel::ALL {
+        mesh.uv
+            .textures
+            .push(Texture::new_with_precision(channel, 16, &material, Precision::Float32).unwrap());
+    }
+    let mut doc = Document::default();
+    doc.replace_geometry(Geometry::new(mesh.clone())).unwrap();
+    let display = Arc::new(DisplayMesh::new(&doc));
+    gpu.upload(&display);
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(128.));
+    let params = Params::new(
+        rect,
+        Vec3(1., 0., 0.),
+        Vec3(0., 1., 0.),
+        Vec3(0., 0., 1.),
+        45.,
+        rect.center(),
+        3.,
+    );
+    let center = (64 * 128 + 64) * 4;
+    for (mode, expected) in [
+        (
+            InspectionMode::Color,
+            material
+                .base_color
+                .map(|v| crate::sculpt::material::linear_to_srgb(v) * 255.),
+        ),
+        (InspectionMode::Roughness, [0.25 * 255.; 3]),
+        (InspectionMode::Metallic, [0.75 * 255.; 3]),
+    ] {
+        gpu.paint(
+            &params,
+            [128, 128],
+            false,
+            WireMode::Visible,
+            false,
+            &Preview {
+                inspection: mode,
+                ..Default::default()
+            },
+        );
+        let rgba = gpu.read();
+        for (actual, expected) in rgba[center..center + 3].iter().zip(expected) {
+            assert!(
+                (*actual as f32 - expected).abs() <= 1.,
+                "{mode:?}: {actual} != {expected}"
+            );
+        }
+    }
+    for i in 0..256 {
+        mesh.uv.textures[0].pixels.set_pixel(i, [1., 0., 0., 1.]);
+    }
+    mesh.uv.textures[0].upload.record(0..256);
+    doc.replace_geometry(Geometry::new(mesh)).unwrap();
+    let next = Arc::new(display.with_texture_updates(&doc).unwrap());
+    assert!(display.shares_geometry(&next));
+    gpu.upload(&next);
+    gpu.paint(
+        &params,
+        [128, 128],
+        false,
+        WireMode::Visible,
+        false,
+        &Preview {
+            inspection: InspectionMode::Color,
+            ..Default::default()
+        },
+    );
+    assert_eq!(&gpu.read()[center..center + 4], &[255, 0, 0, 255]);
 }

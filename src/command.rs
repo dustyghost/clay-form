@@ -13,6 +13,7 @@ pub(crate) enum PendingAction {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum AssetKind {
     Texture,
+    PaintWorking,
     Reference,
     Alpha,
     Obj,
@@ -43,6 +44,7 @@ pub(crate) enum Command {
     BrowseExport(crate::persistence::material_export::ExportFormat),
     CancelExport,
     SaveMaterial(crate::sculpt::material::layers::Asset),
+    SaveMaterialToLibrary(crate::sculpt::material::layers::Asset),
     RemoveMaterial(u64),
     FillMaterial(Brush),
     FillAllMaterial(Brush),

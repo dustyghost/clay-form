@@ -37,7 +37,10 @@ try:
         guide.set_lock_position(False)
         assert image.remove_layer(guide)
     # GIMP's exporter reduces float to 16-bit; the Rust test verifies rejection.
-    export("file-psd-export", config["xcf"])
+    if config["xcf"].lower().endswith(".xcf"):
+        assert Gimp.file_save(Gimp.RunMode.NONINTERACTIVE, image, file, None)
+    else:
+        export("file-psd-export", config["xcf"])
     image.delete()
     result = {"ok": True}
 except Exception as error:

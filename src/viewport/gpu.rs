@@ -11,43 +11,31 @@ use eframe::{
 use std::sync::{Arc, Mutex};
 use wgpu::util::DeviceExt;
 
-/// Changed row ranges per lossless image page; unchanged pages stay on the GPU.
-fn changed_pixel_rows(old: &[[u32; 2]], new: &[[u32; 2]]) -> Vec<(usize, std::ops::Range<usize>)> {
-    debug_assert_eq!(old.len(), new.len());
-    old.chunks(1024 * 1024)
-        .zip(new.chunks(1024 * 1024))
-        .enumerate()
-        .filter_map(|(page, (a, b))| {
-            if bytemuck::cast_slice::<_, u8>(a) == bytemuck::cast_slice::<_, u8>(b) {
-                return None;
-            }
-            let changed: Vec<_> = a
-                .chunks(1024)
-                .zip(b.chunks(1024))
-                .enumerate()
-                .filter_map(|(row, (a, b))| {
-                    (bytemuck::cast_slice::<_, u8>(a) != bytemuck::cast_slice::<_, u8>(b))
-                        .then_some(row)
-                })
-                .collect();
-            Some((page, *changed.first()?..changed.last()? + 1))
-        })
-        .collect()
+/// Inspect stored paint independently of the scene lights.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) enum InspectionMode {
+    #[default]
+    Lit,
+    Color,
+    Roughness,
+    Metallic,
+    UvChecker,
 }
-
-#[test]
-fn texture_upload_updates_only_changed_rows_including_partial_pages() {
-    let old = vec![[0; 2]; 1024 * 1024 + 17];
-    let mut new = old.clone();
-    assert!(changed_pixel_rows(&old, &new).is_empty());
-    new[1024 * 42 + 6] = [1, 2];
-    new[1024 * 44] = [3, 4];
-    new[1024 * 1024 + 16] = [5, 6];
-    assert_eq!(changed_pixel_rows(&old, &new), vec![(0, 42..45), (1, 0..1)]);
+impl InspectionMode {
+    fn shader_value(self) -> f32 {
+        match self {
+            Self::Lit => 0.,
+            Self::Color => 1.,
+            Self::Roughness => 2.,
+            Self::Metallic => 3.,
+            Self::UvChecker => 4.,
+        }
+    }
 }
 
 pub(super) struct Renderer {
     revision: Option<u64>,
+    geometry_revision: Option<u64>,
     live_display: bool,
     geometry: Option<Arc<DisplayMesh>>,
     render_geometry: Option<Arc<DisplayMesh>>,
@@ -59,6 +47,7 @@ impl Renderer {
         Ok(Self {
             preview: Arc::new(Mutex::new(Preview::default())),
             revision: None,
+            geometry_revision: None,
             live_display: false,
             geometry: None,
             render_geometry: None,
@@ -73,23 +62,50 @@ impl Renderer {
         if self.revision != Some(document.display_revision())
             || (self.live_display && !document.stroke_active())
         {
-            let preview = self
-                .geometry
-                .as_ref()
-                .and_then(|display| display.during_stroke(document));
-            self.live_display = preview.is_some();
-            self.geometry = Some(Arc::new(
-                preview.unwrap_or_else(|| DisplayMesh::new(document)),
-            ));
-            self.render_geometry = Some(
-                if (0..document.model_count())
-                    .any(|i| document.model(i).unwrap().metadata.temporary_thickness > 0.)
-                {
-                    Arc::new(DisplayMesh::preview(document))
+            let textures_only = self.geometry_revision
+                == Some(document.geometry_display_revision())
+                && !(self.live_display && !document.stroke_active());
+            let updated = textures_only
+                .then(|| self.geometry.as_ref()?.with_texture_updates(document))
+                .flatten();
+            if let Some(updated) = updated {
+                let shared = self
+                    .geometry
+                    .as_ref()
+                    .zip(self.render_geometry.as_ref())
+                    .is_some_and(|(a, b)| Arc::ptr_eq(a, b));
+                self.geometry = Some(Arc::new(updated));
+                self.render_geometry = if shared {
+                    self.geometry.clone()
                 } else {
-                    self.geometry.as_ref().unwrap().clone()
-                },
-            );
+                    self.render_geometry
+                        .as_ref()
+                        .and_then(|display| display.with_texture_updates(document))
+                        .map(Arc::new)
+                };
+                if self.render_geometry.is_none() {
+                    self.render_geometry = Some(Arc::new(DisplayMesh::preview(document)));
+                }
+            } else {
+                let preview = self
+                    .geometry
+                    .as_ref()
+                    .and_then(|display| display.during_stroke(document));
+                self.live_display = preview.is_some();
+                self.geometry = Some(Arc::new(
+                    preview.unwrap_or_else(|| DisplayMesh::new(document)),
+                ));
+                self.render_geometry = Some(
+                    if (0..document.model_count())
+                        .any(|i| document.model(i).unwrap().metadata.temporary_thickness > 0.)
+                    {
+                        Arc::new(DisplayMesh::preview(document))
+                    } else {
+                        self.geometry.as_ref().unwrap().clone()
+                    },
+                );
+            }
+            self.geometry_revision = Some(document.geometry_display_revision());
             self.revision = Some(document.display_revision());
         }
         self.geometry.as_ref().unwrap().clone()
@@ -138,13 +154,28 @@ impl Renderer {
     }
 
     pub fn clear_preview(&self) {
-        *self.preview.lock().unwrap() = Preview::default();
+        let mut preview = self.preview.lock().unwrap();
+        // App-level display choices are set before Viewport::show clears transient guides.
+        let (inspection, uv_checker, texture_exposure) = (
+            preview.inspection,
+            preview.uv_checker,
+            preview.texture_exposure,
+        );
+        *preview = Preview {
+            inspection,
+            uv_checker,
+            texture_exposure,
+            ..Default::default()
+        };
     }
     pub fn set_backfaces(&self, opacity: f32) {
         self.preview.lock().unwrap().backface_opacity = opacity.clamp(0., 1.);
     }
     pub fn set_texture_exposure(&self, stops: f32) {
         self.preview.lock().unwrap().texture_exposure = stops.clamp(-12., 12.);
+    }
+    pub fn set_inspection_mode(&self, mode: InspectionMode) {
+        self.preview.lock().unwrap().inspection = mode;
     }
     pub fn set_uv_checker(&self, enabled: bool) {
         self.preview.lock().unwrap().uv_checker = enabled;
@@ -184,6 +215,7 @@ impl Renderer {
     }
 }
 
+mod atlas;
 mod state;
 use state::{BrushPreview, Params, Preview};
 
@@ -573,7 +605,7 @@ impl Gpu {
             uniform: uniform(),
             back_uniform: uniform(),
             meshes: vec![Self::mesh_buffers(device, &[], &[], &[], &[])],
-            texture_pixels: Self::pixel_texture(device, queue, &[]),
+            texture_pixels: Self::pixel_texture(device, queue, &atlas::Atlas::default()),
             texture_info: buffer(
                 device,
                 "texture descriptors",
@@ -666,8 +698,14 @@ impl Gpu {
             data,
             self.device.limits().max_storage_buffer_binding_size as usize,
         );
-        self.edges = None;
-        self.triangle_edges = None;
+        if !self
+            .uploaded
+            .as_ref()
+            .is_some_and(|old| old.shares_geometry(data))
+        {
+            self.edges = None;
+            self.triangle_edges = None;
+        }
         self.uploaded = Some(data.clone());
     }
     // A document may contain several maximum-density models. Chunk the display
@@ -676,49 +714,41 @@ impl Gpu {
         if let Some(old) = &self.uploaded
             && old.texture_pixels.len() == data.texture_pixels.len()
         {
-            for (layer, range) in changed_pixel_rows(&old.texture_pixels, &data.texture_pixels) {
-                let page = layer * 1024 * 1024;
-                let start = page + range.start * 1024;
-                let end = (page + range.end * 1024).min(data.texture_pixels.len());
-                let pixels = &data.texture_pixels[start..end];
-                let mut bytes = std::borrow::Cow::Borrowed(bytemuck::cast_slice(pixels));
-                if !pixels.len().is_multiple_of(1024) {
-                    bytes.to_mut().resize(range.len() * 1024 * 8, 0);
+            for (index, (before, after)) in old
+                .texture_pixels
+                .chunks
+                .iter()
+                .zip(&data.texture_pixels.chunks)
+                .enumerate()
+            {
+                if !Arc::ptr_eq(before, after) {
+                    Self::write_pixel_chunk(&self.queue, &self.texture_pixels, index, after);
                 }
-                self.queue.write_texture(
-                    wgpu::TexelCopyTextureInfo {
-                        texture: &self.texture_pixels,
-                        mip_level: 0,
-                        origin: wgpu::Origin3d {
-                            x: 0,
-                            y: range.start as u32,
-                            z: layer as u32,
-                        },
-                        aspect: wgpu::TextureAspect::All,
-                    },
-                    &bytes,
-                    wgpu::TexelCopyBufferLayout {
-                        offset: 0,
-                        bytes_per_row: Some(1024 * 8),
-                        rows_per_image: Some(range.len() as u32),
-                    },
-                    wgpu::Extent3d {
-                        width: 1024,
-                        height: range.len() as u32,
-                        depth_or_array_layers: 1,
-                    },
-                );
             }
         } else {
             self.texture_pixels =
                 Self::pixel_texture(&self.device, &self.queue, &data.texture_pixels);
         }
-        self.texture_info = buffer(
-            &self.device,
-            "texture descriptors",
-            bytemuck::cast_slice(&data.texture_info),
-            wgpu::BufferUsages::STORAGE,
-        );
+        if !self
+            .uploaded
+            .as_ref()
+            .is_some_and(|old| old.texture_info == data.texture_info)
+        {
+            self.texture_info = buffer(
+                &self.device,
+                "texture descriptors",
+                bytemuck::cast_slice(&data.texture_info),
+                wgpu::BufferUsages::STORAGE,
+            );
+        }
+        if limit == self.device.limits().max_storage_buffer_binding_size as usize
+            && self
+                .uploaded
+                .as_ref()
+                .is_some_and(|old| old.shares_geometry(data))
+        {
+            return;
+        }
         self.vertex_stride = data.vertex_stride();
         let stride = self.vertex_stride;
         let vertices = data.vertices(stride);
@@ -807,7 +837,11 @@ impl Gpu {
         let mut u: Uniforms = bytemuck::Zeroable::zeroed();
         u.material_info = [
             self.vertex_stride as f32,
-            f32::from(preview.uv_checker),
+            if preview.uv_checker {
+                4.
+            } else {
+                preview.inspection.shader_value()
+            },
             preview.texture_exposure,
             0.,
         ];
@@ -960,7 +994,7 @@ impl Gpu {
     fn pixel_texture(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        pixels: &[[u32; 2]],
+        pixels: &atlas::Atlas,
     ) -> wgpu::Texture {
         const SIDE: usize = 1024;
         const PAGE: usize = SIDE * SIDE;
@@ -978,37 +1012,46 @@ impl Gpu {
             usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
-        for (layer, pixels) in pixels.chunks(PAGE).enumerate() {
-            let rows = pixels.len().div_ceil(SIDE);
-            let mut bytes = std::borrow::Cow::Borrowed(bytemuck::cast_slice(pixels));
-            if !pixels.len().is_multiple_of(SIDE) {
-                bytes.to_mut().resize(rows * SIDE * 8, 0);
-            }
-            queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d {
-                        x: 0,
-                        y: 0,
-                        z: layer as u32,
-                    },
-                    aspect: wgpu::TextureAspect::All,
-                },
-                &bytes,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some((SIDE * 8) as u32),
-                    rows_per_image: Some(rows as u32),
-                },
-                wgpu::Extent3d {
-                    width: SIDE as u32,
-                    height: rows as u32,
-                    depth_or_array_layers: 1,
-                },
-            );
+        for (index, chunk) in pixels.chunks.iter().enumerate() {
+            Self::write_pixel_chunk(queue, &texture, index, chunk);
         }
         texture
+    }
+    fn write_pixel_chunk(
+        queue: &wgpu::Queue,
+        texture: &wgpu::Texture,
+        index: usize,
+        pixels: &[[u32; 2]],
+    ) {
+        let offset = index * atlas::CHUNK;
+        let rows = pixels.len().div_ceil(1024);
+        let mut bytes = std::borrow::Cow::Borrowed(bytemuck::cast_slice(pixels));
+        if !pixels.len().is_multiple_of(1024) {
+            bytes.to_mut().resize(rows * 1024 * 8, 0);
+        }
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: 0,
+                    y: ((offset / 1024) % 1024) as u32,
+                    z: (offset / (1024 * 1024)) as u32,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            &bytes,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(1024 * 8),
+                rows_per_image: Some(rows as u32),
+            },
+            wgpu::Extent3d {
+                width: 1024,
+                height: rows as u32,
+                depth_or_array_layers: 1,
+            },
+        );
     }
     fn target(&mut self, size: [u32; 2]) {
         if self.target.as_ref().is_some_and(|t| t.size == size) {

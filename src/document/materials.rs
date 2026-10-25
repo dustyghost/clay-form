@@ -4,6 +4,28 @@ impl Document {
     pub fn materials(&self) -> &[Asset] {
         &self.geometry.scene.materials
     }
+    /// Count active-resolution painted users; retained levels are updated as well.
+    pub(crate) fn material_usage(&self, id: u64) -> (usize, usize) {
+        let mut models = 0;
+        let mut vertices = 0;
+        for index in 0..self.model_count() {
+            let count =
+                self.model(index)
+                    .unwrap()
+                    .mesh
+                    .materials
+                    .iter()
+                    .filter(|material| {
+                        material.links.iter().any(|link| {
+                            link.id == id && link.weights.iter().any(|weight| *weight > 0.)
+                        })
+                    })
+                    .count();
+            models += usize::from(count > 0);
+            vertices += count;
+        }
+        (models, vertices)
+    }
     pub fn save_material(&mut self, mut asset: Asset) -> Result<(), String> {
         crate::sculpt::material::layers::validate_assets(std::slice::from_ref(&asset))?;
         asset.original = Some(
@@ -23,8 +45,22 @@ impl Document {
         if let Some(i) = existing {
             let old = self.geometry.scene.materials[i].material.clone();
             let rebase = |mesh: &mut Mesh| {
+                // Large fills often repeat exactly the same material. Reuse the
+                // rebased value instead of rebuilding its layers at every vertex.
+                let mut previous: Option<(crate::sculpt::Material, crate::sculpt::Material)> = None;
                 for material in &mut mesh.materials {
+                    if !material.links.iter().any(|link| link.id == asset.id) {
+                        continue;
+                    }
+                    if let Some((source, result)) = &previous
+                        && material == source
+                    {
+                        *material = result.clone();
+                        continue;
+                    }
+                    let source = material.clone();
                     material.rebase_asset(asset.id, &old, &asset.material);
+                    previous = Some((source, material.clone()));
                 }
             };
             rebase(&mut self.geometry.mesh);
@@ -119,6 +155,20 @@ impl Document {
 mod tests {
     use super::*;
     use crate::sculpt::{Material, PaintChannels};
+    #[test]
+    fn material_scope_counts_only_linked_painted_users() {
+        let mut document = Document::default();
+        let material = Material::default().with_link(42);
+        document.geometry.mesh.materials = vec![material.clone(); document.mesh().vertices.len()];
+        let count = document.mesh().vertices.len();
+        assert_eq!(document.material_usage(42), (1, count));
+        assert_eq!(document.material_usage(43), (0, 0));
+        document.duplicate_model(false).unwrap();
+        assert_eq!(document.material_usage(42), (2, count * 2));
+        document.geometry.mesh.materials[0] = material.unlinked();
+        assert_eq!(document.material_usage(42), (2, count * 2 - 1));
+    }
+
     #[test]
     fn shared_layered_material_edits_update_blended_uses_levels_and_undo() {
         let mut doc = Document::default();

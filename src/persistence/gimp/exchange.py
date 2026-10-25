@@ -31,12 +31,20 @@ def layers(items):
 def exchange():
     source = config["xcf"]
     image = require(Gimp.file_load(Gimp.RunMode.NONINTERACTIVE, Gio.File.new_for_path(source)),
-                    "Cannot open the GIMP working document")
+                    "Cannot open the external working document")
     try:
         require(0 < image.get_width() <= 4096 and 0 < image.get_height() <= 4096,
                 "GIMP image exceeds the 4096 × 4096 texture limit")
+        if config["operation"] == "prepare-xcf":
+            if config["float"]:
+                require(image.get_precision() in (Gimp.Precision.FLOAT_LINEAR,
+                        Gimp.Precision.FLOAT_NON_LINEAR, Gimp.Precision.FLOAT_PERCEPTUAL),
+                        "Reader did not preserve 32-bit float pixels")
+            require(Gimp.file_save(Gimp.RunMode.NONINTERACTIVE, image,
+                    Gio.File.new_for_path(config["output"]), None), "Cannot save XCF working document")
+            return
         guides = [layer for layer in layers(image.get_layers()) if layer.get_parasite(MARKER) or layer.get_name() == "Clay UV guide - excluded on reload"]
-        require(guides, "UV guide is missing or was merged. Keep the original guide name and a separate guide layer, then save the PSD again.")
+        require(guides, "UV guide is missing or was merged. Keep the original guide name and a separate guide layer, then save the working document again.")
         for guide in guides:
             require(not guide.is_group(), "Keep the UV guide as a separate layer, outside paint groups")
             guide.set_lock_content(False)
@@ -47,11 +55,11 @@ def exchange():
         if config["float"]:
             require(image.get_precision() in (Gimp.Precision.FLOAT_LINEAR,
                     Gimp.Precision.FLOAT_NON_LINEAR, Gimp.Precision.FLOAT_PERCEPTUAL),
-                    "Working PSD lost float precision. Use an editor that saves 32-bit float PSD; the current texture is unchanged.")
+                    "Working document lost float precision. Relink a 32-bit EXR, use XCF with GIMP, or use an editor that saves float PSD; current texture kept.")
         else:
             require(image.get_precision() not in (Gimp.Precision.U8_LINEAR,
                     Gimp.Precision.U8_NON_LINEAR, Gimp.Precision.U8_PERCEPTUAL),
-                    "Working PSD lost precision. Save a 16-bit or higher PSD; the current texture is unchanged.")
+                    "Working document lost precision. Save a 16-bit or higher image; current texture kept.")
         options = dict(image=image, file=Gio.File.new_for_path(config["output"]))
         if not config["float"]:
             options["include_color_profile"] = True

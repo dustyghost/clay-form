@@ -19,6 +19,9 @@ pub struct PaintEffect {
     pub dot_size: f32,
     #[serde(skip)]
     pub(crate) seed: u32,
+    /// Elapsed deposition time for this dab; zero uses ordinary stroke opacity.
+    #[serde(skip)]
+    pub(crate) seconds: f32,
 }
 impl Default for PaintEffect {
     fn default() -> Self {
@@ -28,6 +31,7 @@ impl Default for PaintEffect {
             density: 0.4,
             dot_size: 0.035,
             seed: 0,
+            seconds: 0.,
         }
     }
 }
@@ -75,6 +79,13 @@ impl Brush {
             } else {
                 1.
             }
+    }
+    pub(crate) fn paint_opacity(&self, local_weight: f32) -> f32 {
+        if self.paint_effect.seconds > 0. {
+            self.paint_strength_for_time(self.paint_effect.seconds * local_weight.max(0.))
+        } else {
+            (self.strength * local_weight).clamp(0., 1.)
+        }
     }
     pub(crate) fn continuous_paint(&self) -> bool {
         self.kind == super::Kind::Paint
@@ -146,5 +157,25 @@ mod tests {
         assert!(restored == brush);
         brush.paint_effect.flow = f32::NAN;
         assert!(super::super::validate_brush(&brush).is_err());
+    }
+}
+
+#[cfg(test)]
+mod deposition_regressions {
+    use super::*;
+    #[test]
+    fn weighted_airbrush_opacity_is_independent_of_time_partition() {
+        let mut brush = Brush::new(super::super::Kind::Paint);
+        brush.paint_effect.mode = PaintMode::Airbrush;
+        brush.paint_effect.flow = 1.;
+        brush.strength = 1.;
+        let coverage = |steps: u32| {
+            let mut b = brush.clone();
+            b.paint_effect.seconds = 1. / steps as f32;
+            1. - (1. - b.paint_opacity(0.25)).powi(steps as i32)
+        };
+        assert!((coverage(20) - coverage(10)).abs() < 1e-6);
+        assert!((coverage(20) - coverage(5)).abs() < 1e-6);
+        assert!((coverage(20) - (1. - (-2f32).exp())).abs() < 1e-6);
     }
 }

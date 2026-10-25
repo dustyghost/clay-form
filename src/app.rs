@@ -444,14 +444,17 @@ impl App {
             },
         );
         self.ui.materials.sampling = self.viewport.sample_colour;
-        if let Some(colour) = self.viewport.sampled_colour.take() {
-            let mut brush = self.document.brushes()[self.ui.selected].clone();
-            brush.material = brush.material.unlinked();
-            brush.material.base_color = colour;
-            if let Err(error) = self.document.update_brush(self.ui.selected, brush) {
+        let sampled = self.viewport.sampled_material.take().or_else(|| {
+            self.viewport.sampled_colour.take().map(|colour| {
+                let mut material = self.document.brushes()[self.ui.selected].material.clone();
+                material.base_color = colour;
+                material
+            })
+        });
+        self.viewport.sampled_colour = None;
+        if let Some(sampled) = sampled {
+            if let Err(error) = self.sample_surface_material(sampled) {
                 self.ui.status = error;
-            } else {
-                self.ui.status = "Colour sampled; use + Colour to save it to the palette".into();
             }
         }
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
@@ -553,6 +556,26 @@ impl eframe::App for App {
         self.poll_mesh_job();
         self.poll_export(ctx);
         self.poll_texture_exchange(ctx);
+        if self.texture_exchange.is_some() && !self.ui.uv.open {
+            let mut cancel = false;
+            egui::TopBottomPanel::top("texture_operation").show(ctx, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.spinner();
+                    ui.label(&self.ui.uv.operation);
+                    if let Some(progress) = self.ui.uv.operation_progress {
+                        ui.add(
+                            egui::ProgressBar::new(progress)
+                                .desired_width(160.)
+                                .show_percentage(),
+                        );
+                    }
+                    cancel = ui.button("Cancel texture operation").clicked();
+                });
+            });
+            if cancel {
+                let _ = self.texture_command(textures::TextureCommand::Cancel);
+            }
+        }
         self.poll_projection();
         self.poll_paths();
         let native_pressure = ctx.input(|i| self.tablet.update_native(&i.events));
@@ -604,6 +627,8 @@ impl eframe::App for App {
         });
         self.viewport
             .set_uv_checker(self.ui.uv.open && self.ui.uv.checker);
+        self.viewport
+            .set_inspection_mode(self.ui.preferences.paint_inspection);
         self.ui.settings(ctx, &self.document);
         self.shortcuts(ctx);
         if self.recovery_error.is_some() {

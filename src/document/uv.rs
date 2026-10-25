@@ -10,7 +10,10 @@ impl Document {
         Ok(())
     }
     pub(crate) fn sync_texture_uses(&mut self) {
-        let textures = self.geometry.mesh.uv.textures.clone();
+        Self::sync_geometry_texture_uses(&mut self.geometry);
+    }
+    pub(crate) fn sync_geometry_texture_uses(geometry: &mut Geometry) {
+        let textures = geometry.mesh.uv.textures.clone();
         let sync = |mesh: &mut Mesh| {
             for t in &mut mesh.uv.textures {
                 if let Some(source) = textures.iter().find(|s| s.id == t.id) {
@@ -18,16 +21,15 @@ impl Document {
                 }
             }
         };
-        for mesh in self
-            .geometry
+        for mesh in geometry
             .settings
             .lower
             .iter_mut()
-            .chain(&mut self.geometry.settings.upper)
+            .chain(&mut geometry.settings.upper)
         {
             sync(mesh);
         }
-        for model in &mut self.geometry.submodels {
+        for model in &mut geometry.submodels {
             sync(&mut model.mesh);
             for mesh in model
                 .mesh_settings
@@ -53,6 +55,10 @@ impl Document {
         if !self.mesh().uv.current(self.mesh()) {
             return Err("Generate UVs before assigning a texture".into());
         }
+        for texture in &textures {
+            texture.validate()?;
+        }
+        self.end_stroke();
         let mut candidate = self.geometry.clone();
         for texture in textures {
             texture.validate()?;
@@ -109,6 +115,7 @@ impl Document {
         channel: crate::sculpt::texture::Channel,
     ) -> Result<(), String> {
         self.require_sculpt_mesh()?;
+        self.end_stroke();
         let mut candidate = self.geometry.clone();
         for mesh in std::iter::once(&mut candidate.mesh)
             .chain(candidate.settings.lower.iter_mut())
@@ -119,7 +126,9 @@ impl Document {
         if candidate == self.geometry {
             return Ok(());
         }
-        self.replace_geometry_named(candidate, "Remove texture")
+        self.replace_geometry_named(candidate, "Remove texture")?;
+        self.reconcile_paint_target();
+        Ok(())
     }
     pub(crate) fn edit_uv(
         &mut self,
@@ -127,16 +136,17 @@ impl Document {
         edit: impl FnOnce(&mut crate::sculpt::uv::UvMap) -> Result<(), String>,
     ) -> Result<(), String> {
         self.require_sculpt_mesh()?;
+        self.end_stroke();
         let mut uv = self.mesh().uv.clone();
         edit(&mut uv)?;
         uv.validate()?;
         if uv == self.mesh().uv {
             return Ok(());
         }
-        self.end_stroke();
         self.end_edit();
         self.record_edit(label);
         self.geometry.mesh.uv = uv;
+        self.reconcile_paint_target();
         self.dirty = true;
         self.display_changed();
         Ok(())

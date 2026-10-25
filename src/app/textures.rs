@@ -1,7 +1,27 @@
 use super::*;
 use crate::sculpt::texture::{Channel, Exchange, Precision, Texture};
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum TextureStart {
+    #[default]
+    Surface,
+    Transparent,
+    Solid,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum WorkingFormat {
+    #[default]
+    Auto,
+    Psd,
+    Xcf,
+}
+#[derive(Clone)]
 pub(crate) enum TextureCommand {
+    #[cfg(test)]
     Create(Channel, u32, Precision),
+    Start(Channel, u32, Precision, TextureStart, bool),
+    Cancel,
+    NewSnapshot(Channel),
+    Relink(Channel, String),
     Bake(bool, u32, Precision),
     CreateAndPaint(Channel, u32, Precision),
     Paint(Option<Channel>),
@@ -17,9 +37,63 @@ pub(super) struct ExchangeJob {
     worker: crate::background_job::BackgroundJob<Vec<Texture>>,
     open_in: Option<String>,
     bake: bool,
+    resume_paint: Option<Channel>,
+    progress: Option<std::sync::Arc<std::sync::atomic::AtomicU32>>,
+    description: &'static str,
+    retry: TextureCommand,
 }
 
 impl App {
+    pub(super) fn sample_surface_material(
+        &mut self,
+        sampled: crate::sculpt::Material,
+    ) -> Result<(), String> {
+        use crate::sculpt::PaintChannels;
+        let mut brush = self.document.brushes()[self.ui.selected].clone();
+        let channels = match self.document.texture_paint {
+            Some(Channel::Color) => PaintChannels::Color,
+            Some(Channel::Roughness) => PaintChannels::Roughness,
+            Some(Channel::Metallic) => PaintChannels::Metallic,
+            None => brush.paint_channels,
+        };
+        let float_colour =
+            self.document.texture_paint == Some(Channel::Color)
+                && self.document.mesh().uv.textures.iter().any(|t| {
+                    t.channel == Channel::Color && t.pixels.precision() == Precision::Float32
+                });
+        let mut bounded = sampled.clone().unlinked();
+        bounded.base_color = sampled.base_color.map(|v| v.clamp(0., 1.));
+        bounded.roughness = sampled.roughness.clamp(0., 1.);
+        bounded.metallic = sampled.metallic.clamp(0., 1.);
+        let clipped = match channels {
+            PaintChannels::Material => {
+                bounded.base_color != sampled.base_color
+                    || bounded.roughness != sampled.roughness
+                    || bounded.metallic != sampled.metallic
+            }
+            PaintChannels::Color => !float_colour && bounded.base_color != sampled.base_color,
+            PaintChannels::Roughness => bounded.roughness != sampled.roughness,
+            PaintChannels::Metallic => bounded.metallic != sampled.metallic,
+        };
+        brush.material = brush.material.unlinked();
+        match channels {
+            PaintChannels::Material => {
+                brush.material = bounded;
+                brush.texture_colour = None;
+            }
+            PaintChannels::Color => {
+                brush.material.base_color = bounded.base_color;
+                brush.texture_colour = float_colour.then_some(sampled.base_color);
+            }
+            PaintChannels::Roughness => brush.material.roughness = bounded.roughness,
+            PaintChannels::Metallic => brush.material.metallic = bounded.metallic,
+        }
+        self.document.update_brush(self.ui.selected, brush)?;
+        self.ui.status = if clipped { "Sampled values were limited to 0–1 for this target. Float colour textures retain HDR/negative colour samples." }
+            else { "Sampled surface values into the brush for the selected paint channel." }.into();
+        Ok(())
+    }
+
     fn start_texture_exchange(&mut self, texture: Texture, create: bool) -> Result<(), String> {
         if self.texture_exchange.is_some() {
             return Err("An external paint exchange is already running".into());
@@ -44,10 +118,49 @@ impl App {
                 editor.to_owned()
             }
         });
+        let format = self.ui.uv.working_format;
+        let gimp_editor = editor.is_empty()
+            || std::path::Path::new(editor)
+                .file_stem()
+                .is_some_and(|name| name.to_string_lossy().to_lowercase().starts_with("gimp"));
+        let xcf = format == WorkingFormat::Xcf
+            || (format == WorkingFormat::Auto
+                && gimp_editor
+                && texture.pixels.precision() == Precision::Float32);
+        if create && !xcf && gimp_editor && texture.pixels.precision() == Precision::Float32 {
+            return Err("GIMP cannot save float PSD. Choose Automatic or XCF working format, or choose a float-PSD-capable external app.".into());
+        }
+        let directory = if self.document.has_saved_path() {
+            std::path::Path::new(self.document.current_path()).with_extension("textures")
+        } else {
+            crate::preferences::path()
+                .parent()
+                .unwrap_or(std::path::Path::new("."))
+                .join("external-paint")
+        }
+        .join(format!("session-{}", Texture::new_id()));
+        let channel = texture.channel;
+        let description = if create {
+            if xcf {
+                "Preparing float-safe XCF with UV guide"
+            } else {
+                "Preparing layered PSD with UV guide"
+            }
+        } else {
+            "Reading saved paint layers; excluding UV guide"
+        };
         let worker =
-            crate::background_job::BackgroundJob::start("clay-gimp-exchange", move |cancel| {
+            crate::background_job::BackgroundJob::start("clay-paint-exchange", move |cancel| {
                 if create {
-                    persistence::gimp::prepare(texture, &uv, cancel).map(|t| vec![t])
+                    persistence::gimp::prepare_working(
+                        texture,
+                        &uv,
+                        &directory,
+                        xcf,
+                        &executable,
+                        cancel,
+                    )
+                    .map(|t| vec![t])
                 } else {
                     persistence::gimp::reload(&texture, &executable, cancel).map(|t| vec![t])
                 }
@@ -57,14 +170,21 @@ impl App {
             worker,
             open_in,
             bake: false,
+            resume_paint: None,
+            progress: None,
+            description,
+            retry: if create {
+                TextureCommand::NewSnapshot(channel)
+            } else {
+                TextureCommand::Reload(channel, false)
+            },
         });
         self.ui.uv.exchange_busy = true;
-        self.ui.status = if create {
-            "Preparing a layered PSD with a UV guide…"
-        } else {
-            "Reloading saved PSD paint layers without the UV guide…"
-        }
-        .into();
+        self.ui.uv.completed = false;
+        self.ui.uv.operation = description.into();
+        self.ui.uv.operation_progress = None;
+        self.ui.uv.retry = None;
+        self.ui.status = format!("{description}…");
         Ok(())
     }
 
@@ -72,6 +192,11 @@ impl App {
         let Some(job) = &mut self.texture_exchange else {
             return;
         };
+        self.ui.uv.operation = job.description.into();
+        self.ui.uv.operation_progress = job
+            .progress
+            .as_ref()
+            .map(|p| p.load(std::sync::atomic::Ordering::Relaxed) as f32 / 1000.);
         let Some(result) = job.worker.poll() else {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
             return;
@@ -81,26 +206,90 @@ impl App {
             .take()
             .expect("completed texture exchange");
         self.ui.uv.exchange_busy = false;
-        self.ui.status = match result.and_then(|textures| {
+        let resume_paint = job.resume_paint;
+        let retry = job.retry.clone();
+        let cancelled = job.worker.is_cancelled();
+        let result = result.and_then(|textures| {
             if !self.document.geometry_matches(&job.geometry) {
-                return Err("The document changed while the external paint exchange was running; current edits kept. Try the exchange again".into());
+                return Err("The document changed while the texture operation was running; current edits kept. Retry when ready".into());
             }
             self.viewport.cancel(&mut self.document);
             if let Some(executable) = job.open_in {
                 let texture = &textures[0];
-                let path = texture.exchange.as_ref().and_then(|e| e.layered_path.as_ref()).ok_or("Missing PSD working copy")?;
-                persistence::gimp::open(&executable, std::path::Path::new(path))?;
+                let path = texture.exchange.as_ref().and_then(|e| e.layered_path.as_ref()).ok_or("Missing layered working copy")?;
+                let path = path.clone();
+                // Persist the working path even if the chosen editor cannot launch.
                 self.document.assign_textures(textures)?;
-                Ok("Save or export back to the working PSD, then Reload. The UV guide is excluded automatically.")
+                persistence::gimp::open(&executable, std::path::Path::new(&path))?;
+                Ok("Working document ready. Save back to it, then Reload. The separate UV guide is excluded automatically.")
             } else {
                 self.document.assign_textures(textures)?;
                 self.ui.uv.reload_conflict = false;
-                Ok(if job.bake { "Baked unlit paint/material maps. Use Paint on model to continue painting, or Edit in external paint app. Undo restores the previous textures." } else { "Reloaded saved PSD paint layers without the UV guide; Undo restores the previous texture" })
+                Ok(if job.bake { "Baked unlit paint/material maps. Use Paint on model to continue painting, or Edit in external paint app. Undo restores the previous textures." } else { "Reloaded saved paint layers without the UV guide; Undo restores the previous texture" })
             }
-        }) {
-            Ok(message) => message.into(),
-            Err(error) => error,
+        });
+        match result {
+            Ok(message) => {
+                self.ui.status = message.into();
+                self.ui.uv.completed = true;
+                self.ui.uv.retry = None;
+                if let Some(channel) = resume_paint {
+                    if let Err(error) = self.texture_command(TextureCommand::Paint(Some(channel))) {
+                        self.ui.status = error;
+                    }
+                }
+            }
+            Err(error) => {
+                self.ui.status = error.clone();
+                self.ui.uv.operation = error;
+                self.ui.uv.retry = (!cancelled).then_some(retry);
+            }
+        }
+    }
+
+    fn start_texture_bake(
+        &mut self,
+        channels: Vec<Channel>,
+        options: crate::sculpt::texture::bake::BakeOptions,
+        resume_paint: Option<Channel>,
+        retry: TextureCommand,
+    ) -> Result<(), String> {
+        if self.texture_exchange.is_some() {
+            return Err("Wait for or cancel the current texture operation".into());
+        }
+        let geometry = self.document.geometry_snapshot();
+        let mesh = self.document.mesh().clone();
+        let progress = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let worker_progress = progress.clone();
+        let worker =
+            crate::background_job::BackgroundJob::start("clay-texture-bake", move |cancel| {
+                mesh.bake_texture_channels(&channels, options, cancel, &|value| {
+                    worker_progress
+                        .store((value * 1000.) as u32, std::sync::atomic::Ordering::Relaxed);
+                })
+            })?;
+        let description = if options.composite {
+            "Baking surface colour and material maps"
+        } else {
+            "Capturing vertex surface into texture"
         };
+        self.texture_exchange = Some(ExchangeJob {
+            geometry,
+            worker,
+            open_in: None,
+            bake: true,
+            resume_paint,
+            progress: Some(progress),
+            description,
+            retry,
+        });
+        self.ui.uv.exchange_busy = true;
+        self.ui.uv.completed = false;
+        self.ui.uv.operation = description.into();
+        self.ui.uv.operation_progress = Some(0.);
+        self.ui.uv.retry = None;
+        self.ui.status = format!("{description}…");
+        Ok(())
     }
 
     pub(super) fn texture_command(&mut self, command: TextureCommand) -> Result<(), String> {
@@ -117,35 +306,87 @@ impl App {
                 .ok_or_else(|| "Create or import a texture for this channel first".to_string())
         };
         match command {
-            Bake(all, size, precision) => {
-                if self.texture_exchange.is_some() {
-                    return Err("Wait for the current texture operation".into());
+            Cancel => {
+                if let Some(job) = &self.texture_exchange {
+                    job.worker.cancel();
                 }
-                let geometry = self.document.geometry_snapshot();
-                let mesh = self.document.mesh().clone();
-                let worker = crate::background_job::BackgroundJob::start(
-                    "clay-texture-bake",
-                    move |cancel| mesh.bake_material_textures(all, size, precision, cancel),
+                self.ui.uv.operation = "Cancelling texture operation…".into();
+            }
+            Bake(all, size, precision) => {
+                let channels = if all {
+                    Channel::ALL.to_vec()
+                } else {
+                    vec![Channel::Color]
+                };
+                self.start_texture_bake(
+                    channels,
+                    crate::sculpt::texture::bake::BakeOptions {
+                        size,
+                        precision,
+                        preserve_existing: !self.ui.uv.bake_override,
+                        composite: all,
+                    },
+                    None,
+                    Bake(all, size, precision),
                 )?;
-                self.texture_exchange = Some(ExchangeJob {
-                    geometry,
-                    worker,
-                    open_in: None,
-                    bake: true,
-                });
-                self.ui.uv.exchange_busy = true;
-                self.ui.status =
-                    "Baking unlit colour and material properties into UV textures…".into();
             }
             CreateAndPaint(channel, size, precision) => {
+                self.texture_command(Start(channel, size, precision, self.ui.uv.initial, true))?;
+            }
+            Start(channel, size, precision, initial, paint) => {
                 if !self.document.mesh().uv.current(self.document.mesh()) {
                     return Err(
-                        "Use Automatic unwrap in UV layout before creating a paint texture".into(),
+                        "Generate UVs using Automatic unwrap below, then start texture painting."
+                            .into(),
                     );
                 }
-                self.texture_command(Create(channel, size, precision))?;
-                self.texture_command(Paint(Some(channel)))?;
+                if self
+                    .document
+                    .mesh()
+                    .uv
+                    .textures
+                    .iter()
+                    .any(|t| t.channel == channel)
+                {
+                    return Err("This channel already has a texture. Choose Paint on model or remove it before creating another.".into());
+                }
+                if initial == TextureStart::Surface {
+                    self.start_texture_bake(
+                        vec![channel],
+                        crate::sculpt::texture::bake::BakeOptions {
+                            size,
+                            precision,
+                            preserve_existing: false,
+                            composite: false,
+                        },
+                        paint.then_some(channel),
+                        Start(channel, size, precision, initial, paint),
+                    )?;
+                } else {
+                    let brush = &self.document.brushes()[self.ui.selected];
+                    let mut material = brush.material.clone();
+                    if channel == Channel::Color && precision == Precision::Float32 {
+                        material.base_color = brush.texture_colour.unwrap_or(material.base_color);
+                    }
+                    let mut texture =
+                        Texture::new_with_precision(channel, size, &material, precision)?;
+                    if initial == TextureStart::Transparent {
+                        match &mut texture.pixels {
+                            crate::sculpt::texture::Pixels::U16(p) => {
+                                std::sync::Arc::make_mut(p).fill(0)
+                            }
+                            crate::sculpt::texture::Pixels::Float32(p) => {
+                                std::sync::Arc::make_mut(p).fill(0.)
+                            }
+                        }
+                    }
+                    self.document.assign_texture(texture)?;
+                    if paint {
+                        self.texture_command(Paint(Some(channel)))?;
+                    }
+                }
             }
+            #[cfg(test)]
             Create(channel, size, precision) => {
                 if self
                     .document
@@ -268,7 +509,63 @@ impl App {
             }
             EditExternal(channel) => {
                 let texture = get(&self.document, channel)?;
-                self.start_texture_exchange(texture, true)?;
+                if let Some(exchange) = &texture.exchange {
+                    let path = exchange.layered_path.as_ref().unwrap_or(&exchange.path);
+                    if !std::path::Path::new(path).is_file() {
+                        return Err("Working file is missing. Choose working file to relink it, or create a New snapshot.".into());
+                    }
+                    let app = self.ui.preferences.external_paint_app.trim();
+                    let reader = self.ui.preferences.gimp_path.trim();
+                    let app = if !app.is_empty() {
+                        app
+                    } else if !reader.is_empty() {
+                        reader
+                    } else {
+                        "gimp"
+                    };
+                    persistence::gimp::open(app, std::path::Path::new(path))?;
+                    self.ui.status =
+                        "Opened existing working document. Save there, then Reload here.".into();
+                } else {
+                    self.start_texture_exchange(texture, true)?;
+                }
+            }
+            NewSnapshot(channel) => {
+                self.start_texture_exchange(get(&self.document, channel)?, true)?;
+            }
+            Relink(channel, path) => {
+                let mut texture = get(&self.document, channel)?;
+                let file = std::path::Path::new(&path);
+                let metadata = std::fs::metadata(file)
+                    .map_err(|e| format!("Cannot open working file: {e}"))?;
+                if !metadata.is_file() || metadata.len() > 2 * 1024 * 1024 * 1024 {
+                    return Err("Choose a regular working file smaller than 2 GiB".into());
+                }
+                let extension = file
+                    .extension()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_lowercase();
+                if !["psd", "xcf", "png", "exr"].contains(&extension.as_str()) {
+                    return Err("Choose a PSD, XCF, PNG or EXR working file".into());
+                }
+                let path = file
+                    .canonicalize()
+                    .map_err(|e| e.to_string())?
+                    .to_string_lossy()
+                    .into_owned();
+                texture.exchange = Some(Exchange {
+                    baseline: texture
+                        .exchange
+                        .as_ref()
+                        .map_or_else(|| texture.fingerprint(), |e| e.baseline),
+                    layered_path: ["psd", "xcf"]
+                        .contains(&extension.as_str())
+                        .then(|| path.clone()),
+                    path,
+                });
+                self.document.assign_texture(texture)?;
+                self.ui.status = "Working file linked. Reload to import saved paint; current pixels are unchanged.".into();
             }
             Reload(channel, discard_local) => {
                 let texture = get(&self.document, channel)?;
@@ -317,6 +614,123 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(5));
         }
     }
+    #[test]
+    fn hdr_sampling_paints_float_colour_and_bounds_vertex_materials() {
+        let mut app = App::default();
+        let mut mesh = crate::sculpt::texture::tests::sheets();
+        mesh.uv.textures[0] = Texture::new_with_precision(
+            Channel::Color,
+            64,
+            &Default::default(),
+            Precision::Float32,
+        )
+        .unwrap();
+        app.document
+            .replace_geometry(crate::sculpt::Geometry::new(mesh))
+            .unwrap();
+        app.texture_command(TextureCommand::Paint(Some(Channel::Color)))
+            .unwrap();
+        let mut sampled = crate::sculpt::Material::default();
+        sampled.base_color = [2., -0.25, 0.5];
+        app.sample_surface_material(sampled.clone()).unwrap();
+        let mut brush = app.document.brushes()[app.ui.selected].clone();
+        assert_eq!(brush.texture_colour, Some(sampled.base_color));
+        let decoded: crate::sculpt::Brush =
+            serde_json::from_str(&serde_json::to_string(&brush).unwrap()).unwrap();
+        assert_eq!(decoded.texture_colour, brush.texture_colour);
+        brush.strength = 1.;
+        app.document.fill_all_material(&brush).unwrap();
+        let p = app.document.mesh().uv.textures[0].linear_pixel(32 * 64 + 16);
+        assert_eq!(&p[..3], &sampled.base_color);
+        app.texture_command(TextureCommand::Paint(None)).unwrap();
+        app.sample_surface_material(sampled).unwrap();
+        let brush = &app.document.brushes()[app.ui.selected];
+        assert_eq!(brush.material.base_color, [1., 0., 0.5]);
+        assert!(brush.texture_colour.is_none());
+        assert!(app.ui.status.contains("limited to 0–1"));
+    }
+
+    #[test]
+    fn texture_setup_preserves_surface_and_cancel_keeps_document() {
+        let mut app = App::default();
+        let mut mesh = crate::sculpt::texture::tests::sheets();
+        mesh.uv.textures.clear();
+        let material = crate::sculpt::Material::from_srgb([0.8, 0.2, 0.4], 0.3, 0.7);
+        mesh.materials = vec![material.clone(); mesh.vertices.len()];
+        app.document
+            .replace_geometry(crate::sculpt::Geometry::new(mesh))
+            .unwrap();
+        let before = app.document.geometry_snapshot();
+        app.texture_command(TextureCommand::CreateAndPaint(
+            Channel::Color,
+            64,
+            Precision::Float32,
+        ))
+        .unwrap();
+        finish_exchange(&mut app);
+        assert_eq!(app.document.texture_paint, Some(Channel::Color));
+        let p = app.document.mesh().uv.textures[0].linear_pixel(32 * 64 + 16);
+        for (actual, expected) in p[..3].iter().zip(material.base_color) {
+            assert!((actual - expected).abs() < 1e-6);
+        }
+        app.document.undo();
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert_eq!(app.document.texture_paint, None);
+        app.texture_command(TextureCommand::Start(
+            Channel::Color,
+            64,
+            Precision::Float32,
+            TextureStart::Transparent,
+            false,
+        ))
+        .unwrap();
+        assert_eq!(app.document.mesh().uv.textures[0].linear_pixel(0), [0.; 4]);
+        let before_cancel = app.document.geometry_snapshot();
+        app.texture_command(TextureCommand::Bake(true, 64, Precision::Float32))
+            .unwrap();
+        app.texture_command(TextureCommand::Cancel).unwrap();
+        finish_exchange(&mut app);
+        assert_eq!(app.document.geometry_snapshot(), before_cancel);
+        assert!(app.ui.status.contains("cancelled"));
+    }
+
+    #[test]
+    fn working_file_relink_preserves_pixels_and_conflict_baseline() {
+        let mut app = App::default();
+        app.document
+            .replace_geometry(crate::sculpt::Geometry::new(
+                crate::sculpt::texture::tests::sheets(),
+            ))
+            .unwrap();
+        let before = app.document.mesh().uv.textures[0].clone();
+        let path = std::env::temp_dir().join(format!("clay-relink-{}.png", before.id));
+        persistence::texture::save(&path, &before).unwrap();
+        app.texture_command(TextureCommand::Relink(
+            Channel::Color,
+            path.to_string_lossy().into(),
+        ))
+        .unwrap();
+        let linked = app.document.mesh().uv.textures[0].clone();
+        assert_eq!(linked.pixels, before.pixels);
+        assert_eq!(
+            linked.exchange.as_ref().unwrap().baseline,
+            before.fingerprint()
+        );
+        let mut edited = linked.clone();
+        edited.pixels.set_pixel(0, [0.1, 0.2, 0.3, 1.]);
+        app.document.assign_texture(edited).unwrap();
+        app.texture_command(TextureCommand::Relink(
+            Channel::Color,
+            path.to_string_lossy().into(),
+        ))
+        .unwrap();
+        assert!(
+            app.texture_command(TextureCommand::Reload(Channel::Color, false))
+                .is_err()
+        );
+        std::fs::remove_file(path).unwrap();
+    }
+
     #[test]
     fn texture_bake_is_one_undo_and_rejects_stale_background_results() {
         let mut app = App::default();
@@ -423,10 +837,10 @@ mod tests {
         assert_eq!(app.document.mesh().uv.textures[0].pixels, external.pixels);
         app.ui.preferences.gimp_path = "/nonexistent/clay-gimp".into();
         let saved = app.document.geometry_snapshot();
-        app.texture_command(TextureCommand::EditExternal(Channel::Color))
-            .unwrap();
-        finish_exchange(&mut app);
-        assert!(app.ui.status.contains("Could not open external paint app"));
+        let error = app
+            .texture_command(TextureCommand::EditExternal(Channel::Color))
+            .unwrap_err();
+        assert!(error.contains("Could not open external paint app"));
         assert_eq!(app.document.geometry_snapshot(), saved);
         let _ = std::fs::remove_file(path);
     }
@@ -526,7 +940,13 @@ mod tests {
         ] {
             capture.render(&ctx, frame(&mut app, events));
         }
-        assert_eq!(app.document.mesh().uv.textures.len(), 1);
+        finish_exchange(&mut app);
+        assert_eq!(
+            app.document.mesh().uv.textures.len(),
+            1,
+            "{}",
+            app.ui.status
+        );
         assert!(!app.ui.uv.open, "painting returns to the 3D model");
         assert_eq!(app.document.texture_paint, Some(Channel::Color));
         let mut brush = app.document.brushes()[app.ui.selected].clone();
@@ -570,6 +990,15 @@ mod tests {
         assert_eq!(app.document.mesh().uv.textures[0].pixels, after);
         app.ui.uv.open = true;
         capture.render(&ctx, frame(&mut app, vec![egui::Event::PointerGone]));
+        let out = frame(&mut app, vec![]);
+        let p = point(&out, "Capture and bake");
+        capture.render(&ctx, out);
+        for events in [
+            vec![egui::Event::PointerMoved(p), button(p, true)],
+            vec![button(p, false)],
+        ] {
+            capture.render(&ctx, frame(&mut app, events));
+        }
         let out = frame(&mut app, vec![]);
         let p = point(&out, "Bake material maps");
         capture.render(&ctx, out);

@@ -62,6 +62,7 @@ pub fn load(path: &str, channel: Channel) -> Result<Texture, String> {
         Pixels::U16(Arc::new(pixels))
     };
     let asset = Texture {
+        upload: Default::default(),
         id: Texture::new_id(),
         name: Path::new(path)
             .file_stem()

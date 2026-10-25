@@ -324,8 +324,14 @@ impl App {
                 Ok(())
             }
             Command::SaveMaterial(asset) => self.document.save_material(asset),
+            Command::SaveMaterialToLibrary(asset) => {
+                self.ui.preferences.materials.save_asset(&asset).map(|()| {
+                    self.ui.status =
+                        "Saved to personal library. Project Undo does not change library presets."
+                            .into();
+                })
+            }
             Command::RemoveMaterial(id) => self.document.remove_material(id).map(|()| {
-                self.ui.preferences.materials.remove(id);
                 self.ui.status =
                     "Removed material; existing paint is preserved. Undo restores the material."
                         .into();
@@ -354,19 +360,7 @@ impl App {
                     self.viewport.wait_for_release();
                 }
                 let label = self.document.undo_label();
-                let materials =
-                    (label == Some("Remove material")).then(|| self.document.materials().to_vec());
                 self.document.undo();
-                if let Some(before) = materials {
-                    for asset in self
-                        .document
-                        .materials()
-                        .iter()
-                        .filter(|a| !before.iter().any(|b| a.id == b.id))
-                    {
-                        self.ui.preferences.materials.restore(asset);
-                    }
-                }
                 self.refresh_path_after_history();
                 self.ui.status =
                     label.map_or("Nothing to undo".into(), |label| format!("Undid: {label}"));
@@ -379,17 +373,7 @@ impl App {
                     self.viewport.wait_for_release();
                 }
                 let label = self.document.redo_label();
-                let materials =
-                    (label == Some("Remove material")).then(|| self.document.materials().to_vec());
                 self.document.redo();
-                if let Some(before) = materials {
-                    for asset in before
-                        .iter()
-                        .filter(|a| !self.document.materials().iter().any(|b| a.id == b.id))
-                    {
-                        self.ui.preferences.materials.remove(asset.id);
-                    }
-                }
                 self.refresh_path_after_history();
                 self.ui.status =
                     label.map_or("Nothing to redo".into(), |label| format!("Redid: {label}"));

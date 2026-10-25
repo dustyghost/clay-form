@@ -364,6 +364,7 @@ pub(crate) struct Preferences {
     pub gimp_path: String,
     pub external_paint_app: String,
     pub materials: MaterialLibrary,
+    pub paint_inspection: crate::viewport::InspectionMode,
     pub lighting: crate::lighting::Lighting,
     #[serde(default)]
     pub paint_shortcuts_version: u32,
@@ -396,6 +397,7 @@ pub(crate) struct Preferences {
     pub workspaces: Vec<Workspace>,
     pub next_menu_id: u64,
     pub active_workspace: Option<usize>,
+    pub paint_workspace_backup: Option<(Workspace, Option<usize>)>,
     pub compact_toolbar: bool,
     #[serde(default = "default_shelf_sizes")]
     pub shelf_sizes: [f32; 4],
@@ -408,6 +410,7 @@ impl Default for Preferences {
             gimp_path: String::new(),
             external_paint_app: String::new(),
             materials: MaterialLibrary::default(),
+            paint_inspection: Default::default(),
             lighting: Default::default(),
             paint_shortcuts_version: 1,
             brush_controls_version: 2,
@@ -456,6 +459,7 @@ impl Default for Preferences {
             workspaces: Vec::new(),
             next_menu_id: 1,
             active_workspace: None,
+            paint_workspace_backup: None,
             appearance: Appearance::default(),
             compact_toolbar: false,
             shelf_sizes: default_shelf_sizes(),
@@ -538,7 +542,11 @@ impl Preferences {
                 return Err("Duplicate sidebar section order".into());
             }
         }
-        for workspace in &self.workspaces {
+        for workspace in self.workspaces.iter().chain(
+            self.paint_workspace_backup
+                .iter()
+                .map(|(workspace, _)| workspace),
+        ) {
             let prefs = Self {
                 panels: workspace.panels.clone(),
                 menus: workspace.menus.clone(),
@@ -835,6 +843,44 @@ impl Preferences {
             workspace.menus.push(menu.clone());
         }
     }
+    /// A reversible layout preset; keep the backup in preferences so a restart
+    /// cannot strand the artist without their original workspace.
+    pub fn focus_paint_workspace(&mut self) {
+        if self.paint_workspace_backup.is_some() {
+            return;
+        }
+        self.sync_active_workspace();
+        self.paint_workspace_backup = Some((
+            self.workspace("Before Paint focus".into()),
+            self.active_workspace,
+        ));
+        self.active_workspace = None;
+        for panel in &mut self.panels {
+            panel.dock = if panel.tool == Tool::Brush {
+                Dock::Right
+            } else {
+                Dock::Hidden
+            };
+            panel.open = panel.tool == Tool::Brush;
+        }
+        for menu in &mut self.menus {
+            if menu.placement != Placement::Hidden {
+                menu.placement = Placement::Menu;
+            }
+        }
+        self.pinned_menus.clear();
+        self.menu_sections.clear();
+        self.sidebar_order.clear();
+        self.right_width = 320.;
+        self.compact_toolbar = true;
+    }
+    pub fn restore_paint_workspace(&mut self) {
+        if let Some((workspace, active)) = self.paint_workspace_backup.take() {
+            self.apply_workspace(&workspace);
+            self.active_workspace = active.filter(|index| *index < self.workspaces.len());
+        }
+    }
+
     pub fn workspace(&self, name: String) -> Workspace {
         Workspace {
             name,

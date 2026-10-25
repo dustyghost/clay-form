@@ -9,7 +9,9 @@ impl Document {
         &self.geometry.settings
     }
     pub(crate) fn geometry_snapshot(&self) -> Geometry {
-        self.geometry.clone()
+        let mut geometry = self.geometry.clone();
+        Self::sync_geometry_texture_uses(&mut geometry);
+        geometry
     }
     #[cfg(test)]
     pub(crate) fn replace_geometry(&mut self, geometry: Geometry) -> Result<(), String> {
@@ -58,6 +60,7 @@ impl Document {
         }
         self.dirty = true;
         self.display_changed();
+        self.reconcile_paint_target();
     }
     pub fn set_mesh_level(&mut self, level: usize) -> Result<(), String> {
         self.require_sculpt_mesh()?;

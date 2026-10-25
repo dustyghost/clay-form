@@ -55,6 +55,7 @@ pub struct Document {
     references: Vec<crate::reference::ReferenceImage>,
     geometry: Geometry,
     display_revision: u64,
+    geometry_display_revision: u64,
     brushes: Vec<Brush>,
     history: History,
     diagnostic_context: Option<serde_json::Value>,
@@ -67,6 +68,7 @@ pub struct Document {
     pub(crate) texture_paint: Option<crate::sculpt::texture::Channel>,
     paint_stroke: Option<(bool, crate::diagnostics::EditSettings)>,
     paint_sequence: u32,
+    paint_scratch: crate::sculpt::texture::PaintScratch,
     pub(crate) relax_status: Option<String>,
     stroke_deformed: bool,
     stroke_before: Option<Geometry>,
@@ -83,6 +85,7 @@ impl Default for Document {
             references: Vec::new(),
             geometry: Geometry::new(Mesh::starting_sphere()),
             display_revision: 0,
+            geometry_display_revision: 0,
             brushes: Kind::ALL
                 .into_iter()
                 .map(Brush::new)
@@ -99,6 +102,7 @@ impl Default for Document {
             texture_paint: None,
             paint_stroke: None,
             paint_sequence: 0,
+            paint_scratch: Default::default(),
             relax_status: None,
             stroke_deformed: false,
             stroke_before: None,
@@ -117,8 +121,15 @@ impl Document {
     pub(crate) fn display_revision(&self) -> u64 {
         self.display_revision
     }
+    pub(crate) fn geometry_display_revision(&self) -> u64 {
+        self.geometry_display_revision
+    }
+    fn texture_display_changed(&mut self) {
+        self.display_revision = self.display_revision.wrapping_add(1);
+    }
     fn display_changed(&mut self) {
         self.display_revision = self.display_revision.wrapping_add(1);
+        self.geometry_display_revision = self.geometry_display_revision.wrapping_add(1);
     }
     pub fn brushes(&self) -> &[Brush] {
         &self.brushes
@@ -153,19 +164,20 @@ impl Document {
         self.history.can_redo()
     }
     pub fn project(&self) -> Project {
+        let geometry = self.geometry_snapshot();
         Project {
-            paths: self.geometry.paths.clone(),
+            paths: geometry.paths,
             alphas: self.alphas.clone(),
             stencil: self.stencil.clone(),
             references: self.references.clone(),
             version: Project::VERSION,
-            scene: self.geometry.scene.clone(),
-            model_name: self.geometry.name.clone(),
-            submodels: self.geometry.submodels.clone(),
-            mesh: self.geometry.mesh.clone(),
+            scene: geometry.scene,
+            model_name: geometry.name,
+            submodels: geometry.submodels,
+            mesh: geometry.mesh,
             brushes: self.brushes.clone(),
             symmetry: self.symmetry.clone(),
-            mesh_settings: self.geometry.settings.clone(),
+            mesh_settings: geometry.settings,
         }
     }
     pub fn has_saved_path(&self) -> bool {
@@ -221,6 +233,7 @@ impl Document {
             self.dirty = true;
             self.display_changed();
             self.sync_material_brushes(&previous_ids);
+            self.reconcile_paint_target();
         }
     }
     pub fn redo(&mut self) {
@@ -229,6 +242,7 @@ impl Document {
         let previous_ids: Vec<_> = self.materials().iter().map(|a| a.id).collect();
         if self.history.redo(&mut self.geometry) {
             self.sync_material_brushes(&previous_ids);
+            self.reconcile_paint_target();
             self.dirty = true;
             self.display_changed();
         }

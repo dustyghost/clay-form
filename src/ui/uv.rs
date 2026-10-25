@@ -18,6 +18,14 @@ pub(crate) struct UvControls {
     pub export_overwrite: Option<String>,
     pub reload_conflict: bool,
     pub exchange_busy: bool,
+    pub operation: String,
+    pub operation_progress: Option<f32>,
+    pub completed: bool,
+    pub retry: Option<crate::app::textures::TextureCommand>,
+    pub initial: crate::app::textures::TextureStart,
+    pub bake_override: bool,
+    pub working_format: crate::app::textures::WorkingFormat,
+    pub working_path: String,
     bake_replace: Option<bool>,
     image_preview: Option<((u64, u64, u32, bool), egui::TextureHandle)>,
     geometry_hash: Option<u64>,
@@ -223,7 +231,32 @@ impl UiState {
         let uv = &document.mesh().uv;
 
         use crate::app::textures::TextureCommand as T;
-        use crate::sculpt::texture::Channel;
+        use crate::app::textures::{TextureStart, WorkingFormat};
+        use crate::sculpt::texture::{Channel, Precision};
+        let ready = uv.current(document.mesh()) && (0..uv.corners.len()).any(|f| uv.mapped(f));
+        if !ready {
+            ui.label("Start texture painting: this model needs current UVs.");
+            if ui.button("Generate UVs for painting").clicked() {
+                commands.push(Command::UvUnwrap(true, 0.01));
+            }
+            ui.weak("Then choose a starting image and Create & paint on model.");
+        }
+        if self.uv.exchange_busy {
+            ui.label(&self.uv.operation);
+            if let Some(progress) = self.uv.operation_progress {
+                ui.add(egui::ProgressBar::new(progress).show_percentage());
+            } else {
+                ui.spinner();
+            }
+            if ui.button("Cancel texture operation").clicked() {
+                commands.push(Command::Texture(T::Cancel));
+            }
+        } else if let Some(retry) = self.uv.retry.clone() {
+            ui.colored_label(Color32::YELLOW, &self.uv.operation);
+            if ui.button("Retry texture operation").clicked() {
+                commands.push(Command::Texture(retry));
+            }
+        }
         ui.horizontal_wrapped(|ui| {
             for channel in Channel::ALL {
                 if ui
@@ -237,58 +270,107 @@ impl UiState {
         if self.uv.size == 0 {
             self.uv.size = 512;
         }
-        ui.horizontal_wrapped(|ui| {
-            egui::ComboBox::from_id_salt("texture_resolution")
-                .selected_text(format!("{} × {}", self.uv.size, self.uv.size))
-                .show_ui(ui, |ui| {
-                    for size in [256, 512, 1024, 2048, 4096] {
-                        ui.selectable_value(&mut self.uv.size, size, size.to_string());
+        let has_image = uv.textures.iter().any(|t| t.channel == self.uv.channel);
+        egui::CollapsingHeader::new("New texture / import")
+            .id_salt(("new_texture", has_image))
+            .default_open(!has_image)
+            .show(ui, |ui| {
+                ui.label("New texture");
+                egui::ComboBox::from_id_salt("texture_start")
+                    .selected_text(match self.uv.initial {
+                        TextureStart::Surface => "Use existing surface / vertex colour",
+                        TextureStart::Transparent => "Blank transparent",
+                        TextureStart::Solid => "Solid brush colour / value",
+                    })
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.uv.initial,
+                            TextureStart::Surface,
+                            "Use existing surface / vertex colour",
+                        );
+                        ui.selectable_value(
+                            &mut self.uv.initial,
+                            TextureStart::Transparent,
+                            "Blank transparent",
+                        );
+                        ui.selectable_value(
+                            &mut self.uv.initial,
+                            TextureStart::Solid,
+                            "Solid brush colour / value",
+                        );
+                    });
+                let can_create = ready
+                    && !self.uv.exchange_busy
+                    && !uv.textures.iter().any(|t| t.channel == self.uv.channel);
+                ui.horizontal_wrapped(|ui| {
+                    egui::ComboBox::from_id_salt("texture_resolution")
+                        .selected_text(format!("{} × {}", self.uv.size, self.uv.size))
+                        .show_ui(ui, |ui| {
+                            for size in [256, 512, 1024, 2048, 4096] {
+                                ui.selectable_value(&mut self.uv.size, size, size.to_string());
+                            }
+                        });
+                    use crate::sculpt::texture::Precision;
+                    egui::ComboBox::from_id_salt("texture_precision")
+                        .selected_text(if self.uv.precision == Precision::U16 {
+                            "16-bit integer"
+                        } else {
+                            "32-bit float"
+                        })
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(
+                                &mut self.uv.precision,
+                                Precision::U16,
+                                "16-bit integer",
+                            );
+                            ui.selectable_value(
+                                &mut self.uv.precision,
+                                Precision::Float32,
+                                "32-bit float",
+                            );
+                        });
+                    if ui
+                        .add_enabled(can_create, egui::Button::new("Create texture"))
+                        .clicked()
+                    {
+                        commands.push(Command::Texture(T::Start(
+                            self.uv.channel,
+                            self.uv.size,
+                            self.uv.precision,
+                            self.uv.initial,
+                            false,
+                        )));
+                    }
+                    if ui
+                        .add_enabled(can_create, egui::Button::new("Create & paint on model"))
+                        .clicked()
+                    {
+                        commands.push(Command::Texture(T::CreateAndPaint(
+                            self.uv.channel,
+                            self.uv.size,
+                            self.uv.precision,
+                        )));
+                    }
+                    if ui.button("Import PNG / JPEG / EXR…").clicked() {
+                        commands.push(Command::BrowseAsset(crate::command::AssetKind::Texture));
                     }
                 });
-            use crate::sculpt::texture::Precision;
-            egui::ComboBox::from_id_salt("texture_precision")
-                .selected_text(if self.uv.precision == Precision::U16 {
-                    "16-bit integer / PNG"
-                } else {
-                    "32-bit float / EXR"
-                })
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(
-                        &mut self.uv.precision,
-                        Precision::U16,
-                        "16-bit integer / PNG",
-                    );
-                    ui.selectable_value(
-                        &mut self.uv.precision,
-                        Precision::Float32,
-                        "32-bit float / EXR",
-                    );
-                });
-            if ui.button("Create texture").clicked() {
-                commands.push(Command::Texture(T::Create(
-                    self.uv.channel,
-                    self.uv.size,
-                    self.uv.precision,
-                )));
-            }
-            if ui.button("Create & paint on model").clicked() {
-                commands.push(Command::Texture(T::CreateAndPaint(
-                    self.uv.channel,
-                    self.uv.size,
-                    self.uv.precision,
-                )));
-            }
-            if ui.button("Import PNG / JPEG / EXR…").clicked() {
-                commands.push(Command::BrowseAsset(crate::command::AssetKind::Texture));
-            }
-        });
+            });
+        ui.separator();
+        ui.collapsing("Capture and bake", |ui| {
+        ui.checkbox(
+            &mut self.uv.bake_override,
+            "Override existing bake size and precision",
+        );
+        ui.weak(if self.uv.bake_override { "All baked maps use the size and precision in New texture / import." }
+            else { "Bake preserves each existing map's size and precision. New maps use the settings in New texture / import." });
         ui.horizontal_wrapped(|ui| {
             for (all, label) in [
                 (false, "Capture vertex paint"),
                 (true, "Bake material maps"),
             ] {
                 if ui
-                    .add_enabled(!self.uv.exchange_busy, egui::Button::new(label))
+                    .add_enabled(ready && !self.uv.exchange_busy, egui::Button::new(label))
                     .clicked()
                 {
                     if uv
@@ -307,9 +389,50 @@ impl UiState {
                 }
             }
         });
-        ui.weak("Capture copies vertex colour. Bake creates unlit base colour, roughness and metallic maps, including existing texture paint. Uses the size and precision above.");
+        ui.weak("Capture copies vertex colour. Bake creates unlit base colour, roughness and metallic maps, including existing texture paint.");
         if let Some(all) = self.uv.bake_replace {
             ui.label("This replaces existing texture maps. One Undo restores them.");
+            for channel in Channel::ALL
+                .into_iter()
+                .filter(|c| all || *c == Channel::Color)
+            {
+                let old = uv.textures.iter().find(|t| t.channel == channel);
+                let (width, height, precision) = old
+                    .filter(|_| !self.uv.bake_override)
+                    .map_or((self.uv.size, self.uv.size, self.uv.precision), |t| {
+                        (t.width, t.height, t.pixels.precision())
+                    });
+                let describe = |w, h, p| {
+                    format!(
+                        "{w} × {h}, {}",
+                        if p == Precision::Float32 {
+                            "32-bit float"
+                        } else {
+                            "16-bit integer"
+                        }
+                    )
+                };
+                let before = old.map_or("new map".into(), |t| {
+                    describe(t.width, t.height, t.pixels.precision())
+                });
+                ui.label(format!(
+                    "{}: {before} → {}",
+                    channel.label(),
+                    describe(width, height, precision)
+                ));
+                if let Some(texture) = old {
+                    let users = (0..document.model_count())
+                        .filter(|&i| {
+                            document.model(i).is_some_and(|m| {
+                                m.mesh.uv.textures.iter().any(|t| t.id == texture.id)
+                            })
+                        })
+                        .count();
+                    if users > 1 {
+                        ui.colored_label(Color32::YELLOW, format!("Updates {users} linked models"));
+                    }
+                }
+            }
             ui.horizontal_wrapped(|ui| {
                 if ui
                     .add_enabled(
@@ -330,6 +453,7 @@ impl UiState {
                 }
             });
         }
+        });
         if let Some(texture) = uv.textures.iter().find(|t| t.channel == self.uv.channel) {
             if self.uv.export_path == "texture.png"
                 && texture.pixels.precision() == crate::sculpt::texture::Precision::Float32
@@ -392,11 +516,20 @@ impl UiState {
                     }
                 });
             }
+            ui.collapsing("External painting", |ui| {
+            egui::ComboBox::from_id_salt("paint_working_format")
+                .selected_text(match self.uv.working_format { WorkingFormat::Auto => "Automatic working format", WorkingFormat::Psd => "PSD", WorkingFormat::Xcf => "XCF (GIMP)" })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.uv.working_format, WorkingFormat::Auto, "Automatic working format");
+                    ui.selectable_value(&mut self.uv.working_format, WorkingFormat::Psd, "PSD");
+                    ui.selectable_value(&mut self.uv.working_format, WorkingFormat::Xcf, "XCF (GIMP)");
+                });
+            ui.weak("Automatic uses XCF for float textures in GIMP; otherwise PSD. PNG and EXR export are separate from working format.");
             ui.horizontal_wrapped(|ui| {
                 if ui
                     .add_enabled(
                         !self.uv.exchange_busy,
-                        egui::Button::new("Edit in external paint app"),
+                        egui::Button::new(if texture.exchange.is_some() { "Open working document" } else { "Edit in external paint app" }),
                     )
                     .clicked()
                 {
@@ -410,6 +543,14 @@ impl UiState {
                     .clicked()
                 {
                     commands.push(Command::Texture(T::Reload(self.uv.channel, false)));
+                }
+            });
+            ui.horizontal_wrapped(|ui| {
+                if ui.add_enabled(!self.uv.exchange_busy, egui::Button::new("New snapshot")).clicked() {
+                    commands.push(Command::Texture(T::NewSnapshot(self.uv.channel)));
+                }
+                if ui.add_enabled(!self.uv.exchange_busy, egui::Button::new("Choose working file…")).clicked() {
+                    commands.push(Command::BrowseAsset(crate::command::AssetKind::PaintWorking));
                 }
             });
             if self.uv.reload_conflict {
@@ -428,21 +569,17 @@ impl UiState {
             }
             if let Some(exchange) = &texture.exchange {
                 if let Some(path) = &exchange.layered_path {
-                    ui.label(format!("Working PSD: {path}"));
-                    ui.label("Save back to this PSD, then Reload here. In GIMP use Export (Ctrl+E). The UV guide is excluded even when visible; keep its name and separate layer.");
+                    ui.label(format!("Working document: {path}"));
+                    ui.label("Save back to this file, then Reload here. For PSD in GIMP use Export; for XCF use Save. Keep the UV guide name and separate layer; it is excluded even when visible.");
                 } else {
                     ui.label(format!("Exchange image: {}", exchange.path));
                     ui.label("Export back to this PNG or EXR before Reload. Use Edit in external paint app again to create a layered copy with a UV guide.");
                 }
             }
-            if self.uv.exchange_busy {
-                ui.label("External paint exchange in progress…");
-            }
-            ui.label("PSD reload uses GIMP 3 with Python to composite paint layers. Imported pixels are embedded in the project.");
+            ui.label("Layered reload uses GIMP 3 with Python. Reloaded pixels are embedded in the project; the editable working document stays at its linked path.");
             if texture.pixels.precision() == crate::sculpt::texture::Precision::Float32 {
-                ui.weak("External PSD is 32-bit float. Use an editor that saves float PSD: GIMP's PSD export reduces it to 16-bit, which Reload will reject. EXR export retains full float precision.");
+                ui.weak("32-bit float: use XCF with GIMP or float PSD with a compatible editor. EXR also retains float precision and can be relinked for reload.");
             }
-        }
         ui.horizontal(|ui| {
             ui.label("External paint app");
             ui.add(
@@ -451,7 +588,7 @@ impl UiState {
                     .hint_text("gimp"),
             );
         });
-        ui.collapsing("PSD reload settings", |ui| {
+        ui.collapsing("Layered reader settings", |ui| {
             ui.label("GIMP 3 reader executable");
             ui.add(
                 egui::TextEdit::singleline(&mut self.preferences.gimp_path)
@@ -459,6 +596,14 @@ impl UiState {
                     .hint_text("gimp"),
             );
         });
+            });
+            if self.uv.completed {
+                ui.label("Texture ready. One Undo restores the previous maps.");
+                ui.weak(
+                    "Continue with Paint on model, inspect the image here, or Export image above.",
+                );
+            }
+        }
     }
 
     fn uv_unwrap_controls(

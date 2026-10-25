@@ -96,6 +96,7 @@ jobs:
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-file-pickers" cargo test --locked --lib asset_file_dialog_offscreen_review -- --ignored
           cargo test --locked --lib interchange_export_controls_offscreen_review -- --ignored
           cargo test --locked --lib paint_modes_offscreen_review -- --ignored
+          cargo test --locked --lib paint_target_scope_inspection_offscreen_review -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-visibility" cargo test --locked --lib visibility_selection_offscreen_review -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-temporary-mask" cargo test --locked --lib temporary_mask_offscreen_review -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-context-menu" cargo test --locked --lib viewport_context_menu_offscreen_review -- --ignored

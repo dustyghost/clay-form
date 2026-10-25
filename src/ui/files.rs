@@ -7,6 +7,7 @@ impl AssetKind {
     pub(crate) fn title(self) -> &'static str {
         match self {
             Self::Texture => "Import material texture",
+            Self::PaintWorking => "Choose external paint working document",
             Self::Reference => "Add reference image",
             Self::Alpha => "Preview alpha image",
             Self::Obj => "Import OBJ",
@@ -17,6 +18,7 @@ impl AssetKind {
     pub(crate) fn filter_label(self) -> &'static str {
         match self {
             Self::Texture => "PNG / JPEG / OpenEXR (.png, .jpg, .jpeg, .exr)",
+            Self::PaintWorking => "Paint working files (.psd, .xcf, .png, .exr)",
             Self::Reference | Self::Alpha => "PNG / JPEG images (.png, .jpg, .jpeg)",
             Self::Obj => "Wavefront models (.obj)",
             Self::Brush => "Brush presets (.brush.json, .json)",
@@ -29,6 +31,7 @@ impl AssetKind {
         };
         let extensions: &[&str] = match self {
             Self::Texture => &["png", "jpg", "jpeg", "exr"],
+            Self::PaintWorking => &["psd", "xcf", "png", "exr"],
             Self::Reference | Self::Alpha => &["png", "jpg", "jpeg"],
             Self::Obj => &["obj"],
             Self::Brush | Self::BrushLibrary => &["json"],
@@ -62,6 +65,7 @@ impl UiState {
     pub(crate) fn asset_path_mut(&mut self, asset: AssetKind) -> &mut String {
         match asset {
             AssetKind::Texture => &mut self.uv.image_path,
+            AssetKind::PaintWorking => &mut self.uv.working_path,
             AssetKind::Reference => &mut self.reference_path,
             AssetKind::Alpha => &mut self.alpha_path,
             AssetKind::Obj => &mut self.obj_path,
