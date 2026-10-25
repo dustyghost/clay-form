@@ -212,7 +212,7 @@ impl DisplayMesh {
                                 u32::from(texture.channel == crate::sculpt::texture::Channel::Color)
                             }),
                         ]);
-                        texture_pixels.extend(texture.packed_pixels());
+                        texture.append_packed_pixels(&mut texture_pixels);
                         id
                     });
                     texture_channels[texture.channel.index()] = id as f32;

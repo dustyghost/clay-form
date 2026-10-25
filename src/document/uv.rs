@@ -43,43 +43,51 @@ impl Document {
         &mut self,
         texture: crate::sculpt::texture::Texture,
     ) -> Result<(), String> {
+        self.assign_textures(vec![texture])
+    }
+    pub(crate) fn assign_textures(
+        &mut self,
+        textures: Vec<crate::sculpt::texture::Texture>,
+    ) -> Result<(), String> {
         self.require_sculpt_mesh()?;
-        texture.validate()?;
         if !self.mesh().uv.current(self.mesh()) {
             return Err("Generate UVs before assigning a texture".into());
         }
         let mut candidate = self.geometry.clone();
-        let assign = |mesh: &mut Mesh| {
-            if let Some(old) = mesh
-                .uv
-                .textures
+        for texture in textures {
+            texture.validate()?;
+            let assign = |mesh: &mut Mesh| {
+                if let Some(old) = mesh
+                    .uv
+                    .textures
+                    .iter_mut()
+                    .find(|t| t.channel == texture.channel)
+                {
+                    *old = texture.clone();
+                } else {
+                    mesh.uv.textures.push(texture.clone());
+                }
+            };
+            assign(&mut candidate.mesh);
+            for mesh in candidate
+                .settings
+                .lower
                 .iter_mut()
-                .find(|t| t.channel == texture.channel)
+                .chain(&mut candidate.settings.upper)
             {
-                *old = texture.clone();
-            } else {
-                mesh.uv.textures.push(texture.clone());
+                if !mesh.uv.corners.is_empty() {
+                    assign(mesh);
+                }
             }
-        };
-        assign(&mut candidate.mesh);
-        for mesh in candidate
-            .settings
-            .lower
-            .iter_mut()
-            .chain(&mut candidate.settings.upper)
-        {
-            if !mesh.uv.corners.is_empty() {
-                assign(mesh);
-            }
-        }
-        for model in &mut candidate.submodels {
-            for mesh in std::iter::once(&mut model.mesh)
-                .chain(model.mesh_settings.lower.iter_mut())
-                .chain(model.mesh_settings.upper.iter_mut())
-            {
-                for t in &mut mesh.uv.textures {
-                    if t.id == texture.id {
-                        *t = texture.clone();
+            for model in &mut candidate.submodels {
+                for mesh in std::iter::once(&mut model.mesh)
+                    .chain(model.mesh_settings.lower.iter_mut())
+                    .chain(model.mesh_settings.upper.iter_mut())
+                {
+                    for t in &mut mesh.uv.textures {
+                        if t.id == texture.id {
+                            *t = texture.clone();
+                        }
                     }
                 }
             }

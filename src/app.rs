@@ -40,6 +40,7 @@ pub struct App {
     paths: paths::PathState,
     closing: bool,
     mesh_job: Option<MeshJob>,
+    texture_exchange: Option<textures::ExchangeJob>,
     export_job: Option<
         crate::background_job::BackgroundJob<(
             std::path::PathBuf,
@@ -68,6 +69,7 @@ impl Default for App {
             paths: Default::default(),
             closing: false,
             mesh_job: None,
+            texture_exchange: None,
             export_job: None,
             recovery: None,
             recovery_entries: Vec::new(),
@@ -550,6 +552,7 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         self.poll_mesh_job();
         self.poll_export(ctx);
+        self.poll_texture_exchange(ctx);
         self.poll_projection();
         self.poll_paths();
         let native_pressure = ctx.input(|i| self.tablet.update_native(&i.events));

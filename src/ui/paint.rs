@@ -38,22 +38,20 @@ impl UiState {
         );
         ui.horizontal(|ui| {
             use crate::sculpt::texture::Channel;
+            let mut material = brush.material.clone();
             let changed = match document.texture_paint {
                 Some(Channel::Roughness) => ui
                     .add(
-                        egui::Slider::new(&mut brush.material.roughness, 0. ..=1.)
+                        egui::Slider::new(&mut material.roughness, 0. ..=1.)
                             .text("Paint roughness"),
                     )
                     .changed(),
                 Some(Channel::Metallic) => ui
-                    .add(
-                        egui::Slider::new(&mut brush.material.metallic, 0. ..=1.)
-                            .text("Paint metallic"),
-                    )
+                    .add(egui::Slider::new(&mut material.metallic, 0. ..=1.).text("Paint metallic"))
                     .changed(),
                 _ => {
                     ui.label("Paint colour");
-                    ui.color_edit_button_rgb(&mut brush.material.base_color)
+                    ui.color_edit_button_rgb(&mut material.base_color)
                         .on_hover_text(
                             "Change this brush's colour without editing a shared material",
                         )
@@ -61,7 +59,7 @@ impl UiState {
                 }
             };
             if changed {
-                brush.material = brush.material.unlinked();
+                brush.material = material.unlinked();
             }
         });
         let label = |mode| match mode {

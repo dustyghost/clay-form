@@ -11,6 +11,41 @@ use eframe::{
 use std::sync::{Arc, Mutex};
 use wgpu::util::DeviceExt;
 
+/// Changed row ranges per lossless image page; unchanged pages stay on the GPU.
+fn changed_pixel_rows(old: &[[u32; 2]], new: &[[u32; 2]]) -> Vec<(usize, std::ops::Range<usize>)> {
+    debug_assert_eq!(old.len(), new.len());
+    old.chunks(1024 * 1024)
+        .zip(new.chunks(1024 * 1024))
+        .enumerate()
+        .filter_map(|(page, (a, b))| {
+            if bytemuck::cast_slice::<_, u8>(a) == bytemuck::cast_slice::<_, u8>(b) {
+                return None;
+            }
+            let changed: Vec<_> = a
+                .chunks(1024)
+                .zip(b.chunks(1024))
+                .enumerate()
+                .filter_map(|(row, (a, b))| {
+                    (bytemuck::cast_slice::<_, u8>(a) != bytemuck::cast_slice::<_, u8>(b))
+                        .then_some(row)
+                })
+                .collect();
+            Some((page, *changed.first()?..changed.last()? + 1))
+        })
+        .collect()
+}
+
+#[test]
+fn texture_upload_updates_only_changed_rows_including_partial_pages() {
+    let old = vec![[0; 2]; 1024 * 1024 + 17];
+    let mut new = old.clone();
+    assert!(changed_pixel_rows(&old, &new).is_empty());
+    new[1024 * 42 + 6] = [1, 2];
+    new[1024 * 44] = [3, 4];
+    new[1024 * 1024 + 16] = [5, 6];
+    assert_eq!(changed_pixel_rows(&old, &new), vec![(0, 42..45), (1, 0..1)]);
+}
+
 pub(super) struct Renderer {
     revision: Option<u64>,
     live_display: bool,
@@ -638,7 +673,46 @@ impl Gpu {
     // A document may contain several maximum-density models. Chunk the display
     // data at the device binding limit instead of imposing a new geometry limit.
     fn upload_meshes(&mut self, data: &DisplayMesh, limit: usize) {
-        self.texture_pixels = Self::pixel_texture(&self.device, &self.queue, &data.texture_pixels);
+        if let Some(old) = &self.uploaded
+            && old.texture_pixels.len() == data.texture_pixels.len()
+        {
+            for (layer, range) in changed_pixel_rows(&old.texture_pixels, &data.texture_pixels) {
+                let page = layer * 1024 * 1024;
+                let start = page + range.start * 1024;
+                let end = (page + range.end * 1024).min(data.texture_pixels.len());
+                let pixels = &data.texture_pixels[start..end];
+                let mut bytes = std::borrow::Cow::Borrowed(bytemuck::cast_slice(pixels));
+                if !pixels.len().is_multiple_of(1024) {
+                    bytes.to_mut().resize(range.len() * 1024 * 8, 0);
+                }
+                self.queue.write_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &self.texture_pixels,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d {
+                            x: 0,
+                            y: range.start as u32,
+                            z: layer as u32,
+                        },
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    &bytes,
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(1024 * 8),
+                        rows_per_image: Some(range.len() as u32),
+                    },
+                    wgpu::Extent3d {
+                        width: 1024,
+                        height: range.len() as u32,
+                        depth_or_array_layers: 1,
+                    },
+                );
+            }
+        } else {
+            self.texture_pixels =
+                Self::pixel_texture(&self.device, &self.queue, &data.texture_pixels);
+        }
         self.texture_info = buffer(
             &self.device,
             "texture descriptors",
@@ -906,8 +980,10 @@ impl Gpu {
         });
         for (layer, pixels) in pixels.chunks(PAGE).enumerate() {
             let rows = pixels.len().div_ceil(SIDE);
-            let mut bytes = bytemuck::cast_slice(pixels).to_vec();
-            bytes.resize(rows * SIDE * 8, 0);
+            let mut bytes = std::borrow::Cow::Borrowed(bytemuck::cast_slice(pixels));
+            if !pixels.len().is_multiple_of(SIDE) {
+                bytes.to_mut().resize(rows * SIDE * 8, 0);
+            }
             queue.write_texture(
                 wgpu::TexelCopyTextureInfo {
                     texture: &texture,

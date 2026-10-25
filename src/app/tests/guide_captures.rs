@@ -3200,6 +3200,29 @@ fn material_controls_offscreen_review() {
     );
     click_guide_label(&mut g, "Copy material");
     assert_eq!(g.app.ui.preferences.materials.copies.len(), 1);
+    // Paint target and delivery controls add height above the material palette.
+    // Reach the palette through the same outer-sidebar scroll an artist uses.
+    let reveal_lower_control = |g: &mut Guide, label: &str| {
+        for _ in 0..20 {
+            g.frame(vec![]);
+            if g.text_positions
+                .iter()
+                .any(|(text, pos)| text == label && pos.y < 970.)
+            {
+                break;
+            }
+            let margin = 1200. - g.app.ui.preferences.right_width + 12.;
+            g.frame(vec![
+                egui::Event::PointerMoved(Pos2::new(margin, 800.)),
+                egui::Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    delta: Vec2::new(0., -80.),
+                    modifiers: Default::default(),
+                },
+            ]);
+        }
+    };
+    reveal_lower_control(&mut g, "+ Colour");
     click_guide_label(&mut g, "+ Colour");
     assert!(
         g.app
@@ -3210,6 +3233,7 @@ fn material_controls_offscreen_review() {
             .contains(&Material::examples()[4].1.clone().base_color)
     );
     click_guide_label(&mut g, "Red plastic");
+    reveal_lower_control(&mut g, "Sample colour");
     click_guide_label(&mut g, "Sample colour");
     assert!(
         g.app.ui.materials.sampling,

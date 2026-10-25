@@ -17,6 +17,8 @@ pub(crate) struct UvControls {
     pub image_path: String,
     pub export_overwrite: Option<String>,
     pub reload_conflict: bool,
+    pub exchange_busy: bool,
+    bake_replace: Option<bool>,
     image_preview: Option<((u64, u64, u32, bool), egui::TextureHandle)>,
     geometry_hash: Option<u64>,
     size: u32,
@@ -280,6 +282,54 @@ impl UiState {
                 commands.push(Command::BrowseAsset(crate::command::AssetKind::Texture));
             }
         });
+        ui.horizontal_wrapped(|ui| {
+            for (all, label) in [
+                (false, "Capture vertex paint"),
+                (true, "Bake material maps"),
+            ] {
+                if ui
+                    .add_enabled(!self.uv.exchange_busy, egui::Button::new(label))
+                    .clicked()
+                {
+                    if uv
+                        .textures
+                        .iter()
+                        .any(|t| all || t.channel == crate::sculpt::texture::Channel::Color)
+                    {
+                        self.uv.bake_replace = Some(all);
+                    } else {
+                        commands.push(Command::Texture(T::Bake(
+                            all,
+                            self.uv.size,
+                            self.uv.precision,
+                        )));
+                    }
+                }
+            }
+        });
+        ui.weak("Capture copies vertex colour. Bake creates unlit base colour, roughness and metallic maps, including existing texture paint. Uses the size and precision above.");
+        if let Some(all) = self.uv.bake_replace {
+            ui.label("This replaces existing texture maps. One Undo restores them.");
+            ui.horizontal_wrapped(|ui| {
+                if ui
+                    .add_enabled(
+                        !self.uv.exchange_busy,
+                        egui::Button::new("Replace with bake"),
+                    )
+                    .clicked()
+                {
+                    commands.push(Command::Texture(T::Bake(
+                        all,
+                        self.uv.size,
+                        self.uv.precision,
+                    )));
+                    self.uv.bake_replace = None;
+                }
+                if ui.button("Cancel bake").clicked() {
+                    self.uv.bake_replace = None;
+                }
+            });
+        }
         if let Some(texture) = uv.textures.iter().find(|t| t.channel == self.uv.channel) {
             if self.uv.export_path == "texture.png"
                 && texture.pixels.precision() == crate::sculpt::texture::Precision::Float32
@@ -343,12 +393,18 @@ impl UiState {
                 });
             }
             ui.horizontal_wrapped(|ui| {
-                if ui.button("Edit in GIMP").clicked() {
+                if ui
+                    .add_enabled(
+                        !self.uv.exchange_busy,
+                        egui::Button::new("Edit in external paint app"),
+                    )
+                    .clicked()
+                {
                     commands.push(Command::Texture(T::EditExternal(self.uv.channel)));
                 }
                 if ui
                     .add_enabled(
-                        texture.exchange.is_some(),
+                        texture.exchange.is_some() && !self.uv.exchange_busy,
                         egui::Button::new("Reload external image"),
                     )
                     .clicked()
@@ -371,12 +427,32 @@ impl UiState {
                 });
             }
             if let Some(exchange) = &texture.exchange {
-                ui.label(format!("Exchange image: {}", exchange.path));
+                if let Some(path) = &exchange.layered_path {
+                    ui.label(format!("Working PSD: {path}"));
+                    ui.label("Save back to this PSD, then Reload here. In GIMP use Export (Ctrl+E). The UV guide is excluded even when visible; keep its name and separate layer.");
+                } else {
+                    ui.label(format!("Exchange image: {}", exchange.path));
+                    ui.label("Export back to this PNG or EXR before Reload. Use Edit in external paint app again to create a layered copy with a UV guide.");
+                }
             }
-            ui.label("GIMP: export back to the exchange PNG or EXR before Reload. Save layered XCF separately. Imported pixels are embedded in the project.");
+            if self.uv.exchange_busy {
+                ui.label("External paint exchange in progress…");
+            }
+            ui.label("PSD reload uses GIMP 3 with Python to composite paint layers. Imported pixels are embedded in the project.");
+            if texture.pixels.precision() == crate::sculpt::texture::Precision::Float32 {
+                ui.weak("External PSD is 32-bit float. Use an editor that saves float PSD: GIMP's PSD export reduces it to 16-bit, which Reload will reject. EXR export retains full float precision.");
+            }
         }
         ui.horizontal(|ui| {
-            ui.label("GIMP executable");
+            ui.label("External paint app");
+            ui.add(
+                egui::TextEdit::singleline(&mut self.preferences.external_paint_app)
+                    .desired_width(130.)
+                    .hint_text("gimp"),
+            );
+        });
+        ui.collapsing("PSD reload settings", |ui| {
+            ui.label("GIMP 3 reader executable");
             ui.add(
                 egui::TextEdit::singleline(&mut self.preferences.gimp_path)
                     .desired_width(130.)

@@ -1,4 +1,4 @@
-# UVs, texture painting and GIMP
+# UVs, texture painting and external paint apps
 
 [Documentation home](../../README.md#documentation) · [Vertex materials](materials.md)
 
@@ -56,12 +56,29 @@ Float images use RGBA32 storage. RGB colour EXRs use linear Rec.709/sRGB primari
 
 Images are limited to 4096 × 4096, with three 4K images or an equivalent mix of smaller images per project. A 4K RGBA16 image occupies 128 MiB, and RGBA32 float occupies 256 MiB before compression. Native pixels use lossless compression; project files are capped at 2 GiB. History defaults to a 1024 MiB ceiling, with shared pixel allocations counted once. Existing saved retention preferences remain in effect; if the scene cannot fit one Undo snapshot, **Paint on model** asks you to increase the budget through diagnostic settings. This ceiling does not preallocate memory. Large image edits retain fewer Undo steps. Duplicated models share their texture identity; editing or reloading updates linked uses. **Make independent** gives the active model a separate image. Texture pixels are embedded in `.clay`, so moving the project does not depend on an exchange directory. New saves use project version 3; versions 1 and 2 remain readable.
 
-## Edit in GIMP
+## Capture paint and bake materials
 
-Select a texture, then **Edit in GIMP**. If GIMP is not on PATH, enter the executable path in the same panel. The image opens as a 16-bit PNG or a 32-bit float EXR according to its precision, in a unique exchange location shown in the panel. This setting is saved with your preferences.
+In **UVs and textures → Texture images**, choose the output size and precision, then:
 
-Edit the image in GIMP and **export back to that PNG or EXR**. Save a layered working document separately as XCF; Clay Form consumes the flattened exchange image. Return to Clay Form and choose **Reload external image**. The image retains its identity and channel, updates linked uses, and can be undone. Resolution changes are accepted within the image budget.
+- **Capture vertex paint** copies the model's vertex colour into a base-colour image, replacing any existing colour texture after an inline confirmation.
+- **Bake material maps** creates base-colour, roughness and metallic images. It interpolates the model's base material values and composites existing texture paint over them. These maps contain surface properties without lights, shadows or reflections.
 
-If you painted locally after sending the image out, Reload asks whether to keep local paint or replace it explicitly. A missing, moved, incomplete or unsupported image leaves the last valid texture intact. Import a replacement file through **Import PNG / JPEG / EXR…** if the exchange file moved. Sending to GIMP again creates a new exchange file without overwriting the previous external work. The temporary exchange file is not your durable XCF working copy; save that in your own project folder.
+Both require current, nondegenerate UVs inside 0–1. Arrange overlapping islands first if they need different paint: overlapping UVs share pixels. The bake uses the active model, includes temporarily hidden faces, adds gutter padding, and replaces the maps together in one Undo step. Existing texture identities and linked uses are retained. Vertex materials remain editable. Use 32-bit float when baking existing HDR paint. This captures base PBR values; it does not flatten layered BSDFs, subsurface, emission or procedural shader networks.
 
-GIMP 3.2 EXR exchange has a dedicated alpha adaptation: its native loader reads straight RGB, while its GEGL exporter writes associated RGB. **Edit in GIMP** therefore sends straight RGB and Reload reads the standard associated result. Ordinary **Export image** writes standard associated EXR. The reproducible GIMP fixture checks negative/HDR values and nonopaque alpha across this path.
+![Texture capture and bake controls](../images/texture-bake-controls.png)
+
+## Edit in an external paint app
+
+Select a texture, then **Edit in external paint app**. Clay Form writes a layered Photoshop **PSD** containing **Texture paint** and **Clay UV guide - excluded on reload**. The cyan guide sits above the paint and is locked. Keep its name and separate layer; you can toggle visibility while painting. The paint layer is selected on opening. Choose an application executable in **External paint app**; the default is GIMP. The setting is saved with your preferences.
+
+Save the edited file back to the **Working PSD** path shown in the panel, then choose **Reload external image**. In GIMP, use **Export / Ctrl+E** to update the PSD; ordinary Save creates an XCF. Clay Form removes the guide from a disposable copy before compositing the visible paint layers, so the guide is excluded even if visible. The layered PSD stays intact. Reload retains texture identity, updates linked uses, and can be undone.
+
+PSD creation is native. Reload currently uses **GIMP 3 with its Python batch interpreter** as the PSD compositor; configure its executable under **PSD reload settings** when necessary. You can paint in another PSD editor while using this reader. Photoshop-specific adjustment layers, effects and smart objects may not translate through GIMP; use ordinary raster paint layers for reliable exchange. Photoshop itself was not available for validation.
+
+Clay Form writes 16-bit or 32-bit float PSD according to the texture precision. The installed GIMP 3.2.6 reads float PSD, but its PSD exporter converts float to 16-bit. **Reload rejects reduced precision instead of replacing an HDR texture.** Use an editor that retains 32-bit float PSD for HDR work. Ordinary **Export image** still offers lossless full-float EXR.
+
+If local paint changed after export, Reload asks whether to keep it or replace it. If the document changes during a background bake or reload, the result is discarded. Missing guides, merged guides, incomplete files and unsupported precision leave the previous texture intact. Sending to the external app again creates a fresh working file without overwriting previous external work. Keep a durable copy in your project folder; the exchange directory is temporary. Texture pixels are embedded in `.clay`.
+
+![Visible UV guide above an edited paint layer in the PSD fixture](../images/psd-uv-guide.png)
+
+Projects with older PNG/EXR exchanges still reload their original image; start a new external edit to get the layered PSD workflow.

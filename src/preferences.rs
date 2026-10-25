@@ -362,6 +362,7 @@ pub(crate) enum SelectionMode {
 pub(crate) struct Preferences {
     #[serde(default)]
     pub gimp_path: String,
+    pub external_paint_app: String,
     pub materials: MaterialLibrary,
     pub lighting: crate::lighting::Lighting,
     #[serde(default)]
@@ -405,6 +406,7 @@ impl Default for Preferences {
     fn default() -> Self {
         let mut prefs = Self {
             gimp_path: String::new(),
+            external_paint_app: String::new(),
             materials: MaterialLibrary::default(),
             lighting: Default::default(),
             paint_shortcuts_version: 1,

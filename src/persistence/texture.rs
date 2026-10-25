@@ -186,6 +186,7 @@ pub fn save(path: &Path, texture: &Texture) -> Result<(), String> {
 }
 /// GIMP's native EXR loader reads straight RGB, while its GEGL exporter writes
 /// associated RGB. Keep this adaptation confined to outgoing GIMP exchanges.
+#[cfg(test)]
 pub(crate) fn save_gimp(path: &Path, texture: &Texture) -> Result<(), String> {
     save_impl(path, texture, true)
 }

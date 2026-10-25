@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 pub const MAX_SIZE: u32 = 4096;
 pub const MAX_PIXELS: usize = 3 * 4096 * 4096;
+mod bake;
 mod pixel_storage;
 mod pixels;
 pub use pixels::{Pixels, Precision};
@@ -147,6 +148,21 @@ impl Texture {
                 Box::new(p.as_chunks::<2>().0.iter().map(|p| p.map(f32::to_bits)))
             }
         }
+    }
+    /// Bulk-copy native little-endian samples into the lossless GPU page layout.
+    pub(crate) fn append_packed_pixels(&self, output: &mut Vec<[u32; 2]>) {
+        #[cfg(target_endian = "little")]
+        {
+            let packed = match &self.pixels {
+                Pixels::U16(p) => bytemuck::try_cast_slice::<u16, [u32; 2]>(p),
+                Pixels::Float32(p) => bytemuck::try_cast_slice::<f32, [u32; 2]>(p),
+            };
+            if let Ok(packed) = packed {
+                output.extend_from_slice(packed);
+                return;
+            }
+        }
+        output.extend(self.packed_pixels());
     }
 }
 /// Three 4096² images or an equivalent mix, uploaded as bounded texture-array pages.
@@ -303,7 +319,10 @@ impl Mesh {
                     continue;
                 }
                 let uv = self.uv.corners[f].map(|q| [q[0], 1. - q[1]]);
-                raster(uv, width, height, |x, y, w| {
+                let Some(bounds) = dab_uv_bounds(projected_face, uv) else {
+                    continue;
+                };
+                raster_bounds(uv, bounds, width, height, |x, y, w| {
                     let point = (0..3).fold(Vec3::default(), |sum, c| sum + p[c] * w[c]);
                     let offset = point - dab.center;
                     if offset.len() > dab.radius * 1.5 {
@@ -343,6 +362,9 @@ impl Mesh {
                             1.
                         }
                         * stencils.get(di).map_or(1., |s| s.weight(point));
+                    if weight <= 0. {
+                        return;
+                    }
                     let entry = weights.entry(y * width + x).or_default();
                     if weight > entry.0 {
                         *entry = (weight.clamp(0., 1.), brush.subtract ^ dab.invert);
@@ -383,6 +405,48 @@ impl Mesh {
         }
         changed
     }
+}
+
+/// Clip a projected triangle to the dab square while carrying UV coordinates.
+/// This bounds raster work by the brush footprint even on a two-triangle plane.
+fn dab_uv_bounds(projected: [[f32; 3]; 3], uv: [[f32; 2]; 3]) -> Option<[[f32; 2]; 2]> {
+    let mut polygon: Vec<[f32; 4]> = (0..3)
+        .map(|i| [projected[i][0], projected[i][1], uv[i][0], uv[i][1]])
+        .collect();
+    for (axis, side) in [(0, -1f32), (0, 1.), (1, -1.), (1, 1.)] {
+        let mut clipped = Vec::with_capacity(8);
+        for i in 0..polygon.len() {
+            let a = polygon[i];
+            let b = polygon[(i + 1) % polygon.len()];
+            let da = 1. - side * a[axis];
+            let db = 1. - side * b[axis];
+            if da >= 0. {
+                clipped.push(a);
+            }
+            if (da >= 0.) != (db >= 0.) {
+                let t = da / (da - db);
+                clipped.push(std::array::from_fn(|c| a[c] + t * (b[c] - a[c])));
+            }
+        }
+        polygon = clipped;
+        if polygon.is_empty() {
+            return None;
+        }
+    }
+    Some([
+        std::array::from_fn(|k| {
+            polygon
+                .iter()
+                .map(|p| p[k + 2])
+                .fold(f32::INFINITY, f32::min)
+        }),
+        std::array::from_fn(|k| {
+            polygon
+                .iter()
+                .map(|p| p[k + 2])
+                .fold(f32::NEG_INFINITY, f32::max)
+        }),
+    ])
 }
 pub(crate) fn pad_pixels(texture: &mut Texture, mut occupied: Vec<bool>) {
     let width = texture.width as usize;
@@ -439,16 +503,27 @@ pub(crate) fn raster(
     t: [[f32; 2]; 3],
     width: usize,
     height: usize,
+    visit: impl FnMut(usize, usize, [f32; 3]),
+) {
+    let bounds = [
+        std::array::from_fn(|k| t.iter().map(|p| p[k]).fold(f32::INFINITY, f32::min)),
+        std::array::from_fn(|k| t.iter().map(|p| p[k]).fold(f32::NEG_INFINITY, f32::max)),
+    ];
+    raster_bounds(t, bounds, width, height, visit);
+}
+fn raster_bounds(
+    t: [[f32; 2]; 3],
+    bounds: [[f32; 2]; 2],
+    width: usize,
+    height: usize,
     mut visit: impl FnMut(usize, usize, [f32; 3]),
 ) {
     let size = [width as f32, height as f32];
     let mut lo = [0; 2];
     let mut hi = [0; 2];
     for k in 0..2 {
-        lo[k] = (t.iter().map(|p| p[k]).fold(f32::INFINITY, f32::min) * size[k] - 0.5)
-            .floor()
-            .max(0.) as usize;
-        hi[k] = (t.iter().map(|p| p[k]).fold(f32::NEG_INFINITY, f32::max) * size[k] - 0.5)
+        lo[k] = (bounds[0][k] * size[k] - 0.5).floor().max(0.) as usize;
+        hi[k] = (bounds[1][k] * size[k] - 0.5)
             .ceil()
             .clamp(0., size[k] - 1.) as usize;
     }
@@ -467,6 +542,9 @@ pub(crate) fn raster(
 pub struct Exchange {
     pub path: String,
     pub baseline: u64,
+    /// Layered paint working copy. Older exchanges reload `path` directly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layered_path: Option<String>,
 }
 impl Texture {
     pub fn fingerprint(&self) -> u64 {
@@ -481,6 +559,48 @@ impl Texture {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    #[test]
+    fn small_texture_brush_bounds_work_to_footprint_and_preserves_samples() {
+        let uv = [[0., 0.], [1., 0.], [0., 1.]];
+        let projected = [[-20., -20., 0.], [20., -20., 0.], [-20., 20., 0.]];
+        let bounds = dab_uv_bounds(projected, uv).unwrap();
+        let start = std::time::Instant::now();
+        let mut full = 0usize;
+        let mut expected = Vec::new();
+        raster(uv, 2048, 2048, |x, y, w| {
+            full += 1;
+            let q: [f32; 2] = std::array::from_fn(|c| (0..3).map(|i| w[i] * projected[i][c]).sum());
+            if q.iter().all(|v| v.abs() <= 1.) {
+                expected.push((x, y));
+            }
+        });
+        let full_time = start.elapsed();
+        let start = std::time::Instant::now();
+        let mut clipped = 0usize;
+        let mut actual = Vec::new();
+        raster_bounds(uv, bounds, 2048, 2048, |x, y, w| {
+            clipped += 1;
+            let q: [f32; 2] = std::array::from_fn(|c| (0..3).map(|i| w[i] * projected[i][c]).sum());
+            if q.iter().all(|v| v.abs() <= 1.) {
+                actual.push((x, y));
+            }
+        });
+        assert_eq!(actual, expected);
+        assert!(clipped < full / 100);
+        println!(
+            "2K triangle: {full} samples in {full_time:?}; brush bounds {clipped} samples in {:?}",
+            start.elapsed()
+        );
+        for precision in [Precision::U16, Precision::Float32] {
+            let texture =
+                Texture::new_with_precision(Channel::Color, 32, &Default::default(), precision)
+                    .unwrap();
+            let expected: Vec<_> = texture.packed_pixels().collect();
+            let mut actual = Vec::new();
+            texture.append_packed_pixels(&mut actual);
+            assert_eq!(actual, expected);
+        }
+    }
     #[test]
     fn spray_respects_zero_pressure_masks_and_occluding_surfaces() {
         let mut brush = Brush::new(super::super::Kind::Paint);

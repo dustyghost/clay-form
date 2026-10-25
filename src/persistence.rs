@@ -1,4 +1,5 @@
 //! Filesystem adapter: versioned projects, presets, image alphas, and OBJ import/export.
+pub(crate) mod gimp;
 pub mod material_export;
 mod obj;
 pub mod texture;
