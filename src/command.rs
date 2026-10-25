@@ -24,6 +24,7 @@ pub(crate) enum Command {
     UvUnwrap(bool, f32),
     UvSeams(bool),
     UvPack(f32),
+    UvPackSelected(Vec<usize>, f32),
     UvTransform(Vec<usize>, [f32; 2], f32, f32),
     UvSelect(Vec<usize>),
     UvReplace(Box<crate::sculpt::uv::UvMap>),

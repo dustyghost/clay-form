@@ -146,13 +146,16 @@ fn triangles_overlap(a: [Point; 3], b: [Point; 3]) -> bool {
     for t in [a, b] {
         for c in 0..3 {
             let d = (c + 1) % 3;
-            let axis = [t[d][1] - t[c][1], t[c][0] - t[d][0]];
-            let project = |p: Point| p[0] * axis[0] + p[1] * axis[1];
+            let axis = [
+                t[d][1] as f64 - t[c][1] as f64,
+                t[c][0] as f64 - t[d][0] as f64,
+            ];
+            let project = |p: Point| p[0] as f64 * axis[0] + p[1] as f64 * axis[1];
             let interval = |q: [Point; 3]| {
                 let values = q.map(project);
                 [
-                    values.into_iter().fold(f32::INFINITY, f32::min),
-                    values.into_iter().fold(f32::NEG_INFINITY, f32::max),
+                    values.into_iter().fold(f64::INFINITY, f64::min),
+                    values.into_iter().fold(f64::NEG_INFINITY, f64::max),
                 ]
             };
             let p = interval(a);
@@ -350,96 +353,30 @@ impl UvMap {
         *self = next;
         Ok(())
     }
+    pub fn pack_selected(&mut self, faces: &[usize], padding: f32) -> Result<(), String> {
+        if faces.is_empty() || faces.iter().any(|&f| !self.mapped(f)) {
+            return Err("Select UV islands to arrange".into());
+        }
+        if !padding.is_finite() || !(0. ..=0.1).contains(&padding) {
+            return Err("UV padding must be 0–10%".into());
+        }
+        self.validate()?;
+        let mut next = self.clone();
+        next.arrange(padding, Some(faces))?;
+        next.validate()?;
+        *self = next;
+        Ok(())
+    }
     /// Uniform scale across islands preserves their relative texel density.
     pub fn pack(&mut self, padding: f32) -> Result<(), String> {
         if !padding.is_finite() || !(0. ..=0.1).contains(&padding) {
             return Err("UV padding must be 0–10%".into());
         }
-        let islands = self.islands();
-        if islands.is_empty() {
-            return Err("Generate UVs before packing".into());
-        }
-        let mut rects: Vec<_> = islands
-            .iter()
-            .enumerate()
-            .map(|(id, fs)| {
-                let mut lo = [f32::INFINITY; 2];
-                let mut hi = [f32::NEG_INFINITY; 2];
-                for &f in fs {
-                    for q in self.corners[f] {
-                        for k in 0..2 {
-                            lo[k] = lo[k].min(q[k]);
-                            hi[k] = hi[k].max(q[k]);
-                        }
-                    }
-                }
-                (
-                    id,
-                    lo,
-                    [(hi[0] - lo[0]).max(1e-8), (hi[1] - lo[1]).max(1e-8)],
-                )
-            })
-            .collect();
-        rects.sort_by(|a, b| b.2[1].total_cmp(&a.2[1]).then(a.0.cmp(&b.0)));
-        let fixed: BTreeSet<_> = islands
-            .iter()
-            .enumerate()
-            .filter(|(_, fs)| fs.iter().any(|&f| (0..3).any(|c| self.mask(f, c) > 0.)))
-            .map(|(id, _)| id)
-            .collect();
-        if !fixed.is_empty() {
-            return self.pack_around_masks(padding, &islands, &rects, &fixed);
-        }
-        let layout = |scale: f32| -> Option<Vec<Point>> {
-            let (mut x, mut y, mut row) = (padding, padding, 0_f32);
-            let mut origins = vec![[0.; 2]; islands.len()];
-            for &(id, _, size) in &rects {
-                let w = size[0] * scale;
-                let h = size[1] * scale;
-                if x + w + padding > 1. {
-                    x = padding;
-                    y += row + 2. * padding;
-                    row = 0.;
-                }
-                if x + w + padding > 1. || y + h + padding > 1. {
-                    return None;
-                }
-                origins[id] = [x, y];
-                x += w + 2. * padding;
-                row = row.max(h);
-            }
-            Some(origins)
-        };
-        if layout(0.).is_none() {
-            return Err("Too many islands for this padding; reduce padding".into());
-        }
-        let mut low = 0.;
-        let mut high = 1.
-            / rects
-                .iter()
-                .map(|r| r.2[0].max(r.2[1]))
-                .fold(1e-8, f32::max);
-        for _ in 0..40 {
-            let mid = (low + high) * 0.5;
-            if layout(mid).is_some() {
-                low = mid;
-            } else {
-                high = mid;
-            }
-        }
-        if low < 1e-12 {
-            return Err("UV packing collapsed; reduce padding".into());
-        }
-        let origins = layout(low).unwrap();
-        for (id, lo, _) in rects {
-            for &f in &islands[id] {
-                for q in &mut self.corners[f] {
-                    for k in 0..2 {
-                        q[k] = (q[k] - lo[k]) * low + origins[id][k];
-                    }
-                }
-            }
-        }
+        self.validate()?;
+        let mut next = self.clone();
+        next.arrange(padding, None)?;
+        next.validate()?;
+        *self = next;
         Ok(())
     }
 }

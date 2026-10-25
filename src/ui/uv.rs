@@ -6,6 +6,7 @@ mod tests;
 pub(crate) struct UvControls {
     islands: Vec<Vec<usize>>,
     expanded: bool,
+    status_at_expand: String,
     tool: interaction::Tool,
     radius: f32,
     drag: Option<interaction::Drag>,
@@ -71,34 +72,22 @@ impl UiState {
                 self.uv.geometry_hash = Some(hash);
             }
         }
+        if self.uv.expanded {
+            self.uv_workspace(ctx, document, model_faces, &mut commands);
+            return commands;
+        }
         let mut open = true;
-        let expanded = self.uv.expanded;
-        let bounds = ctx.content_rect().shrink(8.);
-        let window = egui::Window::new("UVs and textures")
-            .id(egui::Id::new(if expanded {
-                "uv_editor_expanded"
-            } else {
-                "uv_editor"
-            }))
+        egui::Window::new("UVs and textures")
+            .id(egui::Id::new("uv_editor"))
             .open(&mut open)
-            .collapsible(!expanded)
             .default_width(480.)
             .default_pos(egui::pos2(20., 110.))
             .default_height(800.)
-            .max_height(if expanded {
-                bounds.height()
-            } else {
-                (bounds.height() - 124.).max(200.)
-            })
-            .vscroll(true);
-        let window = if expanded {
-            window.fixed_rect(bounds).resizable(false)
-        } else {
-            window
-        };
-        window.show(ctx, |ui| {
-            self.uv_contents(ui, document, model_faces, &mut commands)
-        });
+            .max_height((ctx.content_rect().height() - 140.).max(200.))
+            .vscroll(true)
+            .show(ctx, |ui| {
+                self.uv_contents(ui, document, model_faces, &mut commands)
+            });
         if !open {
             self.uv.drag = None;
         }
@@ -115,7 +104,16 @@ impl UiState {
         if self.mesh_busy || self.pending.is_some() {
             ui.disable();
         }
-        ui.horizontal(|ui| {
+        self.uv_header(ui);
+        if self.uv.texture_tab {
+            ui.scope(|ui| self.texture_controls(ui, document, commands));
+        }
+        ui.add_enabled_ui(!self.mesh_busy && self.pending.is_none(), |ui| {
+            self.uv_layout(ui, document, model_faces, commands)
+        });
+    }
+    fn uv_header(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal_wrapped(|ui| {
             ui.selectable_value(&mut self.uv.texture_tab, false, "UV layout");
             ui.selectable_value(&mut self.uv.texture_tab, true, "Texture images");
             if ui
@@ -127,15 +125,92 @@ impl UiState {
                 .clicked()
             {
                 self.uv.expanded = !self.uv.expanded;
+                self.uv.status_at_expand = self.status.clone();
                 self.uv.drag = None;
             }
         });
-        if self.uv.texture_tab {
-            ui.scope(|ui| self.texture_controls(ui, document, commands));
-        }
-        ui.add_enabled_ui(!self.mesh_busy && self.pending.is_none(), |ui| {
-            self.uv_layout(ui, document, model_faces, commands)
-        });
+    }
+    fn uv_workspace(
+        &mut self,
+        ctx: &egui::Context,
+        document: &Document,
+        model_faces: &[usize],
+        commands: &mut Vec<Command>,
+    ) {
+        let bounds = ctx.content_rect();
+        let id = egui::Id::new("uv_workspace");
+        ctx.move_to_top(egui::LayerId::new(egui::Order::Middle, id));
+        egui::Area::new(id)
+            .order(egui::Order::Middle)
+            .fixed_pos(bounds.min)
+            .movable(false)
+            .constrain(false)
+            .show(ctx, |ui| {
+                ui.set_min_size(bounds.size());
+                ui.set_max_size(bounds.size());
+                ui.set_clip_rect(bounds);
+                ui.painter().rect_filled(bounds, 0., Color32::from_gray(18));
+                let sidebar_width = 300_f32.min(bounds.width() * 0.42);
+                let split = bounds.right() - sidebar_width;
+                let sidebar = egui::Rect::from_min_max(egui::pos2(split, bounds.top()), bounds.max);
+                ui.painter()
+                    .rect_filled(sidebar, 0., ui.visuals().panel_fill);
+                let mut controls = ui.new_child(
+                    egui::UiBuilder::new()
+                        .id_salt("uv_sidebar")
+                        .max_rect(sidebar.shrink(12.)),
+                );
+                controls.set_clip_rect(sidebar);
+                controls.heading("UVs and textures");
+                self.uv_header(&mut controls);
+                if controls.button("Close editor").clicked() {
+                    self.uv.open = false;
+                    self.uv.drag = None;
+                }
+                if self.mesh_busy && controls.button("Cancel operation").clicked() {
+                    commands.push(Command::CancelMeshJob);
+                }
+                controls.separator();
+                egui::ScrollArea::vertical()
+                    .id_salt("uv_sidebar_scroll")
+                    .auto_shrink([false, false])
+                    .show(&mut controls, |ui| {
+                        ui.set_max_width(sidebar_width - 24.);
+                        if self.mesh_busy || self.pending.is_some() {
+                            ui.disable();
+                        }
+                        if self.uv.texture_tab {
+                            self.texture_controls(ui, document, commands);
+                        }
+                        self.uv_unwrap_controls(ui, document, commands);
+                        ui.add_enabled_ui(document.mesh().uv.current(document.mesh()), |ui| {
+                            self.uv_view_controls(ui, document, model_faces, commands);
+                            if !self.uv.texture_tab {
+                                self.uv_transform_controls(ui, document, commands);
+                            }
+                        });
+                        if !self.status.is_empty() && self.status != self.uv.status_at_expand {
+                            ui.separator();
+                            ui.label(&self.status);
+                        }
+                    });
+                let viewport =
+                    egui::Rect::from_min_max(bounds.min, egui::pos2(split, bounds.bottom()));
+                let mut canvas = ui.new_child(
+                    egui::UiBuilder::new()
+                        .id_salt("uv_workspace_canvas")
+                        .max_rect(viewport),
+                );
+                canvas.set_clip_rect(viewport);
+                canvas.add_enabled_ui(
+                    !self.mesh_busy
+                        && self.pending.is_none()
+                        && document.mesh().uv.current(document.mesh()),
+                    |ui| {
+                        self.uv_canvas(ui, document, commands, Some(viewport));
+                    },
+                );
+            });
     }
     fn texture_controls(
         &mut self,
@@ -239,7 +314,7 @@ impl UiState {
             ui.label("Images are shared by duplicated models. Make independent to edit only this model. Overlapping UVs share pixels.");
             ui.horizontal_wrapped(|ui| {
                 ui.label("PNG / EXR export");
-                ui.text_edit_singleline(&mut self.uv.export_path);
+                ui.add(egui::TextEdit::singleline(&mut self.uv.export_path).desired_width(150.));
                 if ui.button("Export image").clicked() {
                     commands.push(Command::Texture(T::Export(
                         self.uv.channel,
@@ -294,15 +369,18 @@ impl UiState {
         }
         ui.horizontal(|ui| {
             ui.label("GIMP executable");
-            ui.add(egui::TextEdit::singleline(&mut self.preferences.gimp_path).hint_text("gimp"));
+            ui.add(
+                egui::TextEdit::singleline(&mut self.preferences.gimp_path)
+                    .desired_width(130.)
+                    .hint_text("gimp"),
+            );
         });
     }
 
-    fn uv_layout(
+    fn uv_unwrap_controls(
         &mut self,
         ui: &mut egui::Ui,
         document: &Document,
-        model_faces: &[usize],
         commands: &mut Vec<Command>,
     ) {
         let mesh = document.mesh();
@@ -329,26 +407,44 @@ impl UiState {
         if !current {
             ui.colored_label(Color32::YELLOW,if uv.corners.is_empty(){"Generate UVs to begin, or import a UV-mapped OBJ."}else{"Topology changed: these UVs are inactive. Undo the topology edit or unwrap again."});
         }
-        ui.add_enabled_ui(current, |ui| {
-            self.uv_canvas(ui, document, model_faces, commands)
-        });
     }
-
-    fn uv_canvas(
+    fn uv_layout(
         &mut self,
         ui: &mut egui::Ui,
         document: &Document,
         model_faces: &[usize],
         commands: &mut Vec<Command>,
     ) {
-        ui.add(egui::Slider::new(&mut self.uv.exposure, -12. ..=12.).text("Preview exposure (EV)"))
-            .on_hover_text(
-                "View adjustment only; exported pixels are unchanged. Useful for HDR EXR images.",
-            );
-        let ctx = ui.ctx().clone();
+        self.uv_unwrap_controls(ui, document, commands);
+        ui.add_enabled_ui(document.mesh().uv.current(document.mesh()), |ui| {
+            self.uv_view_controls(ui, document, model_faces, commands);
+            self.uv_canvas(ui, document, commands, None);
+            if !self.uv.texture_tab {
+                self.uv_transform_controls(ui, document, commands);
+            }
+        });
+    }
+    fn uv_view_controls(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &Document,
+        model_faces: &[usize],
+        commands: &mut Vec<Command>,
+    ) {
+        if self.uv.expanded {
+            ui.label("Preview exposure (EV)");
+        }
+        let exposure = egui::Slider::new(&mut self.uv.exposure, -12. ..=12.);
+        ui.add(if self.uv.expanded {
+            exposure
+        } else {
+            exposure.text("Preview exposure (EV)")
+        })
+        .on_hover_text(
+            "View adjustment only; exported pixels are unchanged. Useful for HDR EXR images.",
+        );
         let mesh = document.mesh();
         let uv = &mesh.uv;
-        let current = uv.current(mesh);
 
         if !self.uv.texture_tab {
             ui.horizontal_wrapped(|ui| {
@@ -360,8 +456,12 @@ impl UiState {
                         .speed(0.001)
                         .prefix("Padding "),
                 );
-                if ui.button("Pack islands").clicked() {
+                if ui.button("Auto arrange all").clicked() {
                     commands.push(Command::UvPack(self.uv.padding));
+                }
+                if ui.add_enabled(!self.uv.selected.is_empty(),egui::Button::new("Arrange selected"))
+                    .on_hover_text("Straighten and pack selected islands around the others. Masked islands stay fixed.").clicked() {
+                    commands.push(Command::UvPackSelected(self.uv.selected.clone(),self.uv.padding));
                 }
                 if ui.button("Select all").clicked() {
                     self.uv.selected = (0..uv.corners.len()).filter(|&f| uv.mapped(f)).collect();
@@ -389,18 +489,29 @@ impl UiState {
         if !self.uv.texture_tab {
             self.uv_tools(ui, commands);
         }
-        let max_size = if self.uv.expanded {
-            (ui.ctx().content_rect().bottom()
-                - ui.cursor().top()
-                - if self.uv.texture_tab { 30. } else { 90. })
-            .max(180.)
-        } else if self.uv.texture_tab {
-            320.
+    }
+    fn uv_canvas(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &Document,
+        commands: &mut Vec<Command>,
+        viewport: Option<egui::Rect>,
+    ) {
+        let ctx = ui.ctx().clone();
+        let mesh = document.mesh();
+        let uv = &mesh.uv;
+        let current = uv.current(mesh);
+        let (rect, response) = if let Some(viewport) = viewport {
+            let size = (viewport.width().min(viewport.height()) - 32.).max(1.);
+            let rect = egui::Rect::from_center_size(viewport.center(), Vec2::splat(size));
+            (rect, ui.allocate_rect(rect, Sense::click_and_drag()))
         } else {
-            500.
+            let size = ui
+                .available_width()
+                .clamp(180., if self.uv.texture_tab { 320. } else { 500. });
+            ui.allocate_exact_size(Vec2::splat(size), Sense::click_and_drag())
         };
-        let size = ui.available_width().clamp(180., max_size);
-        let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), Sense::click_and_drag());
+        let size = rect.width();
         let consumed = if !self.uv.texture_tab && current {
             self.uv_interaction(ui, &response, uv, commands)
         } else {
@@ -550,6 +661,14 @@ impl UiState {
             }
             commands.push(Command::UvSelect(self.uv.selected.clone()));
         }
+    }
+    fn uv_transform_controls(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &Document,
+        commands: &mut Vec<Command>,
+    ) {
+        let uv = &document.mesh().uv;
         if !self.uv.texture_tab {
             ui.label(
                 "Click an island; Shift-click adds. Drag the handle to transform · Esc cancels.",

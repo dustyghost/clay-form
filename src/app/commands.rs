@@ -136,6 +136,7 @@ impl App {
         let uv_attributes = matches!(
             command,
             Command::UvPack(_)
+                | Command::UvPackSelected(..)
                 | Command::UvTransform(..)
                 | Command::UvReplace(_)
                 | Command::UvRemove(_)
@@ -149,7 +150,12 @@ impl App {
             }
             Command::UvPack(padding) => self
                 .document
-                .edit_uv("Pack UV islands", |uv| uv.pack(padding)),
+                .edit_uv("Auto arrange UV islands", |uv| uv.pack(padding)),
+            Command::UvPackSelected(faces, padding) => {
+                self.document.edit_uv("Arrange selected UV islands", |uv| {
+                    uv.pack_selected(&faces, padding)
+                })
+            }
             Command::UvTransform(faces, offset, scale, angle) => {
                 self.document.edit_uv("Transform UV islands", |uv| {
                     uv.transform(&faces, offset, scale, angle)

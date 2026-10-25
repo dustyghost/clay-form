@@ -49,7 +49,10 @@ impl Harness {
             .shapes
             .iter()
             .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.text() == label => {
+                egui::Shape::Text(t)
+                    if t.galley.text() == label
+                        && s.clip_rect.contains(t.pos + t.galley.size() * 0.5) =>
+                {
                     Some(t.pos + t.galley.size() * 0.5)
                 }
                 _ => None,
@@ -135,11 +138,59 @@ fn uv_island_controls_offscreen_review() {
     h.click("Expand editor");
     let big = h.canvas();
     assert!(big.width() > small.width());
-    assert!(h.label("Apply transform").y < 900.);
+    assert!(
+        big.width() > 850. && big.top() < 25. && big.bottom() > 875.,
+        "UV canvas fills the workspace height: {big:?}"
+    );
+    for label in [
+        "Auto arrange all",
+        "Arrange selected",
+        "Move",
+        "Apply transform",
+        "Restore window",
+    ] {
+        let p = h.label(label);
+        assert!(
+            p.x > big.right() && p.x < 1200. && p.y < 900.,
+            "{label} lives in the visible right sidebar: {p:?}"
+        );
+    }
     h.tap(big.center());
     h.frame(vec![]);
     assert!(!h.ui.uv.selected.is_empty());
     let before = h.app.document.mesh().uv.clone();
+    for label in ["Arrange selected", "Auto arrange all"] {
+        let history = h.app.document.history_counts().0;
+        h.click(label);
+        let coverage = h
+            .app
+            .document
+            .mesh()
+            .uv
+            .corners
+            .iter()
+            .map(|t| crate::sculpt::uv::area(*t).abs() * 0.5)
+            .sum::<f32>();
+        assert!(coverage > 0.95, "{label} fills the available image");
+        assert_eq!(h.app.document.history_counts().0, history + 1);
+        assert_eq!(
+            h.canvas(),
+            big,
+            "arranging does not change the viewport size"
+        );
+        if label == "Auto arrange all" {
+            let output = h.output.take().unwrap();
+            let pixels = h.capture.render(&h.ctx, output);
+            h.capture.save(
+                std::env::temp_dir().join("clay-uv-arranged-workspace.png"),
+                &pixels,
+            );
+        }
+        h.app.dispatch(Command::Undo, &h.ctx);
+        h.frame(vec![]);
+        h.frame(vec![]);
+        assert_eq!(h.app.document.mesh().uv, before);
+    }
     let history = h.app.document.history_counts().0;
     let start = interaction::pivot(&before, &h.ui.uv.selected, big).unwrap();
     h.drag(start, start + egui::vec2(24., -12.), false);
@@ -170,6 +221,10 @@ fn uv_island_controls_offscreen_review() {
     }
     h.click("Paint mask");
     let rect = h.canvas();
+    assert_eq!(
+        rect, big,
+        "mask controls scroll without shrinking the UV canvas"
+    );
     let q = before.corners[0][0];
     let point = egui::pos2(
         rect.left() + q[0] * rect.width(),
@@ -208,6 +263,13 @@ fn uv_island_controls_offscreen_review() {
     h.app.dispatch(Command::Undo, &h.ctx);
     h.frame(vec![]);
     assert_eq!(h.app.document.geometry_snapshot(), before_remove);
+    h.click("Texture images");
+    assert_eq!(h.canvas(), big, "image controls stay in the sidebar too");
+    assert!(h.label("Create texture").x > big.right());
+    h.click("Create texture");
+    assert_eq!(h.app.document.mesh().uv.textures.len(), 1);
+    assert_eq!(h.canvas(), big);
+    h.click("UV layout");
     h.click("Restore window");
     assert!(!h.ui.uv.expanded);
     assert!(h.canvas().width() < big.width());

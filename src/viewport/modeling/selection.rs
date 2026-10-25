@@ -231,9 +231,7 @@ impl Viewport {
                 }
             }
             let modifiers = ui.input(|i| i.modifiers);
-            let change = if model.erase_radius > 0. {
-                SelectionChange::Remove
-            } else if modifiers.ctrl || modifiers.command {
+            let change = if model.erase_radius > 0. || modifiers.ctrl || modifiers.command {
                 SelectionChange::Remove
             } else if modifiers.shift {
                 SelectionChange::Add

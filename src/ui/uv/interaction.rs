@@ -65,7 +65,7 @@ impl UiState {
             if self.uv.radius == 0. {
                 self.uv.radius = 40.;
             }
-            ui.add(egui::Slider::new(&mut self.uv.radius, 4. ..=160.).text("UV brush radius (px)"));
+            ui.add(egui::Slider::new(&mut self.uv.radius, 4. ..=160.).text("Radius (px)"));
             ui.weak("Purple pins UV points · Alt reverses · packing keeps masked islands fixed");
         }
     }
