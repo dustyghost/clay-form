@@ -4,6 +4,8 @@ use super::{Mesh, Vec3};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+mod editing;
+
 pub type Point = [f32; 2];
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct UvMap {
@@ -13,6 +15,11 @@ pub struct UvMap {
     /// Retained topology detects stale UVs after edits, even at equal face counts.
     pub topology: Vec<[usize; 3]>,
     pub seams: Vec<[usize; 2]>,
+    /// Empty arrays preserve compatibility with projects saved before UV editing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub masks: Vec<[f32; 3]>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub removed: Vec<bool>,
 }
 pub fn edge(a: usize, b: usize) -> [usize; 2] {
     if a < b { [a, b] } else { [b, a] }
@@ -72,6 +79,10 @@ impl UvMap {
         let mut bins = HashMap::<(i32, i32), Vec<usize>>::new();
         let mut pairs = std::collections::HashSet::new();
         for (f, t) in self.corners.iter().enumerate() {
+            if !self.mapped(f) {
+                report.stretch.push(1.);
+                continue;
+            }
             if area(*t).abs() < 1e-12 {
                 report.degenerate += 1;
             }
@@ -155,6 +166,56 @@ fn triangles_overlap(a: [Point; 3], b: [Point; 3]) -> bool {
     true
 }
 impl UvMap {
+    pub fn mapped(&self, face: usize) -> bool {
+        face < self.corners.len() && !self.removed.get(face).copied().unwrap_or(false)
+    }
+    pub fn mask(&self, face: usize, corner: usize) -> f32 {
+        self.masks.get(face).map_or(0., |m| m[corner])
+    }
+    pub fn has_mask(&self) -> bool {
+        self.masks
+            .iter()
+            .enumerate()
+            .any(|(f, m)| self.mapped(f) && m.iter().any(|&v| v > 0.))
+    }
+    pub fn remove_islands(&mut self, faces: &[usize]) -> Result<(), String> {
+        if faces.is_empty() || faces.iter().any(|&f| !self.mapped(f)) {
+            return Err("Select mapped UV islands to remove".into());
+        }
+        if faces.iter().any(|&f| (0..3).any(|c| self.mask(f, c) > 0.)) {
+            return Err("Clear the UV mask on these islands before removing their mapping".into());
+        }
+        self.removed.resize(self.corners.len(), false);
+        for &f in faces {
+            self.removed[f] = true;
+        }
+        Ok(())
+    }
+    /// Apply a soft brush to UV corners. A hard center pins points completely.
+    pub fn paint_mask(&mut self, point: Point, radius: f32, erase: bool) {
+        if !radius.is_finite() || radius <= 0. || point.iter().any(|v| !v.is_finite()) {
+            return;
+        }
+        self.masks.resize(self.corners.len(), [0.; 3]);
+        for f in 0..self.corners.len() {
+            if !self.mapped(f) {
+                continue;
+            }
+            for c in 0..3 {
+                let q = self.corners[f][c];
+                let distance = ((q[0] - point[0]).powi(2) + (q[1] - point[1]).powi(2)).sqrt();
+                let weight = ((1. - distance / radius) * 2.).clamp(0., 1.);
+                self.masks[f][c] = if erase {
+                    (self.masks[f][c] - weight).max(0.)
+                } else {
+                    self.masks[f][c].max(weight)
+                };
+            }
+        }
+        if self.masks.iter().flatten().all(|&v| v == 0.) {
+            self.masks.clear();
+        }
+    }
     pub fn is_empty(&self) -> bool {
         self.corners.is_empty() && self.seams.is_empty() && self.textures.is_empty()
     }
@@ -164,7 +225,14 @@ impl UvMap {
             && self.topology == mesh.triangles
     }
     pub fn validate(&self) -> Result<(), String> {
-        if self.corners.len() != self.topology.len()
+        if (!self.masks.is_empty() && self.masks.len() != self.corners.len())
+            || (!self.removed.is_empty() && self.removed.len() != self.corners.len())
+            || self
+                .masks
+                .iter()
+                .flatten()
+                .any(|v| !v.is_finite() || !(0. ..=1.).contains(v))
+            || self.corners.len() != self.topology.len()
             || self.corners.len() > super::MAX_TRIANGLES
             || self
                 .corners
@@ -189,7 +257,9 @@ impl UvMap {
         Ok(())
     }
     pub fn retained_bytes(&self) -> usize {
-        self.corners.len() * 24
+        self.masks.len() * 12
+            + self.removed.len()
+            + self.corners.len() * 24
             + self.topology.len() * 24
             + self.seams.len() * 16
             + self
@@ -204,6 +274,9 @@ impl UvMap {
         let mut parent: Vec<_> = (0..self.topology.len()).collect();
         let mut edges = HashMap::new();
         for (f, t) in self.topology.iter().enumerate() {
+            if !self.mapped(f) {
+                continue;
+            }
             for c in 0..3 {
                 let d = (c + 1) % 3;
                 let key = edge(t[c], t[d]);
@@ -223,6 +296,9 @@ impl UvMap {
         }
         let mut groups = BTreeMap::<usize, Vec<usize>>::new();
         for f in 0..parent.len() {
+            if !self.mapped(f) {
+                continue;
+            }
             groups.entry(root(&mut parent, f)).or_default().push(f);
         }
         groups.into_values().collect()
@@ -235,7 +311,7 @@ impl UvMap {
         radians: f32,
     ) -> Result<(), String> {
         if faces.is_empty()
-            || faces.iter().any(|&f| f >= self.corners.len())
+            || faces.iter().any(|&f| !self.mapped(f))
             || !scale.is_finite()
             || scale <= 0.
             || !radians.is_finite()
@@ -257,13 +333,17 @@ impl UvMap {
         let (s, c) = radians.sin_cos();
         let mut next = self.clone();
         for &f in faces {
-            for q in &mut next.corners[f] {
+            for (i, q) in next.corners[f].iter_mut().enumerate() {
                 let x = (q[0] - center[0]) * scale;
                 let y = (q[1] - center[1]) * scale;
-                *q = [
+                let target = [
                     center[0] + c * x - s * y + offset[0],
                     center[1] + s * x + c * y + offset[1],
                 ];
+                let influence = 1. - self.mask(f, i);
+                for k in 0..2 {
+                    q[k] += (target[k] - q[k]) * influence;
+                }
             }
         }
         next.validate()?;
@@ -301,6 +381,15 @@ impl UvMap {
             })
             .collect();
         rects.sort_by(|a, b| b.2[1].total_cmp(&a.2[1]).then(a.0.cmp(&b.0)));
+        let fixed: BTreeSet<_> = islands
+            .iter()
+            .enumerate()
+            .filter(|(_, fs)| fs.iter().any(|&f| (0..3).any(|c| self.mask(f, c) > 0.)))
+            .map(|(id, _)| id)
+            .collect();
+        if !fixed.is_empty() {
+            return self.pack_around_masks(padding, &islands, &rects, &fixed);
+        }
         let layout = |scale: f32| -> Option<Vec<Point>> {
             let (mut x, mut y, mut row) = (padding, padding, 0_f32);
             let mut origins = vec![[0.; 2]; islands.len()];
@@ -387,6 +476,11 @@ impl Mesh {
         if self.triangles.is_empty() {
             return Err("The model has no faces to unwrap".into());
         }
+        if self.uv.current(self) && self.uv.has_mask() {
+            return Err(
+                "Clear the UV mask before unwrapping; masked points must stay in place".into(),
+            );
+        }
         let seams: BTreeSet<_> = if self.uv.corners.is_empty() || self.uv.current(self) {
             self.uv.seams.iter().copied().collect()
         } else {
@@ -451,6 +545,7 @@ impl Mesh {
             corners: vec![[[0.; 2]; 3]; n],
             topology: self.triangles.clone(),
             seams: cuts.into_iter().collect(),
+            ..Default::default()
         };
         for faces in charts.values() {
             check(cancel)?;

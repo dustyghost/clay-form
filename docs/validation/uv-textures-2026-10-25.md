@@ -5,6 +5,7 @@ Batch: #12, #11, #22. PR CI owns the full test suite, formatting, Clippy and the
 Focused local checks:
 
 - Cube, sphere and a welded cylinder with one side seam and two cap rims unwrap into finite, positive-area charts. The cylinder produces three islands; cube charts preserve sculpt vertex sharing. Cancellation and closed-chart rejection keep input intact.
+- Follow-up UV controls: rendered interaction checks click Expand/Restore, Move/Rotate/Scale handles, Paint/Clear mask, Remove islands, and Modeling Mark/Clear UV seams. Drags create one Undo step; Escape cancels transforms and mask strokes. The expanded editor capture was inspected for visible controls. Masks pin corners during transforms and keep whole islands fixed during packing; persistence and OBJ checks retain removed mapping without losing mesh geometry or quads. Modeling eraser tests cover face/edge/point brush reach, depth protection and cancellation.
 - The OBJ tests cover forward/negative indices, partial UVs, UV seams without geometric vertex splitting, quad topology and UV export/import.
 - Texture strokes protect masks and hidden faces, respond to pressure, avoid painting a sheet only 0.001 units behind another, and pad into unoccupied gutters. Shared-image edits, Undo/Redo, native serialization and stale-topology handling are covered.
 - Reload tests cover stable identity, changed dimensions, local-edit conflicts, corrupt/incomplete input, explicit conflict replacement, failed GIMP launch and undoable updates.

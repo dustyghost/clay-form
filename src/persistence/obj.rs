@@ -301,6 +301,10 @@ fn parse(text: &str, cancelled: &impl Fn() -> bool) -> Result<Mesh, String> {
             triangles.len(),
         ));
         if has_uv {
+            mesh.uv.removed.extend(triangles.iter().map(|t| {
+                t.iter()
+                    .any(|v| face.uv[face.vertices.iter().position(|i| i == v).unwrap()].is_none())
+            }));
             mesh.uv.corners.extend(triangles.iter().map(|t| {
                 t.map(|v| {
                     face.uv[face.vertices.iter().position(|&i| i == v).unwrap()]
@@ -461,6 +465,7 @@ pub(super) fn export_uv_obj(path: &str, mesh: &Mesh) -> Result<(), String> {
         let mut ids = HashMap::new();
         let mut faces = Vec::new();
         let mut coherent = true;
+        let mut mapped = None;
         // A polygon has at most four corners; find its triangles by their keys.
         let candidates: Vec<_> = if polygon.vertices.len() == 4 {
             let v = &polygon.vertices;
@@ -477,12 +482,19 @@ pub(super) fn export_uv_obj(path: &str, mesh: &Mesh) -> Result<(), String> {
             if let Some(&first) = corner_ids.get(&(t[0], key(t))) {
                 let f = (first - 1) / 3;
                 faces.push(f);
+                if mapped.is_some_and(|old| old != mesh.uv.mapped(f)) {
+                    coherent = false;
+                }
+                mapped = Some(mesh.uv.mapped(f));
                 for c in 0..3 {
                     let v = mesh.triangles[f][c];
                     let id = f * 3 + c + 1;
                     if let Some(&old) = ids.get(&v) {
                         let old: usize = old;
-                        if mesh.uv.corners[(old - 1) / 3][(old - 1) % 3] != mesh.uv.corners[f][c] {
+                        if mesh.uv.mapped(f)
+                            && mesh.uv.corners[(old - 1) / 3][(old - 1) % 3]
+                                != mesh.uv.corners[f][c]
+                        {
                             coherent = false;
                         }
                     } else {
@@ -501,7 +513,11 @@ pub(super) fn export_uv_obj(path: &str, mesh: &Mesh) -> Result<(), String> {
         }
         text.push('f');
         for v in polygon.vertices {
-            write!(text, " {}/{}", v + 1, ids[&v]).unwrap();
+            if mapped == Some(true) {
+                write!(text, " {}/{}", v + 1, ids[&v]).unwrap();
+            } else {
+                write!(text, " {}", v + 1).unwrap();
+            }
         }
         text.push('\n');
         used.extend(faces);
@@ -510,7 +526,11 @@ pub(super) fn export_uv_obj(path: &str, mesh: &Mesh) -> Result<(), String> {
         if !used.contains(&f) {
             text.push('f');
             for (c, v) in t.iter().enumerate() {
-                write!(text, " {}/{}", v + 1, f * 3 + c + 1).unwrap();
+                if mesh.uv.mapped(f) {
+                    write!(text, " {}/{}", v + 1, f * 3 + c + 1).unwrap();
+                } else {
+                    write!(text, " {}", v + 1).unwrap();
+                }
             }
             text.push('\n');
         }

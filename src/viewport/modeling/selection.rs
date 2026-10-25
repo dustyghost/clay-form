@@ -7,6 +7,7 @@ pub(super) struct SelectionDrag {
     mode: ComponentMode,
     span: SelectionSpan,
     flat_angle: f32,
+    erase_radius: f32,
     last: Pos2,
     visited: BTreeSet<Component>,
 }
@@ -18,6 +19,84 @@ impl ModelingState {
     }
 }
 impl Viewport {
+    fn selection_eraser_targets(
+        point: Pos2,
+        radius: f32,
+        selected: &BTreeSet<Component>,
+        document: &Document,
+        scene: &Scene,
+    ) -> Vec<Component> {
+        let mesh = document.mesh();
+        let polygons = mesh.polygons();
+        let hit_triangle = scene.pick_face(point).map(|f| mesh.triangles[f]);
+        let closest = |a: Pos2, b: Pos2| {
+            let d = b - a;
+            a + d * ((point - a).dot(d) / d.length_sq().max(1e-8)).clamp(0., 1.)
+        };
+        selected
+            .iter()
+            .copied()
+            .filter(|&component| {
+                let mut points = Vec::new();
+                match component {
+                    Component::Vertex(v) => {
+                        if let Some(&v) = mesh.vertices.get(v) {
+                            points.push(scene.project(v));
+                        }
+                    }
+                    Component::Edge([a, b]) => {
+                        if let Some([a, b]) =
+                            scene.clip_segment([mesh.vertices[a], mesh.vertices[b]])
+                        {
+                            points.push(closest(a, b));
+                        }
+                    }
+                    Component::Face(f) => {
+                        if let Some(poly) = polygons.get(f) {
+                            if hit_triangle
+                                .is_some_and(|t| t.iter().all(|v| poly.vertices.contains(v)))
+                            {
+                                return true;
+                            }
+                            let center = poly
+                                .vertices
+                                .iter()
+                                .fold(Vec3::default(), |s, &v| s + mesh.vertices[v])
+                                * (1. / poly.vertices.len() as f32);
+                            points.push(scene.project(center));
+                            for (a, b) in poly.edges() {
+                                if let Some([a, b]) =
+                                    scene.clip_segment([mesh.vertices[a], mesh.vertices[b]])
+                                {
+                                    // Nudge towards the face to avoid picking its neighbour at shared edges.
+                                    points.push(closest(a, b).lerp(scene.project(center), 0.001));
+                                }
+                            }
+                        }
+                    }
+                }
+                points
+                    .into_iter()
+                    .filter(|p| p.distance(point) <= radius)
+                    .any(|p| match component {
+                        Component::Face(f) => scene.pick_face(p).is_some_and(|t| {
+                            mesh.triangles[t]
+                                .iter()
+                                .all(|v| polygons[f].vertices.contains(v))
+                        }),
+                        Component::Vertex(v) => scene.pick(p).is_some_and(|hit| {
+                            (hit.0 - mesh.vertices[v]).len() < 2. / scene.scale_at(mesh.vertices[v])
+                        }),
+                        Component::Edge([a, b]) => scene.pick(p).is_some_and(|hit| {
+                            let start = mesh.vertices[a];
+                            let d = mesh.vertices[b] - start;
+                            let t = ((hit.0 - start).dot(d) / d.dot(d).max(1e-12)).clamp(0., 1.);
+                            (hit.0 - (start + d * t)).len() < 2. / scene.scale_at(hit.0)
+                        }),
+                    })
+            })
+            .collect()
+    }
     pub(super) fn selection_target(
         component: Component,
         point: Pos2,
@@ -133,23 +212,28 @@ impl Viewport {
             let Some(origin) = origin.filter(|p| allowed(*p)) else {
                 return;
             };
-            let Some(component) = Self::component_at(origin, model.mode, document, scene) else {
-                return;
-            };
-            if let Err(error) = Self::selection_target(
-                component,
-                origin,
-                model.span,
-                model.flat_angle,
-                document.mesh(),
-                scene,
-                symmetry,
-            ) {
-                self.status = Some(error);
-                return;
+            if model.erase_radius == 0. {
+                let Some(component) = Self::component_at(origin, model.mode, document, scene)
+                else {
+                    return;
+                };
+                if let Err(error) = Self::selection_target(
+                    component,
+                    origin,
+                    model.span,
+                    model.flat_angle,
+                    document.mesh(),
+                    scene,
+                    symmetry,
+                ) {
+                    self.status = Some(error);
+                    return;
+                }
             }
             let modifiers = ui.input(|i| i.modifiers);
-            let change = if modifiers.ctrl || modifiers.command {
+            let change = if model.erase_radius > 0. {
+                SelectionChange::Remove
+            } else if modifiers.ctrl || modifiers.command {
                 SelectionChange::Remove
             } else if modifiers.shift {
                 SelectionChange::Add
@@ -167,6 +251,7 @@ impl Viewport {
                 mode: model.mode,
                 span: model.span,
                 flat_angle: model.flat_angle,
+                erase_radius: model.erase_radius,
                 last: origin,
                 visited: BTreeSet::new(),
             });
@@ -200,6 +285,31 @@ impl Viewport {
             for step in 0..=steps {
                 let p = start.lerp(end, step as f32 / steps as f32);
                 if !allowed(p) {
+                    continue;
+                }
+                if drag.erase_radius > 0. {
+                    let targets = Self::selection_eraser_targets(
+                        p,
+                        drag.erase_radius,
+                        &drag.current,
+                        document,
+                        scene,
+                    );
+                    for component in targets {
+                        if let Ok(targets) = Self::selection_target(
+                            component,
+                            p,
+                            SelectionSpan::Single,
+                            drag.flat_angle,
+                            document.mesh(),
+                            scene,
+                            symmetry,
+                        ) {
+                            for target in targets {
+                                drag.current.remove(&target);
+                            }
+                        }
+                    }
                     continue;
                 }
                 let Some(component) = Self::component_at(p, drag.mode, document, scene) else {

@@ -133,6 +133,15 @@ impl App {
             self.viewport.cancel_reference_drag();
         }
         self.document.prepare_edit(command.edit_kind());
+        let uv_attributes = matches!(
+            command,
+            Command::UvPack(_)
+                | Command::UvTransform(..)
+                | Command::UvReplace(_)
+                | Command::UvRemove(_)
+                | Command::UvClearMask
+                | Command::UvSeams(_)
+        );
         let result: Result<(), String> = match command {
             Command::Texture(command) => self.texture_command(command),
             Command::UvUnwrap(automatic, padding) => {
@@ -146,6 +155,20 @@ impl App {
                     uv.transform(&faces, offset, scale, angle)
                 })
             }
+            Command::UvReplace(next) => self.document.edit_uv("Edit UV islands", |uv| {
+                if uv.topology != next.topology {
+                    return Err("UV edit is out of date".into());
+                }
+                *uv = *next;
+                Ok(())
+            }),
+            Command::UvRemove(faces) => self
+                .document
+                .edit_uv("Remove UV islands", |uv| uv.remove_islands(&faces)),
+            Command::UvClearMask => self.document.edit_uv("Clear UV mask", |uv| {
+                uv.masks.clear();
+                Ok(())
+            }),
             Command::UvSeams(mark) => {
                 let edges = self
                     .viewport
@@ -657,6 +680,11 @@ impl App {
                 Ok(())
             }
         };
+        if result.is_ok() && uv_attributes {
+            self.viewport
+                .modeling
+                .accept_attribute_revision(&self.document);
+        }
         if let Err(error) = result {
             self.diagnostic_warning("An application command failed; detailed error text withheld to exclude personal paths");
             self.ui.status = error;

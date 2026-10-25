@@ -1,7 +1,14 @@
 use super::*;
+mod interaction;
+#[cfg(test)]
+mod tests;
 #[derive(Default)]
 pub(crate) struct UvControls {
     islands: Vec<Vec<usize>>,
+    expanded: bool,
+    tool: interaction::Tool,
+    radius: f32,
+    drag: Option<interaction::Drag>,
     report: crate::sculpt::uv::Report,
     stretch: bool,
     texture_tab: bool,
@@ -9,7 +16,7 @@ pub(crate) struct UvControls {
     pub image_path: String,
     pub export_overwrite: Option<String>,
     pub reload_conflict: bool,
-    image_preview: Option<((u64, u64, u32), egui::TextureHandle)>,
+    image_preview: Option<((u64, u64, u32, bool), egui::TextureHandle)>,
     geometry_hash: Option<u64>,
     size: u32,
     precision: crate::sculpt::texture::Precision,
@@ -43,7 +50,8 @@ impl UiState {
         let uv = &mesh.uv;
         let current = uv.current(mesh);
         if self.uv.revision != Some(document.display_revision()) {
-            self.uv.selected.retain(|&f| f < mesh.triangles.len());
+            self.uv.drag = None;
+            self.uv.selected.retain(|&f| uv.mapped(f));
             self.uv.revision = Some(document.display_revision());
             use std::hash::{Hash, Hasher};
             let mut hash = std::collections::hash_map::DefaultHasher::new();
@@ -52,6 +60,7 @@ impl UiState {
             }
             mesh.triangles.hash(&mut hash);
             current.hash(&mut hash);
+            uv.removed.hash(&mut hash);
             for q in uv.corners.iter().flatten() {
                 q.map(f32::to_bits).hash(&mut hash);
             }
@@ -63,17 +72,36 @@ impl UiState {
             }
         }
         let mut open = true;
-        egui::Window::new("UVs and textures")
-            .id(egui::Id::new("uv_editor"))
+        let expanded = self.uv.expanded;
+        let bounds = ctx.content_rect().shrink(8.);
+        let window = egui::Window::new("UVs and textures")
+            .id(egui::Id::new(if expanded {
+                "uv_editor_expanded"
+            } else {
+                "uv_editor"
+            }))
             .open(&mut open)
+            .collapsible(!expanded)
             .default_width(480.)
             .default_pos(egui::pos2(20., 110.))
             .default_height(800.)
-            .max_height((ctx.content_rect().height() - 140.).max(200.))
-            .vscroll(true)
-            .show(ctx, |ui| {
-                self.uv_contents(ui, document, model_faces, &mut commands)
-            });
+            .max_height(if expanded {
+                bounds.height()
+            } else {
+                (bounds.height() - 124.).max(200.)
+            })
+            .vscroll(true);
+        let window = if expanded {
+            window.fixed_rect(bounds).resizable(false)
+        } else {
+            window
+        };
+        window.show(ctx, |ui| {
+            self.uv_contents(ui, document, model_faces, &mut commands)
+        });
+        if !open {
+            self.uv.drag = None;
+        }
         self.uv.open = open;
         commands
     }
@@ -90,6 +118,17 @@ impl UiState {
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.uv.texture_tab, false, "UV layout");
             ui.selectable_value(&mut self.uv.texture_tab, true, "Texture images");
+            if ui
+                .button(if self.uv.expanded {
+                    "Restore window"
+                } else {
+                    "Expand editor"
+                })
+                .clicked()
+            {
+                self.uv.expanded = !self.uv.expanded;
+                self.uv.drag = None;
+            }
         });
         if self.uv.texture_tab {
             ui.scope(|ui| self.texture_controls(ui, document, commands));
@@ -325,7 +364,7 @@ impl UiState {
                     commands.push(Command::UvPack(self.uv.padding));
                 }
                 if ui.button("Select all").clicked() {
-                    self.uv.selected = (0..uv.corners.len()).collect();
+                    self.uv.selected = (0..uv.corners.len()).filter(|&f| uv.mapped(f)).collect();
                     commands.push(Command::UvSelect(self.uv.selected.clone()));
                 }
                 if ui.button("From 3D selection").clicked() {
@@ -347,10 +386,27 @@ impl UiState {
                 }
             });
         }
-        let size = ui
-            .available_width()
-            .clamp(180., if self.uv.texture_tab { 320. } else { 500. });
-        let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), Sense::click());
+        if !self.uv.texture_tab {
+            self.uv_tools(ui, commands);
+        }
+        let max_size = if self.uv.expanded {
+            (ui.ctx().content_rect().bottom()
+                - ui.cursor().top()
+                - if self.uv.texture_tab { 30. } else { 90. })
+            .max(180.)
+        } else if self.uv.texture_tab {
+            320.
+        } else {
+            500.
+        };
+        let size = ui.available_width().clamp(180., max_size);
+        let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), Sense::click_and_drag());
+        let consumed = if !self.uv.texture_tab && current {
+            self.uv_interaction(ui, &response, uv, commands)
+        } else {
+            false
+        };
+        let uv = self.uv.drag.as_ref().map_or(uv, |d| &d.preview);
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 0., Color32::from_gray(24));
         let map = |q: [f32; 2]| egui::pos2(rect.left() + q[0] * size, rect.bottom() - q[1] * size);
@@ -373,6 +429,7 @@ impl UiState {
                 texture.id,
                 document.display_revision(),
                 self.uv.exposure.to_bits(),
+                self.uv.expanded,
             );
             if self
                 .uv
@@ -380,9 +437,10 @@ impl UiState {
                 .as_ref()
                 .is_none_or(|(old, _)| *old != id)
             {
-                // The panel is at most 500 pixels wide; keep its preview bounded at 4K.
-                let width = texture.width.min(512) as usize;
-                let height = texture.height.min(512) as usize;
+                // Bound display memory independently of the source image resolution.
+                let limit = if self.uv.expanded { 1024 } else { 512 };
+                let width = texture.width.min(limit) as usize;
+                let height = texture.height.min(limit) as usize;
                 let mut rgba = Vec::with_capacity(width * height * 4);
                 for y in 0..height {
                     for x in 0..width {
@@ -424,7 +482,12 @@ impl UiState {
             self.uv.image_preview = None;
         }
         let selection: std::collections::BTreeSet<_> = self.uv.selected.iter().copied().collect();
-        for (f, t) in uv.corners.iter().enumerate().filter(|_| current) {
+        for (f, t) in uv
+            .corners
+            .iter()
+            .enumerate()
+            .filter(|(f, _)| current && uv.mapped(*f))
+        {
             let color = if selection.contains(&f) {
                 Color32::from_rgb(255, 185, 70)
             } else if crate::sculpt::uv::area(*t).abs() < 1e-10 {
@@ -435,16 +498,35 @@ impl UiState {
             } else {
                 Color32::from_rgb(115, 185, 215)
             };
+            if !self.uv.texture_tab {
+                let mut overlay = egui::Mesh::default();
+                for (c, &q) in t.iter().enumerate() {
+                    overlay.colored_vertex(
+                        map(q),
+                        Color32::from_rgba_unmultiplied(170, 75, 220, (uv.mask(f, c) * 180.) as u8),
+                    );
+                }
+                overlay.add_triangle(0, 1, 2);
+                painter.add(egui::Shape::mesh(overlay));
+            }
             for c in 0..3 {
                 painter.line_segment([map(t[c]), map(t[(c + 1) % 3])], (1., color));
             }
         }
+        if !self.uv.texture_tab {
+            self.uv_paint_handles(ui, &response, uv);
+        }
         if !self.uv.texture_tab
+            && !consumed
+            && !self.uv.tool.is_mask()
             && response.clicked()
             && let Some(p) = response.interact_pointer_pos()
         {
             let q = [(p.x - rect.left()) / size, (rect.bottom() - p.y) / size];
-            let face = uv.corners.iter().position(|t| {
+            let face = uv.corners.iter().enumerate().position(|(f, t)| {
+                if !uv.mapped(f) {
+                    return false;
+                }
                 let a = crate::sculpt::uv::area(*t);
                 if a.abs() < 1e-12 {
                     return false;
@@ -469,7 +551,9 @@ impl UiState {
             commands.push(Command::UvSelect(self.uv.selected.clone()));
         }
         if !self.uv.texture_tab {
-            ui.label("Click an island; Shift-click adds. Orange islands are selected in 3D too.");
+            ui.label(
+                "Click an island; Shift-click adds. Drag the handle to transform · Esc cancels.",
+            );
             ui.horizontal_wrapped(|ui| {
                 for k in 0..2 {
                     ui.add(

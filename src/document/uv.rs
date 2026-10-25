@@ -151,23 +151,32 @@ impl Document {
             return Err("Edge selection is out of date".into());
         }
         let stale = !self.mesh().uv.corners.is_empty() && !self.mesh().uv.current(self.mesh());
-        self.edit_uv("Mark UV seams", |uv| {
-            if stale {
-                uv.corners.clear();
-                uv.topology.clear();
-                uv.seams.clear();
-            }
-            let mut seams: std::collections::BTreeSet<_> = uv.seams.iter().copied().collect();
-            for edge in edges {
-                if mark {
-                    seams.insert(edge);
-                } else {
-                    seams.remove(&edge);
+        self.edit_uv(
+            if mark {
+                "Mark UV seams"
+            } else {
+                "Clear UV seams"
+            },
+            |uv| {
+                if stale {
+                    uv.corners.clear();
+                    uv.topology.clear();
+                    uv.seams.clear();
+                    uv.masks.clear();
+                    uv.removed.clear();
                 }
-            }
-            uv.seams = seams.into_iter().collect();
-            Ok(())
-        })
+                let mut seams: std::collections::BTreeSet<_> = uv.seams.iter().copied().collect();
+                for edge in edges {
+                    if mark {
+                        seams.insert(edge);
+                    } else {
+                        seams.remove(&edge);
+                    }
+                }
+                uv.seams = seams.into_iter().collect();
+                Ok(())
+            },
+        )
     }
 }
 

@@ -211,6 +211,8 @@ pub(crate) struct ModelingOptions {
     pub span: SelectionSpan,
     #[serde(default)]
     pub flat_angle: f32,
+    #[serde(default)]
+    pub erase_radius: f32,
     pub join: bool,
     pub loop_count: u32,
     pub axis: ModelAxis,
@@ -605,6 +607,12 @@ impl Viewport {
             point.filter(|p| !navigation::contains(response.rect, *p) && !gizmo.contains(*p));
         self.modeling
             .advance_direct_transform(document, scene, point, model);
+        if model.tool == ModelTool::Select
+            && model.erase_radius > 0.
+            && let Some(p) = eligible
+        {
+            painter.circle_stroke(p, model.erase_radius, (1.5, Color32::LIGHT_RED));
+        }
         let hover = eligible.and_then(|p| Self::component_at(p, model.mode, document, scene));
         if model.smooth_preview && options.wire && !self.modeling.dragging() {
             for [a, b] in document.mesh().polygon_edges() {
@@ -1193,6 +1201,8 @@ impl ModelingOptions {
         .iter()
         .all(|v| v.is_finite())
             || self.transform_direction.len() > 1.001
+            || !self.erase_radius.is_finite()
+            || !(0. ..=160.).contains(&self.erase_radius)
             || !self.flat_angle.is_finite()
             || !(0. ..=180.).contains(&self.flat_angle)
             || !self.construction.width.is_finite()

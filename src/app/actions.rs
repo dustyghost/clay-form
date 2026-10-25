@@ -109,9 +109,18 @@ impl App {
                     Action::ModelSelectSingle => self.ui.modeling.span = Span::Single,
                     Action::ModelSelectLoops => self.ui.modeling.span = Span::Loop,
                     Action::ModelSelectRing => self.ui.modeling.span = Span::Ring,
-                    Action::ModelReplace => self.ui.modeling.change = Change::Replace,
-                    Action::ModelAdd => self.ui.modeling.change = Change::Add,
-                    Action::ModelRemove => self.ui.modeling.change = Change::Remove,
+                    Action::ModelReplace => {
+                        self.ui.modeling.change = Change::Replace;
+                        self.ui.modeling.erase_radius = 0.;
+                    }
+                    Action::ModelAdd => {
+                        self.ui.modeling.change = Change::Add;
+                        self.ui.modeling.erase_radius = 0.;
+                    }
+                    Action::ModelRemove => {
+                        self.ui.modeling.change = Change::Remove;
+                        self.ui.modeling.erase_radius = 0.;
+                    }
                     _ => {}
                 }
                 None

@@ -8,6 +8,7 @@ pub(crate) struct ModelingControls {
     pub change: SelectionChange,
     pub span: SelectionSpan,
     pub flat_angle: f32,
+    pub erase_radius: f32,
     pub count: usize,
     pub loop_count: u32,
     pub join: bool,
@@ -60,6 +61,7 @@ impl ModelingControls {
         self.change = o.change;
         self.span = o.span;
         self.flat_angle = o.flat_angle;
+        self.erase_radius = o.erase_radius;
         self.join = o.join;
         self.loop_count = o.loop_count;
         self.axis = o.axis;
@@ -79,6 +81,7 @@ impl ModelingControls {
             change: self.change,
             span: self.span,
             flat_angle: self.flat_angle,
+            erase_radius: self.erase_radius,
             join: self.join,
             loop_count: self.loop_count,
             axis: self.axis,
@@ -274,20 +277,27 @@ impl UiState {
                             (SelectionChange::Add, Action::ModelAdd),
                             (SelectionChange::Remove, Action::ModelRemove),
                         ] {
-                            if ui.selectable_label(self.modeling.change == change, format!("{change:?}"))
+                            if ui.selectable_label(self.modeling.erase_radius == 0. && self.modeling.change == change, format!("{change:?}"))
                                 .customize(action.clone()).clicked() {
                                 commands.push(Command::Action(action));
                             }
                         }
                     });
-                    ui.weak("Tap or drag to select · Shift adds · Ctrl removes");
+                    let mut erase = self.modeling.erase_radius > 0.;
+                    if ui.checkbox(&mut erase, "Paint away selection").changed() {
+                        self.modeling.erase_radius = if erase { 32. } else { 0. };
+                    }
+                    if erase {
+                        ui.add(egui::Slider::new(&mut self.modeling.erase_radius,4. ..=160.).text("Eraser radius (px)"));
+                        ui.weak("Brush visible selected components · Esc restores the selection");
+                    } else { ui.weak("Tap or drag to select · Shift adds · Ctrl removes"); }
                     match (self.modeling.mode,self.modeling.span) {
                         (ComponentMode::Face,SelectionSpan::Loop) => {ui.weak("Hover near a face edge to choose the loop direction.");}
                         (ComponentMode::Edge,SelectionSpan::Loop) => {ui.weak("Follows connected edges along the loop.");}
                         (ComponentMode::Edge,SelectionSpan::Ring) => {ui.weak("Follows opposite edges across a quad strip.");}
                         _ => {}
                     }
-                    ui.weak("Replace clears once per stroke · Esc cancels");
+                    if !erase { ui.weak("Replace clears once per stroke · Esc cancels"); }
                 }
                 ModelTool::Extrude | ModelTool::Fuse => {
                     if self.modeling.tool==ModelTool::Fuse {
@@ -382,6 +392,11 @@ impl UiState {
             });
             if self.modeling.mode==ComponentMode::Face && ui.button("Select region boundary").customize(Action::ModelBoundary).clicked() { commands.push(Command::ModelBoundary); }
             if self.modeling.mode==ComponentMode::Edge {
+                ui.horizontal_wrapped(|ui| {
+                    if ui.add_enabled(self.modeling.count>0,egui::Button::new("Mark UV seams")).clicked() { commands.push(Command::UvSeams(true)); }
+                    if ui.add_enabled(self.modeling.count>0,egui::Button::new("Clear UV seams")).clicked() { commands.push(Command::UvSeams(false)); }
+                });
+                ui.weak("Select edges, then mark or clear seams. Unwrap uses the marked seams.");
                 let response=ui.add_enabled(self.modeling.count>0,egui::Button::new("Dissolve selected loops"))
                     .customize(Action::ModelDissolveLoops);
                 if design::help(response,"Remove complete interior quad loops and merge the surrounding faces. Keeps the surface connected; replaces stored levels. Undo restores the mesh.").clicked() {

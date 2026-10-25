@@ -379,6 +379,12 @@ impl Mesh {
         if self.uv.current(self) {
             result.uv.textures = self.uv.textures.clone();
             result.uv.corners = old_faces.iter().map(|&f| self.uv.corners[f]).collect();
+            if !self.uv.masks.is_empty() {
+                result.uv.masks = old_faces.iter().map(|&f| self.uv.masks[f]).collect();
+            }
+            if !self.uv.removed.is_empty() {
+                result.uv.removed = old_faces.iter().map(|&f| self.uv.removed[f]).collect();
+            }
             result.uv.topology = result.triangles.clone();
         }
         result.materials = self.reindex_materials(old_vertices.iter().copied());

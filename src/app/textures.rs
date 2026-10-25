@@ -60,18 +60,26 @@ impl App {
                         .uv
                         .corners
                         .iter()
-                        .any(|t| crate::sculpt::uv::area(*t).abs() < 1e-12)
+                        .enumerate()
+                        .any(|(f, t)| {
+                            self.document.mesh().uv.mapped(f)
+                                && crate::sculpt::uv::area(*t).abs() < 1e-12
+                        })
                     {
                         return Err("Repair degenerate UV triangles before painting".into());
                     }
-                    if self
-                        .document
-                        .mesh()
-                        .uv
+                    let uv = &self.document.mesh().uv;
+                    if !(0..uv.corners.len()).any(|f| uv.mapped(f)) {
+                        return Err(
+                            "Generate UVs before painting; all UV islands were removed".into()
+                        );
+                    }
+                    if uv
                         .corners
                         .iter()
-                        .flatten()
-                        .flatten()
+                        .enumerate()
+                        .filter(|(f, _)| uv.mapped(*f))
+                        .flat_map(|(_, t)| t.iter().flatten())
                         .any(|v| !(0. ..=1.).contains(v))
                     {
                         return Err("Pack UV islands inside 0–1 before painting; tiled UV painting is not supported".into());

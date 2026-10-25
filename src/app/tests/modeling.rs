@@ -1768,3 +1768,78 @@ fn modeling_double_ring_drag_reverses_cancels_and_repeats_remembered_radius() {
     app.dispatch(Command::Undo, &ctx);
     assert_eq!(app.document.geometry_snapshot(), before);
 }
+
+#[test]
+fn modeling_selection_eraser_removes_a_disk_and_escape_restores_selection() {
+    let (mut app, ctx, rect) = setup();
+    tap(&mut app, &ctx, rect.center());
+    app.ui.modeling.change = SelectionChange::Add;
+    tap(&mut app, &ctx, rect.center() + Vec2::new(100., 0.));
+    let selected = app.viewport.modeling.selected.clone();
+    assert_eq!(selected.len(), 2);
+    let before = app.document.geometry_snapshot();
+    app.ui.modeling.erase_radius = 80.;
+    let p = rect.center() + Vec2::new(50., 0.);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(p), primary_event(p, true)],
+    );
+    assert!(app.viewport.modeling.selection().is_empty());
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::Key {
+            key: egui::Key::Escape,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Default::default(),
+        }],
+    );
+    navigation_frame(&mut app, &ctx, vec![primary_event(p, false)]);
+    assert_eq!(app.viewport.modeling.selected, selected);
+    tap(&mut app, &ctx, p);
+    assert!(app.viewport.modeling.selected.is_empty());
+    assert_eq!(app.document.geometry_snapshot(), before);
+}
+
+#[test]
+fn modeling_selection_eraser_respects_depth_and_covers_edges_and_points() {
+    let (mut app, ctx, rect) = setup();
+    tap(&mut app, &ctx, rect.center());
+    let front = *app.viewport.modeling.selected.iter().next().unwrap();
+    let all = app.document.mesh().polygons().len();
+    app.viewport.modeling.selected = (0..all).map(crate::viewport::Component::Face).collect();
+    app.ui.modeling.erase_radius = 4.;
+    tap(&mut app, &ctx, rect.center());
+    assert!(!app.viewport.modeling.selected.contains(&front));
+    assert_eq!(
+        app.viewport.modeling.selected.len(),
+        all - 1,
+        "faces behind the visible surface stay selected"
+    );
+    for mode in [ComponentMode::Edge, ComponentMode::Vertex] {
+        app.ui.modeling.erase_radius = 0.;
+        app.dispatch(Command::ModelingComponent(mode), &ctx);
+        app.dispatch(Command::ClearModelSelection, &ctx);
+        let scale = rect.width().min(rect.height()) * 0.35;
+        let p = rect.center()
+            + Vec2::new(
+                scale / 3.,
+                if mode == ComponentMode::Vertex {
+                    scale / 3.
+                } else {
+                    0.
+                },
+            );
+        tap(&mut app, &ctx, p);
+        assert_eq!(app.viewport.modeling.selected.len(), 1, "{mode:?}");
+        app.ui.modeling.erase_radius = 32.;
+        tap(&mut app, &ctx, p + Vec2::new(20., 0.));
+        assert!(
+            app.viewport.modeling.selected.is_empty(),
+            "brush reaches {mode:?} away from its centre"
+        );
+    }
+}

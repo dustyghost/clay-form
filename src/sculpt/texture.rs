@@ -189,7 +189,10 @@ impl Mesh {
         let texture = &self.uv.textures[i];
         let (width, height) = (texture.width as usize, texture.height as usize);
         let mut occupied = vec![false; width * height];
-        for t in &self.uv.corners {
+        for (f, t) in self.uv.corners.iter().enumerate() {
+            if !self.uv.mapped(f) {
+                continue;
+            }
             raster(t.map(|q| [q[0], 1. - q[1]]), width, height, |x, y, _| {
                 occupied[y * width + x] = true
             });
@@ -340,6 +343,9 @@ impl Mesh {
                     projected_face.iter().all(|p| p[k] < -1.)
                         || projected_face.iter().all(|p| p[k] > 1.)
                 }) {
+                    continue;
+                }
+                if !self.uv.mapped(f) {
                     continue;
                 }
                 let uv = self.uv.corners[f].map(|q| [q[0], 1. - q[1]]);
@@ -535,6 +541,19 @@ pub(crate) mod tests {
             delta: Vec3::default(),
             invert: false,
         }
+    }
+    #[test]
+    fn removed_uv_faces_do_not_paint_but_still_occlude_other_faces() {
+        let mut mesh = sheets();
+        mesh.uv.remove_islands(&[0, 1]).unwrap();
+        let before = mesh.uv.textures[0].pixels.clone();
+        let mut brush = Brush::new(super::super::Kind::Paint);
+        brush.material = super::super::Material::from_srgb([1., 0., 0.], 0.5, 0.);
+        brush.strength = 1.;
+        assert!(!mesh.paint_texture(Channel::Color, &brush, &[dab()], &[], &[]));
+        assert_eq!(mesh.uv.textures[0].pixels, before);
+        mesh.hidden_faces = vec![true, true, false, false];
+        assert!(mesh.paint_texture(Channel::Color, &brush, &[dab()], &[], &[]));
     }
     #[test]
     fn texture_stroke_respects_occlusion_masks_pressure_and_hidden_faces() {

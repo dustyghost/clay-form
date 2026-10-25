@@ -240,6 +240,46 @@ fn gpu_uv_texture_pixels_and_checker_survive_batching() {
         "checker overrides painted colour"
     );
 
+    doc.edit_uv("Remove UV mapping", |uv| {
+        uv.remove_islands(&(0..uv.corners.len()).collect::<Vec<_>>())
+    })
+    .unwrap();
+    gpu.upload(&Arc::new(DisplayMesh::new(&doc)));
+    gpu.paint(
+        &params,
+        [256, 256],
+        false,
+        WireMode::Visible,
+        false,
+        &Preview::default(),
+    );
+    let unmapped = gpu.read();
+    assert_ne!(unmapped, rgba, "removed UVs stop sampling the texture");
+    gpu.paint(
+        &params,
+        [256, 256],
+        false,
+        WireMode::Visible,
+        false,
+        &preview,
+    );
+    assert_eq!(
+        gpu.read(),
+        unmapped,
+        "unmapped faces also bypass the UV checker"
+    );
+    doc.undo();
+    gpu.upload(&Arc::new(DisplayMesh::new(&doc)));
+    gpu.paint(
+        &params,
+        [256, 256],
+        false,
+        WireMode::Visible,
+        false,
+        &Preview::default(),
+    );
+    assert_eq!(gpu.read(), rgba, "Undo restores texture sampling");
+
     // Paint across a geometric edge whose two UV copies are far apart in the atlas.
     // Compare rendered fragments across the seam, not only rasterized UV coverage.
     let mut seam = crate::sculpt::texture::tests::sheets();

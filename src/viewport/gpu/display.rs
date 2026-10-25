@@ -230,7 +230,7 @@ impl DisplayMesh {
                 if !surface.face_visible(face) {
                     continue;
                 }
-                uv_corners.push(if uv_current {
+                uv_corners.push(if uv_current && surface.uv.mapped(face) {
                     std::array::from_fn(|c| {
                         let q = surface.uv.corners[face][c];
                         [q[0], q[1], 1., texture_channels[c]]
