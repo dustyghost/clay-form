@@ -276,6 +276,9 @@ mod tests {
     fn removed_head_recipes_keep_saved_surfaces_in_active_and_other_submodels() {
         use crate::sculpt::{MeshSettings, ModelMetadata, Primitive, PrimitiveKind, Submodel};
         let mut expected = crate::document::Document::default().project();
+        // Recipe-only legacy settings predate the quad remesh option. The
+        // active model inherits triangles; the submodel's explicit choice stays.
+        expected.mesh_settings.remesh_topology = crate::sculpt::Topology::Triangles;
         expected.model_name = "Saved head".into();
         expected.mesh = Primitive::for_kind(PrimitiveKind::Cube).mesh().unwrap();
         expected.mesh.mask[0] = 0.75;

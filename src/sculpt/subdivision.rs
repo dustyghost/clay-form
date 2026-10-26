@@ -65,6 +65,9 @@ impl MeshSettings {
             ..Self::default()
         }
     }
+    pub(crate) fn is_legacy_default(&self) -> bool {
+        *self == Self::legacy_default()
+    }
     pub fn is_default(&self) -> bool {
         *self == Self::default()
     }
