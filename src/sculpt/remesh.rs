@@ -192,7 +192,7 @@ impl Mesh {
             self.transfer_groups_to(&mut mesh);
             // A quad is one editable face even though its render triangles can
             // sample different source groups at a border.
-            for pair in mesh.polygroups.chunks_exact_mut(2) {
+            for pair in mesh.polygroups.as_chunks_mut::<2>().0 {
                 pair[1] = pair[0];
             }
             self.transfer_materials_to(&mut mesh, &cancelled)?;
