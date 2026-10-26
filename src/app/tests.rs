@@ -263,7 +263,10 @@ fn customized_tool_groups_render_in_all_docks_and_settings() {
 }
 
 fn finish_mesh_job(app: &mut App) {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    finish_mesh_job_with_timeout(app, std::time::Duration::from_secs(10));
+}
+fn finish_mesh_job_with_timeout(app: &mut App, timeout: std::time::Duration) {
+    let deadline = std::time::Instant::now() + timeout;
     while app.mesh_job.is_some() {
         app.poll_mesh_job();
         assert!(std::time::Instant::now() < deadline, "mesh job timed out");
@@ -315,10 +318,20 @@ fn background_mesh_jobs_commit_once_and_cancellation_or_failure_keeps_original()
 
 #[test]
 fn automatic_remeshing_waits_for_stroke_release_and_is_undoable() {
+    for algorithm in [
+        crate::sculpt::QuadRemeshAlgorithm::SurfaceNets,
+        crate::sculpt::QuadRemeshAlgorithm::Relaxed,
+    ] {
+        automatic_remeshing_with_algorithm(algorithm);
+    }
+}
+
+fn automatic_remeshing_with_algorithm(algorithm: crate::sculpt::QuadRemeshAlgorithm) {
     let mut app = App::default();
     let ctx = egui::Context::default();
     app.dispatch(Command::SetDynamicMesh(true), &ctx);
     app.dispatch(Command::SetRemeshSettings(16, true), &ctx);
+    app.dispatch(Command::SetQuadRemeshAlgorithm(algorithm), &ctx);
     let rect = navigation_frame(&mut app, &ctx, vec![]);
     let center = rect.center();
     navigation_frame(
@@ -339,11 +352,15 @@ fn automatic_remeshing_waits_for_stroke_release_and_is_undoable() {
     assert!(app.mesh_job.is_none());
     navigation_frame(&mut app, &ctx, vec![primary_event(center, false)]);
     assert!(app.mesh_job.is_some());
-    finish_mesh_job(&mut app);
+    finish_mesh_job_with_timeout(&mut app, std::time::Duration::from_secs(60));
     assert_ne!(
         app.document.mesh().triangles.len(),
         sculpted.triangles.len()
     );
+    let expected = sculpted
+        .remesh_algorithm_cancellable(16, crate::sculpt::Topology::Quads, algorithm, &|| false)
+        .unwrap();
+    assert_eq!(app.document.mesh(), &expected);
     app.dispatch(Command::Undo, &ctx);
     assert_eq!(app.document.mesh(), &sculpted);
     // A pen held down during an explicit mesh operation must be lifted before
@@ -357,7 +374,7 @@ fn automatic_remeshing_waits_for_stroke_release_and_is_undoable() {
         ],
     );
     app.dispatch(Command::Remesh, &ctx);
-    finish_mesh_job(&mut app);
+    finish_mesh_job_with_timeout(&mut app, std::time::Duration::from_secs(60));
     let remeshed = app.document.mesh().clone();
     navigation_frame(
         &mut app,

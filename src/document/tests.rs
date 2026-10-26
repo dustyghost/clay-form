@@ -446,6 +446,29 @@ mod adaptive_mode_tests {
         let current = serde_json::to_value(document.project()).unwrap();
         let saved: crate::sculpt::Project = serde_json::from_value(current.clone()).unwrap();
         assert_eq!(saved.mesh_settings.remesh_topology, Topology::Quads);
+        assert_eq!(
+            saved.mesh_settings.quad_remesh_algorithm,
+            crate::sculpt::QuadRemeshAlgorithm::SurfaceNets
+        );
+        assert!(
+            current["mesh_settings"]
+                .get("quad_remesh_algorithm")
+                .is_none()
+        );
+        document
+            .set_quad_remesh_algorithm(crate::sculpt::QuadRemeshAlgorithm::Relaxed)
+            .unwrap();
+        let relaxed = serde_json::to_value(document.project()).unwrap();
+        let saved: crate::sculpt::Project = serde_json::from_value(relaxed).unwrap();
+        assert_eq!(
+            saved.mesh_settings.quad_remesh_algorithm,
+            crate::sculpt::QuadRemeshAlgorithm::Relaxed
+        );
+        document.undo();
+        assert_eq!(
+            document.mesh_settings().quad_remesh_algorithm,
+            crate::sculpt::QuadRemeshAlgorithm::SurfaceNets
+        );
         let mut old = current.clone();
         old["mesh_settings"]
             .as_object_mut()

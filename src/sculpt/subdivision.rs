@@ -24,6 +24,11 @@ pub struct MeshSettings {
     pub auto_remesh: bool,
     #[serde(default = "super::Topology::triangles")]
     pub remesh_topology: super::Topology,
+    #[serde(
+        default,
+        skip_serializing_if = "super::QuadRemeshAlgorithm::is_default"
+    )]
+    pub quad_remesh_algorithm: super::QuadRemeshAlgorithm,
     #[serde(default, skip_serializing_if = "AdaptiveSettings::is_default")]
     pub adaptive: AdaptiveSettings,
 }
@@ -54,6 +59,7 @@ impl Default for MeshSettings {
             resolution: 48,
             auto_remesh: false,
             remesh_topology: super::Topology::Quads,
+            quad_remesh_algorithm: super::QuadRemeshAlgorithm::default(),
             adaptive: AdaptiveSettings::default(),
         }
     }

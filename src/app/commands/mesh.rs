@@ -38,6 +38,9 @@ impl App {
                 self.document.set_remesh_settings(resolution, auto)
             }
             Command::SetRemeshTopology(topology) => self.document.set_remesh_topology(topology),
+            Command::SetQuadRemeshAlgorithm(algorithm) => {
+                self.document.set_quad_remesh_algorithm(algorithm)
+            }
             Command::ZoomIn | Command::ZoomOut => {
                 self.camera.zoom_step(matches!(command, Command::ZoomIn));
                 Ok(())

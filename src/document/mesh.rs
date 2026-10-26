@@ -157,6 +157,18 @@ impl Document {
         }
         Ok(())
     }
+    pub fn set_quad_remesh_algorithm(
+        &mut self,
+        algorithm: crate::sculpt::QuadRemeshAlgorithm,
+    ) -> Result<(), String> {
+        self.require_sculpt_mesh()?;
+        if self.geometry.settings.quad_remesh_algorithm == algorithm {
+            return Ok(());
+        }
+        let mut geometry = self.geometry.clone();
+        geometry.settings.quad_remesh_algorithm = algorithm;
+        self.replace_geometry_named(geometry, "Quad remesh algorithm")
+    }
     pub fn set_remesh_topology(&mut self, topology: crate::sculpt::Topology) -> Result<(), String> {
         self.require_sculpt_mesh()?;
         if self.geometry.settings.remesh_topology == topology {

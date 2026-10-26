@@ -1,4 +1,4 @@
-//! Voxel solid reconstruction followed by marching tetrahedra.
+//! Voxel solid reconstruction with triangle or quad extraction.
 //! Scanline winding fills overlapping closed volumes as a union. The grid is
 //! padded so extraction never ends on its boundary. No third-party mesh code.
 use super::{
@@ -8,6 +8,7 @@ use super::{
 };
 use std::collections::HashMap;
 mod quads;
+mod relaxed;
 
 impl Mesh {
     pub fn validate_closed(&self) -> Result<(), String> {
@@ -49,6 +50,20 @@ impl Mesh {
         &self,
         resolution: u32,
         topology: super::Topology,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Self, String> {
+        self.remesh_algorithm_cancellable(
+            resolution,
+            topology,
+            super::QuadRemeshAlgorithm::SurfaceNets,
+            cancelled,
+        )
+    }
+    pub(crate) fn remesh_algorithm_cancellable(
+        &self,
+        resolution: u32,
+        topology: super::Topology,
+        algorithm: super::QuadRemeshAlgorithm,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Self, String> {
         if cancelled() {
@@ -189,6 +204,9 @@ impl Mesh {
             .collect();
         if topology == super::Topology::Quads {
             let mut mesh = quads::extract(&grid, &field, cancelled)?;
+            if algorithm == super::QuadRemeshAlgorithm::Relaxed {
+                relaxed::redistribute(&mut mesh, step, cancelled)?;
+            }
             self.transfer_groups_to(&mut mesh);
             // A quad is one editable face even though its render triangles can
             // sample different source groups at a border.

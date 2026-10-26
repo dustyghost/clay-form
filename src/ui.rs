@@ -1407,7 +1407,18 @@ impl UiState {
                 });
                 if topology != settings.remesh_topology { commands.push(Command::SetRemeshTopology(topology)); }
                 if topology == crate::sculpt::Topology::Quads {
-                    ui.weak("Creates editable quads aligned to the voxel grid. Increase resolution for small features. Ambiguous cells are reported without changing the model.");
+                    let mut algorithm = settings.quad_remesh_algorithm;
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label("Quad algorithm");
+                        ui.selectable_value(&mut algorithm, crate::sculpt::QuadRemeshAlgorithm::SurfaceNets, "Surface nets");
+                        ui.selectable_value(&mut algorithm, crate::sculpt::QuadRemeshAlgorithm::Relaxed, "Relaxed quads");
+                    });
+                    if algorithm != settings.quad_remesh_algorithm { commands.push(Command::SetQuadRemeshAlgorithm(algorithm)); }
+                    ui.weak(match algorithm {
+                        crate::sculpt::QuadRemeshAlgorithm::SurfaceNets => "Original grid-aligned quads. Fast, but spacing can cluster where the surface changes direction.",
+                        crate::sculpt::QuadRemeshAlgorithm::Relaxed => "Redistributes quads along the rebuilt surface for more even spacing. Slower; retains grid junctions and face count.",
+                    });
+                    ui.weak("Increase resolution for small features. Ambiguous cells are reported without changing the model.");
                 }
                 let mut resolution=settings.resolution;
                 let mut auto=settings.auto_remesh;

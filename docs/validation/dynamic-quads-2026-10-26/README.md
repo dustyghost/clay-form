@@ -49,3 +49,31 @@ cargo test --locked --lib quad_topology_controls_offscreen_review -- --ignored -
 ```
 
 The interaction regression is included in GPU CI. Image inspection remains manual; the test does not claim automated visual comparison. Full test/lint/GPU checks run in PR CI.
+
+## Follow-up: relaxed quad distribution
+
+Dynamic Mesh now keeps the original **Surface nets** algorithm and offers **Relaxed quads** separately. Missing algorithm settings and new models retain Surface nets. The choice is saved per model, captured in diagnostics, restored by Undo/Redo and used by both explicit and automatic remeshing. Adaptive sculpt settings remain independent.
+
+Relaxed quads applies the existing surface-constrained relaxation engine to the freshly reconstructed surface before transferring materials and vertex groups. It uses polygon edges (not hidden render diagonals), 30 iterations at strength 0.5 and a maximum sampled deviation of 0.15 voxels. Coordinates are normalized to voxel units so this tolerance scales with the model. Connected reference-face tracking prevents projection from jumping directly to nearby sheets. Existing sharp-feature protection, orientation checks, sampled face-centre/edge-midpoint checks and backtracking limit unsafe moves. The shared work limit reports an actionable error; a failed or cancelled job keeps the original document.
+
+This follows the general approach of [tangential mesh relaxation](https://doc.cgal.org/6.2/PMP_Remeshing/index.html); it uses the app's own existing engine, with no new dependencies. Projection constrains the reconstructed surface, not the pre-voxel sculpt: the voxel detail limits still apply. The sampled deviation is not a global Hausdorff bound. Connectivity and quad count stay fixed, so valence junctions remain; this is more even spacing, not a new guided quad layout.
+
+The supplied head session was compared from stage 23 (before remeshing), at resolution 48 and the original camera. Both outputs contain **5,534 quads** with identical connectivity. Edge-length coefficient of variation falls from **0.224313 to 0.140089**, a **37.5% reduction**. Maximum sampled deviation from the unrelaxed reconstruction is **0.005871 model units / 0.093274 voxels**. Wireframe review shows more even spacing across the forehead and cheek; shaded review shows the head/neck shape and silhouette retained. Junctions remain visible. Debug runs took about 4 seconds for Surface nets and 27 seconds for Relaxed quads; these are local review timings, not release performance claims.
+
+| Surface nets | Relaxed quads |
+| --- | --- |
+| ![Original head wireframe](surface-nets-head-wire.png) | ![Relaxed head wireframe](relaxed-quads-head-wire.png) |
+| ![Original shaded head](surface-nets-head-solid.png) | ![Relaxed shaded head](relaxed-quads-head-solid.png) |
+
+![Separate quad algorithm controls](relaxed-quad-controls.png)
+
+Focused checks cover spacing and valid faces on sphere/cube/torus, projection onto the reconstructed surface, thin nearby components, cancellation, legacy persistence, algorithm Undo/Redo, and both algorithms through automatic remeshing. The GPU control check passes with a bounded 60-second wait for the heavier relaxed operation; simpler mesh jobs retain their existing 10-second test wait.
+
+The local comparison helper accepts a pre-remesh project and writes separate output projects without modifying the diagnostic bundle:
+
+```sh
+CLAY_REVIEW_PROJECT=/path/to/stage-023.clay CLAY_GUIDE_PREVIEW=/tmp/clay-relaxed-review \
+  cargo test --locked --lib relaxed_quads_project_comparison -- --ignored --nocapture
+```
+
+Render either output with `project_file_offscreen_review`, using `CLAY_REVIEW_PROJECT`, `CLAY_GUIDE_PREVIEW` and optional `CLAY_REVIEW_MANIFEST` for the original camera. This manual review stays outside routine GPU CI; the existing quad control regression covers both algorithm buttons, saved settings and Undo/Redo. Automatic-remesh coverage now checks both algorithms against their expected geometry.
