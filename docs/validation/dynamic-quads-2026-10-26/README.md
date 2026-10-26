@@ -77,3 +77,44 @@ CLAY_REVIEW_PROJECT=/path/to/stage-023.clay CLAY_GUIDE_PREVIEW=/tmp/clay-relaxed
 ```
 
 Render either output with `project_file_offscreen_review`, using `CLAY_REVIEW_PROJECT`, `CLAY_GUIDE_PREVIEW` and optional `CLAY_REVIEW_MANIFEST` for the original camera. This manual review stays outside routine GPU CI; the existing quad control regression covers both algorithm buttons, saved settings and Undo/Redo. Automatic-remesh coverage now checks both algorithms against their expected geometry.
+
+
+## Follow-up: native topology optimisation
+
+**Optimized quads** is a third, optional Dynamic Mesh algorithm. Surface nets remains the default and Relaxed quads is unchanged. This implements native Rust local operations informed by Tarini, Pietroni, Cignoni, Panozzo and Puppo, [Practical Quad Mesh Simplification (2010)](https://vcg.isti.cnr.it/publication/2010/TPCPP10/). No Blender, QuadriFlow or other mesh-library code or dependencies were added.
+
+The optimiser alternates diagonal/edge contractions and edge/vertex rotations with tangent redistribution. Its geometric objective equalises edges and diagonals (the paper's “homeometry”), rather than blindly removing every irregular vertex. Edge collapse combines a vertex rotation and diagonal contraction atomically; requiring the intermediate rotation to be profitable prevented useful simplification in the prototype. A coarse layout is subdivided and reprojected to recover approximately the requested density. Thin shapes that cannot reach the coarsest layout retry with one subdivision level instead of two. Already regular closed layouts are retained. This is an adaptation of the paper, not a complete reproduction or a guided retopology solver.
+
+Projection walks connected reference patches. Each disconnected component is optimised and validated separately. The final gate checks closed oriented quad fans, Euler characteristic, nonfolded/convex faces, mesh limits and sampled surface error in **both directions**. Vertices, triangle-edge midpoints and triangle centres must be within **0.4 voxel** of the Surface nets reconstruction. Coarse intermediate layouts have a looser 0.75-voxel allowance; they are never applied directly. These samples do not prove a global Hausdorff bound or absence of all self-intersections. Work is bounded and cancellable, and a failed job leaves the document unchanged. Global remeshing still clears masks and transfers attributes afterwards.
+
+On the supplied head, resolution 48:
+
+| Measurement | Surface nets | Relaxed quads | Optimized quads |
+| --- | ---: | ---: | ---: |
+| Editable quads | 5,534 | 5,534 | 5,520 |
+| Vertices with degree other than four | 2,401 | 2,401 | 125 |
+| Edge-length coefficient of variation | 0.22431 | 0.14009 | 0.14268 |
+| Worst longest/shortest edge ratio within a face | 6.82 | 7.15 | 2.82 |
+| Corners outside 45–135 degrees | 302 | 10 | 2 |
+| Minimum / maximum corner angle | 43.64 / 159.20° | 42.99 / 145.74° | 44.79 / 133.77° |
+
+The optimised head retains a closed sphere topology, has no duplicate faces or invalid vertex links, and contains only four-sided polygons. Independent bidirectional sampling measured 0.259 voxel output-to-reference and 0.333 voxel reference-to-output. Matching-camera front and back wireframes show a large reduction in crowded junctions. Small sharp details may soften; this option trades more shape freedom for better connections than Relaxed quads.
+
+| Optimized front | Optimized back |
+| --- | --- |
+| ![Optimized head front wireframe](optimized-quads-head-wire.png) | ![Optimized head back wireframe](optimized-quads-head-back.png) |
+
+![Optimized shaded head](optimized-quads-head-solid.png)
+
+Release profiling confirmed the earlier slowdown was real: median of three runs was 0.844 seconds for Surface nets and 7.030 seconds for Relaxed quads, excluding UI time. In Relaxed quads, sampled surface checks dominated (about 5.24 seconds and 19.2 million reference-triangle evaluations). The final optimisation core took approximately 12.4 seconds in the small release harness, **excluding voxel reconstruction, attribute transfer and the final validation gate**, so this is not an end-to-end comparison. A 22-second variant reduced junctions further but offered a smaller practical benefit for its extra cost. Optimized quads prioritises layout quality; it is not a performance fix for Relaxed quads.
+
+Focused regressions cover sphere (552 → 39 irregular vertices), cube (its existing eight corner junctions and regular connections are retained), torus (200 → 62, with the same 544 faces), scale-normalised optimisation, disconnected nearby components, rejected shape changes, and cancellation without replacing the input. The app-level test exercises Optimized quads through automatic remeshing, blocked mid-stroke replacement and Undo/Redo. Persistence coverage includes all three algorithms; the GPU control regression clicks the new option and verifies its Undo/Redo behaviour.
+
+The manual project comparison uses the real application pipeline and writes a separate project:
+
+```sh
+CLAY_REVIEW_PROJECT=/path/to/stage-023.clay CLAY_GUIDE_PREVIEW=/tmp/clay-optimized-review \
+  cargo test --locked --lib optimized_quads_project_comparison -- --ignored --nocapture
+```
+
+Use the existing `project_file_offscreen_review` helper to capture the resulting project with the original camera. The diagnostic export itself is never modified.

@@ -455,20 +455,23 @@ mod adaptive_mode_tests {
                 .get("quad_remesh_algorithm")
                 .is_none()
         );
-        document
-            .set_quad_remesh_algorithm(crate::sculpt::QuadRemeshAlgorithm::Relaxed)
-            .unwrap();
-        let relaxed = serde_json::to_value(document.project()).unwrap();
-        let saved: crate::sculpt::Project = serde_json::from_value(relaxed).unwrap();
-        assert_eq!(
-            saved.mesh_settings.quad_remesh_algorithm,
-            crate::sculpt::QuadRemeshAlgorithm::Relaxed
-        );
-        document.undo();
-        assert_eq!(
-            document.mesh_settings().quad_remesh_algorithm,
-            crate::sculpt::QuadRemeshAlgorithm::SurfaceNets
-        );
+        for algorithm in [
+            crate::sculpt::QuadRemeshAlgorithm::Relaxed,
+            crate::sculpt::QuadRemeshAlgorithm::Optimized,
+        ] {
+            document.set_quad_remesh_algorithm(algorithm).unwrap();
+            let encoded = serde_json::to_value(document.project()).unwrap();
+            let saved: crate::sculpt::Project = serde_json::from_value(encoded).unwrap();
+            assert_eq!(saved.mesh_settings.quad_remesh_algorithm, algorithm);
+            document.undo();
+            assert_eq!(
+                document.mesh_settings().quad_remesh_algorithm,
+                crate::sculpt::QuadRemeshAlgorithm::SurfaceNets
+            );
+            document.redo();
+            assert_eq!(document.mesh_settings().quad_remesh_algorithm, algorithm);
+            document.undo();
+        }
         let mut old = current.clone();
         old["mesh_settings"]
             .as_object_mut()

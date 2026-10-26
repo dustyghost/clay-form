@@ -7,6 +7,8 @@ use super::{
     subdivision::{MAX_TRIANGLES, MAX_VERTICES},
 };
 use std::collections::HashMap;
+mod optimized;
+mod optimized_mesh;
 mod quads;
 mod relaxed;
 
@@ -204,8 +206,14 @@ impl Mesh {
             .collect();
         if topology == super::Topology::Quads {
             let mut mesh = quads::extract(&grid, &field, cancelled)?;
-            if algorithm == super::QuadRemeshAlgorithm::Relaxed {
-                relaxed::redistribute(&mut mesh, step, cancelled)?;
+            match algorithm {
+                super::QuadRemeshAlgorithm::SurfaceNets => {}
+                super::QuadRemeshAlgorithm::Relaxed => {
+                    relaxed::redistribute(&mut mesh, step, cancelled)?
+                }
+                super::QuadRemeshAlgorithm::Optimized => {
+                    optimized_mesh::redistribute(&mut mesh, step, cancelled)?
+                }
             }
             self.transfer_groups_to(&mut mesh);
             // A quad is one editable face even though its render triangles can

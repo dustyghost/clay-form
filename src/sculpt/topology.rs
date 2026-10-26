@@ -19,6 +19,7 @@ pub enum QuadRemeshAlgorithm {
     #[default]
     SurfaceNets,
     Relaxed,
+    Optimized,
 }
 impl QuadRemeshAlgorithm {
     pub(crate) fn is_default(&self) -> bool {

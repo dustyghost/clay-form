@@ -326,6 +326,11 @@ fn automatic_remeshing_waits_for_stroke_release_and_is_undoable() {
     }
 }
 
+#[test]
+fn optimized_remeshing_waits_for_stroke_release_and_is_undoable() {
+    automatic_remeshing_with_algorithm(crate::sculpt::QuadRemeshAlgorithm::Optimized);
+}
+
 fn automatic_remeshing_with_algorithm(algorithm: crate::sculpt::QuadRemeshAlgorithm) {
     let mut app = App::default();
     let ctx = egui::Context::default();

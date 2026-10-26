@@ -105,6 +105,21 @@ fn quad_topology_controls_offscreen_review() {
         g.app.document.mesh().triangles.len()
     );
     g.save("relaxed-quad-remesh-wire");
+    let before_optimized = g.app.document.geometry_snapshot();
+    click_guide_label(&mut g, "Optimized quads");
+    assert_eq!(
+        g.app.document.mesh_settings().quad_remesh_algorithm,
+        crate::sculpt::QuadRemeshAlgorithm::Optimized
+    );
+    g.save("optimized-quad-controls");
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), before_optimized);
+    g.app.dispatch(Command::Redo, &g.ctx);
+    assert_eq!(
+        g.app.document.mesh_settings().quad_remesh_algorithm,
+        crate::sculpt::QuadRemeshAlgorithm::Optimized
+    );
+
     click_guide_label(&mut g, "Surface nets");
     assert_eq!(
         g.app.document.mesh_settings().quad_remesh_algorithm,
