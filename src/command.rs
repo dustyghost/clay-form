@@ -127,6 +127,7 @@ pub(crate) enum Command {
     SetDynamicMesh(bool),
     SetAdaptive(AdaptiveSettings),
     SetRemeshSettings(u32, bool),
+    SetRemeshTopology(crate::sculpt::Topology),
     Remesh,
     CancelMeshJob,
     EditEdges(crate::sculpt::EdgeEdit),

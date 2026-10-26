@@ -621,6 +621,7 @@ impl App {
             | Command::SetAdaptive(..)
             | Command::SetDynamicMesh(..)
             | Command::SetRemeshSettings(..)
+            | Command::SetRemeshTopology(..)
             | Command::ZoomIn
             | Command::ZoomOut
             | Command::SetZoom(..)

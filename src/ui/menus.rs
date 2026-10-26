@@ -347,7 +347,7 @@ impl UiState {
             BuiltinMenu::Visibility => {
                 let hidden = document.mesh().hidden_face_count();
                 ui.label(format!(
-                    "{hidden} / {} faces hidden",
+                    "{hidden} / {} triangles hidden",
                     document.mesh().triangles.len()
                 ));
                 ui.add_enabled_ui(!self.mesh_busy && document.primitive().is_none(), |ui| {

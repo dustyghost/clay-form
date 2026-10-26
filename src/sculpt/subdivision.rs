@@ -22,6 +22,8 @@ pub struct MeshSettings {
     pub dynamic: bool,
     pub resolution: u32,
     pub auto_remesh: bool,
+    #[serde(default = "super::Topology::triangles")]
+    pub remesh_topology: super::Topology,
     #[serde(default, skip_serializing_if = "AdaptiveSettings::is_default")]
     pub adaptive: AdaptiveSettings,
 }
@@ -51,11 +53,18 @@ impl Default for MeshSettings {
             dynamic: false,
             resolution: 48,
             auto_remesh: false,
+            remesh_topology: super::Topology::Quads,
             adaptive: AdaptiveSettings::default(),
         }
     }
 }
 impl MeshSettings {
+    pub(crate) fn legacy_default() -> Self {
+        Self {
+            remesh_topology: super::Topology::Triangles,
+            ..Self::default()
+        }
+    }
     pub fn is_default(&self) -> bool {
         *self == Self::default()
     }
@@ -104,6 +113,9 @@ impl MeshSettings {
         }
         if self.adaptive.enabled {
             mesh.validate_closed()?;
+            if self.adaptive.topology == super::Topology::Quads {
+                mesh.require_adaptive_quads()?;
+            }
         }
         let levels: Vec<&Mesh> = self
             .lower

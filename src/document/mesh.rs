@@ -112,10 +112,20 @@ impl Document {
         if settings.enabled && !self.mesh().creases.is_empty() {
             return Err("Clear creases before enabling adaptive sculpt".into());
         }
+        if settings.enabled
+            && settings.topology == crate::sculpt::Topology::Quads
+            && (!self.geometry.settings.adaptive.enabled
+                || self.geometry.settings.adaptive.topology != settings.topology)
+        {
+            self.mesh().require_adaptive_quads()?;
+        }
         if self.geometry.settings.adaptive == settings {
             return Ok(());
         }
-        if self.geometry.settings.adaptive.enabled == settings.enabled {
+        if self.geometry.settings.adaptive.enabled == settings.enabled
+            && self.geometry.settings.adaptive.topology == settings.topology
+            && self.geometry.settings.adaptive.unmasked_only == settings.unmasked_only
+        {
             self.end_stroke();
             self.geometry.settings.adaptive = settings;
             self.dirty = true;
@@ -146,5 +156,14 @@ impl Document {
             self.dirty = true;
         }
         Ok(())
+    }
+    pub fn set_remesh_topology(&mut self, topology: crate::sculpt::Topology) -> Result<(), String> {
+        self.require_sculpt_mesh()?;
+        if self.geometry.settings.remesh_topology == topology {
+            return Ok(());
+        }
+        let mut geometry = self.geometry.clone();
+        geometry.settings.remesh_topology = topology;
+        self.replace_geometry_named(geometry, "Remesh topology")
     }
 }

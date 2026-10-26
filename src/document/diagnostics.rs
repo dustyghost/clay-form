@@ -167,6 +167,7 @@ fn topology_settings(geometry: &Geometry) -> MeshSettings {
         dynamic: geometry.settings.dynamic,
         resolution: geometry.settings.resolution,
         auto_remesh: geometry.settings.auto_remesh,
+        remesh_topology: geometry.settings.remesh_topology,
         adaptive: geometry.settings.adaptive.clone(),
     }
 }

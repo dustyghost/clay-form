@@ -508,10 +508,15 @@ Lower-level edits carry upward while retaining finer detail. Subdivision is line
 ### Remesh a whole surface
 
 1. Switch to **Dynamic mesh**. This keeps the active surface and discards stored levels.
-2. Choose a resolution, **16–96 voxels** along the longest bounding-box axis.
-3. Select **Remesh now**, or enable **Remesh after each stroke**.
+2. Choose **Quads** or **Triangles** under **Remesh topology**. New models default to Quads; older projects retain triangle remeshing until you change it.
+3. Choose a resolution, **16–96 voxels** along the longest bounding-box axis.
+4. Select **Remesh now**, or enable **Remesh after each stroke**. Both use the selected topology.
 
 **Remeshing clears masks and can lose details thinner than a voxel.** Use moderate resolution first. It requires closed, consistently oriented surfaces and can fuse overlapping outward-facing shells; separate volumes remain separate.
+
+Quads are editable four-sided faces, visible in wireframe and Modeling face selection. Their layout follows the voxel grid; this does not provide guided retopology or animation-ready edge flow. Very thin or closely spaced sheets can create ambiguous cells: quad mode reports these and keeps the original model. Increase Resolution or explicitly choose Triangles. There is no automatic triangle fallback. Both modes preserve supported vertex colours/materials and transfer vertex groups; quad faces receive a single group assignment.
+
+The two topology choices are saved independently for Dynamic mesh and Adaptive sculpt. To continue locally refining a quad remesh, switch to **Adaptive sculpt → Quads**. Enable **Adapt only unmasked areas** there to protect masked topology. That option does not make whole-surface voxel remeshing local or preserve its masks.
 
 Mesh operations run in the background. Cancel keeps the original surface; Undo restores prior geometry and settings. A failed automatic remesh disables the automatic option so you can adjust it.
 

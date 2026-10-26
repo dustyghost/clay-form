@@ -21,6 +21,153 @@ struct Guide {
 }
 
 #[test]
+#[ignore = "quad remesh/adaptive controls and visual review; requires Vulkan"]
+fn quad_topology_controls_offscreen_review() {
+    use crate::sculpt::{Brush, Dab, Geometry, Kind, Mesh, Topology, Vec3};
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir().join("clay-quad-topology"));
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1200, 1000]);
+    g.interactive = true;
+    g.panel(Tool::Mesh, Dock::Right);
+    g.app.ui.preferences.right_width = 350.;
+    g.app.camera.yaw = 0.35;
+    g.app.camera.pitch = -0.2;
+    g.save("source");
+    click_guide_label(&mut g, "Dynamic mesh");
+    assert!(g.app.document.mesh_settings().dynamic);
+    assert_eq!(
+        g.app.document.mesh_settings().remesh_topology,
+        Topology::Quads
+    );
+    g.app
+        .dispatch(Command::SetRemeshSettings(24, false), &g.ctx);
+    click_guide_label(&mut g, "Remesh now");
+    finish_mesh_job(&mut g.app);
+    assert_eq!(
+        g.app.document.mesh().quads.len() * 2,
+        g.app.document.mesh().triangles.len(),
+        "{}",
+        g.app.ui.status
+    );
+    let quad = g.app.document.geometry_snapshot();
+    g.save("quad-remesh-solid");
+    g.app.ui.wire = true;
+    g.save("quad-remesh-wire");
+    assert!(quad.mesh.polygons().iter().all(|p| p.vertices.len() == 4));
+    g.app.dispatch(Command::ModelingMode(true), &g.ctx);
+    g.app.dispatch(
+        Command::ModelingComponent(crate::viewport::ComponentMode::Face),
+        &g.ctx,
+    );
+    let center = g.frame(vec![]).0.center() + Vec2::new(11., 7.);
+    g.frame(vec![
+        egui::Event::PointerMoved(center),
+        primary_event(center, true),
+    ]);
+    g.frame(vec![primary_event(center, false), egui::Event::PointerGone]);
+    let selected = g.app.viewport.modeling.selected_faces();
+    assert!(!selected.is_empty());
+    assert!(
+        selected
+            .iter()
+            .all(|&f| g.app.document.mesh().polygons()[f].vertices.len() == 4)
+    );
+    g.save("quad-remesh-face-selection");
+    g.app.dispatch(Command::ModelingMode(false), &g.ctx);
+    click_guide_label(&mut g, "Triangles");
+    assert_eq!(
+        g.app.document.mesh_settings().remesh_topology,
+        Topology::Triangles
+    );
+    let before = g.app.document.geometry_snapshot();
+    click_guide_label(&mut g, "Remesh now");
+    finish_mesh_job(&mut g.app);
+    assert!(g.app.document.mesh().quads.is_empty());
+    g.save("triangle-remesh-wire");
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.app.dispatch(Command::Redo, &g.ctx);
+    assert!(g.app.document.mesh().quads.is_empty());
+    // Exercise the explicit unsupported-input path without modifying geometry.
+    click_guide_label(&mut g, "Adaptive sculpt");
+    let before = g.app.document.geometry_snapshot();
+    click_guide_label(&mut g, "Quads");
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    assert!(g.app.ui.status.contains("all-quad"));
+
+    let mut mesh = Mesh::sphere();
+    for (p, w) in mesh.vertices.iter().zip(&mut mesh.mask) {
+        if p.0 < -0.1 {
+            *w = 0.5;
+        }
+    }
+    g.app
+        .document
+        .replace_geometry(Geometry::new(mesh))
+        .unwrap();
+    click_guide_label(&mut g, "Adaptive sculpt");
+    click_guide_label(&mut g, "Quads");
+    click_guide_label(&mut g, "Adapt only unmasked areas");
+    assert!(g.app.document.mesh_settings().adaptive.unmasked_only);
+    assert_eq!(
+        g.app.document.mesh_settings().adaptive.topology,
+        Topology::Quads
+    );
+    let before = g.app.document.geometry_snapshot();
+    let mut settings = before.settings.adaptive.clone();
+    settings.detail = 3.;
+    settings.simplify = false;
+    g.app.document.set_adaptive(settings).unwrap();
+    let mut brush = Brush::new(Kind::Clay);
+    brush.radius = 100.;
+    brush.strength = 0.2;
+    let (right, up, view) = g.app.camera.basis();
+    for i in 0..12 {
+        let x = 0.05 + (i as f32) * 0.035;
+        let center = right * x + view * (1. - x * x).sqrt();
+        g.app.document.begin_sculpt_frame();
+        g.app.document.apply_dab(
+            &brush,
+            Dab {
+                center,
+                normal: center.norm(),
+                right,
+                up,
+                radius: 0.35,
+                pressure: 1.,
+                delta: Vec3::default(),
+                invert: false,
+            },
+        );
+    }
+    g.app.document.end_stroke();
+    assert!(g.app.document.mesh().vertices.len() > before.mesh.vertices.len());
+    assert_eq!(
+        g.app.document.mesh().quads.len() * 2,
+        g.app.document.mesh().triangles.len()
+    );
+    g.app.document.mesh().validate_closed().unwrap();
+    g.save("adaptive-quads-mask-wire");
+    g.app.ui.wire = false;
+    g.save("adaptive-quads-mask-solid");
+    let after = g.app.document.geometry_snapshot();
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.mesh(), &before.mesh);
+    g.app.dispatch(Command::Redo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), after);
+    let saved = serde_json::to_vec(&g.app.document.project()).unwrap();
+    std::fs::write(directory.join("adaptive-quads.clay"), &saved).unwrap();
+    let project = serde_json::from_slice(&saved).unwrap();
+    g.app
+        .document
+        .replace_project(project, "adaptive-quads.clay")
+        .unwrap();
+    assert_eq!(g.app.document.geometry_snapshot(), after);
+}
+
+#[test]
 #[ignore = "renders and resizes brush sidebars; requires Vulkan"]
 fn brush_sidebar_resize_offscreen_review() {
     let directory = std::env::temp_dir().join("clay-brush-sidebar-resize");

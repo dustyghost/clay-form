@@ -70,9 +70,11 @@ impl MeshJob {
                     if !geometry.settings.dynamic {
                         return Err("Switch to dynamic mode first".into());
                     }
-                    geometry.mesh = geometry
-                        .mesh
-                        .remesh_cancellable(geometry.settings.resolution, &cancel)?;
+                    geometry.mesh = geometry.mesh.remesh_topology_cancellable(
+                        geometry.settings.resolution,
+                        geometry.settings.remesh_topology,
+                        &cancel,
+                    )?;
                 }
             }
             ValidatedGeometry::new(geometry, &cancel)

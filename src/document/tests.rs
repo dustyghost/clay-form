@@ -439,6 +439,83 @@ mod history_feedback_tests {
 mod adaptive_mode_tests {
     use super::*;
     #[test]
+    fn quad_topology_settings_migrate_persist_and_undo() {
+        use crate::sculpt::Topology;
+        let mut document = Document::default();
+        assert_eq!(document.mesh_settings().remesh_topology, Topology::Quads);
+        let current = serde_json::to_value(document.project()).unwrap();
+        let saved: crate::sculpt::Project = serde_json::from_value(current.clone()).unwrap();
+        assert_eq!(saved.mesh_settings.remesh_topology, Topology::Quads);
+        let mut old = current.clone();
+        old["mesh_settings"]
+            .as_object_mut()
+            .unwrap()
+            .remove("remesh_topology");
+        let migrated: crate::sculpt::Project = serde_json::from_value(old).unwrap();
+        assert_eq!(migrated.mesh_settings.remesh_topology, Topology::Triangles);
+        let mut absent = current;
+        absent.as_object_mut().unwrap().remove("mesh_settings");
+        let migrated: crate::sculpt::Project = serde_json::from_value(absent).unwrap();
+        assert_eq!(migrated.mesh_settings.remesh_topology, Topology::Triangles);
+        let original = document.geometry_snapshot();
+        let settings = AdaptiveSettings {
+            enabled: true,
+            topology: Topology::Quads,
+            unmasked_only: true,
+            ..Default::default()
+        };
+        document.set_adaptive(settings.clone()).unwrap();
+        let before = document.geometry_snapshot();
+        let mut brush = Brush::new(Kind::Standard);
+        brush.radius = 100.;
+        let dab = Dab {
+            center: crate::sculpt::Vec3(0., 1., 0.),
+            normal: crate::sculpt::Vec3(0., 1., 0.),
+            right: crate::sculpt::Vec3(1., 0., 0.),
+            up: crate::sculpt::Vec3(0., 0., 1.),
+            radius: 0.7,
+            pressure: 1.,
+            delta: Default::default(),
+            invert: false,
+        };
+        for _ in 0..3 {
+            document.begin_sculpt_frame();
+            document.apply_dab(&brush, dab);
+        }
+        document.end_stroke();
+        let after = document.geometry_snapshot();
+        assert_ne!(after, before);
+        assert_eq!(after.mesh.quads.len() * 2, after.mesh.triangles.len());
+        document.undo();
+        assert_eq!(document.geometry_snapshot(), before);
+        document.redo();
+        assert_eq!(document.geometry_snapshot(), after);
+        let roundtrip: crate::sculpt::Project =
+            serde_json::from_str(&serde_json::to_string(&document.project()).unwrap()).unwrap();
+        roundtrip.validate().unwrap();
+        let mut reopened = Document::default();
+        reopened.replace_project(roundtrip, "quads.clay").unwrap();
+        assert_eq!(reopened.geometry_snapshot(), after);
+        assert_eq!(reopened.mesh_settings().adaptive, settings);
+        document.undo();
+        document.undo();
+        assert_eq!(document.geometry_snapshot(), original);
+        document.redo();
+        assert_eq!(document.mesh_settings().adaptive, settings);
+        let mut triangles = before.clone();
+        triangles.settings.adaptive.enabled = false;
+        triangles.mesh.quads.clear();
+        document.replace_geometry(triangles).unwrap();
+        let before = document.geometry_snapshot();
+        assert!(
+            document
+                .set_adaptive(settings)
+                .unwrap_err()
+                .contains("all-quad")
+        );
+        assert_eq!(document.geometry_snapshot(), before);
+    }
+    #[test]
     fn adaptive_mode_discards_levels_undo_restores_them_and_other_modes_exclude_it() {
         let mut document = Document::default();
         let mut geometry = document.geometry_snapshot();

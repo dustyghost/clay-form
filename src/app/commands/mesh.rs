@@ -37,6 +37,7 @@ impl App {
             Command::SetRemeshSettings(resolution, auto) => {
                 self.document.set_remesh_settings(resolution, auto)
             }
+            Command::SetRemeshTopology(topology) => self.document.set_remesh_topology(topology),
             Command::ZoomIn | Command::ZoomOut => {
                 self.camera.zoom_step(matches!(command, Command::ZoomIn));
                 Ok(())

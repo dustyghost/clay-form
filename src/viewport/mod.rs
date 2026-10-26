@@ -1250,9 +1250,9 @@ fn draw_mesh_counts(document: &Document, painter: &egui::Painter, rect: egui::Re
         navigation::inner(rect).left_top() + Vec2::splat(8.),
         egui::Align2::LEFT_TOP,
         format!(
-            "{} vertices • {} faces • {} hidden",
+            "{} vertices • {} faces • {} hidden triangles",
             document.mesh().vertices.len(),
-            document.mesh().triangles.len(),
+            document.mesh().triangles.len() - document.mesh().quads.len(),
             document.mesh().hidden_face_count()
         ),
         egui::FontId::monospace(12.),
