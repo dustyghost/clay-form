@@ -137,3 +137,25 @@ A narrow crease still contains very small edges (16 faces with an edge ratio abo
 | ![Branched sculpt before remeshing](branched-source-wire.png) | ![Branched sculpt after remeshing](branched-optimized-wire.png) |
 
 The recovery snapshot and diagnostic export were not modified. The real application remesh pipeline and matching-camera wireframe/shaded capture were exercised locally; full checks run in PR CI.
+
+
+## Follow-up: Optimized quads CPU savings (27 October)
+
+Profiling the real release pipeline put most of the cost in projection during smoothing and simplification. On the branched sculpt, the two layout attempts took about 5.45 and 5.52 seconds; their final validation checks together took about 0.51 seconds. Those figures are for **Optimized quads**, independent of the earlier Relaxed quads profile.
+
+The native optimiser now avoids evaluating a reference triangle twice within the same projection query, with a fast path for queries that settle in their starting patch. Per-face samples reuse a distance only when the sample's coordinate bits are unchanged and the previous projection retained its input anchor. That anchor restriction preserves strict distance-tie behaviour. Changed points are reprojected; the reference surface remains immutable. Local smoothing visits the sorted affected vertices directly, reuses scratch buffers, and keeps the original neighbour/face order and arithmetic. Eight face sample points use a fixed array instead of a temporary allocation.
+
+The simplification objective, smoothing passes, quality retry, component separation and final bidirectional shape checks remain unchanged. Cancellation and projection work limits remain enforced; the projection budget now counts actual triangle evaluations rather than repeated or cached work. No GPU work, parallel topology updates, third-party libraries or dependencies were added.
+
+Three alternating before/after release runs on the Intel Core i7-7500U laptop, resolution 48:
+
+| Model | Median before | Median after | Time saved | Median peak process memory before → after |
+| --- | ---: | ---: | ---: | ---: |
+| Head | 10.639 s | 7.323 s | 31.2% | 22.8 → 27.8 MiB |
+| Branched sculpt, including both quality attempts | 12.040 s | 7.862 s | 34.7% | 19.2 → 21.5 MiB |
+
+These timings include voxel reconstruction, optimisation, attribute transfer and final validation, and exclude project loading/saving and UI work. Builds and renders were not running concurrently. The baseline was commit `6671c73` with lightweight phase timers; the delivered code contains no profiling probes. These same-session comparisons supersede the earlier head runtime as evidence for this performance change; timings vary with CPU load and temperature. Peak memory is for the manual test process, not the GUI's total memory. The caches add a few MiB on these fixtures and scale with mesh size.
+
+All six output projects for each fixture were **byte-for-byte identical**, including coordinates, face order and transferred attributes. The previously inspected head and branched wireframe/shaded results therefore also describe the faster output; existing narrow-crease limitations still apply. [Raw runs, fixture/output hashes and method](optimized-quads-performance.json) are retained here.
+
+Focused release regressions cover sphere/cube/torus, scaling, nearby components, rejected shape changes and cancellation. New tests compare cached projection coordinates, anchors and distances against the original uncached walk, including shared-edge ties, changed sample points, signed zero, query-counter wrap and exhausted work budgets. Automatic remeshing, stroke-release gating and Undo/Redo are checked separately. Full tests, lint and GPU controls run in PR CI.

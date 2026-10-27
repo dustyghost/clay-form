@@ -1,0 +1,74 @@
+{
+  "date": "2026-10-27",
+  "cpu": "Intel Core i7-7500U, 2 cores / 4 threads",
+  "rustc": "1.99.0 (b940084d7 2026-09-28)",
+  "baseline_commit": "6671c738d3719ab021a7fb89aa5f0e6bb7040466",
+  "baseline_instrumentation": "Phase timers around optimizer operations and final validation; no extra per-triangle profiling counters. Not included in shipping code.",
+  "method": "Three alternating before/after release runs per fixture, resolution 48. Real remesh pipeline including reconstruction, optimization, quality retry, validation and attribute transfer; excludes project load/save and UI. No concurrent build or render during timing. Peak RSS from wait4 covers the complete test process.",
+  "fixtures": {
+    "head": {
+      "runs_seconds": {
+        "before": [
+          10.714106347,
+          10.638921177,
+          10.549258169
+        ],
+        "after": [
+          7.240157751,
+          7.585057948,
+          7.323334398
+        ]
+      },
+      "peak_rss_kib": {
+        "before": [
+          23324,
+          23432,
+          23316
+        ],
+        "after": [
+          28436,
+          28652,
+          28008
+        ]
+      },
+      "median_before": 10.638921177,
+      "median_after": 7.323334398,
+      "time_reduction_percent": 31.164689763543684,
+      "output_sha256": "bd71fbadb64cbe25e24fd04166518678c93bf7535e9631d3d1658c3292ed12a6",
+      "all_six_projects_byte_identical": true,
+      "input_sha256": "8168faa4ef5fa7675f98810feea0e54a6c31ac15e3bd60e08e7d5a79ceee0c87"
+    },
+    "branched": {
+      "runs_seconds": {
+        "before": [
+          11.66746579,
+          12.079478456,
+          12.039634588
+        ],
+        "after": [
+          7.86215434,
+          7.769563432,
+          7.921819589
+        ]
+      },
+      "peak_rss_kib": {
+        "before": [
+          19756,
+          19376,
+          19624
+        ],
+        "after": [
+          22052,
+          22580,
+          21840
+        ]
+      },
+      "median_before": 12.039634588,
+      "median_after": 7.86215434,
+      "time_reduction_percent": 34.69773287109334,
+      "output_sha256": "8d9934a3d9786ef677cdcfbb044632e2845d5630b4eb790cd12b2cb5a5d1b752",
+      "all_six_projects_byte_identical": true,
+      "input_sha256": "c10956c28a5be3f387ad91e28a192676b57472cd91602fdca464f5729763705a"
+    }
+  }
+}

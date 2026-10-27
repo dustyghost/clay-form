@@ -28,23 +28,37 @@ fn shape(p: [Vec3; 4]) -> f32 {
         })
         .fold(f32::INFINITY, f32::min)
 }
-fn samples([a, b, c]: [Vec3; 3]) -> [Vec3; 7] {
-    [
-        a,
-        b,
-        c,
-        (a + b) * 0.5,
-        (b + c) * 0.5,
-        (c + a) * 0.5,
-        (a + b + c) * (1. / 3.),
-    ]
-}
-
 struct Reference {
     patches: Vec<Vec<usize>>,
     budget: usize,
     cached: Vec<RefTriangle>,
+    visited: Vec<usize>,
+    query: usize,
 }
+
+struct Sample {
+    anchor: usize,
+    cached: Option<([u32; 3], f32)>,
+}
+impl Sample {
+    fn distance(&mut self, reference: &mut Reference, p: Vec3) -> Result<f32, String> {
+        let bits = [p.0.to_bits(), p.1.to_bits(), p.2.to_bits()];
+        if let Some((point, distance)) = self.cached
+            && point == bits
+        {
+            return Ok(distance);
+        }
+        let (nearest, anchor) = reference.project(p, self.anchor)?;
+        let distance = (nearest - p).len();
+        // Reuse only a fixed point of the anchor walk. Otherwise starting the
+        // next query at the returned face could break a distance tie differently.
+        // The reference geometry is immutable for the lifetime of these samples.
+        self.cached = (anchor == self.anchor).then_some((bits, distance));
+        self.anchor = anchor;
+        Ok(distance)
+    }
+}
+
 struct RefTriangle {
     a: Vec3,
     ab: Vec3,
@@ -141,6 +155,8 @@ impl Reference {
                 patches,
                 budget: 500_000_000,
                 cached,
+                visited: vec![0; t.len()],
+                query: 0,
             },
             anchors,
         ))
@@ -149,9 +165,42 @@ impl Reference {
         let mut seed = anchor;
         let mut best = p;
         let mut d = f32::INFINITY;
-        for _ in 0..64 {
+        // Most queries settle in their starting patch. Do not read or write
+        // visit stamps unless the search actually moves to another patch.
+        for &f in &self.patches[anchor] {
+            if self.budget == 0 {
+                return Err("Quad optimisation reached its projection work limit".into());
+            }
+            self.budget -= 1;
+            let q = self.cached[f].closest(p);
+            let dist = (q - p).dot(q - p);
+            if dist < d {
+                d = dist;
+                best = q;
+                seed = f;
+            }
+        }
+        if seed == anchor {
+            return Ok((best, seed));
+        }
+        self.query = self.query.wrapping_add(1);
+        if self.query == 0 {
+            self.visited.fill(0);
+            self.query = 1;
+        }
+        for &f in &self.patches[anchor] {
+            self.visited[f] = self.query;
+        }
+        for _ in 1..64 {
             let previous = seed;
             for &f in &self.patches[previous] {
+                // Adjacent patches overlap. For this fixed query point, an
+                // already tested face cannot improve the monotonically falling
+                // best distance. Preserve first-visit order and strict ties.
+                if self.visited[f] == self.query {
+                    continue;
+                }
+                self.visited[f] = self.query;
                 if self.budget == 0 {
                     return Err("Quad optimisation reached its projection work limit".into());
                 }
@@ -181,7 +230,7 @@ struct Work {
     reference: Reference,
     tolerance: f32,
     count: usize,
-    sample_anchors: BTreeMap<Quad, [usize; 8]>,
+    samples: BTreeMap<Quad, [Sample; 8]>,
     dirty: BTreeSet<usize>,
 }
 impl Work {
@@ -196,7 +245,7 @@ impl Work {
             reference,
             tolerance: 0.75,
             count: 0,
-            sample_anchors: BTreeMap::new(),
+            samples: BTreeMap::new(),
             dirty: BTreeSet::new(),
         };
         for (f, &q) in q.iter().enumerate() {
@@ -218,7 +267,7 @@ impl Work {
     }
     fn remove(&mut self, f: usize) {
         if let Some(q) = self.q[f].take() {
-            self.sample_anchors.remove(&q);
+            self.samples.remove(&q);
             self.dirty.extend(q);
             self.count -= 1;
             for i in 0..4 {
@@ -255,11 +304,18 @@ impl Work {
             {
                 return Ok(false);
             }
-            let points: Vec<_> = triangles(q)
-                .into_iter()
-                .flat_map(|t| samples(t.map(|v| self.p[v])).into_iter().skip(3))
-                .collect();
-            let seeds = self.sample_anchors.entry(q).or_insert_with(|| {
+            let [a, b, c, d] = p;
+            let points = [
+                (a + b) * 0.5,
+                (b + c) * 0.5,
+                (c + a) * 0.5,
+                (a + b + c) * (1. / 3.),
+                (a + c) * 0.5,
+                (c + d) * 0.5,
+                (d + a) * 0.5,
+                (a + c + d) * (1. / 3.),
+            ];
+            let samples = self.samples.entry(q).or_insert_with(|| {
                 std::array::from_fn(|i| {
                     let v = *q
                         .iter()
@@ -269,13 +325,14 @@ impl Work {
                                 .total_cmp(&(self.p[b] - points[i]).len())
                         })
                         .unwrap();
-                    self.anchor[v]
+                    Sample {
+                        anchor: self.anchor[v],
+                        cached: None,
+                    }
                 })
             });
             for (i, p) in points.into_iter().enumerate() {
-                let (nearest, seed) = self.reference.project(p, seeds[i])?;
-                seeds[i] = seed;
-                if (nearest - p).len() > self.tolerance {
+                if samples[i].distance(&mut self.reference, p)? > self.tolerance {
                     return Ok(false);
                 }
             }
@@ -686,23 +743,35 @@ impl Work {
             .map(|&[a, b]| (self.p[a] - self.p[b]).len())
             .sum::<f32>()
             / self.edges.len() as f32;
-        for v in 0..self.p.len() {
-            if v % 256 == 0 && cancel() {
+        let vertices: Box<dyn Iterator<Item = usize>> = match region {
+            Some(region) => Box::new(region.iter().copied()),
+            None => Box::new(0..self.p.len()),
+        };
+        let mut adjacent = Vec::new();
+        let mut faces = Vec::new();
+        let mut limits = Vec::new();
+        for (index, v) in vertices.enumerate() {
+            if index % 256 == 0 && cancel() {
                 return Err("Quad optimisation cancelled".into());
             }
-            if self.incident[v].is_empty() || region.is_some_and(|r| !r.contains(&v)) {
+            if self.incident[v].is_empty() {
                 continue;
             }
-            let adjacent = self.neighbors(v);
+            adjacent.clear();
+            faces.clear();
+            limits.clear();
+            for &f in &self.incident[v] {
+                let q = self.q[f].unwrap();
+                let i = q.iter().position(|&a| a == v).unwrap();
+                adjacent.extend([q[(i + 1) % 4], q[(i + 3) % 4]]);
+                faces.push(q);
+                limits.push((shape(q.map(|v| self.p[v])) * 0.999).min(0.4));
+            }
+            // Match the former BTreeSet order so floating-point sums and
+            // sequential vertex updates produce the same geometry.
+            adjacent.sort_unstable();
+            adjacent.dedup();
             let before = self.p[v];
-            let faces: Vec<_> = self.incident[v]
-                .iter()
-                .map(|&f| self.q[f].unwrap())
-                .collect();
-            let limits: Vec<_> = faces
-                .iter()
-                .map(|q| (shape(q.map(|v| self.p[v])) * 0.999).min(0.4))
-                .collect();
             let n = faces
                 .iter()
                 .fold(Vec3::default(), |n, q| n + normal(q.map(|i| self.p[i])))
@@ -866,7 +935,7 @@ pub(super) fn optimize_levels(
         w.q = vec![None; refined.len()];
         w.incident = vec![BTreeSet::new(); w.p.len()];
         w.edges.clear();
-        w.sample_anchors.clear();
+        w.samples.clear();
         w.count = 0;
         for (f, q) in refined.into_iter().enumerate() {
             w.insert(f, q);
@@ -891,4 +960,116 @@ pub(super) fn optimize_levels(
         }));
     }
     Ok(Some((vertices, quads)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The original uncached walk is an oracle for both projection coordinates
+    // and face selection, including strict distance ties at shared edges.
+    fn uncached(reference: &Reference, p: Vec3, anchor: usize) -> (Vec3, usize, usize) {
+        let mut seed = anchor;
+        let mut best = p;
+        let mut distance = f32::INFINITY;
+        let mut evaluations = 0;
+        for _ in 0..64 {
+            let previous = seed;
+            for &f in &reference.patches[previous] {
+                evaluations += 1;
+                let q = reference.cached[f].closest(p);
+                let d = (q - p).dot(q - p);
+                if d < distance {
+                    distance = d;
+                    best = q;
+                    seed = f;
+                }
+            }
+            if seed == previous {
+                return (best, seed, evaluations);
+            }
+        }
+        panic!("reference walk did not converge");
+    }
+
+    fn curved_reference() -> Reference {
+        let vertices: Vec<_> = (0..=12)
+            .flat_map(|y| (0..=12).map(move |x| Vec3(x as f32, y as f32, (x * y) as f32 * 0.03)))
+            .collect();
+        let quads: Vec<_> = (0..12)
+            .flat_map(|y| {
+                (0..12).map(move |x| {
+                    let a = y * 13 + x;
+                    [a, a + 1, a + 14, a + 13]
+                })
+            })
+            .collect();
+        Reference::new(&vertices, &quads, &|| false).unwrap().0
+    }
+
+    #[test]
+    fn optimized_quads_projection_reuses_faces_without_changing_results() {
+        let mut reference = curved_reference();
+        let initial_budget = reference.budget;
+        let mut uncached_evaluations = 0;
+        for anchor in [0, 1, 75, 143, 287] {
+            for v in (0..=12).flat_map(|y| {
+                (0..=12).map(move |x| Vec3(x as f32, y as f32, (x * y) as f32 * 0.03))
+            }) {
+                for offset in [Vec3::default(), Vec3(0.5, 0.5, 0.3), Vec3(-0.5, 0., -0.7)] {
+                    let p = v + offset;
+                    let (expected, seed, evaluations) = uncached(&reference, p, anchor);
+                    uncached_evaluations += evaluations;
+                    let (actual, actual_seed) = reference.project(p, anchor).unwrap();
+                    assert_eq!(actual_seed, seed);
+                    assert_eq!(
+                        [actual.0.to_bits(), actual.1.to_bits(), actual.2.to_bits()],
+                        [
+                            expected.0.to_bits(),
+                            expected.1.to_bits(),
+                            expected.2.to_bits()
+                        ]
+                    );
+                }
+            }
+        }
+        assert!(initial_budget - reference.budget < uncached_evaluations);
+
+        // A wrapped query counter must not mistake old stamps for this query.
+        reference.query = usize::MAX;
+        let p = Vec3(5.5, 6.5, 2.);
+        let (expected, seed, _) = uncached(&reference, p, 0);
+        assert_eq!(reference.project(p, 0).unwrap(), (expected, seed));
+        reference.budget = 0;
+        assert!(reference.project(p, 0).unwrap_err().contains("work limit"));
+    }
+
+    #[test]
+    fn optimized_quads_sample_cache_preserves_ties_and_invalidates_changed_points() {
+        let mut reference = curved_reference();
+        let mut hits = 0;
+        for anchor in [0, 1, 75, 143, 287] {
+            let mut sample = Sample {
+                anchor,
+                cached: None,
+            };
+            for p in [
+                Vec3(5.5, 6.5, 2.),
+                Vec3(0., 0., 0.),
+                Vec3(-0., 0., 0.),
+                Vec3(12., 12., 4.),
+                Vec3(5.5, 6.5, 2.),
+            ] {
+                for _ in 0..3 {
+                    let (expected, seed, _) = uncached(&reference, p, sample.anchor);
+                    let budget = reference.budget;
+                    let distance = sample.distance(&mut reference, p).unwrap();
+                    assert_eq!(distance.to_bits(), (expected - p).len().to_bits());
+                    assert_eq!(sample.anchor, seed);
+                    hits += usize::from(budget == reference.budget);
+                }
+            }
+        }
+        assert!(hits > 0);
+    }
 }
