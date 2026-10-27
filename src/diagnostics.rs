@@ -37,11 +37,8 @@ impl EditSettings {
             text.push_str("       Active brush unavailable; recorded library is in manifest\n");
         }
         text.push_str(&format!(
-            "       Topology: dynamic {}, remesh resolution {}, auto remesh {}, adaptive {}\n",
-            self.topology.dynamic,
-            self.topology.resolution,
-            self.topology.auto_remesh,
-            self.topology.adaptive.enabled
+            "       Topology: dynamic {}, remesh resolution {}, adaptive {}\n",
+            self.topology.dynamic, self.topology.resolution, self.topology.adaptive.enabled
         ));
         text.push_str(&format!(
             "       Symmetry enabled: {}; view/input: {}\n",

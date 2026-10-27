@@ -21,7 +21,6 @@ pub struct MeshSettings {
     pub upper: Vec<Mesh>,
     pub dynamic: bool,
     pub resolution: u32,
-    pub auto_remesh: bool,
     #[serde(default = "super::Topology::triangles")]
     pub remesh_topology: super::Topology,
     #[serde(
@@ -57,7 +56,6 @@ impl Default for MeshSettings {
             upper: Vec::new(),
             dynamic: false,
             resolution: 48,
-            auto_remesh: false,
             remesh_topology: super::Topology::Quads,
             quad_remesh_algorithm: super::QuadRemeshAlgorithm::default(),
             adaptive: AdaptiveSettings::default(),
@@ -93,17 +91,13 @@ impl MeshSettings {
     ) -> Result<(), String> {
         check_cancel(cancel)?;
         if let Some(primitive) = &self.primitive
-            && (self.levels() != 1
-                || self.dynamic
-                || self.adaptive.enabled
-                || self.auto_remesh
-                || {
-                    let mut expected = primitive.mesh()?;
-                    expected.quads.clear();
-                    let mut actual = mesh.clone();
-                    actual.quads.clear();
-                    expected != actual
-                })
+            && (self.levels() != 1 || self.dynamic || self.adaptive.enabled || {
+                let mut expected = primitive.mesh()?;
+                expected.quads.clear();
+                let mut actual = mesh.clone();
+                actual.quads.clear();
+                expected != actual
+            })
         {
             return Err(
                 "Primitive preview does not match its parameters; convert before sculpting".into(),

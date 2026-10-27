@@ -307,7 +307,7 @@ mod mesh_tests {
 mod protected_stroke_tests {
     use super::*;
     #[test]
-    fn black_alpha_and_fully_masked_strokes_do_not_trigger_auto_remesh() {
+    fn black_alpha_and_fully_masked_strokes_do_not_report_deformation() {
         let mut document = Document::default();
         let dab = Dab {
             center: crate::sculpt::Vec3(0., 1., 0.),
@@ -826,7 +826,7 @@ mod scene_transform_tests {
         }
         assert!(
             !document.end_stroke(),
-            "transforms must not trigger automatic remeshing"
+            "transforms must not report sculpt stroke deformation"
         );
         assert_eq!(document.history_counts().0, count.0 + 1);
         assert_eq!(document.geometry.submodels, before.submodels);
@@ -1268,7 +1268,6 @@ mod mask_edit_tests {
         for i in q {
             geometry.mesh.mask[i] = 1.;
         }
-        geometry.settings.auto_remesh = true;
         let mut d = Document::default();
         d.replace_geometry(geometry).unwrap();
         d.duplicate_model(false).unwrap();
@@ -1278,11 +1277,7 @@ mod mask_edit_tests {
         let after = d.geometry_snapshot();
         assert_eq!(after.submodels, before.submodels);
         assert_eq!(d.mesh_settings().levels(), 1);
-        assert!(
-            !d.mesh_settings().auto_remesh
-                && !d.mesh_settings().adaptive.enabled
-                && !d.mesh_settings().dynamic
-        );
+        assert!(!d.mesh_settings().adaptive.enabled && !d.mesh_settings().dynamic);
         assert!(d.mesh().triangles.len() < before.mesh.triangles.len());
         assert!(d.mesh().validate_closed().is_err());
         assert_eq!(d.history_counts().0, count + 1);

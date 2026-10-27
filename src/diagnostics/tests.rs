@@ -56,7 +56,7 @@ fn session_roundtrip_preserves_stages_settings_and_live_undo_redo() {
     let mut symmetry = doc.symmetry().clone();
     symmetry.enabled = true;
     doc.set_symmetry(symmetry.clone()).unwrap();
-    doc.set_remesh_settings(32, false).unwrap();
+    doc.set_remesh_resolution(32).unwrap();
     stroke(&mut doc, 0.7);
     let second = doc.project();
     let mut geometry = doc.geometry_snapshot();

@@ -123,7 +123,7 @@ A view stencil stays in the viewport while you orbit, pan, or zoom. A surface st
 
 Freehand, Line, Drag Rect, and Drag Dot work through the placed stencil. Dragging a stamp changes the brush footprint; the stencil stays placed. Stamp previews are private, release creates one undoable edit, and Escape cancels. Completed freehand strokes use the usual one-step Undo. Symmetry mirrors or rotates the stencil with each brush copy.
 
-Adaptive sculpting works through stencils on closed meshes: refinement samples the projected pattern, and simplification stays inside fully white regions to protect dark gaps and edges. Lower adaptive **Edge size** for finer patterns. Stamp preview and release use the same refinement. Automatic remeshing stays paused while a stencil is enabled because it would rebuild the whole surface. **Grab**, **Snake**, and **Detail** require the stencil to be disabled. The viewport explains this restriction. Toggle, attachment, and removal actions can be assigned in **Settings → Key settings** or added to custom controls.
+Adaptive sculpting works through stencils on closed meshes: refinement samples the projected pattern, and simplification stays inside fully white regions to protect dark gaps and edges. Lower adaptive **Edge size** for finer patterns. Stamp preview and release use the same refinement. **Grab**, **Snake**, and **Detail** require the stencil to be disabled. The viewport explains this restriction. Toggle, attachment, and removal actions can be assigned in **Settings → Key settings** or added to custom controls.
 
 ![Adaptive sculpting adds a spiral relief to a coarse cube through Nature’s curve](../images/alpha-adaptive-spiral.png)
 

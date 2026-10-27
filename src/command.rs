@@ -126,7 +126,7 @@ pub(crate) enum Command {
     DeleteHigherLevels,
     SetDynamicMesh(bool),
     SetAdaptive(AdaptiveSettings),
-    SetRemeshSettings(u32, bool),
+    SetRemeshResolution(u32),
     SetRemeshTopology(crate::sculpt::Topology),
     SetQuadRemeshAlgorithm(crate::sculpt::QuadRemeshAlgorithm),
     Remesh,

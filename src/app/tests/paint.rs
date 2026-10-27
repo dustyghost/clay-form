@@ -18,7 +18,6 @@ fn material_brush_menu_old_project_pointer_release_escape_and_undo() {
     );
     let mut project = app.document.project();
     project.mesh_settings.dynamic = true;
-    project.mesh_settings.auto_remesh = true;
     app.document
         .replace_project(project, "dynamic.clay")
         .unwrap();

@@ -1423,11 +1423,9 @@ impl UiState {
                     ui.weak("Increase resolution for small features. Unresolved surface crossings are reported without changing the model.");
                 }
                 let mut resolution=settings.resolution;
-                let mut auto=settings.auto_remesh;
                 ui.add(egui::Slider::new(&mut resolution,16..=96).text("Resolution"));
                 ui.label("Voxels along the longest bounding-box axis.");
-                design::checkbox(ui, &mut auto,"Remesh after each stroke");
-                if resolution!=settings.resolution || auto!=settings.auto_remesh { commands.push(Command::SetRemeshSettings(resolution,auto)); }
+                if resolution!=settings.resolution { commands.push(Command::SetRemeshResolution(resolution)); }
                 if ui.add(design::button(ui, Glyph::Restore, "Remesh now")).customize(Action::Remesh).clicked() { commands.push(Command::Remesh); }
             } else {
                 ui.label(format!("Level {} of {}",settings.level(),settings.levels()));

@@ -450,7 +450,6 @@ mod mesh_storage_tests {
         geometry.subdivide().unwrap();
         geometry.set_level(1).unwrap();
         geometry.settings.resolution = 32;
-        geometry.settings.auto_remesh = true;
         let project = Project {
             paths: Vec::new(),
             alphas: Vec::new(),

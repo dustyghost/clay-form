@@ -37,12 +37,18 @@ fn quad_topology_controls_offscreen_review() {
     g.save("source");
     click_guide_label(&mut g, "Dynamic mesh");
     assert!(g.app.document.mesh_settings().dynamic);
+    g.frame(vec![]);
+    assert!(
+        !g.text_positions
+            .iter()
+            .any(|(text, _)| text == "Remesh after each stroke")
+    );
+    g.save("manual-remesh-controls");
     assert_eq!(
         g.app.document.mesh_settings().remesh_topology,
         Topology::Quads
     );
-    g.app
-        .dispatch(Command::SetRemeshSettings(24, false), &g.ctx);
+    g.app.dispatch(Command::SetRemeshResolution(24), &g.ctx);
     click_guide_label(&mut g, "Remesh now");
     finish_mesh_job(&mut g.app);
     assert_eq!(
@@ -2326,8 +2332,7 @@ fn detail_projection_offscreen_review() {
         .unwrap();
     g.app.dispatch(Command::KeepProjectionReference, &g.ctx);
     g.app.dispatch(Command::SetDynamicMesh(true), &g.ctx);
-    g.app
-        .dispatch(Command::SetRemeshSettings(24, false), &g.ctx);
+    g.app.dispatch(Command::SetRemeshResolution(24), &g.ctx);
     g.app.dispatch(Command::Remesh, &g.ctx);
     finish_mesh_job(&mut g.app);
     g.app.camera.zoom = 0.85;

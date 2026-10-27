@@ -620,7 +620,7 @@ impl App {
             | Command::DeleteHigherLevels
             | Command::SetAdaptive(..)
             | Command::SetDynamicMesh(..)
-            | Command::SetRemeshSettings(..)
+            | Command::SetRemeshResolution(..)
             | Command::SetRemeshTopology(..)
             | Command::SetQuadRemeshAlgorithm(..)
             | Command::ZoomIn

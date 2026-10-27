@@ -19,7 +19,7 @@ New models default to quad remeshing. Missing topology fields in old saved setti
 - Focused adaptive checks: repeated refinement/coarsening, manifold vertex links, duplicate/degenerate faces, both topology modes at partial-mask boundaries, masked/hidden stamp exclusion, symmetry/stencil copies and interpolated attributes.
 - Focused remesh checks: cube, cylinder and torus; repeated output remeshing; overlapping-volume fusion and disconnected components; ambiguous-cell rejection and cancellation; material/group transfer.
 - Persistence and document checks: absent legacy fields, current round trips, rejected mixed input, strokes and mode changes through Undo/Redo, and existing subdivision-history behaviour.
-- The real egui/wgpu control test clicks Dynamic mesh, Quads/Triangles, Remesh now, Modeling face selection, Adaptive sculpt and unmasked-only adaptation. It checks failure atomicity, Undo/Redo and project reopening, and captures shaded/wireframe output. Existing automatic-remesh stroke-release/Undo coverage runs with the new quad default.
+- The real egui/wgpu control test clicks Dynamic mesh, Quads/Triangles, Remesh now, Modeling face selection, Adaptive sculpt and unmasked-only adaptation. It checks failure atomicity, Undo/Redo and project reopening, and captures shaded/wireframe output. App-level coverage checks explicit remeshing and Undo with the new quad default, and verifies that stroke release does not launch a remesh.
 
 For a unit-radius sphere at resolution 24, three successive quad remeshes produced:
 
@@ -52,7 +52,7 @@ The interaction regression is included in GPU CI. Image inspection remains manua
 
 ## Follow-up: relaxed quad distribution
 
-Dynamic Mesh now keeps the original **Surface nets** algorithm and offers **Relaxed quads** separately. Missing algorithm settings and new models retain Surface nets. The choice is saved per model, captured in diagnostics, restored by Undo/Redo and used by both explicit and automatic remeshing. Adaptive sculpt settings remain independent.
+Dynamic Mesh now keeps the original **Surface nets** algorithm and offers **Relaxed quads** separately. Missing algorithm settings and new models retain Surface nets. The choice is saved per model, captured in diagnostics, restored by Undo/Redo and used by explicit remeshing. Adaptive sculpt settings remain independent.
 
 Relaxed quads applies the existing surface-constrained relaxation engine to the freshly reconstructed surface before transferring materials and vertex groups. It uses polygon edges (not hidden render diagonals), 30 iterations at strength 0.5 and a maximum sampled deviation of 0.15 voxels. Coordinates are normalized to voxel units so this tolerance scales with the model. Connected reference-face tracking prevents projection from jumping directly to nearby sheets. Existing sharp-feature protection, orientation checks, sampled face-centre/edge-midpoint checks and backtracking limit unsafe moves. The shared work limit reports an actionable error; a failed or cancelled job keeps the original document.
 
@@ -67,7 +67,7 @@ The supplied head session was compared from stage 23 (before remeshing), at reso
 
 ![Separate quad algorithm controls](relaxed-quad-controls.png)
 
-Focused checks cover spacing and valid faces on sphere/cube/torus, projection onto the reconstructed surface, thin nearby components, cancellation, legacy persistence, algorithm Undo/Redo, and both algorithms through automatic remeshing. The GPU control check passes with a bounded 60-second wait for the heavier relaxed operation; simpler mesh jobs retain their existing 10-second test wait.
+Focused checks cover spacing and valid faces on sphere/cube/torus, projection onto the reconstructed surface, thin nearby components, cancellation, legacy persistence, algorithm Undo/Redo, and both algorithms through explicit remeshing. The GPU control check passes with a bounded 60-second wait for the heavier relaxed operation; simpler mesh jobs retain their existing 10-second test wait.
 
 The local comparison helper accepts a pre-remesh project and writes separate output projects without modifying the diagnostic bundle:
 
@@ -76,7 +76,7 @@ CLAY_REVIEW_PROJECT=/path/to/stage-023.clay CLAY_GUIDE_PREVIEW=/tmp/clay-relaxed
   cargo test --locked --lib relaxed_quads_project_comparison -- --ignored --nocapture
 ```
 
-Render either output with `project_file_offscreen_review`, using `CLAY_REVIEW_PROJECT`, `CLAY_GUIDE_PREVIEW` and optional `CLAY_REVIEW_MANIFEST` for the original camera. This manual review stays outside routine GPU CI; the existing quad control regression covers both algorithm buttons, saved settings and Undo/Redo. Automatic-remesh coverage now checks both algorithms against their expected geometry.
+Render either output with `project_file_offscreen_review`, using `CLAY_REVIEW_PROJECT`, `CLAY_GUIDE_PREVIEW` and optional `CLAY_REVIEW_MANIFEST` for the original camera. This manual review stays outside routine GPU CI; the existing quad control regression covers both algorithm buttons, saved settings and Undo/Redo. Explicit-remesh coverage checks both algorithms against their expected geometry.
 
 
 ## Follow-up: native topology optimisation
@@ -108,7 +108,7 @@ The optimised head retains a closed sphere topology, has no duplicate faces or i
 
 Release profiling confirmed the earlier slowdown was real: median of three runs was 0.844 seconds for Surface nets and 7.030 seconds for Relaxed quads, excluding UI time. In Relaxed quads, sampled surface checks dominated (about 5.24 seconds and 19.2 million reference-triangle evaluations). The final optimisation core took approximately 12.4 seconds in the small release harness, **excluding voxel reconstruction, attribute transfer and the final validation gate**, so this is not an end-to-end comparison. A 22-second variant reduced junctions further but offered a smaller practical benefit for its extra cost. Optimized quads prioritises layout quality; it is not a performance fix for Relaxed quads.
 
-Focused regressions cover sphere (552 → 139 irregular vertices with the quality retry described below), cube (its existing eight corner junctions and regular connections are retained), torus (200 → 62, with the same 544 faces), scale-normalised optimisation, disconnected nearby components, rejected shape changes, and cancellation without replacing the input. The app-level test exercises Optimized quads through automatic remeshing, blocked mid-stroke replacement and Undo/Redo. Persistence coverage includes all three algorithms; the GPU control regression clicks the new option and verifies its Undo/Redo behaviour.
+Focused regressions cover sphere (552 → 139 irregular vertices with the quality retry described below), cube (its existing eight corner junctions and regular connections are retained), torus (200 → 62, with the same 544 faces), scale-normalised optimisation, disconnected nearby components, rejected shape changes, and cancellation without replacing the input. The app-level test exercises Optimized quads through explicit remeshing, blocked mid-stroke replacement and Undo/Redo. Persistence coverage includes all three algorithms; the GPU control regression clicks the new option and verifies its Undo/Redo behaviour.
 
 The manual project comparison uses the real application pipeline and writes a separate project:
 
@@ -158,4 +158,11 @@ These timings include voxel reconstruction, optimisation, attribute transfer and
 
 All six output projects for each fixture were **byte-for-byte identical**, including coordinates, face order and transferred attributes. The previously inspected head and branched wireframe/shaded results therefore also describe the faster output; existing narrow-crease limitations still apply. [Raw runs, fixture/output hashes and method](optimized-quads-performance.json) are retained here.
 
-Focused release regressions cover sphere/cube/torus, scaling, nearby components, rejected shape changes and cancellation. New tests compare cached projection coordinates, anchors and distances against the original uncached walk, including shared-edge ties, changed sample points, signed zero, query-counter wrap and exhausted work budgets. Automatic remeshing, stroke-release gating and Undo/Redo are checked separately. Full tests, lint and GPU controls run in PR CI.
+Focused release regressions cover sphere/cube/torus, scaling, nearby components, rejected shape changes and cancellation. New tests compare cached projection coordinates, anchors and distances against the original uncached walk, including shared-edge ties, changed sample points, signed zero, query-counter wrap and exhausted work budgets. Explicit remeshing, stroke-release behaviour and Undo/Redo are checked separately. Full tests, lint and GPU controls run in PR CI.
+
+
+## Follow-up: manual remeshing only (27 October)
+
+Dynamic Mesh now remeshes only when explicitly requested through **Remesh now** or its command/shortcut. The **Remesh after each stroke** checkbox, runtime trigger and saved setting have been removed. Ending a sculpt stroke retains the sculpted surface without starting a whole-mesh rebuild. Adaptive Sculpt remains the separate option for local topology adaptation.
+
+Old projects containing `auto_remesh: true` still load; the obsolete field is ignored and omitted from new saves and diagnostic settings. The app regressions load such a project for each quad algorithm, finish a real sculpt stroke without launching a job, then request a manual remesh and verify its result and Undo. Existing pointer-release protection during explicit mesh jobs remains covered. The GPU control regression verifies that the removed checkbox is absent and clicks **Remesh now**; the control capture was visually reviewed.

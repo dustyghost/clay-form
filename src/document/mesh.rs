@@ -143,16 +143,13 @@ impl Document {
     pub(crate) fn begin_sculpt_frame(&mut self) {
         self.adaptive_budget = AdaptiveBudget::default();
     }
-    pub fn set_remesh_settings(&mut self, resolution: u32, auto: bool) -> Result<(), String> {
+    pub fn set_remesh_resolution(&mut self, resolution: u32) -> Result<(), String> {
         self.require_sculpt_mesh()?;
         if !(16..=96).contains(&resolution) {
             return Err("Remesh resolution must be between 16 and 96".into());
         }
-        if self.geometry.settings.resolution != resolution
-            || self.geometry.settings.auto_remesh != auto
-        {
+        if self.geometry.settings.resolution != resolution {
             self.geometry.settings.resolution = resolution;
-            self.geometry.settings.auto_remesh = auto;
             self.dirty = true;
         }
         Ok(())
