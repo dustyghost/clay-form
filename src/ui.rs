@@ -1420,7 +1420,7 @@ impl UiState {
                         crate::sculpt::QuadRemeshAlgorithm::Relaxed => "Redistributes quads along the rebuilt surface for more even spacing. Slower; retains grid junctions and face count.",
                         crate::sculpt::QuadRemeshAlgorithm::Optimized => "Rebuilds quad connections to reduce crowded junctions. Slower; face count may change and small features may soften. Can be cancelled.",
                     });
-                    ui.weak("Increase resolution for small features. Ambiguous cells are reported without changing the model.");
+                    ui.weak("Increase resolution for small features. Unresolved surface crossings are reported without changing the model.");
                 }
                 let mut resolution=settings.resolution;
                 let mut auto=settings.auto_remesh;

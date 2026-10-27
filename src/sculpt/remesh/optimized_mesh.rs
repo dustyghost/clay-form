@@ -19,6 +19,22 @@ fn mesh(vertices: Vec<Vec3>, quads: Vec<[usize; 4]>) -> Mesh {
     }
 }
 
+// A valid surface can still contain crowded short edges at a narrow crease.
+// Prefer fewer severely uneven faces before considering their worst ratio.
+fn uneven_faces(mesh: &Mesh) -> (usize, f32) {
+    let mut count = 0;
+    let mut worst = 1f32;
+    for q in &mesh.quads {
+        let lengths: [f32; 4] =
+            std::array::from_fn(|i| (mesh.vertices[q[i]] - mesh.vertices[q[(i + 1) % 4]]).len());
+        let ratio = lengths.into_iter().fold(0f32, f32::max)
+            / lengths.into_iter().fold(f32::INFINITY, f32::min).max(1e-20);
+        count += usize::from(ratio > 8.);
+        worst = worst.max(ratio);
+    }
+    (count, worst)
+}
+
 // Run in voxel units. Sampling is a bounded approximation, not a Hausdorff proof.
 fn check_surface(reference: &Mesh, output: &Mesh, cancel: &dyn Fn() -> bool) -> Result<(), String> {
     output.require_adaptive_quads()?;
@@ -115,8 +131,27 @@ pub(super) fn redistribute(
         let reference = mesh(vertices, quads);
         let (vertices, quads) =
             optimized::optimize(&reference.vertices, &reference.quads, 1., cancel)?;
-        let output = mesh(vertices, quads);
+        let mut output = mesh(vertices, quads);
         check_surface(&reference, &output, cancel)?;
+        let quality = uneven_faces(&output);
+        if quality.0 > 0 && output.quads != reference.quads {
+            // Keep the validated candidate if this optional, less aggressive
+            // attempt cannot improve it. Do not relax the surface-error bound.
+            if let Ok(Some((vertices, quads))) =
+                optimized::optimize_levels(&reference.vertices, &reference.quads, 1., cancel, 1)
+            {
+                let candidate = mesh(vertices, quads);
+                let candidate_quality = uneven_faces(&candidate);
+                if candidate_quality < quality
+                    && check_surface(&reference, &candidate, cancel).is_ok()
+                {
+                    output = candidate;
+                }
+            }
+            if cancel() {
+                return Err("Quad optimisation cancelled".into());
+            }
+        }
         if result.vertices.len() + output.vertices.len() > MAX_VERTICES
             || result.triangles.len() + output.triangles.len() > MAX_TRIANGLES
         {
@@ -237,14 +272,17 @@ mod tests {
 
     #[test]
     fn optimized_quads_keep_nearby_components_and_are_scale_independent() {
-        // Two almost touching cubes exercise component-local validation: their
-        // separation is much smaller than the allowed shape error.
-        let first = Primitive::for_kind(PrimitiveKind::Cube).mesh().unwrap();
+        // Two thin, nearby boxes exercise component-local validation and the
+        // unchanged-layout shortcut. Their regular quads have high edge ratios.
+        let mut first = Primitive::for_kind(PrimitiveKind::Cube).mesh().unwrap();
+        for p in &mut first.vertices {
+            p.2 *= 0.02;
+        }
         let mut source = first.clone();
         let offset = source.vertices.len();
         source
             .vertices
-            .extend(first.vertices.iter().map(|&p| p + Vec3(2.001, 0., 0.)));
+            .extend(first.vertices.iter().map(|&p| p + Vec3(0., 0., 0.05)));
         source
             .quads
             .extend(first.quads.iter().map(|q| q.map(|v| v + offset)));

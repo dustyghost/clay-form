@@ -820,7 +820,7 @@ pub(crate) fn optimize(
 }
 
 type Output = (Vec<Vec3>, Vec<Quad>);
-fn optimize_levels(
+pub(super) fn optimize_levels(
     p: &[Vec3],
     q: &[Quad],
     step: f32,

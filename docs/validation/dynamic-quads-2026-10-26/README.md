@@ -108,7 +108,7 @@ The optimised head retains a closed sphere topology, has no duplicate faces or i
 
 Release profiling confirmed the earlier slowdown was real: median of three runs was 0.844 seconds for Surface nets and 7.030 seconds for Relaxed quads, excluding UI time. In Relaxed quads, sampled surface checks dominated (about 5.24 seconds and 19.2 million reference-triangle evaluations). The final optimisation core took approximately 12.4 seconds in the small release harness, **excluding voxel reconstruction, attribute transfer and the final validation gate**, so this is not an end-to-end comparison. A 22-second variant reduced junctions further but offered a smaller practical benefit for its extra cost. Optimized quads prioritises layout quality; it is not a performance fix for Relaxed quads.
 
-Focused regressions cover sphere (552 → 39 irregular vertices), cube (its existing eight corner junctions and regular connections are retained), torus (200 → 62, with the same 544 faces), scale-normalised optimisation, disconnected nearby components, rejected shape changes, and cancellation without replacing the input. The app-level test exercises Optimized quads through automatic remeshing, blocked mid-stroke replacement and Undo/Redo. Persistence coverage includes all three algorithms; the GPU control regression clicks the new option and verifies its Undo/Redo behaviour.
+Focused regressions cover sphere (552 → 139 irregular vertices with the quality retry described below), cube (its existing eight corner junctions and regular connections are retained), torus (200 → 62, with the same 544 faces), scale-normalised optimisation, disconnected nearby components, rejected shape changes, and cancellation without replacing the input. The app-level test exercises Optimized quads through automatic remeshing, blocked mid-stroke replacement and Undo/Redo. Persistence coverage includes all three algorithms; the GPU control regression clicks the new option and verifies its Undo/Redo behaviour.
 
 The manual project comparison uses the real application pipeline and writes a separate project:
 
@@ -118,3 +118,22 @@ CLAY_REVIEW_PROJECT=/path/to/stage-023.clay CLAY_GUIDE_PREVIEW=/tmp/clay-optimiz
 ```
 
 Use the existing `project_file_offscreen_review` helper to capture the resulting project with the original camera. The diagnostic export itself is never modified.
+
+
+## Follow-up: resolvable voxel crossings in a branched sculpt (27 October)
+
+A recovered three-armed sculpt reproduced “Quad remesh cannot resolve nearby sheets at this resolution” at resolution 48, before any distribution algorithm ran. Exactly one shared grid face had alternating signs. Its bilinear saddle was not singular: the diagonal products differed by approximately -4.94e-5, so the separate branches could be resolved instead of rejecting the whole operation.
+
+The native extractor now connects crossed cube edges through face-contour arcs, uses an asymptotic decision consistently on shared faces, and gives each disconnected contour loop its own vertex. It retains the original vertex positions/order for unambiguous cells. This follows the contour-loop construction in [Grosso and Zint, A parallel dual marching cubes approach to quad only surface reconstruction, §3.1.1](https://doi.org/10.1007/s00371-021-02139-w); no third-party source was added. Sparse per-cell branch mappings avoid allocating twelve indices for every grid cell. All three quad algorithms use this extraction stage.
+
+Singular saddle ties remain errors. Non-manifold two-cell tunnels, invalid vertex fans and folded faces remain errors as well: this does not claim to solve every under-resolved trilinear topology. A regression verifies that two regions sharing a checkerboard face remain separate closed components, across scalar scales 1e-6 to 1e6. Another regression ensures the opposite saddle configuration cannot return a four-face non-manifold edge. Existing primitive, repeat-remesh, attribute and cancellation checks pass.
+
+The recovered model now extracts as 3,454 closed quads. Its most aggressive optimised layout crowded a narrow crease, so Optimized quads now tries a less aggressive layout when the valid initial result has faces with an edge ratio above 8. It adopts the alternative only if it reduces that quality score and passes the same manifold and 0.4-voxel bidirectional shape checks. Already regular layouts retain their original connections. The final application output has **3,452 quads and 281 irregular junctions**. Independent sampling measured maximum deviations of **0.311 and 0.395 voxel** in the two directions. Its minimum/maximum corner angles are approximately **43.8° / 149.7°**.
+
+A narrow crease still contains very small edges (16 faces with an edge ratio above 8, versus 33 before the less aggressive retry). This fix makes the reported remesh succeed and improves distribution; it does not guarantee uniform quads at every sharp or near-touching feature. The extra attempt increases runtime on affected shapes. Unchanged regular thin-box components are explicitly covered by a regression, so they do not trigger unnecessary optimisation.
+
+| Recovered sculpt | Successful Optimized quads result |
+| --- | --- |
+| ![Branched sculpt before remeshing](branched-source-wire.png) | ![Branched sculpt after remeshing](branched-optimized-wire.png) |
+
+The recovery snapshot and diagnostic export were not modified. The real application remesh pipeline and matching-camera wireframe/shaded capture were exercised locally; full checks run in PR CI.
