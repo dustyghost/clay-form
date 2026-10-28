@@ -1,5 +1,9 @@
 # Open-source preparation checks
 
+- Startup notice interaction test verifies Continue, the version-specific opt-out,
+  immediate preference persistence, older preference compatibility, and retention
+  of pending recovery prompts. Manual Vulkan capture visually reviewed at
+  1000 × 760: [startup notice](startup.png).
 - Focused egui interaction test opens Settings → About Clay Form,
   checks the ownership statement and verifies that pointer input behind the
   window cannot sculpt or create undo entries: passed.

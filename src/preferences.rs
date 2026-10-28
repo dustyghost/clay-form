@@ -369,6 +369,7 @@ pub(crate) enum SelectionMode {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct Preferences {
+    pub dismissed_startup_version: String,
     #[serde(default)]
     pub gimp_path: String,
     pub external_paint_app: String,
@@ -419,6 +420,7 @@ pub(crate) struct Preferences {
 impl Default for Preferences {
     fn default() -> Self {
         let mut prefs = Self {
+            dismissed_startup_version: String::new(),
             gimp_path: String::new(),
             external_paint_app: String::new(),
             materials: MaterialLibrary::default(),

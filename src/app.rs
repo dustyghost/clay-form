@@ -110,7 +110,20 @@ impl App {
             .set_history_retention(app.ui.preferences.history_retention);
         app.initialize_recovery(path.with_file_name("recovery"));
         app.preferences_path = Some(path);
+        app.ui.initialize_startup_notice();
         app
+    }
+    fn show_startup_notice(&mut self, ctx: &egui::Context) -> bool {
+        if !self.ui.startup_notice_open {
+            return false;
+        }
+        self.ui.startup_notice(ctx);
+        if !self.ui.startup_notice_open {
+            self.save_preferences();
+            ctx.request_repaint();
+        }
+        // The Continue click must not reach the workspace in this frame.
+        true
     }
     fn finish_parameter_input(&mut self, ctx: &egui::Context) {
         if ctx.input(|i| !i.pointer.any_down() || !i.focused) {
@@ -588,6 +601,9 @@ impl eframe::App for App {
         self.viewport.destroy_renderer();
     }
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
+        if self.show_startup_notice(ctx) {
+            return;
+        }
         self.poll_mesh_job();
         self.poll_export(ctx);
         self.poll_texture_exchange(ctx);

@@ -1,5 +1,7 @@
 **Alpha 1 — 0.1.0-alpha.1.** An early testing release, with features and file
 formats still evolving. Keep backups of important projects.
+The startup notice can be dismissed for the current version; new prereleases
+show it again.
 
 Clay Form is free and open source under GPLv3. Your models, textures, renders
 and other creations remain yours to use, sell, license or keep private.

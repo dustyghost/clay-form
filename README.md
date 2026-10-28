@@ -1,6 +1,9 @@
 # Clay Form — Alpha 1
 
 Version **0.1.0-alpha.1** is an early testing release.
+On startup, a development notice explains the current version and testing
+expectations. Choose **Continue to Clay Form** to begin; **Don’t show again for
+this version** remembers your choice until the version changes.
 
 A Rust desktop sculpting prototype built with eframe/egui. Start from a sphere and sculpt real mesh vertices with a pen or mouse.
 

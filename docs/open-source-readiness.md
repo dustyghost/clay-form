@@ -9,6 +9,9 @@ claim that Clay Form is already cleared or tested on every platform.
 
 The chosen first public testing version is **0.1.0-alpha.1**, displayed as
 **Alpha 1**. This is a prerelease designation, not a claim of production readiness.
+A startup notice explains development status before the workspace opens. Its
+optional dismissal is stored per version; pending recovery prompts remain
+available after continuing.
 
 The owner confirmed all original code/artwork is theirs to release and that
 no borrowed proprietary assets were included. Original repository content uses
