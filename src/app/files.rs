@@ -62,6 +62,7 @@ impl App {
         };
         let path = if location == "~" {
             std::env::var_os("HOME")
+                .or_else(|| std::env::var_os("USERPROFILE"))
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| picker.directory.clone())
         } else {

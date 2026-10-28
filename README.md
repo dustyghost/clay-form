@@ -2,6 +2,17 @@
 
 A Rust desktop sculpting prototype built with eframe/egui. Start from a sphere and sculpt real mesh vertices with a pen or mouse.
 
+Clay Form is free and open source under [GPLv3](LICENSE). Official downloads
+are free of charge. **Your creations belong to you:** use, sell, license or
+keep your models, textures and other artwork private without crediting Clay
+Form or publishing source. Imported third-party material keeps its own terms.
+See [licensing and ownership](COPYRIGHT.md).
+
+Cross-platform packages are being prepared. See [release readiness and current
+limits](docs/open-source-readiness.md); a configured build target is not yet a
+claim of tested support. [Release instructions](.github/RELEASING.md) cover
+Windows, macOS, Linux and ARM64 artifacts, corresponding source and checksums.
+
 ## Run
 
 Install Rust through rustup, then run from the repository root (rustup selects the version pinned in `rust-toolchain.toml`):

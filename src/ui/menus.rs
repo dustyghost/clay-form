@@ -136,6 +136,7 @@ impl UiState {
                 && self.primitive_warning.is_none()
                 && !self.icon_capture_open()
                 && !self.recovery_open
+                && !self.about_open
                 && !self.settings_open
                 && !self.layout_open;
             let max_height = (ctx.content_rect().height() - 80.).max(120.);

@@ -141,6 +141,7 @@ impl App {
             || self.ui.pending.is_some()
             || self.ui.file_picker.is_some()
             || self.ui.recovery_open
+            || self.ui.about_open
             || self.ui.diagnostics_open
             || self.ui.viewport_controls.editor_open
             || self.ui.viewport_controls.arranging
@@ -294,6 +295,7 @@ impl App {
             && self.ui.pending.is_none()
             && self.ui.file_picker.is_none()
             && !self.ui.recovery_open
+            && !self.ui.about_open
             && !self.ui.diagnostics_open
             && !self.ui.settings_open
             && !self.ui.layout_open
@@ -703,6 +705,7 @@ impl eframe::App for App {
         }
         self.show_recovery(ctx);
         self.show_diagnostics(ctx);
+        self.ui.about(ctx);
         self.ui.preferences.sync_active_workspace();
         if self.ui.preferences != self.saved_preferences {
             let since = self

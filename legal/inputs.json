@@ -1,0 +1,9 @@
+{
+  "Cargo.lock": "5615324a57d9610684e403637c24efeaeb6acd168c1c6de4aa3d0fe6ea5cceaf",
+  "Cargo.toml": "d3f0f76f8a1b227f678c66da1fd745519fda40997087ffae4006ebcccacf0f29",
+  "about.toml": "ac5b74aa7f3f3d9182bf9be22c778626008219c018f709458cee9ba846d2ce70",
+  "scripts/generate-notices.py": "5446e11e7f6131085a3037634e4f001582795ad4decee35aecc6b8a44ee768cf",
+  "legal/upstream/index.json": "753c0bf82c4e47afaf1117c58d4503c500037d91e58b6150609f4224ef25ed7a",
+  "legal/pending-review.json": "aa1d3747a4b384cba873e3c9249d8601f64291f0a3796896b63912b266e19bca",
+  "legal/additional-notices.json": "c3f11f2ce77e7858421a1b838f9575bc22cae1db3887241c17c0337dacb6c1ed"
+}

@@ -1,3 +1,5 @@
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
+
 use clay_form::App;
 use eframe::egui;
 fn main() -> eframe::Result {

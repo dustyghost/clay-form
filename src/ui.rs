@@ -6,6 +6,7 @@ use crate::{
     sculpt::{Alpha, Axis, Kind},
 };
 use eframe::egui::{self, Color32, Sense, Vec2};
+mod about;
 pub(crate) mod alphas;
 mod design;
 mod material;
@@ -67,6 +68,7 @@ pub(crate) struct UiState {
     rename_model: Option<(usize, String, String)>,
     pub preferences: Preferences,
     pub(super) customization: customization::Customization,
+    pub about_open: bool,
     pub settings_open: bool,
     pub diagnostics_open: bool,
     pub diagnostic_path: String,
@@ -150,6 +152,7 @@ impl Default for UiState {
             rename_model: None,
             preferences: Preferences::default(),
             customization: Default::default(),
+            about_open: false,
             settings_open: false,
             diagnostics_open: false,
             diagnostic_path: "clay-session".into(),
@@ -320,6 +323,9 @@ impl UiState {
                 self.builtin_menu(ui, BuiltinMenu::Edit, document, camera, &mut commands);
                 self.builtin_menu(ui, BuiltinMenu::Settings, document, camera, &mut commands);
                 self.custom_menu_bar(ui, document, &mut commands);
+                if ui.button("About").clicked() {
+                    self.about_open = true;
+                }
                 ui.menu_button("Export", |ui| {
                     if ui
                         .button("OBJ")

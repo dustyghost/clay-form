@@ -992,11 +992,19 @@ fn validate_menus(menus: &[CustomMenu]) -> Result<(), String> {
     Ok(())
 }
 pub(crate) fn path() -> PathBuf {
-    std::env::var_os("XDG_CONFIG_HOME")
+    #[cfg(target_os = "windows")]
+    let base = std::env::var_os("APPDATA")
         .filter(|p| !p.is_empty())
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|p| PathBuf::from(p).join(".config")))
-        .unwrap_or_else(|| PathBuf::from("."))
+        .or_else(|| {
+            std::env::var_os("USERPROFILE").map(|p| PathBuf::from(p).join("AppData/Roaming"))
+        });
+    #[cfg(not(target_os = "windows"))]
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|p| !p.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|p| PathBuf::from(p).join(".config")));
+    base.unwrap_or_else(|| PathBuf::from("."))
         .join("clay-form/preferences.json")
 }
 pub(crate) fn save(path: &std::path::Path, prefs: &Preferences) -> Result<(), String> {

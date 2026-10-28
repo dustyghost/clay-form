@@ -2,6 +2,9 @@
 name = "clay-form"
 version = "0.1.0"
 edition = "2024"
+license = "GPL-3.0-only"
+description = "A free, open-source desktop sculpting application"
+repository = "https://github.com/dustyghost/clay-form"
 
 [dependencies]
 eframe = { version = "0.33.3", default-features = false, features = ["wgpu", "x11", "wayland", "default_fonts"] }
