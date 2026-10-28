@@ -2,6 +2,10 @@
 use eframe::egui::{self, Color32, Vec2};
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Glyph {
+    Pan,
+    Zoom,
+    Orbit,
+    Groups,
     New,
     Open,
     Save,
@@ -35,6 +39,50 @@ impl Glyph {
     fn lines(self) -> Vec<Vec<[f32; 2]>> {
         use Glyph::*;
         match self {
+            Pan => vec![
+                vec![[12., 2.], [12., 22.]],
+                vec![[2., 12.], [22., 12.]],
+                vec![[8., 6.], [12., 2.], [16., 6.]],
+                vec![[8., 18.], [12., 22.], [16., 18.]],
+                vec![[6., 8.], [2., 12.], [6., 16.]],
+                vec![[18., 8.], [22., 12.], [18., 16.]],
+            ],
+            Zoom => vec![
+                circle(10., 10., 6.),
+                vec![[14.5, 14.5], [21., 21.]],
+                vec![[7., 10.], [13., 10.]],
+                vec![[10., 7.], [10., 13.]],
+            ],
+            Orbit => vec![
+                circle(12., 12., 5.),
+                vec![
+                    [3., 10.],
+                    [4., 6.],
+                    [8., 3.],
+                    [13., 2.],
+                    [18., 4.],
+                    [21., 8.],
+                ],
+                vec![[16., 8.], [21., 8.], [21., 3.]],
+                vec![
+                    [21., 14.],
+                    [20., 18.],
+                    [16., 21.],
+                    [11., 22.],
+                    [6., 20.],
+                    [3., 16.],
+                ],
+                vec![[8., 16.], [3., 16.], [3., 21.]],
+            ],
+            Groups => vec![
+                circle(6., 6., 3.),
+                circle(18., 6., 3.),
+                circle(12., 18., 3.),
+                vec![[9., 6.], [15., 6.]],
+                vec![[7.5, 9.], [10.5, 15.]],
+                vec![[16.5, 9.], [13.5, 15.]],
+            ],
+
             Pin | Unpin => {
                 let mut lines = vec![
                     vec![
@@ -338,6 +386,23 @@ pub(super) fn icon_button(ui: &mut egui::Ui, glyph: Glyph, label: &str) -> egui:
     ui.ctx()
         .data_mut(|d| d.insert_temp(egui::Id::new(("icon_button", label)), response.rect));
     response.on_hover_text(label)
+}
+
+/// A single surface for floating controls; no window border or drop shadow.
+pub(super) fn floating_button(
+    ui: &egui::Ui,
+    glyph: Option<Glyph>,
+    label: Option<&str>,
+) -> egui::Button<'static> {
+    let image = glyph.map(|glyph| {
+        egui::Image::new((icon(ui.ctx(), glyph), Vec2::splat(20.))).tint(ui.visuals().text_color())
+    });
+    let button = match (image, label) {
+        (Some(image), Some(label)) => egui::Button::image_and_text(image, label.to_owned()),
+        (Some(image), None) => egui::Button::image(image),
+        (_, label) => egui::Button::new(label.unwrap_or_default().to_owned()),
+    };
+    button.min_size(Vec2::splat(40.)).corner_radius(10.)
 }
 pub(super) fn menu(
     ui: &mut egui::Ui,

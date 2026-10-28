@@ -6,6 +6,7 @@ Get a clear look at the shape you are making. Start a sculpt stroke on clay; sta
 
 - [Orbit and pan](#orbit-and-pan)
 - [Zoom](#zoom)
+- [Viewport buttons](#viewport-buttons)
 - [Perspective view](#perspective-view)
 - [Surface display](#surface-display)
 - [Huion tablets](#huion-tablets)
@@ -45,6 +46,25 @@ Use the wheel, toolbar **− / +**, or **View → Zoom in / Zoom out**. Default 
 For pen zoom, hold **Ctrl** and drag up to enlarge or down to shrink. This also works during an orbit or gizmo drag.
 
 Change the zoom/pan modifiers in **Settings → Key settings**. Zoom takes priority if both use the same modifier; Ctrl+Shift selection retains priority inside the navigation frame.
+
+## Viewport buttons
+
+The drawing area includes **Pan view**, **Zoom view**, **Rotate view**, **Reset view**, **Vertex groups**, and **Toggle wireframe** controls.
+
+- Hold the left mouse button on **Pan view** and drag in any direction.
+- Drag **Zoom view** up to zoom in or down to zoom out.
+- Drag **Rotate view** to orbit the camera.
+- Click **Reset view** to restore the default camera. **Vertex groups** toggles group colours; **Toggle wireframe** toggles mesh edges.
+
+Open **Viewport controls…** in the drawing area to search the action catalog, add controls, rename them, or remove them. The catalog includes brush sliders, brush presets, menus, and editing actions. You can also right-click an existing customizable action and choose **Add to viewport**.
+
+Choose **Icon only**, **Icon + text**, or **Text** when adding a control. Each existing control has its own style and icon picker. **Automatic** chooses a symbol for the action; you can choose another symbol from the picker. Icon buttons show their name and shortcut on hover, and toggles retain a selected highlight. Click an icon for a brush value to open its editable control.
+
+The defaults are 40-pixel icon buttons in a compact vertical stack with 8-pixel gaps. **Align right** lines up the controls vertically; **Align bottom** makes a horizontal row. Set **Spacing** before aligning to choose the gap. Alignment keeps pixel spacing consistent when the viewport resizes. To update an existing layout, choose **Icon only**, click **Apply style to all**, then **Align right**.
+
+Choose **Place controls**, drag each button to its desired position, then click **Done placing controls**. While placing controls, dragging moves the buttons. Right-click any viewport button for style, placement and removal options. **Restore default controls** restores the original six buttons.
+
+Positions save automatically with your workspace and adjust to the viewport when the window or sidebars resize. Camera movement and layout changes do not change the sculpt or add undo steps.
 
 ## Perspective view
 

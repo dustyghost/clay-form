@@ -15,6 +15,7 @@ pub(crate) mod context_menu;
 mod customization;
 mod edges;
 mod files;
+mod viewport_controls;
 pub(crate) use files::{FileEntry, FilePicker};
 mod brush_controls;
 mod icons;
@@ -33,6 +34,7 @@ mod transform;
 use customization::ActionResponse;
 pub(crate) struct UiState {
     pub uv: uv::UvControls,
+    pub viewport_controls: viewport_controls::ControlsState,
     pub viewport_menu: context_menu::ViewportMenuState,
     icons: icons::Icons,
     pinned_menu_rects: Vec<egui::Rect>,
@@ -106,6 +108,7 @@ pub(crate) struct UiState {
 impl Default for UiState {
     fn default() -> Self {
         Self {
+            viewport_controls: Default::default(),
             uv: Default::default(),
             viewport_menu: Default::default(),
             icons: Default::default(),
