@@ -33,19 +33,20 @@ notice files, origins and hashes are retained in `legal/upstream/`.
 
 The [follow-up verification](research/license-verification.md) resolved four
 of the original 13 pending records: fax, fax_derive, hexf-parse and zune-inflate.
-Nine remain. It also added copyright/trademark text extracted from the exact
+The other nine now have documented attribution and non-blocking distribution
+decisions under the maintainer-approved policy. Historical uncertainty remains
+visible in the report. Verification also added text extracted from the exact
 bundled fonts and checked the relevant registry archives against Cargo.lock.
 
-**Outstanding:** `legal/pending-review.json` identifies dependencies whose
-manifest declares a licence but whose complete release-specific notices remain
-unresolved. Generic copyright placeholders are explicitly marked pending in
-the draft inventory, never represented as completed attribution. The release
-workflow blocks distributable builds until these entries are resolved. The
-[macOS review](research/macos-licensing.md) separately records SDK-binding and
-historical-attribution questions. These require a targeted licensing assessment;
-automated SPDX acceptance is insufficient evidence to close them.
-The SDK-binding question has its own gate in `legal/release-review.json` so
-clearing notice records alone cannot silently clear that separate review.
+**Release policy:** retain published licence declarations, all collected notices,
+full terms and source links. Label package-author credit accurately without
+inventing copyright years. `legal/notice-supplements.json` supplies the reviewed
+attribution, and `legal/review-decisions.json` preserves evidence and uncertainty.
+`legal/pending-review.json` is currently empty; new unresolved compliance issues
+still block release. The [macOS review](research/macos-licensing.md) records the
+SDK-binding question as a non-blocking decision in `legal/release-review.json`,
+not a new Apple permission grant. Notice integrity checks and recorded
+pending/blocked reviews remain enforced.
 
 ## Platforms
 
@@ -102,7 +103,8 @@ so their notice review matters even when distributing a different platform's bin
 
 ## Remaining launch work
 
-1. Resolve pending notices and the macOS binding assessment with evidence.
+1. Keep notice verification passing and revisit documented decisions when
+   dependencies or authoritative upstream evidence change.
 2. Require final CI and native package jobs to pass; inspect the generated
    archives and rebuild their corresponding source.
 3. Record real-platform smoke tests, especially file replacement/recovery,

@@ -75,16 +75,20 @@ grant rights to redistribute someone else's generated wrappers or SDK content.
 
 ## Release decision
 
-Continue macOS build validation and retain the dependency's declared licences.
-Keep the two unresolved items visible in release review. Obtain a targeted
-licensing assessment of SDK-derived binding redistribution and the collected
-historical notices before calling the macOS distribution legally cleared.
+Proceed with macOS build validation under the declared licences, retaining
+the collected historical/current notices and normal Apple build tooling.
+The maintainer approved treating these uncertainties as documented distribution
+decisions rather than automatic release blockers. The SDK question remains
+visible; this decision is not legal clearance or an Apple permission grant.
+Packages must not contain Apple SDKs, system frameworks or Apple artwork.
 No maintainer or Apple contact was made during this research.
 
 The [follow-up notice verification](license-verification.md) records exact
-historical comparisons and narrows the overall pending inventory to nine
-macOS dependency records. The SDK-binding question is separately enforced
-through `legal/release-review.json`; completing attribution does not close it.
+historical comparisons and the attribution assembled for nine macOS dependency
+records. The SDK-binding question is separately recorded with status
+`documented` in `legal/release-review.json`. New concrete conflicting terms or
+unauthorized bundled material must be treated as blockers; an uncertain
+historical question alone is not described as a prohibition.
 
 Switching Clay Form to a permissive licence would not itself cure missing
 third-party notices or SDK-derived-content rights. Upgrading dependencies may

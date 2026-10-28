@@ -8,11 +8,14 @@ are test artifacts, not public releases.
 ## Before the first public release
 
 Complete [the readiness review](../docs/open-source-readiness.md), including
-outstanding licence notices and the macOS dependency assessment. The release
+the recorded attribution decisions and macOS dependency assessment. The release
 workflow refuses to proceed while `legal/pending-review.json` is nonempty.
-A pending item in `legal/release-review.json` also blocks release. See the
+A pending or blocked item in `legal/release-review.json` also blocks release.
+Items with status `documented` retain an explicit non-blocking distribution
+decision; they are not represented as legally resolved. See the
 [verification findings](../docs/research/license-verification.md) for evidence
-and the unresolved historical notices.
+and the historical uncertainties. The current reviewed notice inventory passes
+`python3 scripts/check-notices.py --release`.
 A successful notice-hash check alone is not legal clearance.
 
 Run the regular PR CI and native packaging matrix on the final commit. Smoke

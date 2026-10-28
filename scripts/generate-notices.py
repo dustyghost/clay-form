@@ -23,6 +23,7 @@ def main():
     upstream = ROOT / "legal/upstream"
     overrides = json.loads((upstream / "index.json").read_text())
     pending = json.loads((ROOT / "legal/pending-review.json").read_text())
+    supplements = json.loads((ROOT / "legal/notice-supplements.json").read_text())
     records = []
     for license in report["licenses"]:
         for user in license["used_by"]:
@@ -38,6 +39,13 @@ def main():
                 raise SystemExit(f"Review missing HTTPS source repository: {package['name']}")
             text = license["text"]
             key = f"{package['name']}@{package['version']}|{license['id']}"
+            if key in supplements:
+                supplement = supplements[key]
+                declaration = Path(package["manifest_path"]).read_bytes()
+                if hashlib.sha256(declaration).hexdigest() != supplement["declaration_sha256"]:
+                    raise SystemExit(f"Review changed upstream declaration: {key}")
+                if key not in overrides:
+                    raise SystemExit(f"Reviewed attribution requires retained licence text: {key}")
             if key in overrides:
                 texts = []
                 for entry in overrides[key]:
@@ -57,6 +65,12 @@ def main():
                 text = ("RELEASE REVIEW PENDING: " + pending[key]["reason"] + "\n\n"
                         + "Authors declared in package metadata: " + ", ".join(pending[key]["authors"])
                         + "\n\nStandard licence terms (not a complete copyright notice):\n\n" + text)
+            if key in supplements:
+                supplement = supplements[key]
+                context = supplement["notice_context"]
+                if supplement["authors"]:
+                    context += "\nAuthors listed in package metadata: " + ", ".join(supplement["authors"])
+                text = context + "\n\n" + text
             records.append(dict(name=package["name"], version=package["version"],
                                 repository=repository, license=license["id"], text=text))
 
@@ -106,7 +120,8 @@ def main():
     hashes = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
               for name in ("Cargo.lock", "Cargo.toml", "about.toml", "scripts/generate-notices.py",
                            "legal/upstream/index.json", "legal/pending-review.json", "legal/additional-notices.json",
-                           "legal/font-metadata.json", "legal/review-decisions.json", "legal/release-review.json",
+                           "legal/font-metadata.json", "legal/notice-supplements.json",
+                           "legal/review-decisions.json", "legal/release-review.json",
                            "legal/third-party.json", "THIRD-PARTY-NOTICES.html")}
     (legal / "inputs.json").write_text(json.dumps(hashes, indent=2) + "\n")
     print(f"Wrote {len(records)} notices")

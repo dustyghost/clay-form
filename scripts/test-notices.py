@@ -1,4 +1,4 @@
-"""Check that damaged notices and unresolved release reviews cannot pass verification."""
+"""Retain notice integrity and concrete blockers while permitting documented decisions."""
 import hashlib
 import json
 from pathlib import Path
@@ -55,6 +55,7 @@ class NoticeVerificationTests(unittest.TestCase):
     def test_platform_review_blocks_release_even_after_notice_resolution(self):
         (self.root / 'legal/pending-review.json').write_text('{}')
         (self.root / 'legal/review-decisions.json').write_text('{}')
+        (self.root / 'legal/notice-supplements.json').write_text('{}')
         (self.root / 'legal/release-review.json').write_text(json.dumps({
             'review-fixture': {'status': 'pending'}
         }))
@@ -68,6 +69,55 @@ class NoticeVerificationTests(unittest.TestCase):
         }))
         self.rehash()
         self.assertEqual(self.run_check('--release').returncode, 0)
+
+    def test_documented_decisions_pass_and_keep_all_retained_notice_text(self):
+        result = self.run_check('--release')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        records = json.loads((self.root / 'legal/third-party.json').read_text())
+        records = {r['name'] + '@' + r['version'] + '|' + r['license']: r for r in records}
+        supplements = json.loads((self.root / 'legal/notice-supplements.json').read_text())
+        upstream = json.loads((self.root / 'legal/upstream/index.json').read_text())
+        for key, supplement in supplements.items():
+            with self.subTest(key=key):
+                text = records[key]['text']
+                self.assertIn(supplement['notice_context'], text)
+                self.assertNotIn('RELEASE REVIEW PENDING:', text)
+                self.assertNotIn('<copyright holders>', text)
+                for entry in upstream[key]:
+                    self.assertIn((self.root / 'legal/upstream' / entry['file']).read_text(), text)
+                for author in supplement['authors']:
+                    self.assertIn(author, text)
+
+    def test_documented_status_alone_cannot_bypass_attribution(self):
+        (self.root / 'legal/review-decisions.json').write_text(json.dumps({
+            'unreviewed@1.0|MIT': {'status': 'documented', 'release_basis': 'fixture'}
+        }))
+        self.rehash()
+        self.assertNotEqual(self.run_check('--release').returncode, 0)
+
+    def test_new_pending_notice_still_blocks_release(self):
+        path = self.root / 'legal/review-decisions.json'
+        decisions = json.loads(path.read_text())
+        decisions['unreviewed@1.0|MIT'] = {'status': 'pending'}
+        path.write_text(json.dumps(decisions))
+        (self.root / 'legal/pending-review.json').write_text(json.dumps({
+            'unreviewed@1.0|MIT': {'reason': 'Missing required notice'}
+        }))
+        self.rehash()
+        self.assertEqual(self.run_check().returncode, 0)
+        self.assertNotEqual(self.run_check('--release').returncode, 0)
+
+    def test_platform_decision_must_be_explicit_and_unknown_states_fail(self):
+        path = self.root / 'legal/release-review.json'
+        for status, allowed in [('pending', False), ('blocked', False), ('documented', True),
+                                ('resolved', True), ('typo', False)]:
+            with self.subTest(status=status):
+                path.write_text(json.dumps({'fixture': {
+                    'status': status, 'reason': 'Retained uncertainty',
+                    'release_basis': 'Explicit reviewed distribution decision'
+                }}))
+                self.rehash()
+                self.assertEqual(self.run_check('--release').returncode == 0, allowed)
 
 
 if __name__ == '__main__':
