@@ -11,6 +11,7 @@ mod optimized;
 mod optimized_mesh;
 mod quads;
 mod relaxed;
+mod skin;
 
 impl Mesh {
     pub fn validate_closed(&self) -> Result<(), String> {
@@ -66,6 +67,16 @@ impl Mesh {
         resolution: u32,
         topology: super::Topology,
         algorithm: super::QuadRemeshAlgorithm,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Self, String> {
+        self.remesh_projected_cancellable(resolution, topology, algorithm, true, cancelled)
+    }
+    pub(crate) fn remesh_projected_cancellable(
+        &self,
+        resolution: u32,
+        topology: super::Topology,
+        algorithm: super::QuadRemeshAlgorithm,
+        project_voxel_skin: bool,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Self, String> {
         if cancelled() {
@@ -152,6 +163,16 @@ impl Mesh {
             }
         }
         drop(crossings);
+        if topology == super::Topology::Quads && algorithm == super::QuadRemeshAlgorithm::VoxelSkin
+        {
+            let mesh = skin::extract(&grid, &inside, cancelled)?;
+            let mesh = if project_voxel_skin {
+                skin::project(mesh, self, step, cancelled)?
+            } else {
+                mesh
+            };
+            return self.finish_quad_remesh(mesh, cancelled);
+        }
         // Binary occupancy supplies the union's sign, but it cannot locate the
         // surface between samples. Measure actual distances in a narrow band
         // so extraction interpolates crossings instead of snapping to midpoints.
@@ -214,16 +235,11 @@ impl Mesh {
                 super::QuadRemeshAlgorithm::Optimized => {
                     optimized_mesh::redistribute(&mut mesh, step, cancelled)?
                 }
+                super::QuadRemeshAlgorithm::VoxelSkin => {
+                    unreachable!("voxel skin uses occupancy directly")
+                }
             }
-            self.transfer_groups_to(&mut mesh);
-            // A quad is one editable face even though its render triangles can
-            // sample different source groups at a border.
-            for pair in mesh.polygroups.as_chunks_mut::<2>().0 {
-                pair[1] = pair[0];
-            }
-            self.transfer_materials_to(&mut mesh, &cancelled)?;
-            mesh.validate_closed()?;
-            return Ok(mesh);
+            return self.finish_quad_remesh(mesh, cancelled);
         }
         let mut mesh = Mesh {
             uv: Default::default(),
@@ -331,6 +347,21 @@ impl Mesh {
         }
         mesh.smooth_remesh();
         self.transfer_groups_to(&mut mesh);
+        self.transfer_materials_to(&mut mesh, &cancelled)?;
+        mesh.validate_closed()?;
+        Ok(mesh)
+    }
+    fn finish_quad_remesh(
+        &self,
+        mut mesh: Mesh,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Self, String> {
+        self.transfer_groups_to(&mut mesh);
+        // A quad is one editable face even when its render triangles sample
+        // different source groups at a border.
+        for pair in mesh.polygroups.as_chunks_mut::<2>().0 {
+            pair[1] = pair[0];
+        }
         self.transfer_materials_to(&mut mesh, &cancelled)?;
         mesh.validate_closed()?;
         Ok(mesh)

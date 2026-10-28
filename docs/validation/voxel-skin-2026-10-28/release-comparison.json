@@ -1,0 +1,156 @@
+{
+  "cpu": "Intel Core i7-7500U",
+  "build": "cargo test --release --locked",
+  "resolution": 48,
+  "method": "Three sequential runs per fixture. Times include occupancy, extraction, optional redistribution/projection, group/material transfer and mesh validation. They exclude project load/save, independent deviation sampling, UI and final document commit. Debug/release meshes match exactly.",
+  "fixtures": {
+    "head": {
+      "runs": [
+        {
+          "stepped": {
+            "max_sampled_deviation_voxels": [
+              0.8607685565948486,
+              0.6746919751167297
+            ],
+            "projected": false,
+            "quads": 5534,
+            "seconds": 0.045235827,
+            "vertices": 5536
+          },
+          "projected": {
+            "max_sampled_deviation_voxels": [
+              0.490225225687027,
+              0.8405575752258301
+            ],
+            "projected": true,
+            "quads": 5534,
+            "seconds": 0.088308176,
+            "vertices": 5536
+          }
+        },
+        {
+          "stepped": {
+            "max_sampled_deviation_voxels": [
+              0.8607685565948486,
+              0.6746919751167297
+            ],
+            "projected": false,
+            "quads": 5534,
+            "seconds": 0.036419305,
+            "vertices": 5536
+          },
+          "projected": {
+            "max_sampled_deviation_voxels": [
+              0.490225225687027,
+              0.8405575752258301
+            ],
+            "projected": true,
+            "quads": 5534,
+            "seconds": 0.07785915,
+            "vertices": 5536
+          }
+        },
+        {
+          "stepped": {
+            "max_sampled_deviation_voxels": [
+              0.8607685565948486,
+              0.6746919751167297
+            ],
+            "projected": false,
+            "quads": 5534,
+            "seconds": 0.038691834,
+            "vertices": 5536
+          },
+          "projected": {
+            "max_sampled_deviation_voxels": [
+              0.490225225687027,
+              0.8405575752258301
+            ],
+            "projected": true,
+            "quads": 5534,
+            "seconds": 0.076451197,
+            "vertices": 5536
+          }
+        }
+      ],
+      "median_seconds": {
+        "stepped": 0.038691834,
+        "projected": 0.07785915
+      }
+    },
+    "branched": {
+      "runs": [
+        {
+          "stepped": {
+            "max_sampled_deviation_voxels": [
+              0.8584446907043457,
+              0.515415608882904
+            ],
+            "projected": false,
+            "quads": 3454,
+            "seconds": 0.029610484,
+            "vertices": 3456
+          },
+          "projected": {
+            "max_sampled_deviation_voxels": [
+              0.3342662453651428,
+              0.434511661529541
+            ],
+            "projected": true,
+            "quads": 3454,
+            "seconds": 0.066505489,
+            "vertices": 3456
+          }
+        },
+        {
+          "stepped": {
+            "max_sampled_deviation_voxels": [
+              0.8584446907043457,
+              0.515415608882904
+            ],
+            "projected": false,
+            "quads": 3454,
+            "seconds": 0.025269644,
+            "vertices": 3456
+          },
+          "projected": {
+            "max_sampled_deviation_voxels": [
+              0.3342662453651428,
+              0.434511661529541
+            ],
+            "projected": true,
+            "quads": 3454,
+            "seconds": 0.059441755,
+            "vertices": 3456
+          }
+        },
+        {
+          "stepped": {
+            "max_sampled_deviation_voxels": [
+              0.8584446907043457,
+              0.515415608882904
+            ],
+            "projected": false,
+            "quads": 3454,
+            "seconds": 0.022351928,
+            "vertices": 3456
+          },
+          "projected": {
+            "max_sampled_deviation_voxels": [
+              0.3342662453651428,
+              0.434511661529541
+            ],
+            "projected": true,
+            "quads": 3454,
+            "seconds": 0.048556527,
+            "vertices": 3456
+          }
+        }
+      ],
+      "median_seconds": {
+        "stepped": 0.025269644,
+        "projected": 0.059441755
+      }
+    }
+  }
+}

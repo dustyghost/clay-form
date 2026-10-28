@@ -126,6 +126,41 @@ fn quad_topology_controls_offscreen_review() {
         crate::sculpt::QuadRemeshAlgorithm::Optimized
     );
 
+    click_guide_label(&mut g, "Voxel skin");
+    assert!(g.app.document.mesh_settings().voxel_skin_project);
+    let before_projection = g.app.document.geometry_snapshot();
+    click_guide_label(&mut g, "Project to original surface");
+    assert!(!g.app.document.mesh_settings().voxel_skin_project);
+    let unprojected_settings = g.app.document.geometry_snapshot();
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), before_projection);
+    g.app.dispatch(Command::Redo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), unprojected_settings);
+    let saved = serde_json::to_vec(&g.app.document.project()).unwrap();
+    g.app
+        .document
+        .replace_project(serde_json::from_slice(&saved).unwrap(), "voxel-skin.clay")
+        .unwrap();
+    assert!(!g.app.document.mesh_settings().voxel_skin_project);
+    assert_eq!(
+        g.app.document.mesh_settings().quad_remesh_algorithm,
+        crate::sculpt::QuadRemeshAlgorithm::VoxelSkin
+    );
+    click_guide_label(&mut g, "Remesh now");
+    finish_mesh_job(&mut g.app);
+    let stepped = g.app.document.mesh().clone();
+    g.save("voxel-skin-stepped-controls");
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), unprojected_settings);
+    click_guide_label(&mut g, "Project to original surface");
+    click_guide_label(&mut g, "Remesh now");
+    finish_mesh_job(&mut g.app);
+    assert_eq!(g.app.document.mesh().quads, stepped.quads);
+    assert_ne!(g.app.document.mesh().vertices, stepped.vertices);
+    g.app.document.mesh().require_adaptive_quads().unwrap();
+    g.save("voxel-skin-projected-controls");
+    g.app.dispatch(Command::Undo, &g.ctx);
+
     click_guide_label(&mut g, "Surface nets");
     assert_eq!(
         g.app.document.mesh_settings().quad_remesh_algorithm,

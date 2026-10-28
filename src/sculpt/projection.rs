@@ -320,6 +320,25 @@ impl Mesh {
         options: ProjectionOptions,
         cancel: &impl Fn() -> bool,
     ) -> Result<(Mesh, ProjectionReport), String> {
+        self.project_details_impl(source, options, cancel, false)
+    }
+    // Voxel stair steps may collapse under projection. Pin difficult regions
+    // locally instead of cancelling an otherwise useful fit of the whole skin.
+    pub(super) fn project_details_locally(
+        &self,
+        source: &Mesh,
+        options: ProjectionOptions,
+        cancel: &impl Fn() -> bool,
+    ) -> Result<(Mesh, ProjectionReport), String> {
+        self.project_details_impl(source, options, cancel, true)
+    }
+    fn project_details_impl(
+        &self,
+        source: &Mesh,
+        options: ProjectionOptions,
+        cancel: &impl Fn() -> bool,
+        local_rejection: bool,
+    ) -> Result<(Mesh, ProjectionReport), String> {
         options.validate()?;
         self.validate()?;
         source.validate()?;
@@ -373,7 +392,11 @@ impl Mesh {
             return Err("Projection cancelled".into());
         }
         let proposed = mesh.vertices.clone();
-        mesh.limit_projection_deformation(&self.vertices);
+        if local_rejection {
+            mesh.limit_local_projection_deformation(&self.vertices);
+        } else {
+            mesh.limit_projection_deformation(&self.vertices);
+        }
         report.limited = mesh
             .vertices
             .iter()

@@ -458,6 +458,7 @@ mod adaptive_mode_tests {
         for algorithm in [
             crate::sculpt::QuadRemeshAlgorithm::Relaxed,
             crate::sculpt::QuadRemeshAlgorithm::Optimized,
+            crate::sculpt::QuadRemeshAlgorithm::VoxelSkin,
         ] {
             document.set_quad_remesh_algorithm(algorithm).unwrap();
             let encoded = serde_json::to_value(document.project()).unwrap();
@@ -473,12 +474,26 @@ mod adaptive_mode_tests {
             document.undo();
         }
         let mut old = current.clone();
+        assert!(document.mesh_settings().voxel_skin_project);
+        document.set_voxel_skin_projection(false).unwrap();
+        let saved: crate::sculpt::Project =
+            serde_json::from_value(serde_json::to_value(document.project()).unwrap()).unwrap();
+        assert!(!saved.mesh_settings.voxel_skin_project);
+        document.undo();
+        assert!(document.mesh_settings().voxel_skin_project);
+        document.redo();
+        assert!(!document.mesh_settings().voxel_skin_project);
+        old["mesh_settings"]
+            .as_object_mut()
+            .unwrap()
+            .remove("voxel_skin_project");
         old["mesh_settings"]
             .as_object_mut()
             .unwrap()
             .remove("remesh_topology");
         let migrated: crate::sculpt::Project = serde_json::from_value(old).unwrap();
         assert_eq!(migrated.mesh_settings.remesh_topology, Topology::Triangles);
+        assert!(migrated.mesh_settings.voxel_skin_project);
         let mut absent = current;
         absent.as_object_mut().unwrap().remove("mesh_settings");
         let migrated: crate::sculpt::Project = serde_json::from_value(absent).unwrap();

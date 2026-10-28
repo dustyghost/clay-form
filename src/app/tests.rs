@@ -331,6 +331,11 @@ fn optimized_remeshing_is_explicit_and_undoable() {
     explicit_remeshing_with_algorithm(crate::sculpt::QuadRemeshAlgorithm::Optimized);
 }
 
+#[test]
+fn voxel_skin_remeshing_is_explicit_and_undoable() {
+    explicit_remeshing_with_algorithm(crate::sculpt::QuadRemeshAlgorithm::VoxelSkin);
+}
+
 fn explicit_remeshing_with_algorithm(algorithm: crate::sculpt::QuadRemeshAlgorithm) {
     let mut app = App::default();
     let ctx = egui::Context::default();

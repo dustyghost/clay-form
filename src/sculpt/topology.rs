@@ -20,6 +20,7 @@ pub enum QuadRemeshAlgorithm {
     SurfaceNets,
     Relaxed,
     Optimized,
+    VoxelSkin,
 }
 impl QuadRemeshAlgorithm {
     pub(crate) fn is_default(&self) -> bool {
