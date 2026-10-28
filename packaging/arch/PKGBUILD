@@ -1,6 +1,7 @@
 # Build the tagged upstream source; this recipe is not yet published to AUR.
 pkgname=clay-form
-pkgver=0.1.0
+pkgver=0.1.0alpha1
+_upstream_version=0.1.0-alpha.1
 pkgrel=1
 pkgdesc='Free, open-source desktop sculpting'
 arch=('x86_64' 'aarch64')
@@ -9,7 +10,7 @@ license=('GPL-3.0-only')
 depends=('gcc-libs' 'glibc' 'libx11' 'libxcursor' 'libxi' 'libxrandr' 'libxkbcommon' 'libxkbcommon-x11' 'wayland' 'vulkan-icd-loader')
 makedepends=('git' 'rustup' 'pkgconf' 'python')
 optdepends=('blender: Blender and FBX export' 'gimp: external texture editing')
-source=("git+$url.git#tag=v$pkgver")
+source=("git+$url.git#tag=v$_upstream_version")
 # Git sources use a tag rather than an archive checksum; review the upstream
 # release commit before publishing this recipe and pin a commit if desired.
 sha256sums=('SKIP')

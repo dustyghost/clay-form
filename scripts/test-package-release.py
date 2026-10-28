@@ -1,5 +1,6 @@
 """Focused archive tests; no compiler, network or signing identity required."""
 import importlib.util
+from itertools import product
 import json
 from pathlib import Path
 import plistlib
@@ -16,10 +17,10 @@ spec.loader.exec_module(packager)
 
 class NativeArchiveTests(unittest.TestCase):
     def test_all_targets_preserve_version_notices_source_identity_and_executable(self):
-        for target, suffix in packager.TARGETS.items():
-            with self.subTest(target=target), tempfile.TemporaryDirectory() as temp:
+        for (target, suffix), version in product(packager.TARGETS.items(), ["1.2.3", "0.1.0-alpha.1"]):
+            with self.subTest(target=target, version=version), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
-                (root / 'Cargo.toml').write_text('[package]\nversion = "1.2.3"\n')
+                (root / 'Cargo.toml').write_text(f'[package]\nversion = "{version}"\n')
                 for name in ['LICENSE', 'COPYRIGHT.md', 'README.md', 'THIRD-PARTY-NOTICES.html']:
                     (root / name).write_text(name)
                 for directory in ['docs', 'legal', 'packaging/linux', 'sysroot/share/doc/rust/licenses']:
@@ -43,7 +44,7 @@ class NativeArchiveTests(unittest.TestCase):
 
                 with patch.object(packager, 'ROOT', root), patch('sys.argv', ['packager', '--target', target, '--profile', 'debug']), patch.object(packager.subprocess, 'check_output', side_effect=output), patch.object(packager.subprocess, 'run') as signing:
                     packager.main()
-                name = f'clay-form-v1.2.3-{suffix}'
+                name = f'clay-form-v{version}-{suffix}'
                 extension = '.tar.gz' if 'linux' in target else '.zip'
                 archive = root / 'dist' / (name + extension)
                 self.assertTrue(archive.is_file())
@@ -53,7 +54,7 @@ class NativeArchiveTests(unittest.TestCase):
                 self.assertEqual(metadata['commit'], 'a' * 40)
                 self.assertEqual(metadata['target'], target)
                 self.assertEqual(metadata['profile'], 'debug')
-                self.assertEqual(metadata['source_asset'], 'clay-form-v1.2.3-source.tar.gz')
+                self.assertEqual(metadata['source_asset'], f'clay-form-v{version}-source.tar.gz')
                 if extension == '.zip':
                     with zipfile.ZipFile(archive) as zipped:
                         members = zipped.namelist()
@@ -70,7 +71,8 @@ class NativeArchiveTests(unittest.TestCase):
                     self.assertIn(name + '/Clay Form.app/Contents/Resources/LICENSE', members)
                     plist = plistlib.loads((stage / 'Clay Form.app/Contents/Info.plist').read_bytes())
                     self.assertEqual(plist['CFBundleExecutable'], binary)
-                    self.assertEqual(plist['CFBundleShortVersionString'], '1.2.3')
+                    self.assertEqual(plist['CFBundleShortVersionString'], version.split('-')[0])
+                    self.assertGreater(int(plist['CFBundleVersion']), 0)
                     signing.assert_called_once()
                 else:
                     signing.assert_not_called()

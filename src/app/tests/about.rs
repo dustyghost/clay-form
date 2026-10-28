@@ -23,28 +23,31 @@ fn about_frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) -> 
 fn about_button_opens_ownership_and_licences_without_editing_document() {
     let mut app = App::default();
     let ctx = egui::Context::default();
+    ctx.style_mut(|s| s.animation_time = 0.);
     let before = app.document.geometry_snapshot();
     about_frame(&mut app, &ctx, vec![]);
-    let output = about_frame(&mut app, &ctx, vec![]);
-    let position = output
-        .shapes
-        .iter()
-        .find_map(|s| match &s.shape {
-            egui::Shape::Text(t) if t.galley.text() == "About" => {
-                Some(t.pos + t.galley.size() * 0.5)
-            }
-            _ => None,
-        })
-        .expect("About button must be reachable");
-    about_frame(
-        &mut app,
-        &ctx,
-        vec![
-            egui::Event::PointerMoved(position),
-            primary_event(position, true),
-        ],
-    );
-    about_frame(&mut app, &ctx, vec![primary_event(position, false)]);
+    for label in ["Settings", "About Clay Form"] {
+        let output = about_frame(&mut app, &ctx, vec![]);
+        let position = output
+            .shapes
+            .iter()
+            .find_map(|s| match &s.shape {
+                egui::Shape::Text(t) if t.galley.text() == label => {
+                    Some(t.pos + t.galley.size() * 0.5)
+                }
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("{label} must be reachable"));
+        about_frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::PointerMoved(position),
+                primary_event(position, true),
+            ],
+        );
+        about_frame(&mut app, &ctx, vec![primary_event(position, false)]);
+    }
     assert!(app.ui.about_open);
     about_frame(&mut app, &ctx, vec![]);
     let output = about_frame(&mut app, &ctx, vec![]);

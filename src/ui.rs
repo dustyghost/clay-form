@@ -323,9 +323,6 @@ impl UiState {
                 self.builtin_menu(ui, BuiltinMenu::Edit, document, camera, &mut commands);
                 self.builtin_menu(ui, BuiltinMenu::Settings, document, camera, &mut commands);
                 self.custom_menu_bar(ui, document, &mut commands);
-                if ui.button("About").clicked() {
-                    self.about_open = true;
-                }
                 ui.menu_button("Export", |ui| {
                     if ui
                         .button("OBJ")

@@ -33,6 +33,9 @@ impl UiState {
             .vscroll(true)
             .show(ctx, |ui| {
                 ui.heading(format!("Clay Form {}", env!("CARGO_PKG_VERSION")));
+                if let Some(number) = env!("CARGO_PKG_VERSION_PRE").strip_prefix("alpha.") {
+                    ui.strong(format!("Alpha {number} · early testing release"));
+                }
                 ui.label(format!("Build: {}", env!("CLAY_BUILD_ID")));
                 ui.label("Free, open-source sculpting • GPL-3.0-only");
                 ui.label("Copyright © 2026 Clay Form contributors. No warranty.");

@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 import plistlib
 from pathlib import Path
 import shutil
@@ -39,10 +40,15 @@ def main():
         contents = stage / "Clay Form.app" / "Contents"
         destination = contents / "MacOS"
         destination.mkdir(parents=True)
+        build_number = os.environ.get("GITHUB_RUN_NUMBER", "1")
+        if not build_number.isdecimal() or int(build_number) < 1:
+            raise SystemExit("macOS bundle build number must be a positive integer")
         (contents / "Info.plist").write_bytes(plistlib.dumps({
             "CFBundleExecutable": binary, "CFBundleIdentifier": "io.github.dustyghost.clay-form",
             "CFBundleName": "Clay Form", "CFBundlePackageType": "APPL",
-            "CFBundleShortVersionString": version, "CFBundleVersion": version,
+            # The full SemVer remains in About and BUILD-INFO.
+            "CFBundleShortVersionString": version.split("-", 1)[0],
+            "CFBundleVersion": build_number,
             "NSHighResolutionCapable": True,
         }))
     shutil.copy2(ROOT / "target" / args.target / args.profile / binary, destination / binary)

@@ -1,4 +1,6 @@
-# Clay Form
+# Clay Form — Alpha 1
+
+Version **0.1.0-alpha.1** is an early testing release.
 
 A Rust desktop sculpting prototype built with eframe/egui. Start from a sphere and sculpt real mesh vertices with a pen or mouse.
 
@@ -14,6 +16,9 @@ claim of tested support. [Release instructions](.github/RELEASING.md) cover
 Windows, macOS, Linux and ARM64 artifacts, corresponding source and checksums.
 
 ## Run
+
+Windows packages require the [Microsoft Visual C++ v14 runtime](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist/)
+for their CPU architecture if it is not already installed.
 
 Install Rust through rustup, then run from the repository root (rustup selects the version pinned in `rust-toolchain.toml`):
 

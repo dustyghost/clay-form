@@ -176,6 +176,12 @@ jobs:
             test "$(git rev-list -n 1 "$tag")" = "$(git rev-parse HEAD)"
           fi
           (cd dist && sha256sum *.tar.gz *.zip > SHA256SUMS)
+          prerelease=()
+          if [[ "$VERSION" == *-* ]]; then prerelease+=(--prerelease); fi
+          title="Clay Form $tag"
+          if [[ "$VERSION" =~ -alpha\.([0-9]+)$ ]]; then
+            title="Clay Form Alpha ${BASH_REMATCH[1]} ($tag)"
+          fi
           gh release create "$tag" dist/*.tar.gz dist/*.zip dist/SHA256SUMS \
-            --target "$GITHUB_SHA" --draft --title "Clay Form $tag" \
-            --notes-file .github/RELEASE-NOTES.md
+            --target "$GITHUB_SHA" --draft --title "$title" \
+            --notes-file .github/RELEASE-NOTES.md "${prerelease[@]}"

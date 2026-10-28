@@ -3,11 +3,14 @@
 use clay_form::App;
 use eframe::egui;
 fn main() -> eframe::Result {
+    let title = format!("Clay Form {}", env!("CARGO_PKG_VERSION"));
     eframe::run_native(
         "Clay Form",
         eframe::NativeOptions {
             renderer: eframe::Renderer::Wgpu,
-            viewport: egui::ViewportBuilder::default().with_inner_size([1280., 850.]),
+            viewport: egui::ViewportBuilder::default()
+                .with_title(title)
+                .with_inner_size([1280., 850.]),
             ..Default::default()
         },
         Box::new(|cc| {

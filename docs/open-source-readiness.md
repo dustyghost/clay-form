@@ -7,6 +7,9 @@ claim that Clay Form is already cleared or tested on every platform.
 
 ## Licensing and ownership
 
+The chosen first public testing version is **0.1.0-alpha.1**, displayed as
+**Alpha 1**. This is a prerelease designation, not a claim of production readiness.
+
 The owner confirmed all original code/artwork is theirs to release and that
 no borrowed proprietary assets were included. Original repository content uses
 GPL-3.0-only, with complete terms in LICENSE and package metadata. Official
@@ -51,6 +54,11 @@ xkbcommon and Vulkan runtime libraries/driver. They are not musl/Alpine builds,
 recipe avoids the prebuilt glibc baseline when built locally. Native `.deb`,
 `.rpm`, Flatpak/AppImage, AUR publication, winget and Homebrew distribution are
 follow-up packaging choices; portable archives are the initial delivery format.
+
+The inspected Windows x86-64 executable imports `VCRUNTIME140.dll`. A clean
+Windows installation needs the [matching Microsoft Visual C++ v14 runtime](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist/)
+if it is absent. The runtime is installed separately, not redistributed in our
+ZIP. Verify ARM64's matching runtime during clean-machine testing.
 
 The Linux-specific tablet reader is guarded by target configuration. Native
 pressure events are accepted where available on other platforms, with full

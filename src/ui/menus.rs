@@ -301,6 +301,13 @@ impl UiState {
                 ui.label("Geometry and masks • history resets on New/Open");
             }
             BuiltinMenu::Settings => {
+                if ui.button("About Clay Form").clicked() {
+                    self.about_open = true;
+                    if popup {
+                        ui.close_kind(egui::UiKind::Menu);
+                    }
+                }
+                ui.separator();
                 if ui
                     .add(design::button(
                         ui,
