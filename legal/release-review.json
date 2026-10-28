@@ -1,0 +1,8 @@
+{
+  "macos-sdk-bindings": {
+    "status": "pending",
+    "reason": "Assess redistribution of the Apple SDK-derived bindings described by upstream. This is distinct from collecting MIT notices; the all-platform vendored source archive also contains these bindings.",
+    "evidence": "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+    "review": "docs/research/macos-licensing.md"
+  }
+}

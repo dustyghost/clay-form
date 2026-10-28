@@ -46,6 +46,7 @@ jobs:
               output.write(f'version={version}\n')
           PY
       - run: python scripts/check-notices.py
+      - run: python scripts/test-notices.py
       - run: python scripts/test-package-release.py
       - name: Require completed notice review for releases
         if: github.event_name != 'pull_request'

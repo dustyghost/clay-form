@@ -43,8 +43,10 @@ fn startup_notice_continue_and_version_specific_opt_out_survive_restart() {
     let path = directory.0.join("preferences.json");
     let ctx = egui::Context::default();
     ctx.style_mut(|s| s.animation_time = 0.);
-    let mut app = App::default();
-    app.preferences_path = Some(path.clone());
+    let mut app = App {
+        preferences_path: Some(path.clone()),
+        ..Default::default()
+    };
     app.ui.startup_notice_open = true;
     app.ui.recovery_open = true;
     let before = app.document.geometry_snapshot();

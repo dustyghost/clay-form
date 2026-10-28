@@ -81,6 +81,11 @@ licensing assessment of SDK-derived binding redistribution and the collected
 historical notices before calling the macOS distribution legally cleared.
 No maintainer or Apple contact was made during this research.
 
+The [follow-up notice verification](license-verification.md) records exact
+historical comparisons and narrows the overall pending inventory to nine
+macOS dependency records. The SDK-binding question is separately enforced
+through `legal/release-review.json`; completing attribution does not close it.
+
 Switching Clay Form to a permissive licence would not itself cure missing
 third-party notices or SDK-derived-content rights. Upgrading dependencies may
 improve packaged notices, but requires its own review and runtime validation.

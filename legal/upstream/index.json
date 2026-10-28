@@ -95,6 +95,20 @@
       "source": "crate:exr@1.74.2/LICENSE.md"
     }
   ],
+  "fax@0.2.6|MIT": [
+    {
+      "file": "7101390b4c8edd752f4c0de47f35d61b44d9cf0ee8dd032115e25644e277cfff.txt",
+      "sha256": "7101390b4c8edd752f4c0de47f35d61b44d9cf0ee8dd032115e25644e277cfff",
+      "source": "https://raw.githubusercontent.com/pdf-rs/fax/ad46e7e76dfe74c171ef04f2ccb70fd84b2a117f/LICENSE"
+    }
+  ],
+  "fax_derive@0.2.0|MIT": [
+    {
+      "file": "7101390b4c8edd752f4c0de47f35d61b44d9cf0ee8dd032115e25644e277cfff.txt",
+      "sha256": "7101390b4c8edd752f4c0de47f35d61b44d9cf0ee8dd032115e25644e277cfff",
+      "source": "https://raw.githubusercontent.com/pdf-rs/fax/ad46e7e76dfe74c171ef04f2ccb70fd84b2a117f/LICENSE"
+    }
+  ],
   "gpu-alloc-types@0.3.1|MIT": [
     {
       "file": "f774bf68151714985324d90adbd59e8f271b7ba518608d871b6ba16464692879.txt",
@@ -121,6 +135,18 @@
       "file": "5226e27d5fbc683db56c52853cdb9d15b69abadb525a60f95c862c2dbd77cdc8.txt",
       "sha256": "5226e27d5fbc683db56c52853cdb9d15b69abadb525a60f95c862c2dbd77cdc8",
       "source": "https://raw.githubusercontent.com/zakarumych/gpu-descriptor/bb28b4e55b742e0ea3e7a0968e7ee6287ba0e06a/license/MIT"
+    }
+  ],
+  "hexf-parse@0.2.1|CC0-1.0": [
+    {
+      "file": "4a56dbdbc12054fd33b7a2634a45cbbe6fe12f5e6f4081002cbfa527f7220c70.txt",
+      "sha256": "4a56dbdbc12054fd33b7a2634a45cbbe6fe12f5e6f4081002cbfa527f7220c70",
+      "source": "https://raw.githubusercontent.com/lifthrasiir/hexf/4225763d744183d720f575ae96d04161b4d08ea0/parse/Cargo.toml"
+    },
+    {
+      "file": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499.txt",
+      "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+      "source": "https://creativecommons.org/publicdomain/zero/1.0/legalcode.txt"
     }
   ],
   "libm@0.2.16|MIT": [
@@ -424,6 +450,23 @@
       "file": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383.txt",
       "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383",
       "source": "crate:windows_x86_64_msvc@0.53.1/license-mit"
+    }
+  ],
+  "zune-inflate@0.2.54|MIT": [
+    {
+      "file": "e870d7fd7819a9f0453c62798cb52ae95d148a8c91dc2de1d983f997143c72de.txt",
+      "sha256": "e870d7fd7819a9f0453c62798cb52ae95d148a8c91dc2de1d983f997143c72de",
+      "source": "https://raw.githubusercontent.com/etemesi254/zune-image/69502ce83fdfecdd0beefd677e2abb3781b29d98/LICENSE.md"
+    },
+    {
+      "file": "82dadd3c4a4df0d55d055f78f0fbb14e2fc3f66516a45d57dbcc5aadf32ebbb0.txt",
+      "sha256": "82dadd3c4a4df0d55d055f78f0fbb14e2fc3f66516a45d57dbcc5aadf32ebbb0",
+      "source": "crate:zune-inflate@0.2.54/src/lib.rs#lines-1-5"
+    },
+    {
+      "file": "d30047bca3b516639339a3c279bb84c3483124fb5a9dafe3c75056a85090e745.txt",
+      "sha256": "d30047bca3b516639339a3c279bb84c3483124fb5a9dafe3c75056a85090e745",
+      "source": "https://raw.githubusercontent.com/etemesi254/zune-image/24603fed7981bbbc6db6dca7f58b1bbcc0a5e885/LICENSE-MIT"
     }
   ]
 }

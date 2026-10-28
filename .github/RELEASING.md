@@ -10,6 +10,9 @@ are test artifacts, not public releases.
 Complete [the readiness review](../docs/open-source-readiness.md), including
 outstanding licence notices and the macOS dependency assessment. The release
 workflow refuses to proceed while `legal/pending-review.json` is nonempty.
+A pending item in `legal/release-review.json` also blocks release. See the
+[verification findings](../docs/research/license-verification.md) for evidence
+and the unresolved historical notices.
 A successful notice-hash check alone is not legal clearance.
 
 Run the regular PR CI and native packaging matrix on the final commit. Smoke

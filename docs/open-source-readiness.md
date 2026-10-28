@@ -31,6 +31,11 @@ multiple notices and font-specific terms must also be retained. Notices are
 embedded in About and provided in THIRD-PARTY-NOTICES.html. Exact upstream
 notice files, origins and hashes are retained in `legal/upstream/`.
 
+The [follow-up verification](research/license-verification.md) resolved four
+of the original 13 pending records: fax, fax_derive, hexf-parse and zune-inflate.
+Nine remain. It also added copyright/trademark text extracted from the exact
+bundled fonts and checked the relevant registry archives against Cargo.lock.
+
 **Outstanding:** `legal/pending-review.json` identifies dependencies whose
 manifest declares a licence but whose complete release-specific notices remain
 unresolved. Generic copyright placeholders are explicitly marked pending in
@@ -39,6 +44,8 @@ workflow blocks distributable builds until these entries are resolved. The
 [macOS review](research/macos-licensing.md) separately records SDK-binding and
 historical-attribution questions. These require a targeted licensing assessment;
 automated SPDX acceptance is insufficient evidence to close them.
+The SDK-binding question has its own gate in `legal/release-review.json` so
+clearing notice records alone cannot silently clear that separate review.
 
 ## Platforms
 

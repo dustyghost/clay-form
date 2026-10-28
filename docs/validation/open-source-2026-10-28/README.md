@@ -17,6 +17,11 @@
 - Notice input hashes and collected upstream-file hashes: passed. The release
   gate deliberately rejects the unresolved notice inventory; these are draft
   audit records, not completed legal clearance.
+- Follow-up licence verification resolved four of 13 pending records and
+  preserved font metadata notices. Notice generation is deterministic; focused
+  checks reject altered generated/additional notices and a pending SDK-binding
+  review even after clearing notice records. The release gate correctly refuses
+  distribution with nine notices and the separate SDK review outstanding.
 - Gitleaks 8.30.1: scanned 95 reachable commits / about 6.23 MB, no matching
   leaks. A clean pattern scan is not proof of complete absence of private data.
 - Native compilation and packaging passed in PR CI for all six targets, and

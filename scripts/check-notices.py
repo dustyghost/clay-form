@@ -10,7 +10,9 @@ for name, digest in json.loads((root / "legal/inputs.json").read_text()).items()
     if hashlib.sha256((root / name).read_bytes()).hexdigest() != digest:
         raise SystemExit(f"Regenerate and review third-party notices: {name} changed")
 records = json.loads((root / "legal/third-party.json").read_text())
-for entries in json.loads((root / "legal/upstream/index.json").read_text()).values():
+sources = list(json.loads((root / "legal/upstream/index.json").read_text()).values())
+sources.append(json.loads((root / "legal/additional-notices.json").read_text()))
+for entries in sources:
     for entry in entries:
         data = (root / "legal/upstream" / entry["file"]).read_bytes()
         if hashlib.sha256(data).hexdigest() != entry["sha256"]:
@@ -19,7 +21,19 @@ if not records or any(not all(r.get(k) for k in ("name", "repository", "license"
     raise SystemExit("Incomplete third-party notices")
 print(f"Verified {len(records)} third-party notices and their input hashes")
 pending = json.loads((root / "legal/pending-review.json").read_text())
+decisions = json.loads((root / "legal/review-decisions.json").read_text())
+if not set(pending).issubset(decisions):
+    raise SystemExit("Every pending notice needs a recorded review decision")
+for key, decision in decisions.items():
+    if decision["status"] not in ("pending", "resolved"):
+        raise SystemExit(f"Unknown notice review status: {key}")
+    if (key in pending) != (decision["status"] == "pending"):
+        raise SystemExit(f"Notice review decision disagrees with pending inventory: {key}")
 if pending:
     print(f"NOT CLEARED FOR DISTRIBUTION: {len(pending)} notice records need review")
-    if "--release" in sys.argv:
-        raise SystemExit("Resolve legal/pending-review.json before building a distributable release")
+reviews = json.loads((root / "legal/release-review.json").read_text())
+unresolved = [name for name, review in reviews.items() if review["status"] != "resolved"]
+if unresolved:
+    print("RELEASE REVIEW PENDING: " + ", ".join(unresolved))
+if "--release" in sys.argv and (pending or unresolved):
+    raise SystemExit("Resolve the pending notices and release review before building a distributable release")

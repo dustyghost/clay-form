@@ -2,8 +2,13 @@
   "Cargo.lock": "fbaf442999eb49ff0ae530f42e7cb97ee03837f36f654d9e6b7cd130b44c0265",
   "Cargo.toml": "6e07e2fa0e5d697ddf34e6bb10b1aba478849cc8a3e9f12d04c704ee9ba2b4d2",
   "about.toml": "ac5b74aa7f3f3d9182bf9be22c778626008219c018f709458cee9ba846d2ce70",
-  "scripts/generate-notices.py": "5446e11e7f6131085a3037634e4f001582795ad4decee35aecc6b8a44ee768cf",
-  "legal/upstream/index.json": "753c0bf82c4e47afaf1117c58d4503c500037d91e58b6150609f4224ef25ed7a",
-  "legal/pending-review.json": "aa1d3747a4b384cba873e3c9249d8601f64291f0a3796896b63912b266e19bca",
-  "legal/additional-notices.json": "c3f11f2ce77e7858421a1b838f9575bc22cae1db3887241c17c0337dacb6c1ed"
+  "scripts/generate-notices.py": "16266e6722f40b19c852dbedf973f22e5ef5e20220a3c9da9707e5e58f3671ad",
+  "legal/upstream/index.json": "d4940998537cfe2f0491cd2887276c2511148aa64fdc457f8ea0dbc7ca5996a4",
+  "legal/pending-review.json": "e165f976b5d62d4537bd76e2c3f773e6f9e6ceca2d8e18ee0bdc57366ee6db96",
+  "legal/additional-notices.json": "f0440110f85fa521a12d19e91bc3ae08557d5174ef71b13f2ed057aa82ac5691",
+  "legal/font-metadata.json": "844f3511af96ad977e136ce75c271670bb005e74b908ef3cfe5d1ea394aefa63",
+  "legal/review-decisions.json": "516836bf9db71b1cf3715cba74e364ab32e21e1e1ce153f8f5b09d7fb974d62c",
+  "legal/release-review.json": "26173a1d91d7463c1625a6e1b1efd7d96975ad63b760bbac3bdba52ab851515a",
+  "legal/third-party.json": "9cc45994e846ef00c1e2fef31c28f712c846369aa05cf57657b4527de5a3725a",
+  "THIRD-PARTY-NOTICES.html": "7a8c71f614f24e65a5425bf3abf33cc5d44e3d78719d2f970f107f5b8bcd5599"
 }

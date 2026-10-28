@@ -67,15 +67,21 @@ def main():
         ["cargo", "metadata", "--locked", "--offline", "--format-version", "1"], cwd=ROOT))
     fonts = next(p for p in metadata["packages"] if p["name"] == "epaint_default_fonts")
     directory = Path(fonts["manifest_path"]).parent / "fonts"
-    for name, repository, license, filename in [
-        ("Hack font", "https://github.com/source-foundry/Hack", "MIT AND Bitstream-Vera", "Hack-Regular.txt"),
-        ("Noto Emoji font", "https://github.com/googlefonts/noto-emoji", "OFL-1.1", "OFL.txt"),
-        ("Ubuntu font", "https://github.com/canonical/Ubuntu-fonts", "Ubuntu-font-1.0", "UFL.txt"),
-        ("emoji-icon-font", "https://github.com/jslegers/emoji-icon-font", "MIT", "emoji-icon-font-mit-license.txt"),
+    font_metadata = json.loads((ROOT / "legal/font-metadata.json").read_text())
+    for name, repository, license, filename, font_file in [
+        ("Hack font", "https://github.com/source-foundry/Hack", "MIT AND Bitstream-Vera", "Hack-Regular.txt", "Hack-Regular.ttf"),
+        ("Noto Emoji font", "https://github.com/googlefonts/noto-emoji", "OFL-1.1", "OFL.txt", "NotoEmoji-Regular.ttf"),
+        ("Ubuntu font", "https://github.com/canonical/Ubuntu-fonts", "Ubuntu-font-1.0", "UFL.txt", "Ubuntu-Light.ttf"),
+        ("emoji-icon-font", "https://github.com/jslegers/emoji-icon-font", "MIT", "emoji-icon-font-mit-license.txt", "emoji-icon-font.ttf"),
     ]:
+        font = font_metadata[font_file]
+        if hashlib.sha256((directory / font_file).read_bytes()).hexdigest() != font["sha256"]:
+            raise SystemExit(f"Review changed font metadata: {font_file}")
+        notices = [entry["text"] for entry in font["notices"]]
+        notices.append((directory / filename).read_text())
         records.append(dict(name=name, version=f"bundled by epaint_default_fonts {fonts['version']}",
                             repository=repository, license=license,
-                            text=(directory / filename).read_text()))
+                            text="\n\n".join(notices)))
     for entry in json.loads((ROOT / "legal/additional-notices.json").read_text()):
         data = (upstream / entry["file"]).read_bytes()
         if hashlib.sha256(data).hexdigest() != entry["sha256"]:
@@ -98,7 +104,10 @@ def main():
     parts.append('</html>')
     (ROOT / "THIRD-PARTY-NOTICES.html").write_text("\n".join(parts) + "\n")
     hashes = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
-              for name in ("Cargo.lock", "Cargo.toml", "about.toml", "scripts/generate-notices.py", "legal/upstream/index.json", "legal/pending-review.json", "legal/additional-notices.json")}
+              for name in ("Cargo.lock", "Cargo.toml", "about.toml", "scripts/generate-notices.py",
+                           "legal/upstream/index.json", "legal/pending-review.json", "legal/additional-notices.json",
+                           "legal/font-metadata.json", "legal/review-decisions.json", "legal/release-review.json",
+                           "legal/third-party.json", "THIRD-PARTY-NOTICES.html")}
     (legal / "inputs.json").write_text(json.dumps(hashes, indent=2) + "\n")
     print(f"Wrote {len(records)} notices")
 
