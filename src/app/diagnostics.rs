@@ -13,7 +13,7 @@ impl App {
         let modifiers = ctx.input(|i| i.modifiers);
         self.document.set_diagnostic_context(serde_json::json!({
             "selected_brush": self.ui.brush_index_for_context(&self.document, ctx),
-            "camera": { "yaw": camera.yaw, "pitch": camera.pitch, "zoom": camera.zoom,
+            "camera": { "yaw": camera.yaw, "pitch": camera.pitch, "roll": camera.roll, "zoom": camera.zoom,
                 "pan": [camera.pan.x, camera.pan.y], "perspective": camera.perspective,
                 "field_of_view": camera.field_of_view, "perspective_radius": camera.perspective_radius },
             "pressure_at_boundary": self.pressure,

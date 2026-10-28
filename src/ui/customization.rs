@@ -797,6 +797,7 @@ impl UiState {
             ui.label("Click a binding and press the new keys. Escape cancels.");
             ui.label("1–0 and Shift+1–0 are separate bindings. Changes save automatically.");
             ui.label("Shortcuts pause during text entry and settings editing.");
+            self.touch_settings(ui, document);
             ui.add(egui::TextEdit::singleline(&mut self.customization.key_search).hint_text("Search actions, brushes and menus"));
             if let Some(action) = &self.capturing { ui.strong(format!("Press keys for {}…", self.action_label(action, document))); }
             ui.label(&self.settings_message);

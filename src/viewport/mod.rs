@@ -742,6 +742,7 @@ impl Viewport {
             {
                 camera.yaw = yaw;
                 camera.pitch = pitch;
+                camera.roll = 0.;
             }
             self.session.gesture = None;
             self.session.gizmo_start = None;

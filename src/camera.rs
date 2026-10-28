@@ -5,6 +5,8 @@ use eframe::egui::Vec2;
 pub struct Camera {
     pub yaw: f32,
     pub pitch: f32,
+    /// Clockwise screen-space rotation, in radians.
+    pub roll: f32,
     pub zoom: f32,
     pub pan: Vec2,
     pub perspective: bool,
@@ -16,6 +18,7 @@ impl Default for Camera {
         Self {
             yaw: 0.,
             pitch: 0.,
+            roll: 0.,
             zoom: 1.,
             pan: Vec2::ZERO,
             perspective: false,
@@ -90,16 +93,30 @@ impl Camera {
     pub fn basis(&self) -> (Vec3, Vec3, Vec3) {
         let (s, c) = self.yaw.sin_cos();
         let (p, q) = self.pitch.sin_cos();
+        let right = Vec3(c, 0., -s);
+        let up = Vec3(s * p, q, c * p);
+        let (sr, cr) = self.roll.sin_cos();
         (
-            Vec3(c, 0., -s),
-            Vec3(s * p, q, c * p),
+            right * cr + up * sr,
+            up * cr - right * sr,
             Vec3(s * q, -p, c * q),
         )
+    }
+    pub fn roll_by(&mut self, radians: f32) {
+        if radians.is_finite() {
+            self.roll = (self.roll + radians) % std::f32::consts::TAU;
+        }
+    }
+    pub fn roll_drag(&mut self, delta: Vec2) {
+        self.roll_by(delta.x * 0.008);
     }
     pub fn orbit(&mut self, delta: Vec2) {
         if !delta.is_finite() {
             return;
         }
+        // Interpret the drag in screen axes even after rolling the view.
+        let (s, c) = self.roll.sin_cos();
+        let delta = Vec2::new(c * delta.x + s * delta.y, -s * delta.x + c * delta.y);
         // Wrap complete turns for precision, without imposing a pole limit.
         let wrap = |angle: f32| angle % std::f32::consts::TAU;
         // After crossing a pole, world-up points down on screen. Reverse the
@@ -113,6 +130,52 @@ impl Camera {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn screen_roll_rotates_projection_without_changing_depth_or_view_direction() {
+        for (yaw, pitch) in [(0., 0.), (0.7, 0.4), (-1.2, 2.)] {
+            let mut camera = Camera {
+                yaw,
+                pitch,
+                ..Default::default()
+            };
+            let before = camera.basis();
+            camera.roll_by(std::f32::consts::FRAC_PI_2);
+            let after = camera.basis();
+            assert!((after.0 - before.1).len() < 1e-6);
+            assert!((after.1 + before.0).len() < 1e-6);
+            assert_eq!(after.2, before.2);
+            // A point originally on screen-right moves down for a clockwise roll.
+            assert!(-before.0.dot(after.1) > 0.99);
+            assert!((after.0.cross(after.1) - after.2).len() < 1e-5);
+            camera.roll_by(f32::NAN);
+            assert_eq!(camera.roll, std::f32::consts::FRAC_PI_2);
+            camera.reset();
+            assert_eq!(camera.roll, 0.);
+        }
+    }
+
+    #[test]
+    fn screen_roll_keeps_orbit_drags_following_screen_direction() {
+        for roll in [0., 0.7, std::f32::consts::FRAC_PI_2, 3., -1.] {
+            for pitch in [0., 0.7, 2.] {
+                for delta in [Vec2::new(1., 0.), Vec2::new(0., 1.)] {
+                    let mut camera = Camera {
+                        roll,
+                        pitch,
+                        ..Default::default()
+                    };
+                    let point = camera.basis().2;
+                    camera.orbit(delta);
+                    let (right, up, _) = camera.basis();
+                    let motion = Vec2::new(point.dot(right), -point.dot(up));
+                    assert!(
+                        motion.dot(delta) > 0.,
+                        "roll={roll}, pitch={pitch}, delta={delta:?}"
+                    );
+                }
+            }
+        }
+    }
     #[test]
     fn horizontal_orbit_follows_drag_on_both_sides_of_the_poles() {
         for pitch in [

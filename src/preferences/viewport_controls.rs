@@ -5,6 +5,7 @@ pub(crate) enum ViewportControlKind {
     Pan,
     Zoom,
     Orbit,
+    Roll,
     Action(Action),
 }
 
@@ -33,6 +34,7 @@ pub(crate) enum ViewportControlIcon {
     Pan,
     Zoom,
     Orbit,
+    Roll,
     Reset,
     Groups,
     Wireframe,
@@ -45,11 +47,12 @@ pub(crate) enum ViewportControlIcon {
     Settings,
 }
 impl ViewportControlIcon {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Auto,
         Self::Pan,
         Self::Zoom,
         Self::Orbit,
+        Self::Roll,
         Self::Reset,
         Self::Groups,
         Self::Wireframe,
@@ -67,6 +70,7 @@ impl ViewportControlIcon {
             Self::Pan => "Pan",
             Self::Zoom => "Zoom",
             Self::Orbit => "Orbit",
+            Self::Roll => "Roll",
             Self::Reset => "Reset",
             Self::Groups => "Groups",
             Self::Wireframe => "Wireframe",
@@ -105,6 +109,7 @@ pub(crate) fn default_viewport_controls() -> Vec<ViewportControl> {
         Action(super::Action::ResetView),
         Action(super::Action::PolygroupColors),
         Action(super::Action::Wireframe),
+        Roll,
     ]
     .into_iter()
     .enumerate()
@@ -118,7 +123,7 @@ pub(crate) fn default_viewport_controls() -> Vec<ViewportControl> {
         style: ViewportControlStyle::Icon,
         icon: ViewportControlIcon::Auto,
         position: [1., 0.56],
-        offset: [0., (i as f32 - 2.5) * 48.],
+        offset: [0., (i as f32 - 3.) * 48.],
     })
     .collect()
 }

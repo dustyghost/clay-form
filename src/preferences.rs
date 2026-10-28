@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 pub(crate) use crate::action::Action;
+mod touch;
 mod viewport_controls;
+pub(crate) use touch::{TouchDrag, TouchScroll, TouchSettings};
 pub(crate) use viewport_controls::{
     ViewportControl, ViewportControlIcon, ViewportControlKind, ViewportControlStyle,
     default_viewport_controls,
@@ -392,6 +394,7 @@ pub(crate) struct Preferences {
     pub reverse: Hold,
     pub zoom_hold: Hold,
     pub pan_hold: Hold,
+    pub touch: TouchSettings,
     pub panels: Vec<Panel>,
     pub left_width: f32,
     pub right_width: f32,
@@ -429,6 +432,7 @@ impl Default for Preferences {
             recovery: Default::default(),
             history_retention: Default::default(),
             version: 1,
+            touch: TouchSettings::default(),
             bindings: Action::ALL
                 .iter()
                 .cloned()
@@ -480,6 +484,7 @@ impl Default for Preferences {
 }
 impl Preferences {
     pub fn validate(&self) -> Result<(), String> {
+        self.touch.validate()?;
         self.materials.validate()?;
         self.lighting.validate()?;
         self.mask_hold.validate()?;

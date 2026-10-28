@@ -109,6 +109,30 @@ mod tests {
         )
     }
     #[test]
+    fn screen_roll_keeps_projection_and_surface_picking_aligned() {
+        for perspective in [false, true] {
+            let mut camera = Camera {
+                yaw: 0.3,
+                pitch: 0.2,
+                perspective,
+                ..Default::default()
+            };
+            let vertices = vec![Vec3(-0.8, -0.5, 0.), Vec3(0.8, -0.5, 0.), Vec3(0., 0.7, 0.)];
+            let point = vertices[0] * 0.2 + vertices[1] * 0.3 + vertices[2] * 0.5;
+            let before = scene(&camera, vertices.clone());
+            let offset = before.project(point) - before.center;
+            camera.roll_by(0.8);
+            let after = scene(&camera, vertices);
+            let (s, c) = camera.roll.sin_cos();
+            let expected =
+                after.center + Vec2::new(c * offset.x - s * offset.y, s * offset.x + c * offset.y);
+            assert!(after.project(point).distance(expected) < 1e-4);
+            assert!((after.pick(expected).unwrap().0 - point).len() < 1e-5);
+            assert!((after.at_depth(expected, point) - point).len() < 1e-5);
+        }
+    }
+
+    #[test]
     fn perspective_picking_recovers_world_barycentrics_across_angles_and_zoom() {
         for perspective in [false, true] {
             for zoom in [0.2, 1., 8.] {

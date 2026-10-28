@@ -6,6 +6,7 @@ Get a clear look at the shape you are making. Start a sculpt stroke on clay; sta
 
 - [Orbit and pan](#orbit-and-pan)
 - [Zoom](#zoom)
+- [Touch and trackpad gestures](#touch-and-trackpad-gestures)
 - [Viewport buttons](#viewport-buttons)
 - [Perspective view](#perspective-view)
 - [Surface display](#surface-display)
@@ -47,13 +48,39 @@ For pen zoom, hold **Ctrl** and drag up to enlarge or down to shrink. This also 
 
 Change the zoom/pan modifiers in **Settings → Key settings**. Zoom takes priority if both use the same modifier; Ctrl+Shift selection retains priority inside the navigation frame.
 
+## Touch and trackpad gestures
+
+Open **Settings → Key settings → Touch and trackpad gestures**, or the same section in **Viewport controls…**. Settings save automatically and apply across workspaces.
+
+| Gesture | Default action |
+| --- | --- |
+| One-finger drag on the touchscreen | Rotate view |
+| Two-finger drag | Pan view |
+| Pinch apart / together | Zoom in / out |
+| Twist two fingers around each other | Roll the view in screen space |
+| Two-finger tap | Undo |
+| Three-finger tap | Redo |
+
+With touch gestures enabled, fingers navigate and the pen or mouse sculpts. The first finger cannot leave a sculpt mark while you place the second. Gestures must begin in the drawing area, away from floating controls. Taps complete when all fingers lift; a drag, long hold, cancelled contact, or fourth finger prevents a tap action. Adding or removing a finger does not jump the camera. After lifting any finger, lift the remaining fingers before starting another navigation gesture.
+
+Choose a different navigation action or **Disabled** for each drag, and any action from the action catalog (or **Disabled**) for each tap. Pinch and twist can each be disabled or reversed, with separate sensitivity settings. Drag sensitivity, maximum tap time, and tap movement tolerance are also adjustable. **Restore default touch gestures** resets just these controls. Turning off **Enable touch gestures** restores the previous pointer and wheel behavior.
+
+To roll, place two fingers apart and circle them around each other, like turning a sheet of paper. The image follows clockwise or counterclockwise motion while the viewing direction stays the same. Twist works together with two-finger pan and pinch. Keep the fingers separated; rotation pauses when they become too close to give a stable angle. **Reset view** and axis-gizmo snaps clear the roll. This is camera navigation and adds no model edit or undo step. Trackpad twist works when the desktop delivers native rotation events.
+
+Trackpads normally send scroll events instead of individual contacts. **Pan pixel scroll; zoom wheel** pans smooth trackpad scrolling while keeping a stepped mouse wheel for zoom. If your desktop sends trackpad scrolling as wheel steps, choose **Pan all scrolling**; this also makes the mouse wheel pan. The two-finger drag mapping and sensitivity apply to trackpad panning too.
+
+For a trackpad configured by the OS to send two-finger taps as right-click and three-finger taps as middle-click, enable **Use right / middle clicks as two / three-finger taps**. This also maps short physical mouse right/middle clicks to the selected tap actions. Right/middle drags retain their usual navigation behavior. Alternatively, map the trackpad taps to Clay Form's configured Undo/Redo keyboard shortcuts in your desktop settings.
+
+Native trackpad pinch requires the OS to deliver pinch events. The current windowing backend exposes these on macOS, but not Linux or Windows ([winit platform support](https://docs.rs/winit/0.30.13/winit/event/enum.WindowEvent.html#variant.PinchGesture)). On those desktops, a gesture mapper can send **Ctrl+wheel** or Clay Form's Zoom in/out shortcuts instead. Ctrl+wheel uses the pinch sensitivity and direction settings. Touchscreen pinch uses the individual contacts and does not need that trackpad support. OS-reserved gestures must be reassigned in desktop settings before Clay Form can receive them.
+
 ## Viewport buttons
 
-The drawing area includes **Pan view**, **Zoom view**, **Rotate view**, **Reset view**, **Vertex groups**, and **Toggle wireframe** controls.
+The default drawing area includes **Pan view**, **Zoom view**, **Rotate view**, **Roll view**, **Reset view**, **Vertex groups**, and **Toggle wireframe** controls.
 
 - Hold the left mouse button on **Pan view** and drag in any direction.
 - Drag **Zoom view** up to zoom in or down to zoom out.
 - Drag **Rotate view** to orbit the camera.
+- Drag **Roll view** right for clockwise screen-space rotation, or left for counterclockwise rotation. Existing saved layouts can add **Roll view** from **Viewport controls…**; it uses the same movable, configurable button styles as the other controls.
 - Click **Reset view** to restore the default camera. **Vertex groups** toggles group colours; **Toggle wireframe** toggles mesh edges.
 
 Open **Viewport controls…** in the drawing area to search the action catalog, add controls, rename them, or remove them. The catalog includes brush sliders, brush presets, menus, and editing actions. You can also right-click an existing customizable action and choose **Add to viewport**.
@@ -62,7 +89,7 @@ Choose **Icon only**, **Icon + text**, or **Text** when adding a control. Each e
 
 The defaults are 40-pixel icon buttons in a compact vertical stack with 8-pixel gaps. **Align right** lines up the controls vertically; **Align bottom** makes a horizontal row. Set **Spacing** before aligning to choose the gap. Alignment keeps pixel spacing consistent when the viewport resizes. To update an existing layout, choose **Icon only**, click **Apply style to all**, then **Align right**.
 
-Choose **Place controls**, drag each button to its desired position, then click **Done placing controls**. While placing controls, dragging moves the buttons. Right-click any viewport button for style, placement and removal options. **Restore default controls** restores the original six buttons.
+Choose **Place controls**, drag each button to its desired position, then click **Done placing controls**. While placing controls, dragging moves the buttons. Right-click any viewport button for style, placement and removal options. **Restore default controls** restores the seven default buttons.
 
 Positions save automatically with your workspace and adjust to the viewport when the window or sidebars resize. Camera movement and layout changes do not change the sculpt or add undo steps.
 

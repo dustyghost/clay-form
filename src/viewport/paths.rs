@@ -431,6 +431,7 @@ impl PathEditor {
             {
                 camera.yaw = yaw;
                 camera.pitch = pitch;
+                camera.roll = 0.;
             }
             let secondary = response.dragged_by(egui::PointerButton::Secondary);
             let middle = response.dragged_by(egui::PointerButton::Middle);
