@@ -208,6 +208,7 @@ impl UiState {
         // Keep a route back to the editor even when all user controls have been removed.
         let launcher = egui::Area::new(egui::Id::new("viewport_controls_launcher"))
             .order(egui::Order::Foreground)
+            .default_size(egui::vec2(240., 40.))
             .movable(false)
             .fixed_pos(egui::pos2(rect.left() + 24., launcher_y))
             .constrain_to(rect)
@@ -225,16 +226,20 @@ impl UiState {
                     });
                 });
             });
-        output.blocks_viewport |= enabled && pointer_over(ctx, launcher.response.rect);
+        output.blocks_viewport |= enabled && launcher.response.contains_pointer();
         let arranging = self.viewport_controls.arranging;
         let controls = self.preferences.viewport_controls.clone();
         let mut remove = None;
         for (index, control) in controls.iter().enumerate() {
             let id = egui::Id::new(("viewport_control", index));
             // Remember the measured size so right/bottom anchors stay inside the drawing area.
-            let size = ctx
-                .data(|d| d.get_temp::<Vec2>(id.with("size")))
-                .unwrap_or(egui::vec2(140., 40.));
+            let size = ctx.data(|d| d.get_temp::<Vec2>(id.with("size"))).unwrap_or(
+                if control.style == Style::Icon {
+                    Vec2::splat(40.)
+                } else {
+                    egui::vec2(140., 40.)
+                },
+            );
             let bounds = rect.shrink(24_f32.min(rect.width().min(rect.height()).max(0.) * 0.25));
             let travel = (bounds.size() - size).max(Vec2::ZERO);
             let position = bounds.min
@@ -245,6 +250,9 @@ impl UiState {
                 + egui::vec2(control.offset[0], control.offset[1]);
             let area = egui::Area::new(id)
                 .order(egui::Order::Foreground)
+                // Avoid the default Area estimate covering the model before
+                // the first measured frame, swallowing an early stroke press.
+                .default_size(size)
                 .movable(false)
                 .fixed_pos(position)
                 .constrain_to(rect)
@@ -325,7 +333,9 @@ impl UiState {
                     });
                 });
             ctx.data_mut(|d| d.insert_temp(id.with("size"), area.response.rect.size()));
-            output.blocks_viewport |= enabled && pointer_over(ctx, area.response.rect);
+            // Respect foreground overlays such as the light controls. A button
+            // behind them must not disable their input merely by overlapping.
+            output.blocks_viewport |= enabled && area.response.contains_pointer();
         }
         if let Some(index) = remove {
             self.preferences.viewport_controls.remove(index);
@@ -406,10 +416,6 @@ impl UiState {
         }
         self.viewport_controls.editor_open = open;
     }
-}
-
-fn pointer_over(ctx: &egui::Context, rect: egui::Rect) -> bool {
-    ctx.input(|i| i.pointer.hover_pos().is_some_and(|p| rect.contains(p)))
 }
 
 fn style_picker(ui: &mut egui::Ui, id: &str, style: &mut Style) {
