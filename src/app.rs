@@ -140,6 +140,8 @@ impl App {
             || self.ui.file_picker.is_some()
             || self.ui.recovery_open
             || self.ui.diagnostics_open
+            || self.ui.viewport_controls.editor_open
+            || self.ui.viewport_controls.arranging
             || self.ui.settings_open
             || self.ui.layout_open
             || self.ui.alphas.draft.is_some()
@@ -331,12 +333,32 @@ impl App {
         let over_toolbar = toolbar_rect.is_some_and(|rect| {
             ui.input(|i| i.pointer.hover_pos().is_some_and(|p| rect.contains(p)))
         });
+        let controls = self.ui.viewport_controls(
+            ui.ctx(),
+            ui.available_rect_before_wrap(),
+            &self.document,
+            enabled
+                && self.viewport.session.gesture.is_none()
+                && !self.viewport.modeling.dragging(),
+        );
+        for command in controls.commands {
+            self.dispatch(command, ui.ctx());
+        }
+        for (kind, delta) in controls.navigation {
+            use crate::preferences::ViewportControlKind;
+            match kind {
+                ViewportControlKind::Pan => self.camera.pan += delta,
+                ViewportControlKind::Zoom => self.camera.zoom_drag(delta),
+                ViewportControlKind::Orbit => self.camera.orbit(delta),
+                ViewportControlKind::Action(_) => unreachable!(),
+            }
+        }
         let light_input = self.ui.light_controls.show(
             ui.ctx(),
             ui.available_rect_before_wrap(),
             &self.camera,
             &mut self.ui.preferences.lighting,
-            enabled && self.viewport.session.gesture.is_none(),
+            enabled && !controls.blocks_viewport && self.viewport.session.gesture.is_none(),
         );
         self.ui.preferences.lighting.install(ui.ctx());
         let selected = self.ui.brush_index_for_context(&self.document, ui.ctx());
@@ -421,6 +443,7 @@ impl App {
                 show_guides: self.ui.show_symmetry_guides,
                 guide_opacity: self.ui.guide_opacity,
                 enabled: enabled
+                    && !controls.blocks_viewport
                     && !light_input
                     && (self.viewport.session.guided.dragging()
                         || (!over_toolbar
@@ -622,6 +645,7 @@ impl eframe::App for App {
         self.viewport
             .set_inspection_mode(self.ui.preferences.paint_inspection);
         self.ui.settings(ctx, &self.document);
+        self.ui.viewport_controls_editor(ctx, &self.document);
         self.shortcuts(ctx);
         if self.recovery_error.is_some() {
             egui::TopBottomPanel::bottom("recovery_error").show(ctx, |ui| {

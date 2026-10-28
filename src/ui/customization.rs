@@ -16,6 +16,7 @@ pub(crate) struct Customization {
 #[derive(Clone)]
 enum Request {
     Add(Action),
+    AddViewport(Action),
     Bind(Action),
     NewPanel(Placement),
     EditMenu(u64),
@@ -68,6 +69,11 @@ impl ActionResponse for egui::Response {
     }
 }
 pub(super) fn action_options(ui: &mut egui::Ui, action: &Action) {
+    if ui.button("Add to viewport").clicked() {
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(request_id(), Request::AddViewport(action.clone())));
+        ui.close();
+    }
     if ui.button("Add to custom menu / shelf…").clicked() {
         ui.ctx()
             .data_mut(|d| d.insert_temp(request_id(), Request::Add(action.clone())));
@@ -184,7 +190,7 @@ impl UiState {
             _ => action.label().into(),
         }
     }
-    fn action_catalog(&self, document: &Document) -> Vec<Action> {
+    pub(super) fn action_catalog(&self, document: &Document) -> Vec<Action> {
         let mut actions = Action::ALL.to_vec();
         actions.extend(
             self.preferences
@@ -220,7 +226,12 @@ impl UiState {
             .action(action)
             .is_ok()
     }
-    fn action_selected(&self, action: &Action, document: &Document, ctx: &egui::Context) -> bool {
+    pub(super) fn action_selected(
+        &self,
+        action: &Action,
+        document: &Document,
+        ctx: &egui::Context,
+    ) -> bool {
         let active = self.brush_index_for_context(document, ctx);
         let brush = active.map(|index| &document.brushes()[index]);
         match action {
@@ -372,46 +383,8 @@ impl UiState {
     ) {
         let item = &menu.items[index];
         if let Some(action) = &item.action {
-            if super::brush_controls::is_control(action) {
-                self.brush_control(ui, action, &item.label, document, commands)
-                    .custom_item(Some(action.clone()), menu.id, index);
-                return;
-            }
-            let label = if item.label.trim().is_empty() {
-                self.action_label(action, document)
-            } else {
-                item.label.clone()
-            };
-            let shortcut = self
-                .preferences
-                .shortcut(action)
-                .map_or(String::new(), |s| s.label());
-            let button = egui::Button::new(label)
-                .wrap()
-                .selected(self.action_selected(action, document, ui.ctx()))
-                .shortcut_text(shortcut);
-            let available = self.action_enabled(action, document);
-            let response = ui.add_enabled(available, button);
-            let response = if available {
-                response
-            } else {
-                ui.interact(
-                    response.rect,
-                    response.id.with("edit_disabled_item"),
-                    egui::Sense::click(),
-                )
-            };
-            if self
-                .edge_help(response, action, document)
-                .custom_item(Some(action.clone()), menu.id, index)
-                .clicked()
-                && available
-            {
-                commands.push(Command::Action(action.clone()));
-                if vertical {
-                    ui.close();
-                }
-            }
+            self.action_widget(ui, item, document, commands, vertical)
+                .custom_item(Some(action.clone()), menu.id, index);
         } else {
             let response = ui.separator();
             ui.interact(
@@ -421,6 +394,53 @@ impl UiState {
             )
             .custom_item(None, menu.id, index);
         }
+    }
+
+    /// The same controls serve shelves and individually positioned viewport widgets.
+    pub(super) fn action_widget(
+        &mut self,
+        ui: &mut egui::Ui,
+        item: &CustomItem,
+        document: &Document,
+        commands: &mut Vec<Command>,
+        close_menu: bool,
+    ) -> egui::Response {
+        let action = item.action.as_ref().expect("action widget");
+        if super::brush_controls::is_control(action) {
+            return self.brush_control(ui, action, &item.label, document, commands);
+        }
+        let label = if item.label.trim().is_empty() {
+            self.action_label(action, document)
+        } else {
+            item.label.clone()
+        };
+        let shortcut = self
+            .preferences
+            .shortcut(action)
+            .map_or(String::new(), |s| s.label());
+        let button = egui::Button::new(label)
+            .wrap()
+            .selected(self.action_selected(action, document, ui.ctx()))
+            .shortcut_text(shortcut);
+        let available = self.action_enabled(action, document);
+        let response = ui.add_enabled(available, button);
+        let response = if available {
+            response
+        } else {
+            ui.interact(
+                response.rect,
+                response.id.with("edit_disabled_item"),
+                egui::Sense::click(),
+            )
+        };
+        let response = self.edge_help(response, action, document);
+        if response.clicked() && available {
+            commands.push(Command::Action(action.clone()));
+            if close_menu {
+                ui.close();
+            }
+        }
+        response
     }
     fn custom_items(
         &mut self,
@@ -683,6 +703,11 @@ impl UiState {
             request
         }) {
             match request {
+                Request::AddViewport(action) => {
+                    self.add_viewport_control(crate::preferences::ViewportControlKind::Action(
+                        action,
+                    ));
+                }
                 Request::RemoveItem(id, index) => {
                     if let Some(menu) = self.preferences.menus.iter_mut().find(|m| m.id == id)
                         && index < menu.items.len()
@@ -827,6 +852,10 @@ impl UiState {
             ui.label("Changes save automatically. Drag floating shelves by their titles.");
             self.workspace_editor(ui);
             ui.separator();
+            if ui.button("Configure viewport controls…").clicked() {
+                self.viewport_controls.editor_open = true;
+            }
+            ui.separator();
             self.custom_editor(ui, document);
             ui.separator();
             egui::CollapsingHeader::new("Built-in panels and toolbar").show(ui, |ui| {
@@ -848,7 +877,7 @@ impl UiState {
             });
             ui.separator();
         });
-        self.layout_open = open;
+        self.layout_open = open && !self.viewport_controls.editor_open;
         super::design::appearance(ctx, &self.preferences.appearance);
     }
     fn custom_editor(&mut self, ui: &mut egui::Ui, document: &Document) {

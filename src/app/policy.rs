@@ -47,7 +47,12 @@ impl<'a> EditorPolicy<'a> {
         if ui.icon_capture_open() && intent != Intent::Icon {
             return Err("Finish capturing the brush icon first");
         }
-        if (ui.recovery_open || ui.diagnostics_open || ui.settings_open || ui.layout_open)
+        if (ui.recovery_open
+            || ui.diagnostics_open
+            || ui.settings_open
+            || ui.layout_open
+            || ui.viewport_controls.editor_open
+            || ui.viewport_controls.arranging)
             && !matches!(intent, Intent::Request | Intent::Pending)
         {
             return Err("Close the open dialog before editing");

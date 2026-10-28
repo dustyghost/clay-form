@@ -4,6 +4,11 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 pub(crate) use crate::action::Action;
+mod viewport_controls;
+pub(crate) use viewport_controls::{
+    ViewportControl, ViewportControlIcon, ViewportControlKind, ViewportControlStyle,
+    default_viewport_controls,
+};
 mod visibility;
 pub(crate) use visibility::{VisibilitySettings, VisibilityShape};
 mod masking;
@@ -330,6 +335,8 @@ pub(crate) struct Workspace {
     pub name: String,
     pub panels: Vec<Panel>,
     pub menus: Vec<CustomMenu>,
+    #[serde(default = "default_viewport_controls")]
+    pub viewport_controls: Vec<ViewportControl>,
     #[serde(default)]
     pub pinned_menus: Vec<PinnedMenu>,
     #[serde(default)]
@@ -389,6 +396,8 @@ pub(crate) struct Preferences {
     pub left_width: f32,
     pub right_width: f32,
     pub menus: Vec<CustomMenu>,
+    #[serde(default = "default_viewport_controls")]
+    pub viewport_controls: Vec<ViewportControl>,
     pub pinned_menus: Vec<PinnedMenu>,
     #[serde(default)]
     pub menu_sections: Vec<MenuSection>,
@@ -453,6 +462,7 @@ impl Default for Preferences {
             left_width: 260.,
             right_width: 260.,
             menus: Vec::new(),
+            viewport_controls: default_viewport_controls(),
             pinned_menus: Vec::new(),
             menu_sections: Vec::new(),
             sidebar_order: Vec::new(),
@@ -515,6 +525,7 @@ impl Preferences {
             return Err("Unknown active workspace".into());
         }
         validate_menus(&self.menus)?;
+        viewport_controls::validate(&self.viewport_controls)?;
         for (index, pinned) in self.pinned_menus.iter().enumerate() {
             if self.pinned_menus[..index]
                 .iter()
@@ -550,6 +561,7 @@ impl Preferences {
             let prefs = Self {
                 panels: workspace.panels.clone(),
                 menus: workspace.menus.clone(),
+                viewport_controls: workspace.viewport_controls.clone(),
                 pinned_menus: workspace.pinned_menus.clone(),
                 menu_sections: workspace.menu_sections.clone(),
                 sidebar_order: workspace.sidebar_order.clone(),
@@ -886,6 +898,7 @@ impl Preferences {
             name,
             panels: self.panels.clone(),
             menus: self.menus.clone(),
+            viewport_controls: self.viewport_controls.clone(),
             pinned_menus: self.pinned_menus.clone(),
             menu_sections: self.menu_sections.clone(),
             sidebar_order: self.sidebar_order.clone(),
@@ -899,6 +912,7 @@ impl Preferences {
     pub fn apply_workspace(&mut self, workspace: &Workspace) {
         self.panels = workspace.panels.clone();
         self.menus = workspace.menus.clone();
+        self.viewport_controls = workspace.viewport_controls.clone();
         self.pinned_menus = workspace.pinned_menus.clone();
         self.menu_sections = workspace.menu_sections.clone();
         self.sidebar_order = workspace.sidebar_order.clone();

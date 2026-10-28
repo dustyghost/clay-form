@@ -82,6 +82,12 @@ Geometry-changing edits, mask edits, model selection/visibility, undo/redo, topo
 
 Menu-only close requests leave floating controls open. Their rectangles block viewport gestures, including on the frame a window is closed; moving or pinning controls never edits the document.
 
+### Individually placed viewport controls
+
+`ui/viewport_controls.rs` renders independent controls at normalized anchors with logical-pixel offsets within the drawing area. Aligned rows and columns retain measured widget sizes and pixel gaps when resizing. Preferences and workspace snapshots store `ViewportControl` records; missing control lists gain the six default icon controls, while an explicitly empty list stays empty. Existing records without a style preserve text presentation. Style, icon overrides and alignment offsets belong to each workspace. Camera drag controls emit navigation deltas for the controller; action widgets reuse the same rendering, availability, selected state, and commands as custom shelves. Brush value controls retain their editable widgets.
+
+Placement mode replaces action widgets with drag handles and blocks editing. Controls capture their entire drag, including movement outside their button bounds, so navigation and layout changes cannot also sculpt. The configuration window and existing source-button context menus add catalog actions without changing the document.
+
 ### Sidebar placement
 
 `ui/sidebar.rs` renders whole built-in menus as collapsible sections and provides header movement options plus a shared order editor. Preferences and workspaces store `MenuSection` records (menu, side and expansion) and stable `SidebarSection` identities interleaving built-in tools, custom menus and converted menus.

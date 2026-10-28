@@ -3848,3 +3848,5 @@ fn uv_island_selection_highlight_does_not_rebuild_topology_for_every_face() {
     assert_eq!(app.document.display_revision(), revision);
     assert_eq!(app.document.history_counts(), history);
 }
+
+mod viewport_controls;
