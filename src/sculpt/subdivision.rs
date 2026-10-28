@@ -21,7 +21,13 @@ pub struct MeshSettings {
     pub upper: Vec<Mesh>,
     pub dynamic: bool,
     pub resolution: u32,
-    pub auto_remesh: bool,
+    #[serde(default = "super::Topology::triangles")]
+    pub remesh_topology: super::Topology,
+    #[serde(
+        default,
+        skip_serializing_if = "super::QuadRemeshAlgorithm::is_default"
+    )]
+    pub quad_remesh_algorithm: super::QuadRemeshAlgorithm,
     #[serde(default, skip_serializing_if = "AdaptiveSettings::is_default")]
     pub adaptive: AdaptiveSettings,
 }
@@ -50,12 +56,22 @@ impl Default for MeshSettings {
             upper: Vec::new(),
             dynamic: false,
             resolution: 48,
-            auto_remesh: false,
+            remesh_topology: super::Topology::Quads,
+            quad_remesh_algorithm: super::QuadRemeshAlgorithm::default(),
             adaptive: AdaptiveSettings::default(),
         }
     }
 }
 impl MeshSettings {
+    pub(crate) fn legacy_default() -> Self {
+        Self {
+            remesh_topology: super::Topology::Triangles,
+            ..Self::default()
+        }
+    }
+    pub(crate) fn is_legacy_default(&self) -> bool {
+        *self == Self::legacy_default()
+    }
     pub fn is_default(&self) -> bool {
         *self == Self::default()
     }
@@ -75,17 +91,13 @@ impl MeshSettings {
     ) -> Result<(), String> {
         check_cancel(cancel)?;
         if let Some(primitive) = &self.primitive
-            && (self.levels() != 1
-                || self.dynamic
-                || self.adaptive.enabled
-                || self.auto_remesh
-                || {
-                    let mut expected = primitive.mesh()?;
-                    expected.quads.clear();
-                    let mut actual = mesh.clone();
-                    actual.quads.clear();
-                    expected != actual
-                })
+            && (self.levels() != 1 || self.dynamic || self.adaptive.enabled || {
+                let mut expected = primitive.mesh()?;
+                expected.quads.clear();
+                let mut actual = mesh.clone();
+                actual.quads.clear();
+                expected != actual
+            })
         {
             return Err(
                 "Primitive preview does not match its parameters; convert before sculpting".into(),
@@ -104,6 +116,9 @@ impl MeshSettings {
         }
         if self.adaptive.enabled {
             mesh.validate_closed()?;
+            if self.adaptive.topology == super::Topology::Quads {
+                mesh.require_adaptive_quads()?;
+            }
         }
         let levels: Vec<&Mesh> = self
             .lower

@@ -1,4 +1,4 @@
-//! Voxel solid reconstruction followed by marching tetrahedra.
+//! Voxel solid reconstruction with triangle or quad extraction.
 //! Scanline winding fills overlapping closed volumes as a union. The grid is
 //! padded so extraction never ends on its boundary. No third-party mesh code.
 use super::{
@@ -7,6 +7,10 @@ use super::{
     subdivision::{MAX_TRIANGLES, MAX_VERTICES},
 };
 use std::collections::HashMap;
+mod optimized;
+mod optimized_mesh;
+mod quads;
+mod relaxed;
 
 impl Mesh {
     pub fn validate_closed(&self) -> Result<(), String> {
@@ -42,6 +46,31 @@ impl Mesh {
         resolution: u32,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Self, String> {
+        self.remesh_topology_cancellable(resolution, super::Topology::Triangles, cancelled)
+    }
+    pub(crate) fn remesh_topology_cancellable(
+        &self,
+        resolution: u32,
+        topology: super::Topology,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Self, String> {
+        self.remesh_algorithm_cancellable(
+            resolution,
+            topology,
+            super::QuadRemeshAlgorithm::SurfaceNets,
+            cancelled,
+        )
+    }
+    pub(crate) fn remesh_algorithm_cancellable(
+        &self,
+        resolution: u32,
+        topology: super::Topology,
+        algorithm: super::QuadRemeshAlgorithm,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Self, String> {
+        if cancelled() {
+            return Err("Mesh operation cancelled".into());
+        }
         if !self.creases.is_empty() {
             return Err("Clear creases before voxel remeshing".into());
         }
@@ -175,6 +204,27 @@ impl Mesh {
                 if inner { -d } else { d }
             })
             .collect();
+        if topology == super::Topology::Quads {
+            let mut mesh = quads::extract(&grid, &field, cancelled)?;
+            match algorithm {
+                super::QuadRemeshAlgorithm::SurfaceNets => {}
+                super::QuadRemeshAlgorithm::Relaxed => {
+                    relaxed::redistribute(&mut mesh, step, cancelled)?
+                }
+                super::QuadRemeshAlgorithm::Optimized => {
+                    optimized_mesh::redistribute(&mut mesh, step, cancelled)?
+                }
+            }
+            self.transfer_groups_to(&mut mesh);
+            // A quad is one editable face even though its render triangles can
+            // sample different source groups at a border.
+            for pair in mesh.polygroups.as_chunks_mut::<2>().0 {
+                pair[1] = pair[0];
+            }
+            self.transfer_materials_to(&mut mesh, &cancelled)?;
+            mesh.validate_closed()?;
+            return Ok(mesh);
+        }
         let mut mesh = Mesh {
             uv: Default::default(),
             creases: Vec::new(),
@@ -403,12 +453,21 @@ mod tests {
     }
     #[test]
     fn remesh_unions_overlapping_shells_and_preserves_disconnected_volumes() {
-        let united = merged(Vec3(0.8, 0.2, 0.1)).remesh(24).unwrap();
-        united.validate_closed().unwrap();
-        assert_eq!(components(&united), 1);
-        let separate = merged(Vec3(4., 0., 0.)).remesh(24).unwrap();
-        separate.validate_closed().unwrap();
-        assert_eq!(components(&separate), 2);
+        for topology in [
+            super::super::Topology::Quads,
+            super::super::Topology::Triangles,
+        ] {
+            let united = merged(Vec3(0.8, 0.2, 0.1))
+                .remesh_topology_cancellable(24, topology, &|| false)
+                .unwrap();
+            united.validate_closed().unwrap();
+            assert_eq!(components(&united), 1);
+            let separate = merged(Vec3(4., 0., 0.))
+                .remesh_topology_cancellable(24, topology, &|| false)
+                .unwrap();
+            separate.validate_closed().unwrap();
+            assert_eq!(components(&separate), 2);
+        }
     }
     #[test]
     fn open_invalid_and_cancelled_meshes_are_rejected() {

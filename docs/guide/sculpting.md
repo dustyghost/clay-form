@@ -123,7 +123,7 @@ A view stencil stays in the viewport while you orbit, pan, or zoom. A surface st
 
 Freehand, Line, Drag Rect, and Drag Dot work through the placed stencil. Dragging a stamp changes the brush footprint; the stencil stays placed. Stamp previews are private, release creates one undoable edit, and Escape cancels. Completed freehand strokes use the usual one-step Undo. Symmetry mirrors or rotates the stencil with each brush copy.
 
-Adaptive sculpting works through stencils on closed meshes: refinement samples the projected pattern, and simplification stays inside fully white regions to protect dark gaps and edges. Lower adaptive **Edge size** for finer patterns. Stamp preview and release use the same refinement. Automatic remeshing stays paused while a stencil is enabled because it would rebuild the whole surface. **Grab**, **Snake**, and **Detail** require the stencil to be disabled. The viewport explains this restriction. Toggle, attachment, and removal actions can be assigned in **Settings → Key settings** or added to custom controls.
+Adaptive sculpting works through stencils on closed meshes: refinement samples the projected pattern, and simplification stays inside fully white regions to protect dark gaps and edges. Lower adaptive **Edge size** for finer patterns. Stamp preview and release use the same refinement. **Grab**, **Snake**, and **Detail** require the stencil to be disabled. The viewport explains this restriction. Toggle, attachment, and removal actions can be assigned in **Settings → Key settings** or added to custom controls.
 
 ![Adaptive sculpting adds a spiral relief to a coarse cube through Nature’s curve](../images/alpha-adaptive-spiral.png)
 
@@ -225,7 +225,11 @@ Smooth can gradually soften a pulled-out bump back into the surrounding surface.
 
 ### Add detail where you sculpt
 
-Enable **Mesh → Adaptive sculpt**. It adds or removes local triangles as you brush, keeping separate parts separate and preserving masks.
+Enable **Mesh → Adaptive sculpt**. It adds or removes local faces as you brush, keeping separate parts separate and preserving mask values. Choose **Triangles** for triangle adaptation or **Quads** to retain four-sided faces through refinement, simplification and stamps.
+
+Quad adaptation requires an existing all-quad mesh, such as the starting sphere or a **Dynamic mesh → Quads** remesh. Triangle or mixed meshes give an explanation rather than silently converting. Local quad refinement adds irregular junctions; it does not promise a regular grid or guided edge flow. Sharp folds, protected boundaries and per-frame work limits can prevent the requested edge size from being reached. Smooth and Relax keep topology fixed in either mode.
+
+Enable **Adapt only unmasked areas** to freeze topology on every face touching a nonzero mask weight, including soft masks and boundary faces. Unmasked regions can still refine or simplify, but operations that would cross that protected boundary are skipped. The brush itself continues to follow mask strength: a soft mask can still permit some deformation. Fully mask an area to protect its shape as well. Hidden faces remain protected regardless of this option.
 
 ![Adaptive sculpt settings with the separate Decimate brush selected](../images/adaptive-settings.png)
 
@@ -234,6 +238,8 @@ Enable **Mesh → Adaptive sculpt**. It adds or removes local triangles as you b
 | Setting | Use |
 | --- | --- |
 | Edge size | Target edge length in screen pixels |
+| Adaptive topology | Keep quads on an all-quad mesh, or generate triangles locally; untouched faces are retained |
+| Adapt only unmasked areas | Protect the connectivity of faces touching any mask weight; independent of topology choice |
 | Detail relative to brush size | Interpret size as a percentage of brush radius |
 | Refine | Split long edges near the brush |
 | Simplify while sculpting | Automatically collapse short edges during deformation strokes; Smooth keeps topology fixed |

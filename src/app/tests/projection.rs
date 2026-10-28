@@ -112,7 +112,7 @@ fn projection_preserved_reference_survives_remesh_and_lower_level_sources_keep_s
     app.dispatch(Command::KeepProjectionReference, &ctx);
     let source = app.document.model(1).unwrap().mesh.clone();
     app.dispatch(Command::SetDynamicMesh(true), &ctx);
-    app.dispatch(Command::SetRemeshSettings(24, false), &ctx);
+    app.dispatch(Command::SetRemeshResolution(24), &ctx);
     app.dispatch(Command::Remesh, &ctx);
     finish_mesh_job(&mut app);
     app.dispatch(Command::OpenProjection, &ctx);

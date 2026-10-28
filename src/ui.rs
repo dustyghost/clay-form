@@ -1349,7 +1349,12 @@ impl UiState {
         ui.label(format!(
             "{} vertices • {} faces",
             document.mesh().vertices.len(),
-            document.mesh().triangles.len()
+            document.mesh().triangles.len() - document.mesh().quads.len()
+        ));
+        ui.weak(format!(
+            "{} quads • {} triangles",
+            document.mesh().quads.len(),
+            document.mesh().triangles.len() - document.mesh().quads.len() * 2
         ));
         ui.add_enabled_ui(!self.mesh_busy, |ui| {
             ui.horizontal_wrapped(|ui| {
@@ -1360,6 +1365,16 @@ impl UiState {
             if settings.adaptive.enabled {
                 ui.label("Add detail or simplify locally as you sculpt.");
                 let mut adaptive=settings.adaptive.clone();
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Adaptive topology");
+                    ui.selectable_value(&mut adaptive.topology, crate::sculpt::Topology::Quads, "Quads");
+                    ui.selectable_value(&mut adaptive.topology, crate::sculpt::Topology::Triangles, "Triangles");
+                });
+                design::checkbox(ui, &mut adaptive.unmasked_only,"Adapt only unmasked areas")
+                    .on_hover_text("Keep faces touching any nonzero mask weight unchanged during topology adaptation. Brush deformation still follows mask strength.");
+                if adaptive.topology == crate::sculpt::Topology::Quads {
+                    ui.weak("Requires an all-quad mesh. Local refinement adds irregular quad junctions; masked or sharply folded areas can limit adaptation.");
+                }
                 design::checkbox(ui, &mut adaptive.relative,"Detail relative to brush size");
                 let label=if adaptive.relative { "Edge size (% of radius)" } else { "Edge size (px)" };
                 ui.add(egui::Slider::new(&mut adaptive.detail,1. ..=32.).text(label));
@@ -1380,16 +1395,37 @@ impl UiState {
                         commands.push(Command::AddBrush(Kind::Decimate));
                     }
                 }
-                ui.weak("Smooth first, then paint with Decimate to reduce triangles. Increase Edge size for more reduction. Decimate also works with automatic simplification off.");
+                ui.weak("Smooth first, then paint with Decimate to reduce faces. Increase Edge size for more reduction. Decimate also works with automatic simplification off.");
                 ui.label("Local adaptation preserves separate parts; use voxel remeshing to fuse them.");
             } else if settings.dynamic {
                 ui.label("Voxel remeshing replaces topology and clears masks. Small details below the voxel size may be lost.");
+                let mut topology = settings.remesh_topology;
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Remesh topology");
+                    ui.selectable_value(&mut topology, crate::sculpt::Topology::Quads, "Quads");
+                    ui.selectable_value(&mut topology, crate::sculpt::Topology::Triangles, "Triangles");
+                });
+                if topology != settings.remesh_topology { commands.push(Command::SetRemeshTopology(topology)); }
+                if topology == crate::sculpt::Topology::Quads {
+                    let mut algorithm = settings.quad_remesh_algorithm;
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label("Quad algorithm");
+                        ui.selectable_value(&mut algorithm, crate::sculpt::QuadRemeshAlgorithm::SurfaceNets, "Surface nets");
+                        ui.selectable_value(&mut algorithm, crate::sculpt::QuadRemeshAlgorithm::Relaxed, "Relaxed quads");
+                        ui.selectable_value(&mut algorithm, crate::sculpt::QuadRemeshAlgorithm::Optimized, "Optimized quads");
+                    });
+                    if algorithm != settings.quad_remesh_algorithm { commands.push(Command::SetQuadRemeshAlgorithm(algorithm)); }
+                    ui.weak(match algorithm {
+                        crate::sculpt::QuadRemeshAlgorithm::SurfaceNets => "Original grid-aligned quads. Fast, but spacing can cluster where the surface changes direction.",
+                        crate::sculpt::QuadRemeshAlgorithm::Relaxed => "Redistributes quads along the rebuilt surface for more even spacing. Slower; retains grid junctions and face count.",
+                        crate::sculpt::QuadRemeshAlgorithm::Optimized => "Rebuilds quad connections to reduce crowded junctions. Slower; face count may change and small features may soften. Can be cancelled.",
+                    });
+                    ui.weak("Increase resolution for small features. Unresolved surface crossings are reported without changing the model.");
+                }
                 let mut resolution=settings.resolution;
-                let mut auto=settings.auto_remesh;
                 ui.add(egui::Slider::new(&mut resolution,16..=96).text("Resolution"));
                 ui.label("Voxels along the longest bounding-box axis.");
-                design::checkbox(ui, &mut auto,"Remesh after each stroke");
-                if resolution!=settings.resolution || auto!=settings.auto_remesh { commands.push(Command::SetRemeshSettings(resolution,auto)); }
+                if resolution!=settings.resolution { commands.push(Command::SetRemeshResolution(resolution)); }
                 if ui.add(design::button(ui, Glyph::Restore, "Remesh now")).customize(Action::Remesh).clicked() { commands.push(Command::Remesh); }
             } else {
                 ui.label(format!("Level {} of {}",settings.level(),settings.levels()));

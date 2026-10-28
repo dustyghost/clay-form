@@ -112,10 +112,20 @@ impl Document {
         if settings.enabled && !self.mesh().creases.is_empty() {
             return Err("Clear creases before enabling adaptive sculpt".into());
         }
+        if settings.enabled
+            && settings.topology == crate::sculpt::Topology::Quads
+            && (!self.geometry.settings.adaptive.enabled
+                || self.geometry.settings.adaptive.topology != settings.topology)
+        {
+            self.mesh().require_adaptive_quads()?;
+        }
         if self.geometry.settings.adaptive == settings {
             return Ok(());
         }
-        if self.geometry.settings.adaptive.enabled == settings.enabled {
+        if self.geometry.settings.adaptive.enabled == settings.enabled
+            && self.geometry.settings.adaptive.topology == settings.topology
+            && self.geometry.settings.adaptive.unmasked_only == settings.unmasked_only
+        {
             self.end_stroke();
             self.geometry.settings.adaptive = settings;
             self.dirty = true;
@@ -133,18 +143,36 @@ impl Document {
     pub(crate) fn begin_sculpt_frame(&mut self) {
         self.adaptive_budget = AdaptiveBudget::default();
     }
-    pub fn set_remesh_settings(&mut self, resolution: u32, auto: bool) -> Result<(), String> {
+    pub fn set_remesh_resolution(&mut self, resolution: u32) -> Result<(), String> {
         self.require_sculpt_mesh()?;
         if !(16..=96).contains(&resolution) {
             return Err("Remesh resolution must be between 16 and 96".into());
         }
-        if self.geometry.settings.resolution != resolution
-            || self.geometry.settings.auto_remesh != auto
-        {
+        if self.geometry.settings.resolution != resolution {
             self.geometry.settings.resolution = resolution;
-            self.geometry.settings.auto_remesh = auto;
             self.dirty = true;
         }
         Ok(())
+    }
+    pub fn set_quad_remesh_algorithm(
+        &mut self,
+        algorithm: crate::sculpt::QuadRemeshAlgorithm,
+    ) -> Result<(), String> {
+        self.require_sculpt_mesh()?;
+        if self.geometry.settings.quad_remesh_algorithm == algorithm {
+            return Ok(());
+        }
+        let mut geometry = self.geometry.clone();
+        geometry.settings.quad_remesh_algorithm = algorithm;
+        self.replace_geometry_named(geometry, "Quad remesh algorithm")
+    }
+    pub fn set_remesh_topology(&mut self, topology: crate::sculpt::Topology) -> Result<(), String> {
+        self.require_sculpt_mesh()?;
+        if self.geometry.settings.remesh_topology == topology {
+            return Ok(());
+        }
+        let mut geometry = self.geometry.clone();
+        geometry.settings.remesh_topology = topology;
+        self.replace_geometry_named(geometry, "Remesh topology")
     }
 }

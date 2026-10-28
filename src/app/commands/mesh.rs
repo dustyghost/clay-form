@@ -34,8 +34,12 @@ impl App {
                 self.viewport.cancel(&mut self.document);
                 self.document.set_dynamic_mesh(enabled)
             }
-            Command::SetRemeshSettings(resolution, auto) => {
-                self.document.set_remesh_settings(resolution, auto)
+            Command::SetRemeshResolution(resolution) => {
+                self.document.set_remesh_resolution(resolution)
+            }
+            Command::SetRemeshTopology(topology) => self.document.set_remesh_topology(topology),
+            Command::SetQuadRemeshAlgorithm(algorithm) => {
+                self.document.set_quad_remesh_algorithm(algorithm)
             }
             Command::ZoomIn | Command::ZoomOut => {
                 self.camera.zoom_step(matches!(command, Command::ZoomIn));

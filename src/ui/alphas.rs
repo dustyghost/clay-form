@@ -411,7 +411,7 @@ impl UiState {
                 "Changes the guide only, not sculpt strength. Use zero to inspect the sculpt while keeping the stencil active.",
             );
             ui.collapsing("Stencil help", |ui| {
-                ui.weak("Brush through the stencil using Freehand, Line or stamps. Brush alpha, strength and pressure multiply its coverage. Symmetry copies the stencil. Adaptive sculpting refines through the stencil; automatic remeshing stays paused. Grab, Snake and Detail require disabling the stencil.");
+                ui.weak("Brush through the stencil using Freehand, Line or stamps. Brush alpha, strength and pressure multiply its coverage. Symmetry copies the stencil. Adaptive sculpting refines through the stencil. Grab, Snake and Detail require disabling the stencil.");
             });
             if remove {
                 commands.push(Command::SetStencil(None));

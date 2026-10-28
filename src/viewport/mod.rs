@@ -67,7 +67,6 @@ pub(crate) struct Viewport {
     edge_revision: u64,
     references: references::ReferenceOverlay,
     renderer: Option<gpu::Renderer>,
-    pub(crate) completed_stroke: bool,
     blocked_until_release: bool,
     pub(crate) status: Option<String>,
     pub(crate) completed_slice: Option<crate::mesh_job::Operation>,
@@ -143,7 +142,6 @@ impl Viewport {
         self.modeling.cancel();
         self.references.cancel_drag();
         self.session = Default::default();
-        self.completed_stroke = false;
         self.completed_slice = None;
         self.status = None;
         document.cancel_relax_stroke();
@@ -173,7 +171,6 @@ impl Viewport {
         camera: &mut Camera,
         options: ViewportOptions,
     ) {
-        self.completed_stroke = false;
         self.completed_slice = None;
         document.begin_sculpt_frame();
         if (!options.enabled || !ui.input(|i| i.focused)) && ui.input(|i| i.pointer.primary_down())
@@ -920,9 +917,8 @@ impl Viewport {
             options.reverse.active(modifiers),
             stencil.clone(),
         ) {
-            match result {
-                Ok(completed) => self.completed_stroke = completed,
-                Err(error) => self.status = Some(error),
+            if let Err(error) = result {
+                self.status = Some(error);
             }
             ui.ctx().request_repaint();
             draw_gizmo(camera, &painter, gizmo_rect, pointer);
@@ -1055,7 +1051,7 @@ impl Viewport {
                     "Decimate: no removable edges at this size. Increase Edge size for more reduction; protected features stay intact.".into()
                 });
             }
-            self.completed_stroke = document.end_stroke() && self.session.sculpt.stroke;
+            document.end_stroke();
             self.session.sculpt.stroke = false;
             self.session.sculpt.stroke_brush = None;
             self.session.sculpt.last = None;
@@ -1250,9 +1246,9 @@ fn draw_mesh_counts(document: &Document, painter: &egui::Painter, rect: egui::Re
         navigation::inner(rect).left_top() + Vec2::splat(8.),
         egui::Align2::LEFT_TOP,
         format!(
-            "{} vertices • {} faces • {} hidden",
+            "{} vertices • {} faces • {} hidden triangles",
             document.mesh().vertices.len(),
-            document.mesh().triangles.len(),
+            document.mesh().triangles.len() - document.mesh().quads.len(),
             document.mesh().hidden_face_count()
         ),
         egui::FontId::monospace(12.),

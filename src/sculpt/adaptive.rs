@@ -5,6 +5,7 @@ use super::{
     math::closest_triangle,
     subdivision::{MAX_TRIANGLES, MAX_VERTICES},
 };
+mod quads;
 mod relief;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -15,6 +16,9 @@ type OrientedFaceEdge = (usize, usize, usize, usize);
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AdaptiveSettings {
+    #[serde(default = "super::Topology::triangles")]
+    pub topology: super::Topology,
+    pub unmasked_only: bool,
     pub enabled: bool,
     pub detail: f32,
     pub relative: bool,
@@ -25,6 +29,8 @@ pub struct AdaptiveSettings {
 impl Default for AdaptiveSettings {
     fn default() -> Self {
         Self {
+            topology: super::Topology::Triangles,
+            unmasked_only: false,
             enabled: false,
             detail: 8.,
             relative: false,
@@ -69,6 +75,12 @@ impl AdaptiveSettings {
         }
     }
 }
+#[derive(Clone, Copy, Default)]
+struct SplitOptions {
+    relief: bool,
+    unmasked_only: bool,
+}
+
 /// Bound topology work per rendered input frame, shared by all interpolated dabs.
 pub(crate) struct Budget {
     pub splits: usize,
@@ -118,6 +130,46 @@ impl Region<'_> {
 }
 
 impl Mesh {
+    fn adaptive_protected_vertices(&self, unmasked_only: bool) -> Vec<bool> {
+        let mut protected = vec![false; self.vertices.len()];
+        for (fi, t) in self.triangles.iter().enumerate() {
+            if !self.face_visible(fi) || (unmasked_only && t.iter().any(|&v| self.mask[v] > 0.)) {
+                for &v in t {
+                    protected[v] = true;
+                }
+            }
+        }
+        if unmasked_only {
+            for q in &self.quads {
+                if q.iter().any(|&v| self.mask[v] > 0.) {
+                    for &v in q {
+                        protected[v] = true;
+                    }
+                }
+            }
+        }
+        protected
+    }
+    fn retain_adaptive_quads(&mut self) {
+        if self.quads.is_empty() {
+            return;
+        }
+        let key = |mut t: [usize; 3]| {
+            t.sort_unstable();
+            t
+        };
+        let faces: HashSet<_> = self.triangles.iter().copied().map(key).collect();
+        self.quads.retain(|&[a, b, c, d]| {
+            a != b
+                && a != c
+                && a != d
+                && b != c
+                && b != d
+                && c != d
+                && ((faces.contains(&key([a, b, c])) && faces.contains(&key([a, c, d])))
+                    || (faces.contains(&key([a, b, d])) && faces.contains(&key([b, c, d]))))
+        });
+    }
     /// A placed stamp has no later dabs to finish refinement. Resolve its footprint
     /// on the undeformed surface so new vertices sample the alpha, rather than
     /// merely subdividing an already jagged displacement afterwards.
@@ -167,6 +219,9 @@ impl Mesh {
         if !target.is_finite() || target <= 1e-7 {
             return false;
         }
+        if settings.topology == super::Topology::Quads {
+            return self.prepare_quad_stamp(brush, Region { dabs, stencils }, settings, cancelled);
+        }
         let relief = brush.kind == Kind::Standard
             && (matches!(brush.alpha, Alpha::Image { .. }) || !stencils.is_empty());
         // Relief error needs more local samples than the edge-length heuristic.
@@ -183,13 +238,16 @@ impl Mesh {
                 stencils,
                 target,
                 remaining.min(if relief { 1024 } else { 512 }),
-                true,
+                SplitOptions {
+                    relief: true,
+                    unmasked_only: settings.unmasked_only,
+                },
             );
             changed |= count > 0;
             let flips = if relief {
                 // Reconnect on the undeformed surface so quality improvement
                 // cannot flatten the relief or interpolate its heights afterwards.
-                self.improve_edges(brush, dabs, stencils, 512)
+                self.improve_edges(brush, dabs, stencils, 512, settings.unmasked_only)
             } else {
                 0
             };
@@ -246,6 +304,9 @@ impl Mesh {
         if !target.is_finite() || target <= 1e-7 {
             return false;
         }
+        if settings.topology == super::Topology::Quads {
+            return self.adapt_quads(brush, region, settings, budget, collapse);
+        }
         let cleanup = brush.kind == Kind::Decimate;
         let mut changed = false;
         if collapse && (settings.simplify || cleanup) && budget.collapses > 0 {
@@ -261,6 +322,7 @@ impl Mesh {
                 // Cleanup can remove more independent edges in the same mesh
                 // scan. Deformation brushes retain their smaller allowance.
                 budget.collapses.min(if cleanup { 256 } else { 32 }),
+                settings.unmasked_only,
             );
             budget.collapses = 0;
             changed |= count > 0;
@@ -271,7 +333,14 @@ impl Mesh {
                     break;
                 }
                 budget.passes -= 1;
-                let count = self.split_local(brush, dabs, stencils, target, budget.splits.min(64));
+                let count = self.split_local(
+                    brush,
+                    dabs,
+                    stencils,
+                    target,
+                    budget.splits.min(64),
+                    settings.unmasked_only,
+                );
                 budget.splits -= count;
                 changed |= count > 0;
                 if count == 0 || budget.splits == 0 {
@@ -281,7 +350,13 @@ impl Mesh {
         }
         if !cleanup && settings.refine && budget.flips > 0 && budget.flip_passes > 0 {
             budget.flip_passes -= 1;
-            let count = self.improve_edges(brush, dabs, stencils, budget.flips.min(64));
+            let count = self.improve_edges(
+                brush,
+                dabs,
+                stencils,
+                budget.flips.min(64),
+                settings.unmasked_only,
+            );
             budget.flips -= count;
             changed |= count > 0;
         }
@@ -291,7 +366,7 @@ impl Mesh {
             && budget.relax
         {
             budget.relax = false;
-            changed |= self.relax_surface(brush, dabs, stencils, target);
+            changed |= self.relax_surface(brush, dabs, stencils, target, settings.unmasked_only);
         }
         changed
     }
@@ -303,7 +378,9 @@ impl Mesh {
         dabs: &[Dab],
         stencils: &[Projection],
         target: f32,
+        unmasked_only: bool,
     ) -> bool {
+        let protected = self.adaptive_protected_vertices(unmasked_only);
         let mut changed = false;
         let sculptable = self.sculptable_vertices();
         for _ in 0..2 {
@@ -320,6 +397,7 @@ impl Mesh {
             let mut moves = vec![Vec3::default(); self.vertices.len()];
             for i in 0..moves.len() {
                 if !sculptable[i]
+                    || protected[i]
                     || !active[i]
                     || self.mask[i] >= 0.999
                     || counts[i] == 0.
@@ -438,8 +516,9 @@ impl Mesh {
         dabs: &[Dab],
         stencils: &[Projection],
         limit: usize,
+        unmasked_only: bool,
     ) -> usize {
-        self.improve_edges_impl::<true>(brush, dabs, stencils, limit)
+        self.improve_edges_impl::<true>(brush, dabs, stencils, limit, unmasked_only)
     }
     fn improve_edges_impl<const FLAT: bool>(
         &mut self,
@@ -447,7 +526,9 @@ impl Mesh {
         dabs: &[Dab],
         stencils: &[Projection],
         limit: usize,
+        unmasked_only: bool,
     ) -> usize {
+        let protected = self.adaptive_protected_vertices(unmasked_only);
         let mut edges: Vec<((usize, usize), OrientedFaceEdge)> = Vec::new();
         let mut local_vertices = vec![false; self.vertices.len()];
         let nearby_faces = self.patch_candidates(brush, dabs);
@@ -502,6 +583,7 @@ impl Mesh {
             if a != y
                 || b != x
                 || c == d
+                || [*a, *b, *c, *d].iter().any(|&v| protected[v])
                 || used.contains(i)
                 || used.contains(j)
                 || existing.contains(&edge(*c, *d))
@@ -539,12 +621,12 @@ impl Mesh {
             replacements.push((*i, *j, new));
         }
         let count = replacements.len();
-        if count > 0 {
-            self.quads.clear();
-        }
         for (i, j, [a, b]) in replacements {
             self.triangles[i] = a;
             self.triangles[j] = b;
+        }
+        if count > 0 {
+            self.retain_adaptive_quads();
         }
         count
     }
@@ -566,8 +648,19 @@ impl Mesh {
         stencils: &[Projection],
         target: f32,
         limit: usize,
+        unmasked_only: bool,
     ) -> usize {
-        self.split_local_impl::<true>(brush, dabs, stencils, target, limit, false)
+        self.split_local_impl::<true>(
+            brush,
+            dabs,
+            stencils,
+            target,
+            limit,
+            SplitOptions {
+                relief: false,
+                unmasked_only,
+            },
+        )
     }
     fn split_local_impl<const LOCAL_MIDPOINTS: bool>(
         &mut self,
@@ -576,12 +669,12 @@ impl Mesh {
         stencils: &[Projection],
         target: f32,
         limit: usize,
-        relief: bool,
+        options: SplitOptions,
     ) -> usize {
         if limit == 0 {
             return 0;
         }
-        let relief = relief
+        let relief = options.relief
             && brush.kind == Kind::Standard
             && (matches!(brush.alpha, Alpha::Image { .. }) || !stencils.is_empty());
         let mut sampling =
@@ -651,6 +744,10 @@ impl Mesh {
                     .and_modify(|old| *old = old.max(ratio))
                     .or_insert(ratio);
             }
+        }
+        if options.unmasked_only || self.has_hidden_faces() {
+            let protected = self.adaptive_protected_vertices(options.unmasked_only);
+            candidates.retain(|&(a, b), _| !protected[a] && !protected[b]);
         }
         let mut candidates: Vec<_> = candidates.into_iter().collect();
         // Each manifold edge adds one vertex and two faces. Leave headroom for
@@ -738,8 +835,8 @@ impl Mesh {
         }
         self.polygroups = new_groups;
         self.hidden_faces = new_hidden;
-        self.quads.clear();
         self.triangles = faces;
+        self.retain_adaptive_quads();
         candidates.len()
     }
     fn collapse_local(
@@ -749,7 +846,9 @@ impl Mesh {
         stencils: &[Projection],
         threshold: f32,
         limit: usize,
+        unmasked_only: bool,
     ) -> usize {
+        let protected = self.adaptive_protected_vertices(unmasked_only);
         let mut candidates = BTreeMap::new();
         let nearby_faces = self.patch_candidates(brush, dabs);
         for (fi, &t) in self.triangles.iter().enumerate() {
@@ -798,7 +897,9 @@ impl Mesh {
             {
                 continue;
             }
-            if blocked.contains(&a)
+            if protected[a]
+                || protected[b]
+                || blocked.contains(&a)
                 || blocked.contains(&b)
                 || self.mask[a] > 0.95
                 || self.mask[b] > 0.95
@@ -1029,8 +1130,11 @@ impl Mesh {
             self.reindex_materials((0..self.vertices.len()).filter(|i| !merged.contains_key(i)));
         self.vertices = vertices;
         self.mask = mask;
-        self.quads.clear();
+        for q in &mut self.quads {
+            *q = q.map(|v| indices[v]);
+        }
         self.triangles = triangles;
+        self.retain_adaptive_quads();
         merged.len()
     }
     fn collapse_preserves_folds(
@@ -1658,10 +1762,10 @@ mod tests {
         };
         let mut actual = original.clone();
         let mut expected = original.clone();
-        let count = actual.improve_edges_impl::<true>(&brush, &[d], &[], 64);
+        let count = actual.improve_edges_impl::<true>(&brush, &[d], &[], 64, false);
         assert_eq!(
             count,
-            expected.improve_edges_impl::<false>(&brush, &[d], &[], 64)
+            expected.improve_edges_impl::<false>(&brush, &[d], &[], 64, false)
         );
         assert_eq!(
             count, 1,
@@ -1670,7 +1774,7 @@ mod tests {
         assert_eq!(actual, expected);
 
         let mut original = Mesh::sphere();
-        original.split_local(&brush, &[dab()], &[], 0.02, 64);
+        original.split_local(&brush, &[dab()], &[], 0.02, 64, false);
         for protected in [false, true] {
             let mut actual = original.clone();
             if protected {
@@ -1679,8 +1783,8 @@ mod tests {
             let mut expected = actual.clone();
             for limit in [1, 16, 64] {
                 assert_eq!(
-                    actual.improve_edges_impl::<true>(&brush, &[dab()], &[], limit),
-                    expected.improve_edges_impl::<false>(&brush, &[dab()], &[], limit)
+                    actual.improve_edges_impl::<true>(&brush, &[dab()], &[], limit, false),
+                    expected.improve_edges_impl::<false>(&brush, &[dab()], &[], limit, false)
                 );
                 assert_eq!(actual, expected);
             }
@@ -1699,8 +1803,22 @@ mod tests {
         let mut expected = original;
         for limit in [1, 23, 64] {
             assert_eq!(
-                actual.split_local_impl::<true>(&brush, &[dab()], &[], 0.02, limit, false),
-                expected.split_local_impl::<false>(&brush, &[dab()], &[], 0.02, limit, false)
+                actual.split_local_impl::<true>(
+                    &brush,
+                    &[dab()],
+                    &[],
+                    0.02,
+                    limit,
+                    SplitOptions::default()
+                ),
+                expected.split_local_impl::<false>(
+                    &brush,
+                    &[dab()],
+                    &[],
+                    0.02,
+                    limit,
+                    SplitOptions::default()
+                )
             );
             assert_eq!(actual, expected);
         }
@@ -2065,10 +2183,10 @@ mod group_tests {
             delta: Vec3::default(),
             invert: false,
         };
-        assert!(m.split_local(&brush, &[dab], &[], 0.02, 16) > 0);
+        assert!(m.split_local(&brush, &[dab], &[], 0.02, 16, false) > 0);
         m.validate_closed().unwrap();
         assert!(m.hidden_face_count() > 0);
-        m.collapse_local(&brush, &[dab], &[], 0.3, 16);
+        m.collapse_local(&brush, &[dab], &[], 0.3, 16, false);
         m.validate_closed().unwrap();
         assert!(m.hidden_face_count() > 0);
         for p in hidden_points {
@@ -2092,11 +2210,11 @@ mod group_tests {
             delta: Vec3::default(),
             invert: false,
         };
-        assert!(m.split_local(&brush, &[dab], &[], 0.1, 16) > 0);
+        assert!(m.split_local(&brush, &[dab], &[], 0.1, 16, false) > 0);
         m.validate_closed().unwrap();
         assert_eq!(m.polygroups, vec![1; m.triangles.len()]);
         assert!(m.vertex_groups[0].weights.iter().all(|&w| w == 1.));
-        let count = m.collapse_local(&brush, &[dab], &[], 3., 16);
+        let count = m.collapse_local(&brush, &[dab], &[], 3., 16, false);
         assert!(count > 0);
         m.validate_closed().unwrap();
         assert_eq!(m.polygroups, vec![1; m.triangles.len()]);

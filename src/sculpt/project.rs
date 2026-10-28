@@ -139,7 +139,10 @@ pub struct Project {
     pub brushes: Vec<Brush>,
     #[serde(default, skip_serializing_if = "Symmetry::is_default")]
     pub symmetry: Symmetry,
-    #[serde(default, skip_serializing_if = "MeshSettings::is_default")]
+    #[serde(
+        default = "MeshSettings::legacy_default",
+        skip_serializing_if = "MeshSettings::is_legacy_default"
+    )]
     pub mesh_settings: MeshSettings,
 }
 impl Project {

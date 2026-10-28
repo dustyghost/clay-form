@@ -15,6 +15,8 @@ mod overlap;
 mod polish;
 mod project;
 mod remesh;
+mod topology;
+pub use topology::{QuadRemeshAlgorithm, Topology};
 mod smooth;
 mod subdivision;
 mod symmetry;

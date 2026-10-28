@@ -84,13 +84,6 @@ impl App {
                         operation.history_label()
                     ));
                     self.ui.status = error;
-                    if matches!(operation, Operation::Remesh)
-                        && self.document.mesh_settings().auto_remesh
-                        && !self.document.mesh().has_hidden_faces()
-                    {
-                        let resolution = self.document.mesh_settings().resolution;
-                        let _ = self.document.set_remesh_settings(resolution, false);
-                    }
                 }
             }
         }
