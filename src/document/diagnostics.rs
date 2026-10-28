@@ -168,7 +168,6 @@ fn topology_settings(geometry: &Geometry) -> MeshSettings {
         resolution: geometry.settings.resolution,
         remesh_topology: geometry.settings.remesh_topology,
         quad_remesh_algorithm: geometry.settings.quad_remesh_algorithm,
-        voxel_skin_project: geometry.settings.voxel_skin_project,
         adaptive: geometry.settings.adaptive.clone(),
     }
 }

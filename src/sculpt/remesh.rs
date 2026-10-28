@@ -10,8 +10,17 @@ use std::collections::HashMap;
 mod optimized;
 mod optimized_mesh;
 mod quads;
-mod relaxed;
 mod skin;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum QuadExtraction {
+    SurfaceNets,
+    Fast,
+    Optimized,
+    // Literal voxel squares are an internal comparison fixture, not a setting.
+    #[cfg(test)]
+    Stepped,
+}
 
 impl Mesh {
     pub fn validate_closed(&self) -> Result<(), String> {
@@ -55,12 +64,7 @@ impl Mesh {
         topology: super::Topology,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Self, String> {
-        self.remesh_algorithm_cancellable(
-            resolution,
-            topology,
-            super::QuadRemeshAlgorithm::SurfaceNets,
-            cancelled,
-        )
+        self.remesh_impl(resolution, topology, QuadExtraction::SurfaceNets, cancelled)
     }
     pub(crate) fn remesh_algorithm_cancellable(
         &self,
@@ -69,14 +73,30 @@ impl Mesh {
         algorithm: super::QuadRemeshAlgorithm,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Self, String> {
-        self.remesh_projected_cancellable(resolution, topology, algorithm, true, cancelled)
+        let extraction = match algorithm {
+            super::QuadRemeshAlgorithm::Fast => QuadExtraction::Fast,
+            super::QuadRemeshAlgorithm::Optimized => QuadExtraction::Optimized,
+        };
+        self.remesh_impl(resolution, topology, extraction, cancelled)
     }
-    pub(crate) fn remesh_projected_cancellable(
+    #[cfg(test)]
+    fn remesh_stepped_cancellable(
+        &self,
+        resolution: u32,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Self, String> {
+        self.remesh_impl(
+            resolution,
+            super::Topology::Quads,
+            QuadExtraction::Stepped,
+            cancelled,
+        )
+    }
+    fn remesh_impl(
         &self,
         resolution: u32,
         topology: super::Topology,
-        algorithm: super::QuadRemeshAlgorithm,
-        project_voxel_skin: bool,
+        algorithm: QuadExtraction,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Self, String> {
         if cancelled() {
@@ -163,10 +183,15 @@ impl Mesh {
             }
         }
         drop(crossings);
-        if topology == super::Topology::Quads && algorithm == super::QuadRemeshAlgorithm::VoxelSkin
-        {
+        let skin = match algorithm {
+            QuadExtraction::Fast => true,
+            #[cfg(test)]
+            QuadExtraction::Stepped => true,
+            _ => false,
+        };
+        if topology == super::Topology::Quads && skin {
             let mesh = skin::extract(&grid, &inside, cancelled)?;
-            let mesh = if project_voxel_skin {
+            let mesh = if algorithm == QuadExtraction::Fast {
                 skin::project(mesh, self, step, cancelled)?
             } else {
                 mesh
@@ -227,17 +252,8 @@ impl Mesh {
             .collect();
         if topology == super::Topology::Quads {
             let mut mesh = quads::extract(&grid, &field, cancelled)?;
-            match algorithm {
-                super::QuadRemeshAlgorithm::SurfaceNets => {}
-                super::QuadRemeshAlgorithm::Relaxed => {
-                    relaxed::redistribute(&mut mesh, step, cancelled)?
-                }
-                super::QuadRemeshAlgorithm::Optimized => {
-                    optimized_mesh::redistribute(&mut mesh, step, cancelled)?
-                }
-                super::QuadRemeshAlgorithm::VoxelSkin => {
-                    unreachable!("voxel skin uses occupancy directly")
-                }
+            if algorithm == QuadExtraction::Optimized {
+                optimized_mesh::redistribute(&mut mesh, step, cancelled)?
             }
             return self.finish_quad_remesh(mesh, cancelled);
         }

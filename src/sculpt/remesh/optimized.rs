@@ -885,7 +885,7 @@ pub(crate) fn optimize(
             return Ok(result);
         }
     }
-    Err("Optimized quads could not simplify this surface safely. Choose Surface nets or Relaxed quads; the original model is unchanged.".into())
+    Err("Optimized quads could not simplify this surface safely. Choose Fast quads; the original model is unchanged.".into())
 }
 
 type Output = (Vec<Vec3>, Vec<Quad>);

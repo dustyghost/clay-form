@@ -1413,24 +1413,14 @@ impl UiState {
                     let mut algorithm = settings.quad_remesh_algorithm;
                     ui.horizontal_wrapped(|ui| {
                         ui.label("Quad algorithm");
-                        ui.selectable_value(&mut algorithm, crate::sculpt::QuadRemeshAlgorithm::SurfaceNets, "Surface nets");
-                        ui.selectable_value(&mut algorithm, crate::sculpt::QuadRemeshAlgorithm::Relaxed, "Relaxed quads");
+                        ui.selectable_value(&mut algorithm, crate::sculpt::QuadRemeshAlgorithm::Fast, "Fast quads");
                         ui.selectable_value(&mut algorithm, crate::sculpt::QuadRemeshAlgorithm::Optimized, "Optimized quads");
-                        ui.selectable_value(&mut algorithm, crate::sculpt::QuadRemeshAlgorithm::VoxelSkin, "Voxel skin");
                     });
                     if algorithm != settings.quad_remesh_algorithm { commands.push(Command::SetQuadRemeshAlgorithm(algorithm)); }
                     ui.weak(match algorithm {
-                        crate::sculpt::QuadRemeshAlgorithm::SurfaceNets => "Original grid-aligned quads. Fast, but spacing can cluster where the surface changes direction.",
-                        crate::sculpt::QuadRemeshAlgorithm::Relaxed => "Redistributes quads along the rebuilt surface for more even spacing. Slower; retains grid junctions and face count.",
+                        crate::sculpt::QuadRemeshAlgorithm::Fast => "Quickly fits grid-based quads to the sculpt. Retains grid junctions; small features may soften.",
                         crate::sculpt::QuadRemeshAlgorithm::Optimized => "Rebuilds quad connections to reduce crowded junctions. Slower; face count may change and small features may soften. Can be cancelled.",
-                        crate::sculpt::QuadRemeshAlgorithm::VoxelSkin => "Builds quads from the exposed square faces of voxels. Keep the stepped surface, or fit it back to the original sculpt.",
                     });
-                    if algorithm == crate::sculpt::QuadRemeshAlgorithm::VoxelSkin {
-                        let mut project = settings.voxel_skin_project;
-                        design::checkbox(ui, &mut project, "Project to original surface");
-                        if project != settings.voxel_skin_project { commands.push(Command::SetVoxelSkinProjection(project)); }
-                        ui.weak("Fits to the sculpt before remeshing; keeps the voxel connections. Undo before comparing the other option. Sharp areas may retain some steps.");
-                    }
                     ui.weak("Increase resolution for small features. Unresolved surface crossings are reported without changing the model.");
                 }
                 let mut resolution=settings.resolution;

@@ -41,9 +41,6 @@ impl App {
             Command::SetQuadRemeshAlgorithm(algorithm) => {
                 self.document.set_quad_remesh_algorithm(algorithm)
             }
-            Command::SetVoxelSkinProjection(enabled) => {
-                self.document.set_voxel_skin_projection(enabled)
-            }
             Command::ZoomIn | Command::ZoomOut => {
                 self.camera.zoom_step(matches!(command, Command::ZoomIn));
                 Ok(())

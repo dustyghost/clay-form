@@ -28,8 +28,6 @@ pub struct MeshSettings {
         skip_serializing_if = "super::QuadRemeshAlgorithm::is_default"
     )]
     pub quad_remesh_algorithm: super::QuadRemeshAlgorithm,
-    /// Fit Voxel skin to the pre-remesh sculpt; false keeps exposed voxel squares.
-    pub voxel_skin_project: bool,
     #[serde(default, skip_serializing_if = "AdaptiveSettings::is_default")]
     pub adaptive: AdaptiveSettings,
 }
@@ -60,7 +58,6 @@ impl Default for MeshSettings {
             resolution: 48,
             remesh_topology: super::Topology::Quads,
             quad_remesh_algorithm: super::QuadRemeshAlgorithm::default(),
-            voxel_skin_project: true,
             adaptive: AdaptiveSettings::default(),
         }
     }

@@ -623,7 +623,6 @@ impl App {
             | Command::SetRemeshResolution(..)
             | Command::SetRemeshTopology(..)
             | Command::SetQuadRemeshAlgorithm(..)
-            | Command::SetVoxelSkinProjection(..)
             | Command::ZoomIn
             | Command::ZoomOut
             | Command::SetZoom(..)

@@ -6,7 +6,7 @@ use super::{Grid, MAX_TRIANGLES, MAX_VERTICES, Mesh, Vec3};
 use crate::sculpt::ProjectionOptions;
 use std::collections::HashMap;
 
-const CONTACT: &str = "Voxel skin has an unresolved edge or corner contact. Increase Resolution or choose Surface nets; the original model is unchanged.";
+const CONTACT: &str = "Fast quads has an unresolved edge or corner contact. Increase Resolution or choose Triangles; the original model is unchanged.";
 
 pub(super) fn extract(
     grid: &Grid,
@@ -74,7 +74,7 @@ pub(super) fn extract(
                     owners.push(grid.index(x, y, z));
                     if lattice_quads.len() * 2 > MAX_TRIANGLES {
                         return Err(
-                            "Voxel skin exceeds mesh limits; choose a lower resolution".into()
+                            "Fast quads exceeds mesh limits; choose a lower resolution".into()
                         );
                     }
                 }
@@ -82,7 +82,7 @@ pub(super) fn extract(
         }
     }
     if lattice_quads.is_empty() {
-        return Err("No voxel skin found; increase Resolution".into());
+        return Err("No quad surface found; increase Resolution".into());
     }
     // Each face starts with its own four corners. Join only through paired
     // boundary edges; a checkerboard edge has four incident faces, paired by
@@ -154,7 +154,7 @@ pub(super) fn extract(
         let [a, b, c, d] = q;
         mesh.triangles.extend([[a, b, c], [a, c, d]]);
         if mesh.vertices.len() > MAX_VERTICES {
-            return Err("Voxel skin exceeds mesh limits; choose a lower resolution".into());
+            return Err("Fast quads exceeds mesh limits; choose a lower resolution".into());
         }
     }
     mesh.require_adaptive_quads()
@@ -298,23 +298,9 @@ mod tests {
     fn voxel_skin_projection_scales_cancels_and_preserves_transferred_attributes() {
         let mut source = Mesh::starting_sphere();
         source.mask.fill(1.);
-        let raw = source
-            .remesh_projected_cancellable(
-                16,
-                Topology::Quads,
-                QuadRemeshAlgorithm::VoxelSkin,
-                false,
-                &|| false,
-            )
-            .unwrap();
+        let raw = source.remesh_stepped_cancellable(16, &|| false).unwrap();
         let fitted = source
-            .remesh_projected_cancellable(
-                16,
-                Topology::Quads,
-                QuadRemeshAlgorithm::VoxelSkin,
-                true,
-                &|| false,
-            )
+            .remesh_algorithm_cancellable(16, Topology::Quads, QuadRemeshAlgorithm::Fast, &|| false)
             .unwrap();
         assert_eq!(fitted.vertex_groups.len(), source.vertex_groups.len());
         assert_eq!(fitted.vertex_groups[0].name, source.vertex_groups[0].name);
@@ -356,20 +342,13 @@ mod tests {
         ] {
             let source = Primitive::for_kind(kind).mesh().unwrap();
             let raw = source
-                .remesh_projected_cancellable(
-                    24,
-                    Topology::Quads,
-                    QuadRemeshAlgorithm::VoxelSkin,
-                    false,
-                    &|| false,
-                )
+                .remesh_stepped_cancellable(24, &|| false)
                 .unwrap_or_else(|e| panic!("{kind:?}: {e}"));
             let fitted = source
-                .remesh_projected_cancellable(
+                .remesh_algorithm_cancellable(
                     24,
                     Topology::Quads,
-                    QuadRemeshAlgorithm::VoxelSkin,
-                    true,
+                    QuadRemeshAlgorithm::Fast,
                     &|| false,
                 )
                 .unwrap();
@@ -402,7 +381,7 @@ mod tests {
 
     #[test]
     #[ignore = "manual voxel skin comparison; requires CLAY_REVIEW_PROJECT and CLAY_GUIDE_PREVIEW"]
-    fn voxel_skin_project_comparison() {
+    fn fast_quads_project_comparison() {
         let input = std::env::var("CLAY_REVIEW_PROJECT").unwrap();
         let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
         std::fs::create_dir_all(&directory).unwrap();
@@ -411,16 +390,19 @@ mod tests {
         for projected in [false, true] {
             let mut project = source.clone();
             let now = std::time::Instant::now();
-            project.mesh = source
-                .mesh
-                .remesh_projected_cancellable(
+            project.mesh = if projected {
+                source.mesh.remesh_algorithm_cancellable(
                     source.mesh_settings.resolution,
                     Topology::Quads,
-                    QuadRemeshAlgorithm::VoxelSkin,
-                    projected,
+                    QuadRemeshAlgorithm::Fast,
                     &|| false,
                 )
-                .unwrap();
+            } else {
+                source
+                    .mesh
+                    .remesh_stepped_cancellable(source.mesh_settings.resolution, &|| false)
+            }
+            .unwrap();
             eprintln!(
                 "Voxel skin projected={projected}: {} quads in {:?}",
                 project.mesh.quads.len(),
@@ -478,8 +460,7 @@ mod tests {
                 serde_json::to_vec_pretty(&profile).unwrap(),
             )
             .unwrap();
-            project.mesh_settings.quad_remesh_algorithm = QuadRemeshAlgorithm::VoxelSkin;
-            project.mesh_settings.voxel_skin_project = projected;
+            project.mesh_settings.quad_remesh_algorithm = QuadRemeshAlgorithm::Fast;
             std::fs::write(
                 directory.join(if projected {
                     "projected.clay"

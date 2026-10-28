@@ -129,7 +129,6 @@ pub(crate) enum Command {
     SetRemeshResolution(u32),
     SetRemeshTopology(crate::sculpt::Topology),
     SetQuadRemeshAlgorithm(crate::sculpt::QuadRemeshAlgorithm),
-    SetVoxelSkinProjection(bool),
     Remesh,
     CancelMeshJob,
     EditEdges(crate::sculpt::EdgeEdit),
