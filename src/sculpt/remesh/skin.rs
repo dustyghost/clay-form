@@ -305,7 +305,14 @@ mod tests {
         assert_eq!(fitted.vertex_groups.len(), source.vertex_groups.len());
         assert_eq!(fitted.vertex_groups[0].name, source.vertex_groups[0].name);
         assert!(fitted.mask.iter().all(|&m| m == 0.));
-        assert!(fitted.polygroups.chunks_exact(2).all(|p| p[0] == p[1]));
+        assert!(
+            fitted
+                .polygroups
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .all(|p| p[0] == p[1])
+        );
         let expected = project(raw.clone(), &source, 2. / 16., &|| false).unwrap();
         for scale in [1. / 1024., 1024.] {
             let mut scaled_source = source.clone();
