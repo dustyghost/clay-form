@@ -114,7 +114,6 @@ jobs:
           if-no-files-found: error
 
   source:
-    if: github.event_name != 'pull_request'
     needs: prepare
     runs-on: ubuntu-22.04
     timeout-minutes: 20
@@ -136,7 +135,12 @@ jobs:
           p.write_text(p.read_text().replace(sys.argv[2], 'vendor'))
           PY
           git rev-parse HEAD > "$stage/SOURCE-COMMIT"
-          tar -C "$RUNNER_TEMP" -czf "dist/clay-form-v$VERSION-source.tar.gz" "clay-form-v$VERSION-source"
+          # Prove the vendored configuration works after relocation, offline.
+          mkdir -p "$RUNNER_TEMP/source-check"
+          mv "$stage" "$RUNNER_TEMP/source-check/"
+          relocated="$RUNNER_TEMP/source-check/clay-form-v$VERSION-source"
+          (cd "$relocated" && cargo metadata --frozen --format-version 1 > /dev/null)
+          tar -C "$RUNNER_TEMP/source-check" -czf "dist/clay-form-v$VERSION-source.tar.gz" "clay-form-v$VERSION-source"
       - uses: actions/upload-artifact@v4
         with:
           name: corresponding-source

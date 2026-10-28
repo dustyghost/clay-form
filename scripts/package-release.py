@@ -70,6 +70,13 @@ def main():
         "source_asset": f"clay-form-v{version}-source.tar.gz",
     }, indent=2) + "\n")
     if mac:
+        # Keep notices with the .app when the user moves it to Applications.
+        resources = stage / "Clay Form.app/Contents/Resources"
+        resources.mkdir()
+        for filename in ["LICENSE", "COPYRIGHT.md", "README.md", "THIRD-PARTY-NOTICES.html", "BUILD-INFO.json"]:
+            shutil.copy2(stage / filename, resources / filename)
+        for directory in ["docs", "legal"]:
+            shutil.copytree(stage / directory, resources / directory)
         # Ad-hoc identity supports local execution; this is not notarization.
         subprocess.run(["codesign", "--force", "--sign", "-", str(stage / "Clay Form.app")], check=True)
     if windows or mac:

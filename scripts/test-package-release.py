@@ -66,6 +66,8 @@ class NativeArchiveTests(unittest.TestCase):
                 for required in ['LICENSE', 'COPYRIGHT.md', 'THIRD-PARTY-NOTICES.html', 'legal/rust/COPYRIGHT-library.html', 'BUILD-INFO.json']:
                     self.assertIn(name + '/' + required, members)
                 if 'apple' in target:
+                    self.assertIn(name + '/Clay Form.app/Contents/Resources/legal/rust/COPYRIGHT-library.html', members)
+                    self.assertIn(name + '/Clay Form.app/Contents/Resources/LICENSE', members)
                     plist = plistlib.loads((stage / 'Clay Form.app/Contents/Info.plist').read_bytes())
                     self.assertEqual(plist['CFBundleExecutable'], binary)
                     self.assertEqual(plist['CFBundleShortVersionString'], '1.2.3')

@@ -86,3 +86,22 @@ third-party notices or SDK-derived-content rights. Upgrading dependencies may
 improve packaged notices, but requires its own review and runtime validation.
 Direct downloads, signing/notarization and Mac App Store distribution are
 different release decisions; the initial packaging work targets direct downloads.
+
+## Comparison with Blender
+
+Blender distributes its combined application under
+[GPLv3-or-later](https://www.blender.org/about/license/). Its
+[GHOST Cocoa implementation](https://github.com/blender/blender/blob/main/intern/ghost/intern/GHOST_SystemCocoa.mm)
+uses native Objective-C++ code; its
+[Apple build configuration](https://github.com/blender/blender/blob/main/build_files/cmake/platform/platform_apple.cmake)
+links Cocoa, AppKit, Foundation, Metal and other system frameworks. This
+platform layer does not depend on Clay Form's Rust `objc2` bridge.
+
+Blender's [build instructions](https://developer.blender.org/docs/handbook/building_blender/mac/)
+use Apple's development tools, and its
+[installation guide](https://docs.blender.org/manual/en/dev/getting_started/installing/macos.html)
+describes a native `.app` delivered in a DMG. This is practical precedent for
+GPL application distribution on macOS. It is not evidence that the notice
+history of an unrelated Rust binding has been cleared, nor an Apple permission
+grant for that binding. Our issue should remain scoped to those specific
+dependency questions, rather than being described as a general GPL/macOS ban.
