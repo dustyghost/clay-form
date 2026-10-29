@@ -250,6 +250,7 @@ fn brush_controls_popup_drag_edits_preset_without_closing_or_sculpting() {
     assert!(app.ui.customization.popup_menu.is_none());
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 #[ignore = "visual brush control review; requires Vulkan and CLAY_BRUSH_CONTROLS_PREVIEW"]
 fn brush_controls_offscreen_review() {

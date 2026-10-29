@@ -107,6 +107,11 @@ jobs:
           else
             cargo build --locked --target '${{ matrix.target }}'
           fi
+      - name: Check Windows pen and touch routing
+        if: runner.os == 'Windows' && github.event_name == 'pull_request'
+        run: |
+          cargo test --locked --lib tablet:: --target '${{ matrix.target }}'
+          cargo test --locked --lib native_pen_ --target '${{ matrix.target }}'
       - name: Package and verify required notices
         env:
           RELEASE_BUILD: ${{ github.event_name != 'pull_request' }}

@@ -83,6 +83,22 @@ impl Default for App {
     }
 }
 impl App {
+    fn reset_touch_for_pen(&mut self, events: &[egui::Event]) {
+        // Discard a finger gesture already in progress when the pen takes over.
+        self.touch = Default::default();
+        if events.iter().any(|event| {
+            matches!(
+                event,
+                egui::Event::PointerButton {
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    ..
+                }
+            )
+        }) {
+            self.viewport.start_pen_contact(&mut self.document);
+        }
+    }
     pub fn with_wgpu(state: &eframe::egui_wgpu::RenderState) -> Result<Self, String> {
         let mut app = Self::new();
         app.viewport.initialize_renderer(state)?;
@@ -593,6 +609,12 @@ impl App {
     }
 }
 impl eframe::App for App {
+    fn raw_input_hook(&mut self, _: &egui::Context, input: &mut egui::RawInput) {
+        if self.tablet.prepare_input(input) {
+            self.reset_touch_for_pen(&input.events);
+        }
+    }
+
     fn on_exit(&mut self) {
         self.save_preferences();
         if self.closing || !self.document.is_dirty() {

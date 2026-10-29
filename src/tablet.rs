@@ -2,6 +2,17 @@
 use eframe::egui;
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(any(target_os = "windows", test))]
+pub(crate) mod pen;
+#[cfg(target_os = "windows")]
+mod windows;
+
+/// Install native pen classification before starting eframe's event loop.
+pub fn configure_native_input(_options: &mut eframe::NativeOptions) {
+    #[cfg(target_os = "windows")]
+    windows::configure(_options);
+}
+
 use std::{
     sync::{
         Arc, Mutex,
@@ -20,6 +31,8 @@ pub(crate) struct Tablet {
     stop: Arc<AtomicBool>,
     worker: Option<std::thread::JoinHandle<()>>,
     native: NativePressure,
+    #[cfg(target_os = "windows")]
+    pen_input: pen::PenInput,
 }
 impl Tablet {
     pub fn new() -> Self {
@@ -43,6 +56,8 @@ impl Tablet {
             stop,
             worker,
             native: NativePressure::default(),
+            #[cfg(target_os = "windows")]
+            pen_input: pen::PenInput::default(),
         }
     }
     pub fn pressure(&self) -> Option<f32> {
@@ -53,7 +68,25 @@ impl Tablet {
         self.state.lock().unwrap().status.clone()
     }
     pub fn update_native(&mut self, events: &[egui::Event]) -> Option<f32> {
+        #[cfg(target_os = "windows")]
+        let events = {
+            // Windows pressure was already extracted from classified pen contacts
+            // in prepare_input; finger force must never replace it here.
+            let _ = events;
+            &[]
+        };
         self.native.update(events)
+    }
+    pub fn prepare_input(&mut self, _input: &mut egui::RawInput) -> bool {
+        #[cfg(target_os = "windows")]
+        {
+            let pens = windows::pen_contacts(_input);
+            let routed = self.pen_input.route(_input, |id| pens.contains(&id));
+            self.native.update(&routed.pen_events);
+            routed.reset_gestures
+        }
+        #[cfg(not(target_os = "windows"))]
+        false
     }
 }
 

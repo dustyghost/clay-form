@@ -712,3 +712,55 @@ fn touch_roll_axis_snap_returns_to_an_upright_view() {
     assert!((app.camera.yaw - std::f32::consts::FRAC_PI_2).abs() < 1e-6);
     assert!(!app.document.can_undo());
 }
+
+#[test]
+fn native_pen_after_finger_sculpts_without_waiting_for_finger_release() {
+    let (mut app, ctx) = setup();
+    let mut router = crate::tablet::pen::PenInput::default();
+    let original = app.document.mesh().vertices.clone();
+    for (time, events) in [
+        (
+            1.,
+            vec![
+                touch(1, TouchPhase::Start, 400., 400.),
+                Event::PointerMoved(Pos2::new(400., 400.)),
+                primary_event(Pos2::new(400., 400.), true),
+            ],
+        ),
+        (1.1, vec![touch(2, TouchPhase::Start, 500., 400.)]),
+        (
+            1.2,
+            vec![
+                touch(1, TouchPhase::Move, 600., 400.),
+                touch(2, TouchPhase::Move, 510., 400.),
+            ],
+        ),
+        (1.3, vec![touch(2, TouchPhase::End, 510., 400.)]),
+        (
+            1.4,
+            vec![
+                touch(1, TouchPhase::End, 600., 400.),
+                primary_event(Pos2::new(600., 400.), false),
+            ],
+        ),
+    ] {
+        let mut input = egui::RawInput {
+            events,
+            ..Default::default()
+        };
+        let routed = router.route(&mut input, |id| id == 2);
+        // Exercise the same controller reset as raw_input_hook, with native
+        // classification supplied explicitly so this regression runs on Linux.
+        if routed.reset_gestures {
+            app.reset_touch_for_pen(&input.events);
+        }
+        frame(&mut app, &ctx, time, input.events);
+    }
+    assert!(app.document.is_dirty());
+    assert_ne!(app.document.mesh().vertices, original);
+    assert_eq!(app.camera.yaw, 0.);
+    assert_eq!(app.camera.pitch, 0.);
+    app.document.undo();
+    assert_eq!(app.document.mesh().vertices, original);
+    assert!(!app.document.can_undo());
+}
