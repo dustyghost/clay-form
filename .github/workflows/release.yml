@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.version.outputs.version }}
+      build_required: ${{ steps.release.outputs.build_required }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -45,6 +46,13 @@ jobs:
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write(f'version={version}\n')
           PY
+      - name: Check for an existing release before building
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: python scripts/check-existing-release.py
+      - run: python scripts/test-existing-release.py
       - run: python scripts/check-notices.py
       - run: python scripts/test-notices.py
       - run: python scripts/test-package-release.py
@@ -54,6 +62,7 @@ jobs:
 
   build:
     needs: prepare
+    if: needs.prepare.outputs.build_required == 'true'
     name: Package ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
@@ -116,6 +125,7 @@ jobs:
 
   source:
     needs: prepare
+    if: needs.prepare.outputs.build_required == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
@@ -149,7 +159,7 @@ jobs:
           if-no-files-found: error
 
   draft:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && needs.prepare.outputs.build_required == 'true'
     needs: [prepare, build, source]
     runs-on: ubuntu-22.04
     permissions:
