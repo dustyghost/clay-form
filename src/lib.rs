@@ -20,3 +20,5 @@ mod touch;
 mod ui;
 mod viewport;
 pub use app::App;
+
+pub use tablet::configure_native_input;
