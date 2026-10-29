@@ -26,11 +26,12 @@ repository to the public is a separate maintainer action.
 
 ## Create a draft release
 
-The first public testing version is **0.1.0-alpha.1 (Alpha 1)**. Continue with
-`0.1.0-alpha.2`, then `0.1.0-beta.1` when ready for beta testing, and `0.1.0`
-when that development cycle is ready for a stable release. Hyphenated versions
+The current testing version is **0.1.0-alpha.2 (Alpha 2)**. Continue with
+`0.1.0-alpha.3`, then `0.1.0-beta.1` when ready for beta testing, and `0.1.0`
+when that development cycle is ready for a stable release. Alpha 1 remains
+available under its original tag. Hyphenated versions
 are automatically marked as GitHub prereleases, in addition to being drafts.
-Arch uses `pkgver=0.1.0alpha1` and a separate `_upstream_version` for its tag;
+Arch uses `pkgver=0.1.0alpha2` and a separate `_upstream_version` for its tag;
 update both together. macOS uses the numeric `0.1.0` marketing version and CI
 run number as its bundle build counter; About retains the full alpha version.
 

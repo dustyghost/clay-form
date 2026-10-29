@@ -6,7 +6,7 @@ Use this guide to build and open Clay Form from its source code. You will need a
 
 ## Before you start
 
-Alpha 1 packages are being prepared. This guide covers the current source checkout, rather than assuming a packaged download is available. Platform packaging and real-device validation still need release review.
+For a packaged build, download the archive for your operating system and CPU from the [Alpha 2 release](https://github.com/dustyghost/clay-form/releases/tag/v0.1.0-alpha.2), extract it and open Clay Form. The steps below cover building the current source checkout. See [release readiness and platform limits](open-source-readiness.md) for testing coverage.
 
 You need an internet connection for the first build and enough time for Rust and the app's dependencies to download and compile.
 

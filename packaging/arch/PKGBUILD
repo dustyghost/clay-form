@@ -1,7 +1,7 @@
 # Build the tagged upstream source; this recipe is not yet published to AUR.
 pkgname=clay-form
-pkgver=0.1.0alpha1
-_upstream_version=0.1.0-alpha.1
+pkgver=0.1.0alpha2
+_upstream_version=0.1.0-alpha.2
 pkgrel=1
 pkgdesc='Free, open-source desktop sculpting'
 arch=('x86_64' 'aarch64')

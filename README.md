@@ -1,4 +1,4 @@
-# Clay Form — Alpha 1
+# Clay Form — Alpha 2
 
 Clay Form is a desktop sculpting prototype. Shape a sphere with a mouse or pen, then save your model and return to it later.
 
@@ -6,12 +6,12 @@ Clay Form is a desktop sculpting prototype. Shape a sphere with a mouse or pen, 
 
 *Head Sculpt*
 
-Version **0.1.0-alpha.1** is an early testing release.
+Version **0.1.0-alpha.2** is an early testing release.
 On startup, a development notice explains the current version and testing
 expectations. Choose **Continue to Clay Form** to begin; **Don’t show again for
 this version** remembers your choice until the version changes.
 
-**New to Clay Form?** [Download Alpha 1](https://github.com/dustyghost/clay-form/releases/tag/v0.1.0-alpha.1) or [build from source](docs/installation.md), then [make your first sculpt](docs/guide/getting-started.md) in about ten minutes.
+**New to Clay Form?** [Download Alpha 2](https://github.com/dustyghost/clay-form/releases/tag/v0.1.0-alpha.2) or [build from source](docs/installation.md), then [make your first sculpt](docs/guide/getting-started.md) in about ten minutes.
 
 Clay Form is free and open source under [GPLv3](LICENSE). Official downloads
 are free of charge. **Your creations belong to you:** use, sell, license or
@@ -19,7 +19,7 @@ keep your models, textures and other artwork private without crediting Clay
 Form or publishing source. Imported third-party material keeps its own terms.
 See [licensing and ownership](COPYRIGHT.md).
 
-Alpha 1 downloads are available for Windows, macOS and Linux on x86-64 and ARM64.
+Alpha 2 downloads are available for Windows, macOS and Linux on x86-64 and ARM64.
 The maintainer has tested Arch Linux; other platforms await user testing. See
 [release readiness and current limits](docs/open-source-readiness.md).
 [Release instructions](.github/RELEASING.md) cover
@@ -27,7 +27,7 @@ Windows, macOS, Linux and ARM64 artifacts, corresponding source and checksums.
 
 ## Run
 
-To use a packaged build, [download Alpha 1](https://github.com/dustyghost/clay-form/releases/tag/v0.1.0-alpha.1). The instructions below cover running from source.
+To use a packaged build, [download Alpha 2](https://github.com/dustyghost/clay-form/releases/tag/v0.1.0-alpha.2). The instructions below cover running from source.
 
 Windows packages require the [Microsoft Visual C++ v14 runtime](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist/)
 for their CPU architecture if it is not already installed.
