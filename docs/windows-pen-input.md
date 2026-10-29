@@ -3,6 +3,8 @@
 Clay Form observes the native pointer frame before winit 0.30 converts both
 `PT_PEN` and `PT_TOUCH` into `Touch`. The message hook returns false so winit
 still handles dispatch, capture, coordinate conversion and coalesced history.
+Native metadata stays queued until its matching egui touch event is consumed:
+eframe can repaint between individual contacts from the same native frame.
 The raw-input adapter removes pen contacts from touch gestures, reads pressure
 only from those pen contacts, and synthesizes a pen-owned primary pointer.
 It suppresses emulated finger/mouse pointer events during pen input and retains
@@ -34,3 +36,10 @@ support:
 
 Physical-device verification is required in addition to passing CI; synthetic
 input cannot establish what a particular driver delivers.
+
+If a device still rotates with the pen, open **Tablet & navigation**, make a
+short pen stroke, and capture the Windows input status. It reports native and
+routed pen/finger counts, unclassified contacts, pending/discarded metadata, and
+native API failures with the last Win32 error. Native pen counts without routed
+pen counts indicate a matching problem; zero native pen counts help distinguish
+a missing native message from a driver that reports touch instead of pen.

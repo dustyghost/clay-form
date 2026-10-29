@@ -1,5 +1,7 @@
 //! Tablet pressure service; platform readers publish normalized pressure here.
 use eframe::egui;
+#[cfg(any(target_os = "windows", test))]
+mod contact_types;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(any(target_os = "windows", test))]
@@ -65,7 +67,10 @@ impl Tablet {
         (state.updated_at.elapsed().as_secs_f32() < 0.5).then_some(state.pressure)
     }
     pub fn status(&self) -> String {
-        self.state.lock().unwrap().status.clone()
+        let status = self.state.lock().unwrap().status.clone();
+        #[cfg(target_os = "windows")]
+        let status = format!("{status}; {}", windows::status());
+        status
     }
     pub fn update_native(&mut self, events: &[egui::Event]) -> Option<f32> {
         #[cfg(target_os = "windows")]

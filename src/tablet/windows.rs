@@ -1,7 +1,12 @@
 //! Observe native pointer types before winit 0.30 erases PT_PEN vs PT_TOUCH.
 //! Keep winit's dispatch, coordinate conversion, capture and pointer history intact.
-use eframe::egui::{Event, RawInput, TouchPhase};
-use std::{cell::RefCell, collections::BTreeSet};
+use super::contact_types::ContactTypes;
+use eframe::egui::{RawInput, TouchPhase};
+use std::{
+    cell::{Cell, RefCell},
+    collections::BTreeSet,
+};
+use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::UI::{
     Input::Pointer::{
         GetPointerFrameInfoHistory, POINTER_FLAG_CANCELED, POINTER_FLAG_DOWN, POINTER_FLAG_UP,
@@ -11,14 +16,27 @@ use windows_sys::Win32::UI::{
 };
 use winit::platform::windows::EventLoopBuilderExtWindows;
 
-struct Observation {
-    id: u64,
-    phase: TouchPhase,
-    pen: bool,
-    canceled: bool,
-}
 thread_local! {
-    static OBSERVATIONS: RefCell<Vec<Observation>> = const { RefCell::new(Vec::new()) };
+    static OBSERVATIONS: RefCell<ContactTypes> = RefCell::default();
+    static LAST_ERROR: Cell<u32> = const { Cell::new(0) };
+    static API_FAILURES: Cell<u64> = const { Cell::new(0) };
+}
+
+pub(super) fn status() -> String {
+    OBSERVATIONS.with_borrow(|observations| {
+        format!(
+            "{}; native API failures {}, last error {}",
+            observations.status(),
+            API_FAILURES.get(),
+            LAST_ERROR.get()
+        )
+    })
+}
+
+fn record_api_error() {
+    // SAFETY: GetLastError reads this UI thread's last Win32 error.
+    LAST_ERROR.set(unsafe { GetLastError() });
+    API_FAILURES.set(API_FAILURES.get() + 1);
 }
 
 pub(super) fn configure(options: &mut eframe::NativeOptions) {
@@ -49,6 +67,7 @@ fn observe(id: u32) {
     if unsafe { GetPointerFrameInfoHistory(id, &mut entries, &mut pointers, std::ptr::null_mut()) }
         == 0
     {
+        record_api_error();
         return;
     }
     let Some(count) = entries.checked_mul(pointers) else {
@@ -60,6 +79,7 @@ fn observe(id: u32) {
     if unsafe { GetPointerFrameInfoHistory(id, &mut entries, &mut pointers, history.as_mut_ptr()) }
         == 0
     {
+        record_api_error();
         return;
     }
     let count = (entries as usize).saturating_mul(pointers as usize);
@@ -80,40 +100,26 @@ fn observe(id: u32) {
             } else {
                 continue;
             };
-            observations.push(Observation {
-                id: info.pointerId as u64,
+            observations.record(
+                info.pointerId as u64,
                 phase,
-                pen: info.pointerType == PT_PEN,
-                canceled: info.pointerFlags & POINTER_FLAG_CANCELED != 0,
-            });
+                info.pointerType == PT_PEN,
+                info.pointerFlags & POINTER_FLAG_CANCELED != 0,
+            );
         }
     });
 }
 
 pub(super) fn pen_contacts(input: &mut RawInput) -> BTreeSet<u64> {
-    let mut observations = OBSERVATIONS.with_borrow_mut(std::mem::take);
-    let mut pens = BTreeSet::new();
-    for event in &mut input.events {
-        if let Event::Touch { id, phase, .. } = event
-            && let Some(index) = observations
-                .iter()
-                .position(|o| o.id == id.0 && o.phase == *phase)
-        {
-            let observation = observations.remove(index);
-            if observation.pen {
-                pens.insert(id.0);
-            }
-            if observation.canceled {
-                *phase = TouchPhase::Cancel;
-            }
-        }
-    }
-    pens
+    // eframe may repaint reentrantly while winit dispatches a native frame.
+    // Remove only metadata whose corresponding touch event actually arrived.
+    OBSERVATIONS.with_borrow_mut(|observations| observations.classify(input))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use eframe::egui::Event;
     #[test]
     fn coalesced_pen_and_finger_contacts_keep_their_native_type() {
         OBSERVATIONS.with_borrow_mut(|observations| {
@@ -122,12 +128,7 @@ mod tests {
                 (2, true, TouchPhase::Start, false),
                 (2, true, TouchPhase::Move, true),
             ] {
-                observations.push(Observation {
-                    id,
-                    pen,
-                    phase,
-                    canceled,
-                });
+                observations.record(id, phase, pen, canceled);
             }
         });
         let mut input = RawInput::default();
