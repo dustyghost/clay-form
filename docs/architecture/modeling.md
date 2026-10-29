@@ -4,6 +4,23 @@
 
 Use this reference when changing these systems. Start with the overview for ownership and the shared edit rules.
 
+## Dynamic Mesh quad reconstruction
+
+Whole-surface quad remeshing reconstructs the active surface from a voxel grid. The user workflow and destructive-operation warnings remain in [Remesh a whole surface](../guide/modeling.md#remesh-a-whole-surface).
+
+| Algorithm | Implementation |
+| --- | --- |
+| Fast quads | Builds a voxel skin, slightly redistributes its vertices and projects it back to the pre-remesh sculpt. Projection is always included. |
+| Optimized quads | A native Rust adaptation of [Practical Quad Mesh Simplification](https://vcg.isti.cnr.it/publication/2010/TPCPP10/). Simplifies and redistributes a coarse quad layout, then subdivides and projects it back onto the reconstructed surface. |
+
+Fast quads retains grid junctions. Sharp or under-resolved regions can retain a partial fit; the result is not guided retopology or animation-ready edge flow.
+
+Optimized quads changes connectivity and may slightly change the face count. If the coarse layout creates severely uneven quads, it tries a less aggressive layout and keeps it only when spacing improves and the same shape checks pass. It takes longer than Fast quads and can soften small features.
+
+Optimized quads checks each disconnected part separately, requires closed quad topology, and checks surface samples in both directions against a 0.4-voxel limit relative to its internal Surface nets reconstruction. This is a sampled bound, not a guarantee at every point. If simplification, shape checks or bounded work cannot complete, it reports failure and keeps the original model.
+
+Both quad methods require valid closed output. Unresolved crossings or folded output report an error and keep the original model; there is no automatic triangle fallback. All remesh algorithms preserve supported vertex colours/materials and transfer vertex groups; quad faces receive a single group assignment. Global voxel remeshing still clears masks and can lose subvoxel details.
+
 ## Edge loops, creases, and smooth subdivision
 
 `sculpt/edges.rs` builds polygon incidence from retained quads and remaining triangles. Shared boundary targeting covers open borders, fully masked polygons, visible face categories, and explicit edge selections. `edges/loops.rs` inserts inset quad strips without duplicating the original border, projects new positions onto adjacent source triangles, and interpolates masks and group weights there. Face-orientation checks reject folded local results. Border relaxation fixes junctions, sharp corners, and vertices touching hidden faces.
