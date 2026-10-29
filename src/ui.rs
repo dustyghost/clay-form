@@ -1,5 +1,6 @@
 //! Immediate-mode UI. Widgets emit commands; they never perform IO or sculpt edits.
 use crate::{
+    camera::Camera,
     command::{Command, PendingAction},
     document::Document,
     preferences::{Action, BuiltinMenu, Dock, Hold, Preferences, Shortcut, SidebarSection, Tool},
@@ -528,7 +529,7 @@ impl UiState {
                         commands.push(Command::ResetView);
                     }
                     if ui
-                        .add_enabled(camera.zoom > 0.2, design::button(ui, Glyph::Minus, ""))
+                        .add_enabled(camera.zoom > Camera::MIN_ZOOM, design::button(ui, Glyph::Minus, ""))
                         .on_hover_text("Zoom out")
                         .customize(Action::ZoomOut)
                         .clicked()

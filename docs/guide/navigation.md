@@ -37,12 +37,12 @@ Tap X, Y, or Z on the top-right orientation gizmo. Dimmed axes face away from yo
 
 ## Zoom
 
-Use the wheel, toolbar **− / +**, or **View → Zoom in / Zoom out**. Default keys are **− / =**. Zoom ranges from **20–800%**.
+Use the wheel, toolbar **− / +**, or **View → Zoom in / Zoom out**. Default keys are **− / =**. Zoom goes up to **800%** and can go below **20%** to accommodate large imported models.
 
 | Reset | What changes |
 | --- | --- |
 | Click the toolbar percentage, or **Reset zoom** | Zoom returns to 100%; rotation and pan stay |
-| **Reset view** or **F** | Rotation, pan, zoom, and projection return to defaults |
+| **Reset view** or **F** | Return to the front orthographic view, center the visible models and zoom out as needed to fit them with a margin |
 
 For pen zoom, hold **Ctrl** and drag up to enlarge or down to shrink. This also works during an orbit or gizmo drag.
 
@@ -81,7 +81,7 @@ The default drawing area includes **Pan view**, **Zoom view**, **Rotate view**, 
 - Drag **Zoom view** up to zoom in or down to zoom out.
 - Drag **Rotate view** to orbit the camera.
 - Drag **Roll view** right for clockwise screen-space rotation, or left for counterclockwise rotation. Existing saved layouts can add **Roll view** from **Viewport controls…**; it uses the same movable, configurable button styles as the other controls.
-- Click **Reset view** to restore the default camera. **Vertex groups** toggles group colours; **Toggle wireframe** toggles mesh edges.
+- Click **Reset view** to face front and fit the visible models. Hidden submodels and hidden faces do not affect the fit. **Vertex groups** toggles group colours; **Toggle wireframe** toggles mesh edges.
 
 Open **Viewport controls…** in the drawing area to search the action catalog, add controls, rename them, or remove them. The catalog includes brush sliders, brush presets, menus, and editing actions. You can also right-click an existing customizable action and choose **Add to viewport**.
 

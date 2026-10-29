@@ -483,7 +483,7 @@ fn zoom_buttons_and_rebound_keys_change_only_the_camera_and_respect_limits() {
     for _ in 0..100 {
         app.dispatch(Command::ZoomOut, &ctx);
     }
-    assert_eq!(app.camera.zoom, 0.2);
+    assert_eq!(app.camera.zoom, Camera::MIN_ZOOM);
     for _ in 0..100 {
         app.dispatch(Command::ZoomIn, &ctx);
     }

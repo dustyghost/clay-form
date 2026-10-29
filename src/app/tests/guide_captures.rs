@@ -21,6 +21,38 @@ struct Guide {
 }
 
 #[test]
+#[ignore = "manual reset-view capture; requires Vulkan and optionally CLAY_OBJ_REVIEW"]
+fn reset_view_manual_capture() {
+    let directory = std::path::PathBuf::from(
+        std::env::var("CLAY_GUIDE_PREVIEW").unwrap_or_else(|_| "/tmp/clay-reset-view".into()),
+    );
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1200, 900]);
+    g.interactive = true;
+    g.panel(Tool::Library, Dock::Left);
+    let mut mesh = if let Ok(path) = std::env::var("CLAY_OBJ_REVIEW") {
+        crate::persistence::load_obj(&path).unwrap()
+    } else {
+        let mut mesh = Primitive::for_kind(PrimitiveKind::UvSphere).mesh().unwrap();
+        for point in &mut mesh.vertices {
+            *point = *point * 4.;
+        }
+        mesh
+    };
+    // Exercise centering as well as fitting without modifying the source file.
+    for point in &mut mesh.vertices {
+        *point = *point + crate::sculpt::Vec3(2., -1., 0.);
+    }
+    g.app
+        .document
+        .replace_geometry(crate::sculpt::Geometry::new(mesh))
+        .unwrap();
+    g.save("before-reset");
+    click_guide_label(&mut g, "Reset view");
+    g.save("after-reset");
+}
+
+#[test]
 #[ignore = "quad remesh/adaptive controls and visual review; requires Vulkan"]
 fn quad_topology_controls_offscreen_review() {
     use crate::sculpt::{Brush, Dab, Geometry, Kind, Mesh, Topology, Vec3};
