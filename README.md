@@ -2,9 +2,9 @@
 
 Clay Form is a desktop sculpting prototype. Shape a sphere with a mouse or pen, then save your model and return to it later.
 
-![Clay Form’s starting sphere with brush controls and the brush library on the left, mesh tools on the right, and the main menus above](docs/validation/viewport-controls-2026-10-28/small.png)
+![An imported alien head in Clay Form with teal material and three-point lighting, brush controls on the left and mesh tools on the right](docs/images/alien-cone-head-workspace.png)
 
-*The sculpting workspace.*
+*An imported alien head in the sculpting workspace.*
 
 ![Clay Form showing a clay-coloured head study in the sculpting workspace, with brush controls beside the model](docs/validation/dynamic-quads-2026-10-26/optimized-quads-head-solid.png)
 
