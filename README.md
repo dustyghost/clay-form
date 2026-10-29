@@ -1,13 +1,17 @@
 # Clay Form — Alpha 1
 
+Clay Form is a desktop sculpting prototype. Shape a sphere with a mouse or pen, then save your model and return to it later.
+
+![Clay Form showing a clay-coloured head study in the sculpting workspace, with brush controls beside the model](docs/validation/dynamic-quads-2026-10-26/optimized-quads-head-solid.png)
+
+*A head study in Clay Form’s sculpting workspace. This is a real app capture.*
+
 Version **0.1.0-alpha.1** is an early testing release.
 On startup, a development notice explains the current version and testing
 expectations. Choose **Continue to Clay Form** to begin; **Don’t show again for
 this version** remembers your choice until the version changes.
 
-Clay Form is a desktop sculpting prototype. Shape a sphere with a mouse or pen, then save your model and return to it later.
-
-**New to Clay Form?** [Set it up](docs/installation.md), then [make your first sculpt](docs/guide/getting-started.md) in about ten minutes.
+**New to Clay Form?** [Download Alpha 1](https://github.com/dustyghost/clay-form/releases/tag/v0.1.0-alpha.1) or [build from source](docs/installation.md), then [make your first sculpt](docs/guide/getting-started.md) in about ten minutes.
 
 Clay Form is free and open source under [GPLv3](LICENSE). Official downloads
 are free of charge. **Your creations belong to you:** use, sell, license or
@@ -15,14 +19,15 @@ keep your models, textures and other artwork private without crediting Clay
 Form or publishing source. Imported third-party material keeps its own terms.
 See [licensing and ownership](COPYRIGHT.md).
 
-Cross-platform packages are being prepared. See [release readiness and current
-limits](docs/open-source-readiness.md); a configured build target is not yet a
-claim of tested support. [Release instructions](.github/RELEASING.md) cover
+Alpha 1 downloads are available for Windows, macOS and Linux on x86-64 and ARM64.
+The maintainer has tested Arch Linux; other platforms await user testing. See
+[release readiness and current limits](docs/open-source-readiness.md).
+[Release instructions](.github/RELEASING.md) cover
 Windows, macOS, Linux and ARM64 artifacts, corresponding source and checksums.
 
 ## Run
 
-Alpha 1 is being prepared. These instructions describe running the current source checkout; they do not imply that an Alpha download is available or that every platform has been tested.
+To use a packaged build, [download Alpha 1](https://github.com/dustyghost/clay-form/releases/tag/v0.1.0-alpha.1). The instructions below cover running from source.
 
 Windows packages require the [Microsoft Visual C++ v14 runtime](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist/)
 for their CPU architecture if it is not already installed.
