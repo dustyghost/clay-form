@@ -60,7 +60,7 @@ For tooling, `clay_form::diagnostics::load_manifest` checks the schema version, 
 ### Example: import the sample pyramid
 
 1. Download [pyramid.obj](../examples/pyramid.obj), or use `docs/examples/pyramid.obj` from a checkout.
-2. Open **Submodels → Import OBJ…**, browse to the model, and choose **Import OBJ**. You can also enter its path in **OBJ path** before opening the picker.
+2. Open **Import → OBJ…** in the top toolbar, browse to the model, and choose **Import OBJ**. **Submodels → Import OBJ…** is also available; you can enter its path in **OBJ path** before opening that picker.
 3. Wait for the new submodel to appear. Use the original sphere's eye icon to hide it when inspecting the pyramid.
 4. Save a `.clay` project to keep both models, or undo the import.
 

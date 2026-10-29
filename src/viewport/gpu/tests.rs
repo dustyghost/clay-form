@@ -365,7 +365,14 @@ fn gpu_material_channels_match_linear_reference_and_survive_batching() {
     plane.divisions = [4, 4, 1];
     let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(256.));
     let (right, up, view) = (Vec3(1., 0., 0.), Vec3(0., 1., 0.), Vec3(0., 0., 1.));
-    let params = Params::new(rect, right, up, view, 90., rect.center(), 3.);
+    let mut params = Params::new(rect, right, up, view, 90., rect.center(), 3.);
+    // This reference measures the fixed material-swatch light, independent of
+    // the artist-facing default studio rig.
+    params.lighting = crate::lighting::Lighting {
+        lights: vec![crate::lighting::Light::default()],
+        fill: 1.,
+        ..Default::default()
+    };
     let center = (128 * 256 + 128) * 4;
     let mut samples = Vec::new();
     let mut layered = Material::from_srgb([0.1, 0.2, 0.3], 0.6, 0.2);

@@ -64,7 +64,11 @@ pub struct Material {
 }
 impl Default for Material {
     fn default() -> Self {
-        Self::from_srgb([190., 155., 125.].map(|v| v / 255.), 0.85, 0.)
+        Self {
+            // Scene-linear values from the clay-session-defaults sculpt.
+            base_color: [0.09664174, 0.43852815, 0.44494006],
+            ..Self::from_srgb([0.; 3], 0.53, 0.)
+        }
     }
 }
 pub fn srgb_to_linear(v: f32) -> f32 {
@@ -101,7 +105,7 @@ impl Material {
     pub fn is_default(&self) -> bool {
         *self == Self::default()
     }
-    /// Matches the viewport's fixed studio light, also used by the CPU fallback.
+    /// Fixed illumination for material-library swatches.
     pub(crate) fn studio_color(
         &self,
         normal: super::Vec3,
@@ -303,7 +307,10 @@ impl Material {
     }
     pub fn examples() -> [(&'static str, Self); 11] {
         [
-            ("Matte clay", Self::default()),
+            (
+                "Matte clay",
+                Self::from_srgb([190., 155., 125.].map(|v| v / 255.), 0.85, 0.),
+            ),
             (
                 "Glazed ceramic",
                 Self::from_srgb([0.12, 0.55, 0.65], 0.18, 0.),

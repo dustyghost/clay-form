@@ -192,7 +192,7 @@ impl Default for UiState {
             wire: false,
             wire_mode: Default::default(),
             wire_triangles: false,
-            show_polygroups: true,
+            show_polygroups: false,
             show_backfaces: false,
             backface_opacity: 0.15,
             show_symmetry_guides: true,
@@ -328,6 +328,20 @@ impl UiState {
                 self.builtin_menu(ui, BuiltinMenu::Edit, document, camera, &mut commands);
                 self.builtin_menu(ui, BuiltinMenu::Settings, document, camera, &mut commands);
                 self.custom_menu_bar(ui, document, &mut commands);
+                ui.menu_button("Import", |ui| {
+                    if ui
+                        .add_enabled(
+                            self.action_enabled(&Action::ImportObj, document),
+                            egui::Button::new("OBJ…"),
+                        )
+                        .customize(Action::ImportObj)
+                        .on_hover_text("Add an OBJ as a new submodel, keeping its position, scale, UVs and vertex colours")
+                        .clicked()
+                    {
+                        commands.push(Command::Action(Action::ImportObj));
+                        ui.close();
+                    }
+                });
                 ui.menu_button("Export", |ui| {
                     if ui
                         .button("OBJ")

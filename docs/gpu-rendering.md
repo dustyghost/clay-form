@@ -78,6 +78,8 @@ CLAY_GPU_SOFTWARE=1 LP_NUM_THREADS=2 CLAY_GUIDE_PREVIEW=/tmp/clay-inflate-relax 
 CLAY_GPU_SOFTWARE=1 LP_NUM_THREADS=2 CLAY_GUIDE_PREVIEW=/tmp/clay-relax-brush cargo test --locked --lib relax_brush_manual_capture -- --ignored
 ```
 
+For a manual studio comparison, run `CLAY_GUIDE_PREVIEW=/tmp/clay-studio cargo test --locked --lib studio_defaults_manual_capture -- --ignored`. This captures the default material on a sphere and front/quarter views. Optionally set `CLAY_REVIEW_PROJECT` to a `.clay` project and `CLAY_REVIEW_LIGHTING` to a lighting-rig JSON file to capture the same sculpt under both rigs. Inspect the highlights, groove contrast and colour consistency. This capture is excluded from routine CI; the GPU lighting tests compare rendered pixels against the CPU lighting model.
+
 Remaining automated coverage:
 
 | Manual capture | Ordinary regression coverage retained in CI |
