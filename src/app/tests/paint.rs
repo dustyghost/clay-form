@@ -9,6 +9,11 @@ fn material_brush_menu_old_project_pointer_release_escape_and_undo() {
     project.brushes.retain(|b| b.kind != Kind::Paint);
     app.document.replace_project(project, "old.clay").unwrap();
     assert!(!app.document.mesh().vertex_groups.is_empty());
+    assert!(
+        !app.ui.show_polygroups,
+        "Startup must show the model material"
+    );
+    app.dispatch(Command::Action(Action::PolygroupColors), &ctx);
     assert!(app.ui.show_polygroups);
     app.dispatch(Command::Action(Action::NewBrush("Paint".into())), &ctx);
     assert_eq!(app.document.brushes()[app.ui.selected].kind, Kind::Paint);

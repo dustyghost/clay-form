@@ -156,9 +156,31 @@ fn default_fill() -> f32 {
 impl Default for Lighting {
     fn default() -> Self {
         Self {
-            lights: vec![Light::default()],
+            // Camera-relative directional lights keep the sculpt readable at
+            // every model size: key, gentle fill, and a rear rim.
+            lights: vec![
+                Light {
+                    azimuth: -40.,
+                    elevation: 35.,
+                    intensity: 2.3,
+                    ..Default::default()
+                },
+                Light {
+                    azimuth: 50.,
+                    elevation: 10.,
+                    intensity: 0.55,
+                    colour: [0.90, 0.95, 1.],
+                    ..Default::default()
+                },
+                Light {
+                    azimuth: 140.,
+                    elevation: 35.,
+                    intensity: 1.4,
+                    ..Default::default()
+                },
+            ],
             selected: 0,
-            fill: default_fill(),
+            fill: 0.65,
             show_controls: false,
         }
     }

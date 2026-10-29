@@ -390,14 +390,18 @@ fn touch_pinch_configuration_clamps_zoom_and_ctrl_wheel_mapping_works() {
     );
     assert_eq!(app.camera.zoom, 0.25);
     frame(&mut app, &ctx, 1.1, vec![Event::Zoom(100.)]);
-    assert_eq!(app.camera.zoom, 0.2);
+    // Large imports can be framed below the former 20% minimum. Keep the
+    // sensitivity/reversal check separate from reaching the actual limit.
+    assert!((app.camera.zoom - 2.5e-5).abs() < 1e-10);
+    frame(&mut app, &ctx, 1.15, vec![Event::Zoom(100.)]);
+    assert_eq!(app.camera.zoom, Camera::MIN_ZOOM);
     frame(
         &mut app,
         &ctx,
         1.2,
         vec![Event::Zoom(f32::NAN), Event::Zoom(-1.)],
     );
-    assert_eq!(app.camera.zoom, 0.2);
+    assert_eq!(app.camera.zoom, Camera::MIN_ZOOM);
     app.ui.preferences.touch.reverse_pinch = false;
     frame(
         &mut app,
@@ -409,7 +413,7 @@ fn touch_pinch_configuration_clamps_zoom_and_ctrl_wheel_mapping_works() {
             modifiers: egui::Modifiers::CTRL,
         }],
     );
-    assert!(app.camera.zoom > 0.2);
+    assert!(app.camera.zoom > Camera::MIN_ZOOM);
     let before = app.camera.zoom;
     app.ui.preferences.touch.pinch = false;
     frame(&mut app, &ctx, 1.4, vec![Event::Zoom(2.)]);

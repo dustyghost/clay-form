@@ -1,11 +1,63 @@
 //! Execute UI commands and enforce edit boundaries.
 use super::*;
+use egui::Vec2;
 mod brushes;
 mod mesh;
 mod modeling;
 mod scene;
 
 impl App {
+    fn reset_camera_view(&mut self) {
+        self.camera.reset();
+        let Some(rect) = self
+            .ui
+            .viewport_menu
+            .viewport_rect
+            .filter(|rect| rect.is_positive())
+        else {
+            return;
+        };
+        let mut bounds = egui::Rect::NOTHING;
+        for index in 0..self.document.model_count() {
+            let model = self.document.model(index).unwrap();
+            if !model.metadata.visible {
+                continue;
+            }
+            let mesh = model.display_mesh(index == self.document.active_model_index());
+            let mut include = |point: crate::sculpt::Vec3| {
+                bounds.extend_with(egui::pos2(point.0, -point.1));
+            };
+            if mesh.has_hidden_faces() {
+                for (face, triangle) in mesh.triangles.iter().enumerate() {
+                    if mesh.face_visible(face) {
+                        for &vertex in triangle {
+                            include(mesh.vertices[vertex]);
+                        }
+                    }
+                }
+            } else {
+                for &point in &mesh.vertices {
+                    include(point);
+                }
+            }
+        }
+        if !bounds.is_finite() {
+            return;
+        }
+        // Reset still faces front in orthographic view. Keep the usual scale
+        // for small models; larger imports fit with room for navigation.
+        let base_scale = rect.width().min(rect.height()) * 0.35;
+        let margin = (rect.width().min(rect.height()) * 0.1).max(24.);
+        let available = rect.shrink(margin).size().max(Vec2::splat(1.));
+        let extent = bounds.size().max(Vec2::splat(1e-6));
+        self.camera.set_zoom(
+            (available.x / extent.x / base_scale)
+                .min(available.y / extent.y / base_scale)
+                .min(1.),
+        );
+        self.camera.pan = -bounds.center().to_vec2() * base_scale * self.camera.zoom;
+    }
+
     fn set_camera_projection(&mut self, perspective: bool, field_of_view: f32) {
         if self.camera.perspective == perspective
             && self.camera.field_of_view == field_of_view.clamp(20., 75.)

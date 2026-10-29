@@ -50,7 +50,7 @@ impl App {
                 Ok(())
             }
             Command::ResetView => {
-                self.camera.reset();
+                self.reset_camera_view();
                 Ok(())
             }
             Command::SetPerspective(enabled) => {

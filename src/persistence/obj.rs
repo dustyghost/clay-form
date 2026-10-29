@@ -125,6 +125,9 @@ fn parse(text: &str, cancelled: &impl Fn() -> bool) -> Result<Mesh, String> {
     let mut triangle_count = 0;
     let mut logical = String::new();
     let mut start = 1;
+    // ZBrush can append a C-string terminator after the final OBJ record.
+    // Accept only terminal NUL padding, not NULs embedded in the document.
+    let text = text.trim_end_matches('\0');
     for (line, physical) in text.trim_start_matches('\u{feff}').lines().enumerate() {
         check_cancel(cancelled)?;
         let physical = physical.split('#').next().unwrap().trim_end();

@@ -28,6 +28,9 @@ impl Default for Camera {
     }
 }
 impl Camera {
+    // Imported meshes retain their original units and can need much less than
+    // 20% zoom. Use the same limit for fitting, wheel input and UI controls.
+    pub const MIN_ZOOM: f32 = 1e-6;
     /// The same local pixel scale used by surface picking and manual brushes.
     pub fn scale_at(&self, viewport_size: Vec2, point: Vec3) -> f32 {
         Self::projection_scale(
@@ -78,7 +81,7 @@ impl Camera {
     }
     pub fn set_zoom(&mut self, zoom: f32) {
         if zoom.is_finite() {
-            self.zoom = zoom.clamp(0.2, 8.);
+            self.zoom = zoom.clamp(Self::MIN_ZOOM, 8.);
         }
     }
     pub fn zoom_step(&mut self, inward: bool) {

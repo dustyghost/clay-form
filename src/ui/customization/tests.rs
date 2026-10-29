@@ -50,7 +50,9 @@ fn frame(
         egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
                 egui::Pos2::ZERO,
-                egui::vec2(1400., 1000.),
+                // The central copy of the modeling controls is deliberately
+                // unscrolled; leave room for its expanded group controls.
+                egui::vec2(1400., if state.modeling.active { 1400. } else { 1000. }),
             )),
             events,
             ..Default::default()
@@ -770,10 +772,18 @@ fn modeling_buttons_offer_menu_and_shortcut_customization() {
         click(&mut state, &ctx, &doc, group, egui::PointerButton::Primary);
         let (output, _) = frame(&mut state, &ctx, &doc, vec![]);
         let pos = central_text(&output, label);
+        assert!(
+            ctx.content_rect().contains(pos),
+            "{label} must be on screen"
+        );
         let (_, commands) = click(&mut state, &ctx, &doc, pos, egui::PointerButton::Secondary);
         assert!(commands.is_empty(), "Right click must not execute {label}");
         let (output, _) = frame(&mut state, &ctx, &doc, vec![]);
-        text_center(&output, "Assign shortcut…");
+        assert!(
+            output.shapes.iter().any(|shape| matches!(&shape.shape,
+            egui::Shape::Text(text) if text.galley.text() == "Assign shortcut…")),
+            "Missing customization menu for {label} at {pos:?}"
+        );
         let add = text_center(&output, "Add to custom menu / shelf…");
         click(&mut state, &ctx, &doc, add, egui::PointerButton::Primary);
         assert_eq!(state.customization.chosen, Some(action.clone()), "{label}");

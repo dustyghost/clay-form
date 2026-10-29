@@ -7,6 +7,7 @@ use eframe::egui;
 #[derive(Default)]
 pub(crate) struct MaterialControls {
     textures: Vec<(Material, egui::TextureHandle)>,
+    palette_draft: (egui::ecolor::Hsva, [f32; 3]),
 
     pub sampling: bool,
     usage: Option<(u64, u64, usize, usize)>,
@@ -387,13 +388,41 @@ impl MaterialControls {
                     }
                 });
             }
-            if ui
+            let add = ui
                 .add_enabled(library.palette.len() < 32, egui::Button::new("+ Colour"))
-                .on_hover_text("Save this brush colour to your personal palette")
-                .clicked()
-            {
-                library.add_colour(brush.material.base_color);
+                .on_hover_text("Choose a colour to add to your personal palette");
+            if add.clicked() {
+                let colour = brush.material.base_color;
+                self.palette_draft = (egui::ecolor::Hsva::from_rgb(colour), colour);
             }
+            egui::Popup::menu(&add)
+                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                .show(|ui| {
+                    ui.strong("Add palette colour");
+                    let (hsva, colour) = &mut self.palette_draft;
+                    if egui::color_picker::color_picker_hsva_2d(
+                        ui,
+                        hsva,
+                        egui::color_picker::Alpha::Opaque,
+                    ) {
+                        *colour = hsva.to_rgb();
+                    }
+                    if library.palette.contains(colour) {
+                        ui.weak("Already in your palette");
+                    }
+                    ui.horizontal(|ui| {
+                        if ui.button("Add colour").clicked() {
+                            library.add_colour(*colour);
+                            brush.material = brush.material.unlinked();
+                            brush.material.base_color = *colour;
+                            brush.texture_colour = None;
+                            ui.close();
+                        }
+                        if ui.button("Cancel").clicked() {
+                            ui.close();
+                        }
+                    });
+                });
         });
         if let Some(index) = remove {
             library.palette.remove(index);
