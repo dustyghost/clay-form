@@ -507,24 +507,44 @@ Lower-level edits carry upward while retaining finer detail. Subdivision is line
 
 ### Remesh a whole surface
 
-1. Switch to **Dynamic mesh**. This keeps the active surface and discards stored levels.
+Dynamic mesh rebuilds the whole surface. Use it to redistribute geometry or fuse overlapping closed parts; use [Adaptive sculpt](sculpting.md#add-detail-where-you-sculpt) for local changes near the brush.
+
+1. Switch to **Dynamic mesh**. This keeps the active surface and discards stored subdivision levels.
 2. Choose **Quads** or **Triangles** under **Remesh topology**. New models default to Quads; older projects retain triangle remeshing until you change it.
-3. For Quads, choose **Fast quads** (the default, quickly fits grid-based quads to the sculpt) or **Optimized quads** (takes longer to improve connections and reduce crowded junctions). Older Surface nets, Relaxed quads and Voxel skin settings migrate to Fast quads; loading does not alter the saved mesh.
-4. Choose a resolution, **16–96 voxels** along the longest bounding-box axis.
-5. Select **Remesh now** to rebuild the surface with the selected topology and quad algorithm. Remeshing runs only when requested; finishing a sculpt stroke keeps the sculpted surface.
+3. For Quads, choose a method from the table below.
+4. Set **Resolution** to **16–96 voxels** along the model's longest bounding-box axis. A voxel is one cell in the grid used to rebuild the surface; higher resolution captures smaller details.
+5. Choose **Remesh now**, then inspect the silhouette, small details and wireframe. Use Undo to restore the previous mesh if needed.
+
+Remeshing happens only when requested. Finishing a sculpt stroke keeps the sculpted surface.
+
+| Quad method | Use it for | What to expect |
+| --- | --- | --- |
+| **Fast quads** (default) | A quick rebuild fitted to your sculpt | Grid-based quads; grid junctions remain, and sharp or under-resolved areas may only partly fit the sculpt |
+| **Optimized quads** | Improving connections and reducing crowded junctions | Takes longer, changes connectivity and may slightly change face count; small features can soften |
+
+Older Surface nets, Relaxed quads and Voxel skin settings migrate to Fast quads. Loading a project does not alter its saved mesh.
 
 **Remeshing clears masks and can lose details thinner than a voxel.** Use moderate resolution first. It requires closed, consistently oriented surfaces and can fuse overlapping outward-facing shells; separate volumes remain separate.
 
-Quads are editable four-sided faces, visible in wireframe and Modeling face selection. **Fast quads** builds a voxel skin, slightly redistributes its vertices and projects it back to the pre-remesh sculpt. Projection is always included. Grid junctions remain, and sharp or under-resolved regions can retain a partial fit. This is not guided retopology or animation-ready edge flow.
+Quads are editable four-sided faces, visible in wireframe and Modeling face selection. Neither method provides guided retopology or animation-ready edge flow.
 
-Both quad methods require valid closed output. Unresolved crossings or folded output report an error and keep the original model. Increase Resolution or explicitly choose Triangles; there is no automatic triangle fallback. All remesh algorithms preserve supported vertex colours/materials and transfer vertex groups; quad faces receive a single group assignment.
+Fast quads always fits its result back to the pre-remesh sculpt. This fitting cannot recover detail that the grid resolution failed to capture.
 
-Optimized quads is a native Rust adaptation of [Practical Quad Mesh Simplification](https://vcg.isti.cnr.it/publication/2010/TPCPP10/). It simplifies and redistributes a coarse quad layout, then subdivides and projects it back onto the reconstructed surface. It changes connectivity and may slightly change the face count. If the coarse layout creates severely uneven quads, it tries a less aggressive layout and keeps it only when spacing improves and the same shape checks pass. It takes longer than Fast quads and can soften small features. Use **Remesh now** when you want to rebuild the layout; Undo restores the previous mesh.
+Both quad methods require valid closed output. If the result has unresolved crossings or folded faces, Clay Form reports an error and keeps the original model. Increase **Resolution** or explicitly choose **Triangles**; there is no automatic triangle fallback.
 
-Optimized quads checks each disconnected part separately, requires closed quad topology, and checks surface samples in both directions against a 0.4-voxel limit relative to its internal Surface nets reconstruction. This is a sampled bound, not a guarantee at every point. If simplification, shape checks, or bounded work cannot complete, it reports the failure and keeps the original model. Increase Resolution or select another algorithm. It does not preserve masks: global voxel remeshing still clears them; **Adaptive sculpt → Adapt only unmasked areas** is the separate local option.
+All remesh algorithms preserve supported vertex colours/materials and transfer vertex groups. Each quad face receives a single group assignment.
 
+Optimized quads rebuilds and redistributes a coarse layout before refining and fitting it to the reconstructed surface. If that layout produces severely uneven quads, it tries a less aggressive layout and accepts it only when spacing improves and the same shape checks pass.
 
-The two topology choices are saved independently for Dynamic mesh and Adaptive sculpt. To continue locally refining a quad remesh, switch to **Adaptive sculpt → Quads**. Enable **Adapt only unmasked areas** there to protect masked topology. That option does not make whole-surface voxel remeshing local or preserve its masks.
+The method adapts [Practical Quad Mesh Simplification](https://vcg.isti.cnr.it/publication/2010/TPCPP10/). See the [modelling architecture](../architecture/modeling.md) for developer context.
+
+Optimized quads checks each disconnected part separately and requires closed quad topology. Surface samples are checked in both directions against a **0.4-voxel** limit relative to its internal Surface nets reconstruction. **This is a sampled bound, not a guarantee at every point.**
+
+If simplification, shape checks or the work limit prevent completion, the operation reports a failure and keeps the original model. Increase Resolution or select another algorithm.
+
+Dynamic mesh and Adaptive sculpt save their topology choices independently. To refine a quad remesh locally, switch to **Adaptive sculpt → Quads**.
+
+Enable **Adapt only unmasked areas** there to protect masked topology during local sculpting. **This does not make whole-surface remeshing local or preserve its masks.**
 
 Mesh operations run in the background. Cancel keeps the original surface; Undo restores prior geometry and settings. A failed remesh keeps the original model so you can adjust the settings and try again.
 

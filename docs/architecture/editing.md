@@ -76,9 +76,31 @@ For the manifold safety principle, see [CGAL's edge-collapse reference](https://
 
 ### Smooth and Decimate
 
-Smooth and temporary Shift smoothing always keep topology fixed. `sculpt/smooth.rs` uses local implicit surface fairing with lumped triangle area and a brush-radius-scaled timestep. Edge weights sum the two cotangent contributions and clamp negative totals. A bounded, diagonally preconditioned solve operates on active vertices; fixed neighboring vertices supply the boundary. The same operator solves all three displacement coordinates, allowing steep sidewalls to relax instead of squeezing vertices along their old normals. Front-facing eligibility uses a one-ring average of vertex normals so an isolated turned normal does not permanently pin a groove; disconnected opposing sheets remain separate. Masks, visibility, creases, pressure, alpha and symmetry constrain the solve. Shared deformation checks limit triangle inversion and collapse. Smooth does not restrict adjacent face normals to less than 90 degrees: valid sharp grooves can cross that angle while relaxing, so enforcing it can pin an already-smoothed patch. Projection and decimation retain their separate adjacent-face checks. Smooth uses the standard 0.02 triangle-quality collapse floor (or the original quality for an existing worse triangle), rather than requiring each triangle to maintain its former aspect ratio; failed proposals are pinned locally before their neighbors are rechecked. The flow changes shape and can shrink a protrusion; it does not guarantee volume preservation or implement an exact cotangent curvature flow.
+Smooth and temporary Shift smoothing always keep topology fixed. They relax the surface while preserving the edit protections below.
 
-The separate Decimate brush uses bounded collapses without deformation, splits or flips. It doubles the ordinary collapse ratio, capped at 95% of the target edge length, independently of the automatic simplify toggle. Both endpoints must lie in the same brush footprint, with a pressure/strength/mask/falloff-dependent length threshold. Existing link, visibility and attribute checks remain; triangle quality and a local incident-plane error guard protect shape. The plane test is not a global surface-distance bound. Decimation reports actual removal counts and has its own undo step. Older projects can add/select the new brush through the Adaptive sculpt panel without changing the project schema.
+`sculpt/smooth.rs` uses local implicit surface fairing: it solves for a smoother surface over the brush area while keeping neighbouring boundary vertices fixed. The numerical contract is:
+
+| Part | Behaviour |
+| --- | --- |
+| Area and timestep | Lumped triangle area and a brush-radius-scaled timestep |
+| Edge weights | Sum the two cotangent contributions and clamp negative totals |
+| Solver | Bounded, diagonally preconditioned solve on active vertices; fixed neighbouring vertices supply the boundary |
+| Displacement | The same operator solves all three coordinates, allowing steep sidewalls to relax instead of squeezing vertices along their old normals |
+| Front-facing eligibility | Uses a one-ring average of vertex normals so an isolated turned normal does not permanently pin a groove; disconnected opposing sheets remain separate |
+
+Masks, visibility, creases, pressure, alpha and symmetry constrain the solve. Shared deformation checks limit triangle inversion and collapse.
+
+Smooth does not restrict adjacent face normals to less than 90 degrees. Valid sharp grooves can cross that angle while relaxing, so enforcing it can pin an already-smoothed patch. Projection and decimation retain their separate adjacent-face checks.
+
+Smooth uses the standard 0.02 triangle-quality collapse floor, or the original quality for an existing worse triangle. It does not require each triangle to maintain its former aspect ratio. Failed proposals are pinned locally before their neighbours are rechecked.
+
+The flow changes shape and can shrink a protrusion. It does not guarantee volume preservation or implement an exact cotangent curvature flow.
+
+The separate Decimate brush uses bounded collapses without deformation, splits or flips. It doubles the ordinary collapse ratio, capped at 95% of the target edge length, independently of the automatic simplify toggle.
+
+Both endpoints must lie in the same brush footprint, with a pressure/strength/mask/falloff-dependent length threshold. Existing link, visibility and attribute checks remain; triangle quality and a local incident-plane error guard protect shape. The plane test is not a global surface-distance bound.
+
+Decimation reports actual removal counts and has its own undo step. Older projects can add/select the new brush through the Adaptive sculpt panel without changing the project schema.
 
 
 ## Submodel deletion

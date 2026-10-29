@@ -2,14 +2,16 @@
 
 [Documentation home](../../README.md#documentation)
 
-Turn a sphere into a small moon: carve a few craters, soften their edges, and save your own pocket planet. A mouse is enough; a pen works too. Allow about ten minutes.
+Turn a sphere into a small moon: carve a few craters, soften their edges and save your own pocket planet. A mouse is enough; a pen works too. Allow about ten minutes.
+
+If you have not opened Clay Form yet, follow the [installation guide](../installation.md) first.
 
 ## 1. Start with a sphere
 
 1. Choose **New sphere**. Save any work you want to keep before replacing it.
 2. Select **Standard** in **Brush library**.
 3. In **Brush settings**, choose **Add**, **Freehand**, **Soft** alpha, **Radius 60**, and **Strength 0.25**. Turn **Stroke stabilisation** off for this exercise.
-4. Turn **Symmetry** off so each crater appears only where you draw. For a single clay color, turn off **View → Show vertex group colors**.
+4. Turn **Symmetry** off so each crater appears only where you draw. For a single clay colour, turn off **View → Show vertex group colors**.
 
 You should have an unmarked sphere and a circular brush preview when you hover over it. Your panels may be arranged differently.
 
@@ -27,7 +29,9 @@ If clay rises instead, check that Standard is set to **Add**: Alt reverses its c
 
 ## 3. Soften the rims
 
-Hold **Shift** and make a light pass around one crater's edge. Release Shift to return to Standard. Aim to soften the transition while keeping the hollow visible.
+1. Hold **Shift** and make a light pass around one crater's edge.
+2. Release Shift to return to Standard.
+3. Inspect the rim. It should look softer while the hollow remains visible.
 
 Too much smoothing can erase the crater. Undo that pass and use a shorter stroke. Shift uses your last Smooth preset, so its size and strength may differ from Standard; see [brush settings](sculpting.md#choose-a-brush) if you need to adjust it.
 
@@ -54,7 +58,11 @@ Compare a change with **Ctrl+Z**, then restore it with **Ctrl+Shift+Z**. Open **
 
 ## 5. Save your work
 
-Choose **Save** (**Ctrl+S**), browse to a folder, and name the project `pocket-moon.clay`. Later saves update that file directly; **Save as…** (**Ctrl+Shift+S**) makes a separate version. Reopen with **Open** or **Ctrl+O**.
+1. Choose **Save** (**Ctrl+S**).
+2. Browse to a folder you can find again and name the project `pocket-moon.clay`.
+3. To return to your moon later, choose **Open** (**Ctrl+O**) and select that file.
+
+You now have a saved project to continue sculpting. Later saves update the same file; **Save as…** (**Ctrl+Shift+S**) makes a separate version.
 
 Keep the `.clay` project for further sculpting. **Export OBJ** saves the active mesh for other applications. See [Files and recovery](files.md).
 
@@ -69,5 +77,5 @@ Your moon is ready when you can see three distinct hollows from an angled view a
 | Start from a primitive | [Primitives](modeling.md#parametric-primitives) |
 | Cut away part of the form | [Slice](modeling.md#slice) |
 | Work beside a drawing | [Reference images](references.md) |
-| Keep favorite tools visible | [Workspace](workspace.md) |
+| Keep favourite tools visible | [Workspace](workspace.md) |
 

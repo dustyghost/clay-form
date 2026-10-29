@@ -2,15 +2,51 @@
 
 [Documentation home](../../README.md#documentation) · [Vertex materials](materials.md)
 
-Open **UVs / Textures** in the toolbar. Convert a parametric primitive to a sculpt mesh before editing UVs. The window has **UV layout** and **Texture images** tabs and scrolls in small windows. **Expand editor** opens a full-window UV workspace: the canvas uses the space on the left, and all controls sit in a scrollable sidebar on the right. The image keeps its square UV proportions and fits the available width and height. **Restore window** returns to the floating editor; **Close editor** returns to modeling. Switching tools or scrolling the sidebar does not shrink the canvas.
+UVs lay out a model's surface on a flat image so you can paint details independently of mesh density. Start with one of these tasks:
+
+- [Unwrap and arrange the surface](#unwrap-and-edit-uvs)
+- [Paint on an image](#paint-an-image)
+- [Capture existing vertex colour](#capture-vertex-colour)
+- [Edit in an external paint app](#edit-in-an-external-paint-app)
+- [Export to another 3D application](#export-to-maya-cinema-4d-and-other-dccs)
+
+Open **UVs / Textures** in the toolbar. Convert a parametric primitive to a sculpt mesh before editing UVs. The window has **UV layout** and **Texture images** tabs, with scrolling for small windows.
+
+Choose **Expand editor** for a full-window workspace, with the canvas on the left and a scrollable control sidebar on the right. The image stays square and fits the available space; switching tools or scrolling the sidebar does not shrink it. **Restore window** returns to the floating editor, and **Close editor** returns to modelling.
 
 ## Unwrap and edit UVs
 
-**Automatic unwrap** cuts the surface into charts using its face directions, unfolds them and packs them into the image. It keeps sculpt vertices welded. For deliberate seams, select edges in Modeling, choose **Mark UV seams** in the Modeling toolset (or **Mark selected edges** in the UV editor), then **Unwrap marked seams**. **Clear UV seams** in Modeling removes seams from selected edges. Marked seams appear violet in wireframe. Modeling’s Select tool also offers **Paint away selection** with an adjustable brush radius. It removes visible selected faces, edges or points under the brush; Escape cancels the stroke. On a cylinder, mark both cap rims and one vertical side edge: the result has a side island and two cap islands. Closed charts need a seam; failed or cancelled unwraps keep the original surface and UVs. Cancel a running unwrap with the toolbar's mesh-operation Cancel control.
+Unwrapping divides the surface into flat patches, called islands, and places them in the image. **Automatic unwrap** chooses these patches from the face directions and keeps the sculpt vertices joined together.
+
+To choose the seams yourself, try this on a cylinder:
+
+1. Select both cap rims and one vertical side edge in Modeling.
+2. Choose **Mark UV seams** in the Modeling toolset, or **Mark selected edges** in the UV editor. Marked seams appear violet in wireframe.
+3. Choose **Unwrap marked seams**. The cylinder should have one side island and two cap islands.
+4. Inspect the result with the checks below. **Clear UV seams** in Modeling removes seams from selected edges.
+
+Closed patches need a seam so they can unfold. A failed or cancelled unwrap keeps the original surface and UVs; use the toolbar's mesh-operation Cancel control to stop a running unwrap.
+
+To refine your selection first, Modeling’s Select tool offers **Paint away selection** with an adjustable brush radius. It removes visible selected faces, edges or points under the brush; Escape cancels that stroke.
 
 Turn on **3D checker** to judge the result on the model. **UV stretch** colours the 2D edges from green towards red as distortion increases. The editor reports degenerate triangles, overlapping triangle pairs and coordinates outside the image. On very dense layouts the overlap check reports when it reaches its work limit; this is not a guarantee of no overlaps.
 
-Click an island to select it in 2D and 3D; Shift-click adds islands. **From 3D selection** selects the islands containing the selected Modeling faces. Choose **Move**, **Rotate**, or **Scale** and drag the centre handle, rotation ring, or square scale handle on the selected islands. The UV view previews the drag; release applies one Undo step and updates the 3D view. Escape cancels. For precise values, enter U/V movement, rotation in degrees or a positive scale, then **Apply transform**. **Auto arrange all** straightens angled islands and packs them into 0–1 using the chosen padding, expressed as a fraction of image width. **Arrange selected** does the same for selected islands while leaving other islands exactly where they are and fitting around them. Arrangement tries tighter island bounds, quarter-turn rotations and two packing orders, then applies one uniform scale to the movable islands to preserve their relative texel density. Masked islands stay fixed in either mode. This is a rectangle-based packing heuristic, so irregular island shapes can still leave unused space. UV operations support Undo/Redo. Packing or moving UVs also moves where existing image pixels appear; it does not repaint or reproject the image.
+To move, rotate or scale an island:
+
+1. Click it to select it in both 2D and 3D. Shift-click adds islands; **From 3D selection** selects islands containing your selected Modeling faces.
+2. Choose **Move**, **Rotate** or **Scale**, then drag the centre handle, rotation ring or square scale handle.
+3. Release to apply one Undo step and update the 3D view, or press Escape to cancel. For exact values, enter U/V movement, rotation in degrees or a positive scale, then choose **Apply transform**.
+
+To pack islands into the image, set the padding as a fraction of image width, then choose an arrangement:
+
+| Action | Result |
+| --- | --- |
+| **Auto arrange all** | Straightens angled islands and packs movable islands into the 0–1 image area |
+| **Arrange selected** | Arranges selected islands around the others, leaving unselected islands exactly where they are |
+
+Masked islands stay fixed in either mode. Movable islands receive one shared scale so their relative image detail stays consistent. Packing tries tighter rectangular bounds, quarter-turn rotations and two packing orders; irregular shapes can still leave unused space.
+
+UV operations support Undo/Redo. **Moving or packing UVs changes where existing image pixels appear; it does not repaint or reproject the image.**
 
 **Paint mask** brushes protection onto UV points; **Erase mask** removes it and Alt reverses either brush. Purple shows the protected area. The inner brush radius fully pins points; the outer falloff reduces their movement. Masks are stored per UV corner, so a coarse mesh offers fewer points to paint. Fully masked points stay fixed during transforms; packing keeps an entire island fixed if any of its points are masked, placing other islands around it. **Clear UV mask** removes the protection. Unwrapping asks you to clear masks first so it cannot silently move pinned points.
 
@@ -36,11 +72,38 @@ The companion `clay_metadata.json` retains original UV corners, painted UV masks
 
 ## Paint an image
 
-The **Texture images** workflow currently authors **Base colour** only. Roughness and metallic remain material settings; their separate image-authoring controls are deferred until the preview and workflow are complete. Existing scalar images remain saved, rendered and included in model export. Choose a resolution from 256 to **4096 × 4096 (4K)** and **16-bit integer** or **32-bit float** precision. Precision is independent of export format. The default **Use existing surface / vertex colour** captures the current surface so starting texture painting preserves its appearance. Alternatively choose **Blank transparent** (reveals the material beneath) or **Solid brush colour**, or import PNG/JPEG/EXR. If UVs are missing, **Generate UVs for painting** prepares them before creation. Choose **Create & paint on model** for a new image, or **Paint on model** for an existing one. The UV editor closes and the Paint brush activates, so you can paint directly on the 3D surface. Select a colour in Brush settings; reopen the UV editor to inspect the resulting image. The toolbar displays the active texture channel. **Paint vertices** returns to vertex painting.
+The **Texture images** workflow currently authors **Base colour** only. Roughness and metallic remain material settings; separate image-authoring controls are deferred until their preview and workflow are complete. Existing scalar images are still saved, rendered and included in model exports.
+
+To start painting:
+
+1. Open **Texture images** and choose a resolution from 256 to **4096 × 4096 (4K)**. Select **16-bit integer** or **32-bit float** precision; this is independent of export format.
+2. Choose how to start the image from the table below, or import PNG/JPEG/EXR.
+3. If UVs are missing, use **Generate UVs for painting**.
+4. Choose **Create & paint on model** for a new image, or **Paint on model** for an existing one. The editor closes and the Paint brush activates.
+5. Select a colour in Brush settings and paint on the 3D surface. Reopen the UV editor to inspect the image.
+
+| Starting image | Result |
+| --- | --- |
+| **Use existing surface / vertex colour** (default) | Captures the current surface to preserve its appearance |
+| **Blank transparent** | Reveals the material beneath |
+| **Solid brush colour** | Starts with the selected brush colour |
+
+The toolbar shows the active texture channel. Choose **Paint vertices** to return to vertex painting.
 
 The Paint brush settings provide a **Brush colour** picker and **Target**: choose **Vertices** or an existing **Base colour image**. **Set up texture painting…** opens UV layout when mapping is needed, or Texture images when UVs are ready. The UV image canvas is a preview; paint strokes are made on the model.
 
-Choose **Application → Airbrush** for smooth colour buildup while holding the pen down, or **Spray dots** for scattered droplets that continue accumulating while stationary. **Flow** controls buildup speed in both modes. Spray adds **Dot density** and **Dot size** (a percentage of the main brush radius). Radius sets the overall footprint; Strength, pressure, masks and alpha still apply. Continuous buildup uses **Freehand**; Flow is disabled on other paths, which place their usual dabs. Stroke spacing and pressure interpolate along the path; airbrush flow accounts for elapsed time and weighted brush coverage. Release stops deposition, Escape cancels the complete stroke, and Undo removes it as one edit. Presets retain the mode and spray controls. Spray can also paint vertex materials, although fine dots need enough vertices; texture painting is independent of mesh density.
+Choose an application mode for continuous colour build-up:
+
+| Mode | Result | Extra controls |
+| --- | --- | --- |
+| **Application → Airbrush** | Smooth colour build-up while the pen is held down | **Flow** sets build-up speed |
+| **Spray dots** | Scattered droplets that accumulate even while stationary | **Flow**, **Dot density** and **Dot size** (percentage of brush radius) |
+
+Radius sets the overall footprint. Strength, pressure, masks and alpha still apply. Continuous build-up requires **Freehand**; other paths disable Flow and place their usual dabs.
+
+Stroke spacing and pressure interpolate along the path; airbrush flow accounts for elapsed time and weighted brush coverage. Release stops painting, Escape cancels the complete stroke, and Undo removes it as one edit. Presets retain the application mode and spray controls.
+
+Spray can also paint vertex materials, although fine dots need enough vertices. Texture painting is independent of mesh density.
 
 ![Spray dots painted directly on a model, with target, colour, flow and droplet controls](../images/texture-spray-controls.png)
 
@@ -50,11 +113,39 @@ Subtract/reverse erases image coverage, revealing the underlying material. Trans
 
 ![The texture image and a matching stroke on the model](../images/uv-texture-painting.png)
 
-The Paint controls show the active model, target, image dimensions, precision and shared uses. **Inspect** switches the viewport between lit material, unlit colour and a UV checker without modifying the project. **UV / image view** opens the linked image preview. The 2D view shows a bounded preview of the image beneath its UV edges. **Preview exposure (EV)** adjusts the view for HDR inspection while the editor is open; it does not change saved or exported pixels. Integer images use RGBA16 storage. Base colour is interpreted as sRGB; roughness and metallic are linear data and bypass colour-profile conversion. Embedded RGB ICC profiles are converted to sRGB internally and retained for conversion back during colour PNG export. Data-map exports preserve numeric values and omit colour profiles. Alpha controls texture coverage, not mesh transparency.
+Use the Paint controls to check the active model, target, image dimensions, precision and shared uses. **Inspect** switches between lit material, unlit colour and a UV checker without modifying the project.
 
-Float colour targets retain advanced brush values under **HDR colour values**. These are colour values, not another map type. Sampling preserves negative/HDR colour in this brush value and subsequent float painting/Fill. Vertex and integer targets keep bounded material values and report when sampling clips to 0–1. Float images use RGBA32 storage. RGB colour EXRs use linear Rec.709/sRGB primaries, preserve finite negative and above-one values, and use premultiplied colour alpha on disk. Data EXRs bypass colour conversion; RGB(A) uses the same associated-alpha convention, which is undone on import to recover the original data values. Import accepts single-layer non-deep RGB/RGBA EXRs with half- or full-float samples and retains them as 32-bit float; export writes 32-bit float EXR. Extra AOVs, deep/multilayer files, and colour files declaring other primaries require conversion before import. EXR without chromaticities assumes Rec.709. ICC profiles belong to the PNG workflow. Exporting a float image to PNG is refused rather than silently clipping its range. Alpha remains coverage inside 0–1; additive transparent-emission rendering is not supported.
+**UV / image view** opens the linked image preview beneath the UV edges. **Preview exposure (EV)** adjusts HDR inspection while the editor is open; it does not change saved or exported pixels.
 
-Images are limited to 4096 × 4096, with three 4K images or an equivalent mix of smaller images per project. A 4K RGBA16 image occupies 128 MiB, and RGBA32 float occupies 256 MiB before compression. Native pixels use lossless compression; project files are capped at 2 GiB. History defaults to a 1024 MiB ceiling, with shared pixel allocations counted once. Existing saved retention preferences remain in effect; if the scene cannot fit one Undo snapshot, **Paint on model** asks you to increase the budget through diagnostic settings. This ceiling does not preallocate memory. Large image edits retain fewer Undo steps. Duplicated models share their texture identity; editing or reloading updates linked uses. **Make independent** gives the active model a separate image. Texture pixels are embedded in `.clay`, so moving the project does not depend on an exchange directory. New saves use project version 3; versions 1 and 2 remain readable.
+Integer images use RGBA16 storage. Base colour is interpreted as sRGB; roughness and metallic are linear data and bypass colour-profile conversion. Embedded RGB ICC profiles are converted to sRGB internally and retained for conversion back during colour PNG export. Data-map exports preserve numeric values and omit colour profiles. Alpha controls texture coverage, not mesh transparency.
+
+Float colour targets retain advanced brush values under **HDR colour values**. These are colour values, not another map type. Sampling preserves negative and above-one colour values for subsequent float painting and Fill.
+
+Vertex and integer targets keep bounded material values and report when sampling clips to 0–1. Float images use RGBA32 storage; exporting one to PNG is refused instead of silently clipping its range.
+
+| EXR detail | Supported behaviour |
+| --- | --- |
+| Colour space | RGB colour uses linear Rec.709/sRGB primaries; files without chromaticities assume Rec.709 |
+| Values | Finite negative and above-one values are preserved |
+| Alpha | Colour alpha is premultiplied on disk; import undoes this association to recover original values |
+| Data maps | Bypass colour conversion; RGB(A) uses the same associated-alpha convention |
+| Import | Single-layer, non-deep RGB/RGBA with half- or full-float samples, retained as 32-bit float |
+| Export | 32-bit float EXR |
+
+Convert extra AOVs, deep/multilayer files and colour files declaring other primaries before import. ICC profiles belong to the PNG workflow. Alpha remains coverage inside 0–1; additive transparent-emission rendering is not supported.
+
+Texture pixels are embedded in `.clay`, so moving the project does not depend on an exchange directory. New saves use project version 3; versions 1 and 2 remain readable. Duplicated models share their texture identity: painting or reloading changes every linked use. Choose **Make independent** to give the active model a separate image.
+
+| Capacity | Limit or memory use |
+| --- | --- |
+| Maximum image size | 4096 × 4096 |
+| Images per project | Three 4K images, or an equivalent mix of smaller images |
+| 4K RGBA16 image | 128 MiB before compression |
+| 4K RGBA32 float image | 256 MiB before compression |
+| Project file | 2 GiB; native pixels use lossless compression |
+| Default history ceiling | 1024 MiB, with shared pixel allocations counted once |
+
+Existing saved history preferences remain in effect. If the scene cannot fit one Undo snapshot, **Paint on model** asks you to increase the budget through diagnostic settings. The ceiling does not preallocate memory, and large image edits retain fewer Undo steps.
 
 ## Capture vertex colour
 
@@ -68,7 +159,14 @@ The generic **Bake material maps** action is hidden for now. The deferred workfl
 
 ## Edit in an external paint app
 
-Select a texture and expand **External painting**, then choose **Edit in external paint app**. The working document contains **Texture paint** and **Clay UV guide - excluded on reload**. The cyan guide sits above the paint and is locked. Keep its name and separate layer; you can toggle visibility while painting. The paint layer is selected on opening. Choose an application executable in **External paint app**; the default is GIMP.
+To send a texture to an external paint app:
+
+1. Select the texture and expand **External painting**.
+2. Choose an executable under **External paint app**; the default is GIMP.
+3. Choose **Edit in external paint app**. The working document opens with **Texture paint** selected.
+4. Paint on that layer. Keep **Clay UV guide - excluded on reload** as a separate layer with its original name.
+
+The cyan UV guide sits above the paint and is locked. You can toggle its visibility while painting; it will be excluded when you reload.
 
 **Automatic working format** chooses float-safe **XCF** for a 32-bit texture edited in GIMP, and **PSD** otherwise. You can explicitly choose PSD or XCF. Clay Form writes native 16-bit and 32-bit float PSD; GIMP reads both but reduces float precision when exporting PSD, so a float PSD/GIMP combination is blocked before export. XCF retains float precision through ordinary GIMP Save. Use a float-PSD-capable editor for float PSD. **Export image** separately offers PNG for integer images and full-float EXR.
 
