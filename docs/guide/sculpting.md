@@ -31,7 +31,13 @@ Build a rounded form, cut a fold, or pull out a horn: choose the brush for the s
 
 For broad, clean planes, try **Polish** with a large radius and light pressure. It flattens local bumps while holding sharp corners and marked creases. Masks, hidden surfaces, pressure, alphas, and symmetry still apply. Reversing Polish exaggerates relief, as with Flatten.
 
-**Flatten** samples the average surface angle and height under the brush at the start of a stroke. Brush back and forth to bring the surface progressively toward that same plane; the footprint follows your cursor without changing the target when you cross a bump or reverse direction. Release and start another stroke to choose a new plane. Lower strength or pressure gives a gentler result. Each symmetry copy samples its own starting patch. Subtract exaggerates relief away from the fixed plane; use Polish when you want to preserve sharp corners and marked creases.
+To flatten a patch:
+
+1. Select **Flatten** and start a stroke on the surface you want to use as a reference plane.
+2. Brush back and forth across bumps. The brush brings the surface towards the average angle and height sampled at the start, even when you reverse direction.
+3. Release, then start a new stroke to choose a different plane. Lower Strength or pressure for a gentler result.
+
+The brush footprint follows your cursor while its target plane stays fixed. Each symmetry copy samples its own starting patch. Subtract exaggerates relief away from that plane; use **Polish** to preserve sharp corners and marked creases.
 
 Select a tile in **Brush library**. Use **Add brush** if a brush is missing from an older project.
 
@@ -65,11 +71,27 @@ Grab follows pointer movement; spacing does not affect it. Subtracting Smooth sh
 
 ### Alpha Drag preset
 
-New documents include **Alpha Drag**: Standard behavior with **Drag Rect** and **Wood grain** already selected. Drag to size and rotate one stamp, then release to commit it. In an existing project, use **Brushes → Alpha Drag** to add the preset. The regular Standard preset stays available for freehand work.
+Use **Alpha Drag** to place a single relief stamp:
+
+1. Select **Alpha Drag** in a new document. In an existing project, choose **Brushes → Alpha Drag** to add it.
+2. Drag to size and rotate the stamp.
+3. Release to commit it.
+
+The preset uses Standard behaviour with **Drag Rect** and **Wood grain** selected. The regular Standard preset remains available for freehand work.
 
 ### Choose an alpha
 
-An alpha shapes each dab. Open the **Alpha** panel, select **Soft**, **Hard**, or **Square** in the **Alpha library**, then choose **Use on brush**. The library includes **39 built-ins**, with **Nature’s curve** (a flowing spiral), **Leaf veins**, **Wood grain**, and **Pebbles** alongside the following collections. These built-ins are always available, including in older projects. You can also **Place stencil** with them or **Duplicate alpha** to edit a variation. Built-ins cannot be removed; saved copies can. Search by name or category to find a pattern. The library starts four rows tall; hold and drag **Drag to resize library** up or down to change its height. Clicking the handle alone does not resize it. The library keeps its chosen height even below other open panels; use the outer sidebar scrollbar to bring it into view. This centered handle stays clear of the sidebar scrollbar.
+An alpha is the pattern that shapes each brush dab. To try one:
+
+1. Open **Alpha** and select **Soft**, **Hard** or **Square** in the **Alpha library**.
+2. Choose **Use on brush** and make a short test stroke.
+3. Search by name or category to try a different pattern. Use **Duplicate alpha** to edit a variation, or **Place stencil** to brush through a fixed pattern.
+
+The library includes **39 built-ins**, including **Nature’s curve** (a flowing spiral), **Leaf veins**, **Wood grain** and **Pebbles**. They remain available in older projects. Built-ins cannot be removed; saved copies can.
+
+The library starts four rows tall. Hold and drag **Drag to resize library** up or down to change its height; clicking alone does not resize it. The centred handle stays clear of the sidebar scrollbar.
+
+Your chosen height is retained even below other open panels. Use the outer sidebar scrollbar to bring the library into view.
 
 | Category | Examples |
 | --- | --- |
@@ -170,7 +192,15 @@ Use subdivision or adaptive sculpting if a fine crease looks faceted. Detail's a
 
 Choose **Brush settings → Stroke mode**. Each preset remembers its own mode.
 
-For a reusable surface guide, open **Mesh → Editable paths**, draw the route, and choose **Save & sculpt**. With **Guide brush strokes with paths** enabled, start a stroke near the saved guide and draw along it: only the section you traverse is sculpted. Pressure, masks, symmetry, and the active brush still apply, including Detail, Grab, and Snake with their usual stencil restrictions. The captured guide reattaches after its own stroke; unrelated surface edits require reprojection. Enable **Only start strokes on paths** to ignore off-guide starts, or use **Stroke entire path** to apply the brush automatically. **New ring** creates a complete level or shortest-surface loop with one pen drag. See [editable 3D paths](paths.md) for editing and application settings.
+To brush along a reusable surface guide:
+
+1. Open **Mesh → Editable paths**, draw the route and choose **Save & sculpt**.
+2. Enable **Guide brush strokes with paths**, then start near the saved guide and draw along it. Only the section you traverse is sculpted.
+3. Inspect the stroke. The captured guide reattaches after its own stroke; unrelated surface edits require reprojection.
+
+Pressure, masks, symmetry and the active brush still apply, including Detail, Grab and Snake with their usual stencil restrictions.
+
+Enable **Only start strokes on paths** to ignore off-guide starts, or use **Stroke entire path** to apply the brush automatically. **New ring** creates a complete level or shortest-surface loop with one pen drag. See [editable 3D paths](paths.md) for editing and application settings.
 
 | Mode | Gesture | Useful for |
 | --- | --- | --- |
@@ -213,7 +243,11 @@ Guides show X in red, Y in green, Z in blue, and other radial boundaries in gold
 
 ### Pull a tapered form
 
-Select **Snake**, start on the clay, and drag outward. The tip continues to follow you after leaving the original surface. Use **Shift** to smooth the result. Enable adaptive sculpting for stretched forms that need more geometry.
+1. Select **Snake**, start on the clay and drag outwards.
+2. Keep dragging to extend the tip; it follows your pointer after leaving the original surface.
+3. Hold **Shift** to smooth the result. Enable adaptive sculpting if the stretched form needs more geometry.
+
+You should have a tapered protrusion that joins the original surface.
 
 Smooth can gradually soften a pulled-out bump back into the surrounding surface. Use several passes and a brush wide enough to cover its base. For a long protrusion you want to cut off cleanly, use [Slice → Trim](modeling.md#trim-away-one-side) with **Cap cuts** enabled. Trim cuts through the active model; check **Keep / Remove** before releasing.
 
@@ -225,11 +259,21 @@ Smooth can gradually soften a pulled-out bump back into the surrounding surface.
 
 ### Add detail where you sculpt
 
-Enable **Mesh → Adaptive sculpt**. It adds or removes local faces as you brush, keeping separate parts separate and preserving mask values. Choose **Triangles** for triangle adaptation or **Quads** to retain four-sided faces through refinement, simplification and stamps.
+Adaptive sculpting adds or removes faces near your brush, so you can add detail without subdividing the whole model. Separate parts stay separate, and mask values are preserved.
 
-Quad adaptation requires an existing all-quad mesh, such as the starting sphere or a **Dynamic mesh → Quads** remesh. Triangle or mixed meshes give an explanation rather than silently converting. Local quad refinement adds irregular junctions; it does not promise a regular grid or guided edge flow. Sharp folds, protected boundaries and per-frame work limits can prevent the requested edge size from being reached. Smooth and Relax keep topology fixed in either mode.
+1. Enable **Mesh → Adaptive sculpt**. **This discards stored subdivision levels; Undo restores them.**
+2. Choose **Triangles** for triangle adaptation, or **Quads** to retain four-sided faces during refinement, simplification and stamps.
+3. Make a short stroke and inspect the local density. Reduce **Edge size** for finer detail.
 
-Enable **Adapt only unmasked areas** to freeze topology on every face touching a nonzero mask weight, including soft masks and boundary faces. Unmasked regions can still refine or simplify, but operations that would cross that protected boundary are skipped. The brush itself continues to follow mask strength: a soft mask can still permit some deformation. Fully mask an area to protect its shape as well. Hidden faces remain protected regardless of this option.
+Adaptive sculpting requires a closed, consistently oriented surface. Mask strokes do not change topology.
+
+For **Quads**, start with an all-quad mesh, such as the starting sphere or a **Dynamic mesh → Quads** remesh. A triangle or mixed mesh shows an explanation instead of converting silently.
+
+Local quad refinement can create irregular junctions. It does not promise a regular grid or guided edge flow. Sharp folds, protected boundaries and per-frame work limits can prevent the requested edge size from being reached. **Smooth** and **Relax** keep topology fixed in either mode.
+
+Use **Adapt only unmasked areas** when masked faces must keep their existing connections. It freezes every face touching a nonzero mask weight, including soft masks and boundary faces.
+
+Unmasked regions can still refine or simplify, but operations crossing the protected boundary are skipped. This setting protects topology, not all movement: a soft mask still permits some deformation. Fully mask an area to protect its shape too. Hidden faces remain protected regardless of this option.
 
 ![Adaptive sculpt settings with the separate Decimate brush selected](../images/adaptive-settings.png)
 
@@ -245,15 +289,23 @@ Enable **Adapt only unmasked areas** to freeze topology on every face touching a
 | Simplify while sculpting | Automatically collapse short edges during deformation strokes; Smooth keeps topology fixed |
 | Simplify ratio | Threshold for collapsing edges relative to the target |
 
-**Enabling adaptive sculpt discards stored subdivision levels.** Undo restores them. It requires a closed, consistently oriented surface; Mask strokes do not change topology.
+Adaptive sculpting only changes the area around a supported brush stroke. Use [whole-surface remeshing](modeling.md#remesh-a-whole-surface) when you need to rebuild or fuse the complete surface.
 
 ### Redistribute polygons with Relax
 
-Choose **Relax** from the brush library (use **Add brush → Relax** in older projects). After Inflate, paint over crowded or stretched regions to even out the existing vertices. Radius, Strength, falloff, alpha, tablet pressure and symmetry control the local influence. Masks and hidden faces protect the surface; open boundaries, creases and sharp features stay fixed. Relax keeps vertex counts, faces and attributes, even with Adaptive sculpt enabled.
+Use **Relax** to even out crowded or stretched polygons without softening the shape.
+
+1. Choose **Relax** from the brush library, or **Add brush → Relax** in an older project.
+2. After Inflate, paint over the uneven region. Radius, Strength, falloff, alpha, tablet pressure and symmetry control the local influence.
+3. Compare the shaded surface and wireframe. Spacing should become more even while the form is retained.
+
+Masks and hidden faces protect the surface. Open boundaries, creases and sharp features stay fixed. Relax keeps vertex counts, faces and attributes, even with Adaptive sculpt enabled.
 
 **Surface tolerance** in Brush settings bounds sampled deviation from the retained surface, in model units. Start with the default 0.002; a larger tolerance allows more redistribution on curved regions. The status reports moved/protected/constrained vertices. If little moves, the tolerance or fixed topology may be limiting the result. Relax does not add missing resolution. Use Smooth/Polish when you intend to soften the shape.
 
-Consecutive Relax strokes share one immutable reference, so releasing and pressing again does not reset the surface-error allowance. A different mesh edit, Undo/Redo, changing the active model, or reopening the project captures a new reference on the next Relax stroke. Camera and brush-setting changes keep it. Saved geometry and presets round-trip normally; this reference cache is session-only.
+Consecutive Relax strokes use the same reference surface. Releasing and pressing again does not reset the surface-error allowance, so repeated strokes cannot gradually increase the permitted deviation.
+
+A different mesh edit, Undo/Redo, changing the active model or reopening the project captures a new reference on the next Relax stroke. Camera and brush-setting changes keep the existing reference. Geometry and presets save and reopen normally; the reference itself lasts only for the session.
 
 ![Relax brush surface tolerance and strength controls](../images/relax-brush-controls.png)
 
@@ -285,7 +337,16 @@ Use **Edit → Undo / Redo** or **Ctrl+Z / Ctrl+Shift+Z**. Tooltips and the Edit
 | Sculpt/mask strokes, transforms, cuts, topology edits | Brush settings, symmetry settings, camera navigation, workspace preferences |
 | Completed parameter drags as one step | Reference-image placement and settings |
 
-History defaults to **24 edits** within an estimated **1024 MiB**, shared by undo and redo. Use **Export diagnostic bundle…** in the file toolbar to configure **1–256 edits** and **16–1024 MiB**. Older undo steps are evicted first, then the most distant redo steps; a single snapshot larger than the budget cannot be retained. The estimate covers geometry and captured settings, excluding the live project and allocator overhead. Lowering limits may evict steps immediately. New/Open clears it; it is not saved in projects. A new geometry edit clears redo. Cancelled or unchanged operations preserve it. [Diagnostic bundles](files.md#diagnostic-bundles) can preserve the retained stages for inspection.
+History is temporary: **New/Open clears it, and projects do not save it**. A new geometry edit clears redo; cancelled or unchanged operations preserve it. Save a `.clay` project to keep your work, and use [Diagnostic bundles](files.md#diagnostic-bundles) to preserve retained stages for inspection.
+
+| History limit | Default | Configurable range |
+| --- | --- | --- |
+| Number of edits | 24 | 1–256 |
+| Estimated memory shared by undo and redo | 1024 MiB | 16–1024 MiB |
+
+To change these limits, open **Export diagnostic bundle…** in the file toolbar. Lowering a limit may remove steps immediately.
+
+When the budget is full, the oldest undo steps are removed first, then the most distant redo steps. A single snapshot larger than the budget cannot be retained. The memory estimate includes geometry and captured settings; it excludes the live project and allocator overhead.
 
 ## Related guides
 

@@ -4,7 +4,9 @@
 
 Start here to find the owner of a change. Follow the linked references when you need an algorithm, validation rule, or interaction contract.
 
-Clay Form uses immediate-mode egui, one application controller, and one document owner. It has no MVC framework, ECS, event bus, or plugin layer.
+Clay Form uses immediate-mode egui: controls are described each frame. One application controller coordinates actions, and one document owner holds persistent scene data.
+
+There is no MVC framework, ECS, event bus or plugin layer. Start with the ownership table below rather than looking for those abstractions.
 
 The main paths through the app are:
 
@@ -50,7 +52,9 @@ Desktop startup lives in `main.rs`. See [integration details](architecture/integ
 4. Expose settings in `ui/` and gesture handling in `viewport/` as needed.
 5. Check no-op, cancellation, undo, and invalid-input behavior alongside the successful edit.
 
-For a reusable shortcut or custom control, also add an `Action`, catalog label, availability check, and dispatch mapping. Declare default shortcuts explicitly in `Action::default_shortcut`; catalog order does not determine bindings. See [custom interface actions](architecture/integration.md#custom-interface-actions) for the complete registration and preference rules.
+For a reusable shortcut or custom control, also add an `Action`, catalogue label, availability check and dispatch mapping. Declare default shortcuts explicitly in `Action::default_shortcut`; catalogue order does not determine bindings.
+
+See [custom interface actions](architecture/integration.md#custom-interface-actions) for the complete registration and preference rules. The result should be a command that follows the same availability, preference and dispatch rules as existing controls.
 
 Introduce a trait when a second implementation needs one. Current concrete modules are enough for the existing app.
 
