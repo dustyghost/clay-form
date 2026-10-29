@@ -46,6 +46,11 @@ run number as its bundle build counter; About retains the full alpha version.
 An existing release (including a draft) is never overwritten automatically.
 An existing tag must point to the release commit.
 
+Publishing a prepared draft can trigger the tag workflow. If that tag already
+has a release, the workflow skips native builds and source packaging. Manually
+requesting an existing release fails before builds start; API permission or
+service errors also stop the preflight rather than allowing a rebuild.
+
 ## Artifacts
 
 | Asset suffix | Contents |
