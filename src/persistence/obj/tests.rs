@@ -1,6 +1,39 @@
 use super::*;
 const SQUARE: &str = "v 2 3 4\nv 4 3 4\nv 4 5 4\nv 2 5 4\n";
 #[test]
+fn zbrush_terminal_nul_padding_preserves_geometry_and_uvs() {
+    let source = format!(
+        "# File exported by ZBrush version 2021\n{SQUARE}vt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\ng head\nf 1/1 2/2 3/3 4/4"
+    );
+    let expected = read(&source);
+    for suffix in ["\0", "\n\n\0", "\r\n\0\0"] {
+        assert_eq!(read(&format!("{source}{suffix}")), expected);
+    }
+    for source in [
+        format!("{SQUARE}\0\nf 1 2 3 4\n"),
+        format!("{SQUARE}f 1 2\0 3 4\n"),
+        format!("{SQUARE}curv 0 1 1 2\n\0"),
+    ] {
+        assert!(parse(&source, &|| false).is_err());
+    }
+}
+
+#[test]
+#[ignore = "manual validation of an external OBJ supplied via CLAY_OBJ_REVIEW"]
+fn external_obj_manual_review() {
+    let path = std::env::var("CLAY_OBJ_REVIEW").expect("Set CLAY_OBJ_REVIEW to an OBJ path");
+    let mesh = load_obj(&path).unwrap();
+    mesh.validate().unwrap();
+    println!(
+        "Imported {} vertices, {} quads, {} triangles and {} UV triangle mappings",
+        mesh.vertices.len(),
+        mesh.quads.len(),
+        mesh.triangles.len(),
+        mesh.uv.corners.len()
+    );
+}
+
+#[test]
 fn uv_obj_roundtrip_preserves_seams_and_quad_topology() {
     let mesh = read(
         "v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nv 2 0 0\nv 2 1 0\nvt 0 0\nvt 0.4 0\nvt 0.4 1\nvt 0 1\nvt 0.6 0\nvt 1 0\nvt 1 1\nvt 0.6 1\nf 1/1 2/2 3/3 4/4\nf 2/5 5/6 6/7 3/8\n",

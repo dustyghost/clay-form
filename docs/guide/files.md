@@ -72,7 +72,8 @@ For tooling, `clay_form::diagnostics::load_manifest` checks the schema version, 
 
 | Preserved | Not imported |
 | --- | --- |
-| Coordinates, scale, winding, shared vertices | UVs, materials, supplied normals, vertex colors |
+| Coordinates, scale, winding, shared vertices | Supplied normals |
+| Face-corner UVs, opaque vertex colours | Material libraries and image assignments |
 | Triangles and quads | Points, lines, free-form geometry |
 | OBJ face groups | External material files |
 
@@ -82,7 +83,7 @@ Import does not center, resize, or weld the mesh. Multiple OBJ objects combine i
 
 Simple planar polygons with up to **256 corners** are triangulated, including concave shapes. Triangulate non-planar, self-intersecting, or degenerate polygons in your source app; errors identify the line.
 
-Positive/negative indices, UV/normal index forms, comments, line continuations, and UTF-8 names are accepted. Normals are regenerated. OBJ `g` names become full-weight vertex groups; if a face has several groups, the first supplies its color. Long names receive unique shortened versions.
+Positive/negative indices, UV/normal index forms, comments, line continuations, and UTF-8 names are accepted. Trailing NUL padding from ZBrush exports is accepted. Normals are regenerated. OBJ `g` names become full-weight vertex groups; if a face has several groups, the first supplies its color. Long names receive unique shortened versions.
 
 ### Import limits
 
