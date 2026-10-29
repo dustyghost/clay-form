@@ -78,17 +78,17 @@ Historical validation records, legal notices, third-party attribution, the GPLv3
 
 Before public Alpha 1, a maintainer should reconcile pending package instructions with the accepted release workflow, confirm download names and tested platforms, review signing/notarisation guidance, and complete the existing legal/readiness decisions. Clearer wording must not turn a recorded distribution decision into a claim of legal clearance.
 
-Each rewrite PR should reference its issue, include a concrete before/after example and record link/format checks. Keep the PRs unmerged and leave publication and repository visibility unchanged.
+The review PR should reference all four issues, include concrete before/after examples and record link/format checks. Keep it unmerged and leave publication and repository visibility unchanged.
 
 ## Rewrite results and remaining work
 
-The audit guided three independent documentation PRs:
+The audit guided three parallel rewrite workstreams. At the maintainer’s request, the audit and all rewrites are now consolidated in [PR #83](https://github.com/dustyghost/clay-form/pull/83). The original separate PRs #84, #85 and #86 are superseded.
 
-| Workstream | Review |
+| Workstream | Issue |
 | --- | --- |
-| Beginner setup and first sculpt | [PR #83](https://github.com/dustyghost/clay-form/pull/83), addressing #80 |
-| Sculpting, remeshing, UV/image painting and materials | [PR #86](https://github.com/dustyghost/clay-form/pull/86), addressing #81 |
-| Contributor workflow, architecture and Alpha review tasks | [PR #85](https://github.com/dustyghost/clay-form/pull/85), addressing #82 |
+| Beginner setup and first sculpt | #80 |
+| Sculpting, remeshing, UV/image painting and materials | #81 |
+| Contributor workflow, architecture and Alpha review tasks | #82 |
 
 A temporary local checkout combined all four documentation branches for review. Its 489 relative links and image targets passed with no missing paths or anchors. All pre-existing headings and explicit anchor aliases in changed files were preserved, `git diff --check` passed, and the changed Markdown parsed successfully as GitHub-flavoured Markdown. The combined diff contained documentation files only.
 
