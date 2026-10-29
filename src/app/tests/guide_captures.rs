@@ -38,11 +38,16 @@ fn quad_topology_controls_offscreen_review() {
     click_guide_label(&mut g, "Dynamic mesh");
     assert!(g.app.document.mesh_settings().dynamic);
     g.frame(vec![]);
-    assert!(
-        !g.text_positions
-            .iter()
-            .any(|(text, _)| text == "Remesh after each stroke")
-    );
+    assert!(!g.text_positions.iter().any(|(text, _)| {
+        [
+            "Remesh after each stroke",
+            "Surface nets",
+            "Relaxed quads",
+            "Voxel skin",
+            "Project to original surface",
+        ]
+        .contains(&text.as_str())
+    }));
     g.save("manual-remesh-controls");
     assert_eq!(
         g.app.document.mesh_settings().remesh_topology,
@@ -82,54 +87,41 @@ fn quad_topology_controls_offscreen_review() {
     );
     g.save("quad-remesh-face-selection");
     g.app.dispatch(Command::ModelingMode(false), &g.ctx);
-    let before_algorithm = g.app.document.geometry_snapshot();
-    click_guide_label(&mut g, "Relaxed quads");
     assert_eq!(
         g.app.document.mesh_settings().quad_remesh_algorithm,
-        crate::sculpt::QuadRemeshAlgorithm::Relaxed
+        crate::sculpt::QuadRemeshAlgorithm::Fast
     );
-    let relaxed_settings = g.app.document.geometry_snapshot();
-    g.app.dispatch(Command::Undo, &g.ctx);
-    assert_eq!(g.app.document.geometry_snapshot(), before_algorithm);
-    g.app.dispatch(Command::Redo, &g.ctx);
-    assert_eq!(g.app.document.geometry_snapshot(), relaxed_settings);
-    let saved = serde_json::to_vec(&g.app.document.project()).unwrap();
-    g.app
-        .document
-        .replace_project(
-            serde_json::from_slice(&saved).unwrap(),
-            "relaxed-quads.clay",
-        )
-        .unwrap();
-    assert_eq!(g.app.document.geometry_snapshot(), relaxed_settings);
-    click_guide_label(&mut g, "Remesh now");
-    // Projected relaxation is deliberately more expensive than grid extraction.
-    finish_mesh_job_with_timeout(&mut g.app, std::time::Duration::from_secs(60));
-    g.app.document.mesh().validate_closed().unwrap();
-    assert_eq!(
-        g.app.document.mesh().quads.len() * 2,
-        g.app.document.mesh().triangles.len()
-    );
-    g.save("relaxed-quad-remesh-wire");
-    let before_optimized = g.app.document.geometry_snapshot();
+    g.save("fast-quad-controls");
+    let before_algorithm = g.app.document.geometry_snapshot();
     click_guide_label(&mut g, "Optimized quads");
     assert_eq!(
         g.app.document.mesh_settings().quad_remesh_algorithm,
         crate::sculpt::QuadRemeshAlgorithm::Optimized
     );
-    g.save("optimized-quad-controls");
+    let optimized_settings = g.app.document.geometry_snapshot();
     g.app.dispatch(Command::Undo, &g.ctx);
-    assert_eq!(g.app.document.geometry_snapshot(), before_optimized);
+    assert_eq!(g.app.document.geometry_snapshot(), before_algorithm);
     g.app.dispatch(Command::Redo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), optimized_settings);
+    let saved = serde_json::to_vec(&g.app.document.project()).unwrap();
+    g.app
+        .document
+        .replace_project(
+            serde_json::from_slice(&saved).unwrap(),
+            "optimized-quads.clay",
+        )
+        .unwrap();
+    assert_eq!(g.app.document.geometry_snapshot(), optimized_settings);
+    g.save("optimized-quad-controls");
+    click_guide_label(&mut g, "Remesh now");
+    finish_mesh_job_with_timeout(&mut g.app, std::time::Duration::from_secs(60));
+    g.app.document.mesh().require_adaptive_quads().unwrap();
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), optimized_settings);
+    click_guide_label(&mut g, "Fast quads");
     assert_eq!(
         g.app.document.mesh_settings().quad_remesh_algorithm,
-        crate::sculpt::QuadRemeshAlgorithm::Optimized
-    );
-
-    click_guide_label(&mut g, "Surface nets");
-    assert_eq!(
-        g.app.document.mesh_settings().quad_remesh_algorithm,
-        crate::sculpt::QuadRemeshAlgorithm::SurfaceNets
+        crate::sculpt::QuadRemeshAlgorithm::Fast
     );
     click_guide_label(&mut g, "Triangles");
     assert_eq!(

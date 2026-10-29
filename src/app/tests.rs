@@ -317,13 +317,8 @@ fn background_mesh_jobs_commit_once_and_cancellation_or_failure_keeps_original()
 }
 
 #[test]
-fn remeshing_is_explicit_and_undoable() {
-    for algorithm in [
-        crate::sculpt::QuadRemeshAlgorithm::SurfaceNets,
-        crate::sculpt::QuadRemeshAlgorithm::Relaxed,
-    ] {
-        explicit_remeshing_with_algorithm(algorithm);
-    }
+fn fast_remeshing_is_explicit_and_undoable() {
+    explicit_remeshing_with_algorithm(crate::sculpt::QuadRemeshAlgorithm::Fast);
 }
 
 #[test]

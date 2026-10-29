@@ -86,6 +86,10 @@ impl Mesh {
         self.limit_deformation(before, true, None, false)
     }
 
+    pub(super) fn limit_local_projection_deformation(&mut self, before: &[Vec3]) -> bool {
+        self.limit_deformation(before, true, None, true)
+    }
+
     pub(super) fn limit_smoothing_deformation(&mut self, before: &[Vec3]) -> bool {
         self.limit_deformation(before, false, None, true)
     }

@@ -10,7 +10,17 @@ use std::collections::HashMap;
 mod optimized;
 mod optimized_mesh;
 mod quads;
-mod relaxed;
+mod skin;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum QuadExtraction {
+    SurfaceNets,
+    Fast,
+    Optimized,
+    // Literal voxel squares are an internal comparison fixture, not a setting.
+    #[cfg(test)]
+    Stepped,
+}
 
 impl Mesh {
     pub fn validate_closed(&self) -> Result<(), String> {
@@ -54,18 +64,39 @@ impl Mesh {
         topology: super::Topology,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Self, String> {
-        self.remesh_algorithm_cancellable(
-            resolution,
-            topology,
-            super::QuadRemeshAlgorithm::SurfaceNets,
-            cancelled,
-        )
+        self.remesh_impl(resolution, topology, QuadExtraction::SurfaceNets, cancelled)
     }
     pub(crate) fn remesh_algorithm_cancellable(
         &self,
         resolution: u32,
         topology: super::Topology,
         algorithm: super::QuadRemeshAlgorithm,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Self, String> {
+        let extraction = match algorithm {
+            super::QuadRemeshAlgorithm::Fast => QuadExtraction::Fast,
+            super::QuadRemeshAlgorithm::Optimized => QuadExtraction::Optimized,
+        };
+        self.remesh_impl(resolution, topology, extraction, cancelled)
+    }
+    #[cfg(test)]
+    fn remesh_stepped_cancellable(
+        &self,
+        resolution: u32,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Self, String> {
+        self.remesh_impl(
+            resolution,
+            super::Topology::Quads,
+            QuadExtraction::Stepped,
+            cancelled,
+        )
+    }
+    fn remesh_impl(
+        &self,
+        resolution: u32,
+        topology: super::Topology,
+        algorithm: QuadExtraction,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Self, String> {
         if cancelled() {
@@ -152,6 +183,21 @@ impl Mesh {
             }
         }
         drop(crossings);
+        let skin = match algorithm {
+            QuadExtraction::Fast => true,
+            #[cfg(test)]
+            QuadExtraction::Stepped => true,
+            _ => false,
+        };
+        if topology == super::Topology::Quads && skin {
+            let mesh = skin::extract(&grid, &inside, cancelled)?;
+            let mesh = if algorithm == QuadExtraction::Fast {
+                skin::project(mesh, self, step, cancelled)?
+            } else {
+                mesh
+            };
+            return self.finish_quad_remesh(mesh, cancelled);
+        }
         // Binary occupancy supplies the union's sign, but it cannot locate the
         // surface between samples. Measure actual distances in a narrow band
         // so extraction interpolates crossings instead of snapping to midpoints.
@@ -206,24 +252,10 @@ impl Mesh {
             .collect();
         if topology == super::Topology::Quads {
             let mut mesh = quads::extract(&grid, &field, cancelled)?;
-            match algorithm {
-                super::QuadRemeshAlgorithm::SurfaceNets => {}
-                super::QuadRemeshAlgorithm::Relaxed => {
-                    relaxed::redistribute(&mut mesh, step, cancelled)?
-                }
-                super::QuadRemeshAlgorithm::Optimized => {
-                    optimized_mesh::redistribute(&mut mesh, step, cancelled)?
-                }
+            if algorithm == QuadExtraction::Optimized {
+                optimized_mesh::redistribute(&mut mesh, step, cancelled)?
             }
-            self.transfer_groups_to(&mut mesh);
-            // A quad is one editable face even though its render triangles can
-            // sample different source groups at a border.
-            for pair in mesh.polygroups.as_chunks_mut::<2>().0 {
-                pair[1] = pair[0];
-            }
-            self.transfer_materials_to(&mut mesh, &cancelled)?;
-            mesh.validate_closed()?;
-            return Ok(mesh);
+            return self.finish_quad_remesh(mesh, cancelled);
         }
         let mut mesh = Mesh {
             uv: Default::default(),
@@ -331,6 +363,21 @@ impl Mesh {
         }
         mesh.smooth_remesh();
         self.transfer_groups_to(&mut mesh);
+        self.transfer_materials_to(&mut mesh, &cancelled)?;
+        mesh.validate_closed()?;
+        Ok(mesh)
+    }
+    fn finish_quad_remesh(
+        &self,
+        mut mesh: Mesh,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Self, String> {
+        self.transfer_groups_to(&mut mesh);
+        // A quad is one editable face even when its render triangles sample
+        // different source groups at a border.
+        for pair in mesh.polygroups.as_chunks_mut::<2>().0 {
+            pair[1] = pair[0];
+        }
         self.transfer_materials_to(&mut mesh, &cancelled)?;
         mesh.validate_closed()?;
         Ok(mesh)

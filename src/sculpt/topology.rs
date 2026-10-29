@@ -13,16 +13,16 @@ impl Topology {
     }
 }
 
-/// Distribution of vertices in the quad voxel reconstruction.
+/// User-facing quad remeshing choices. Retired names migrate to Fast.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum QuadRemeshAlgorithm {
     #[default]
-    SurfaceNets,
-    Relaxed,
+    #[serde(alias = "SurfaceNets", alias = "Relaxed", alias = "VoxelSkin")]
+    Fast,
     Optimized,
 }
 impl QuadRemeshAlgorithm {
     pub(crate) fn is_default(&self) -> bool {
-        *self == Self::SurfaceNets
+        *self == Self::Fast
     }
 }

@@ -1,5 +1,7 @@
 # Dynamic Mesh quads and protected adaptive topology
 
+**Current UI:** Fast quads and Optimized quads are the two choices. Fast quads replaces the Surface nets, Relaxed quads and Voxel skin presets; see [the current implementation and migration notes](../voxel-skin-2026-10-28/README.md). The following sections retain historical implementation evidence.
+
 Issue #36, 26 October 2026. The primary workflow is Dynamic Mesh remeshing; Adaptive sculpt has its own topology choice and an independent unmasked-only option.
 
 ## Implementation and limits

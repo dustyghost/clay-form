@@ -1413,14 +1413,12 @@ impl UiState {
                     let mut algorithm = settings.quad_remesh_algorithm;
                     ui.horizontal_wrapped(|ui| {
                         ui.label("Quad algorithm");
-                        ui.selectable_value(&mut algorithm, crate::sculpt::QuadRemeshAlgorithm::SurfaceNets, "Surface nets");
-                        ui.selectable_value(&mut algorithm, crate::sculpt::QuadRemeshAlgorithm::Relaxed, "Relaxed quads");
+                        ui.selectable_value(&mut algorithm, crate::sculpt::QuadRemeshAlgorithm::Fast, "Fast quads");
                         ui.selectable_value(&mut algorithm, crate::sculpt::QuadRemeshAlgorithm::Optimized, "Optimized quads");
                     });
                     if algorithm != settings.quad_remesh_algorithm { commands.push(Command::SetQuadRemeshAlgorithm(algorithm)); }
                     ui.weak(match algorithm {
-                        crate::sculpt::QuadRemeshAlgorithm::SurfaceNets => "Original grid-aligned quads. Fast, but spacing can cluster where the surface changes direction.",
-                        crate::sculpt::QuadRemeshAlgorithm::Relaxed => "Redistributes quads along the rebuilt surface for more even spacing. Slower; retains grid junctions and face count.",
+                        crate::sculpt::QuadRemeshAlgorithm::Fast => "Quickly fits grid-based quads to the sculpt. Retains grid junctions; small features may soften.",
                         crate::sculpt::QuadRemeshAlgorithm::Optimized => "Rebuilds quad connections to reduce crowded junctions. Slower; face count may change and small features may soften. Can be cancelled.",
                     });
                     ui.weak("Increase resolution for small features. Unresolved surface crossings are reported without changing the model.");

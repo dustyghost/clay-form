@@ -448,29 +448,51 @@ mod adaptive_mode_tests {
         assert_eq!(saved.mesh_settings.remesh_topology, Topology::Quads);
         assert_eq!(
             saved.mesh_settings.quad_remesh_algorithm,
-            crate::sculpt::QuadRemeshAlgorithm::SurfaceNets
+            crate::sculpt::QuadRemeshAlgorithm::Fast
         );
         assert!(
             current["mesh_settings"]
                 .get("quad_remesh_algorithm")
                 .is_none()
         );
-        for algorithm in [
-            crate::sculpt::QuadRemeshAlgorithm::Relaxed,
-            crate::sculpt::QuadRemeshAlgorithm::Optimized,
-        ] {
-            document.set_quad_remesh_algorithm(algorithm).unwrap();
-            let encoded = serde_json::to_value(document.project()).unwrap();
-            let saved: crate::sculpt::Project = serde_json::from_value(encoded).unwrap();
-            assert_eq!(saved.mesh_settings.quad_remesh_algorithm, algorithm);
-            document.undo();
-            assert_eq!(
-                document.mesh_settings().quad_remesh_algorithm,
-                crate::sculpt::QuadRemeshAlgorithm::SurfaceNets
-            );
-            document.redo();
-            assert_eq!(document.mesh_settings().quad_remesh_algorithm, algorithm);
-            document.undo();
+        let algorithm = crate::sculpt::QuadRemeshAlgorithm::Optimized;
+        document.set_quad_remesh_algorithm(algorithm).unwrap();
+        let encoded = serde_json::to_value(document.project()).unwrap();
+        let saved: crate::sculpt::Project = serde_json::from_value(encoded).unwrap();
+        assert_eq!(saved.mesh_settings.quad_remesh_algorithm, algorithm);
+        document.undo();
+        assert_eq!(
+            document.mesh_settings().quad_remesh_algorithm,
+            crate::sculpt::QuadRemeshAlgorithm::Fast
+        );
+        document.redo();
+        assert_eq!(document.mesh_settings().quad_remesh_algorithm, algorithm);
+        document.undo();
+        // Retired algorithm names and the old unchecked projection flag cannot
+        // restore hidden choices. Loading preserves the stored geometry.
+        for name in ["SurfaceNets", "Relaxed", "VoxelSkin", "Fast", "Optimized"] {
+            for projection in [false, true] {
+                let mut old = current.clone();
+                old["mesh_settings"]["quad_remesh_algorithm"] = name.into();
+                old["mesh_settings"]["voxel_skin_project"] = projection.into();
+                let migrated: crate::sculpt::Project = serde_json::from_value(old).unwrap();
+                let expected = if name == "Optimized" {
+                    crate::sculpt::QuadRemeshAlgorithm::Optimized
+                } else {
+                    crate::sculpt::QuadRemeshAlgorithm::Fast
+                };
+                assert_eq!(migrated.mesh_settings.quad_remesh_algorithm, expected);
+                assert_eq!(migrated.mesh, saved.mesh);
+                let encoded = serde_json::to_value(migrated).unwrap();
+                assert!(encoded["mesh_settings"].get("voxel_skin_project").is_none());
+                if expected == crate::sculpt::QuadRemeshAlgorithm::Fast {
+                    assert!(
+                        encoded["mesh_settings"]
+                            .get("quad_remesh_algorithm")
+                            .is_none()
+                    );
+                }
+            }
         }
         let mut old = current.clone();
         old["mesh_settings"]

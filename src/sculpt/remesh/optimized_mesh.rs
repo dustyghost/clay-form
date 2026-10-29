@@ -4,7 +4,7 @@ use crate::sculpt::projection::Surface;
 use std::collections::BTreeMap;
 
 const DEVIATION: f32 = 0.4;
-const SHAPE_ERROR: &str = "Optimized quads could not preserve this surface within 0.4 voxel. Increase Resolution or choose Surface nets or Relaxed quads; the original model is unchanged.";
+const SHAPE_ERROR: &str = "Optimized quads could not preserve this surface within 0.4 voxel. Increase Resolution or choose Fast quads; the original model is unchanged.";
 
 fn mesh(vertices: Vec<Vec3>, quads: Vec<[usize; 4]>) -> Mesh {
     Mesh {
