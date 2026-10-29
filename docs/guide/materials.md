@@ -2,7 +2,20 @@
 
 [Documentation home](../../README.md#documentation) · [Brush controls](sculpting.md)
 
-Choose **Paint** in the brush library, or **Add brush → Paint** in the brush library when opening an older project that has no Paint preset. Convert a parametric primitive to a sculpt mesh first.
+Paint colours, roughness and metallic effects onto the model, then adjust shared materials or lighting to inspect the result.
+
+- [Understand paint detail and saving](#detail-topology-and-saving)
+- [Adjust the lighting](#shading)
+- [Combine shared surfaces and layers](#shared-surfaces-and-layers)
+- [Export painted models](#exporting-paint)
+
+To begin:
+
+1. Convert a parametric primitive to a sculpt mesh if needed.
+2. Choose **Paint** in the brush library. In an older project without a Paint preset, choose **Add brush → Paint**.
+3. Choose a colour or material using the controls below, then make a short test stroke.
+
+The stroke changes the surface appearance without moving the geometry. Use Undo to remove it.
 
 Choose **Focus Paint workspace** to keep one painting sidebar and give the model more screen space. **Restore workspace** in the top toolbar returns your previous layout, including after restarting the app. The model selector switches the active model directly from this workspace.
 
@@ -62,11 +75,31 @@ Save as **`.clay`** to preserve paint, brush settings, masks, groups and subdivi
 
 ## Shading
 
-The viewport light widget starts hidden each time you open the app. Turn on **View → Lighting → Show light controls** when you want it, and use **Close light controls** to hide it completely. The **Light** widget beneath the viewport axes lets you drag the light around the model directly in view. Its gold marker shows the light direction; a hollow marker is behind the model. **Front / back** flips sides, **Directional** and **Point** change the light type, and point lights have a **Distance** slider. **Follow camera** controls whether the light moves with the view. Escape cancels a light drag. Choose which light to move from its light selector. You can also collapse the **Light** header or turn off **Show light controls** in the Lighting panel. These controls change illumination without moving the camera or painting the model.
+Lighting changes how you see the model; it does not paint or move it. To position a light directly in the viewport:
+
+1. Enable **View → Lighting → Show light controls**. These controls start hidden each time you open the app.
+2. Choose a light in the **Light** widget beneath the viewport axes.
+3. Drag its gold marker around the model. A hollow marker means the light is behind the model. Escape cancels a drag.
+4. Use **Front / back** to flip sides, or choose **Directional** or **Point**. Point lights also have a **Distance** slider.
+
+**Follow camera** controls whether the light moves with the view. Collapse the **Light** header to reduce the widget, or use **Close light controls** to hide it completely. You can also disable **Show light controls** in the Lighting panel.
 
 ![Viewport light controls and Lighting panel](../images/lighting-controls.png)
 
-Open **View → Lighting** and use **Add light** or **Remove light** to manage up to eight lights. Select a light from the list to edit it independently as a **Directional light** or **Point light**. Removing the last light leaves ambient fill and material emission. Use **Drag to move light**, or the azimuth and elevation sliders, to reposition it. Point lights also have a distance control and distance falloff. Change each light’s colour and intensity; **Ambient fill** applies to the whole scene. Turn off **Light follows camera** to keep a light fixed in world space. **Reset studio lighting** restores one studio light and neutral fill. Your lights are saved in preferences.
+Open **View → Lighting** to manage up to eight lights. Select a light from the list before adjusting it.
+
+| Control | Effect |
+| --- | --- |
+| **Add light / Remove light** | Changes the light count; removing the last leaves ambient fill and material emission |
+| **Directional light / Point light** | Chooses a direction-only light or a positioned light with distance falloff |
+| **Drag to move light**, azimuth and elevation | Repositions the selected light |
+| Distance | Adjusts point-light distance |
+| Colour and intensity | Changes the selected light |
+| **Ambient fill** | Changes illumination across the whole scene |
+| **Light follows camera** | Turn off to keep the light fixed in world space |
+| **Reset studio lighting** | Restores one studio light and neutral fill |
+
+Lights are saved in preferences.
 
 Lighting controls do not edit paint or geometry.
 
@@ -78,7 +111,14 @@ The initial surface is opaque. UV image painting currently exposes base colour o
 
 Editing a named material now updates surfaces painted with it, in proportion to each stroke's contribution. **Copy material** creates an independent version before you experiment. Rename it with **Material name**. These definitions travel with the project, and Undo restores changes to both the definition and painted surfaces.
 
-Open **Surface options** for IOR, specular level, emission colour and emission strength. Open **Material layers** to combine up to three additional surfaces over the base. Each layer has the same surface controls, a weight and **Mix** or **Add** blending. **Start from** supplies a surface preset; **Move up** changes the order and **Remove layer**, at the top of an expanded layer, deletes it and closes the gap in the stack. Empty slots are hidden, and **Add layer** creates a new layer. Undo restores a removed layer and its effect on painted surfaces. A layer with weight zero remains available for editing. Mix at full weight replaces the earlier surface; Add accumulates another contribution. Transmission is not available; image paint is managed through the Paint target and UV / image view.
+Use **Surface options** to adjust IOR (index of refraction), specular level, emission colour and emission strength. **Material layers** combines up to three additional surfaces over the base.
+
+1. Choose **Add layer**, then use **Start from** to choose a surface preset.
+2. Adjust its surface controls and weight.
+3. Choose **Mix** or **Add**, then inspect the painted surface. Mix at full weight replaces the earlier surface; Add accumulates another contribution.
+4. Use **Move up** to change the order. **Remove layer**, at the top of an expanded layer, deletes it and closes the gap; Undo restores the layer and its effect on painted surfaces.
+
+Empty slots stay hidden. A layer with zero weight remains available for editing. Transmission is not available; manage image paint through the Paint target and UV / image view.
 
 Open **Subsurface scattering** for weight, RGB scattering radius and scale. Beeswax, Ivory wax, Warm skin and Deep skin include starting settings and a subtle specular layer; all colours and controls remain editable. The viewport uses a fast soft-diffuse approximation, while Blender export uses full Principled scattering. The approximation does not account for actual model thickness, so check final translucency in Blender.
 
