@@ -78,6 +78,8 @@ CLAY_GPU_SOFTWARE=1 LP_NUM_THREADS=2 CLAY_GUIDE_PREVIEW=/tmp/clay-inflate-relax 
 CLAY_GPU_SOFTWARE=1 LP_NUM_THREADS=2 CLAY_GUIDE_PREVIEW=/tmp/clay-relax-brush cargo test --locked --lib relax_brush_manual_capture -- --ignored
 ```
 
+For a manual studio comparison, run `CLAY_GUIDE_PREVIEW=/tmp/clay-studio cargo test --locked --lib studio_defaults_manual_capture -- --ignored`. This captures the default material on a sphere and front/quarter views. Optionally set `CLAY_REVIEW_PROJECT` to a `.clay` project and `CLAY_REVIEW_LIGHTING` to a lighting-rig JSON file to capture the same sculpt under both rigs. Inspect the highlights, groove contrast and colour consistency. This capture is excluded from routine CI; the GPU lighting tests compare rendered pixels against the CPU lighting model.
+
 Remaining automated coverage:
 
 | Manual capture | Ordinary regression coverage retained in CI |
@@ -215,3 +217,13 @@ This writes `-1.png` (ready), `-4.png` (rotation drag), and `-6.png` (regenerate
 ## Painted material checks
 
 `gpu_material_channels_match_linear_reference_and_survive_batching` checks real colour/roughness/metallic pixels, vertex interpolation, mask dimming and storage-buffer batches. It runs with the existing `viewport::gpu::` CI matrix. The six-material gallery is a manual capture: `CLAY_GUIDE_PREVIEW=/tmp/clay-material-review cargo test --locked --lib material_examples_manual_capture -- --ignored --nocapture`. See the [Blender mapping and validation notes](validation/material-paint-2026-10-24/README.md).
+
+## Reset-view framing review
+
+`reset_view_manual_capture` clicks the toolbar's Reset view control and saves before/after renders. It is a manual visual review, excluded from routine CI. By default it uses an enlarged, offset sphere; set `CLAY_OBJ_REVIEW` to review an imported OBJ instead. Source files are read without modification.
+
+```sh
+CLAY_GPU_SOFTWARE=1 LP_NUM_THREADS=2 CLAY_GUIDE_PREVIEW=/tmp/clay-reset-view cargo test --locked --lib reset_view_manual_capture -- --ignored --nocapture
+```
+
+Check that the complete model is centered inside the navigation frame with a margin. CPU regressions cover the F shortcut, large and offset models, wide and tall viewports, visible submodels, hidden geometry, repeated resets and unchanged document history.

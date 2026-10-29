@@ -574,7 +574,7 @@ impl UiState {
                 }
                 let mut value = camera.zoom;
                 ui.add(
-                    egui::Slider::new(&mut value, 0.2..=8.)
+                    egui::Slider::new(&mut value, Camera::MIN_ZOOM..=8.)
                         .logarithmic(true)
                         .text("Zoom")
                         .custom_formatter(|value, _| format!("{:.0}%", value * 100.))

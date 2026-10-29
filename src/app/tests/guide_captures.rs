@@ -21,6 +21,38 @@ struct Guide {
 }
 
 #[test]
+#[ignore = "manual reset-view capture; requires Vulkan and optionally CLAY_OBJ_REVIEW"]
+fn reset_view_manual_capture() {
+    let directory = std::path::PathBuf::from(
+        std::env::var("CLAY_GUIDE_PREVIEW").unwrap_or_else(|_| "/tmp/clay-reset-view".into()),
+    );
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1200, 900]);
+    g.interactive = true;
+    g.panel(Tool::Library, Dock::Left);
+    let mut mesh = if let Ok(path) = std::env::var("CLAY_OBJ_REVIEW") {
+        crate::persistence::load_obj(&path).unwrap()
+    } else {
+        let mut mesh = Primitive::for_kind(PrimitiveKind::UvSphere).mesh().unwrap();
+        for point in &mut mesh.vertices {
+            *point = *point * 4.;
+        }
+        mesh
+    };
+    // Exercise centering as well as fitting without modifying the source file.
+    for point in &mut mesh.vertices {
+        *point = *point + crate::sculpt::Vec3(2., -1., 0.);
+    }
+    g.app
+        .document
+        .replace_geometry(crate::sculpt::Geometry::new(mesh))
+        .unwrap();
+    g.save("before-reset");
+    click_guide_label(&mut g, "Reset view");
+    g.save("after-reset");
+}
+
+#[test]
 #[ignore = "quad remesh/adaptive controls and visual review; requires Vulkan"]
 fn quad_topology_controls_offscreen_review() {
     use crate::sculpt::{Brush, Dab, Geometry, Kind, Mesh, Topology, Vec3};
@@ -812,7 +844,6 @@ impl Guide {
         for panel in &mut app.ui.preferences.panels {
             panel.dock = Dock::Hidden;
         }
-        app.ui.show_polygroups = false;
         let ctx = egui::Context::default();
         ctx.style_mut(|style| style.animation_time = 0.);
         // Install the app's theme even for panel-only captures.
@@ -3283,6 +3314,34 @@ fn relax_brush_manual_capture() {
 }
 
 #[test]
+#[ignore = "manual studio comparison; requires Vulkan, CLAY_GUIDE_PREVIEW and optional CLAY_REVIEW_PROJECT/CLAY_REVIEW_LIGHTING"]
+fn studio_defaults_manual_capture() {
+    let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [900, 900]);
+    g.toolbar = false;
+    g.save("default-material-sphere");
+    if let Ok(path) = std::env::var("CLAY_REVIEW_PROJECT") {
+        let project = crate::persistence::load_project(&path).unwrap();
+        g.app.document.replace_project(project, &path).unwrap();
+    }
+    let reference = std::env::var("CLAY_REVIEW_LIGHTING")
+        .ok()
+        .map(|path| crate::persistence::read_json::<crate::lighting::Lighting>(&path).unwrap());
+    for (view, yaw, pitch) in [("front", 0., 0.), ("quarter", 0.84, 0.56)] {
+        g.app.camera.yaw = yaw;
+        g.app.camera.pitch = pitch;
+        if let Some(reference) = &reference {
+            g.app.ui.preferences.lighting = reference.clone();
+            g.save(&format!("studio-reference-{view}"));
+        }
+        g.app.ui.preferences.lighting = Default::default();
+        g.save(&format!("studio-default-{view}"));
+    }
+    g.app.viewport.destroy_renderer();
+}
+
+#[test]
 #[ignore = "manual material gallery and paint controls; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn material_examples_manual_capture() {
     use crate::sculpt::Material;
@@ -3405,6 +3464,84 @@ fn click_paint_control(g: &mut Guide, label: &str) {
 }
 
 #[test]
+#[ignore = "requires Vulkan; checks the Paint palette picker and captures its placement"]
+fn paint_palette_picker_offscreen_review() {
+    let directory = std::env::temp_dir().join("clay-paint-palette");
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1200, 900]);
+    g.interactive = true;
+    g.app
+        .dispatch(Command::AddBrush(crate::sculpt::Kind::Paint), &g.ctx);
+    g.panel(Tool::Brush, Dock::Right);
+    let mut brush = g.app.document.brushes()[g.app.ui.selected].clone();
+    brush.material.base_color = g.app.ui.preferences.materials.palette[0];
+    brush.texture_colour = Some([2., 1., 0.5]);
+    g.app
+        .document
+        .update_brush(g.app.ui.selected, brush.clone())
+        .unwrap();
+    let palette = g.app.ui.preferences.materials.palette.clone();
+    let geometry = g.app.document.geometry_snapshot();
+
+    click_paint_control(&mut g, "+ Colour");
+    g.save("paint-palette-picker");
+    assert!(egui::Popup::is_any_open(&g.ctx));
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(text, _)| text == "Add palette colour")
+    );
+    assert_eq!(g.app.ui.preferences.materials.palette, palette);
+    click_guide_label(&mut g, "Cancel");
+    assert!(!egui::Popup::is_any_open(&g.ctx));
+    assert!(g.app.document.brushes()[g.app.ui.selected] == brush);
+
+    // An existing colour still opens the picker, without adding a duplicate.
+    click_paint_control(&mut g, "+ Colour");
+    click_guide_label(&mut g, "Add colour");
+    assert!(!egui::Popup::is_any_open(&g.ctx));
+    assert_eq!(g.app.ui.preferences.materials.palette, palette);
+    assert_eq!(
+        g.app.document.brushes()[g.app.ui.selected].texture_colour,
+        None
+    );
+
+    click_paint_control(&mut g, "+ Colour");
+    g.frame(vec![]);
+    // Click the centre of the saturation/value square below the RGB controls.
+    let title = g
+        .text_positions
+        .iter()
+        .find(|(text, _)| text == "Add palette colour")
+        .unwrap()
+        .1;
+    let point = title + Vec2::new(0., 140.);
+    g.frame(vec![
+        egui::Event::PointerMoved(point),
+        primary_event(point, true),
+    ]);
+    g.frame(vec![primary_event(point, false)]);
+    assert!(
+        egui::Popup::is_any_open(&g.ctx),
+        "Editing must keep the picker open"
+    );
+    assert_eq!(g.app.ui.preferences.materials.palette, palette);
+    click_guide_label(&mut g, "Add colour");
+    assert!(!egui::Popup::is_any_open(&g.ctx));
+    let colour = g.app.document.brushes()[g.app.ui.selected]
+        .material
+        .base_color;
+    assert_ne!(colour, brush.material.base_color);
+    assert_eq!(
+        g.app.ui.preferences.materials.palette.len(),
+        palette.len() + 1
+    );
+    assert_eq!(g.app.ui.preferences.materials.palette.last(), Some(&colour));
+    assert_eq!(g.app.document.geometry_snapshot(), geometry);
+    g.save("paint-palette-added");
+}
+
+#[test]
 #[ignore = "requires Vulkan; clicks project material, copy, palette, sampler, layers and explicit library save"]
 fn material_controls_offscreen_review() {
     use crate::sculpt::{Kind, Material};
@@ -3518,6 +3655,7 @@ fn material_controls_offscreen_review() {
     click_paint_control(&mut g, "Save to personal library");
     assert_eq!(g.app.ui.preferences.materials.copies.len(), 1);
     click_paint_control(&mut g, "+ Colour");
+    click_guide_label(&mut g, "Add colour");
     assert!(
         g.app
             .ui
@@ -3614,7 +3752,7 @@ fn material_controls_offscreen_review() {
 #[ignore = "requires Vulkan; moves viewport lights through real controls and checks rendered changes"]
 fn viewport_lighting_offscreen_review() {
     use crate::{
-        lighting::{Light, LightKind, Lighting},
+        lighting::{LightKind, Lighting},
         sculpt::{Brush, Kind, Material},
     };
     let directory = std::env::var("CLAY_GUIDE_PREVIEW")
@@ -3662,7 +3800,10 @@ fn viewport_lighting_offscreen_review() {
         .count();
     assert!(changed > 500, "Moving the light changes the rendered model");
     assert!(
-        (g.app.ui.preferences.lighting.lights[0].azimuth - Light::default().azimuth - 54.).abs()
+        (g.app.ui.preferences.lighting.lights[0].azimuth
+            - Lighting::default().lights[0].azimuth
+            - 54.)
+            .abs()
             < 1.
     );
     click_guide_label(&mut g, "Point light");
@@ -3813,6 +3954,8 @@ fn viewport_lighting_offscreen_review() {
             .iter()
             .any(|(text, _)| text == "Close light controls")
     );
+    // Exercise adding/removing lights from a single-light rig.
+    g.app.ui.preferences.lighting.lights.truncate(1);
     let first = g.app.ui.preferences.lighting.lights[0];
     click_guide_label(&mut g, "Add light");
     assert_eq!(g.app.ui.preferences.lighting.lights.len(), 2);

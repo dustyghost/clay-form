@@ -27,6 +27,8 @@ Use **Brush colour**, the palette and **Sample colour** for future strokes. Thes
 
 Open **Material presets and shared editor** to choose a rendered material swatch. Drag **Drag to resize materials** to change the swatch area; larger libraries scroll within it. Choosing a material affects future strokes. Open **Edit shared project material** deliberately when you want to update existing painted uses; it shows how many models and vertices share that definition.
 
+New models start with a teal sculpting material (roughness 0.53, metallic 0). The warm Matte clay preset remains available in the material library. **View → Show vertex group colors** starts off so the material is visible; enable it when you want to inspect group colours.
+
 | Example | Appearance | Roughness | Metallic |
 | --- | --- | --- | --- |
 | Matte clay | Warm, broad shading | 0.85 | 0 |
@@ -47,7 +49,7 @@ Project material edits, copies and resets stay in the `.clay` project and suppor
 
 **Reset material** restores a built-in material's original settings, or a custom material's saved starting settings. It keeps the name and updates painted uses. **Remove from project** removes the definition and detaches its painted uses while preserving their appearance; Undo restores it. Personal presets remain available. **Hide personal library preset** hides/removes the preset for future projects without changing current project paint. **Restore built-in materials** makes hidden built-ins available again.
 
-Click a palette swatch to select a brush colour. **+ Colour** saves it to your personal palette; right-click a swatch to remove it. **Sample colour** picks the visible surface's colour, including image paint, without lighting, mask shading or vertex-group tint. It samples once; **Escape** cancels.
+Click a palette swatch to select a brush colour. **+ Colour** opens a picker: choose a colour, then **Add colour** to save it to your personal palette and select it for painting. **Cancel** discards the choice. Right-click a swatch to remove it. **Sample colour** picks the visible surface's colour, including image paint, without lighting, mask shading or vertex-group tint. It samples once; **Escape** cancels.
 
 **Application** chooses Regular stroke, Airbrush or Spray dots, while **Stroke path** controls Freehand, Line or stamps. Continuous **Flow / second** is available for Freehand; hold the pen still to build up paint. Spray offers density and dot size as a percentage of brush radius. Use **Inspect** to switch between Lit material, Unlit colour, Roughness, Metallic and UV checker without editing paint.
 
@@ -103,7 +105,7 @@ Lights are saved in preferences.
 
 Lighting controls do not edit paint or geometry.
 
-The default viewport lighting uses a studio light and neutral fill. Roughness changes highlight width; metallic changes the diffuse/specular balance and tints metal reflections. The same material appearance is used for the active and inactive painted models. Unpainted inactive models retain their blue-grey selection tint.
+The default viewport lighting uses a three-point studio rig: a neutral key, a weaker slightly cool fill, and a rear rim light, with restrained ambient fill. All three follow the camera. Use **Reset studio lighting** to apply this rig to an existing setup. Roughness changes highlight width; metallic changes the diffuse/specular balance and tints metal reflections. The same material appearance is used for the active and inactive painted models. Unpainted inactive models retain their blue-grey selection tint.
 
 The initial surface is opaque. UV image painting currently exposes base colour only. Existing roughness and metallic images remain preserved and rendered; their authoring controls are deferred in [#70](https://github.com/dustyghost/clay-form/issues/70). Normal maps, height/displacement maps, anisotropy and arbitrary shader graphs are not editable material channels yet. The viewport does not simulate scene reflections, cast shadows or indirect lighting. See the [material channel contract](../materials.md) for Blender mapping and validation.
 

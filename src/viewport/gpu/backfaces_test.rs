@@ -12,6 +12,10 @@ fn gpu_backfaces_are_faint_depth_tested_and_do_not_modify_geometry() {
         let mut plane = Primitive::for_kind(PrimitiveKind::Plane);
         plane.divisions = [1; 3];
         let mut mesh = plane.mesh().unwrap();
+        // Use a neutral surface for the brightness assertions, independent of
+        // the artist's default material colour.
+        mesh.materials =
+            vec![crate::sculpt::Material::from_srgb([0.7; 3], 0.85, 0.); mesh.vertices.len()];
         for t in &mut mesh.triangles {
             t.swap(1, 2);
         }
@@ -90,6 +94,16 @@ fn gpu_backfaces_are_faint_depth_tested_and_do_not_modify_geometry() {
         // Put an opaque front-facing copy behind the translucent back.
         document.duplicate_model(false).unwrap();
         let mut geometry = document.geometry_snapshot();
+        // Distinct surfaces make alpha blending observable even when their
+        // normals receive identical lighting.
+        geometry
+            .mesh
+            .materials
+            .fill(crate::sculpt::Material::from_srgb(
+                [0.8, 0.25, 0.1],
+                0.85,
+                0.,
+            ));
         for p in &mut geometry.mesh.vertices {
             p.0 *= 0.45;
             p.1 *= 0.45;
@@ -121,7 +135,7 @@ fn gpu_backfaces_are_faint_depth_tested_and_do_not_modify_geometry() {
         let combined = sample(&gpu);
         assert!(
             combined[0] > 100 && combined != behind,
-            "faint back blends over the visible surface behind it"
+            "faint back blends over the visible surface behind it: {behind:?} -> {combined:?}"
         );
         if let Ok(path) = std::env::var("CLAY_BACKFACE_PREVIEW") {
             let mut pixels = vec![0; 256 * 256 * 4];

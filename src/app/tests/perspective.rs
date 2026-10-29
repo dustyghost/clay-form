@@ -2,6 +2,138 @@ use super::*;
 use crate::sculpt::{Kind, StrokeMode};
 
 #[test]
+fn reset_view_fits_large_offset_models_via_f_without_editing() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let mut mesh = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Cube)
+        .mesh()
+        .unwrap();
+    for point in &mut mesh.vertices {
+        *point = *point * 30. + crate::sculpt::Vec3(50., -40., 10.);
+    }
+    app.document
+        .replace_geometry(crate::sculpt::Geometry::new(mesh))
+        .unwrap();
+    let rect = navigation_frame(&mut app, &ctx, vec![]);
+    let before = app.document.geometry_snapshot();
+    let history = app.document.history_counts();
+    let dirty = app.document.is_dirty();
+    app.camera.yaw = 0.7;
+    app.camera.pitch = 0.4;
+    app.camera.roll = 0.5;
+    app.camera.zoom = 4.;
+    app.camera.pan = Vec2::new(300., -200.);
+    app.camera.perspective = true;
+    let _ = ctx.run(
+        egui::RawInput {
+            events: vec![egui::Event::Key {
+                key: egui::Key::F,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            ..Default::default()
+        },
+        |ctx| app.shortcuts(ctx),
+    );
+    assert_eq!(
+        (app.camera.yaw, app.camera.pitch, app.camera.roll),
+        (0., 0., 0.)
+    );
+    assert!(!app.camera.perspective);
+    let mut bounds = egui::Rect::NOTHING;
+    for &point in &app.document.mesh().vertices {
+        let projected = rect.center()
+            + app.camera.pan
+            + Vec2::new(point.0, -point.1) * app.camera.scale_at(rect.size(), point);
+        assert!(
+            rect.shrink(25.).contains(projected),
+            "{projected:?} outside {rect:?}"
+        );
+        bounds.extend_with(projected);
+    }
+    assert!(bounds.center().distance(rect.center()) < 0.01);
+    assert!(bounds.height() > rect.height() * 0.6);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert_eq!(app.document.history_counts(), history);
+    assert_eq!(app.document.is_dirty(), dirty);
+    let zoom = app.camera.zoom;
+    app.dispatch(Command::ZoomIn, &ctx);
+    assert!((app.camera.zoom / zoom - 1.2).abs() < 1e-5);
+}
+
+#[test]
+fn reset_view_fits_visible_submodels_in_wide_and_tall_viewports() {
+    use crate::sculpt::{Geometry, ModelMetadata, Primitive, PrimitiveKind, Submodel, Vec3};
+    for size in [Vec2::new(400., 900.), Vec2::new(1200., 400.)] {
+        let mut app = App::default();
+        let ctx = egui::Context::default();
+        let mesh = Primitive::for_kind(PrimitiveKind::Cube).mesh().unwrap();
+        let mut geometry = Geometry::new(mesh.clone());
+        for (offset, visible, hidden_faces) in [
+            (Vec3(12., -6., 0.), true, false),
+            (Vec3(1000., 1000., 0.), false, false),
+            (Vec3(-1000., -1000., 0.), true, true),
+        ] {
+            let mut shifted = mesh.clone();
+            for point in &mut shifted.vertices {
+                *point = *point + offset;
+            }
+            if hidden_faces {
+                shifted.hidden_faces = vec![true; shifted.triangles.len()];
+            }
+            geometry.submodels.push(Submodel {
+                name: "Part".into(),
+                metadata: ModelMetadata {
+                    visible,
+                    ..Default::default()
+                },
+                mesh: shifted,
+                mesh_settings: Default::default(),
+            });
+        }
+        app.document.replace_geometry(geometry).unwrap();
+        let rect = egui::Rect::from_min_size(Pos2::new(350., 120.), size);
+        app.ui.viewport_menu.viewport_rect = Some(rect);
+        app.dispatch(Command::ResetView, &ctx);
+        let mut bounds = egui::Rect::NOTHING;
+        for index in 0..2 {
+            for &point in &app.document.model(index).unwrap().mesh.vertices {
+                let screen = rect.center()
+                    + app.camera.pan
+                    + Vec2::new(point.0, -point.1) * app.camera.scale_at(size, point);
+                assert!(rect.shrink(25.).contains(screen));
+                bounds.extend_with(screen);
+            }
+        }
+        assert!(bounds.center().distance(rect.center()) < 0.01);
+        assert!(
+            bounds.width() > size.x * 0.6 || bounds.height() > size.y * 0.6,
+            "hidden geometry must not shrink the visible models"
+        );
+        let fitted = (app.camera.zoom, app.camera.pan);
+        app.dispatch(Command::ResetView, &ctx);
+        assert_eq!((app.camera.zoom, app.camera.pan), fitted);
+    }
+}
+
+#[test]
+fn reset_view_with_no_visible_geometry_keeps_default_camera() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let mut geometry = app.document.geometry_snapshot();
+    geometry.scene.active_metadata.visible = false;
+    app.document.replace_geometry(geometry).unwrap();
+    navigation_frame(&mut app, &ctx, vec![]);
+    app.camera.zoom = 4.;
+    app.camera.pan = Vec2::splat(200.);
+    app.dispatch(Command::ResetView, &ctx);
+    assert_eq!(app.camera.zoom, 1.);
+    assert_eq!(app.camera.pan, Vec2::ZERO);
+}
+
+#[test]
 fn perspective_actions_preserve_geometry_history_and_rebind_and_validate_fov() {
     let mut app = App::default();
     let ctx = egui::Context::default();

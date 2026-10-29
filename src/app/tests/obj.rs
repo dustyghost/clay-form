@@ -168,7 +168,61 @@ fn obj_import_offscreen_preview() {
         };
     }
     app.ui.obj_path = file.path();
-    app.dispatch(Command::Action(Action::ImportObj), &ctx);
+    let mut time = 0.;
+    // Open the real toolbar menu, so a working import action cannot hide a
+    // missing or inaccessible entry point.
+    {
+        let mut frame = |events| {
+            time += 0.1;
+            let mut commands = Vec::new();
+            let output = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1200., 850.),
+                    )),
+                    events,
+                    time: Some(time),
+                    ..Default::default()
+                },
+                |ctx| commands.extend(app.ui.toolbar(ctx, &app.document, &app.camera)),
+            );
+            capture.render(&ctx, output.clone());
+            for command in commands {
+                app.dispatch(command, &ctx);
+            }
+            output
+        };
+        frame(vec![]);
+        for label in ["Import", "OBJ…"] {
+            let output = frame(vec![]);
+            let point = output
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) if text.galley.text() == label => {
+                        Some(text.pos + text.galley.size() * 0.5)
+                    }
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("Missing toolbar control: {label}"));
+            for pressed in [true, false] {
+                frame(vec![
+                    egui::Event::PointerMoved(point),
+                    egui::Event::PointerButton {
+                        pos: point,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: Default::default(),
+                    },
+                ]);
+            }
+        }
+    }
+    assert_eq!(
+        app.ui.file_picker.as_ref().unwrap().asset,
+        Some(crate::command::AssetKind::Obj)
+    );
     app.dispatch(Command::AcceptProjectFile(false), &ctx);
     finish_mesh_job(&mut app);
     assert_eq!(app.document.model_count(), 2);
@@ -178,13 +232,14 @@ fn obj_import_offscreen_preview() {
     app.ui.wire = true;
     let before = app.document.geometry_snapshot();
     for step in 0..3 {
+        time += 0.1;
         let output = ctx.run(
             egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
                     egui::Pos2::ZERO,
                     egui::vec2(1200., 850.),
                 )),
-                time: Some(step as f64),
+                time: Some(time),
                 ..Default::default()
             },
             |ctx| {
