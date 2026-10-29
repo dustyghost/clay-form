@@ -6,9 +6,11 @@ use crate::{
     sculpt::{Alpha, Axis, Kind},
 };
 use eframe::egui::{self, Color32, Sense, Vec2};
+mod about;
 pub(crate) mod alphas;
 mod design;
 mod material;
+mod startup;
 mod uv;
 use design::Glyph;
 pub(crate) mod context_menu;
@@ -67,6 +69,9 @@ pub(crate) struct UiState {
     rename_model: Option<(usize, String, String)>,
     pub preferences: Preferences,
     pub(super) customization: customization::Customization,
+    pub about_open: bool,
+    pub startup_notice_open: bool,
+    pub startup_notice_skip: bool,
     pub settings_open: bool,
     pub diagnostics_open: bool,
     pub diagnostic_path: String,
@@ -150,6 +155,9 @@ impl Default for UiState {
             rename_model: None,
             preferences: Preferences::default(),
             customization: Default::default(),
+            about_open: false,
+            startup_notice_open: false,
+            startup_notice_skip: false,
             settings_open: false,
             diagnostics_open: false,
             diagnostic_path: "clay-session".into(),

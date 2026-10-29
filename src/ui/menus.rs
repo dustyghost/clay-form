@@ -136,6 +136,7 @@ impl UiState {
                 && self.primitive_warning.is_none()
                 && !self.icon_capture_open()
                 && !self.recovery_open
+                && !self.about_open
                 && !self.settings_open
                 && !self.layout_open;
             let max_height = (ctx.content_rect().height() - 80.).max(120.);
@@ -300,6 +301,13 @@ impl UiState {
                 ui.label("Geometry and masks • history resets on New/Open");
             }
             BuiltinMenu::Settings => {
+                if ui.button("About Clay Form").clicked() {
+                    self.about_open = true;
+                    if popup {
+                        ui.close_kind(egui::UiKind::Menu);
+                    }
+                }
+                ui.separator();
                 if ui
                     .add(design::button(
                         ui,

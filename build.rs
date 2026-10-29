@@ -7,6 +7,9 @@ fn main() {
         "Cargo.lock",
         "README.md",
         "docs",
+        "legal",
+        "LICENSE",
+        "COPYRIGHT.md",
     ] {
         println!("cargo:rerun-if-changed={path}");
     }
@@ -23,6 +26,9 @@ fn main() {
             }
         }
     }
+    if std::path::Path::new("SOURCE-COMMIT").exists() {
+        println!("cargo:rerun-if-changed=SOURCE-COMMIT");
+    }
     // No paths or environment dump: only source identity and build mode.
     let revision = std::process::Command::new("git")
         .args(["describe", "--always", "--dirty", "--abbrev=12"])
@@ -30,6 +36,12 @@ fn main() {
         .ok()
         .filter(|o| o.status.success())
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+        .or_else(|| {
+            std::fs::read_to_string("SOURCE-COMMIT")
+                .ok()
+                .map(|s| s.trim().to_owned())
+                .filter(|s| s.len() == 40 && s.bytes().all(|b| b.is_ascii_hexdigit()))
+        })
         .unwrap_or_else(|| "source-revision-unavailable".into());
     println!(
         "cargo:rustc-env=CLAY_BUILD_ID={revision} ({})",

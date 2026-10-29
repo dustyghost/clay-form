@@ -1,0 +1,47 @@
+# Build the tagged upstream source; this recipe is not yet published to AUR.
+pkgname=clay-form
+pkgver=0.1.0alpha1
+_upstream_version=0.1.0-alpha.1
+pkgrel=1
+pkgdesc='Free, open-source desktop sculpting'
+arch=('x86_64' 'aarch64')
+url='https://github.com/dustyghost/clay-form'
+license=('GPL-3.0-only')
+depends=('gcc-libs' 'glibc' 'libx11' 'libxcursor' 'libxi' 'libxrandr' 'libxkbcommon' 'libxkbcommon-x11' 'wayland' 'vulkan-icd-loader')
+makedepends=('git' 'rustup' 'pkgconf' 'python')
+optdepends=('blender: Blender and FBX export' 'gimp: external texture editing')
+source=("git+$url.git#tag=v$_upstream_version")
+# Git sources use a tag rather than an archive checksum; review the upstream
+# release commit before publishing this recipe and pin a commit if desired.
+sha256sums=('SKIP')
+
+prepare() {
+    cd "$srcdir/$pkgname"
+    rustup show
+    cargo fetch --locked
+}
+
+build() {
+    cd "$srcdir/$pkgname"
+    python3 scripts/check-notices.py --release
+    cargo build --release --frozen
+}
+
+package() {
+    cd "$srcdir/$pkgname"
+    install -Dm755 target/release/clay-form "$pkgdir/usr/bin/clay-form"
+    install -Dm644 packaging/linux/clay-form.desktop "$pkgdir/usr/share/applications/clay-form.desktop"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 COPYRIGHT.md "$pkgdir/usr/share/licenses/$pkgname/COPYRIGHT.md"
+    install -Dm644 THIRD-PARTY-NOTICES.html "$pkgdir/usr/share/licenses/$pkgname/THIRD-PARTY-NOTICES.html"
+    cp -r legal "$pkgdir/usr/share/licenses/$pkgname/"
+    local rust_sysroot
+    rust_sysroot="$(rustc --print sysroot)"
+    install -d "$pkgdir/usr/share/licenses/$pkgname/legal/rust"
+    cp "$rust_sysroot/share/doc/rust/COPYRIGHT-library.html" "$pkgdir/usr/share/licenses/$pkgname/legal/rust/"
+    cp -r "$rust_sysroot/share/doc/rust/licenses" "$pkgdir/usr/share/licenses/$pkgname/legal/rust/"
+    install -d "$pkgdir/usr/share/doc/$pkgname"
+    cp -r docs README.md "$pkgdir/usr/share/doc/$pkgname/"
+    # Device permission rules are opt-in, documented in the navigation guide.
+    cp packaging/linux/*.rules "$pkgdir/usr/share/doc/$pkgname/"
+}

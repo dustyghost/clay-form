@@ -26,7 +26,12 @@ impl Tablet {
         let state = Arc::new(Mutex::new(TabletState {
             pressure: 1.,
             updated_at: Instant::now() - std::time::Duration::from_secs(10),
-            status: "Searching for pen pressure devices".into(),
+            status: if cfg!(target_os = "linux") {
+                "Searching for pen pressure devices"
+            } else {
+                "Using pressure from native pointer events when available"
+            }
+            .into(),
         }));
         let stop = Arc::new(AtomicBool::new(false));
         #[cfg(target_os = "linux")]

@@ -1,0 +1,10 @@
+{
+  "macos-sdk-bindings": {
+    "evidence": "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+    "precedent": "https://docs.slint.dev/latest/docs/node/thirdparty/",
+    "reason": "Upstream SDK-derived-binding uncertainty remains documented. Proceed with native macOS builds under the dependencies’ declared licences and normal Apple build tools; retain upstream notices and exclude Apple SDKs/system frameworks from packages. No specific prohibition for this distribution was established by this review. This is a recorded release decision, not an Apple permission grant or legal resolution.",
+    "release_basis": "Maintainer approved established-practice review. Historical uncertainty alone is non-blocking; newly identified conflicting terms or unauthorized bundled material must block release.",
+    "review": "docs/research/macos-licensing.md",
+    "status": "documented"
+  }
+}

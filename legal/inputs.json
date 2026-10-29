@@ -1,0 +1,15 @@
+{
+  "Cargo.lock": "fbaf442999eb49ff0ae530f42e7cb97ee03837f36f654d9e6b7cd130b44c0265",
+  "Cargo.toml": "6e07e2fa0e5d697ddf34e6bb10b1aba478849cc8a3e9f12d04c704ee9ba2b4d2",
+  "about.toml": "ac5b74aa7f3f3d9182bf9be22c778626008219c018f709458cee9ba846d2ce70",
+  "scripts/generate-notices.py": "6c82d4606becb36764cc44ed499e933d1224860281104855d5320afe316ff240",
+  "legal/upstream/index.json": "3cfdf556cec2e477881dd09a26efa829da4e44e4033d2cfd97ca6849fe6b05cf",
+  "legal/pending-review.json": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+  "legal/additional-notices.json": "f0440110f85fa521a12d19e91bc3ae08557d5174ef71b13f2ed057aa82ac5691",
+  "legal/font-metadata.json": "844f3511af96ad977e136ce75c271670bb005e74b908ef3cfe5d1ea394aefa63",
+  "legal/notice-supplements.json": "35f889d7701100d22ebbb063b0b45942fbe0751fda301bc8570da5fefc521b4c",
+  "legal/review-decisions.json": "3397f00556c43706af47dcceffefd8e0619a10284260fe4dc28a3e98598168de",
+  "legal/release-review.json": "3e654494e8d6cb4ba62338a8f173e48083ff79ee780911eeef3d8a9d15371876",
+  "legal/third-party.json": "bce55439008c466078d2cc1ca80a0d143fe458bdf4d63df02266ad7f0ed7b06b",
+  "THIRD-PARTY-NOTICES.html": "573a470b850decdb14a3d5d197f11b86092531628844065a6a5fce499db2b9ec"
+}

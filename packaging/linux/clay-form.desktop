@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Clay Form
+Comment=Create and sculpt 3D models
+Exec=clay-form
+Terminal=false
+Categories=Graphics;3DGraphics;
+Keywords=sculpt;mesh;model;3D;

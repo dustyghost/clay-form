@@ -1,0 +1,178 @@
+{
+  "block@0.1.6|MIT": {
+    "crate_archive_sha256": "0d8c1fef690941d3e7788d328517591fecc684c084084702d6ff1641e993699a",
+    "evidence": [
+      "https://github.com/SSheldon/rust-block/tree/47178790cfc9d4a8b092051d8b413b78bd31254a",
+      "https://github.com/SSheldon/rust-block/issues/13",
+      "https://github.com/SSheldon/rust-block/pull/14",
+      "https://docs.slint.dev/latest/docs/node/thirdparty/"
+    ],
+    "historical_uncertainty": "MIT is declared, but the release tree and archive omit the full notice. Upstream PR 14 is still unmerged and proposes a notice taken from another project; it cannot establish the applicable copyright notice. Obtain authoritative release-applicable attribution or use a reviewed replacement.",
+    "reason": "Use the published MIT declaration, separately labelled package-author credit, full standard MIT terms and source link. No supplied copyright notice is discarded, and no notice from another project or unmerged proposal is substituted.",
+    "release_basis": "Maintainer-approved proportionate attribution policy: retain declared terms and available notices, document historical uncertainty, and block concrete compliance failures. This is a distribution decision, not new upstream permission or a legal clearance.",
+    "reviewed_on": "2026-10-28",
+    "status": "documented"
+  },
+  "dispatch@0.2.0|MIT": {
+    "crate_archive_sha256": "bd0c93bb4b0c6d9b77f4435b0ae98c24d17f1c45b2ff844c6151a07256ca923b",
+    "evidence": [
+      "https://github.com/SSheldon/rust-dispatch/tree/82d6c7a5b75dc0c71c3f46f87bb6c16a476f7748",
+      "https://github.com/SSheldon/rust-dispatch/issues/18",
+      "https://docs.slint.dev/latest/docs/node/thirdparty/"
+    ],
+    "historical_uncertainty": "MIT is declared, but the exact release tree and archive omit the full notice. Issue 18 is closed without an authoritative notice; its later historical-version request has no maintainer answer. Obtain release-applicable attribution or use a reviewed replacement.",
+    "reason": "Use the published MIT declaration, separately labelled package-author credit, full standard MIT terms and source link. No supplied copyright notice is discarded, and no notice from another project or unmerged proposal is substituted.",
+    "release_basis": "Maintainer-approved proportionate attribution policy: retain declared terms and available notices, document historical uncertainty, and block concrete compliance failures. This is a distribution decision, not new upstream permission or a legal clearance.",
+    "reviewed_on": "2026-10-28",
+    "status": "documented"
+  },
+  "fax@0.2.6|MIT": {
+    "crate_archive_sha256": "f05de7d48f37cd6730705cbca900770cab77a89f413d23e100ad7fad7795a0ab",
+    "evidence": [
+      "https://github.com/pdf-rs/fax/pull/12",
+      "https://github.com/pdf-rs/fax/compare/40b226eb97b391355e971fd95a8dd532a4c127a0...ad46e7e76dfe74c171ef04f2ccb70fd84b2a117f",
+      "https://github.com/pdf-rs/fax/blob/ad46e7e76dfe74c171ef04f2ccb70fd84b2a117f/LICENSE"
+    ],
+    "reason": "The maintainer merged the full MIT notice and derive/LICENSE symlink. Comparing the locked VCS revision to that merge shows only those two added licence files; the released code is unchanged. Preserve the accepted notice verbatim, including its original spelling.",
+    "reviewed_on": "2026-10-28",
+    "status": "resolved"
+  },
+  "fax_derive@0.2.0|MIT": {
+    "crate_archive_sha256": "a0aca10fb742cb43f9e7bb8467c91aa9bcb8e3ffbc6a6f7389bb93ffc920577d",
+    "evidence": [
+      "https://github.com/pdf-rs/fax/pull/12",
+      "https://github.com/pdf-rs/fax/compare/40b226eb97b391355e971fd95a8dd532a4c127a0...ad46e7e76dfe74c171ef04f2ccb70fd84b2a117f",
+      "https://github.com/pdf-rs/fax/blob/ad46e7e76dfe74c171ef04f2ccb70fd84b2a117f/LICENSE"
+    ],
+    "reason": "The maintainer merged the full MIT notice and derive/LICENSE symlink. Comparing the locked VCS revision to that merge shows only those two added licence files; the released code is unchanged. Preserve the accepted notice verbatim, including its original spelling.",
+    "reviewed_on": "2026-10-28",
+    "status": "resolved"
+  },
+  "hexf-parse@0.2.1|CC0-1.0": {
+    "crate_archive_sha256": "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df",
+    "evidence": [
+      "https://github.com/lifthrasiir/hexf/blob/4225763d744183d720f575ae96d04161b4d08ea0/parse/Cargo.toml",
+      "https://creativecommons.org/publicdomain/zero/1.0/legalcode.en"
+    ],
+    "reason": "The exact source manifest declares CC0-1.0. CC0 has no MIT-style requirement to reproduce a copyright-holder notice. Preserve the source declaration and the official CC0 text; do not invent a copyright statement.",
+    "reviewed_on": "2026-10-28",
+    "status": "resolved"
+  },
+  "malloc_buf@0.0.6|MIT": {
+    "crate_archive_sha256": "62bb907fe88d54d8d9ce32a3cceab4218ed2f6b7d35617cafe9adf84e43919cb",
+    "evidence": [
+      "https://github.com/SSheldon/malloc_buf/pull/3",
+      "https://github.com/SSheldon/malloc_buf/compare/a7811e5f4c6f9685dd57ad9bfe34e9bf6b0ba4f9...d9a3e539642bd90e07df458d226b19cdfa606863",
+      "https://github.com/SSheldon/rust-block/issues/13",
+      "https://docs.slint.dev/latest/docs/node/thirdparty/"
+    ],
+    "historical_uncertainty": "A 2020 Steven Sheldon MIT notice was merged and is preserved as additional evidence. The comparison from 0.0.6 includes a substantial source rewrite and version 1.0.0, so this is not a licence-only fix to unchanged code. Historical applicability remains unconfirmed; do not invent a 2015 copyright notice.",
+    "reason": "Preserve the declared MIT licence, package-author credit and maintainer-accepted project MIT notice. Its later date is retained without claiming a version-specific confirmation.",
+    "release_basis": "Maintainer-approved proportionate attribution policy: retain declared terms and available notices, document historical uncertainty, and block concrete compliance failures. This is a distribution decision, not new upstream permission or a legal clearance.",
+    "reviewed_on": "2026-10-28",
+    "status": "documented"
+  },
+  "objc2-app-kit@0.3.2|MIT": {
+    "crate_archive_sha256": "d49e936b501e5c5bf01fda3a9452ff86dc3ea98ad5f283e1455153142d97518c",
+    "evidence": [
+      "https://github.com/madsmtm/objc2/issues/826",
+      "https://github.com/madsmtm/objc2/commit/cfb199226661ec6e4939fcd7cd7531b3c5453076",
+      "https://github.com/madsmtm/objc2/blob/ee9a7ada2131f5944b8750428e265c15632f2a19/LICENSE-MIT.txt",
+      "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+      "https://docs.slint.dev/latest/docs/node/thirdparty/"
+    ],
+    "historical_uncertainty": "The manifest declares the selected MIT option. Upstream confirms the old licence declarations, but does not confirm completeness of the later copyright notice for other contributors. The historical Steven Sheldon notice and 2026 Mads Marquart notice are retained in the inventory. Source history confirms removal of the older file when licensing was reorganized, not replacement of all historical attribution. Complete the historical-notice assessment; Apple SDK-derived binding rights remain a separate review.",
+    "reason": "Preserve both known historical and current project MIT notices and use the declared MIT option. The maintainer confirms the old declarations; no exhaustive reconstruction of every contributor copyright is claimed.",
+    "release_basis": "Maintainer-approved proportionate attribution policy: retain declared terms and available notices, document historical uncertainty, and block concrete compliance failures. This is a distribution decision, not new upstream permission or a legal clearance.",
+    "reviewed_on": "2026-10-28",
+    "status": "documented"
+  },
+  "objc2-core-foundation@0.3.2|MIT": {
+    "crate_archive_sha256": "2a180dd8642fa45cdb7dd721cd4c11b1cadd4929ce112ebd8b9f5803cc79d536",
+    "evidence": [
+      "https://github.com/madsmtm/objc2/issues/826",
+      "https://github.com/madsmtm/objc2/commit/cfb199226661ec6e4939fcd7cd7531b3c5453076",
+      "https://github.com/madsmtm/objc2/blob/ee9a7ada2131f5944b8750428e265c15632f2a19/LICENSE-MIT.txt",
+      "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+      "https://docs.slint.dev/latest/docs/node/thirdparty/"
+    ],
+    "historical_uncertainty": "The manifest declares the selected MIT option. Upstream confirms the old licence declarations, but does not confirm completeness of the later copyright notice for other contributors. The historical Steven Sheldon notice and 2026 Mads Marquart notice are retained in the inventory. Source history confirms removal of the older file when licensing was reorganized, not replacement of all historical attribution. Complete the historical-notice assessment; Apple SDK-derived binding rights remain a separate review.",
+    "reason": "Preserve both known historical and current project MIT notices and use the declared MIT option. The maintainer confirms the old declarations; no exhaustive reconstruction of every contributor copyright is claimed.",
+    "release_basis": "Maintainer-approved proportionate attribution policy: retain declared terms and available notices, document historical uncertainty, and block concrete compliance failures. This is a distribution decision, not new upstream permission or a legal clearance.",
+    "reviewed_on": "2026-10-28",
+    "status": "documented"
+  },
+  "objc2-core-graphics@0.3.2|MIT": {
+    "crate_archive_sha256": "e022c9d066895efa1345f8e33e584b9f958da2fd4cd116792e15e07e4720a807",
+    "evidence": [
+      "https://github.com/madsmtm/objc2/issues/826",
+      "https://github.com/madsmtm/objc2/commit/cfb199226661ec6e4939fcd7cd7531b3c5453076",
+      "https://github.com/madsmtm/objc2/blob/ee9a7ada2131f5944b8750428e265c15632f2a19/LICENSE-MIT.txt",
+      "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+      "https://docs.slint.dev/latest/docs/node/thirdparty/"
+    ],
+    "historical_uncertainty": "The manifest declares the selected MIT option. Upstream confirms the old licence declarations, but does not confirm completeness of the later copyright notice for other contributors. The historical Steven Sheldon notice and 2026 Mads Marquart notice are retained in the inventory. Source history confirms removal of the older file when licensing was reorganized, not replacement of all historical attribution. Complete the historical-notice assessment; Apple SDK-derived binding rights remain a separate review.",
+    "reason": "Preserve both known historical and current project MIT notices and use the declared MIT option. The maintainer confirms the old declarations; no exhaustive reconstruction of every contributor copyright is claimed.",
+    "release_basis": "Maintainer-approved proportionate attribution policy: retain declared terms and available notices, document historical uncertainty, and block concrete compliance failures. This is a distribution decision, not new upstream permission or a legal clearance.",
+    "reviewed_on": "2026-10-28",
+    "status": "documented"
+  },
+  "objc2-encode@4.1.0|MIT": {
+    "crate_archive_sha256": "ef25abbcd74fb2609453eb695bd2f860d389e457f67dc17cafc8b8cbc89d0c33",
+    "evidence": [
+      "https://github.com/madsmtm/objc2/issues/826",
+      "https://github.com/madsmtm/objc2/commit/cfb199226661ec6e4939fcd7cd7531b3c5453076",
+      "https://github.com/madsmtm/objc2/blob/ee9a7ada2131f5944b8750428e265c15632f2a19/LICENSE-MIT.txt",
+      "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+      "https://docs.slint.dev/latest/docs/node/thirdparty/"
+    ],
+    "historical_uncertainty": "The manifest declares the selected MIT option. Upstream confirms the old licence declarations, but does not confirm completeness of the later copyright notice for other contributors. The historical Steven Sheldon notice and 2026 Mads Marquart notice are retained in the inventory. Source history confirms removal of the older file when licensing was reorganized, not replacement of all historical attribution. Complete the historical-notice assessment; Apple SDK-derived binding rights remain a separate review.",
+    "reason": "Preserve both known historical and current project MIT notices and use the declared MIT option. The maintainer confirms the old declarations; no exhaustive reconstruction of every contributor copyright is claimed.",
+    "release_basis": "Maintainer-approved proportionate attribution policy: retain declared terms and available notices, document historical uncertainty, and block concrete compliance failures. This is a distribution decision, not new upstream permission or a legal clearance.",
+    "reviewed_on": "2026-10-28",
+    "status": "documented"
+  },
+  "objc2-foundation@0.3.2|MIT": {
+    "crate_archive_sha256": "e3e0adef53c21f888deb4fa59fc59f7eb17404926ee8a6f59f5df0fd7f9f3272",
+    "evidence": [
+      "https://github.com/madsmtm/objc2/issues/826",
+      "https://github.com/madsmtm/objc2/commit/cfb199226661ec6e4939fcd7cd7531b3c5453076",
+      "https://github.com/madsmtm/objc2/blob/ee9a7ada2131f5944b8750428e265c15632f2a19/LICENSE-MIT.txt",
+      "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+      "https://docs.slint.dev/latest/docs/node/thirdparty/"
+    ],
+    "historical_uncertainty": "The manifest declares the selected MIT option. Upstream confirms the old licence declarations, but does not confirm completeness of the later copyright notice for other contributors. The historical Steven Sheldon notice and 2026 Mads Marquart notice are retained in the inventory. Source history confirms removal of the older file when licensing was reorganized, not replacement of all historical attribution. Complete the historical-notice assessment; Apple SDK-derived binding rights remain a separate review.",
+    "reason": "Preserve both known historical and current project MIT notices and use the declared MIT option. The maintainer confirms the old declarations; no exhaustive reconstruction of every contributor copyright is claimed.",
+    "release_basis": "Maintainer-approved proportionate attribution policy: retain declared terms and available notices, document historical uncertainty, and block concrete compliance failures. This is a distribution decision, not new upstream permission or a legal clearance.",
+    "reviewed_on": "2026-10-28",
+    "status": "documented"
+  },
+  "objc2@0.6.4|MIT": {
+    "crate_archive_sha256": "3a12a8ed07aefc768292f076dc3ac8c48f3781c8f2d5851dd3d98950e8c5a89f",
+    "evidence": [
+      "https://github.com/madsmtm/objc2/issues/826",
+      "https://github.com/madsmtm/objc2/commit/cfb199226661ec6e4939fcd7cd7531b3c5453076",
+      "https://github.com/madsmtm/objc2/blob/ee9a7ada2131f5944b8750428e265c15632f2a19/LICENSE-MIT.txt",
+      "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+      "https://docs.slint.dev/latest/docs/node/thirdparty/"
+    ],
+    "historical_uncertainty": "The manifest declares the selected MIT option. Upstream confirms the old licence declarations, but does not confirm completeness of the later copyright notice for other contributors. The historical Steven Sheldon notice and 2026 Mads Marquart notice are retained in the inventory. Source history confirms removal of the older file when licensing was reorganized, not replacement of all historical attribution. Complete the historical-notice assessment; Apple SDK-derived binding rights remain a separate review.",
+    "reason": "Preserve both known historical and current project MIT notices and use the declared MIT option. The maintainer confirms the old declarations; no exhaustive reconstruction of every contributor copyright is claimed.",
+    "release_basis": "Maintainer-approved proportionate attribution policy: retain declared terms and available notices, document historical uncertainty, and block concrete compliance failures. This is a distribution decision, not new upstream permission or a legal clearance.",
+    "reviewed_on": "2026-10-28",
+    "status": "documented"
+  },
+  "zune-inflate@0.2.54|MIT": {
+    "crate_archive_sha256": "73ab332fe2f6680068f3582b16a24f90ad7096d5d39b974d1c0aff0125116f02",
+    "evidence": [
+      "https://github.com/etemesi254/zune-image/blob/69502ce83fdfecdd0beefd677e2abb3781b29d98/LICENSE.md",
+      "https://github.com/etemesi254/zune-image/issues/139",
+      "https://github.com/etemesi254/zune-image/issues/203",
+      "https://github.com/etemesi254/zune-image/pull/206",
+      "https://github.com/etemesi254/zune-image/blob/24603fed7981bbbc6db6dca7f58b1bbcc0a5e885/LICENSE-MIT"
+    ],
+    "reason": "Retain the original project copyright declaration and published source header, plus the full project MIT text from the maintainer-merged notice correction. The maintainer confirmed project-wide licence options and accepted the missing-text fix. Select only MIT, which is declared by the locked manifest. This decision uses the later notice to complete the pre-existing grant; it does not assert unchanged code or common Git ancestry.",
+    "reviewed_on": "2026-10-28",
+    "status": "resolved"
+  }
+}

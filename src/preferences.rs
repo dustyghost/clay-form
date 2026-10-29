@@ -369,6 +369,7 @@ pub(crate) enum SelectionMode {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct Preferences {
+    pub dismissed_startup_version: String,
     #[serde(default)]
     pub gimp_path: String,
     pub external_paint_app: String,
@@ -419,6 +420,7 @@ pub(crate) struct Preferences {
 impl Default for Preferences {
     fn default() -> Self {
         let mut prefs = Self {
+            dismissed_startup_version: String::new(),
             gimp_path: String::new(),
             external_paint_app: String::new(),
             materials: MaterialLibrary::default(),
@@ -992,11 +994,19 @@ fn validate_menus(menus: &[CustomMenu]) -> Result<(), String> {
     Ok(())
 }
 pub(crate) fn path() -> PathBuf {
-    std::env::var_os("XDG_CONFIG_HOME")
+    #[cfg(target_os = "windows")]
+    let base = std::env::var_os("APPDATA")
         .filter(|p| !p.is_empty())
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|p| PathBuf::from(p).join(".config")))
-        .unwrap_or_else(|| PathBuf::from("."))
+        .or_else(|| {
+            std::env::var_os("USERPROFILE").map(|p| PathBuf::from(p).join("AppData/Roaming"))
+        });
+    #[cfg(not(target_os = "windows"))]
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|p| !p.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|p| PathBuf::from(p).join(".config")));
+    base.unwrap_or_else(|| PathBuf::from("."))
         .join("clay-form/preferences.json")
 }
 pub(crate) fn save(path: &std::path::Path, prefs: &Preferences) -> Result<(), String> {
