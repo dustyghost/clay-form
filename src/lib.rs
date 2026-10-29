@@ -16,6 +16,7 @@ mod recovery;
 pub mod reference;
 pub mod sculpt;
 mod tablet;
+mod touch;
 mod ui;
 mod viewport;
 pub use app::App;

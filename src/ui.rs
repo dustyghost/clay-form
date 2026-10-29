@@ -15,6 +15,7 @@ pub(crate) mod context_menu;
 mod customization;
 mod edges;
 mod files;
+mod touch;
 mod viewport_controls;
 pub(crate) use files::{FileEntry, FilePicker};
 mod brush_controls;

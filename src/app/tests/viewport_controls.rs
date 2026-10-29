@@ -60,7 +60,7 @@ fn settle(app: &mut App, ctx: &egui::Context) -> egui::FullOutput {
 
 #[test]
 fn viewport_controls_drag_camera_without_editing_clay_even_after_leaving_button() {
-    for kind in [Kind::Pan, Kind::Zoom, Kind::Orbit] {
+    for kind in [Kind::Pan, Kind::Zoom, Kind::Orbit, Kind::Roll] {
         let mut app = App::default();
         let ctx = egui::Context::default();
         app.camera.zoom = 5.;
@@ -87,6 +87,11 @@ fn viewport_controls_drag_camera_without_editing_clay_even_after_leaving_button(
             Kind::Pan => assert_eq!(app.camera.pan, Vec2::new(75., -60.)),
             Kind::Zoom => assert!(app.camera.zoom > 5.),
             Kind::Orbit => assert!(app.camera.yaw.abs() > 0.1 && app.camera.pitch.abs() > 0.1),
+            Kind::Roll => {
+                assert!((app.camera.roll - 0.6).abs() < 1e-6);
+                assert_eq!(app.camera.yaw, 0.);
+                assert_eq!(app.camera.pitch, 0.);
+            }
             _ => unreachable!(),
         }
         assert_eq!(app.document.geometry_snapshot(), before);
@@ -114,11 +119,13 @@ fn viewport_controls_toggles_reset_and_layout_drag_use_real_buttons() {
     app.camera.pan = Vec2::new(80., -25.);
     app.camera.zoom = 3.;
     app.camera.yaw = 1.;
+    app.camera.roll = 0.7;
     let reset = center(&settle(&mut app, &ctx), "Reset view");
     click(&mut app, &ctx, reset);
     assert_eq!(app.camera.pan, Vec2::ZERO);
     assert_eq!(app.camera.zoom, 1.);
     assert_eq!(app.camera.yaw, 0.);
+    assert_eq!(app.camera.roll, 0.);
 
     let before = app.ui.preferences.viewport_controls[0].position;
     app.ui.viewport_controls.arranging = true;
@@ -322,7 +329,7 @@ fn viewport_controls_alignment_keeps_even_gaps_after_resize_and_style_changes() 
                 },
             );
         }
-        for i in 1..6 {
+        for i in 1..app.ui.preferences.viewport_controls.len() {
             let previous = control_rect(&ctx, i - 1);
             let next = control_rect(&ctx, i);
             assert!((previous.right() - next.right()).abs() < 1.);
@@ -335,7 +342,7 @@ fn viewport_controls_alignment_keeps_even_gaps_after_resize_and_style_changes() 
     }
     app.ui.align_viewport_controls(&ctx, false);
     settle(&mut app, &ctx);
-    for i in 1..6 {
+    for i in 1..app.ui.preferences.viewport_controls.len() {
         let previous = control_rect(&ctx, i - 1);
         let next = control_rect(&ctx, i);
         assert!((previous.bottom() - next.bottom()).abs() < 1.);
@@ -344,4 +351,58 @@ fn viewport_controls_alignment_keeps_even_gaps_after_resize_and_style_changes() 
             "{previous:?}, {next:?}"
         );
     }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[ignore = "manual screen-space roll visual review; requires Vulkan"]
+fn roll_view_offscreen_preview() {
+    let mut capture = crate::viewport::UiCapture::new([1000, 800]);
+    let ctx = egui::Context::default();
+    let mut app = App::default();
+    app.viewport.initialize_renderer(&capture.state).unwrap();
+    let mut primitive = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Cube);
+    primitive.size = crate::sculpt::Vec3(1.4, 0.6, 0.7);
+    app.document
+        .replace_geometry(crate::sculpt::Geometry::new(primitive.mesh().unwrap()))
+        .unwrap();
+    app.camera.yaw = 0.4;
+    app.camera.pitch = 0.25;
+    app.ui.preferences.viewport_controls = vec![ViewportControl {
+        kind: Kind::Roll,
+        label: String::new(),
+        position: [0.15, 0.85],
+        offset: [0.; 2],
+        style: Style::IconAndText,
+        icon: Icon::Auto,
+    }];
+    let before = app.document.geometry_snapshot();
+    let history = app.document.history_counts();
+    let mut start = Pos2::ZERO;
+    let mut initial = Vec::new();
+    for step in 0..6 {
+        let end = start + Vec2::new(100., 0.);
+        let events = match step {
+            2 => vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+            3 => vec![egui::Event::PointerMoved(end)],
+            4 => vec![primary_event(end, false)],
+            _ => vec![],
+        };
+        let output = frame(&mut app, &ctx, events);
+        let rgba = capture.render(&ctx, output);
+        if step == 1 {
+            start = control_rect(&ctx, 0).center();
+            capture.save("/tmp/clay-roll-before.png", &rgba);
+            initial = rgba.clone();
+        }
+        if step == 5 {
+            capture.save("/tmp/clay-roll-after.png", &rgba);
+            assert_ne!(rgba, initial);
+        }
+    }
+    assert!((app.camera.roll - 0.8).abs() < 1e-6);
+    assert_eq!(app.camera.yaw, 0.4);
+    assert_eq!(app.camera.pitch, 0.25);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert_eq!(app.document.history_counts(), history);
 }

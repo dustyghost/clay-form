@@ -126,6 +126,9 @@ impl UiState {
                 Kind::Pan => "Drag left, right, up or down to pan",
                 Kind::Zoom => "Drag up to zoom in; down to zoom out",
                 Kind::Orbit => "Drag to rotate the camera",
+                Kind::Roll => {
+                    "Drag right to rotate clockwise in screen space; left for counterclockwise"
+                }
                 Kind::Action(_) => "Right-click to change style, move or remove",
             }
         };
@@ -174,6 +177,7 @@ impl UiState {
             Kind::Pan => "Pan view".into(),
             Kind::Zoom => "Zoom view".into(),
             Kind::Orbit => "Rotate view".into(),
+            Kind::Roll => "Roll view".into(),
             Kind::Action(action) => self.action_label(action, document),
         }
     }
@@ -356,6 +360,7 @@ impl UiState {
         egui::Window::new("Viewport controls").open(&mut open).default_size([620., 740.])
             .max_height((ctx.content_rect().height() - 100.).max(160.)).vscroll(true).show(ctx, |ui| {
                 ui.label("Add controls, then drag them anywhere in the drawing area. Layouts save automatically with your workspace.");
+                self.touch_settings(ui, document);
                 ui.horizontal(|ui| {
                     place = ui.button("Place controls").clicked();
                     if ui.button("Restore default controls").clicked() { self.preferences.viewport_controls = crate::preferences::default_viewport_controls(); }
@@ -396,7 +401,7 @@ impl UiState {
                 ui.heading("Add a control");
                 ui.add(egui::TextEdit::singleline(&mut self.viewport_controls.search).hint_text("Search controls, brushes and menus"));
                 let search = self.viewport_controls.search.to_lowercase();
-                let kinds = [Kind::Pan, Kind::Zoom, Kind::Orbit].into_iter()
+                let kinds = [Kind::Pan, Kind::Zoom, Kind::Orbit, Kind::Roll].into_iter()
                     .chain(self.action_catalog(document).into_iter().map(Kind::Action));
                 egui::ScrollArea::vertical().id_salt("viewport_control_catalog").max_height(240.).show(ui, |ui| {
                     for kind in kinds {
@@ -435,6 +440,7 @@ fn icon_glyph(icon: Icon) -> Option<Glyph> {
         Icon::Pan => Glyph::Pan,
         Icon::Zoom => Glyph::Zoom,
         Icon::Orbit => Glyph::Orbit,
+        Icon::Roll => Glyph::Roll,
         Icon::Reset => Glyph::Restore,
         Icon::Groups => Glyph::Groups,
         Icon::Wireframe => Glyph::Wire,
@@ -456,6 +462,7 @@ fn control_glyph(control: &ViewportControl) -> Glyph {
         Kind::Pan => Glyph::Pan,
         Kind::Zoom => Glyph::Zoom,
         Kind::Orbit => Glyph::Orbit,
+        Kind::Roll => Glyph::Roll,
         Kind::Action(action) => match action {
             Action::ResetView | Action::ResetZoom => Glyph::Restore,
             Action::PolygroupColors | Action::GroupAll | Action::GroupMasked => Glyph::Groups,

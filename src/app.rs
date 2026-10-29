@@ -34,6 +34,7 @@ pub struct App {
     ui: UiState,
     tablet: Tablet,
     pressure: f32,
+    touch: crate::touch::TouchInput,
     diagnostic_environment: crate::diagnostics::Environment,
     job_settings: Option<crate::diagnostics::EditSettings>,
     projection: projection::ProjectionState,
@@ -63,6 +64,7 @@ impl Default for App {
             ui: UiState::default(),
             tablet: Tablet::new(),
             pressure: 1.,
+            touch: Default::default(),
             diagnostic_environment: Default::default(),
             job_settings: None,
             projection: Default::default(),
@@ -350,6 +352,7 @@ impl App {
                 ViewportControlKind::Pan => self.camera.pan += delta,
                 ViewportControlKind::Zoom => self.camera.zoom_drag(delta),
                 ViewportControlKind::Orbit => self.camera.orbit(delta),
+                ViewportControlKind::Roll => self.camera.roll_drag(delta),
                 ViewportControlKind::Action(_) => unreachable!(),
             }
         }
@@ -362,6 +365,26 @@ impl App {
         );
         self.ui.preferences.lighting.install(ui.ctx());
         let selected = self.ui.brush_index_for_context(&self.document, ui.ctx());
+        let rect = ui.available_rect_before_wrap();
+        let touch = self.touch.update(
+            ui,
+            &self.ui.preferences.touch,
+            &mut self.camera,
+            enabled
+                && !self.ui.viewport_controls.arranging
+                && !self.ui.viewport_controls.editor_open
+                && self.viewport.session.gesture.is_none()
+                && !self.viewport.modeling.dragging(),
+            |pos| {
+                rect.contains(pos)
+                    && ui.ctx().layer_id_at(pos) == Some(ui.layer_id())
+                    && !toolbar_rect.is_some_and(|r| r.contains(pos))
+                    && !editor_rect.is_some_and(|r| r.contains(pos))
+            },
+        );
+        for action in touch.actions {
+            self.dispatch(Command::Action(action), ui.ctx());
+        }
         self.capture_diagnostic_context(ui.ctx());
         self.viewport.session.projection_preview = self
             .paths
@@ -443,6 +466,7 @@ impl App {
                 show_guides: self.ui.show_symmetry_guides,
                 guide_opacity: self.ui.guide_opacity,
                 enabled: enabled
+                    && !touch.blocks_pointer
                     && !controls.blocks_viewport
                     && !light_input
                     && (self.viewport.session.guided.dragging()
