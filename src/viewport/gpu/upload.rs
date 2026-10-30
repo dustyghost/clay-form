@@ -1,4 +1,4 @@
-//! Bounded, aligned writes for an unchanged single-buffer mesh layout.
+//! Independent mesh-buffer updates and bounded, aligned vertex writes.
 use std::ops::Range;
 
 const BLOCK: usize = 4096;
@@ -30,6 +30,30 @@ pub(super) fn changed_ranges(before: &[u8], after: &[u8]) -> Vec<Range<usize>> {
         }
     }
     ranges
+}
+
+/// Preserve an allocation when its payload size is unchanged. Exact-size
+/// replacements keep growing/shrinking meshes within the binding limit.
+pub(super) fn write_buffer(
+    device: &super::wgpu::Device,
+    queue: &super::wgpu::Queue,
+    target: &mut super::wgpu::Buffer,
+    label: &str,
+    bytes: &[u8],
+) {
+    let size = if bytes.is_empty() { 16 } else { bytes.len() };
+    if target.size() == size as u64 {
+        if !bytes.is_empty() {
+            queue.write_buffer(target, 0, bytes);
+        }
+    } else {
+        *target = super::buffer(
+            device,
+            label,
+            bytes,
+            super::wgpu::BufferUsages::STORAGE | super::wgpu::BufferUsages::COPY_DST,
+        );
+    }
 }
 
 #[cfg(test)]
@@ -211,7 +235,77 @@ mod gpu_tests {
     }
 
     #[test]
-    #[ignore = "requires Vulkan; verifies layout invalidation and batching after sparse uploads"]
+    #[ignore = "requires Vulkan; verifies independent buffers through canonical release fan changes"]
+    fn gpu_vertex_upload_release_splits_and_merges_fans() {
+        let headless = Headless::new();
+        let mut geometry = Geometry::new(Mesh::starting_sphere());
+        for _ in 0..2 {
+            geometry.subdivide().unwrap();
+        }
+        geometry.mesh.hidden_faces = geometry
+            .mesh
+            .triangles
+            .iter()
+            .map(|t| t.iter().all(|&i| geometry.mesh.vertices[i].0 > 0.1))
+            .collect();
+        let original = geometry.clone();
+        let index = geometry
+            .mesh
+            .vertices
+            .iter()
+            .position(|p| p.2 > 0.99 && p.0 <= 0.)
+            .unwrap();
+        let mut doc = Document::default();
+        doc.replace_geometry(geometry.clone()).unwrap();
+        let mut renderer = Renderer::new(&headless.state).unwrap();
+        let initial = renderer.geometry(&doc);
+        let mut gpu = Gpu::new(&headless.state.device, &headless.state.queue, COLOR);
+        gpu.upload(&initial);
+        for (height, splitting) in [(0.8, true), (0., false)] {
+            geometry.mesh.vertices[index].2 = original.mesh.vertices[index].2 + height;
+            doc.replace_geometry(geometry.clone()).unwrap();
+            doc.begin_stroke();
+            let live = renderer.geometry(&doc);
+            assert!(renderer.live_display);
+            gpu.upload(&live);
+            let vertices = gpu.meshes[0].vertices.clone();
+            let indices = gpu.meshes[0].indices.clone();
+            let colors = gpu.meshes[0].colors.clone();
+            let uv = gpu.meshes[0].uv.clone();
+            doc.end_stroke();
+            let released = renderer.geometry(&doc);
+            assert!(!renderer.live_display);
+            assert_ne!(live.shading.triangles, released.shading.triangles);
+            assert_eq!(
+                released.shading.vertices.len() > live.shading.vertices.len(),
+                splitting
+            );
+            let canonical = DisplayMesh::new(&doc);
+            assert_eq!(released.shading.vertices, canonical.shading.vertices);
+            assert_eq!(released.shading.triangles, canonical.shading.triangles);
+            gpu.upload(&released);
+            assert_ne!(gpu.meshes[0].vertices, vertices);
+            assert_eq!(
+                gpu.meshes[0].indices, indices,
+                "face count is stable even when fans change"
+            );
+            assert_eq!(gpu.meshes[0].colors, colors);
+            assert_eq!(gpu.meshes[0].uv, uv);
+            assert_eq!(
+                gpu.face_write_bytes,
+                [released.shading.triangles.len() * 12, 0, 0]
+            );
+            assert_eq!(
+                gpu.vertex_write_bytes,
+                released.shading.vertices.len() * gpu.vertex_stride * 4
+            );
+            assert_fresh_pixels(&headless, &mut gpu, &released);
+        }
+        renderer.destroy();
+    }
+
+    #[test]
+    #[ignore = "requires Vulkan; verifies independent buffer updates and batching"]
     fn gpu_vertex_upload_layout_changes_match_fresh_buffers() {
         let headless = Headless::new();
         let doc = Document::default();
@@ -220,6 +314,9 @@ mod gpu_tests {
         for case in 0..6 {
             gpu.upload(&initial);
             let previous = gpu.meshes[0].vertices.clone();
+            let indices = gpu.meshes[0].indices.clone();
+            let colors = gpu.meshes[0].colors.clone();
+            let uv = gpu.meshes[0].uv.clone();
             let mut next = (*initial).clone();
             let data = Arc::make_mut(&mut next.geometry);
             match case {
@@ -243,10 +340,36 @@ mod gpu_tests {
             }
             let next = Arc::new(next);
             gpu.upload(&next);
-            assert_ne!(
-                gpu.meshes[0].vertices, previous,
-                "layout case {case} must rebuild"
-            );
+            if matches!(case, 3 | 4) {
+                assert_ne!(
+                    gpu.meshes[0].vertices, previous,
+                    "only vertex storage must resize"
+                );
+                assert!(gpu.vertex_write_bytes > 0);
+            } else {
+                assert_eq!(
+                    gpu.meshes[0].vertices, previous,
+                    "case {case}: preserve vertex storage"
+                );
+                assert_eq!(gpu.vertex_write_bytes, 0);
+            }
+            if case != 5 {
+                assert_eq!(gpu.meshes[0].indices, indices);
+                assert_eq!(gpu.meshes[0].colors, colors);
+                assert_eq!(gpu.meshes[0].uv, uv);
+            } else {
+                assert_eq!(gpu.meshes[0].count, 0);
+                assert_eq!(gpu.meshes[0].indices.size(), 16);
+                assert_eq!(gpu.meshes[0].colors.size(), 16);
+                assert_eq!(gpu.meshes[0].uv.size(), 16);
+            }
+            for (channel, bytes) in gpu.face_write_bytes.iter().enumerate() {
+                assert_eq!(
+                    *bytes > 0,
+                    case < 3 && channel == case,
+                    "case {case}: write only the changed face channel {channel}"
+                );
+            }
             assert_fresh_pixels(&headless, &mut gpu, &next);
             if case == 3 {
                 // Extended material records cross 4 KiB boundaries. Exercise

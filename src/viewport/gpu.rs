@@ -339,9 +339,13 @@ struct Gpu {
     vertex_stride: usize,
     mesh_geometry: Option<Arc<display::DisplayGeometry>>,
     mesh_binding_limit: usize,
+    single_mesh_upload: bool,
     packed_vertices: Vec<f32>,
     #[cfg(test)]
     vertex_write_bytes: usize,
+    /// Test accounting for index, face-colour and UV payloads, respectively.
+    #[cfg(test)]
+    face_write_bytes: [usize; 3],
     texture_pixels: wgpu::Texture,
     texture_info: wgpu::Buffer,
     edges: Option<Vec<(wgpu::Buffer, u32)>>,
@@ -623,9 +627,12 @@ impl Gpu {
             vertex_stride: 12,
             mesh_geometry: None,
             mesh_binding_limit: 0,
+            single_mesh_upload: false,
             packed_vertices: Vec::new(),
             #[cfg(test)]
             vertex_write_bytes: 0,
+            #[cfg(test)]
+            face_write_bytes: [0; 3],
             edges: None,
             triangle_edges: None,
             uploaded: None,
@@ -640,6 +647,7 @@ impl Gpu {
         self.uploaded = None;
         self.mesh_geometry = None;
         self.mesh_binding_limit = 0;
+        self.single_mesh_upload = false;
         self.packed_vertices = Vec::new();
         self.edges = None;
         self.triangle_edges = None;
@@ -657,7 +665,7 @@ impl Gpu {
                 device,
                 "face UVs",
                 bytemuck::cast_slice(uv),
-                wgpu::BufferUsages::STORAGE,
+                wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             ),
             vertices: buffer(
                 device,
@@ -669,13 +677,13 @@ impl Gpu {
                 device,
                 "mesh indices",
                 bytemuck::cast_slice(indices),
-                wgpu::BufferUsages::STORAGE,
+                wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             ),
             colors: buffer(
                 device,
                 "face colors",
                 bytemuck::cast_slice(colors),
-                wgpu::BufferUsages::STORAGE,
+                wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             ),
             count: indices.len() as u32,
         }
@@ -706,6 +714,7 @@ impl Gpu {
         #[cfg(test)]
         {
             self.vertex_write_bytes = 0;
+            self.face_write_bytes = [0; 3];
         }
         if self
             .uploaded
@@ -740,6 +749,7 @@ impl Gpu {
         #[cfg(test)]
         {
             self.vertex_write_bytes = 0;
+            self.face_write_bytes = [0; 3];
         }
         if let Some(old) = &self.uploaded
             && old.texture_pixels.len() == data.texture_pixels.len()
@@ -781,64 +791,138 @@ impl Gpu {
         }
         let stride = data.vertex_stride();
         let vertices = data.vertices(stride);
-        if self.meshes.len() == 1
-            && self.mesh_binding_limit == limit
-            && self.vertex_stride == stride
-            && self.packed_vertices.len() == vertices.len()
-            && self.mesh_geometry.as_ref().is_some_and(|old| {
-                old.shading.triangles == data.shading.triangles
-                    && old.poly_colors == data.poly_colors
-                    && old.uv_corners == data.uv_corners
-            })
-        {
-            let bytes = bytemuck::cast_slice(&vertices);
-            for range in upload::changed_ranges(bytemuck::cast_slice(&self.packed_vertices), bytes)
-            {
-                self.queue.write_buffer(
-                    &self.meshes[0].vertices,
-                    range.start as u64,
-                    &bytes[range.clone()],
-                );
+        if vertices.len() * 4 <= limit && data.shading.triangles.len() * 48 <= limit {
+            if self.single_mesh_upload && self.mesh_binding_limit == limit {
+                let old = self.mesh_geometry.as_ref().unwrap();
+                let mesh = &mut self.meshes[0];
+                let bytes = bytemuck::cast_slice(&vertices);
+                if self.vertex_stride == stride && self.packed_vertices.len() == vertices.len() {
+                    for range in
+                        upload::changed_ranges(bytemuck::cast_slice(&self.packed_vertices), bytes)
+                    {
+                        self.queue.write_buffer(
+                            &mesh.vertices,
+                            range.start as u64,
+                            &bytes[range.clone()],
+                        );
+                        #[cfg(test)]
+                        {
+                            self.vertex_write_bytes += range.len();
+                        }
+                    }
+                } else {
+                    // Fan splitting/merging and material-stride changes affect
+                    // vertex storage without invalidating the other buffers.
+                    mesh.vertices = buffer(
+                        &self.device,
+                        "mesh vertices",
+                        bytes,
+                        wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    );
+                    #[cfg(test)]
+                    {
+                        self.vertex_write_bytes = bytes.len();
+                    }
+                }
+                if old.shading.triangles != data.shading.triangles {
+                    let indices: Vec<u32> = data
+                        .shading
+                        .triangles
+                        .iter()
+                        .flatten()
+                        .map(|&i| i as u32)
+                        .collect();
+                    upload::write_buffer(
+                        &self.device,
+                        &self.queue,
+                        &mut mesh.indices,
+                        "mesh indices",
+                        bytemuck::cast_slice(&indices),
+                    );
+                    #[cfg(test)]
+                    {
+                        self.face_write_bytes[0] = indices.len() * 4;
+                    }
+                }
+                if old.poly_colors != data.poly_colors {
+                    let colors: Vec<[f32; 4]> = data
+                        .poly_colors
+                        .iter()
+                        .map(|c| c.map(|n| n as f32 / 255.))
+                        .collect();
+                    upload::write_buffer(
+                        &self.device,
+                        &self.queue,
+                        &mut mesh.colors,
+                        "face colors",
+                        bytemuck::cast_slice(&colors),
+                    );
+                    #[cfg(test)]
+                    {
+                        self.face_write_bytes[1] = colors.len() * 16;
+                    }
+                }
+                if old.uv_corners != data.uv_corners {
+                    upload::write_buffer(
+                        &self.device,
+                        &self.queue,
+                        &mut mesh.uv,
+                        "face UVs",
+                        bytemuck::cast_slice(&data.uv_corners),
+                    );
+                    #[cfg(test)]
+                    {
+                        self.face_write_bytes[2] = data.uv_corners.len() * 48;
+                    }
+                }
+                mesh.count = (data.shading.triangles.len() * 3) as u32;
+            } else {
+                let indices: Vec<u32> = data
+                    .shading
+                    .triangles
+                    .iter()
+                    .flatten()
+                    .map(|&i| i as u32)
+                    .collect();
+                let colors: Vec<[f32; 4]> = data
+                    .poly_colors
+                    .iter()
+                    .map(|c| c.map(|n| n as f32 / 255.))
+                    .collect();
+                self.meshes = vec![Self::mesh_buffers(
+                    &self.device,
+                    &vertices,
+                    &indices,
+                    &colors,
+                    &data.uv_corners,
+                )];
                 #[cfg(test)]
                 {
-                    self.vertex_write_bytes += range.len();
+                    self.vertex_write_bytes = vertices.len() * 4;
+                    self.face_write_bytes = [
+                        indices.len() * 4,
+                        colors.len() * 16,
+                        data.uv_corners.len() * 48,
+                    ];
                 }
             }
-            self.packed_vertices = vertices;
+            self.vertex_stride = stride;
+            self.mesh_binding_limit = limit;
+            self.single_mesh_upload = true;
             self.mesh_geometry = Some(data.geometry.clone());
+            self.packed_vertices = vertices;
             return;
         }
         self.vertex_stride = stride;
         self.mesh_binding_limit = limit;
+        self.single_mesh_upload = false;
         self.mesh_geometry = Some(data.geometry.clone());
         self.packed_vertices = Vec::new();
-        #[cfg(test)]
-        {
-            self.vertex_write_bytes = vertices.len() * 4;
-        }
         let colors: Vec<[f32; 4]> = data
             .poly_colors
             .iter()
             .map(|c| c.map(|n| n as f32 / 255.))
             .collect();
-        if vertices.len() * 4 <= limit && data.shading.triangles.len() * 48 <= limit {
-            let indices: Vec<u32> = data
-                .shading
-                .triangles
-                .iter()
-                .flatten()
-                .map(|&i| i as u32)
-                .collect();
-            self.meshes = vec![Self::mesh_buffers(
-                &self.device,
-                &vertices,
-                &indices,
-                &colors,
-                &data.uv_corners,
-            )];
-            self.packed_vertices = vertices;
-            return;
-        }
         self.meshes.clear();
         let per_batch = (limit / (3 * stride * 4)).max(1);
         for (batch, triangles) in data.shading.triangles.chunks(per_batch).enumerate() {
@@ -854,6 +938,13 @@ impl Gpu {
                 indices.push(index);
             }
             let start = batch * per_batch;
+            #[cfg(test)]
+            {
+                self.vertex_write_bytes += packed.len() * 4;
+                self.face_write_bytes[0] += indices.len() * 4;
+                self.face_write_bytes[1] += triangles.len() * 16;
+                self.face_write_bytes[2] += triangles.len() * 48;
+            }
             self.meshes.push(Self::mesh_buffers(
                 &self.device,
                 &packed,

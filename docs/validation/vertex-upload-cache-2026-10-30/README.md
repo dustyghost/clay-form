@@ -2,6 +2,8 @@
 
 Follow-up to [Hidden-surface release refresh](../hidden-release-refresh-2026-10-30/README.md), under #103. The comparison baseline is commit `bba1f1e`. Final measurements use source SHA-256 `aa4e917e44785f1f20779286551868d657394bf151e470c7e41d27ec6f3eb708`. The [raw GPU results](gpu/index.json) retain all samples, memory stages and environment metadata; the [comparison](gpu-comparison.csv) includes every measured phase.
 
+The release-upload follow-up is recorded in [Independent buffer reuse at stroke release](../release-buffer-reuse-2026-10-30/README.md).
+
 ## Change and boundaries
 
 Previously, each changed display recreated vertex, index, face-colour and UV buffers. Compatible displays now reuse those buffers and write only changed blocks of packed vertex data. Reuse requires the same vertex count and stride, shading triangle indices, face colours, UV corners and device binding limit. Changes to those take the existing full-upload path. Displays that need multiple buffer batches retain the existing chunking path.
