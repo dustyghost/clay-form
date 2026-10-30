@@ -698,6 +698,7 @@ impl UiState {
         commands
     }
     pub fn settings(&mut self, ctx: &egui::Context, document: &Document) {
+        self.mesh_capacity_settings(ctx);
         if let Some(request) = ctx.data_mut(|d| {
             let request = d.get_temp::<Request>(request_id());
             d.remove::<Request>(request_id());

@@ -1,0 +1,11 @@
+
+running 7 tests
+test sculpt::capacity::tests::mesh_capacity_accepts_counts_above_old_cap_and_preserves_project_io ... ok
+test sculpt::capacity::tests::mesh_capacity_limits_cover_validation_subdivision_merge_and_import ... ok
+test sculpt::capacity::tests::mesh_capacity_preferences_migrate_roundtrip_and_validate ... ok
+test sculpt::capacity::tests::mesh_capacity_startup_budget_is_shared_with_workers_and_immutable ... ok
+test sculpt::capacity::tests::mesh_capacity_triangle_budget_can_exceed_the_old_limit ... ok
+test ui::mesh_capacity::tests::gpu_mesh_capacity_settings_capture ... ignored, manual GPU capture of the mesh capacity settings
+test ui::mesh_capacity::tests::mesh_capacity_settings_open_edit_and_reset_without_changing_active_limits ... ok
+
+test result: ok. 6 passed; 0 failed; 1 ignored; 0 measured; 978 filtered out; finished in 9.03s

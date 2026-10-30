@@ -1,7 +1,7 @@
 //! Normal-offset shells for temporary display and explicit solidification.
 use super::{
     Mesh,
-    subdivision::{MAX_TRIANGLES, MAX_VERTICES},
+    subdivision::{max_triangles, max_vertices},
 };
 use std::collections::HashMap;
 impl Mesh {
@@ -65,8 +65,8 @@ impl Mesh {
         boundary.sort_unstable();
         let rim_loops = metadata.map_or(0, |m| m.thickness_loops as usize);
         let n = self.vertices.len();
-        if n * 2 + boundary.len() * rim_loops > MAX_VERTICES
-            || self.triangles.len() * 2 + boundary.len() * 2 * (rim_loops + 1) > MAX_TRIANGLES
+        if n * 2 + boundary.len() * rim_loops > max_vertices()
+            || self.triangles.len() * 2 + boundary.len() * 2 * (rim_loops + 1) > max_triangles()
         {
             return Err(
                 "Thickness would exceed the mesh size limit; use a lower resolution".into(),

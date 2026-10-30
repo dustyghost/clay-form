@@ -1,6 +1,7 @@
 //! Sculpting data and algorithms, independent of windowing and UI.
 mod adaptive;
 mod brush;
+pub(crate) mod capacity;
 mod paint_effect;
 pub use paint_effect::{PaintEffect, PaintMode};
 mod clay;
@@ -29,7 +30,7 @@ pub use math::Vec3;
 pub use mesh::{Dab, Mesh};
 pub use project::{ModelMetadata, Project, SceneSettings, Submodel};
 pub use subdivision::MeshSettings;
-pub(crate) use subdivision::{MAX_TRIANGLES, MAX_VERTICES};
+pub(crate) use subdivision::{max_triangles, max_vertices};
 mod import;
 pub use symmetry::{Axis, GuidePlane, Symmetry};
 #[cfg(test)]

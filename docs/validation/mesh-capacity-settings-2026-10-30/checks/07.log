@@ -1,0 +1,5 @@
+
+running 1 test
+test sculpt::mirror_tests::mirror_rejects_results_over_vertex_and_face_limits ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 984 filtered out; finished in 2.00s

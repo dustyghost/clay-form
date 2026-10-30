@@ -1,7 +1,7 @@
 //! Polygonal Wavefront OBJ adapter; no materials, external files, or executable records.
 //! Syntax reference: original Wavefront Appendix B1, mirrored at
 //! https://github.com/mokiat/java-data-front/blob/master/documents/OBJ%20Specification.txt
-use crate::sculpt::{MAX_TRIANGLES, MAX_VERTICES, Mesh, Vec3, VertexGroup};
+use crate::sculpt::{Mesh, Vec3, VertexGroup, max_triangles, max_vertices};
 use std::{
     collections::{HashMap, HashSet},
     io::Read,
@@ -64,7 +64,7 @@ fn index(text: &str, count: usize) -> Result<usize, String> {
     } else {
         count as i64 + value
     };
-    if index < 0 || index >= MAX_TRIANGLES as i64 * 3 {
+    if index < 0 || index >= max_triangles() as i64 * 3 {
         return Err("OBJ index is out of range".into());
     }
     Ok(index as usize)
@@ -162,8 +162,11 @@ fn parse(text: &str, cancelled: &impl Fn() -> bool) -> Result<Mesh, String> {
                     let p = numbers(&args)?;
                     match kind {
                         "v" => {
-                            if vertices.len() >= MAX_VERTICES {
-                                return Err("OBJ exceeds 500,000 vertices".into());
+                            if vertices.len() >= max_vertices() {
+                                return Err(format!(
+                                    "OBJ exceeds configured vertex limit ({})",
+                                    max_vertices()
+                                ));
                             }
                             // w is a free-form weight; polygon positions are the literal x/y/z.
                             vertices.push(Vec3(p[0], p[1], p[2]));
@@ -191,7 +194,7 @@ fn parse(text: &str, cancelled: &impl Fn() -> bool) -> Result<Mesh, String> {
                         }
                         _ => normals += 1,
                     }
-                    if textures > MAX_TRIANGLES * 3 || normals > MAX_TRIANGLES * 3 {
+                    if textures > max_triangles() * 3 || normals > max_triangles() * 3 {
                         return Err("OBJ has too many texture coordinates or normals".into());
                     }
                 }
@@ -201,8 +204,11 @@ fn parse(text: &str, cancelled: &impl Fn() -> bool) -> Result<Mesh, String> {
                         return Err("Faces need 3–256 corners".into());
                     }
                     triangle_count += corners.len() - 2;
-                    if triangle_count > MAX_TRIANGLES {
-                        return Err("OBJ exceeds 1,000,000 triangles after triangulation".into());
+                    if triangle_count > max_triangles() {
+                        return Err(format!(
+                            "OBJ exceeds configured triangle limit ({}) after triangulation",
+                            max_triangles()
+                        ));
                     }
                     let mut face = Vec::with_capacity(corners.len());
                     let mut uv = Vec::with_capacity(corners.len());

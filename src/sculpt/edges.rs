@@ -1,5 +1,5 @@
 //! Polygon boundaries, persistent hard edges, and explicit topology edits.
-use super::{Geometry, MAX_TRIANGLES, MAX_VERTICES, Mesh, MeshSettings, Vec3};
+use super::{Geometry, Mesh, MeshSettings, Vec3, max_triangles, max_vertices};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 #[cfg(test)]
@@ -149,7 +149,7 @@ impl Mesh {
             return Ok(());
         }
         let edges: BTreeSet<_> = self.polygon_edges().into_iter().collect();
-        if self.creases.len() > MAX_TRIANGLES * 3
+        if self.creases.len() > max_triangles() * 3
             || self.creases.windows(2).any(|p| p[0] >= p[1])
             || self
                 .creases

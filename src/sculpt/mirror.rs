@@ -1,5 +1,5 @@
 //! Replace one half with a reflected source half, sharing the center seam.
-use super::{Axis, Geometry, MAX_TRIANGLES, MAX_VERTICES, Mesh, MeshSettings, SlicePlane, Vec3};
+use super::{Axis, Geometry, Mesh, MeshSettings, SlicePlane, Vec3, max_triangles, max_vertices};
 
 #[derive(Clone, Copy, Debug)]
 pub struct MirrorOptions {
@@ -121,7 +121,7 @@ impl Mesh {
             .map(|&p| distance(p).abs() <= epsilon)
             .collect();
         let count = half.vertices.len() + seam.iter().filter(|&&on_plane| !on_plane).count();
-        if count > MAX_VERTICES || half.triangles.len() > MAX_TRIANGLES / 2 {
+        if count > max_vertices() || half.triangles.len() > max_triangles() / 2 {
             return Err(
                 "Mirrored mesh exceeds the mesh size limit; reduce resolution first".into(),
             );

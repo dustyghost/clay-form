@@ -222,13 +222,18 @@ impl Mesh {
         self.validate_materials()?;
         self.validate_groups()?;
         self.validate_creases()?;
-        if self.vertices.len() > super::subdivision::MAX_VERTICES
-            || self.triangles.len() > super::subdivision::MAX_TRIANGLES
-            || self
-                .quads
-                .iter()
-                .flatten()
-                .any(|&i| i >= self.vertices.len())
+        let capacity = super::capacity::current();
+        if self.vertices.len() > capacity.vertices || self.triangles.len() > capacity.triangles {
+            return Err(format!(
+                "Mesh exceeds configured limits ({} vertices, {} triangles). Increase Settings → Mesh capacity and restart.",
+                capacity.vertices, capacity.triangles
+            ));
+        }
+        if self
+            .quads
+            .iter()
+            .flatten()
+            .any(|&i| i >= self.vertices.len())
             || self.mask.len() != self.vertices.len()
             || self
                 .vertices

@@ -108,6 +108,9 @@ impl App {
         let _ = app
             .document
             .set_history_retention(app.ui.preferences.history_retention);
+        if let Err(error) = crate::sculpt::capacity::initialize(app.ui.preferences.mesh_capacity) {
+            app.ui.status = error;
+        }
         app.initialize_recovery(path.with_file_name("recovery"));
         app.preferences_path = Some(path);
         app.ui.initialize_startup_notice();
@@ -159,6 +162,7 @@ impl App {
             || self.ui.viewport_controls.editor_open
             || self.ui.viewport_controls.arranging
             || self.ui.settings_open
+            || self.ui.mesh_capacity_open
             || self.ui.layout_open
             || self.ui.alphas.draft.is_some()
             || self.ui.alphas.overwrite.is_some()
@@ -311,6 +315,7 @@ impl App {
             && !self.ui.about_open
             && !self.ui.diagnostics_open
             && !self.ui.settings_open
+            && !self.ui.mesh_capacity_open
             && !self.ui.layout_open
             && self.mesh_job.is_none();
         if enabled

@@ -2,7 +2,7 @@
 //! Occupancy samples are voxel centres; corners sit half a cell away. Shared
 //! corners are joined through adjacent boundary faces, keeping edge/corner-only
 //! contacts in separate polygon fans.
-use super::{Grid, MAX_TRIANGLES, MAX_VERTICES, Mesh, Vec3};
+use super::{Grid, Mesh, Vec3, max_triangles, max_vertices};
 use crate::sculpt::ProjectionOptions;
 use std::collections::HashMap;
 
@@ -72,7 +72,7 @@ pub(super) fn extract(
                     }
                     lattice_quads.push(corners.map(|[a, b, c]| a + (nx + 1) * (b + (ny + 1) * c)));
                     owners.push(grid.index(x, y, z));
-                    if lattice_quads.len() * 2 > MAX_TRIANGLES {
+                    if lattice_quads.len() * 2 > max_triangles() {
                         return Err(
                             "Fast quads exceeds mesh limits; choose a lower resolution".into()
                         );
@@ -153,7 +153,7 @@ pub(super) fn extract(
         mesh.quads.push(q);
         let [a, b, c, d] = q;
         mesh.triangles.extend([[a, b, c], [a, c, d]]);
-        if mesh.vertices.len() > MAX_VERTICES {
+        if mesh.vertices.len() > max_vertices() {
             return Err("Fast quads exceeds mesh limits; choose a lower resolution".into());
         }
     }

@@ -1,7 +1,7 @@
 //! Surface nets with separate vertices for disconnected contour loops in a voxel.
 //! Shared-face asymptotic decisions keep adjacent cells consistent. Singular
 //! saddle ties and non-manifold/folded reconstructions are still rejected.
-use super::{Grid, MAX_TRIANGLES, MAX_VERTICES, Mesh, Vec3};
+use super::{Grid, Mesh, Vec3, max_triangles, max_vertices};
 use std::collections::HashMap;
 
 const EDGES: [(usize, usize); 12] = [
@@ -180,7 +180,7 @@ pub(super) fn extract(
                         p.2.clamp(low.2 + margin, low.2 + grid.step - margin),
                     ));
                     mesh.mask.push(0.);
-                    if mesh.vertices.len() > MAX_VERTICES {
+                    if mesh.vertices.len() > max_vertices() {
                         return Err(
                             "Quad remesh exceeds mesh limits; choose a lower resolution".into()
                         );
@@ -243,7 +243,7 @@ pub(super) fn extract(
                     mesh.quads.push(q);
                     let [a, b, c, d] = q;
                     mesh.triangles.extend([[a, b, c], [a, c, d]]);
-                    if mesh.triangles.len() > MAX_TRIANGLES {
+                    if mesh.triangles.len() > max_triangles() {
                         return Err(
                             "Quad remesh exceeds mesh limits; choose a lower resolution".into()
                         );

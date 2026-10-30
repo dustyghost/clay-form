@@ -3,8 +3,7 @@ use super::{AdaptiveSettings, Geometry, Mesh, Vec3};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-pub const MAX_VERTICES: usize = 500_000;
-pub const MAX_TRIANGLES: usize = 1_000_000;
+pub(crate) use super::capacity::{max_triangles, max_vertices};
 const MAX_LEVELS: usize = 8;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -126,7 +125,7 @@ impl MeshSettings {
             .chain(std::iter::once(mesh))
             .chain(self.upper.iter().rev())
             .collect();
-        if levels.iter().map(|m| m.vertices.len()).sum::<usize>() > MAX_VERTICES * 2 {
+        if levels.iter().map(|m| m.vertices.len()).sum::<usize>() > max_vertices() * 2 {
             return Err("Subdivision stack exceeds memory limit".into());
         }
         for level in &levels {
@@ -254,8 +253,11 @@ impl Mesh {
         if self.triangles.is_empty() {
             return Err("Mesh has no faces to subdivide".into());
         }
-        if self.triangles.len() > MAX_TRIANGLES / 4 {
-            return Err("Subdivision would exceed the one-million-face limit".into());
+        if self.triangles.len() > max_triangles() / 4 {
+            return Err(format!(
+                "Subdivision would exceed the configured triangle limit ({})",
+                max_triangles()
+            ));
         }
         let mut result = Self {
             uv: Default::default(),

@@ -327,8 +327,8 @@ impl Mesh {
         let mut replacements = HashMap::new();
         let original_vertices = self.vertices.len();
         let mut remaining = limit
-            .min(MAX_VERTICES.saturating_sub(original_vertices))
-            .min(MAX_TRIANGLES.saturating_sub(self.triangles.len()) / 2);
+            .min(max_vertices().saturating_sub(original_vertices))
+            .min(max_triangles().saturating_sub(self.triangles.len()) / 2);
         for (v, _) in candidates {
             let star = &faces.incident[v];
             let cost = star.len() * 2;

@@ -1,0 +1,9 @@
+
+running 5 tests
+test sculpt::subdivision::tests::coarse_edits_propagate_through_levels_without_losing_high_detail ... ok
+test sculpt::subdivision::tests::primitive_quads_survive_subdivision_and_serialization ... ok
+test sculpt::subdivision::tests::saved_stack_rejects_incompatible_topology_and_dynamic_levels ... ok
+test sculpt::subdivision::tests::subdivision_shares_edges_preserves_winding_and_interpolates_masks ... ok
+test sculpt::subdivision::tests::triangle_primitive_option_and_legacy_meshes_are_supported ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 980 filtered out; finished in 0.44s

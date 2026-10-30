@@ -12,11 +12,13 @@ export CLAY_NAVIGATION_PREVIEW="$capture_dir/navigation"
 export CLAY_LASSO_PREVIEW="$capture_dir/lasso"
 export CLAY_REFERENCE_PREVIEW="$capture_dir/references.png"
 export CLAY_OBJ_PREVIEW="$capture_dir/obj-import.png"
+export CLAY_MESH_CAPACITY_PREVIEW="$capture_dir/mesh-capacity.png"
 export CLAY_MENU_PREVIEW="$capture_dir/menu-placement.png"
 export CLAY_RECOVERY_PREVIEW="$capture_dir/recovery.png"
 export CLAY_ROTATION_PREVIEW="$capture_dir/rotation"
 export CLAY_GUIDE_PREVIEW="$capture_dir/guides"
 
+cargo test --locked --lib gpu_mesh_capacity_settings_capture -- --ignored --test-threads=1
 cargo test --locked --lib offscreen_preview -- --ignored --test-threads=1
 cargo test --locked --lib edge_workflow_offscreen_review -- --ignored --test-threads=1
 cargo test --locked --lib modeling_transform_gizmo_offscreen_review -- --ignored --test-threads=1
@@ -39,6 +41,7 @@ cargo test --locked --lib gpu_rotation_controls_and_primitive_regeneration -- --
 
 # Copy only the documentation selections after every capture succeeds.
 mkdir -p docs/images
+cp "$capture_dir/mesh-capacity.png" docs/images/mesh-capacity.png
 cp "$capture_dir/perspective-orthographic.png" docs/images/view-orthographic.png
 cp "$capture_dir/perspective-ui.png" docs/images/view-perspective.png
 cp "$capture_dir/detail-solid.png" docs/images/detail-groove.png

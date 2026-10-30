@@ -139,6 +139,7 @@ impl UiState {
                 && !self.recovery_open
                 && !self.about_open
                 && !self.settings_open
+                && !self.mesh_capacity_open
                 && !self.layout_open;
             let max_height = (ctx.content_rect().height() - 80.).max(120.);
             let response = egui::Window::new(pinned.menu.label())
@@ -324,6 +325,15 @@ impl UiState {
                 ui.label("Geometry and masks • history resets on New/Open");
             }
             BuiltinMenu::Settings => {
+                if ui
+                    .add(design::button(ui, Glyph::Mesh, "Mesh capacity…"))
+                    .clicked()
+                {
+                    self.mesh_capacity_open = true;
+                    if popup {
+                        ui.close_kind(egui::UiKind::Menu);
+                    }
+                }
                 if ui.button("About Clay Form").clicked() {
                     self.about_open = true;
                     if popup {
