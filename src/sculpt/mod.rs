@@ -19,6 +19,7 @@ mod remesh;
 mod topology;
 pub use topology::{QuadRemeshAlgorithm, Topology};
 mod smooth;
+mod stamp_normals;
 mod subdivision;
 mod symmetry;
 pub use adaptive::AdaptiveSettings;

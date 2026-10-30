@@ -1,0 +1,5 @@
+running 2 tests
+test sculpt::polish::tests::polish_levels_relief_without_rounding_corners_or_moving_protected_vertices ... ok
+test sculpt::polish::tests::polish_pressure_inversion_crease_and_symmetry_are_consistent ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 988 filtered out; finished in 0.00s

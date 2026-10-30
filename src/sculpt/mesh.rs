@@ -334,12 +334,12 @@ impl Mesh {
         let old = self.vertices.clone();
         #[cfg(test)]
         super::stamp_profile::mark("clone_positions");
-        let normals = self.normals();
-        #[cfg(test)]
-        super::stamp_profile::mark("normals");
         let mut sculptable = self.sculptable_vertices();
         #[cfg(test)]
         super::stamp_profile::mark("eligibility");
+        let normals = self.stamp_normals(b.kind, dabs, &mut sculptable);
+        #[cfg(test)]
+        super::stamp_profile::mark("normals");
         let polish = (b.kind == Kind::Polish)
             .then(|| self.polish_planes(b, dabs, &normals, &mut sculptable));
         let sampled = (b.kind == Kind::Clay
