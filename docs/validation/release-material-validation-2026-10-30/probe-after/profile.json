@@ -1,0 +1,334 @@
+{
+  "dabs_per_stroke": 12,
+  "fixture": "hidden",
+  "fixture_hash_fnv1a": "5465b1c03e0bb134",
+  "frames": [
+    {
+      "angle_cache_payload_bytes": 10838040,
+      "brush": "Standard",
+      "faces": 602112,
+      "trial": 0,
+      "unchanged_faces": 597287
+    },
+    {
+      "angle_cache_payload_bytes": 10838040,
+      "brush": "Clay",
+      "faces": 602112,
+      "trial": 0,
+      "unchanged_faces": 597287
+    },
+    {
+      "angle_cache_payload_bytes": 10838040,
+      "brush": "Paint",
+      "faces": 602112,
+      "trial": 0,
+      "unchanged_faces": 602112
+    },
+    {
+      "angle_cache_payload_bytes": 10838040,
+      "brush": "Standard",
+      "faces": 602112,
+      "trial": 1,
+      "unchanged_faces": 597287
+    },
+    {
+      "angle_cache_payload_bytes": 10838040,
+      "brush": "Clay",
+      "faces": 602112,
+      "trial": 1,
+      "unchanged_faces": 597287
+    },
+    {
+      "angle_cache_payload_bytes": 10838040,
+      "brush": "Paint",
+      "faces": 602112,
+      "trial": 1,
+      "unchanged_faces": 602112
+    },
+    {
+      "angle_cache_payload_bytes": 10838040,
+      "brush": "Standard",
+      "faces": 602112,
+      "trial": 2,
+      "unchanged_faces": 597287
+    },
+    {
+      "angle_cache_payload_bytes": 10838040,
+      "brush": "Clay",
+      "faces": 602112,
+      "trial": 2,
+      "unchanged_faces": 597287
+    },
+    {
+      "angle_cache_payload_bytes": 10838040,
+      "brush": "Paint",
+      "faces": 602112,
+      "trial": 2,
+      "unchanged_faces": 602112
+    }
+  ],
+  "level": 3,
+  "memory_final": {
+    "process_peak_rss_bytes": 600260608,
+    "rss_bytes": 524230656
+  },
+  "metrics": {
+    "Clay.clone_geometry": {
+      "max_ms": 12.472656,
+      "n": 3,
+      "p50_ms": 12.381063,
+      "p95_ms": 12.472656,
+      "samples_ms": [
+        10.596182,
+        12.381063,
+        12.472656
+      ]
+    },
+    "Clay.filter_shading": {
+      "max_ms": 1.663171,
+      "n": 3,
+      "p50_ms": 1.4201769999999998,
+      "p95_ms": 1.663171,
+      "samples_ms": [
+        1.663171,
+        1.393099,
+        1.4201769999999998
+      ]
+    },
+    "Clay.shading.angle_sums": {
+      "max_ms": 14.280065,
+      "n": 3,
+      "p50_ms": 12.966265,
+      "p95_ms": 14.280065,
+      "samples_ms": [
+        12.966265,
+        14.280065,
+        12.795872
+      ]
+    },
+    "Clay.shading.emit": {
+      "max_ms": 7.518318000000001,
+      "n": 3,
+      "p50_ms": 7.2606980000000005,
+      "p95_ms": 7.518318000000001,
+      "samples_ms": [
+        6.360933,
+        7.518318000000001,
+        7.2606980000000005
+      ]
+    },
+    "Clay.shading.face_normals": {
+      "max_ms": 4.883705,
+      "n": 3,
+      "p50_ms": 4.410774999999999,
+      "p95_ms": 4.883705,
+      "samples_ms": [
+        4.186463,
+        4.883705,
+        4.410774999999999
+      ]
+    },
+    "Clay.shading.join_fans": {
+      "max_ms": 11.8727,
+      "n": 3,
+      "p50_ms": 11.462577,
+      "p95_ms": 11.8727,
+      "samples_ms": [
+        11.8727,
+        11.462577,
+        10.840888
+      ]
+    },
+    "Clay.shading.parents": {
+      "max_ms": 1.634372,
+      "n": 3,
+      "p50_ms": 1.496859,
+      "p95_ms": 1.634372,
+      "samples_ms": [
+        1.20505,
+        1.496859,
+        1.634372
+      ]
+    },
+    "Clay.validate.materials": {
+      "max_ms": 4.456843999999999,
+      "n": 3,
+      "p50_ms": 3.968465,
+      "p95_ms": 4.456843999999999,
+      "samples_ms": [
+        3.7326550000000003,
+        3.968465,
+        4.456843999999999
+      ]
+    },
+    "Clay.validate.positions_mask": {
+      "max_ms": 1.190534,
+      "n": 3,
+      "p50_ms": 1.1551280000000002,
+      "p95_ms": 1.190534,
+      "samples_ms": [
+        1.1551280000000002,
+        1.190534,
+        1.140581
+      ]
+    },
+    "Clay.validate.topology": {
+      "max_ms": 3.125873,
+      "n": 3,
+      "p50_ms": 3.0303869999999997,
+      "p95_ms": 3.125873,
+      "samples_ms": [
+        2.997709,
+        3.0303869999999997,
+        3.125873
+      ]
+    },
+    "Paint.validate.materials": {
+      "max_ms": 4.794344,
+      "n": 3,
+      "p50_ms": 3.928901,
+      "p95_ms": 4.794344,
+      "samples_ms": [
+        4.794344,
+        3.8239989999999997,
+        3.928901
+      ]
+    },
+    "Paint.validate.positions_mask": {
+      "max_ms": 1.2970679999999999,
+      "n": 3,
+      "p50_ms": 1.181686,
+      "p95_ms": 1.2970679999999999,
+      "samples_ms": [
+        1.181686,
+        1.2970679999999999,
+        1.181269
+      ]
+    },
+    "Paint.validate.topology": {
+      "max_ms": 3.137613,
+      "n": 3,
+      "p50_ms": 3.114464,
+      "p95_ms": 3.137613,
+      "samples_ms": [
+        3.114464,
+        3.137613,
+        3.0609970000000004
+      ]
+    },
+    "Standard.clone_geometry": {
+      "max_ms": 15.017255,
+      "n": 3,
+      "p50_ms": 10.880101,
+      "p95_ms": 15.017255,
+      "samples_ms": [
+        15.017255,
+        10.814205000000001,
+        10.880101
+      ]
+    },
+    "Standard.filter_shading": {
+      "max_ms": 1.79551,
+      "n": 3,
+      "p50_ms": 1.4411420000000001,
+      "p95_ms": 1.79551,
+      "samples_ms": [
+        1.4411420000000001,
+        1.79551,
+        1.380339
+      ]
+    },
+    "Standard.shading.angle_sums": {
+      "max_ms": 13.335418,
+      "n": 3,
+      "p50_ms": 13.108602000000001,
+      "p95_ms": 13.335418,
+      "samples_ms": [
+        13.108602000000001,
+        12.769344,
+        13.335418
+      ]
+    },
+    "Standard.shading.emit": {
+      "max_ms": 8.094037,
+      "n": 3,
+      "p50_ms": 7.117115,
+      "p95_ms": 8.094037,
+      "samples_ms": [
+        8.094037,
+        6.337479,
+        7.117115
+      ]
+    },
+    "Standard.shading.face_normals": {
+      "max_ms": 4.483647,
+      "n": 3,
+      "p50_ms": 4.17478,
+      "p95_ms": 4.483647,
+      "samples_ms": [
+        4.483647,
+        4.16171,
+        4.17478
+      ]
+    },
+    "Standard.shading.join_fans": {
+      "max_ms": 12.102886,
+      "n": 3,
+      "p50_ms": 11.221315,
+      "p95_ms": 12.102886,
+      "samples_ms": [
+        11.221315,
+        12.102886,
+        10.661849
+      ]
+    },
+    "Standard.shading.parents": {
+      "max_ms": 1.208829,
+      "n": 3,
+      "p50_ms": 1.208766,
+      "p95_ms": 1.208829,
+      "samples_ms": [
+        1.208829,
+        1.200662,
+        1.208766
+      ]
+    },
+    "Standard.validate.materials": {
+      "max_ms": 4.804925,
+      "n": 3,
+      "p50_ms": 3.877637,
+      "p95_ms": 4.804925,
+      "samples_ms": [
+        4.804925,
+        3.6604509999999997,
+        3.877637
+      ]
+    },
+    "Standard.validate.positions_mask": {
+      "max_ms": 1.8675549999999999,
+      "n": 3,
+      "p50_ms": 1.179297,
+      "p95_ms": 1.8675549999999999,
+      "samples_ms": [
+        1.140073,
+        1.179297,
+        1.8675549999999999
+      ]
+    },
+    "Standard.validate.topology": {
+      "max_ms": 3.243326,
+      "n": 3,
+      "p50_ms": 3.188361,
+      "p95_ms": 3.243326,
+      "samples_ms": [
+        3.188361,
+        3.104374,
+        3.243326
+      ]
+    }
+  },
+  "mode": "cached",
+  "repeats": 3,
+  "scope": "Isolated CPU release stages; excludes renderer bookkeeping, allocation destruction and GPU work. Reference checks are outside timers.",
+  "vertices": 301058
+}

@@ -2,7 +2,7 @@
 use super::atlas::Atlas;
 use crate::{
     document::Document,
-    sculpt::{Mesh, SurfaceShading, SurfaceShadingTopology, Vec3},
+    sculpt::{Material, Mesh, SurfaceShading, SurfaceShadingTopology, Vec3},
 };
 use std::{collections::HashMap, sync::Arc};
 
@@ -232,7 +232,7 @@ impl DisplayMesh {
             // A final dab or another edit may not have been displayed yet.
             || self.mesh.vertices != source.vertices
             || self.mesh.mask != source.mask
-            || self.mesh.materials != source.materials
+            || !Material::slices_equal(&self.mesh.materials, &source.materials)
         {
             return None;
         }
@@ -939,10 +939,9 @@ impl DisplayMesh {
             .vertices
             == source.vertices
             && self.mesh.mask == source.mask));
-        assert!(timed(&mut times, "validate.materials", || self
-            .mesh
-            .materials
-            == source.materials));
+        assert!(timed(&mut times, "validate.materials", || {
+            Material::slices_equal(&self.mesh.materials, &source.materials)
+        }));
         if !self.temporary_normals {
             return times;
         }

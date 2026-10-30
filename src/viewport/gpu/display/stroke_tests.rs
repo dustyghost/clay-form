@@ -283,3 +283,37 @@ fn hidden_stroke_cache_release_rejects_unseen_final_dab() {
         assert!(live.after_stroke(&doc).is_none());
     }
 }
+
+#[test]
+fn hidden_stroke_cache_release_rejects_material_only_edits_and_history() {
+    let mut mesh = source();
+    for material in &mut mesh.materials {
+        *material = material.with_link(7);
+    }
+    let mut doc = document(mesh);
+    let display = Arc::new(DisplayMesh::new(&doc));
+    for case in 0..5 {
+        let mut geometry = doc.geometry_snapshot();
+        let material = geometry.mesh.materials.last_mut().unwrap();
+        match case {
+            0 => material.emission_strength = 0.5,
+            1 => material.layers[0].weight = 0.5,
+            2 => material.layers[2].surface.roughness = 0.9,
+            3 => Arc::make_mut(&mut material.links)[0].id = 8,
+            4 => Arc::make_mut(&mut material.links)[0].weights[2] = 0.5,
+            _ => unreachable!(),
+        }
+        doc.replace_geometry(geometry).unwrap();
+        assert_eq!(doc.mesh().vertices, display.mesh.vertices);
+        assert_eq!(doc.mesh().mask, display.mesh.mask);
+        assert!(display.after_stroke(&doc).is_none(), "material edit {case}");
+        let changed = Arc::new(DisplayMesh::new(&doc));
+        doc.undo();
+        assert!(display.after_stroke(&doc).is_some());
+        assert!(changed.after_stroke(&doc).is_none());
+        doc.redo();
+        assert!(display.after_stroke(&doc).is_none());
+        assert!(changed.after_stroke(&doc).is_some());
+        doc.undo();
+    }
+}

@@ -1,6 +1,7 @@
 //! Portable, opaque metallic/roughness surface values, independent of groups and masks.
 use super::{Brush, Dab, Mesh};
 use serde::{Deserialize, Serialize};
+mod equality;
 pub mod layers;
 use layers::{Influence, Layer, VALUE_COUNT, group, limits};
 fn links_empty(v: &std::sync::Arc<Vec<Influence>>) -> bool {

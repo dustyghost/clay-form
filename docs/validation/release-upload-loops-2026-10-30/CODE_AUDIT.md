@@ -18,9 +18,10 @@ Both policies were removed from the final implementation. The retained profiler 
 
 ## Remaining candidates, ranked by current evidence
 
+The release material-validation candidate is now completed in the [docked comparison follow-up](../release-material-validation-2026-10-30/README.md). Reusing successful comparisons of shared immutable payloads reduced that stage from about 21 ms to 4 ms while preserving ordinary floating-point equality and unseen material-edit rejection.
+
 | Area | Evidence | Next investigation |
 | --- | --- | --- |
-| Release material validation | About 21 ms in the existing release probe; equality reaches material surfaces and shared layer stacks for the full mesh. | Establish reliable material-change provenance or a specialised comparison. Preserve unseen-final-edit rejection, layer edits, links and floating-point equality semantics; a blanket pointer-equality shortcut is not automatically equivalent. |
 | Display copying | About 10–12 ms for the complete clone. `after_stroke` clones old shading arrays and then replaces them with newly computed shading. During-stroke snapshots also clone several topology-derived arrays. | First avoid copying the shading being replaced; separately measure shared immutable arrays. Do not assume the whole clone cost is removable. |
 | Face-data comparisons during upload | About 4.7–5 ms for colour/UV comparisons in the upload probe, even when their payloads are unchanged. | Investigate shared payload identity or channel revisions. Index/fan changes must still be detected independently. |
 | Brush-wide and dab-wide calculations inside vertex loops | `Brush::weight` evaluates rotation `sin_cos`; pressure `powf` appears inside sculpt, smooth and paint vertex loops. Hard/Square alpha branches do not consume the source-level fade calculation. | Measure a prepared brush/dab representation, and inspect whether the compiler already hoists or sinks this work. Preserve operation order, alpha rotation, pressure response and symmetry/stencil behaviour. No speedup is claimed yet. |

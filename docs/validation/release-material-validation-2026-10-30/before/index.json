@@ -1,0 +1,62 @@
+[
+  {
+    "case": "sphere-l0",
+    "status": "measured",
+    "log": "sphere-l0.log"
+  },
+  {
+    "case": "sphere-l1",
+    "status": "measured",
+    "log": "sphere-l1.log"
+  },
+  {
+    "case": "sphere-l2",
+    "status": "measured",
+    "log": "sphere-l2.log"
+  },
+  {
+    "case": "sphere-l3",
+    "status": "measured",
+    "log": "sphere-l3.log"
+  },
+  {
+    "case": "organic-l0",
+    "status": "measured",
+    "log": "organic-l0.log"
+  },
+  {
+    "case": "organic-l1",
+    "status": "measured",
+    "log": "organic-l1.log"
+  },
+  {
+    "case": "organic-l2",
+    "status": "measured",
+    "log": "organic-l2.log"
+  },
+  {
+    "case": "organic-l3",
+    "status": "measured",
+    "log": "organic-l3.log"
+  },
+  {
+    "case": "hidden-l0",
+    "status": "measured",
+    "log": "hidden-l0.log"
+  },
+  {
+    "case": "hidden-l1",
+    "status": "measured",
+    "log": "hidden-l1.log"
+  },
+  {
+    "case": "hidden-l2",
+    "status": "measured",
+    "log": "hidden-l2.log"
+  },
+  {
+    "case": "hidden-l3",
+    "status": "measured",
+    "log": "hidden-l3.log"
+  }
+]
