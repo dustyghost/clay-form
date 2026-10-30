@@ -1,5 +1,7 @@
 # Docked release material validation
 
+Follow-up: [skip discarded shading copies at release](../release-shading-copy-2026-10-30/README.md) measures the next targeted copy reduction.
+
 Follow-up to the [loop audit](../release-upload-loops-2026-10-30/CODE_AUDIT.md), under #103. A specialised material comparison removes repeated comparisons of shared layer and link payloads during hidden-geometry release validation.
 
 ## Change and correctness contract

@@ -71,6 +71,28 @@ pub(crate) struct DisplayGeometry {
     hidden_stroke_topology: Option<Arc<HiddenStrokeTopology>>,
     temporary_normals: bool,
 }
+impl DisplayGeometry {
+    /// Copy retained display data for release, without copying shading that the
+    /// caller immediately replaces with canonical normals and filtered fans.
+    fn clone_without_shading(&self) -> Self {
+        Self {
+            mesh: self.mesh.clone(),
+            uv_corners: self.uv_corners.clone(),
+            shading: SurfaceShading::default(),
+            owners: self.owners.clone(),
+            muted_vertices: self.muted_vertices.clone(),
+            source_faces: self.source_faces.clone(),
+            poly_colors: self.poly_colors.clone(),
+            edge_colors: self.edge_colors.clone(),
+            outlines: self.outlines.clone(),
+            active_vertices: self.active_vertices,
+            active: self.active,
+            depth_extent: self.depth_extent,
+            hidden_stroke_topology: self.hidden_stroke_topology.clone(),
+            temporary_normals: self.temporary_normals,
+        }
+    }
+}
 impl std::ops::Deref for DisplayMesh {
     type Target = DisplayGeometry;
     fn deref(&self) -> &Self::Target {
@@ -240,7 +262,7 @@ impl DisplayMesh {
             return Some(self.clone());
         }
         let shading = cached.source.shading.shade(source);
-        let mut geometry = (*self.geometry).clone();
+        let mut geometry = self.geometry.clone_without_shading();
         geometry.shading = SurfaceShading {
             vertices: shading.vertices,
             triangles: self
@@ -947,7 +969,9 @@ impl DisplayMesh {
         }
         let (shading, shading_times) = cached.source.shading.profile_shade(source, use_angles);
         times.extend(shading_times);
-        let mut geometry = timed(&mut times, "clone_geometry", || (*self.geometry).clone());
+        let mut geometry = timed(&mut times, "clone_geometry", || {
+            self.geometry.clone_without_shading()
+        });
         geometry.shading = timed(&mut times, "filter_shading", || SurfaceShading {
             vertices: shading.vertices,
             triangles: self

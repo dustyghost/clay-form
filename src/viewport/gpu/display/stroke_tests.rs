@@ -50,6 +50,9 @@ fn assert_visible_data(actual: &DisplayMesh, canonical: &DisplayMesh) {
     assert_eq!(actual.shading.triangles, canonical.shading.triangles);
     assert_eq!(actual.source_faces, canonical.source_faces);
     assert_eq!(actual.owners, canonical.owners);
+    assert_eq!(actual.muted_vertices, canonical.muted_vertices);
+    assert_eq!(actual.active_vertices, canonical.active_vertices);
+    assert_eq!(actual.active, canonical.active);
     assert_eq!(actual.poly_colors, canonical.poly_colors);
     assert_eq!(actual.uv_corners, canonical.uv_corners);
     assert_eq!(actual.edge_colors, canonical.edge_colors);
@@ -97,7 +100,15 @@ fn hidden_stroke_cache_preserves_filtered_faces_and_boundary_normals() {
     let edited = doc.mesh().clone();
     doc.end_stroke();
     assert!(display.during_stroke(&doc).is_none());
-    let released = Arc::new(display).after_stroke(&doc).unwrap();
+    let live = Arc::new(display);
+    let previous_shading = live.shading.clone();
+    let released = live.after_stroke(&doc).unwrap();
+    // Renderers may still retain the live snapshot while release is prepared.
+    assert!(!released.shares_geometry(&live));
+    assert_eq!(live.shading.vertices, previous_shading.vertices);
+    assert_eq!(live.shading.triangles, previous_shading.triangles);
+    assert!(live.temporary_normals);
+    assert_eq!(released.depth_extent, live.depth_extent);
     let canonical = DisplayMesh::new(&doc);
     assert_visible_data(&released, &canonical);
     assert_eq!(released.shading.vertices, canonical.shading.vertices);
