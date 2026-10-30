@@ -5,13 +5,10 @@ use serde::Serialize;
 use std::{collections::BTreeMap, io::Write};
 
 const DABS: usize = 12;
-const SCHEMA: u32 = 1;
+const SCHEMA: u32 = 2;
 
 fn fixture(name: &str, level: usize) -> Geometry {
-    assert!(
-        level <= 3,
-        "higher levels require a separate capacity investigation"
-    );
+    assert!(level <= 4, "capacity fixtures are bounded to level 4");
     assert!(matches!(name, "sphere" | "organic" | "hidden"));
     let mut geometry = Geometry::new(Mesh::starting_sphere());
     for _ in 0..level {
@@ -70,19 +67,35 @@ fn dab(step: usize) -> Dab {
 }
 
 #[derive(Default, Serialize)]
-struct Measurements(BTreeMap<String, Vec<f64>>);
+struct Measurements {
+    values: BTreeMap<String, Vec<f64>>,
+    progress: Option<(std::path::PathBuf, serde_json::Value)>,
+}
 impl Measurements {
     fn time<T>(&mut self, name: &str, f: impl FnOnce() -> T) -> T {
+        self.checkpoint(name, "running");
         let start = Instant::now();
         let result = f();
-        self.0
+        self.values
             .entry(name.into())
             .or_default()
             .push(start.elapsed().as_secs_f64() * 1000.);
+        self.checkpoint(name, "completed");
         result
     }
+    /// Atomic checkpoints are outside timing windows and survive a guard stop.
+    fn checkpoint(&self, stage: &str, status: &str) {
+        if let Some((path, context)) = &self.progress {
+            let value = serde_json::json!({"schema": SCHEMA, "stage": stage,
+                "status": status, "context": context, "metrics": self.summary(),
+                "memory": memory()});
+            let temporary = path.with_extension("tmp");
+            std::fs::write(&temporary, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+            std::fs::rename(temporary, path).unwrap();
+        }
+    }
     fn summary(&self) -> serde_json::Value {
-        self.0
+        self.values
             .iter()
             .map(|(name, values)| {
                 let mut sorted = values.clone();
@@ -180,8 +193,26 @@ fn gpu_load_profile_capacity() {
         .unwrap();
     assert!((1..=10).contains(&repeats));
     let use_gpu = std::env::var_os("CLAY_CAPACITY_GPU").is_some();
-    let mut metrics = Measurements::default();
-    let geometry = fixture(&name, level);
+    let workload = std::env::var("CLAY_CAPACITY_WORKLOAD").unwrap_or_else(|_| "full".into());
+    assert!(matches!(workload.as_str(), "full" | "interactive"));
+    let capacity = benchmark_capacity(
+        level,
+        env_limit("CLAY_CAPACITY_VERTICES", 500_000),
+        env_limit("CLAY_CAPACITY_TRIANGLES", 1_000_000),
+    )
+    .unwrap();
+    crate::sculpt::capacity::initialize(capacity).unwrap();
+    assert_eq!(crate::sculpt::capacity::current(), capacity);
+    let mut metrics = Measurements {
+        progress: Some((
+            std::path::Path::new(&output).with_extension("progress.json"),
+            serde_json::json!({"fixture": name, "level": level, "repeats": repeats,
+                "workload": workload, "mesh_capacity": capacity, "gpu_requested": use_gpu}),
+        )),
+        ..Default::default()
+    };
+    let geometry = metrics.time("fixture_build", || fixture(&name, level));
+    metrics.checkpoint("fixture_fingerprint", "running");
     let initial_hash = fingerprint(&(&geometry.mesh, &geometry.settings));
     let mut doc = metrics.time("document_open", || document(geometry));
     let document_idle = memory();
@@ -197,6 +228,9 @@ fn gpu_load_profile_capacity() {
         "masked_vertices": mesh.mask.iter().filter(|&&m| m == 1.).count(),
         "models": 1, "textures": 0,
     });
+    metrics.progress.as_mut().unwrap().1["counts"] = counts.clone();
+    metrics.progress.as_mut().unwrap().1["fixture_hash_fnv1a"] = initial_hash.clone().into();
+    metrics.checkpoint("gpu_setup", "running");
     let headless = use_gpu.then(Headless::new);
     let mut renderer = headless.as_ref().map(|h| Renderer::new(&h.state).unwrap());
     if let Some(h) = &headless {
@@ -213,6 +247,8 @@ fn gpu_load_profile_capacity() {
         eprintln!("capacity {name} level={level} trial={trial}");
         for kind in [Kind::Standard, Kind::Clay, Kind::Paint] {
             let prefix = format!("{kind:?}");
+            metrics.progress.as_mut().unwrap().1["trial"] = trial.into();
+            metrics.progress.as_mut().unwrap().1["brush"] = prefix.clone().into();
             let brush = brush(kind);
             let mut display = metrics.time("display_initial", || {
                 renderer
@@ -228,6 +264,7 @@ fn gpu_load_profile_capacity() {
                 });
             }
             for step in 0..DABS {
+                metrics.progress.as_mut().unwrap().1["step"] = step.into();
                 doc.begin_sculpt_frame();
                 let phase = if step == 0 { "first" } else { "sustained" };
                 let changed = metrics.time(&format!("{prefix}.{phase}_dab"), || {
@@ -255,10 +292,12 @@ fn gpu_load_profile_capacity() {
                     });
                 }
             }
+            metrics.checkpoint("history_diagnostics", "running");
             let history_bytes = doc
                 .diagnostic_manifest(Default::default())
                 .retained_estimated_bytes;
             memory_stages.push(serde_json::json!({"stage": format!("{prefix}.stroke.{trial}"), "memory": memory(), "history_estimated_bytes": history_bytes}));
+            metrics.progress.as_mut().unwrap().1["memory_stages"] = memory_stages.clone().into();
             metrics.time(&format!("{prefix}.end_stroke"), || doc.end_stroke());
             let final_display = metrics.time(&format!("{prefix}.end_display"), || {
                 renderer.as_mut().map_or_else(
@@ -267,6 +306,7 @@ fn gpu_load_profile_capacity() {
                 )
             });
             assert_eq!(doc.history_counts(), (1, 0), "one stroke, one undo entry");
+            metrics.checkpoint("stroke_verification", "running");
             let after_hash = fingerprint(doc.mesh());
             assert_ne!(after_hash, fingerprint(&before.mesh));
             if let Some(previous) = outputs.insert(prefix.clone(), after_hash.clone()) {
@@ -307,6 +347,7 @@ fn gpu_load_profile_capacity() {
                             h.state.queue.submit([]);
                             h.wait();
                         });
+                        metrics.checkpoint("orbit_gpu_warmup", "running");
                         gpu.paint(
                             &params,
                             [800, 600],
@@ -331,11 +372,18 @@ fn gpu_load_profile_capacity() {
                 }
             }
             metrics.time(&format!("{prefix}.undo"), || doc.undo());
+            metrics.checkpoint("undo_verification", "running");
             assert_restored(&doc, &before);
             metrics.time(&format!("{prefix}.redo"), || doc.redo());
+            metrics.checkpoint("redo_verification", "running");
             assert_eq!(fingerprint(doc.mesh()), after_hash);
             doc.undo();
             assert_restored(&doc, &before);
+            metrics.progress.as_mut().unwrap().1["output_hashes_fnv1a"] =
+                serde_json::to_value(&outputs).unwrap();
+        }
+        if workload == "interactive" {
+            continue;
         }
         let project = metrics.time("project_snapshot", || doc.project());
         let path = std::path::Path::new(&output).with_extension("scratch.clay");
@@ -352,26 +400,87 @@ fn gpu_load_profile_capacity() {
         memory_stages.push(serde_json::json!({"stage": format!("save_load.{trial}"), "file_bytes": bytes, "memory": memory()}));
         std::fs::remove_file(path).unwrap();
     }
-    // Subdivision is measured only where the result fits existing limits. Never raise caps.
-    let subdivision = if level < 3 {
+    // Additional growth remains confined to the original small baseline cases.
+    let subdivision = if workload == "full" && level < 3 {
         let mut g = before.clone();
         metrics.time("subdivide", || g.subdivide().unwrap());
         serde_json::json!({"status": "measured", "output_vertices": g.mesh.vertices.len(), "output_triangles": g.mesh.triangles.len()})
     } else {
-        serde_json::json!({"status": "skipped", "reason": "next level exceeds current per-mesh caps"})
+        serde_json::json!({"status": "skipped", "reason": "additional subdivision is outside this workload"})
     };
     let result = serde_json::json!({
         "schema": SCHEMA, "fixture": name, "level": level, "repeats": repeats, "dabs_per_stroke": DABS,
+        "workload": workload, "mesh_capacity": capacity,
         "fixture_hash_fnv1a": initial_hash, "output_hashes_fnv1a": outputs,
         "counts": counts, "gpu": headless.as_ref().map(|h| format!("{:?}", h.state.adapter.get_info())),
         "viewport": [800, 600], "metrics": metrics.summary(), "memory_stages": memory_stages,
         "memory_final": memory(), "subdivision": subdivision,
-        "not_measured": ["multi-million single mesh (hard caps)", "multi-model scenes", "remeshing", "texture painting", "input-to-present latency", "allocation counts", "GPU timestamps", "cold disk reads"],
+        "not_measured": ["levels above 4", "multi-model scenes", "remeshing", "texture painting", "input-to-present latency", "allocation counts", "GPU timestamps", "cold disk reads"],
     });
     if let Some(r) = renderer {
         r.destroy();
     }
     std::fs::write(output, serde_json::to_vec_pretty(&result).unwrap()).unwrap();
+    metrics.checkpoint("complete", "completed");
+}
+
+fn env_limit(name: &str, default: usize) -> usize {
+    std::env::var(name).map_or(default, |s| s.parse().expect("numeric mesh limit"))
+}
+
+fn benchmark_capacity(
+    level: usize,
+    vertices: usize,
+    triangles: usize,
+) -> Result<crate::sculpt::capacity::MeshCapacity, String> {
+    let capacity = crate::sculpt::capacity::MeshCapacity {
+        vertices,
+        triangles,
+    };
+    capacity.validate()?;
+    if level > 4 {
+        return Err("capacity fixtures are bounded to level 4".into());
+    }
+    let quads = 4704 * 4_usize.pow(level as u32);
+    if vertices < quads + 2 || triangles < quads * 2 {
+        return Err("fixture exceeds the requested mesh capacity".into());
+    }
+    Ok(capacity)
+}
+
+#[test]
+fn capacity_large_fixture_requires_explicit_valid_budgets() {
+    assert!(benchmark_capacity(3, 500_000, 1_000_000).is_ok());
+    assert!(benchmark_capacity(4, 500_000, 1_000_000).is_err());
+    assert!(benchmark_capacity(4, 1_204_226, 2_408_448).is_ok());
+    assert!(benchmark_capacity(4, 1_204_225, 2_408_448).is_err());
+    assert!(benchmark_capacity(4, 1_204_226, 2_408_447).is_err());
+    assert!(benchmark_capacity(5, 16_000_000, 32_000_000).is_err());
+    assert!(benchmark_capacity(4, 16_000_001, 32_000_000).is_err());
+}
+
+#[test]
+fn capacity_checkpoints_preserve_completed_samples_when_next_phase_fails() {
+    let path = std::env::temp_dir().join(format!(
+        "clay-capacity-checkpoint-{}.json",
+        std::process::id()
+    ));
+    let mut metrics = Measurements {
+        progress: Some((path.clone(), serde_json::json!({"fixture": "test"}))),
+        ..Default::default()
+    };
+    assert_eq!(metrics.time("first", || 7), 7);
+    let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        metrics.time("next", || panic!("simulated failed phase"));
+    }));
+    assert!(failed.is_err());
+    let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(saved["status"], "running");
+    assert_eq!(saved["stage"], "next");
+    assert_eq!(saved["context"]["fixture"], "test");
+    assert_eq!(saved["metrics"]["first"]["n"], 1);
+    assert!(saved["metrics"].get("next").is_none());
+    std::fs::remove_file(path).unwrap();
 }
 
 #[test]
@@ -550,7 +659,7 @@ fn gpu_load_profile_release_display() {
             doc.end_stroke();
             for (phase, elapsed) in display.profile_after_stroke(&doc, mode == "cached") {
                 metrics
-                    .0
+                    .values
                     .entry(format!("{kind:?}.{phase}"))
                     .or_default()
                     .push(elapsed);
@@ -599,7 +708,7 @@ fn gpu_load_profile_release_upload() {
             metrics.time(&format!("{kind:?}.cpu_upload"), || gpu.upload(&display));
             for (stage, elapsed) in gpu.upload_trace.stop() {
                 metrics
-                    .0
+                    .values
                     .entry(format!("{kind:?}.{stage}"))
                     .or_default()
                     .push(elapsed);
