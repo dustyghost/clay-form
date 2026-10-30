@@ -91,3 +91,6 @@ pub use relaxation::{RelaxationOptions, RelaxationReport};
 
 #[cfg(test)]
 pub(crate) use relaxation::{inflated_relaxation_fixture, relaxation_fixture};
+
+#[cfg(test)]
+mod brush_loop_profile;

@@ -340,6 +340,11 @@ impl Mesh {
             && dabs.len() > 1
             && stencils.is_empty();
         let origin = dabs.first().map_or(Vec3::default(), |dab| dab.center);
+        let footprint = b.prepare_weight();
+        let strengths: Vec<_> = dabs
+            .iter()
+            .map(|dab| b.strength * b.dab_pressure(dab))
+            .collect();
         for i in 0..old.len() {
             if !sculptable[i] {
                 continue;
@@ -367,17 +372,12 @@ impl Mesh {
                 let weight = if b.kind == Kind::Snake {
                     b.snake_weight(*dab, offset)
                 } else {
-                    b.weight(
+                    footprint.weight(
                         offset.dot(dab.right) / dab.radius,
                         offset.dot(dab.up) / dab.radius,
                     )
                 };
-                let strength = b.strength
-                    * if b.pressure {
-                        dab.pressure.powf(b.pressure_curve)
-                    } else {
-                        1.
-                    };
+                let strength = strengths[dab_index];
                 let influence =
                     weight * strength * stencils.get(dab_index).map_or(1., |s| s.weight(old[i]));
                 if influence <= 0. {

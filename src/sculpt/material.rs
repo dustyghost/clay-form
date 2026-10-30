@@ -588,10 +588,12 @@ impl Mesh {
             scratch.weights[i] = (0., false);
         }
         scratch.weights.resize(self.vertices.len(), (0., false));
+        let footprint = brush.prepare_weight();
         for (j, dab) in dabs.iter().enumerate() {
             if dab.radius <= 0. {
                 continue;
             }
+            let pressure = brush.dab_pressure(dab);
             scratch.depth.prepare(self, dab, occluders);
             for &i in &scratch.depth.active_vertices {
                 let point = self.vertices[i];
@@ -603,15 +605,11 @@ impl Mesh {
                 {
                     continue;
                 }
-                let local = brush.paint_weight(
+                let local = footprint.paint_weight(
                     offset.dot(dab.right) / dab.radius,
                     offset.dot(dab.up) / dab.radius,
                 ) * (1. - self.mask[i])
-                    * if brush.pressure {
-                        dab.pressure.powf(brush.pressure_curve)
-                    } else {
-                        1.
-                    }
+                    * pressure
                     * stencils.get(j).map_or(1., |s| s.weight(point));
                 let weight = brush.paint_opacity(local);
                 if weight > scratch.weights[i].0 && scratch.depth.visible(point, dab, None) {

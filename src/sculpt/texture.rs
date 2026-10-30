@@ -266,10 +266,12 @@ impl Mesh {
         let height = texture.height as usize;
         let weights = &mut scratch.pixels;
         weights.clear();
+        let footprint = brush.prepare_weight();
         for (di, dab) in dabs.iter().enumerate() {
             if dab.radius <= 0. {
                 continue;
             }
+            let pressure = brush.dab_pressure(dab);
             scratch.depth.prepare(self, dab, occluders);
             for &f in &scratch.depth.active_faces {
                 let t = &self.triangles[f];
@@ -313,13 +315,9 @@ impl Mesh {
                     }
                     let mask = (0..3).map(|c| self.mask[t[c]] * w[c]).sum::<f32>()
                         / w.iter().sum::<f32>().max(1e-10);
-                    let weight = brush.paint_weight(q[0], q[1])
+                    let weight = footprint.paint_weight(q[0], q[1])
                         * (1. - mask)
-                        * if brush.pressure {
-                            dab.pressure.powf(brush.pressure_curve)
-                        } else {
-                            1.
-                        }
+                        * pressure
                         * stencils.get(di).map_or(1., |s| s.weight(point));
                     let weight = brush.paint_opacity(weight);
                     if weight <= 0. {

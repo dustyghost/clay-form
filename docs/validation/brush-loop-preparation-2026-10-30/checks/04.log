@@ -1,0 +1,7 @@
+
+running 3 tests
+test sculpt::overlap::tests::curved_seam_join_uses_the_brush_projection_at_oblique_view_angles ... ok
+test sculpt::overlap::tests::separated_footprints_and_coincident_copies_keep_the_original_profile ... ok
+test sculpt::overlap::tests::soft_join_has_a_level_centre_and_preserves_masks_and_texture_alphas ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 973 filtered out; finished in 0.01s

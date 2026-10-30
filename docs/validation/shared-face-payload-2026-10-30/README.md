@@ -111,3 +111,5 @@ python3 scripts/benchmark-capacity.py compare docs/validation/shared-face-payloa
 ```
 
 The ignored `viewport::gpu::profile::capacity::gpu_load_profile_release_upload` optimized library test supplies the upload-stage breakdown with `CLAY_UPLOAD_PROFILE` set to a new JSON path. The capacity-growth reproduction can be built independently with `rustc`; it models builder capacity and does not measure the renderer's complete memory footprint.
+
+The next [brush-loop preparation batch](../brush-loop-preparation-2026-10-30/README.md) measures repeated rotation/pressure work and broader brush footprints separately from default capacity strokes.

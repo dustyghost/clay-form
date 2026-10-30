@@ -452,42 +452,20 @@ impl Brush {
         (dab.delta + dab.normal * (dab.delta.len() * 0.12)) * (gain * sign)
     }
     pub fn weight(&self, x: f32, y: f32) -> f32 {
-        let (s, c) = self.rotation.to_radians().sin_cos();
-        let (x, y) = (x * c - y * s, x * s + y * c);
-        let r = (x * x + y * y).sqrt();
-        if r >= 1. {
-            return 0.;
+        self.prepare_weight().weight(x, y)
+    }
+    pub(super) fn prepare_weight(&self) -> PreparedWeight<'_> {
+        PreparedWeight {
+            brush: self,
+            rotation: self.rotation.to_radians().sin_cos(),
+            fade_width: (1. - self.inner_radius).max(0.0001),
         }
-        let fade = ((1. - r) / (1. - self.inner_radius).max(0.0001))
-            .clamp(0., 1.)
-            .powf(self.falloff);
-        match &self.alpha {
-            Alpha::Soft => fade,
-            Alpha::Hard => 1.,
-            Alpha::Square => {
-                if x.abs().max(y.abs()) < 0.7 {
-                    1.
-                } else {
-                    0.
-                }
-            }
-            Alpha::Image {
-                width,
-                height,
-                pixels,
-            } => {
-                let px = (x + 1.) * 0.5 * (*width - 1) as f32;
-                let py = (1. - y) * 0.5 * (*height - 1) as f32;
-                let ix = px.floor() as usize;
-                let iy = py.floor() as usize;
-                let nx = (ix + 1).min(*width - 1);
-                let ny = (iy + 1).min(*height - 1);
-                let tx = px - ix as f32;
-                let ty = py - iy as f32;
-                let top = pixels[iy * width + ix] * (1. - tx) + pixels[iy * width + nx] * tx;
-                let bottom = pixels[ny * width + ix] * (1. - tx) + pixels[ny * width + nx] * tx;
-                (top * (1. - ty) + bottom * ty) * fade
-            }
+    }
+    pub(super) fn dab_pressure(&self, dab: &super::Dab) -> f32 {
+        if self.pressure {
+            dab.pressure.powf(self.pressure_curve)
+        } else {
+            1.
         }
     }
 }
@@ -539,6 +517,56 @@ pub fn validate_brush(b: &Brush) -> Result<(), String> {
     b.material.validate()?;
     b.alpha.validate()?;
     Ok(())
+}
+
+/// Borrowed for one operation, so edits cannot leave cached brush values stale.
+pub(super) struct PreparedWeight<'a> {
+    pub(super) brush: &'a Brush,
+    rotation: (f32, f32),
+    fade_width: f32,
+}
+impl PreparedWeight<'_> {
+    pub fn weight(&self, x: f32, y: f32) -> f32 {
+        let (s, c) = self.rotation;
+        let (x, y) = (x * c - y * s, x * s + y * c);
+        let r = (x * x + y * y).sqrt();
+        if r >= 1. {
+            return 0.;
+        }
+        let fade = || {
+            ((1. - r) / self.fade_width)
+                .clamp(0., 1.)
+                .powf(self.brush.falloff)
+        };
+        match &self.brush.alpha {
+            Alpha::Soft => fade(),
+            Alpha::Hard => 1.,
+            Alpha::Square => {
+                if x.abs().max(y.abs()) < 0.7 {
+                    1.
+                } else {
+                    0.
+                }
+            }
+            Alpha::Image {
+                width,
+                height,
+                pixels,
+            } => {
+                let px = (x + 1.) * 0.5 * (*width - 1) as f32;
+                let py = (1. - y) * 0.5 * (*height - 1) as f32;
+                let ix = px.floor() as usize;
+                let iy = py.floor() as usize;
+                let nx = (ix + 1).min(*width - 1);
+                let ny = (iy + 1).min(*height - 1);
+                let tx = px - ix as f32;
+                let ty = py - iy as f32;
+                let top = pixels[iy * width + ix] * (1. - tx) + pixels[iy * width + nx] * tx;
+                let bottom = pixels[ny * width + ix] * (1. - tx) + pixels[ny * width + nx] * tx;
+                (top * (1. - ty) + bottom * ty) * fade()
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -630,3 +658,6 @@ mod stroke_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod weight_tests;
