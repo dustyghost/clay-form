@@ -6,6 +6,8 @@ use crate::{
 };
 use std::time::Instant;
 
+mod capacity;
+
 #[test]
 #[ignore = "load profile requires Vulkan; run in release mode"]
 fn gpu_load_profile() {

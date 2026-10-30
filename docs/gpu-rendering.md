@@ -11,6 +11,7 @@ Use this page to choose a rendering check, export a preview, or measure a slowdo
 | Check shaders, depth, or picking agreement | [Validation](#validation) |
 | Export guide images or a regression preview | [Preview images](#preview-images) |
 | Measure rendering and picking costs | [Load profile](#load-profile) |
+| Compare sculpting capacity, memory and stroke phases | [Capacity baseline and repeatable workloads](validation/capacity-2026-10-30/README.md) |
 | Measure transforms and masks without a window | [Document edit profile](#document-edit-profile) |
 | Change shading, groups, or wireframe | [Surface rendering](#surface-rendering) |
 | Check slices, visibility, or rotation controls | [Focused regressions](#focused-regressions) |
@@ -119,7 +120,7 @@ To regenerate all checked-in guide images, use `bash scripts/update-doc-screensh
 Run the repeatable profile in release mode, while other CPU/GPU-intensive work is idle:
 
 ```sh
-CLAY_GPU_PROFILE=/tmp/clay-gpu-profile.csv cargo test --release --locked gpu_load_profile -- --ignored --nocapture
+CLAY_GPU_PROFILE=/tmp/clay-gpu-profile.csv cargo test --release --locked --lib viewport::gpu::profile::gpu_load_profile -- --exact --ignored --nocapture
 ```
 
 The workload includes approximately 4.7k, 19k, 75k, and 301k vertices in a single model, plus four separate models at the low and medium densities. All models use the requested density rather than hiding the cost behind inactive-model LODs. The viewport is 256 × 256 physical pixels.
