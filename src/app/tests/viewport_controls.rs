@@ -462,7 +462,7 @@ fn screen_orbit_offscreen_preview() {
             }
             let output = frame(&mut app, &ctx, vec![]);
             let rgba = capture.render(&ctx, output);
-            capture.save(&format!("{prefix}-{name}-{direction}-before.png"), &rgba);
+            capture.save(format!("{prefix}-{name}-{direction}-before.png"), &rgba);
             let start = control_rect(&ctx, 0).center();
             frame(
                 &mut app,
@@ -481,7 +481,7 @@ fn screen_orbit_offscreen_preview() {
             frame(&mut app, &ctx, vec![primary_event(start + delta, false)]);
             let output = frame(&mut app, &ctx, vec![]);
             let rgba = capture.render(&ctx, output);
-            capture.save(&format!("{prefix}-{name}-{direction}-after.png"), &rgba);
+            capture.save(format!("{prefix}-{name}-{direction}-after.png"), &rgba);
         }
     }
     assert_eq!(app.document.geometry_snapshot(), before);
