@@ -146,6 +146,11 @@ fn brush_controls_stay_visible_on_narrow_and_compact_workspaces() {
             frame(&mut app, &ctx, size, vec![]);
             let output = frame(&mut app, &ctx, size, vec![]);
             for label in [
+                "Tool controls",
+                "Material: Glazed ceramic",
+                "Primary",
+                "Secondary",
+                "Swap colours",
                 "Size",
                 "Strength",
                 "Inner radius",
@@ -234,6 +239,21 @@ fn brush_controls_popup_drag_edits_preset_without_closing_or_sculpting() {
             assert!(app.document.brushes()[0].radius > before.radius);
         }
     }
+    let input = app.ui.paint_input_index(&app.document).unwrap();
+    let primary = app.document.brushes()[input].material.base_color;
+    let secondary = app.document.brushes()[input].secondary_colour;
+    let pos = point(&output, |s| s == "Swap colours");
+    frame(
+        &mut app,
+        &ctx,
+        size,
+        vec![egui::Event::PointerMoved(pos), button(pos, true)],
+    );
+    frame(&mut app, &ctx, size, vec![button(pos, false)]);
+    output = frame(&mut app, &ctx, size, vec![]);
+    assert_eq!(app.document.brushes()[input].material.base_color, secondary);
+    assert_eq!(app.document.brushes()[input].secondary_colour, primary);
+    assert_eq!(app.ui.customization.popup_menu, Some(id));
     let footprint = app.document.brushes()[0].surface_cursor;
     let pos = point(&output, |s| s == "Surface footprint and normal");
     frame(
@@ -325,5 +345,25 @@ fn brush_controls_offscreen_review() {
             capture.render(&ctx, output);
         }
         app.viewport.destroy_renderer();
+    }
+}
+
+#[test]
+fn appearance_controls_are_not_in_the_main_toolbar() {
+    let (mut app, ctx) = setup();
+    for _ in 0..2 {
+        let output = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    Pos2::ZERO,
+                    Vec2::new(1280., 720.),
+                )),
+                ..Default::default()
+            },
+            |ctx| {
+                app.ui.toolbar(ctx, &app.document, &app.camera);
+            },
+        );
+        assert!(!output.shapes.iter().any(|s| matches!(&s.shape, egui::Shape::Text(t) if t.galley.text().starts_with("Material:") || t.galley.text() == "Swap colours")));
     }
 }

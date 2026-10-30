@@ -818,6 +818,10 @@ impl App {
                 self.viewport.wait_for_release();
                 None
             }
+            Action::AppearanceControls => {
+                self.execute_action(Action::OpenColours, ctx);
+                None
+            }
             Action::BrushIcon
             | Action::BrushSize
             | Action::BrushInnerRadius

@@ -449,6 +449,10 @@ fn appearance_workflow_offscreen_review() {
 fn colour_pair_workflow(size: [i32; 2], capture: bool) {
     let mut h = AppearanceHarness::new(size, capture);
     h.app.ui.preferences.compact_toolbar = true;
+    h.alpha = true;
+    for panel in &mut h.app.ui.preferences.panels {
+        panel.dock = crate::preferences::Dock::Hidden;
+    }
     let sculpt = h.app.ui.selected;
     let input = h.app.ui.paint_input_index(&h.app.document).unwrap();
     h.open(Action::OpenMaterials);
@@ -635,6 +639,10 @@ fn appearance_colour_pair_legacy_hdr_and_validation() {
 fn default_material_workflow(size: [i32; 2], capture: bool) {
     let mut h = AppearanceHarness::new(size, capture);
     h.app.ui.preferences.compact_toolbar = true;
+    h.alpha = true;
+    for panel in &mut h.app.ui.preferences.panels {
+        panel.dock = crate::preferences::Dock::Hidden;
+    }
     let input = h.app.ui.paint_input_index(&h.app.document).unwrap();
     let mesh = h.app.document.mesh().clone();
     h.open(Action::OpenMaterials);

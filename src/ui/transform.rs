@@ -75,7 +75,7 @@ impl UiState {
                         if self.transform_operation == Operation::Universal {
                             ui.horizontal_wrapped(|ui| {
                                 // Keep the compact toolbar clear of the centre pivot
-                                // when the persistent appearance strip leaves a short viewport.
+                                // in a short, narrow viewport.
                                 if !compact || viewport.width() >= 500. {
                                     ui.strong("Universal")
                                         .on_hover_text(Operation::Universal.hint());

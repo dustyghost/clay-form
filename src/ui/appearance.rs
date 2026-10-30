@@ -2,14 +2,6 @@
 use super::*;
 
 impl UiState {
-    pub(super) fn appearance_window_bounds(&self, ctx: &egui::Context) -> egui::Rect {
-        let mut bounds = ctx.content_rect();
-        bounds.min.y = self
-            .appearance_bar_bottom
-            .max(bounds.top())
-            .min(bounds.bottom() - 120.);
-        bounds
-    }
     pub(super) fn appearance_strip(
         &mut self,
         ui: &mut egui::Ui,

@@ -4,6 +4,9 @@ Tickets #104 and #105 share selection and assignment conventions. The independen
 
 ## Interaction and data checks
 
+The appearance row now lives in the **Tool controls** custom menu (formerly Brush controls), including its S popup. The main toolbar has no separate appearance row. Migration preserves existing placements, custom names, shortcuts, saved workspaces and Paint-workspace backups.
+
+- `app::tests::brush_controls`: narrow sidebar and S popup visibility, swapping without closing the popup or sculpting, and no appearance group in the main toolbar. Preference migration covers saved layouts, custom names and the Paint backup.
 - `app::tests::appearance`: actual controls at 1200×900 and 720×600; create without UVs, generate UVs, assign, duplicate without assigning, unassign, confirmed deletion, undo, shared-use feedback and entering Paint. Independent material assignment works while a sculpting brush is selected. Opening an already docked menu preserves its placement.
 - `appearance_colour_pair_controls_and_defaults` clicks secondary selection, palette picking, swapping, default material/colour, colour reset and secondary sampling at both sizes, then saves/reopens and uses Swap in the expanded UV editor. It verifies these input changes leave the model untouched. `appearance_colour_pair_legacy_hdr_and_validation` checks older preset defaults, HDR swaps and invalid colour rejection.
 - `appearance_default_material_uses_regular_copy_edit_and_reset` selects the ordinary default tile, copies it, edits/resets both definitions and verifies the selection action preserves edited settings. Preference migration checks retain existing names, materials and hidden presets when adding the default tile.
@@ -18,14 +21,16 @@ The normal test suite runs the new non-GPU interaction tests. The full suite, fo
 
 ## Visual review
 
+- [Tool controls sidebar at 640×720](tool-controls-640.png) and [S popup](tool-controls-popup-640.png): material/colour controls and brush settings share one menu. The earlier reference-removal and transform captures below retain the previous top-strip layout.
+
 Captured with the real egui controls, clicking and scrolling the workflow rather than setting up screenshots of inert widgets. Reviewed selection borders, target names, shared-use warnings, scrolling and action reachability. The compact review uses 720×600. Materials can be docked/pinned; the texture library also shares its controls across menu, dock and editor placements.
 
 - [Independent Materials menu](materials-1200x900.png): chosen Paint preset, material swatches, explicit model assignment and separate shared editor.
 - [Independent Colours menu, compact](colours-720x600.png): future-stroke scope and palette access without changing an existing surface.
 - [Shared image replacement, compact](texture-shared-replace-720x600.png): image identity, named uses and confirmation before replacing shared pixels.
 - [Texture browser beside Alpha management](textures-beside-alphas-1200x900.png): thumbnail browsing, selected state and resize controls, with texture-specific assignment separated from the asset.
-- [Persistent material and colour strip, compact](appearance-strip-720x600.png): material preview/name, editable Primary and Secondary, and Swap remain visible with menus closed.
-- [Secondary colour editing, compact](primary-secondary-colours-720x600.png): explicit palette target, default colour and reset controls, while the strip stays above the pinned menu.
+- [Material and colour controls in Tool controls, compact](appearance-strip-720x600.png): the appearance group is part of the left menu alongside the brush settings.
+- [Secondary colour editing, compact](primary-secondary-colours-720x600.png): explicit palette target, default colour and reset controls, with the appearance group in the Tool controls menu.
 - [Expanded UV appearance controls](appearance-expanded-uv-720x600.png): material and colour controls remain available in the editor sidebar.
 
 - [Reference removal with the persistent strip, compact](reference-removal-760x560.png): the selected image’s removal control remains above import controls and visible without scrolling.
@@ -37,6 +42,8 @@ Captured with the real egui controls, clicking and scrolling the workflow rather
 Reproduce the captures:
 
 ```sh
+CLAY_BRUSH_CONTROLS_PREVIEW=/tmp/clay-tool-controls \
+  cargo test --locked --lib brush_controls_offscreen_review -- --ignored --nocapture
 CLAY_APPEARANCE_REVIEW=/tmp/clay-appearance-review \
   cargo test --locked --lib appearance_workflow_offscreen_review -- --ignored --nocapture
 CLAY_APPEARANCE_REVIEW=/tmp/clay-appearance-review \

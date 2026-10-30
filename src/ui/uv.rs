@@ -162,7 +162,6 @@ impl UiState {
             "UV layout"
         })
         .id(egui::Id::new("uv_editor"))
-        .constrain_to(self.appearance_window_bounds(ctx))
         .open(&mut open)
         .default_width(480.)
         .default_pos(egui::pos2(20., 110.))

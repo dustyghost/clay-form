@@ -433,7 +433,7 @@ impl Default for Preferences {
             paint_inspection: Default::default(),
             lighting: Default::default(),
             paint_shortcuts_version: 1,
-            brush_controls_version: 2,
+            brush_controls_version: 3,
             visibility_selection: VisibilitySettings::default(),
             modeling_presets: Vec::new(),
             next_modeling_preset_id: 1,
@@ -838,11 +838,12 @@ impl Preferences {
     fn add_brush_controls(&mut self) {
         let id = self.add_menu();
         let menu = self.menus.last_mut().unwrap();
-        menu.name = "Brush controls".into();
+        menu.name = "Tool controls".into();
         menu.placement = Placement::LeftPanel;
         menu.columns = 1;
         menu.collapsible = true;
         menu.items = [
+            Action::AppearanceControls,
             Action::BrushIcon,
             Action::BrushSize,
             Action::BrushInnerRadius,
@@ -1196,6 +1197,42 @@ pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
             }
         }
         prefs.brush_controls_version = 2;
+    }
+    if prefs.brush_controls_version < 3 {
+        for menu in prefs
+            .menus
+            .iter_mut()
+            .chain(prefs.workspaces.iter_mut().flat_map(|w| &mut w.menus))
+            .chain(
+                prefs
+                    .paint_workspace_backup
+                    .iter_mut()
+                    .flat_map(|(w, _)| &mut w.menus),
+            )
+        {
+            if menu
+                .items
+                .iter()
+                .any(|i| i.action == Some(Action::BrushIcon))
+                && menu
+                    .items
+                    .iter()
+                    .any(|i| i.action == Some(Action::BrushSize))
+            {
+                if menu.name == "Brush controls" {
+                    menu.name = "Tool controls".into();
+                }
+                if !menu
+                    .items
+                    .iter()
+                    .any(|i| i.action == Some(Action::AppearanceControls))
+                {
+                    menu.items
+                        .insert(0, CustomItem::action(Action::AppearanceControls));
+                }
+            }
+        }
+        prefs.brush_controls_version = 3;
     }
     prefs.validate()?;
     Ok(prefs)

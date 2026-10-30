@@ -441,24 +441,42 @@ impl MaterialControls {
 
     pub(super) fn colour_slots(&mut self, ui: &mut egui::Ui, brush: &mut Brush) {
         for (secondary, label) in [(false, "Primary"), (true, "Secondary")] {
-            ui.selectable_value(&mut self.secondary_edit, secondary, label)
-                .on_hover_text(if secondary {
-                    "Edit the standby colour. Swap colours to paint with it."
-                } else {
-                    "Primary is used for strokes. Select to edit it with the palette."
-                });
-            let mut colour = if secondary {
-                brush.secondary_colour
-            } else {
-                brush.material.base_color
-            };
-            if ui
-                .color_edit_button_rgb(&mut colour)
-                .on_hover_text(format!("Choose {label} colour for future strokes"))
-                .changed()
-            {
-                brush.set_paint_colour(secondary, colour);
-            }
+            let width = ui
+                .painter()
+                .layout_no_wrap(
+                    label.into(),
+                    egui::TextStyle::Button.resolve(ui.style()),
+                    ui.visuals().text_color(),
+                )
+                .size()
+                .x
+                + 2. * ui.spacing().button_padding.x
+                + ui.spacing().item_spacing.x
+                + ui.spacing().interact_size.x;
+            ui.allocate_ui_with_layout(
+                egui::vec2(width, ui.spacing().interact_size.y),
+                egui::Layout::left_to_right(egui::Align::Center),
+                |ui| {
+                    ui.selectable_value(&mut self.secondary_edit, secondary, label)
+                        .on_hover_text(if secondary {
+                            "Edit the standby colour. Swap colours to paint with it."
+                        } else {
+                            "Primary is used for strokes. Select to edit it with the palette."
+                        });
+                    let mut colour = if secondary {
+                        brush.secondary_colour
+                    } else {
+                        brush.material.base_color
+                    };
+                    if ui
+                        .color_edit_button_rgb(&mut colour)
+                        .on_hover_text(format!("Choose {label} colour for future strokes"))
+                        .changed()
+                    {
+                        brush.set_paint_colour(secondary, colour);
+                    }
+                },
+            );
         }
         if ui.button("Swap colours").customize(Action::SwapPaintColours).on_hover_text("Exchange Primary and Secondary, including HDR values. Primary paints; existing surfaces stay unchanged.").clicked() {
             brush.swap_paint_colours();
