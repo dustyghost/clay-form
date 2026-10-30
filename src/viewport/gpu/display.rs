@@ -2,7 +2,7 @@
 use super::atlas::Atlas;
 use crate::{
     document::Document,
-    sculpt::{Mesh, SurfaceShading, Vec3},
+    sculpt::{Mesh, SurfaceShading, SurfaceShadingTopology, Vec3},
 };
 use std::{collections::HashMap, sync::Arc};
 
@@ -23,15 +23,19 @@ struct TextureSource {
 /// Original topology behind a filtered display. Shared by successive stroke
 /// frames so hidden faces still contribute to the original smoothing fans.
 struct HiddenStrokeTopology {
+    source: Arc<HiddenSurfaceTopology>,
+    fans: Vec<[usize; 3]>,
+}
+struct HiddenSurfaceTopology {
     model_id: u64,
     triangles: Vec<[usize; 3]>,
     quads: Vec<[usize; 4]>,
     hidden_faces: Vec<bool>,
     polygroups: Vec<usize>,
     group_visibility: Vec<bool>,
-    fans: Vec<[usize; 3]>,
+    shading: SurfaceShadingTopology,
 }
-impl HiddenStrokeTopology {
+impl HiddenSurfaceTopology {
     fn matches(&self, mesh: &Mesh, model_id: u64) -> bool {
         self.model_id == model_id
             && self.triangles == mesh.triangles
@@ -60,6 +64,7 @@ pub(crate) struct DisplayGeometry {
     pub active: usize,
     pub(super) depth_extent: f32,
     hidden_stroke_topology: Option<Arc<HiddenStrokeTopology>>,
+    temporary_normals: bool,
 }
 impl std::ops::Deref for DisplayMesh {
     type Target = DisplayGeometry;
@@ -115,7 +120,7 @@ impl DisplayMesh {
 
     /// Reuse the smoothing fans while dragging a dense, fixed-topology mesh.
     /// Paint retains exact normals; deformation uses cheap temporary normals.
-    /// The renderer rebuilds full angle-weighted shading when the stroke ends.
+    /// The renderer restores full angle-weighted shading when the stroke ends.
     pub(super) fn during_stroke(&self, document: &Document) -> Option<Self> {
         let source = document.mesh();
         if !document.stroke_active()
@@ -132,7 +137,9 @@ impl DisplayMesh {
         }
         let fans = if let Some(topology) = &self.hidden_stroke_topology {
             if !source.uv.is_empty()
-                || !topology.matches(source, document.model(0)?.metadata.model_id)
+                || !topology
+                    .source
+                    .matches(source, document.model(0)?.metadata.model_id)
             {
                 return None;
             }
@@ -174,8 +181,10 @@ impl DisplayMesh {
             active: self.active,
             depth_extent: self.depth_extent,
             hidden_stroke_topology: self.hidden_stroke_topology.clone(),
+            temporary_normals: self.temporary_normals,
         };
         if self.mesh.vertices != source.vertices {
+            geometry.temporary_normals = true;
             let mut normals = vec![Vec3::default(); geometry.shading.vertices.len()];
             for (ids, fans) in source.triangles.iter().zip(fans) {
                 let [a, b, c] = ids.map(|i| source.vertices[i]);
@@ -200,6 +209,52 @@ impl DisplayMesh {
             texture_info: self.texture_info.clone(),
             texture_sources: self.texture_sources.clone(),
         })
+    }
+
+    /// Finish a cached hidden-surface stroke without rebuilding visibility.
+    /// All source faces still contribute to canonical, angle-weighted shading.
+    pub(super) fn after_stroke(self: &Arc<Self>, document: &Document) -> Option<Arc<Self>> {
+        let cached = self.hidden_stroke_topology.as_ref()?;
+        let source = document.mesh();
+        if document.stroke_active()
+            || document.model_count() != 1
+            || !document.active_visible()
+            || document.model(0)?.metadata.temporary_thickness != 0.
+            || document.primitive().is_some()
+            || !source.uv.is_empty()
+            || !source.creases.is_empty()
+            || !cached.source.matches(source, document.model(0)?.metadata.model_id)
+            // A final dab or another edit may not have been displayed yet.
+            || self.mesh.vertices != source.vertices
+            || self.mesh.mask != source.mask
+            || self.mesh.materials != source.materials
+        {
+            return None;
+        }
+        if !self.temporary_normals {
+            return Some(self.clone());
+        }
+        let shading = cached.source.shading.shade(source);
+        let mut geometry = (*self.geometry).clone();
+        geometry.shading = SurfaceShading {
+            vertices: shading.vertices,
+            triangles: self
+                .source_faces
+                .iter()
+                .map(|&f| shading.triangles[f])
+                .collect(),
+        };
+        geometry.hidden_stroke_topology = Some(Arc::new(HiddenStrokeTopology {
+            source: cached.source.clone(),
+            fans: shading.triangles,
+        }));
+        geometry.temporary_normals = false;
+        Some(Arc::new(Self {
+            geometry: Arc::new(geometry),
+            texture_pixels: self.texture_pixels.clone(),
+            texture_info: self.texture_info.clone(),
+            texture_sources: self.texture_sources.clone(),
+        }))
     }
     pub fn new(document: &Document) -> Self {
         Self::build(document, false, None)
@@ -346,8 +401,7 @@ impl DisplayMesh {
                     texture_channels[texture.channel.index()] = id as f32;
                 }
             }
-            let surface_shading = surface.surface_shading();
-            if has_hidden
+            let cache_hidden = has_hidden
                 && document.model_count() == 1
                 && index == active
                 && active_mesh.is_none()
@@ -355,15 +409,23 @@ impl DisplayMesh {
                 && model.metadata.temporary_thickness == 0.
                 && model.settings.primitive.is_none()
                 && surface.creases.is_empty()
-                && surface.uv.is_empty()
-            {
+                && surface.uv.is_empty();
+            let topology = cache_hidden.then(|| SurfaceShadingTopology::new(surface));
+            let surface_shading = topology.as_ref().map_or_else(
+                || surface.surface_shading(),
+                |topology| topology.shade(surface),
+            );
+            if let Some(topology) = topology {
                 hidden_stroke_topology = Some(Arc::new(HiddenStrokeTopology {
-                    model_id: model.metadata.model_id,
-                    triangles: surface.triangles.clone(),
-                    quads: surface.quads.clone(),
-                    hidden_faces: surface.hidden_faces.clone(),
-                    polygroups: surface.polygroups.clone(),
-                    group_visibility: surface.vertex_groups.iter().map(|g| g.visible).collect(),
+                    source: Arc::new(HiddenSurfaceTopology {
+                        model_id: model.metadata.model_id,
+                        triangles: surface.triangles.clone(),
+                        quads: surface.quads.clone(),
+                        hidden_faces: surface.hidden_faces.clone(),
+                        polygroups: surface.polygroups.clone(),
+                        group_visibility: surface.vertex_groups.iter().map(|g| g.visible).collect(),
+                        shading: topology,
+                    }),
                     fans: surface_shading.triangles.clone(),
                 }));
             }
@@ -440,6 +502,7 @@ impl DisplayMesh {
                 active,
                 depth_extent,
                 hidden_stroke_topology,
+                temporary_normals: false,
             }),
         }
     }

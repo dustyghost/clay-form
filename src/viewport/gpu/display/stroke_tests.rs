@@ -97,6 +97,11 @@ fn hidden_stroke_cache_preserves_filtered_faces_and_boundary_normals() {
     let edited = doc.mesh().clone();
     doc.end_stroke();
     assert!(display.during_stroke(&doc).is_none());
+    let released = Arc::new(display).after_stroke(&doc).unwrap();
+    let canonical = DisplayMesh::new(&doc);
+    assert_visible_data(&released, &canonical);
+    assert_eq!(released.shading.vertices, canonical.shading.vertices);
+    assert!(!released.temporary_normals);
     doc.undo();
     assert_eq!(doc.mesh(), &initial);
     doc.redo();
@@ -119,12 +124,15 @@ fn hidden_stroke_cache_paint_matches_canonical_attributes_and_normals() {
         canonical.vertices(canonical.vertex_stride())
     );
     assert_ne!(updated.mesh.materials, old.mesh.materials);
+    doc.end_stroke();
+    let updated = Arc::new(updated);
+    assert!(Arc::ptr_eq(&updated, &updated.after_stroke(&doc).unwrap()));
 }
 
 #[test]
 fn hidden_stroke_cache_rejects_visibility_group_and_topology_changes() {
     let mesh = source();
-    let display = DisplayMesh::new(&document(mesh.clone()));
+    let display = Arc::new(DisplayMesh::new(&document(mesh.clone())));
     for case in 0..7 {
         let mut changed = mesh.clone();
         match case {
@@ -163,6 +171,8 @@ fn hidden_stroke_cache_rejects_visibility_group_and_topology_changes() {
             display.during_stroke(&doc).is_none(),
             "case {case} must rebuild"
         );
+        doc.end_stroke();
+        assert!(display.after_stroke(&doc).is_none(), "release case {case}");
     }
     let mut doc = document(mesh);
     let mut project = doc.project();
@@ -206,4 +216,70 @@ fn hidden_stroke_cache_supports_group_visibility_and_empty_displays() {
     assert!(live.mesh.triangles.is_empty());
     assert!(live.mesh.quads.is_empty());
     assert!(live.source_faces.is_empty());
+}
+
+#[test]
+fn hidden_stroke_cache_release_updates_fans_for_the_next_stroke() {
+    let mut mesh = source();
+    let original = mesh.clone();
+    let mut display = Arc::new(DisplayMesh::new(&document(mesh.clone())));
+    let topology = display
+        .hidden_stroke_topology
+        .as_ref()
+        .unwrap()
+        .source
+        .clone();
+    let index = mesh
+        .vertices
+        .iter()
+        .position(|p| p.2 > 0.99 && p.0 <= 0.)
+        .unwrap();
+    let original_fans = display.shading.vertices.len();
+    for (height, split) in [(0.8, true), (0., false)] {
+        mesh.vertices[index].2 = original.vertices[index].2 + height;
+        let mut doc = document(mesh.clone());
+        doc.begin_stroke();
+        let live = display.during_stroke(&doc).unwrap();
+        assert!(live.temporary_normals);
+        // Repeated frames and material-only dabs must not clear the dirty normals.
+        let live = live.during_stroke(&doc).unwrap();
+        assert!(live.temporary_normals);
+        doc.end_stroke();
+        display = Arc::new(live).after_stroke(&doc).unwrap();
+        let canonical = DisplayMesh::new(&doc);
+        assert_visible_data(&display, &canonical);
+        assert_eq!(display.shading.vertices, canonical.shading.vertices);
+        assert_eq!(display.shading.vertices.len() > original_fans, split);
+        assert_eq!(
+            display.hidden_stroke_topology.as_ref().unwrap().fans,
+            doc.mesh().surface_shading().triangles
+        );
+        assert!(Arc::ptr_eq(
+            &topology,
+            &display.hidden_stroke_topology.as_ref().unwrap().source
+        ));
+    }
+}
+
+#[test]
+fn hidden_stroke_cache_release_rejects_unseen_final_dab() {
+    for kind in [Kind::Standard, Kind::Paint, Kind::Mask] {
+        let mut doc = document(source());
+        let display = DisplayMesh::new(&doc);
+        let mut brush = Brush::new(kind);
+        brush.strength = 0.15;
+        brush.set_paint_colour(false, [0.9, 0.1, 0.2]);
+        // Mask edits attributes but apply_dab's return value reports deformation.
+        let before_first = doc.mesh().clone();
+        doc.apply_dab(&brush, dab());
+        assert_ne!(doc.mesh(), &before_first, "first {kind:?} dab");
+        let live = Arc::new(display.during_stroke(&doc).unwrap());
+        let mut next = dab();
+        next.center.0 -= 0.1;
+        let before_final = doc.mesh().clone();
+        doc.apply_dab(&brush, next);
+        assert_ne!(doc.mesh(), &before_final, "final {kind:?} dab");
+        doc.end_stroke();
+        assert!(live.after_stroke(&doc).is_none());
+    }
 }

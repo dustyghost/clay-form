@@ -2,6 +2,8 @@
 
 Follow-up to the [capacity baseline](../capacity-2026-10-30/README.md), under #103. The baseline and harness were committed as `7add38c` before this optimization. The matched run's compiler, hardware, source SHA-256, samples and memory readings are retained in [CPU results](cpu/index.json) and [GPU results](gpu/index.json).
 
+The release-cost follow-up is recorded in [Hidden-surface release refresh](../hidden-release-refresh-2026-10-30/README.md).
+
 ## Change and boundaries
 
 Dense single-model strokes with hidden faces now retain the original topology, group visibility and smoothing-fan mapping in a shared cache. Each display update copies the current vertex positions, masks and materials while retaining the already filtered triangles, quads, face IDs and group colours. Hidden faces remain absent from drawing and picking, but still contribute to their original smoothing fans at visible boundaries.

@@ -146,7 +146,9 @@ fn finish_display(
     temporary: bool,
 ) -> Arc<DisplayMesh> {
     if temporary {
-        Arc::new(DisplayMesh::new(doc))
+        previous
+            .after_stroke(doc)
+            .unwrap_or_else(|| Arc::new(DisplayMesh::new(doc)))
     } else {
         previous.clone()
     }

@@ -87,14 +87,17 @@ impl Renderer {
                     self.render_geometry = Some(Arc::new(DisplayMesh::preview(document)));
                 }
             } else {
+                let finished = (self.live_display && !document.stroke_active())
+                    .then(|| self.geometry.as_ref()?.after_stroke(document))
+                    .flatten();
                 let preview = self
                     .geometry
                     .as_ref()
                     .and_then(|display| display.during_stroke(document));
                 self.live_display = preview.is_some();
-                self.geometry = Some(Arc::new(
-                    preview.unwrap_or_else(|| DisplayMesh::new(document)),
-                ));
+                self.geometry = Some(finished.unwrap_or_else(|| {
+                    Arc::new(preview.unwrap_or_else(|| DisplayMesh::new(document)))
+                }));
                 self.render_geometry = Some(
                     if (0..document.model_count())
                         .any(|i| document.model(i).unwrap().metadata.temporary_thickness > 0.)

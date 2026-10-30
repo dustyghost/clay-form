@@ -189,6 +189,12 @@ fn gpu_hidden_stroke_cache_pixels_picking_and_history() {
         doc.end_stroke();
         let finished = renderer.geometry(&doc);
         assert!(!renderer.live_display);
+        if kind == Kind::Paint {
+            assert!(
+                Arc::ptr_eq(&live, &finished),
+                "Paint release must reuse exact geometry"
+            );
+        }
         let after = draw(&renderer, &finished, false);
         assert_eq!(
             after,
