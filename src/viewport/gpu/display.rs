@@ -13,6 +13,11 @@ pub(crate) struct DisplayMesh {
     pub texture_info: Vec<[u32; 4]>,
     texture_sources: Vec<TextureSource>,
 }
+pub(super) struct VertexUpdate {
+    pub(super) ranges: Vec<std::ops::Range<usize>>,
+    #[cfg(test)]
+    pub(super) changed_vertices: usize,
+}
 #[derive(Clone)]
 struct TextureSource {
     id: u64,
@@ -611,6 +616,74 @@ impl DisplayMesh {
         }
         vertices
     }
+    /// Refresh only records whose effective GPU values changed. This scans
+    /// inputs but avoids owned material copies, a second packed array and a
+    /// separate byte-difference pass. Fan mappings may change at the same size.
+    pub(super) fn update_vertices(&self, stride: usize, packed: &mut [f32]) -> VertexUpdate {
+        debug_assert!(stride == 12 || stride == crate::sculpt::material::layers::VERTEX_STRIDE);
+        assert_eq!(packed.len(), self.shading.vertices.len() * stride);
+        let default = crate::sculpt::Material::default();
+        let muted =
+            crate::sculpt::Material::from_srgb([130., 143., 155.].map(|v| v / 255.), 0.85, 0.);
+        let mut dirty = super::upload::DirtyRanges::new(packed.len() * 4);
+        #[cfg(test)]
+        let mut changed_vertices = 0;
+        for (fan, (record, &(i, n))) in packed
+            .chunks_exact_mut(stride)
+            .zip(&self.shading.vertices)
+            .enumerate()
+        {
+            let p = self.mesh.vertices[i];
+            let material = if self.muted_vertices[i] {
+                &muted
+            } else {
+                self.mesh.materials.get(i).unwrap_or(&default)
+            };
+            let mask = if i < self.active_vertices {
+                self.mesh.mask[i]
+            } else {
+                -1.
+            };
+            let compact = [
+                p.0,
+                p.1,
+                p.2,
+                n.0,
+                n.1,
+                n.2,
+                material.base_color[0],
+                material.base_color[1],
+                material.base_color[2],
+                mask,
+                material.roughness,
+                material.metallic,
+            ];
+            let extended = (stride > 12).then(|| material.values());
+            let same_compact = bytemuck::cast_slice::<_, u8>(&record[..12])
+                == bytemuck::cast_slice::<_, u8>(&compact);
+            let same_extended = extended.as_ref().is_none_or(|values| {
+                bytemuck::cast_slice::<_, u8>(&record[12..])
+                    == bytemuck::cast_slice::<_, u8>(&values[5..])
+            });
+            if same_compact && same_extended {
+                continue;
+            }
+            record[..12].copy_from_slice(&compact);
+            if let Some(values) = extended {
+                record[12..].copy_from_slice(&values[5..]);
+            }
+            dirty.mark(fan * stride * 4, (fan + 1) * stride * 4);
+            #[cfg(test)]
+            {
+                changed_vertices += 1;
+            }
+        }
+        VertexUpdate {
+            ranges: dirty.finish(),
+            #[cfg(test)]
+            changed_vertices,
+        }
+    }
     /// Adjacent face normals let the shader reject back-facing edges without
     /// rebuilding edge buffers on every camera movement.
     pub(super) fn edges(&self, triangles: bool) -> Vec<f32> {
@@ -793,3 +866,6 @@ mod tests {
 
 #[cfg(test)]
 mod stroke_tests;
+
+#[cfg(test)]
+mod packing_tests;

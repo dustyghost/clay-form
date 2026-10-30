@@ -462,3 +462,67 @@ fn capacity_canonical_display_is_reused_on_release() {
         ));
     }
 }
+
+/// Isolate CPU upload preparation without changing the capacity workload schema.
+#[test]
+#[ignore = "manual CPU packing diagnosis; excluded from routine GPU CI"]
+fn gpu_load_profile_vertex_packing() {
+    let output =
+        std::env::var("CLAY_PACKING_PROFILE").expect("set CLAY_PACKING_PROFILE output path");
+    let mode = std::env::var("CLAY_PACKING_MODE").unwrap_or_else(|_| "incremental".into());
+    assert!(matches!(mode.as_str(), "full" | "incremental"));
+    let mut doc = document(fixture("hidden", 3));
+    let before = fingerprint(doc.mesh());
+    let mut metrics = Measurements::default();
+    let mut writes = Vec::new();
+    for trial in 0..3 {
+        for kind in [Kind::Standard, Kind::Paint] {
+            let mut display = DisplayMesh::new(&doc);
+            let mut packed = display.vertices(display.vertex_stride());
+            for step in 0..DABS {
+                assert!(doc.apply_dab(&brush(kind), dab(step)));
+                let next = display.during_stroke(&doc).unwrap();
+                let phase = if step == 0 { "first" } else { "sustained" };
+                let prefix = format!("{kind:?}.{phase}");
+                let stride = metrics.time(&format!("{prefix}.stride"), || next.vertex_stride());
+                let (ranges, repacked_vertices) = if mode == "full" {
+                    let vertices =
+                        metrics.time(&format!("{prefix}.full_pack"), || next.vertices(stride));
+                    let ranges = metrics.time(&format!("{prefix}.dirty_blocks"), || {
+                        super::super::upload::changed_ranges(
+                            bytemuck::cast_slice(&packed),
+                            bytemuck::cast_slice(&vertices),
+                        )
+                    });
+                    packed = vertices;
+                    (ranges, next.shading.vertices.len())
+                } else {
+                    let update = metrics.time(&format!("{prefix}.pack_and_dirty_blocks"), || {
+                        next.update_vertices(stride, &mut packed)
+                    });
+                    (update.ranges, update.changed_vertices)
+                };
+                let compatible = metrics.time(&format!("{prefix}.face_comparison"), || {
+                    display.shading.triangles == next.shading.triangles
+                        && display.poly_colors == next.poly_colors
+                        && display.uv_corners == next.uv_corners
+                });
+                assert!(std::hint::black_box(compatible));
+                writes.push(
+                    serde_json::json!({"trial":trial,"brush":format!("{kind:?}"),"step":step,
+                    "packed_bytes":packed.len()*4,"repacked_vertices":repacked_vertices,
+                    "write_bytes":ranges.iter().map(|r|r.len()).sum::<usize>()}),
+                );
+                display = next;
+            }
+            doc.end_stroke();
+            doc.undo();
+            assert_eq!(fingerprint(doc.mesh()), before);
+        }
+    }
+    let report = serde_json::json!({"mode":mode,"fixture":"hidden","level":3,"repeats":3,"dabs_per_stroke":DABS,
+        "fixture_hash_fnv1a":before,"vertices":doc.mesh().vertices.len(),
+        "metrics":metrics.summary(),"frames":writes,"memory_final":memory(),
+        "scope":"Isolated CPU preparation; excludes display refresh, allocation destruction, queue staging and GPU completion. Not an end-to-end upload timing."});
+    std::fs::write(output, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
+}

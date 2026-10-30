@@ -343,6 +343,8 @@ struct Gpu {
     packed_vertices: Vec<f32>,
     #[cfg(test)]
     vertex_write_bytes: usize,
+    #[cfg(test)]
+    vertex_pack_count: usize,
     /// Test accounting for index, face-colour and UV payloads, respectively.
     #[cfg(test)]
     face_write_bytes: [usize; 3],
@@ -632,6 +634,8 @@ impl Gpu {
             #[cfg(test)]
             vertex_write_bytes: 0,
             #[cfg(test)]
+            vertex_pack_count: 0,
+            #[cfg(test)]
             face_write_bytes: [0; 3],
             edges: None,
             triangle_edges: None,
@@ -714,6 +718,7 @@ impl Gpu {
         #[cfg(test)]
         {
             self.vertex_write_bytes = 0;
+            self.vertex_pack_count = 0;
             self.face_write_bytes = [0; 3];
         }
         if self
@@ -749,6 +754,7 @@ impl Gpu {
         #[cfg(test)]
         {
             self.vertex_write_bytes = 0;
+            self.vertex_pack_count = 0;
             self.face_write_bytes = [0; 3];
         }
         if let Some(old) = &self.uploaded
@@ -790,16 +796,35 @@ impl Gpu {
             return;
         }
         let stride = data.vertex_stride();
-        let vertices = data.vertices(stride);
-        if vertices.len() * 4 <= limit && data.shading.triangles.len() * 48 <= limit {
+        let vertex_len = data.shading.vertices.len() * stride;
+        let single = vertex_len * 4 <= limit && data.shading.triangles.len() * 48 <= limit;
+        let (vertices, dirty_ranges) = if single
+            && self.single_mesh_upload
+            && self.mesh_binding_limit == limit
+            && self.vertex_stride == stride
+            && self.packed_vertices.len() == vertex_len
+        {
+            let mut vertices = std::mem::take(&mut self.packed_vertices);
+            let update = data.update_vertices(stride, &mut vertices);
+            #[cfg(test)]
+            {
+                self.vertex_pack_count = update.changed_vertices;
+            }
+            (vertices, Some(update.ranges))
+        } else {
+            #[cfg(test)]
+            {
+                self.vertex_pack_count = data.shading.vertices.len();
+            }
+            (data.vertices(stride), None)
+        };
+        if single {
             if self.single_mesh_upload && self.mesh_binding_limit == limit {
                 let old = self.mesh_geometry.as_ref().unwrap();
                 let mesh = &mut self.meshes[0];
                 let bytes = bytemuck::cast_slice(&vertices);
-                if self.vertex_stride == stride && self.packed_vertices.len() == vertices.len() {
-                    for range in
-                        upload::changed_ranges(bytemuck::cast_slice(&self.packed_vertices), bytes)
-                    {
+                if let Some(ranges) = dirty_ranges {
+                    for range in ranges {
                         self.queue.write_buffer(
                             &mesh.vertices,
                             range.start as u64,

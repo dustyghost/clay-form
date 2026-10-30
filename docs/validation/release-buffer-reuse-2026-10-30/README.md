@@ -1,5 +1,7 @@
 # Independent buffer reuse at stroke release
 
+Follow-up: [Update retained CPU vertex records in place](../vertex-packing-2026-10-30/README.md) measures the next reduction in sustained upload preparation.
+
 Follow-up to [Reuse mesh buffers and upload changed vertex blocks](../vertex-upload-cache-2026-10-30/README.md), under #103. The comparison baseline is commit `bfc02ba`. Final measurements use source SHA-256 `3618eeb38120639781ce6421ffb567eba6c8f7d1088b9c08614ef8db265e8ba2`. The [raw GPU results](gpu/index.json) retain all samples, memory stages and environment metadata; the [comparison](gpu-comparison.csv) includes every measured phase.
 
 ## Change and boundaries

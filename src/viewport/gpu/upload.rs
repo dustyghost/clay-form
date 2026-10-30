@@ -4,6 +4,7 @@ use std::ops::Range;
 const BLOCK: usize = 4096;
 const MAX_WRITES: usize = 64;
 
+#[cfg(test)]
 pub(super) fn changed_ranges(before: &[u8], after: &[u8]) -> Vec<Range<usize>> {
     assert_eq!(before.len(), after.len());
     let mut ranges: Vec<Range<usize>> = Vec::new();
@@ -30,6 +31,53 @@ pub(super) fn changed_ranges(before: &[u8], after: &[u8]) -> Vec<Range<usize>> {
         }
     }
     ranges
+}
+
+/// Track monotonically ordered record edits without rescanning a second array.
+pub(super) struct DirtyRanges {
+    ranges: Vec<Range<usize>>,
+    bytes: usize,
+    len: usize,
+    full: bool,
+}
+impl DirtyRanges {
+    pub(super) fn new(len: usize) -> Self {
+        Self {
+            ranges: Vec::new(),
+            bytes: 0,
+            len,
+            full: false,
+        }
+    }
+    pub(super) fn mark(&mut self, start: usize, end: usize) {
+        debug_assert!(start < end && end <= self.len);
+        if self.full {
+            return;
+        }
+        let start = start / BLOCK * BLOCK;
+        let end = end.div_ceil(BLOCK).saturating_mul(BLOCK).min(self.len);
+        if let Some(last) = self.ranges.last_mut()
+            && last.end >= start
+        {
+            debug_assert!(start >= last.start);
+            self.bytes += end.saturating_sub(last.end);
+            last.end = last.end.max(end);
+        } else {
+            self.bytes += end - start;
+            self.ranges.push(start..end);
+        }
+        if self.ranges.len() > MAX_WRITES || self.bytes > self.len / 2 {
+            self.full = true;
+            self.ranges.clear();
+        }
+    }
+    pub(super) fn finish(self) -> Vec<Range<usize>> {
+        if self.full {
+            vec![0..self.len]
+        } else {
+            self.ranges
+        }
+    }
 }
 
 /// Preserve an allocation when its payload size is unchanged. Exact-size
@@ -60,6 +108,18 @@ pub(super) fn write_buffer(
 mod tests {
     use super::*;
 
+    fn ranges(before: &[u8], after: &[u8]) -> Vec<Range<usize>> {
+        let mut dirty = DirtyRanges::new(after.len());
+        for (i, (a, b)) in before.chunks(BLOCK).zip(after.chunks(BLOCK)).enumerate() {
+            if a != b {
+                dirty.mark(i * BLOCK, i * BLOCK + b.len());
+            }
+        }
+        let ranges = dirty.finish();
+        assert_eq!(ranges, changed_ranges(before, after));
+        ranges
+    }
+
     #[test]
     fn vertex_upload_ranges_cover_sparse_edits_and_aligned_tail() {
         let before = vec![0; BLOCK * 10 + 12];
@@ -67,20 +127,20 @@ mod tests {
         for i in [4, BLOCK + 8, BLOCK * 7 + 4, BLOCK * 10 + 8] {
             after[i] = 1;
         }
-        let ranges = changed_ranges(&before, &after);
+        let writes = ranges(&before, &after);
         assert_eq!(
-            ranges,
+            writes,
             vec![0..BLOCK * 2, BLOCK * 7..BLOCK * 8, BLOCK * 10..after.len()]
         );
         let mut uploaded = before;
-        for range in ranges {
+        for range in writes {
             assert_eq!(range.start % 4, 0);
             assert_eq!(range.len() % 4, 0);
             uploaded[range.clone()].copy_from_slice(&after[range]);
         }
         assert_eq!(uploaded, after);
-        assert!(changed_ranges(&after, &after).is_empty());
-        assert!(changed_ranges(&[], &[]).is_empty());
+        assert!(ranges(&after, &after).is_empty());
+        assert!(ranges(&[], &[]).is_empty());
     }
 
     #[test]
@@ -90,14 +150,14 @@ mod tests {
         for i in 0..65 {
             after[i * BLOCK * 3] = 1;
         }
-        assert_eq!(changed_ranges(&before, &after), vec![0..after.len()]);
+        assert_eq!(ranges(&before, &after), vec![0..after.len()]);
         after.fill(1);
-        assert_eq!(changed_ranges(&before, &after), vec![0..after.len()]);
+        assert_eq!(ranges(&before, &after), vec![0..after.len()]);
         let before = [0_f32; 4096];
         let mut after = before;
         after[0] = -0.;
         after[1024] = f32::from_bits(0x7fc00001);
-        let ranges = changed_ranges(bytemuck::cast_slice(&before), bytemuck::cast_slice(&after));
+        let ranges = ranges(bytemuck::cast_slice(&before), bytemuck::cast_slice(&after));
         assert_eq!(ranges, vec![0..BLOCK * 2]);
     }
 }
@@ -204,6 +264,11 @@ mod gpu_tests {
                     assert_eq!(gpu.meshes[0].colors, colors);
                     assert_eq!(gpu.meshes[0].uv, uv);
                     if step == 1 {
+                        assert!(gpu.vertex_pack_count > 0);
+                        assert!(
+                            gpu.vertex_pack_count < display.shading.vertices.len() / 2,
+                            "{kind:?} must not repack untouched vertices"
+                        );
                         assert!(gpu.vertex_write_bytes > 0, "{kind:?} must write the edit");
                         assert!(
                             gpu.vertex_write_bytes < gpu.packed_vertices.len() * 4 / 2,
@@ -397,6 +462,7 @@ mod gpu_tests {
         gpu.upload(&initial);
         let same_values = Arc::new(DisplayMesh::new(&doc));
         gpu.upload(&same_values);
+        assert_eq!(gpu.vertex_pack_count, 0);
         assert_eq!(
             gpu.vertex_write_bytes, 0,
             "identical packed values need no writes"
