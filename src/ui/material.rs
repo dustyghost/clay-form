@@ -10,7 +10,6 @@ use eframe::egui;
 pub(crate) struct MaterialControls {
     textures: Vec<(Material, egui::TextureHandle)>,
     selected_preview: Option<(Material, egui::TextureHandle)>,
-    default_preview: Option<egui::TextureHandle>,
     secondary_edit: bool,
     pub sampling_secondary: bool,
     palette_draft: (egui::ecolor::Hsva, [f32; 3]),
@@ -68,6 +67,7 @@ impl MaterialControls {
                 presets.push(asset.clone());
             }
         }
+        presets.sort_by_key(|asset| asset.id != Material::DEFAULT_PRESET_ID);
         for asset in &mut presets {
             asset.original = Some(asset.reset_material());
         }
@@ -101,17 +101,6 @@ impl MaterialControls {
             }
         }
         let mut selected = brush.material.primary_asset();
-        ui.horizontal_wrapped(|ui| {
-            let texture = self.default_preview.get_or_insert_with(|| ui.ctx().load_texture("default_material", render_swatch(Material::default()), egui::TextureOptions::LINEAR));
-            ui.image((texture.id(), egui::vec2(32., 32.)));
-            if ui.selectable_label(brush.material == Material::default(), "Default material")
-                .customize(Action::DefaultPaintMaterial)
-                .on_hover_text("Select the initial teal sculpt material for future strokes. Keeps existing surfaces and shared definitions unchanged.").clicked() {
-                brush.reset_paint_material();
-                self.pending = None;
-                selected = None;
-            }
-        });
         ui.weak("Choose a material for future strokes. Existing paint changes only in the shared material editor below.");
         ui.scope(|ui| {
             let height_id = ui.make_persistent_id("material_library_height");
@@ -185,7 +174,7 @@ impl MaterialControls {
             .and_then(|id| presets.iter().find(|a| a.id == id))
             .map_or(
                 if brush.material == Material::default() {
-                    "Default material"
+                    "Default clay"
                 } else {
                     "Custom material"
                 },
@@ -419,7 +408,7 @@ impl MaterialControls {
             }
         }
         if brush.material == Material::default() {
-            "Default material"
+            "Default clay"
         } else {
             "Custom material"
         }
@@ -494,7 +483,7 @@ impl MaterialControls {
         ui.horizontal_wrapped(|ui| {
             let colour = Material::default().base_color;
             let colour32 = egui::Color32::from(egui::Rgba::from_rgb(colour[0], colour[1], colour[2]));
-            if ui.add(egui::Button::new("Default colour").fill(colour32)).on_hover_text("Select the initial teal colour for the highlighted slot. Leaves the other slot and material properties unchanged.").clicked() {
+            if ui.add(egui::Button::new(egui::RichText::new("Default colour").color(egui::Color32::BLACK)).fill(colour32)).on_hover_text("Select the initial teal colour for the highlighted slot. Leaves the other slot and material properties unchanged.").clicked() {
                 brush.set_paint_colour(self.secondary_edit, colour);
             }
             if ui.button("Reset colours").customize(Action::ResetPaintColours).on_hover_text("Restore teal Primary and white Secondary. Resets HDR colour overrides; keeps other material properties and existing surfaces.").clicked() {

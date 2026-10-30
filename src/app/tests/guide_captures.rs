@@ -3571,7 +3571,8 @@ fn material_controls_offscreen_review() {
     };
     let geometry = g.app.document.geometry_snapshot();
     let material = g.app.document.brushes()[g.app.ui.selected].material.clone();
-    for delta in [72., -72.] {
+    // Exercise both resize directions, then expose three rows of regular presets.
+    for delta in [72., -72., 88.] {
         let start = handle(&g);
         g.frame(vec![
             egui::Event::PointerMoved(start),
@@ -3657,6 +3658,12 @@ fn material_controls_offscreen_review() {
             .contains(&Material::examples()[4].1.base_color)
     );
     click_paint_control(&mut g, "Red plastic");
+    assert_eq!(
+        g.app.document.brushes()[g.app.ui.selected]
+            .material
+            .primary_asset(),
+        Some(6)
+    );
     click_paint_control(&mut g, "Sample colour");
     let before_sample = g.app.document.geometry_snapshot();
     let history = g.app.document.history_counts();
@@ -3686,6 +3693,12 @@ fn material_controls_offscreen_review() {
     g.save("material-controls");
     // Shared layer edits update existing users, and Undo restores both parts.
     click_paint_control(&mut g, "Red plastic");
+    assert_eq!(
+        g.app.document.brushes()[g.app.ui.selected]
+            .material
+            .primary_asset(),
+        Some(6)
+    );
     click_paint_control(&mut g, "Fill all vertices");
     let before_layers = g.app.document.mesh().material(0);
     click_paint_control(&mut g, "Material layers");

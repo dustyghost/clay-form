@@ -10,14 +10,36 @@ impl App {
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         let active_brush = self.ui.brush_index_for_context(&self.document, ctx);
         let command = match action {
-            Action::SwapPaintColours | Action::ResetPaintColours | Action::DefaultPaintMaterial => {
+            Action::SwapPaintColours | Action::ResetPaintColours => {
                 self.ui.paint_input_index(&self.document).map(|index| {
                     let mut brush = self.document.brushes()[index].clone();
                     match action {
                         Action::SwapPaintColours => brush.swap_paint_colours(),
-                        Action::ResetPaintColours => brush.reset_paint_colours(),
-                        _ => brush.reset_paint_material(),
+                        _ => brush.reset_paint_colours(),
                     }
+                    Command::UpdateBrush(index, brush)
+                })
+            }
+            Action::DefaultPaintMaterial => {
+                self.ui.paint_input_index(&self.document).map(|index| {
+                    let id = crate::sculpt::Material::DEFAULT_PRESET_ID;
+                    let asset = self
+                        .document
+                        .materials()
+                        .iter()
+                        .find(|asset| asset.id == id)
+                        .cloned()
+                        .unwrap_or_else(|| crate::sculpt::material::layers::Asset {
+                            id,
+                            name: self.ui.preferences.materials.names[id as usize - 1].clone(),
+                            material: self.ui.preferences.materials.values[id as usize - 1]
+                                .unlinked(),
+                            original: Some(crate::sculpt::Material::default()),
+                        });
+                    let mut brush = self.document.brushes()[index].clone();
+                    brush.material = asset.material.with_link(id);
+                    brush.texture_colour = None;
+                    self.dispatch(Command::SaveMaterial(asset), ctx);
                     Command::UpdateBrush(index, brush)
                 })
             }

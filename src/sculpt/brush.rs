@@ -333,10 +333,6 @@ impl Brush {
         self.set_paint_colour(false, super::Material::default().base_color);
         self.set_paint_colour(true, default_secondary_colour());
     }
-    pub fn reset_paint_material(&mut self) {
-        self.material = super::Material::default();
-        self.texture_colour = None;
-    }
     /// A ready-to-place image stamp, independent of the Standard preset's identity.
     pub fn alpha_drag() -> Self {
         Self {

@@ -6,6 +6,7 @@ Tickets #104 and #105 share selection and assignment conventions. The independen
 
 - `app::tests::appearance`: actual controls at 1200×900 and 720×600; create without UVs, generate UVs, assign, duplicate without assigning, unassign, confirmed deletion, undo, shared-use feedback and entering Paint. Independent material assignment works while a sculpting brush is selected. Opening an already docked menu preserves its placement.
 - `appearance_colour_pair_controls_and_defaults` clicks secondary selection, palette picking, swapping, default material/colour, colour reset and secondary sampling at both sizes, then saves/reopens and uses Swap in the expanded UV editor. It verifies these input changes leave the model untouched. `appearance_colour_pair_legacy_hdr_and_validation` checks older preset defaults, HDR swaps and invalid colour rejection.
+- `appearance_default_material_uses_regular_copy_edit_and_reset` selects the ordinary default tile, copies it, edits/resets both definitions and verifies the selection action preserves edited settings. Preference migration checks retain existing names, materials and hidden presets when adding the default tile.
 - `document::texture_library`: shared edits and history, retained-level image uses, preserving replaced images, float pixels through save/reopen, subsequent painting, and library/history memory limits.
 - `document::materials`: shared edits and usage counts, including inactive subdivision levels.
 - Existing `app::textures::tests` retain external-editor reload, conflict detection, float precision, capture and custom Paint presets.
@@ -31,6 +32,8 @@ Captured with the real egui controls, clicking and scrolling the workflow rather
 
 - [Transform pivot access at 640×480](universal-pivot-640x480.png): compact Reset pivot / Done controls stay clear of the centre handle.
 
+- [Editable copy of the default material](default-material-copy-720x600.png): the same shared editor and reset controls used by other materials. The Default colour label uses dark text against teal for contrast.
+
 Reproduce the captures:
 
 ```sh
@@ -38,6 +41,8 @@ CLAY_APPEARANCE_REVIEW=/tmp/clay-appearance-review \
   cargo test --locked --lib appearance_workflow_offscreen_review -- --ignored --nocapture
 CLAY_APPEARANCE_REVIEW=/tmp/clay-appearance-review \
   cargo test --locked --lib appearance_colour_pair_offscreen_review -- --ignored --nocapture
+CLAY_APPEARANCE_REVIEW=/tmp/clay-appearance-review \
+  cargo test --locked --lib appearance_default_material_offscreen_review -- --ignored --nocapture
 ```
 
 The guides provide a short [material/colour workflow](../../guide/materials.md#try-the-complete-workflow) and [texture workflow](../../guide/textures.md#paint-an-image). Image painting still exposes base colour only; scalar-map authoring remains #70. Personal palette/library edits remain separate from project Undo, and each Paint preset retains its own inputs.

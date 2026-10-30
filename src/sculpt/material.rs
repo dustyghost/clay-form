@@ -305,7 +305,10 @@ impl Material {
         };
         m
     }
-    pub fn examples() -> [(&'static str, Self); 11] {
+    /// Stable built-in ID: append new presets without changing existing material links.
+    pub const DEFAULT_PRESET_ID: u64 = 12;
+
+    pub fn examples() -> [(&'static str, Self); 12] {
         [
             (
                 "Matte clay",
@@ -342,6 +345,7 @@ impl Material {
                 "Deep skin",
                 Self::organic([0.28, 0.14, 0.085], 0.58, 0.5, [1., 0.35, 0.2], 0.045),
             ),
+            ("Default clay", Self::default()),
         ]
     }
 }

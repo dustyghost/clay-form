@@ -501,17 +501,17 @@ fn colour_pair_workflow(size: [i32; 2], capture: bool) {
     assert_eq!(h.app.document.geometry_snapshot(), geometry);
     h.app.ui.preferences.pinned_menus.clear();
     h.open(Action::OpenMaterials);
-    h.click("Default material");
+    h.click("Default clay");
     assert_eq!(
         h.app.document.brushes()[input].material,
-        Material::default()
+        Material::default().with_link(Material::DEFAULT_PRESET_ID)
     );
     h.app.ui.preferences.pinned_menus.clear();
     h.frame(vec![]);
     h.frame(vec![]);
-    assert!(h.point("Material: Default material").is_some());
+    assert!(h.point("Material: Default clay").is_some());
     assert_eq!(h.app.ui.selected, sculpt);
-    assert_eq!(h.app.document.geometry_snapshot(), geometry);
+    assert_eq!(h.app.document.mesh(), &geometry.mesh);
     h.save("appearance-defaults");
     h.open(Action::OpenColours);
     h.click("Secondary");
@@ -521,7 +521,7 @@ fn colour_pair_workflow(size: [i32; 2], capture: bool) {
         .unwrap();
     assert_eq!(
         h.app.document.brushes()[input].material,
-        Material::default()
+        Material::default().with_link(Material::DEFAULT_PRESET_ID)
     );
     assert_eq!(
         h.app.document.brushes()[input].secondary_colour,
@@ -550,11 +550,11 @@ fn colour_pair_workflow(size: [i32; 2], capture: bool) {
     h.click("Material: Custom material");
     assert!(!h.app.ui.uv.open);
     h.save("appearance-uv-material-selection");
-    h.click("Default material");
+    h.click("Default clay");
     h.save("appearance-uv-material-default");
     assert_eq!(
         h.app.document.brushes()[input].material,
-        Material::default()
+        Material::default().with_link(Material::DEFAULT_PRESET_ID)
     );
 }
 
@@ -628,6 +628,97 @@ fn appearance_colour_pair_legacy_hdr_and_validation() {
         .dispatch(Command::Action(Action::DefaultPaintMaterial), &h.ctx);
     assert_eq!(
         h.app.document.brushes()[input].material,
+        Material::default().with_link(Material::DEFAULT_PRESET_ID)
+    );
+}
+
+fn default_material_workflow(size: [i32; 2], capture: bool) {
+    let mut h = AppearanceHarness::new(size, capture);
+    h.app.ui.preferences.compact_toolbar = true;
+    let input = h.app.ui.paint_input_index(&h.app.document).unwrap();
+    let mesh = h.app.document.mesh().clone();
+    h.open(Action::OpenMaterials);
+    h.click("Default clay");
+    let id = Material::DEFAULT_PRESET_ID;
+    assert_eq!(
+        h.app.document.brushes()[input].material.primary_asset(),
+        Some(id)
+    );
+    h.save("materials");
+    h.click("Edit shared project material");
+    h.click("Copy material");
+    let copy_id = h.app.document.brushes()[input]
+        .material
+        .primary_asset()
+        .unwrap();
+    assert_ne!(copy_id, id);
+    let mut copy = h
+        .app
+        .document
+        .materials()
+        .iter()
+        .find(|a| a.id == copy_id)
+        .unwrap()
+        .clone();
+    assert_eq!(copy.name, "Default clay copy");
+    copy.material.roughness = 0.9;
+    h.app.dispatch(Command::SaveMaterial(copy), &h.ctx);
+    h.frame(vec![]);
+    h.reach("Shared colour");
+    h.save("default-material-copy");
+    assert_eq!(
+        h.app
+            .document
+            .materials()
+            .iter()
+            .find(|a| a.id == id)
+            .unwrap()
+            .material,
         Material::default()
     );
+    h.click("Reset material");
+    assert_eq!(
+        h.app.document.brushes()[input].material,
+        Material::default().with_link(copy_id)
+    );
+    h.click("Default clay");
+    let mut original = h
+        .app
+        .document
+        .materials()
+        .iter()
+        .find(|a| a.id == id)
+        .unwrap()
+        .clone();
+    original.material.roughness = 0.8;
+    h.app
+        .dispatch(Command::SaveMaterial(original.clone()), &h.ctx);
+    h.app
+        .dispatch(Command::Action(Action::DefaultPaintMaterial), &h.ctx);
+    assert_eq!(
+        h.app.document.brushes()[input].material,
+        original.material.with_link(id)
+    );
+    h.click("Reset material");
+    assert_eq!(
+        h.app.document.brushes()[input].material,
+        Material::default().with_link(id)
+    );
+    assert_eq!(h.app.document.mesh(), &mesh);
+    h.app.ui.preferences.pinned_menus.clear();
+    h.open(Action::OpenColours);
+    h.save("colours");
+}
+
+#[test]
+fn appearance_default_material_uses_regular_copy_edit_and_reset() {
+    default_material_workflow([720, 600], false);
+}
+
+#[test]
+#[ignore = "manual regular default material review; requires Vulkan"]
+fn appearance_default_material_offscreen_review() {
+    for size in [[1200, 900], [720, 600]] {
+        default_material_workflow(size, true);
+    }
 }

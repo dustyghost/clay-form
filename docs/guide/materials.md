@@ -31,7 +31,9 @@ Open **Materials** to choose a rendered material swatch. Drag **Drag to resize m
 
 **Materials**, **Colours** and **Textures** have their own toolbar menus. Materials and Colours can be pinned or docked into a workspace. Their open actions, and **Texture library…** / **UV layout…**, are available in custom menus and shortcut settings.
 
-**Default material** in Materials selects the initial teal sculpt material (roughness 0.53, metallic 0). **Default colour** in Colours selects its teal colour for the highlighted slot. **Reset colours** restores teal Primary and white Secondary while retaining the material’s other properties. These choices remain available independently of your personal library and palette; they change future stroke inputs. Use **Assign material to model** to apply the chosen material to an existing model. **Default material**, **Swap colours** and **Reset colours** are also available as custom actions and shortcuts.
+**Default clay** is the teal sculpt material (roughness 0.53, metallic 0), shown as a regular tile in Materials. Select, copy, edit, rename and save it like any other preset. **Reset material** restores its original teal surface settings; shared painted uses follow edits and resets. The **Default material** shortcut selects the preset’s current project settings, or its personal library settings when it has not been used in the project.
+
+**Default colour** in Colours selects the initial teal colour for the highlighted slot. **Reset colours** restores teal Primary and white Secondary while retaining the material’s other properties. These colour controls remain available independently of the palette and change future stroke inputs. Use **Assign material to model** to apply a chosen material to an existing model. **Default material**, **Swap colours** and **Reset colours** are also available as custom actions and shortcuts.
 
 There is one set of stroke inputs per Paint preset. The independent menus edit that preset directly; the Paint panel displays the same values. Switching Paint presets deliberately recalls that preset’s own material, Primary and Secondary colours, HDR values and channel settings. Older presets keep their existing primary inputs and start with white Secondary. Choosing an ordinary colour detaches that preset’s material link without changing any shared project definition. No extra global override is applied to old presets.
 
@@ -49,6 +51,7 @@ New models start with a teal sculpting material (roughness 0.53, metallic 0). Th
 
 | Example | Appearance | Roughness | Metallic |
 | --- | --- | --- | --- |
+| Default clay | Teal sculpting surface | 0.53 | 0 |
 | Matte clay | Warm, broad shading | 0.85 | 0 |
 | Glazed ceramic | Teal with a sharp highlight | 0.18 | 0 |
 | Rubber | Dark, matte surface | 0.92 | 0 |
