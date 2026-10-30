@@ -133,6 +133,42 @@ mod tests {
     }
 
     #[test]
+    fn screen_orbit_preserves_shared_origin_pivot_and_picking_of_offset_geometry() {
+        for perspective in [false, true] {
+            let mut camera = Camera {
+                yaw: 0.4,
+                pitch: 1.1,
+                roll: 0.7,
+                perspective,
+                pan: Vec2::new(30., -20.),
+                ..Default::default()
+            };
+            let (r, u, v) = camera.basis();
+            let vertices = vec![
+                r * -0.6 - u * 0.4 + v * 0.1,
+                r * 0.9 - u * 0.4 + v * 0.2,
+                r * 0.2 + u * 0.8,
+            ];
+            let point = vertices[0] * 0.2 + vertices[1] * 0.3 + vertices[2] * 0.5;
+            let before = scene(&camera, vertices.clone());
+            let pivot = before.project(Vec3::default());
+            for delta in [
+                Vec2::new(35., 0.),
+                Vec2::new(0., -20.),
+                Vec2::new(-10., 15.),
+            ] {
+                camera.orbit(delta);
+                let after = scene(&camera, vertices.clone());
+                assert_eq!(after.project(Vec3::default()), pivot);
+                let screen = after.project(point);
+                assert!((after.pick(screen).unwrap().0 - point).len() < 1e-5);
+                assert!((after.at_depth(screen, point) - point).len() < 1e-5);
+                assert!(screen.distance(before.project(point)) > 0.1);
+            }
+        }
+    }
+
+    #[test]
     fn perspective_picking_recovers_world_barycentrics_across_angles_and_zoom() {
         for perspective in [false, true] {
             for zoom in [0.2, 1., 8.] {

@@ -406,3 +406,219 @@ fn roll_view_offscreen_preview() {
     assert_eq!(app.document.geometry_snapshot(), before);
     assert_eq!(app.document.history_counts(), history);
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+#[ignore = "manual screen-relative orbit visual review; requires Vulkan"]
+fn screen_orbit_offscreen_preview() {
+    let mut capture = crate::viewport::UiCapture::new([1000, 800]);
+    let ctx = egui::Context::default();
+    let mut app = App::default();
+    app.viewport.initialize_renderer(&capture.state).unwrap();
+    let mut primitive = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Cube);
+    primitive.size = crate::sculpt::Vec3(1.4, 0.6, 0.7);
+    let mut mesh = primitive.mesh().unwrap();
+    for p in &mut mesh.vertices {
+        if p.0 > 0. && p.1 > 0. {
+            p.1 += 0.4;
+            p.2 += 0.15;
+        }
+    }
+    app.document
+        .replace_geometry(crate::sculpt::Geometry::new(mesh))
+        .unwrap();
+    app.ui.preferences.viewport_controls = vec![ViewportControl {
+        kind: Kind::Orbit,
+        label: String::new(),
+        position: [0.15, 0.85],
+        offset: [0.; 2],
+        style: Style::IconAndText,
+        icon: Icon::Auto,
+    }];
+    let before = app.document.geometry_snapshot();
+    let history = app.document.history_counts();
+    let dirty = app.document.is_dirty();
+    let prefix = std::env::var("CLAY_ORBIT_PREVIEW").unwrap_or_else(|_| "/tmp/clay-orbit".into());
+    for (name, pitch, roll) in [
+        ("tilted", 1.1, 0.),
+        ("rolled", 0.7, 0.8),
+        ("inverted", std::f32::consts::PI, 0.),
+        ("pole", std::f32::consts::FRAC_PI_2, 0.3),
+    ] {
+        for (direction, delta) in [
+            ("horizontal", Vec2::new(60., 0.)),
+            ("vertical", Vec2::new(0., 60.)),
+            ("diagonal", Vec2::new(45., 45.)),
+        ] {
+            app.camera = crate::camera::Camera {
+                yaw: 0.4,
+                pitch,
+                roll,
+                ..Default::default()
+            };
+            for _ in 0..3 {
+                let output = frame(&mut app, &ctx, vec![]);
+                capture.render(&ctx, output);
+            }
+            let output = frame(&mut app, &ctx, vec![]);
+            let rgba = capture.render(&ctx, output);
+            capture.save(&format!("{prefix}-{name}-{direction}-before.png"), &rgba);
+            let start = control_rect(&ctx, 0).center();
+            frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+            );
+            for step in 1..=6 {
+                frame(
+                    &mut app,
+                    &ctx,
+                    vec![egui::Event::PointerMoved(
+                        start + delta * (step as f32 / 6.),
+                    )],
+                );
+            }
+            frame(&mut app, &ctx, vec![primary_event(start + delta, false)]);
+            let output = frame(&mut app, &ctx, vec![]);
+            let rgba = capture.render(&ctx, output);
+            capture.save(&format!("{prefix}-{name}-{direction}-after.png"), &rgba);
+        }
+    }
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert_eq!(app.document.history_counts(), history);
+    assert_eq!(app.document.is_dirty(), dirty);
+}
+
+#[test]
+fn screen_orbit_entry_points_agree_without_document_edits() {
+    use crate::camera::Camera;
+    use crate::sculpt::{Geometry, Primitive, PrimitiveKind, Vec3};
+    for perspective in [false, true] {
+        for entry in [
+            "empty",
+            "border",
+            "secondary",
+            "gizmo",
+            "control",
+            "touch",
+            "path",
+            "modeling",
+        ] {
+            let mut app = App::default();
+            let ctx = egui::Context::default();
+            let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
+            primitive.size = Vec3(1.4, 0.6, 0.7);
+            primitive.center = Vec3(0.1, -0.1, 0.05);
+            let mut geometry = Geometry::new(primitive.mesh().unwrap());
+            primitive.center = Vec3(0.8, 0.2, -0.2);
+            primitive.size = Vec3(0.3, 0.4, 0.3);
+            geometry.submodels.push(crate::sculpt::Submodel {
+                name: "Offset part".into(),
+                metadata: Default::default(),
+                mesh: primitive.mesh().unwrap(),
+                mesh_settings: Default::default(),
+            });
+            app.document.replace_geometry(geometry).unwrap();
+            app.ui.preferences.touch.drag_speed = 1.25;
+            app.camera = Camera {
+                yaw: 0.4,
+                pitch: 1.1,
+                roll: 0.7,
+                perspective,
+                pan: Vec2::new(20., -30.),
+                zoom: 0.7,
+                ..Default::default()
+            };
+            app.ui.preferences.viewport_controls = vec![ViewportControl {
+                kind: Kind::Orbit,
+                label: String::new(),
+                position: [0.15, 0.85],
+                offset: [0.; 2],
+                style: Style::IconAndText,
+                icon: Icon::Auto,
+            }];
+            if entry == "path" {
+                app.dispatch(
+                    Command::Path(crate::command::PathCommand::New(
+                        crate::sculpt::paths::PathMode::Surface,
+                    )),
+                    &ctx,
+                );
+            }
+            if entry == "modeling" {
+                app.dispatch(Command::ModelingMode(true), &ctx);
+            }
+            settle(&mut app, &ctx);
+            let rect = app.ui.viewport_menu.viewport_rect.unwrap();
+            let start = match entry {
+                "gizmo" => Pos2::new(rect.right() - 79., rect.top() + 79.),
+                "control" => control_rect(&ctx, 0).center(),
+                "border" | "modeling" => Pos2::new(rect.left() + 10., rect.center().y),
+                "empty" => rect.min + Vec2::splat(40.),
+                _ => rect.center(),
+            };
+            let before = app.document.geometry_snapshot();
+            let history = app.document.history_counts();
+            let dirty = app.document.is_dirty();
+            let original = app.camera;
+            let mut expected = original;
+            let touch = |pos: Pos2, phase| egui::Event::Touch {
+                device_id: egui::TouchDeviceId(1),
+                id: egui::TouchId(1),
+                phase,
+                pos,
+                force: None,
+            };
+            let button = |pos, pressed| egui::Event::PointerButton {
+                pos,
+                pressed,
+                button: if entry == "secondary" || entry == "path" {
+                    egui::PointerButton::Secondary
+                } else {
+                    egui::PointerButton::Primary
+                },
+                modifiers: egui::Modifiers::NONE,
+            };
+            let events = if entry == "touch" {
+                vec![touch(start, egui::TouchPhase::Start)]
+            } else {
+                vec![egui::Event::PointerMoved(start), button(start, true)]
+            };
+            frame(&mut app, &ctx, events);
+            let mut end = start;
+            for delta in [Vec2::new(20., 0.), Vec2::new(0., 20.), Vec2::new(-15., 15.)] {
+                end += delta;
+                let events = if entry == "touch" {
+                    vec![touch(end, egui::TouchPhase::Move)]
+                } else {
+                    vec![egui::Event::PointerMoved(end)]
+                };
+                frame(&mut app, &ctx, events);
+                expected.orbit(delta * if entry == "touch" { 1.25 } else { 1. });
+                let a = app.camera.basis();
+                let b = expected.basis();
+                for (a, b) in [(a.0, b.0), (a.1, b.1), (a.2, b.2)] {
+                    assert!(
+                        (a - b).len() < 2e-6,
+                        "{entry}, perspective={perspective}: {a:?} != {b:?}"
+                    );
+                }
+            }
+            frame(
+                &mut app,
+                &ctx,
+                if entry == "touch" {
+                    vec![touch(end, egui::TouchPhase::End)]
+                } else {
+                    vec![button(end, false)]
+                },
+            );
+            assert_eq!(app.camera.pan, original.pan);
+            assert_eq!(app.camera.zoom, original.zoom);
+            assert_eq!(app.camera.eye_distance(), original.eye_distance());
+            assert_eq!(app.document.geometry_snapshot(), before, "{entry}");
+            assert_eq!(app.document.history_counts(), history, "{entry}");
+            assert_eq!(app.document.is_dirty(), dirty, "{entry}");
+        }
+    }
+}
