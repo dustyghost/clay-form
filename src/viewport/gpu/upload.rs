@@ -1,8 +1,14 @@
 //! Independent mesh-buffer updates and bounded, aligned vertex writes.
-use std::ops::Range;
+use std::{ops::Range, sync::Arc};
 
 const BLOCK: usize = 4096;
 const MAX_WRITES: usize = 64;
+
+/// Shared immutable storage proves the uploaded bytes are unchanged, including
+/// non-reflexive float values. Rebuilt payloads retain the previous value check.
+pub(super) fn face_data_unchanged<T: PartialEq>(before: &Arc<Vec<T>>, after: &Arc<Vec<T>>) -> bool {
+    Arc::ptr_eq(before, after) || before == after
+}
 
 #[cfg(test)]
 pub(super) fn changed_ranges(before: &[u8], after: &[u8]) -> Vec<Range<usize>> {
@@ -107,6 +113,29 @@ pub(super) fn write_buffer(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn face_payload_reuse_preserves_snapshots_and_float_fallback() {
+        let original = Arc::new(vec![[0., 1., 0., 1.]]);
+        let mut changed = original.clone();
+        assert!(face_data_unchanged(&original, &changed));
+        Arc::make_mut(&mut changed)[0][0] = 0.25;
+        assert!(!face_data_unchanged(&original, &changed));
+        assert_eq!(original[0][0], 0.);
+
+        let rebuilt = Arc::new((*original).clone());
+        assert!(!Arc::ptr_eq(&original, &rebuilt));
+        assert!(face_data_unchanged(&original, &rebuilt));
+        let signed_zero = Arc::new(vec![[-0., 1., 0., 1.]]);
+        assert!(face_data_unchanged(&original, &signed_zero));
+        assert!(!face_data_unchanged(&original, &Arc::new(Vec::new())));
+
+        let nan = Arc::new(vec![[f32::from_bits(0x7fc00001), 1., 0., 1.]]);
+        // Reusing the exact bytes is valid even though NaN != NaN. A separate
+        // allocation still takes the old value comparison and requests a write.
+        assert!(face_data_unchanged(&nan, &nan.clone()));
+        assert!(!face_data_unchanged(&nan, &Arc::new((*nan).clone())));
+    }
 
     fn ranges(before: &[u8], after: &[u8]) -> Vec<Range<usize>> {
         let mut dirty = DirtyRanges::new(after.len());
@@ -258,6 +287,8 @@ mod gpu_tests {
                         },
                     );
                     let display = renderer.geometry(&doc);
+                    assert!(Arc::ptr_eq(&first.poly_colors, &display.poly_colors));
+                    assert!(Arc::ptr_eq(&first.uv_corners, &display.uv_corners));
                     gpu.upload(&display);
                     assert_eq!(gpu.meshes[0].vertices, vertices);
                     assert_eq!(gpu.meshes[0].indices, indices);
@@ -340,6 +371,8 @@ mod gpu_tests {
             doc.end_stroke();
             let released = renderer.geometry(&doc);
             assert!(!renderer.live_display);
+            assert!(Arc::ptr_eq(&live.poly_colors, &released.poly_colors));
+            assert!(Arc::ptr_eq(&live.uv_corners, &released.uv_corners));
             assert_ne!(live.shading.triangles, released.shading.triangles);
             assert_eq!(
                 released.shading.vertices.len() > live.shading.vertices.len(),
@@ -386,8 +419,8 @@ mod gpu_tests {
             let data = Arc::make_mut(&mut next.geometry);
             match case {
                 0 => data.shading.triangles.swap(0, 1), // Same count, different indices.
-                1 => data.poly_colors[0] = [255, 0, 0, 255],
-                2 => data.uv_corners[0][0] = [0.1, 0.2, 1., 0.],
+                1 => Arc::make_mut(&mut data.poly_colors)[0] = [255, 0, 0, 255],
+                2 => Arc::make_mut(&mut data.uv_corners)[0][0] = [0.1, 0.2, 1., 0.],
                 3 => {
                     let mut material = Material::default();
                     material.emission_strength = 0.5;
@@ -398,12 +431,20 @@ mod gpu_tests {
                     data.shading.triangles.clear();
                     data.mesh.triangles.clear();
                     data.mesh.quads.clear();
-                    data.poly_colors.clear();
-                    data.uv_corners.clear();
+                    Arc::make_mut(&mut data.poly_colors).clear();
+                    Arc::make_mut(&mut data.uv_corners).clear();
                 }
                 _ => unreachable!(),
             }
             let next = Arc::new(next);
+            assert_eq!(
+                Arc::ptr_eq(&initial.poly_colors, &next.poly_colors),
+                !matches!(case, 1 | 5)
+            );
+            assert_eq!(
+                Arc::ptr_eq(&initial.uv_corners, &next.uv_corners),
+                !matches!(case, 2 | 5)
+            );
             gpu.upload(&next);
             if matches!(case, 3 | 4) {
                 assert_ne!(
@@ -461,7 +502,10 @@ mod gpu_tests {
         }
         gpu.upload(&initial);
         let same_values = Arc::new(DisplayMesh::new(&doc));
+        assert!(!Arc::ptr_eq(&initial.poly_colors, &same_values.poly_colors));
+        assert!(!Arc::ptr_eq(&initial.uv_corners, &same_values.uv_corners));
         gpu.upload(&same_values);
+        assert_eq!(gpu.face_write_bytes, [0; 3]);
         assert_eq!(gpu.vertex_pack_count, 0);
         assert_eq!(
             gpu.vertex_write_bytes, 0,

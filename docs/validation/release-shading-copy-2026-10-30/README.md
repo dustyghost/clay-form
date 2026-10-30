@@ -1,5 +1,7 @@
 # Skip discarded shading copies at release
 
+Follow-up: [shared face payloads](../shared-face-payload-2026-10-30/README.md) removes repeated colour/UV copies and upload comparisons, with timing and memory trade-offs recorded.
+
 Follow-up to [release material validation](../release-material-validation-2026-10-30/README.md), under #103.
 
 ## Change

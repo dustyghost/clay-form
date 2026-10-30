@@ -6,6 +6,7 @@
 !/docs/examples/pyramid.obj
 *.tmp
 *.log
+!/docs/validation/shared-face-payload-2026-10-30/*/*.log
 !/docs/validation/release-shading-copy-2026-10-30/*/*.log
 !/docs/validation/release-material-validation-2026-10-30/*/*.log
 !/docs/validation/capacity-2026-10-30/*/*.log

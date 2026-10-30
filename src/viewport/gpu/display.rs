@@ -57,12 +57,14 @@ impl HiddenSurfaceTopology {
 #[derive(Clone)]
 pub(crate) struct DisplayGeometry {
     pub mesh: Mesh,
-    pub uv_corners: Vec<[[f32; 4]; 3]>,
+    // Immutable face payloads survive live snapshots and canonical release.
+    // Keep the Vec allocation when wrapping freshly built data in an Arc.
+    pub uv_corners: Arc<Vec<[[f32; 4]; 3]>>,
     pub shading: SurfaceShading,
     pub owners: Vec<usize>,
     muted_vertices: Vec<bool>,
     pub source_faces: Vec<usize>,
-    pub poly_colors: Vec<[u8; 4]>,
+    pub poly_colors: Arc<Vec<[u8; 4]>>,
     pub edge_colors: HashMap<(usize, usize), eframe::egui::Color32>,
     pub outlines: Vec<[usize; 2]>,
     pub active_vertices: usize,
@@ -510,6 +512,10 @@ impl DisplayMesh {
                 active_vertices = surface.vertices.len();
             }
         }
+        // Shared snapshots retain the builder allocation, so do not keep its
+        // geometric growth slack alive throughout the stroke.
+        uv_corners.shrink_to_fit();
+        poly_colors.shrink_to_fit();
         let depth_extent = mesh.vertices.iter().map(|p| p.len()).fold(1_f32, f32::max) + 1.;
         Self {
             texture_pixels,
@@ -517,12 +523,12 @@ impl DisplayMesh {
             texture_sources,
             geometry: Arc::new(DisplayGeometry {
                 mesh,
-                uv_corners,
+                uv_corners: Arc::new(uv_corners),
                 shading,
                 owners,
                 muted_vertices,
                 source_faces,
-                poly_colors,
+                poly_colors: Arc::new(poly_colors),
                 edge_colors,
                 outlines,
                 active_vertices,

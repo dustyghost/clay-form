@@ -1,0 +1,12 @@
+[
+  {
+    "case": "sphere-l3",
+    "status": "measured",
+    "log": "sphere-l3.log"
+  },
+  {
+    "case": "hidden-l3",
+    "status": "measured",
+    "log": "hidden-l3.log"
+  }
+]

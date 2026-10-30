@@ -885,7 +885,7 @@ impl Gpu {
                 }
                 #[cfg(test)]
                 self.upload_trace.mark("index_compare_pack_write");
-                if old.poly_colors != data.poly_colors {
+                if !upload::face_data_unchanged(&old.poly_colors, &data.poly_colors) {
                     let colors: Vec<[f32; 4]> = data
                         .poly_colors
                         .iter()
@@ -903,7 +903,7 @@ impl Gpu {
                         self.face_write_bytes[1] = colors.len() * 16;
                     }
                 }
-                if old.uv_corners != data.uv_corners {
+                if !upload::face_data_unchanged(&old.uv_corners, &data.uv_corners) {
                     upload::write_buffer(
                         &self.device,
                         &self.queue,
