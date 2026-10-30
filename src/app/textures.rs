@@ -108,14 +108,16 @@ impl App {
             brush.secondary_colour = bounded.base_color;
             brush.secondary_texture_colour = float_colour.then_some(sampled.base_color);
         } else {
-            brush.material = brush.material.unlinked();
+            if channels != PaintChannels::Color {
+                brush.material = brush.material.unlinked();
+            }
             match channels {
                 PaintChannels::Material => {
                     brush.material = bounded;
                     brush.texture_colour = None;
                 }
                 PaintChannels::Color => {
-                    brush.material.base_color = bounded.base_color;
+                    brush.material.set_colour(bounded.base_color);
                     brush.texture_colour = float_colour.then_some(sampled.base_color);
                 }
                 PaintChannels::Roughness => brush.material.roughness = bounded.roughness,

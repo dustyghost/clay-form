@@ -317,16 +317,14 @@ impl Brush {
             self.secondary_colour = colour;
             self.secondary_texture_colour = None;
         } else {
-            self.material = self.material.unlinked();
-            self.material.base_color = colour;
+            self.material.set_colour(colour);
             self.texture_colour = None;
         }
     }
     pub fn swap_paint_colours(&mut self) {
-        if self.material.base_color != self.secondary_colour {
-            self.material = self.material.unlinked();
-        }
-        std::mem::swap(&mut self.material.base_color, &mut self.secondary_colour);
+        let primary = self.material.base_color;
+        self.material.set_colour(self.secondary_colour);
+        self.secondary_colour = primary;
         std::mem::swap(&mut self.texture_colour, &mut self.secondary_texture_colour);
     }
     pub fn reset_paint_colours(&mut self) {

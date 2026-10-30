@@ -409,6 +409,13 @@ fn startup_defaults_and_z_swap_colours_once_per_press() {
         app.document.brushes()[input].clone()
     };
     let swapped = press(false);
+    assert_eq!(
+        swapped.material.primary_asset(),
+        original.material.primary_asset()
+    );
+    let mut surface = swapped.material.unlinked();
+    surface.base_color = original.material.base_color;
+    assert_eq!(surface, original.material.unlinked());
     assert_eq!(swapped.material.base_color, original.secondary_colour);
     assert_eq!(swapped.secondary_colour, original.material.base_color);
     assert!(
@@ -416,6 +423,10 @@ fn startup_defaults_and_z_swap_colours_once_per_press() {
         "holding Z must not flicker between colours"
     );
     let restored = press(false);
+    assert_eq!(
+        restored.material.primary_asset(),
+        original.material.primary_asset()
+    );
     assert_eq!(restored.material.base_color, original.material.base_color);
     assert_eq!(restored.secondary_colour, original.secondary_colour);
     assert_eq!(app.document.geometry_snapshot(), geometry);

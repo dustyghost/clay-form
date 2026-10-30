@@ -300,11 +300,9 @@ fn appearance_material_controls_without_selecting_paint() {
     h.click("Add colour");
     assert_eq!(h.app.ui.selected, sculpt);
     assert!(h.app.document.mesh().materials.is_empty());
-    assert!(
-        h.app.document.brushes()[index]
-            .material
-            .primary_asset()
-            .is_none()
+    assert_eq!(
+        h.app.document.brushes()[index].material.primary_asset(),
+        Some(5)
     );
     h.click("Paint with these inputs");
     assert_eq!(h.app.ui.selected, index);
@@ -551,7 +549,7 @@ fn colour_pair_workflow(size: [i32; 2], capture: bool) {
     h.click("Restore window");
     h.save("appearance-restored-uv");
     h.click("Expand editor");
-    h.click("Material: Custom material");
+    h.click("Material: Default clay");
     assert!(!h.app.ui.uv.open);
     h.save("appearance-uv-material-selection");
     h.click("Default clay");
@@ -729,4 +727,82 @@ fn appearance_default_material_offscreen_review() {
     for size in [[1200, 900], [720, 600]] {
         default_material_workflow(size, true);
     }
+}
+
+#[test]
+fn colour_swap_preserves_selected_material_through_editor_history_and_reload() {
+    let mut h = AppearanceHarness::new([900, 700], false);
+    h.open(Action::OpenMaterials);
+    h.click("Copper");
+    let input = h.app.ui.paint_input_index(&h.app.document).unwrap();
+    let original = h.app.document.brushes()[input].material.clone();
+    let asset = h
+        .app
+        .document
+        .materials()
+        .iter()
+        .find(|a| a.id == 5)
+        .unwrap()
+        .clone();
+    h.app
+        .dispatch(Command::Action(Action::SwapPaintColours), &h.ctx);
+    h.frame(vec![]);
+    h.frame(vec![]);
+    h.click("Edit shared project material");
+    let swapped = h.app.document.brushes()[input].material.clone();
+    assert_eq!(swapped.primary_asset(), Some(5));
+    assert_eq!(swapped.base_color, [1.; 3]);
+    assert!(h.point("Selected material: Copper").is_some());
+    assert_eq!(
+        h.app.document.materials().iter().find(|a| a.id == 5),
+        Some(&asset)
+    );
+    h.app
+        .dispatch(Command::AssignModelMaterial(swapped.clone()), &h.ctx);
+    let mut edited = asset.clone();
+    edited.material.roughness = 0.8;
+    edited.material.base_color = [0.1, 0.2, 0.3];
+    h.app
+        .dispatch(Command::SaveMaterial(edited.clone()), &h.ctx);
+    h.frame(vec![]);
+    let brush = &h.app.document.brushes()[input];
+    assert_eq!(brush.material.primary_asset(), Some(5));
+    assert_eq!(brush.material.base_color, [1.; 3]);
+    assert_eq!(brush.material.roughness, 0.8);
+    assert!(
+        h.app
+            .document
+            .mesh()
+            .materials
+            .iter()
+            .all(|m| m.base_color == [1.; 3] && m.roughness == 0.8)
+    );
+    h.app.dispatch(Command::Undo, &h.ctx);
+    h.frame(vec![]);
+    assert_eq!(h.app.document.brushes()[input].material.base_color, [1.; 3]);
+    assert_eq!(
+        h.app.document.brushes()[input].material.roughness,
+        original.roughness
+    );
+    let saved = crate::persistence::json_bytes(&h.app.document.project()).unwrap();
+    h.app
+        .document
+        .replace_project(
+            serde_json::from_slice(&saved).unwrap(),
+            "colour-override.clay",
+        )
+        .unwrap();
+    h.frame(vec![]);
+    assert_eq!(h.app.document.brushes()[input].material, swapped);
+    h.app
+        .dispatch(Command::Action(Action::SwapPaintColours), &h.ctx);
+    h.frame(vec![]);
+    assert_eq!(
+        h.app.document.brushes()[input].material.primary_asset(),
+        Some(5)
+    );
+    assert_eq!(
+        h.app.document.brushes()[input].material.unlinked(),
+        original.unlinked()
+    );
 }

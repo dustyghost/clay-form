@@ -155,7 +155,7 @@ impl Document {
         for brush in &mut self.brushes {
             if let Some(id) = brush.material.primary_asset() {
                 if let Some(asset) = self.geometry.scene.materials.iter().find(|a| a.id == id) {
-                    brush.material = asset.material.with_link(id);
+                    brush.material.sync_asset(id, &asset.material);
                 } else if previous_ids.contains(&id) {
                     // Detach a definition removed by history, but preserve library
                     // presets that have not been registered in this project yet.

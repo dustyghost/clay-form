@@ -95,7 +95,7 @@ impl MaterialControls {
         if let Some(id) = brush.material.primary_asset()
             && let Some(asset) = presets.iter().find(|a| a.id == id)
         {
-            brush.material = asset.material.with_link(id);
+            brush.material.sync_asset(id, &asset.material);
             if !document.materials().iter().any(|a| a.id == id) {
                 commands.push(Command::SaveMaterial(asset.clone()));
             }
@@ -215,6 +215,11 @@ impl MaterialControls {
             ui.weak("Assigned images still overlay the material; unassign in Textures to reveal its base colour.");
         }
         ui.separator();
+        // Shared editing addresses the definition, independently of stroke colour.
+        let stroke_material = brush.material.clone();
+        if let Some(asset) = selected.and_then(|id| presets.iter().find(|a| a.id == id)) {
+            brush.material = asset.material.with_link(asset.id);
+        }
         ui.collapsing("Edit shared project material", |ui| {
         if let Some(id) = selected {
             let revision = document.display_revision();
@@ -386,6 +391,13 @@ impl MaterialControls {
                 library.remove(id);
         }
         });
+        if let Some(id) = stroke_material.primary_asset()
+            && brush.material.primary_asset() == Some(id)
+        {
+            let definition = brush.material.clone();
+            brush.material = stroke_material;
+            brush.material.sync_asset(id, &definition);
+        }
     }
 
     pub(super) fn selected_name(
