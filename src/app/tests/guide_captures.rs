@@ -3666,6 +3666,8 @@ fn material_controls_offscreen_review() {
     );
     click_paint_control(&mut g, "Sample colour");
     let before_sample = g.app.document.geometry_snapshot();
+    let before_input = g.app.document.brushes()[g.app.ui.selected].material.clone();
+    let before_definitions = g.app.document.materials().to_vec();
     let history = g.app.document.history_counts();
     let point = g.frame(vec![]).0.center();
     g.frame(vec![
@@ -3674,12 +3676,19 @@ fn material_controls_offscreen_review() {
     ]);
     g.frame(vec![primary_event(point, false)]);
     assert!(!g.app.ui.materials.sampling);
-    assert!(
+    assert_eq!(
         g.app.document.brushes()[g.app.ui.selected]
             .material
-            .primary_asset()
-            .is_none()
+            .primary_asset(),
+        before_input.primary_asset(),
+        "Colour sampling preserves the selected material"
     );
+    let mut sampled_surface = g.app.document.brushes()[g.app.ui.selected]
+        .material
+        .unlinked();
+    sampled_surface.base_color = before_input.base_color;
+    assert_eq!(sampled_surface, before_input.unlinked());
+    assert_eq!(g.app.document.materials(), before_definitions);
     for (a, b) in g.app.document.brushes()[g.app.ui.selected]
         .material
         .base_color
