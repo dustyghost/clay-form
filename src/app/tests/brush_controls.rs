@@ -147,7 +147,7 @@ fn brush_controls_stay_visible_on_narrow_and_compact_workspaces() {
             let output = frame(&mut app, &ctx, size, vec![]);
             for label in [
                 "Tool controls",
-                "Material: Glazed ceramic",
+                "Material: Default clay",
                 "Primary",
                 "Secondary",
                 "Swap colours",
@@ -366,4 +366,57 @@ fn appearance_controls_are_not_in_the_main_toolbar() {
         );
         assert!(!output.shapes.iter().any(|s| matches!(&s.shape, egui::Shape::Text(t) if t.galley.text().starts_with("Material:") || t.galley.text() == "Swap colours")));
     }
+}
+
+#[test]
+fn startup_defaults_and_z_swap_colours_once_per_press() {
+    let (mut app, ctx) = setup();
+    let input = app.ui.paint_input_index(&app.document).unwrap();
+    let original = app.document.brushes()[input].clone();
+    assert_eq!(
+        original.material,
+        crate::sculpt::Material::default().with_link(crate::sculpt::Material::DEFAULT_PRESET_ID)
+    );
+    assert_eq!(original.secondary_colour, [1.; 3]);
+    assert_eq!(original.texture_colour, None);
+    assert_eq!(original.secondary_texture_colour, None);
+    let geometry = app.document.geometry_snapshot();
+    let mut press = |repeat: bool| {
+        if !repeat {
+            let mut release = key(egui::Key::Z);
+            if let egui::Event::Key { pressed, .. } = &mut release {
+                *pressed = false;
+            }
+            let _ = ctx.run(
+                egui::RawInput {
+                    events: vec![release],
+                    ..Default::default()
+                },
+                |ctx| app.shortcuts(ctx),
+            );
+        }
+        let mut event = key(egui::Key::Z);
+        if let egui::Event::Key { repeat: value, .. } = &mut event {
+            *value = repeat;
+        }
+        let _ = ctx.run(
+            egui::RawInput {
+                events: vec![event],
+                ..Default::default()
+            },
+            |ctx| app.shortcuts(ctx),
+        );
+        app.document.brushes()[input].clone()
+    };
+    let swapped = press(false);
+    assert_eq!(swapped.material.base_color, original.secondary_colour);
+    assert_eq!(swapped.secondary_colour, original.material.base_color);
+    assert!(
+        press(true) == swapped,
+        "holding Z must not flicker between colours"
+    );
+    let restored = press(false);
+    assert_eq!(restored.material.base_color, original.material.base_color);
+    assert_eq!(restored.secondary_colour, original.secondary_colour);
+    assert_eq!(app.document.geometry_snapshot(), geometry);
 }

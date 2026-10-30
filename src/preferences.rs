@@ -432,7 +432,7 @@ impl Default for Preferences {
             materials: MaterialLibrary::default(),
             paint_inspection: Default::default(),
             lighting: Default::default(),
-            paint_shortcuts_version: 1,
+            paint_shortcuts_version: 2,
             brush_controls_version: 3,
             visibility_selection: VisibilitySettings::default(),
             modeling_presets: Vec::new(),
@@ -796,7 +796,7 @@ impl Preferences {
                     .iter()
                     .find(|(_, b)| b.as_ref() == Some(&shortcut))
                 {
-                    if matches!(action, Action::OpenMenu(_))
+                    if matches!(action, Action::OpenMenu(_) | Action::SwapPaintColours)
                         && matches!(event, egui::Event::Key { repeat: true, .. })
                     {
                         return false;
@@ -1037,6 +1037,19 @@ pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
             *key = shortcut;
         }
         prefs.paint_shortcuts_version = 1;
+    }
+    if prefs.paint_shortcuts_version < 2 {
+        let shortcut = Action::SwapPaintColours.default_shortcut();
+        if !prefs.bindings.iter().any(|(_, key)| *key == shortcut)
+            && let Some((_, key)) = prefs
+                .bindings
+                .iter_mut()
+                .find(|(a, _)| *a == Action::SwapPaintColours)
+            && key.is_none()
+        {
+            *key = shortcut;
+        }
+        prefs.paint_shortcuts_version = 2;
     }
     // This update introduces T and moves the stock selection-menu key from W to X.
     // Explicit unbindings and non-default assignments remain intact.

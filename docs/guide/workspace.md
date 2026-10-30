@@ -30,7 +30,7 @@ placements and shortcuts continue to apply.
 
 ### Tool controls
 
-The default **Tool controls** custom menu opens at the top of the left sidebar. It contains the selected material preview, editable **Primary** and **Secondary** colours, and **Swap colours**, followed by the active brush icon, draggable **Size** (radius in pixels), **Inner radius** (percent of
+The default **Tool controls** custom menu opens at the top of the left sidebar. It contains the selected material preview, editable **Primary** and **Secondary** colours, and **Swap colours** (**Z**), followed by the active brush icon, draggable **Size** (radius in pixels), **Inner radius** (percent of
 the outer radius), and **Strength** (percent),
 **Surface footprint and normal**, **Stroke mode**, and **Stroke stabilisation**
 with its trailing distance. You can move it to a top shelf, where it wraps to fit narrower windows.
@@ -154,6 +154,7 @@ Shifted numbers use the physical number-row key, so `!` can bind as Shift+1. Oth
 | Universal transform / return to sculpting | T |
 | Smaller / larger brush | [ / ] |
 | Tool controls popup | S |
+| Swap Primary / Secondary colours | Z |
 | Previous / next brush | , / . |
 | Subdivide | Ctrl+D |
 | Lower / higher subdivision level | Shift+D / D |

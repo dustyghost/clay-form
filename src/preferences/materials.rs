@@ -345,4 +345,53 @@ mod tests {
         );
         std::fs::remove_file(path).unwrap();
     }
+    #[test]
+    fn colour_swap_shortcut_migrates_once_and_preserves_custom_keys() {
+        let path =
+            std::env::temp_dir().join(format!("clay-colour-swap-keys-{}.json", std::process::id()));
+        for mode in 0..3 {
+            let mut old = Preferences {
+                paint_shortcuts_version: 1,
+                ..Default::default()
+            };
+            old.clear_binding(&Action::SwapPaintColours);
+            if mode == 1 {
+                old.bind(Action::Wireframe, Shortcut::new(Key::Z, Modifiers::NONE))
+                    .unwrap();
+            } else if mode == 2 {
+                old.bind(
+                    Action::SwapPaintColours,
+                    Shortcut::new(Key::Z, Modifiers::ALT),
+                )
+                .unwrap();
+            }
+            save(&path, &old).unwrap();
+            let mut migrated = load(&path).unwrap();
+            let expected = match mode {
+                0 => Some(Shortcut::new(Key::Z, Modifiers::NONE)),
+                1 => None,
+                _ => Some(Shortcut::new(Key::Z, Modifiers::ALT)),
+            };
+            assert_eq!(
+                migrated.shortcut(&Action::SwapPaintColours),
+                expected.as_ref()
+            );
+            assert_eq!(
+                migrated.shortcut(&Action::Wireframe),
+                old.shortcut(&Action::Wireframe)
+            );
+            assert_eq!(
+                migrated.shortcut(&Action::Undo),
+                old.shortcut(&Action::Undo)
+            );
+            assert_eq!(
+                migrated.shortcut(&Action::Redo),
+                old.shortcut(&Action::Redo)
+            );
+            migrated.clear_binding(&Action::SwapPaintColours);
+            save(&path, &migrated).unwrap();
+            assert_eq!(load(&path).unwrap(), migrated);
+        }
+        std::fs::remove_file(path).unwrap();
+    }
 }

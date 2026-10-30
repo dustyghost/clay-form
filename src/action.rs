@@ -224,6 +224,7 @@ impl Action {
             Self::New => (Key::N, ctrl),
             Self::Undo => (Key::Z, ctrl),
             Self::Redo => (Key::Z, ctrl | Modifiers::SHIFT),
+            Self::SwapPaintColours => (Key::Z, none),
             Self::ResetView => (Key::F, none),
             Self::Symmetry => (Key::X, Modifiers::SHIFT),
             Self::Wireframe => (Key::W, none),
