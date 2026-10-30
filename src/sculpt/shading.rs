@@ -50,7 +50,7 @@ impl Mesh {
         SurfaceShadingTopology::for_each_pair(self, |a, x| {
             join_smooth_edge(&mut parents, &normals, a, x);
         });
-        finish_shading(self, parents, &normals)
+        finish_shading(self, parents, &normals, None)
     }
 }
 
@@ -58,12 +58,58 @@ impl Mesh {
 /// indices and explicit creases are unchanged; sharpness is evaluated on every shade.
 pub(crate) struct SurfaceShadingTopology {
     paired_corners: Vec<[usize; 2]>,
+    angles: CornerAngles,
+}
+
+/// A fixed reference snapshot, shared with the topology across stroke frames.
+/// Changed faces recompute weights; old weights never approximate new geometry.
+struct CornerAngles {
+    positions: Vec<Vec3>,
+    values: Vec<[f32; 3]>,
+}
+impl CornerAngles {
+    fn new(mesh: &Mesh) -> Self {
+        Self {
+            positions: mesh.vertices.clone(),
+            values: mesh
+                .triangles
+                .iter()
+                .map(|t| corner_angles(mesh, t))
+                .collect(),
+        }
+    }
+    fn unchanged(&self, mesh: &Mesh, triangle: &[usize; 3]) -> bool {
+        triangle.iter().all(|&i| {
+            let a = self.positions[i];
+            let b = mesh.vertices[i];
+            a.0.to_bits() == b.0.to_bits()
+                && a.1.to_bits() == b.1.to_bits()
+                && a.2.to_bits() == b.2.to_bits()
+        })
+    }
+    fn get(&self, mesh: &Mesh, face: usize, triangle: &[usize; 3]) -> [f32; 3] {
+        if self.unchanged(mesh, triangle) {
+            self.values[face]
+        } else {
+            corner_angles(mesh, triangle)
+        }
+    }
+}
+fn corner_angles(mesh: &Mesh, t: &[usize; 3]) -> [f32; 3] {
+    std::array::from_fn(|corner| {
+        let a = mesh.vertices[t[(corner + 1) % 3]] - mesh.vertices[t[corner]];
+        let b = mesh.vertices[t[(corner + 2) % 3]] - mesh.vertices[t[corner]];
+        a.cross(b).len().atan2(a.dot(b))
+    })
 }
 impl SurfaceShadingTopology {
     pub(crate) fn new(mesh: &Mesh) -> Self {
         let mut paired_corners = Vec::new();
         Self::for_each_pair(mesh, |a, x| paired_corners.push([a, x]));
-        Self { paired_corners }
+        Self {
+            paired_corners,
+            angles: CornerAngles::new(mesh),
+        }
     }
 
     fn for_each_pair(mesh: &Mesh, mut pair: impl FnMut(usize, usize)) {
@@ -90,7 +136,7 @@ impl SurfaceShadingTopology {
         for &[a, x] in &self.paired_corners {
             join_smooth_edge(&mut parents, &normals, a, x);
         }
-        finish_shading(mesh, parents, &normals)
+        finish_shading(mesh, parents, &normals, Some(&self.angles))
     }
 }
 
@@ -123,25 +169,43 @@ fn join_smooth_edge(parents: &mut [usize], normals: &[Vec3], a: usize, x: usize)
     }
 }
 
-fn finish_shading(mesh: &Mesh, mut parents: Vec<usize>, normals: &[Vec3]) -> SurfaceShading {
+fn finish_shading(
+    mesh: &Mesh,
+    mut parents: Vec<usize>,
+    normals: &[Vec3],
+    angles: Option<&CornerAngles>,
+) -> SurfaceShading {
+    let sums = accumulate_normals(mesh, &mut parents, normals, angles);
+    emit_shading(mesh, &mut parents, &sums)
+}
+
+fn accumulate_normals(
+    mesh: &Mesh,
+    parents: &mut [usize],
+    normals: &[Vec3],
+    angles: Option<&CornerAngles>,
+) -> Vec<Vec3> {
     let mut sums = vec![Vec3::default(); parents.len()];
     for (face, t) in mesh.triangles.iter().enumerate() {
-        for corner in 0..3 {
-            let a = mesh.vertices[t[(corner + 1) % 3]] - mesh.vertices[t[corner]];
-            let b = mesh.vertices[t[(corner + 2) % 3]] - mesh.vertices[t[corner]];
-            // Corner angles, rather than triangle areas, make shading stable
-            // when clipping produces slivers or a large cap triangle fan.
-            let angle = a.cross(b).len().atan2(a.dot(b));
-            let r = root(&mut parents, face * 3 + corner);
+        // Keep exact corner weights and accumulation order, including slivers
+        // and degenerate faces. Only the unchanged reference faces skip atan2.
+        let weights =
+            angles.map_or_else(|| corner_angles(mesh, t), |cache| cache.get(mesh, face, t));
+        for (corner, angle) in weights.into_iter().enumerate() {
+            let r = root(parents, face * 3 + corner);
             sums[r] = sums[r] + normals[face] * angle;
         }
     }
+    sums
+}
+
+fn emit_shading(mesh: &Mesh, parents: &mut [usize], sums: &[Vec3]) -> SurfaceShading {
     let mut shading = SurfaceShading::default();
     let mut indices = vec![usize::MAX; parents.len()];
     for (face, t) in mesh.triangles.iter().enumerate() {
         let mut triangle = [0; 3];
         for corner in 0..3 {
-            let r = root(&mut parents, face * 3 + corner);
+            let r = root(parents, face * 3 + corner);
             if indices[r] == usize::MAX {
                 indices[r] = shading.vertices.len();
                 shading.vertices.push((t[corner], sums[r].norm()));
@@ -222,6 +286,47 @@ mod tests {
             shading.triangles.push(triangle);
         }
         shading
+    }
+
+    #[test]
+    fn cached_corner_angles_match_reference_after_local_global_and_restored_edits() {
+        let original = Mesh::starting_sphere();
+        let topology = SurfaceShadingTopology::new(&original);
+        let mut mesh = original.clone();
+        assert_eq!(topology.angle_cache_stats(&mesh).1, mesh.triangles.len());
+        for edit in 0..5 {
+            match edit {
+                0 => mesh.vertices[0].2 += 0.13,
+                1 => mesh.vertices[7].0 -= 0.28,
+                2 => {
+                    for p in &mut mesh.vertices {
+                        p.1 += 0.07;
+                    }
+                }
+                3 => mesh = original.clone(),
+                _ => {
+                    let p = mesh.vertices.iter_mut().find(|p| p.0 == 0.).unwrap();
+                    p.0 = if p.0.to_bits() == 0 { -0. } else { 0. };
+                }
+            }
+            let unchanged = topology.angle_cache_stats(&mesh).1;
+            match edit {
+                0 | 1 | 4 => assert!(unchanged > 0 && unchanged < mesh.triangles.len()),
+                2 => assert_eq!(unchanged, 0),
+                _ => assert_eq!(unchanged, mesh.triangles.len()),
+            }
+            let expected = reference_shading(&mesh);
+            let actual = topology.shade(&mesh);
+            assert_eq!(actual.triangles, expected.triangles);
+            assert_eq!(actual.vertices.len(), expected.vertices.len());
+            for ((i, a), (j, b)) in actual.vertices.iter().zip(&expected.vertices) {
+                assert_eq!(i, j);
+                assert_eq!(
+                    [a.0.to_bits(), a.1.to_bits(), a.2.to_bits()],
+                    [b.0.to_bits(), b.1.to_bits(), b.2.to_bits()]
+                );
+            }
+        }
     }
 
     #[test]
@@ -367,5 +472,52 @@ mod tests {
             assert_eq!(n.0.abs() + n.1.abs() + n.2.abs(), 1.);
         }
         mesh.validate_closed().unwrap();
+    }
+}
+
+#[cfg(test)]
+impl SurfaceShadingTopology {
+    pub(crate) fn profile_shade(
+        &self,
+        mesh: &Mesh,
+        cached: bool,
+    ) -> (SurfaceShading, Vec<(&'static str, f64)>) {
+        fn timed<T>(
+            out: &mut Vec<(&'static str, f64)>,
+            name: &'static str,
+            f: impl FnOnce() -> T,
+        ) -> T {
+            let start = std::time::Instant::now();
+            let result = f();
+            out.push((name, start.elapsed().as_secs_f64() * 1000.));
+            result
+        }
+        let mut times = Vec::new();
+        let mut parents: Vec<_> = timed(&mut times, "shading.parents", || {
+            (0..mesh.triangles.len() * 3).collect()
+        });
+        let normals = timed(&mut times, "shading.face_normals", || face_normals(mesh));
+        timed(&mut times, "shading.join_fans", || {
+            for &[a, x] in &self.paired_corners {
+                join_smooth_edge(&mut parents, &normals, a, x);
+            }
+        });
+        let sums = timed(&mut times, "shading.angle_sums", || {
+            accumulate_normals(mesh, &mut parents, &normals, cached.then_some(&self.angles))
+        });
+        let shading = timed(&mut times, "shading.emit", || {
+            emit_shading(mesh, &mut parents, &sums)
+        });
+        (shading, times)
+    }
+    pub(crate) fn angle_cache_stats(&self, mesh: &Mesh) -> (usize, usize) {
+        let bytes = self.angles.positions.len() * std::mem::size_of::<Vec3>()
+            + self.angles.values.len() * std::mem::size_of::<[f32; 3]>();
+        let unchanged = mesh
+            .triangles
+            .iter()
+            .filter(|t| self.angles.unchanged(mesh, t))
+            .count();
+        (bytes, unchanged)
     }
 }

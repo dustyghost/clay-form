@@ -1,5 +1,7 @@
 # Update retained CPU vertex records in place
 
+Follow-up: [Reuse unchanged corner angles at hidden-surface release](../release-corner-angles-2026-10-30/README.md) measures the next reduction in canonical release preparation.
+
 Follow-up to [independent buffer reuse at stroke release](../release-buffer-reuse-2026-10-30/README.md), under #103. The GPU comparison baseline is commit `48baac4`. Final measurements use source SHA-256 `ed1ce295fd72f6ecbfbab3e6f0ca5fa193649380e591e11905445a952104cbf1`. The [raw GPU results](gpu/index.json) retain all samples and memory stages; the [comparison](gpu-comparison.csv) includes every measured phase.
 
 ## Change and boundaries

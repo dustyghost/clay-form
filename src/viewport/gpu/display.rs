@@ -869,3 +869,72 @@ mod stroke_tests;
 
 #[cfg(test)]
 mod packing_tests;
+
+#[cfg(test)]
+impl DisplayMesh {
+    pub(super) fn profile_after_stroke(
+        &self,
+        document: &Document,
+        use_angles: bool,
+    ) -> Vec<(&'static str, f64)> {
+        fn timed<T>(
+            out: &mut Vec<(&'static str, f64)>,
+            name: &'static str,
+            f: impl FnOnce() -> T,
+        ) -> T {
+            let start = std::time::Instant::now();
+            let result = f();
+            out.push((name, start.elapsed().as_secs_f64() * 1000.));
+            result
+        }
+        let mut times = Vec::new();
+        let cached = self.hidden_stroke_topology.as_ref().unwrap();
+        let source = document.mesh();
+        assert!(!document.stroke_active());
+        assert!(timed(&mut times, "validate.topology", || cached
+            .source
+            .matches(source, document.model(0).unwrap().metadata.model_id)));
+        assert!(timed(&mut times, "validate.positions_mask", || self
+            .mesh
+            .vertices
+            == source.vertices
+            && self.mesh.mask == source.mask));
+        assert!(timed(&mut times, "validate.materials", || self
+            .mesh
+            .materials
+            == source.materials));
+        if !self.temporary_normals {
+            return times;
+        }
+        let (shading, shading_times) = cached.source.shading.profile_shade(source, use_angles);
+        times.extend(shading_times);
+        let mut geometry = timed(&mut times, "clone_geometry", || (*self.geometry).clone());
+        geometry.shading = timed(&mut times, "filter_shading", || SurfaceShading {
+            vertices: shading.vertices,
+            triangles: self
+                .source_faces
+                .iter()
+                .map(|&f| shading.triangles[f])
+                .collect(),
+        });
+        // Check the diagnostic's staged shading against the production result outside timers.
+        let expected = cached.source.shading.shade(source);
+        assert_eq!(geometry.shading.vertices, expected.vertices);
+        assert_eq!(
+            geometry.shading.triangles,
+            self.source_faces
+                .iter()
+                .map(|&f| expected.triangles[f])
+                .collect::<Vec<_>>()
+        );
+        times
+    }
+    pub(super) fn release_cache_stats(&self, document: &Document) -> (usize, usize) {
+        self.hidden_stroke_topology
+            .as_ref()
+            .unwrap()
+            .source
+            .shading
+            .angle_cache_stats(document.mesh())
+    }
+}

@@ -526,3 +526,42 @@ fn gpu_load_profile_vertex_packing() {
         "scope":"Isolated CPU preparation; excludes display refresh, allocation destruction, queue staging and GPU completion. Not an end-to-end upload timing."});
     std::fs::write(output, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
 }
+
+/// Break down hidden-surface release preparation without timing reference checks.
+#[test]
+#[ignore = "manual release diagnosis; excluded from routine GPU CI"]
+fn gpu_load_profile_release_display() {
+    let output =
+        std::env::var("CLAY_RELEASE_PROFILE").expect("set CLAY_RELEASE_PROFILE output path");
+    let mode = std::env::var("CLAY_RELEASE_MODE").unwrap_or_else(|_| "cached".into());
+    assert!(matches!(mode.as_str(), "full" | "cached"));
+    let mut frames = Vec::new();
+    let mut doc = document(fixture("hidden", 3));
+    let before = fingerprint(doc.mesh());
+    let mut metrics = Measurements::default();
+    for trial in 0..3 {
+        for kind in [Kind::Standard, Kind::Clay, Kind::Paint] {
+            let mut display = DisplayMesh::new(&doc);
+            for step in 0..DABS {
+                assert!(doc.apply_dab(&brush(kind), dab(step)));
+                display = display.during_stroke(&doc).unwrap();
+            }
+            doc.end_stroke();
+            for (phase, elapsed) in display.profile_after_stroke(&doc, mode == "cached") {
+                metrics
+                    .0
+                    .entry(format!("{kind:?}.{phase}"))
+                    .or_default()
+                    .push(elapsed);
+            }
+            let (bytes, unchanged) = display.release_cache_stats(&doc);
+            frames.push(serde_json::json!({"trial":trial,"brush":format!("{kind:?}"),"angle_cache_payload_bytes":bytes,"unchanged_faces":unchanged,"faces":doc.mesh().triangles.len()}));
+            doc.undo();
+            assert_eq!(fingerprint(doc.mesh()), before);
+        }
+    }
+    let report = serde_json::json!({"mode":mode,"frames":frames,"fixture":"hidden","level":3,"repeats":3,"dabs_per_stroke":DABS,
+        "fixture_hash_fnv1a":before,"vertices":doc.mesh().vertices.len(),"metrics":metrics.summary(),"memory_final":memory(),
+        "scope":"Isolated CPU release stages; excludes renderer bookkeeping, allocation destruction and GPU work. Reference checks are outside timers."});
+    std::fs::write(output, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
+}
