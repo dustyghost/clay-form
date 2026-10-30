@@ -9,6 +9,7 @@ Tickets #104 and #105 share selection and assignment conventions. The independen
 - `document::texture_library`: shared edits and history, retained-level image uses, preserving replaced images, float pixels through save/reopen, subsequent painting, and library/history memory limits.
 - `document::materials`: shared edits and usage counts, including inactive subdivision levels.
 - Existing `app::textures::tests` retain external-editor reload, conflict detection, float precision, capture and custom Paint presets.
+- The compact reference-removal regression still clicks **Remove image** without scrolling, including hidden/locked references. The Paint mode regression scrolls to each spray setting before checking it.
 - Existing GPU interaction checks: `material_controls_offscreen_review`, `uv_texture_controls_offscreen_review`, `uv_island_controls_offscreen_review`, `paint_target_scope_inspection_offscreen_review`, and `paint_palette_picker_offscreen_review`.
 
 The normal test suite runs the new non-GPU interaction tests. The full suite, formatting, lint and configured GPU checks run in PR CI. The capture below remains manual because it adds visual review, rather than a pixel-comparison oracle.
@@ -24,6 +25,8 @@ Captured with the real egui controls, clicking and scrolling the workflow rather
 - [Persistent material and colour strip, compact](appearance-strip-720x600.png): material preview/name, editable Primary and Secondary, and Swap remain visible with menus closed.
 - [Secondary colour editing, compact](primary-secondary-colours-720x600.png): explicit palette target, default colour and reset controls, while the strip stays above the pinned menu.
 - [Expanded UV appearance controls](appearance-expanded-uv-720x600.png): material and colour controls remain available in the editor sidebar.
+
+- [Reference removal with the persistent strip, compact](reference-removal-760x560.png): the selected image’s removal control remains above import controls and visible without scrolling.
 
 Reproduce the captures:
 

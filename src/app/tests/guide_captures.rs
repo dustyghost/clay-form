@@ -4098,13 +4098,14 @@ fn paint_modes_offscreen_review() {
             mode
         );
         reach_paint_control(&mut g, "Flow / second");
-        g.save(&format!("{name}-controls"));
         assert!(g.text_positions.iter().any(|(t, _)| t == "Flow / second"));
         if mode == PaintMode::Spray {
             for label in ["Dot density", "Dot size"] {
+                reach_paint_control(&mut g, label);
                 assert!(g.text_positions.iter().any(|(t, _)| t == label));
             }
         }
+        g.save(&format!("{name}-controls"));
         let rect = g.frame(vec![]).0;
         let point = rect.center();
         let before = g.app.document.mesh().uv.textures[0].pixels.clone();
