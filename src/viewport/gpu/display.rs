@@ -587,6 +587,46 @@ impl DisplayMesh {
     }
     pub(super) fn vertices(&self, stride: usize) -> Vec<f32> {
         let mut vertices = Vec::with_capacity(self.shading.vertices.len() * stride);
+        let default = crate::sculpt::Material::default();
+        let muted =
+            crate::sculpt::Material::from_srgb([130., 143., 155.].map(|v| v / 255.), 0.85, 0.);
+        for &(i, n) in &self.shading.vertices {
+            let p = self.mesh.vertices[i];
+            let material = if self.muted_vertices[i] {
+                &muted
+            } else {
+                self.mesh.materials.get(i).unwrap_or(&default)
+            };
+            let color = material.base_color;
+            let mask = if i < self.active_vertices {
+                self.mesh.mask[i]
+            } else {
+                -1.
+            };
+            vertices.extend_from_slice(&[
+                p.0,
+                p.1,
+                p.2,
+                n.0,
+                n.1,
+                n.2,
+                color[0],
+                color[1],
+                color[2],
+                mask,
+                material.roughness,
+                material.metallic,
+            ]);
+            if stride > 12 {
+                vertices.extend_from_slice(&material.values()[5..]);
+            }
+        }
+        vertices
+    }
+    // Frozen owned-material packer for byte-exact regression checks and diagnosis.
+    #[cfg(test)]
+    pub(super) fn reference_vertices(&self, stride: usize) -> Vec<f32> {
+        let mut vertices = Vec::with_capacity(self.shading.vertices.len() * stride);
         for &(i, n) in &self.shading.vertices {
             let p = self.mesh.vertices[i];
             let material = self.material(i);

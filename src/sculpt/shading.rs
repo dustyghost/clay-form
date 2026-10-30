@@ -175,8 +175,8 @@ fn finish_shading(
     normals: &[Vec3],
     angles: Option<&CornerAngles>,
 ) -> SurfaceShading {
-    let sums = accumulate_normals(mesh, &mut parents, normals, angles);
-    emit_shading(mesh, &mut parents, &sums)
+    let (sums, fan_count) = accumulate_normals(mesh, &mut parents, normals, angles);
+    emit_shading(mesh, &mut parents, &sums, fan_count)
 }
 
 fn accumulate_normals(
@@ -184,36 +184,58 @@ fn accumulate_normals(
     parents: &mut [usize],
     normals: &[Vec3],
     angles: Option<&CornerAngles>,
-) -> Vec<Vec3> {
+) -> (Vec<Vec3>, usize) {
     let mut sums = vec![Vec3::default(); parents.len()];
+    let mut fan_count = 0;
     for (face, t) in mesh.triangles.iter().enumerate() {
         // Keep exact corner weights and accumulation order, including slivers
         // and degenerate faces. Only the unchanged reference faces skip atan2.
         let weights =
             angles.map_or_else(|| corner_angles(mesh, t), |cache| cache.get(mesh, face, t));
         for (corner, angle) in weights.into_iter().enumerate() {
-            let r = root(parents, face * 3 + corner);
+            let id = face * 3 + corner;
+            let r = root(parents, id);
+            // Joining always chooses the smallest corner as root. Flatten once
+            // while accumulating; emission can reuse this table for output IDs.
+            parents[id] = r;
+            fan_count += usize::from(r == id);
             sums[r] = sums[r] + normals[face] * angle;
         }
     }
-    sums
+    (sums, fan_count)
 }
 
-fn emit_shading(mesh: &Mesh, parents: &mut [usize], sums: &[Vec3]) -> SurfaceShading {
-    let mut shading = SurfaceShading::default();
-    let mut indices = vec![usize::MAX; parents.len()];
+fn emit_shading(
+    mesh: &Mesh,
+    parents: &mut [usize],
+    sums: &[Vec3],
+    fan_count: usize,
+) -> SurfaceShading {
+    let mut shading = SurfaceShading {
+        vertices: Vec::with_capacity(fan_count),
+        triangles: Vec::with_capacity(mesh.triangles.len()),
+    };
     for (face, t) in mesh.triangles.iter().enumerate() {
         let mut triangle = [0; 3];
         for corner in 0..3 {
-            let r = root(parents, face * 3 + corner);
-            if indices[r] == usize::MAX {
-                indices[r] = shading.vertices.len();
+            let id = face * 3 + corner;
+            let r = parents[id];
+            debug_assert!(r <= id);
+            // A root is encountered before every other corner in its fan.
+            // Its slot already contains the emitted index for later corners.
+            let index = if r == id {
+                let index = shading.vertices.len();
                 shading.vertices.push((t[corner], sums[r].norm()));
-            }
-            triangle[corner] = indices[r];
+                index
+            } else {
+                parents[r]
+            };
+            parents[id] = index;
+            triangle[corner] = index;
         }
         shading.triangles.push(triangle);
     }
+    debug_assert_eq!(shading.vertices.len(), fan_count);
     shading
 }
 
@@ -286,6 +308,46 @@ mod tests {
             shading.triangles.push(triangle);
         }
         shading
+    }
+
+    #[test]
+    fn shading_fans_keep_reference_order_for_reordered_disconnected_and_empty_faces() {
+        let mut mesh = Mesh {
+            vertices: vec![
+                Vec3(9., 9., 9.),
+                Vec3(0., 0., 0.),
+                Vec3(1., 0., 0.),
+                Vec3(0., 1., 0.),
+                Vec3(0., -1., 0.),
+                Vec3(2., 0., 0.),
+                Vec3(3., 0., 0.),
+                Vec3(2., 1., 0.),
+            ],
+            triangles: vec![[1, 2, 3], [2, 1, 4], [5, 6, 7], [1, 1, 2]],
+            ..Default::default()
+        };
+        for pass in 0..6 {
+            if pass == 5 {
+                mesh.triangles.clear();
+            } else {
+                mesh.triangles.rotate_left(1);
+            }
+            let expected = reference_shading(&mesh);
+            for actual in [
+                mesh.surface_shading(),
+                SurfaceShadingTopology::new(&mesh).shade(&mesh),
+            ] {
+                assert_eq!(actual.triangles, expected.triangles);
+                assert_eq!(actual.vertices.len(), expected.vertices.len());
+                for ((i, a), (j, b)) in actual.vertices.iter().zip(&expected.vertices) {
+                    assert_eq!(i, j);
+                    assert_eq!(
+                        [a.0.to_bits(), a.1.to_bits(), a.2.to_bits()],
+                        [b.0.to_bits(), b.1.to_bits(), b.2.to_bits()]
+                    );
+                }
+            }
+        }
     }
 
     #[test]
@@ -502,11 +564,11 @@ impl SurfaceShadingTopology {
                 join_smooth_edge(&mut parents, &normals, a, x);
             }
         });
-        let sums = timed(&mut times, "shading.angle_sums", || {
+        let (sums, fan_count) = timed(&mut times, "shading.angle_sums", || {
             accumulate_normals(mesh, &mut parents, &normals, cached.then_some(&self.angles))
         });
         let shading = timed(&mut times, "shading.emit", || {
-            emit_shading(mesh, &mut parents, &sums)
+            emit_shading(mesh, &mut parents, &sums, fan_count)
         });
         (shading, times)
     }

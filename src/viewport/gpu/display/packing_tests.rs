@@ -5,9 +5,17 @@ fn assert_update(previous: &DisplayMesh, next: &DisplayMesh) -> usize {
     let stride = previous.vertex_stride();
     assert_eq!(stride, next.vertex_stride());
     let mut packed = previous.vertices(stride);
+    assert_eq!(
+        bytemuck::cast_slice::<_, u8>(&packed),
+        bytemuck::cast_slice::<_, u8>(&previous.reference_vertices(stride))
+    );
     let mut uploaded = bytemuck::cast_slice::<_, u8>(&packed).to_vec();
     // The original full packer is an independent byte-for-byte oracle.
-    let expected = next.vertices(stride);
+    let expected = next.reference_vertices(stride);
+    assert_eq!(
+        bytemuck::cast_slice::<_, u8>(&next.vertices(stride)),
+        bytemuck::cast_slice::<_, u8>(&expected)
+    );
     let expected_bytes = bytemuck::cast_slice::<_, u8>(&expected);
     let changed = uploaded
         .chunks_exact(stride * 4)

@@ -486,8 +486,9 @@ fn gpu_load_profile_vertex_packing() {
                 let prefix = format!("{kind:?}.{phase}");
                 let stride = metrics.time(&format!("{prefix}.stride"), || next.vertex_stride());
                 let (ranges, repacked_vertices) = if mode == "full" {
-                    let vertices =
-                        metrics.time(&format!("{prefix}.full_pack"), || next.vertices(stride));
+                    let vertices = metrics.time(&format!("{prefix}.full_pack"), || {
+                        next.reference_vertices(stride)
+                    });
                     let ranges = metrics.time(&format!("{prefix}.dirty_blocks"), || {
                         super::super::upload::changed_ranges(
                             bytemuck::cast_slice(&packed),

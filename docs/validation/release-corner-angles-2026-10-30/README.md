@@ -1,5 +1,7 @@
 # Reuse unchanged corner angles at hidden-surface release
 
+Follow-up: [Release upload and loop audit](../release-upload-loops-2026-10-30/README.md) measures full-packing and shading-emission improvements and records further code-level candidates.
+
 Follow-up to [in-place CPU vertex packing](../vertex-packing-2026-10-30/README.md), under #103. Comparison baseline: commit `ee281d9`. Measured source SHA-256: `3bc6563d3900a4f31ce88319263cff86f1f915f3c2c03ffd3191c4b35227df42`. The [raw GPU matrix](gpu/index.json), [complete comparison](gpu-comparison.csv), [targeted repeats](repeat/index.json) and [repeat comparison](repeat-comparison.csv) retain the evidence, including less favourable timings and memory peaks.
 
 ## Measured target and change
