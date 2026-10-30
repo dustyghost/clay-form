@@ -345,6 +345,8 @@ struct Gpu {
     vertex_write_bytes: usize,
     #[cfg(test)]
     vertex_pack_count: usize,
+    #[cfg(test)]
+    upload_trace: upload::Trace,
     /// Test accounting for index, face-colour and UV payloads, respectively.
     #[cfg(test)]
     face_write_bytes: [usize; 3],
@@ -636,6 +638,8 @@ impl Gpu {
             #[cfg(test)]
             vertex_pack_count: 0,
             #[cfg(test)]
+            upload_trace: upload::Trace::default(),
+            #[cfg(test)]
             face_write_bytes: [0; 3],
             edges: None,
             triangle_edges: None,
@@ -747,6 +751,8 @@ impl Gpu {
             self.triangle_edges = None;
         }
         self.uploaded = Some(data.clone());
+        #[cfg(test)]
+        self.upload_trace.mark("display_replace");
     }
     // A document may contain several maximum-density models. Chunk the display
     // data at the device binding limit instead of imposing a new geometry limit.
@@ -795,7 +801,11 @@ impl Gpu {
         {
             return;
         }
+        #[cfg(test)]
+        self.upload_trace.mark("texture_and_geometry_checks");
         let stride = data.vertex_stride();
+        #[cfg(test)]
+        self.upload_trace.mark("stride");
         let vertex_len = data.shading.vertices.len() * stride;
         let single = vertex_len * 4 <= limit && data.shading.triangles.len() * 48 <= limit;
         let (vertices, dirty_ranges) = if single
@@ -818,6 +828,8 @@ impl Gpu {
             }
             (data.vertices(stride), None)
         };
+        #[cfg(test)]
+        self.upload_trace.mark("vertex_pack");
         if single {
             if self.single_mesh_upload && self.mesh_binding_limit == limit {
                 let old = self.mesh_geometry.as_ref().unwrap();
@@ -849,6 +861,8 @@ impl Gpu {
                         self.vertex_write_bytes = bytes.len();
                     }
                 }
+                #[cfg(test)]
+                self.upload_trace.mark("vertex_storage");
                 if old.shading.triangles != data.shading.triangles {
                     let indices: Vec<u32> = data
                         .shading
@@ -869,6 +883,8 @@ impl Gpu {
                         self.face_write_bytes[0] = indices.len() * 4;
                     }
                 }
+                #[cfg(test)]
+                self.upload_trace.mark("index_compare_pack_write");
                 if old.poly_colors != data.poly_colors {
                     let colors: Vec<[f32; 4]> = data
                         .poly_colors
@@ -900,6 +916,8 @@ impl Gpu {
                         self.face_write_bytes[2] = data.uv_corners.len() * 48;
                     }
                 }
+                #[cfg(test)]
+                self.upload_trace.mark("face_compare_write");
                 mesh.count = (data.shading.triangles.len() * 3) as u32;
             } else {
                 let indices: Vec<u32> = data
@@ -936,6 +954,8 @@ impl Gpu {
             self.single_mesh_upload = true;
             self.mesh_geometry = Some(data.geometry.clone());
             self.packed_vertices = vertices;
+            #[cfg(test)]
+            self.upload_trace.mark("cache_replace");
             return;
         }
         self.vertex_stride = stride;

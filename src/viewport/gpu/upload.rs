@@ -483,3 +483,31 @@ mod gpu_tests {
         assert_eq!(draw(&mut gpu, &initial, false), normal);
     }
 }
+
+/// Opt-in stage timings for the manual release-upload diagnosis only.
+#[cfg(test)]
+#[derive(Default)]
+pub(super) struct Trace {
+    last: Option<std::time::Instant>,
+    samples: Vec<(&'static str, f64)>,
+}
+#[cfg(test)]
+impl Trace {
+    pub(super) fn start(&mut self) {
+        self.samples.clear();
+        self.samples.reserve(12);
+        self.last = Some(std::time::Instant::now());
+    }
+    pub(super) fn mark(&mut self, name: &'static str) {
+        if let Some(last) = &mut self.last {
+            let now = std::time::Instant::now();
+            self.samples
+                .push((name, now.duration_since(*last).as_secs_f64() * 1000.));
+            *last = now;
+        }
+    }
+    pub(super) fn stop(&mut self) -> Vec<(&'static str, f64)> {
+        self.last = None;
+        std::mem::take(&mut self.samples)
+    }
+}

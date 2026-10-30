@@ -565,3 +565,58 @@ fn gpu_load_profile_release_display() {
         "scope":"Isolated CPU release stages; excludes renderer bookkeeping, allocation destruction and GPU work. Reference checks are outside timers."});
     std::fs::write(output, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
 }
+
+#[test]
+#[ignore = "manual hardware release-upload diagnosis; excluded from routine GPU CI"]
+fn gpu_load_profile_release_upload() {
+    let output = std::env::var("CLAY_UPLOAD_PROFILE").expect("set CLAY_UPLOAD_PROFILE output path");
+    let headless = Headless::new();
+    let mut renderer = Renderer::new(&headless.state).unwrap();
+    let mut doc = document(fixture("hidden", 3));
+    let before = fingerprint(doc.mesh());
+    let mut metrics = Measurements::default();
+    let mut frames = Vec::new();
+    for trial in 0..3 {
+        for kind in [Kind::Standard, Kind::Clay, Kind::Paint] {
+            let mut live = renderer.geometry(&doc);
+            renderer.gpu.lock().unwrap().upload(&live);
+            headless.state.queue.submit([]);
+            headless.wait();
+            for step in 0..DABS {
+                doc.begin_sculpt_frame();
+                assert!(doc.apply_dab(&brush(kind), dab(step)));
+                live = renderer.geometry(&doc);
+                renderer.gpu.lock().unwrap().upload(&live);
+                headless.state.queue.submit([]);
+                headless.wait();
+            }
+            doc.end_stroke();
+            let display = renderer.geometry(&doc);
+            let mut gpu = renderer.gpu.lock().unwrap();
+            let before_vertices = gpu.packed_vertices.len() / gpu.vertex_stride;
+            gpu.upload_trace.start();
+            metrics.time(&format!("{kind:?}.cpu_upload"), || gpu.upload(&display));
+            for (stage, elapsed) in gpu.upload_trace.stop() {
+                metrics
+                    .0
+                    .entry(format!("{kind:?}.{stage}"))
+                    .or_default()
+                    .push(elapsed);
+            }
+            metrics.time(&format!("{kind:?}.submit_and_wait"), || {
+                headless.state.queue.submit([]);
+                headless.wait();
+            });
+            frames.push(serde_json::json!({"trial":trial,"brush":format!("{kind:?}"),"before_vertices":before_vertices,"after_vertices":display.shading.vertices.len(),"stride":gpu.vertex_stride,"vertex_write_bytes":gpu.vertex_write_bytes,"face_write_bytes":gpu.face_write_bytes,"packed_vertices":gpu.vertex_pack_count}));
+            drop(gpu);
+            std::hint::black_box(&live);
+            doc.undo();
+            assert_eq!(fingerprint(doc.mesh()), before);
+        }
+    }
+    let report = serde_json::json!({"fixture":"hidden","level":3,"repeats":3,"dabs_per_stroke":DABS,
+        "fixture_hash_fnv1a":before,"vertices":doc.mesh().vertices.len(),"metrics":metrics.summary(),"frames":frames,
+        "memory_final":memory(),"gpu":format!("{:?}",headless.state.adapter.get_info()),
+        "scope":"Actual upload path with opt-in CPU checkpoints and separate queue submit/completion. Excludes display construction, drawing and orbit workload."});
+    std::fs::write(output, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
+}
