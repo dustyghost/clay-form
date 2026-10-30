@@ -101,14 +101,23 @@ impl Mesh {
         direction: Option<Vec3>,
         local_rejection: bool,
     ) -> bool {
+        // Each vertex belongs to several faces. Compare its position once,
+        // then discover incident faces using the compact flags.
+        let changed: Vec<_> = before
+            .iter()
+            .zip(&self.vertices)
+            .map(|(a, b)| a != b)
+            .collect();
         let active: Vec<_> = self
             .triangles
             .iter()
-            .filter(|t| t.iter().any(|&v| before[v] != self.vertices[v]))
+            .filter(|t| t.iter().any(|&v| changed[v]))
             .copied()
             .collect();
+        #[cfg(test)]
+        super::stamp_profile::mark("guard_active_faces");
         if active.is_empty() {
-            return self.vertices.iter().zip(before).any(|(a, b)| a != b);
+            return changed.iter().any(|&v| v);
         }
         // Individually well-oriented faces can still fold back against their
         // neighbour. Check shared edges too when moving onto a reference surface.
@@ -122,11 +131,7 @@ impl Mesh {
                     if let Some(other) = edges.insert(edge, face) {
                         let first = self.triangles[other];
                         let second = self.triangles[face];
-                        if first
-                            .iter()
-                            .chain(&second)
-                            .any(|&v| before[v] != self.vertices[v])
-                        {
+                        if first.iter().chain(&second).any(|&v| changed[v]) {
                             let agreement = normal_agreement(
                                 face_normal(first.map(|v| before[v])),
                                 face_normal(second.map(|v| before[v])),
@@ -143,14 +148,21 @@ impl Mesh {
                 face_normal(self.triangles[b].map(|v| vertices[v])),
             ) >= minimum - 1e-6
         };
+        #[cfg(test)]
+        super::stamp_profile::mark("guard_pairs");
+        drop(changed);
         let mut reduce = vec![false; self.vertices.len()];
+        let mut pending = Vec::new();
         for pass in 0..if local_rejection { 20 } else { 12 } {
             let mut unsafe_face = false;
             for &t in &active {
                 if !safe_face(t.map(|v| before[v]), t.map(|v| self.vertices[v]), direction) {
                     unsafe_face = true;
                     for v in t {
-                        reduce[v] = true;
+                        if !reduce[v] {
+                            reduce[v] = true;
+                            pending.push(v);
+                        }
                     }
                 }
             }
@@ -161,27 +173,36 @@ impl Mesh {
                         .into_iter()
                         .chain(self.triangles[pair.1])
                     {
-                        reduce[v] = true;
+                        if !reduce[v] {
+                            reduce[v] = true;
+                            pending.push(v);
+                        }
                     }
                 }
             }
+            #[cfg(test)]
+            super::stamp_profile::mark("guard_checks");
             if !unsafe_face {
                 return self.vertices.iter().zip(before).any(|(a, b)| a != b);
             }
-            for (v, flag) in reduce.iter_mut().enumerate() {
-                if *flag {
-                    self.vertices[v] = if local_rejection && pass >= 8 {
-                        // A few pre-existing slivers must not cancel smoothing
-                        // everywhere else. Pin failed proposals, then recheck
-                        // neighboring faces against the resulting mixed update.
-                        before[v]
-                    } else {
-                        before[v] + (self.vertices[v] - before[v]) * 0.5
-                    };
-                    *flag = false;
-                }
+            // Reductions depend only on this vertex's old/current positions;
+            // their order cannot affect another vertex in the same pass.
+            for v in pending.drain(..) {
+                self.vertices[v] = if local_rejection && pass >= 8 {
+                    // A few pre-existing slivers must not cancel smoothing
+                    // everywhere else. Pin failed proposals, then recheck
+                    // neighboring faces against the resulting mixed update.
+                    before[v]
+                } else {
+                    before[v] + (self.vertices[v] - before[v]) * 0.5
+                };
+                reduce[v] = false;
             }
+            #[cfg(test)]
+            super::stamp_profile::mark("guard_reduce");
         }
+        #[cfg(test)]
+        super::stamp_profile::mark("guard_last_reduction");
         // Never commit an unchecked last reduction; pinning one vertex can
         // affect its neighbours. Reject a pathological dab without changing positions.
         if active
@@ -418,3 +439,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod scan_tests;

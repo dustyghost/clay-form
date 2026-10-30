@@ -327,8 +327,14 @@ impl Mesh {
         let dabs = stable_dabs.as_deref().unwrap_or(dabs);
         let mut deformed = false;
         let old = self.vertices.clone();
+        #[cfg(test)]
+        super::stamp_profile::mark("clone_positions");
         let normals = self.normals();
+        #[cfg(test)]
+        super::stamp_profile::mark("normals");
         let mut sculptable = self.sculptable_vertices();
+        #[cfg(test)]
+        super::stamp_profile::mark("eligibility");
         let polish = (b.kind == Kind::Polish)
             .then(|| self.polish_planes(b, dabs, &normals, &mut sculptable));
         let sampled = (b.kind == Kind::Clay
@@ -345,6 +351,8 @@ impl Mesh {
             .iter()
             .map(|dab| b.strength * b.dab_pressure(dab))
             .collect();
+        #[cfg(test)]
+        super::stamp_profile::mark("planes_and_brush");
         for i in 0..old.len() {
             if !sculptable[i] {
                 continue;
@@ -497,6 +505,8 @@ impl Mesh {
             self.vertices[i] = old[i] + displacement * stamp_gain;
             deformed |= self.vertices[i] != old[i];
         }
+        #[cfg(test)]
+        super::stamp_profile::mark("vertex_loop");
         if deformed {
             if b.kind == Kind::Standard
                 && dabs.len() == 1

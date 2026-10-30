@@ -105,3 +105,5 @@ python3 scripts/benchmark-capacity.py compare docs/validation/brush-loop-prepara
 ```
 
 The brush-operation probe uses the same Linux process/RSS timeout guard when launched through the capacity driver's `bounded_run` helper; the direct Cargo commands above are for the small diagnostic workloads. Default capacity comparisons cannot establish gains for multi-million-polygon meshes.
+
+The next [deformation-scan batch](../deformation-scan-2026-10-30/README.md) profiles whole-mesh phases and removes repeated position comparisons and full reduction-flag scans.

@@ -3,7 +3,7 @@ use super::*;
 use serde::Serialize;
 use std::{hint::black_box, io::Write, time::Instant};
 
-fn fingerprint(value: &impl Serialize) -> String {
+pub(super) fn fingerprint(value: &impl Serialize) -> String {
     struct Hash(u64);
     impl Write for Hash {
         fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {

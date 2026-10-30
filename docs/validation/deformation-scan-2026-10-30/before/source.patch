@@ -1,0 +1,209 @@
+diff --git a/src/sculpt/brush_loop_profile.rs b/src/sculpt/brush_loop_profile.rs
+index 4b22575..0c84b59 100644
+--- a/src/sculpt/brush_loop_profile.rs
++++ b/src/sculpt/brush_loop_profile.rs
+@@ -3,7 +3,7 @@ use super::*;
+ use serde::Serialize;
+ use std::{hint::black_box, io::Write, time::Instant};
+
+-fn fingerprint(value: &impl Serialize) -> String {
++pub(super) fn fingerprint(value: &impl Serialize) -> String {
+     struct Hash(u64);
+     impl Write for Hash {
+         fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+diff --git a/src/sculpt/deformation.rs b/src/sculpt/deformation.rs
+index 079664a..fe64b2f 100644
+--- a/src/sculpt/deformation.rs
++++ b/src/sculpt/deformation.rs
+@@ -107,6 +107,8 @@ impl Mesh {
+             .filter(|t| t.iter().any(|&v| before[v] != self.vertices[v]))
+             .copied()
+             .collect();
++        #[cfg(test)]
++        super::stamp_profile::mark("guard_active_faces");
+         if active.is_empty() {
+             return self.vertices.iter().zip(before).any(|(a, b)| a != b);
+         }
+@@ -143,6 +145,8 @@ impl Mesh {
+                 face_normal(self.triangles[b].map(|v| vertices[v])),
+             ) >= minimum - 1e-6
+         };
++        #[cfg(test)]
++        super::stamp_profile::mark("guard_pairs");
+         let mut reduce = vec![false; self.vertices.len()];
+         for pass in 0..if local_rejection { 20 } else { 12 } {
+             let mut unsafe_face = false;
+@@ -165,6 +169,8 @@ impl Mesh {
+                     }
+                 }
+             }
++            #[cfg(test)]
++            super::stamp_profile::mark("guard_checks");
+             if !unsafe_face {
+                 return self.vertices.iter().zip(before).any(|(a, b)| a != b);
+             }
+@@ -181,7 +187,11 @@ impl Mesh {
+                     *flag = false;
+                 }
+             }
++            #[cfg(test)]
++            super::stamp_profile::mark("guard_reduce");
+         }
++        #[cfg(test)]
++        super::stamp_profile::mark("guard_last_reduction");
+         // Never commit an unchecked last reduction; pinning one vertex can
+         // affect its neighbours. Reject a pathological dab without changing positions.
+         if active
+diff --git a/src/sculpt/mesh.rs b/src/sculpt/mesh.rs
+index d20574e..8b5226b 100644
+--- a/src/sculpt/mesh.rs
++++ b/src/sculpt/mesh.rs
+@@ -327,8 +327,14 @@ impl Mesh {
+         let dabs = stable_dabs.as_deref().unwrap_or(dabs);
+         let mut deformed = false;
+         let old = self.vertices.clone();
++        #[cfg(test)]
++        super::stamp_profile::mark("clone_positions");
+         let normals = self.normals();
++        #[cfg(test)]
++        super::stamp_profile::mark("normals");
+         let mut sculptable = self.sculptable_vertices();
++        #[cfg(test)]
++        super::stamp_profile::mark("eligibility");
+         let polish = (b.kind == Kind::Polish)
+             .then(|| self.polish_planes(b, dabs, &normals, &mut sculptable));
+         let sampled = (b.kind == Kind::Clay
+@@ -345,6 +351,8 @@ impl Mesh {
+             .iter()
+             .map(|dab| b.strength * b.dab_pressure(dab))
+             .collect();
++        #[cfg(test)]
++        super::stamp_profile::mark("planes_and_brush");
+         for i in 0..old.len() {
+             if !sculptable[i] {
+                 continue;
+@@ -497,6 +505,8 @@ impl Mesh {
+             self.vertices[i] = old[i] + displacement * stamp_gain;
+             deformed |= self.vertices[i] != old[i];
+         }
++        #[cfg(test)]
++        super::stamp_profile::mark("vertex_loop");
+         if deformed {
+             if b.kind == Kind::Standard
+                 && dabs.len() == 1
+diff --git a/src/sculpt/mod.rs b/src/sculpt/mod.rs
+index 09b0a51..58ddf4a 100644
+--- a/src/sculpt/mod.rs
++++ b/src/sculpt/mod.rs
+@@ -94,3 +94,6 @@ pub(crate) use relaxation::{inflated_relaxation_fixture, relaxation_fixture};
+
+ #[cfg(test)]
+ mod brush_loop_profile;
++
++#[cfg(test)]
++mod stamp_profile;
+--- /dev/null
++++ b/src/sculpt/stamp_profile.rs
+@@ -0,0 +1,102 @@
++//! Opt-in phase timings for actual sculpt proposals and safety checks.
++use super::*;
++use std::{cell::RefCell, collections::BTreeMap, time::Instant};
++
++struct Trace {
++    last: Instant,
++    stages: BTreeMap<&'static str, f64>,
++    counts: BTreeMap<&'static str, usize>,
++}
++thread_local! { static TRACE: RefCell<Option<Trace>> = const { RefCell::new(None) }; }
++pub(super) fn mark(name: &'static str) {
++    TRACE.with_borrow_mut(|trace| {
++        if let Some(trace) = trace {
++            let now = Instant::now();
++            *trace.stages.entry(name).or_default() +=
++                now.duration_since(trace.last).as_secs_f64() * 1000.;
++            *trace.counts.entry(name).or_default() += 1;
++            trace.last = now;
++        }
++    });
++}
++struct Reset;
++impl Drop for Reset {
++    fn drop(&mut self) {
++        TRACE.with_borrow_mut(|trace| *trace = None);
++    }
++}
++fn capture(f: impl FnOnce() -> bool) -> (bool, Trace) {
++    let _reset = Reset;
++    TRACE.with_borrow_mut(|trace| {
++        *trace = Some(Trace {
++            last: Instant::now(),
++            stages: BTreeMap::new(),
++            counts: BTreeMap::new(),
++        })
++    });
++    let changed = f();
++    mark("result");
++    (
++        changed,
++        TRACE.with_borrow_mut(|trace| trace.take().unwrap()),
++    )
++}
++
++#[test]
++#[ignore = "opt-in CPU stage diagnosis; no wall-clock assertion"]
++fn profile_stamp_stages() {
++    let mut geometry = Geometry::new(Mesh::starting_sphere());
++    for _ in 0..3 {
++        geometry.subdivide().unwrap();
++    }
++    let mut rows = Vec::new();
++    for hidden in [false, true] {
++        let mut base = geometry.mesh.clone();
++        if hidden {
++            base.hidden_faces = base
++                .triangles
++                .iter()
++                .map(|t| t.iter().all(|&i| base.vertices[i].0 < -0.06))
++                .collect();
++        }
++        for kind in [Kind::Standard, Kind::Clay, Kind::Grab] {
++            let mut brush = Brush::new(kind);
++            if kind == Kind::Grab {
++                brush.strength = 2.;
++            }
++            for radius in [0.18, 0.65] {
++                let dab = Dab {
++                    center: Vec3(0.03, 0.03, 1.),
++                    normal: Vec3(0., 0., 1.),
++                    right: Vec3(1., 0., 0.),
++                    up: Vec3(0., 1., 0.),
++                    radius,
++                    pressure: 0.75,
++                    delta: Vec3(0., 0., -3.),
++                    invert: false,
++                };
++                for trial in 0..6 {
++                    let mut mesh = base.clone();
++                    let start = Instant::now();
++                    let (changed, trace) = capture(|| mesh.stamp_many(&brush, &[dab]));
++                    let total_ms = start.elapsed().as_secs_f64() * 1000.;
++                    if trial > 0 {
++                        rows.push(
++                            serde_json::json!({"hidden":hidden,"kind":format!("{kind:?}"),
++                            "radius":radius,"trial":trial,"changed":changed,"total_ms":total_ms,
++                            "stages_ms":trace.stages,"stage_counts":trace.counts,
++                            "output_hash_fnv1a":super::brush_loop_profile::fingerprint(&mesh)}),
++                        );
++                    }
++                }
++            }
++        }
++    }
++    let out = serde_json::json!({"schema":1,"vertices":geometry.mesh.vertices.len(),
++        "triangles":geometry.mesh.triangles.len(),"rows":rows});
++    std::fs::write(
++        std::env::var("CLAY_STAMP_PROFILE").expect("output path"),
++        serde_json::to_vec_pretty(&out).unwrap(),
++    )
++    .unwrap();
++}

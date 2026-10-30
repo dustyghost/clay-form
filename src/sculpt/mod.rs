@@ -94,3 +94,6 @@ pub(crate) use relaxation::{inflated_relaxation_fixture, relaxation_fixture};
 
 #[cfg(test)]
 mod brush_loop_profile;
+
+#[cfg(test)]
+mod stamp_profile;
