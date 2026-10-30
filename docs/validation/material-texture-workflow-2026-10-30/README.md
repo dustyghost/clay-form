@@ -10,6 +10,7 @@ Tickets #104 and #105 share selection and assignment conventions. The independen
 - `document::materials`: shared edits and usage counts, including inactive subdivision levels.
 - Existing `app::textures::tests` retain external-editor reload, conflict detection, float precision, capture and custom Paint presets.
 - The compact reference-removal regression still clicks **Remove image** without scrolling, including hidden/locked references. The Paint mode regression scrolls to each spray setting before checking it.
+- The universal-transform regression still drags the centre pivot at 640×480; its compact toolbar omits the caption to avoid covering that handle.
 - Existing GPU interaction checks: `material_controls_offscreen_review`, `uv_texture_controls_offscreen_review`, `uv_island_controls_offscreen_review`, `paint_target_scope_inspection_offscreen_review`, and `paint_palette_picker_offscreen_review`.
 
 The normal test suite runs the new non-GPU interaction tests. The full suite, formatting, lint and configured GPU checks run in PR CI. The capture below remains manual because it adds visual review, rather than a pixel-comparison oracle.
@@ -27,6 +28,8 @@ Captured with the real egui controls, clicking and scrolling the workflow rather
 - [Expanded UV appearance controls](appearance-expanded-uv-720x600.png): material and colour controls remain available in the editor sidebar.
 
 - [Reference removal with the persistent strip, compact](reference-removal-760x560.png): the selected image’s removal control remains above import controls and visible without scrolling.
+
+- [Transform pivot access at 640×480](universal-pivot-640x480.png): compact Reset pivot / Done controls stay clear of the centre handle.
 
 Reproduce the captures:
 
