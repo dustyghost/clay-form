@@ -475,3 +475,153 @@ fn visible_release_rebuilds_exact_fans_after_sharpness_changes() {
         ));
     }
 }
+
+fn assert_live_normal_bits(display: &DisplayMesh, mesh: &Mesh) {
+    let fans = &display.stroke_topology.as_ref().unwrap().fans;
+    let expected = super::live_normals::full_normals(mesh, fans, &display.shading.vertices);
+    for (&(a, actual), &(b, expected)) in display.shading.vertices.iter().zip(&expected.vertices) {
+        assert_eq!(a, b);
+        assert_eq!(
+            [actual.0.to_bits(), actual.1.to_bits(), actual.2.to_bits()],
+            [
+                expected.0.to_bits(),
+                expected.1.to_bits(),
+                expected.2.to_bits()
+            ]
+        );
+    }
+}
+
+#[test]
+fn local_display_normals_preserve_skipped_dabs_hidden_faces_and_snapshots() {
+    for hidden in [false, true] {
+        let mut mesh = source();
+        if !hidden {
+            mesh.hidden_faces.clear();
+        }
+        let mut doc = document(mesh);
+        let mut display = Arc::new(DisplayMesh::new(&doc));
+        let topology = display.stroke_topology.as_ref().unwrap().source.clone();
+        let paint = Brush::new(Kind::Paint);
+        doc.apply_dab(&paint, dab());
+        display = Arc::new(display.during_stroke(&doc).unwrap());
+        assert!(
+            topology.normal_corners.get().is_none(),
+            "Paint must not allocate adjacency"
+        );
+        let brush = Brush::new(Kind::Standard);
+        for step in 0..5 {
+            let old_bytes = display.vertices(display.vertex_stride());
+            // Two edits before a display refresh, moving into another region.
+            for offset in [0., 0.04] {
+                let mut next = dab();
+                next.center.0 += step as f32 * 0.07 + offset;
+                assert!(doc.apply_dab(&brush, next));
+            }
+            let work = display
+                .update_live_normals(doc.mesh(), &display.stroke_topology.as_ref().unwrap().fans);
+            assert_eq!(work.local, step > 0);
+            if step > 0 {
+                assert!(work.evaluated_faces < doc.mesh().triangles.len() / 2);
+            } else {
+                assert!(topology.normal_corners.get().is_none());
+            }
+            let next = Arc::new(display.during_stroke(&doc).unwrap());
+            assert_live_normal_bits(&next, doc.mesh());
+            assert_eq!(display.vertices(display.vertex_stride()), old_bytes);
+            display = next;
+        }
+        assert!(topology.normal_corners.get().unwrap().is_some());
+        doc.end_stroke();
+        let finished = display.after_stroke(&doc).unwrap();
+        let canonical = DisplayMesh::new(&doc);
+        assert_eq!(
+            finished.vertices(finished.vertex_stride()),
+            canonical.vertices(canonical.vertex_stride())
+        );
+        assert!(Arc::ptr_eq(
+            &topology,
+            &finished.stroke_topology.as_ref().unwrap().source
+        ));
+        doc.undo();
+        assert!(finished.after_stroke(&doc).is_none());
+        doc.redo();
+        assert!(finished.after_stroke(&doc).is_some());
+    }
+}
+
+#[test]
+fn local_display_normals_reuse_adjacency_after_fans_split_and_merge() {
+    let mut mesh = source();
+    let original = mesh.clone();
+    let mut display = Arc::new(DisplayMesh::new(&document(mesh.clone())));
+    let topology = display.stroke_topology.as_ref().unwrap().source.clone();
+    let sharp = mesh
+        .vertices
+        .iter()
+        .position(|p| p.2 > 0.99 && p.0 <= 0.)
+        .unwrap();
+    let distant = mesh
+        .vertices
+        .iter()
+        .position(|p| p.2 < -0.99 && p.0 <= 0.)
+        .unwrap();
+    let boundary = mesh
+        .vertices
+        .iter()
+        .position(|p| p.2 > 0.98 && p.0 > 0.1 && p.0 < 0.15)
+        .unwrap();
+    let original_fans = display.shading.vertices.len();
+    for (height, split) in [(0.8, true), (0., false)] {
+        mesh.vertices[sharp].2 = original.vertices[sharp].2 + height;
+        let mut doc = document(mesh.clone());
+        doc.begin_stroke();
+        let first = Arc::new(display.during_stroke(&doc).unwrap());
+        assert_live_normal_bits(&first, doc.mesh());
+        // Change a face across the hidden boundary, then a distant visible face.
+        for vertex in [boundary, distant] {
+            mesh.vertices[vertex].0 += 0.0001;
+            doc = document(mesh.clone());
+            doc.begin_stroke();
+            let work = first
+                .update_live_normals(doc.mesh(), &first.stroke_topology.as_ref().unwrap().fans);
+            assert!(work.local);
+            display = Arc::new(first.during_stroke(&doc).unwrap());
+            assert_live_normal_bits(&display, doc.mesh());
+        }
+        doc.end_stroke();
+        display = display.after_stroke(&doc).unwrap();
+        assert_eq!(display.shading.vertices.len() > original_fans, split);
+        let canonical = DisplayMesh::new(&doc);
+        assert_eq!(
+            display.vertices(display.vertex_stride()),
+            canonical.vertices(canonical.vertex_stride())
+        );
+        assert!(Arc::ptr_eq(
+            &topology,
+            &display.stroke_topology.as_ref().unwrap().source
+        ));
+        assert!(topology.normal_corners.get().unwrap().is_some());
+    }
+}
+
+#[test]
+fn broad_display_deformation_preserves_full_normals_without_allocating_adjacency() {
+    let mut mesh = source();
+    let mut display = DisplayMesh::new(&document(mesh.clone()));
+    let topology = display.stroke_topology.as_ref().unwrap().source.clone();
+    for _ in 0..2 {
+        for p in &mut mesh.vertices {
+            p.0 *= 1.01;
+            p.2 += 0.02;
+        }
+        let mut doc = document(mesh.clone());
+        doc.begin_stroke();
+        let work = display
+            .update_live_normals(doc.mesh(), &display.stroke_topology.as_ref().unwrap().fans);
+        assert!(!work.local);
+        display = display.during_stroke(&doc).unwrap();
+        assert_live_normal_bits(&display, doc.mesh());
+        assert!(topology.normal_corners.get().is_none());
+    }
+}

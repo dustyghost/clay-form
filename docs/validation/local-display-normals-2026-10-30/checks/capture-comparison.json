@@ -1,0 +1,14 @@
+{
+  "visible": {
+    "parent_capture": "docs/validation/display-reuse-2026-10-30/checks/visible.png",
+    "parent_sha256": "bc8f47e79b782861d996caf987418cc31e0344cf55dfecf8b064a334e35a6380",
+    "current_sha256": "bc8f47e79b782861d996caf987418cc31e0344cf55dfecf8b064a334e35a6380",
+    "identical": true
+  },
+  "hidden": {
+    "parent_capture": "docs/validation/display-reuse-2026-10-30/checks/hidden.png",
+    "parent_sha256": "6a2fad9305165315e1840ae24a36ab740d92ee8ee00a576f1f1a0ceea7e597c3",
+    "current_sha256": "6a2fad9305165315e1840ae24a36ab740d92ee8ee00a576f1f1a0ceea7e597c3",
+    "identical": true
+  }
+}

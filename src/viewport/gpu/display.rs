@@ -4,7 +4,12 @@ use crate::{
     document::Document,
     sculpt::{Material, Mesh, SurfaceShading, SurfaceShadingTopology, Vec3},
 };
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, OnceLock},
+};
+
+mod live_normals;
 
 #[derive(Clone)]
 pub(crate) struct DisplayMesh {
@@ -40,6 +45,7 @@ struct StrokeSurfaceTopology {
     polygroups: Vec<usize>,
     group_visibility: Vec<bool>,
     shading: SurfaceShadingTopology,
+    normal_corners: OnceLock<Option<live_normals::VertexCorners>>,
 }
 impl StrokeSurfaceTopology {
     fn matches(&self, mesh: &Mesh, model_id: u64) -> bool {
@@ -237,22 +243,7 @@ impl DisplayMesh {
         stroke_profile::mark("live.display_copy");
         if self.mesh.vertices != source.vertices {
             geometry.temporary_normals = true;
-            let mut normals = vec![Vec3::default(); geometry.shading.vertices.len()];
-            for (ids, fans) in source.triangles.iter().zip(fans.iter()) {
-                let [a, b, c] = ids.map(|i| source.vertices[i]);
-                let face = (b - a).cross(c - a);
-                for &i in fans {
-                    normals[i] = normals[i] + face;
-                }
-            }
-            geometry.shading.vertices = Arc::new(
-                self.shading
-                    .vertices
-                    .iter()
-                    .zip(normals)
-                    .map(|(&(vertex, _), sum)| (vertex, sum.norm()))
-                    .collect(),
-            );
+            geometry.shading.vertices = Arc::new(self.update_live_normals(source, fans).vertices);
             geometry.depth_extent = source
                 .vertices
                 .iter()
@@ -543,6 +534,7 @@ impl DisplayMesh {
                         polygroups: surface.polygroups.clone(),
                         group_visibility: surface.vertex_groups.iter().map(|g| g.visible).collect(),
                         shading: topology,
+                        normal_corners: OnceLock::new(),
                     }),
                     fans: if has_hidden {
                         Arc::new(surface_shading.triangles)

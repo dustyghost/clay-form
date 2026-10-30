@@ -1,0 +1,14 @@
+[
+  {
+    "case": "hidden-l4",
+    "status": "measured",
+    "log": "hidden-l4.log",
+    "elapsed_seconds": 93.36942578898743,
+    "sampled_peak_rss_bytes": 2775281664,
+    "sampled_peak_swap_bytes": 0,
+    "minimum_available_bytes": 1262850048,
+    "progress": "hidden-l4.progress.json",
+    "last_stage": "complete",
+    "stage_status": "completed"
+  }
+]
