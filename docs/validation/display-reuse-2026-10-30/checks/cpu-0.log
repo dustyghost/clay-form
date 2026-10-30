@@ -1,0 +1,19 @@
+
+running 15 tests
+test viewport::gpu::display::packing_tests::vertex_packing_defaults_muted_models_and_active_masks_match_full_packing ... ok
+test viewport::gpu::display::packing_tests::vertex_packing_full_dirty_range_still_updates_later_records_and_handles_empty_data ... ok
+test viewport::gpu::display::packing_tests::vertex_packing_sparse_geometry_material_mask_and_fan_edits_match_full_packing ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_paint_matches_canonical_attributes_and_normals ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_preserves_filtered_faces_and_boundary_normals ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_rejects_visibility_group_and_topology_changes ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_release_rejects_material_only_edits_and_history ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_release_rejects_unseen_final_dab ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_release_updates_fans_for_the_next_stroke ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_supports_group_visibility_and_empty_displays ... ok
+test viewport::gpu::display::stroke_tests::visible_cache_rejects_topology_visibility_and_attribute_changes ... ok
+test viewport::gpu::display::stroke_tests::visible_release_rebuilds_exact_fans_after_sharpness_changes ... ok
+test viewport::gpu::display::stroke_tests::visible_strokes_share_immutable_payloads_and_preserve_snapshots ... ok
+test viewport::gpu::display::tests::span_cut_colors_follow_local_axes_after_rotation_and_scaling ... ok
+test viewport::gpu::display::tests::texture_update_reuses_geometry_and_unmodified_atlas_chunks ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 982 filtered out; finished in 3.87s

@@ -418,7 +418,7 @@ mod gpu_tests {
             let mut next = (*initial).clone();
             let data = Arc::make_mut(&mut next.geometry);
             match case {
-                0 => data.shading.triangles.swap(0, 1), // Same count, different indices.
+                0 => Arc::make_mut(&mut data.shading.triangles).swap(0, 1), // Same count, different indices.
                 1 => Arc::make_mut(&mut data.poly_colors)[0] = [255, 0, 0, 255],
                 2 => Arc::make_mut(&mut data.uv_corners)[0][0] = [0.1, 0.2, 1., 0.],
                 3 => {
@@ -426,9 +426,12 @@ mod gpu_tests {
                     material.emission_strength = 0.5;
                     data.mesh.materials = vec![material; data.mesh.vertices.len()];
                 }
-                4 => data.shading.vertices.push(data.shading.vertices[0]),
+                4 => {
+                    let vertex = data.shading.vertices[0];
+                    Arc::make_mut(&mut data.shading.vertices).push(vertex);
+                }
                 5 => {
-                    data.shading.triangles.clear();
+                    Arc::make_mut(&mut data.shading.triangles).clear();
                     data.mesh.triangles.clear();
                     data.mesh.quads.clear();
                     Arc::make_mut(&mut data.poly_colors).clear();

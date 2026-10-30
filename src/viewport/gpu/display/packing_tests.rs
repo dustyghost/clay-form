@@ -64,8 +64,9 @@ fn vertex_packing_sparse_geometry_material_mask_and_fan_edits_match_full_packing
             geometry.mesh.materials[b].layers[1].weight = 0.7;
             geometry.mesh.materials[b].layers[1].surface.emission = [2., 0.1, 0.2];
         }
-        geometry.shading.vertices.swap(3, 4);
-        geometry.shading.vertices[9].1 = Vec3(-0., f32::from_bits(0x7fc00001), 0.);
+        Arc::make_mut(&mut geometry.shading.vertices).swap(3, 4);
+        Arc::make_mut(&mut geometry.shading.vertices)[9].1 =
+            Vec3(-0., f32::from_bits(0x7fc00001), 0.);
         let changed = assert_update(&previous, &next);
         assert!(
             changed > 0 && changed < 10,
@@ -91,7 +92,10 @@ fn vertex_packing_defaults_muted_models_and_active_masks_match_full_packing() {
     let mut next = explicit.clone();
     let geometry = Arc::make_mut(&mut next.geometry);
     geometry.active_vertices /= 2;
-    for (i, muted) in geometry.muted_vertices.iter_mut().enumerate() {
+    for (i, muted) in Arc::make_mut(&mut geometry.muted_vertices)
+        .iter_mut()
+        .enumerate()
+    {
         *muted = i >= geometry.active_vertices;
     }
     assert!(assert_update(&explicit, &next) > 0);
@@ -106,6 +110,6 @@ fn vertex_packing_full_dirty_range_still_updates_later_records_and_handles_empty
     }
     assert_eq!(assert_update(&previous, &next), next.shading.vertices.len());
     let mut empty = previous.clone();
-    Arc::make_mut(&mut empty.geometry).shading.vertices.clear();
+    Arc::make_mut(&mut Arc::make_mut(&mut empty.geometry).shading.vertices).clear();
     assert_eq!(assert_update(&empty, &empty), 0);
 }

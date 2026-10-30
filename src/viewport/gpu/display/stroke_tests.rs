@@ -64,7 +64,7 @@ fn hidden_stroke_cache_preserves_filtered_faces_and_boundary_normals() {
     let initial = source();
     let mut doc = document(initial.clone());
     let mut display = DisplayMesh::new(&doc);
-    let topology = display.hidden_stroke_topology.as_ref().unwrap().clone();
+    let topology = display.stroke_topology.as_ref().unwrap().clone();
     let mut brush = Brush::new(Kind::Standard);
     brush.strength = 0.15;
     for _ in 0..3 {
@@ -74,7 +74,7 @@ fn hidden_stroke_cache_preserves_filtered_faces_and_boundary_normals() {
             .expect("hidden strokes must reuse topology");
         assert!(Arc::ptr_eq(
             &topology,
-            display.hidden_stroke_topology.as_ref().unwrap()
+            display.stroke_topology.as_ref().unwrap()
         ));
         assert_visible_data(&display, &DisplayMesh::new(&doc));
         // Smoothing includes both sides of the hidden boundary. Summing only
@@ -87,7 +87,7 @@ fn hidden_stroke_cache_preserves_filtered_faces_and_boundary_normals() {
                 .zip(&filtered_normals)
                 .any(|(a, b)| (*a - *b).len() > 0.01)
         );
-        for &(vertex, normal) in &display.shading.vertices {
+        for &(vertex, normal) in display.shading.vertices.iter() {
             assert!((normal - full_normals[vertex]).len() < 1e-6);
         }
     }
@@ -234,12 +234,7 @@ fn hidden_stroke_cache_release_updates_fans_for_the_next_stroke() {
     let mut mesh = source();
     let original = mesh.clone();
     let mut display = Arc::new(DisplayMesh::new(&document(mesh.clone())));
-    let topology = display
-        .hidden_stroke_topology
-        .as_ref()
-        .unwrap()
-        .source
-        .clone();
+    let topology = display.stroke_topology.as_ref().unwrap().source.clone();
     let index = mesh
         .vertices
         .iter()
@@ -262,12 +257,12 @@ fn hidden_stroke_cache_release_updates_fans_for_the_next_stroke() {
         assert_eq!(display.shading.vertices, canonical.shading.vertices);
         assert_eq!(display.shading.vertices.len() > original_fans, split);
         assert_eq!(
-            display.hidden_stroke_topology.as_ref().unwrap().fans,
+            *display.stroke_topology.as_ref().unwrap().fans,
             doc.mesh().surface_shading().triangles
         );
         assert!(Arc::ptr_eq(
             &topology,
-            &display.hidden_stroke_topology.as_ref().unwrap().source
+            &display.stroke_topology.as_ref().unwrap().source
         ));
     }
 }
@@ -326,5 +321,157 @@ fn hidden_stroke_cache_release_rejects_material_only_edits_and_history() {
         assert!(display.after_stroke(&doc).is_none());
         assert!(changed.after_stroke(&doc).is_some());
         doc.undo();
+    }
+}
+
+#[test]
+fn visible_strokes_share_immutable_payloads_and_preserve_snapshots() {
+    for kind in [Kind::Standard, Kind::Paint] {
+        let mut mesh = source();
+        mesh.hidden_faces.clear();
+        let mut doc = document(mesh);
+        let initial = Arc::new(DisplayMesh::new(&doc));
+        let original_bytes = initial.vertices(initial.vertex_stride());
+        assert!(!initial.stroke_topology.as_ref().unwrap().source.filtered);
+        assert!(Arc::ptr_eq(
+            &initial.shading.triangles,
+            &initial.stroke_topology.as_ref().unwrap().fans
+        ));
+        let mut display = initial.clone();
+        let mut brush = Brush::new(kind);
+        brush.strength = 0.15;
+        brush.set_paint_colour(false, [0.9, 0.1, 0.2]);
+        for _ in 0..3 {
+            assert!(doc.apply_dab(&brush, dab()));
+            let next = Arc::new(display.during_stroke(&doc).unwrap());
+            assert!(Arc::ptr_eq(&next.owners, &display.owners));
+            assert!(Arc::ptr_eq(&next.source_faces, &display.source_faces));
+            assert!(Arc::ptr_eq(&next.muted_vertices, &display.muted_vertices));
+            assert!(Arc::ptr_eq(&next.edge_colors, &display.edge_colors));
+            assert!(Arc::ptr_eq(&next.outlines, &display.outlines));
+            assert!(Arc::ptr_eq(
+                &next.shading.triangles,
+                &display.shading.triangles
+            ));
+            if kind == Kind::Paint {
+                assert!(Arc::ptr_eq(
+                    &next.shading.vertices,
+                    &display.shading.vertices
+                ));
+            } else {
+                assert!(!Arc::ptr_eq(
+                    &next.shading.vertices,
+                    &display.shading.vertices
+                ));
+                let normals = doc.mesh().normals();
+                for &(vertex, normal) in next.shading.vertices.iter() {
+                    assert_eq!(
+                        [normal.0.to_bits(), normal.1.to_bits(), normal.2.to_bits()],
+                        [
+                            normals[vertex].0.to_bits(),
+                            normals[vertex].1.to_bits(),
+                            normals[vertex].2.to_bits()
+                        ]
+                    );
+                }
+            }
+            assert_visible_data(&next, &DisplayMesh::new(&doc));
+            display = next;
+        }
+        doc.end_stroke();
+        let finished = display.after_stroke(&doc).unwrap();
+        let canonical = DisplayMesh::new(&doc);
+        assert_visible_data(&finished, &canonical);
+        assert_eq!(
+            finished.vertices(finished.vertex_stride()),
+            canonical.vertices(canonical.vertex_stride())
+        );
+        assert!(Arc::ptr_eq(
+            &finished.shading.triangles,
+            &finished.stroke_topology.as_ref().unwrap().fans
+        ));
+        if kind == Kind::Paint {
+            assert!(Arc::ptr_eq(&display, &finished));
+        }
+        assert_eq!(initial.vertices(initial.vertex_stride()), original_bytes);
+        doc.undo();
+        assert!(finished.after_stroke(&doc).is_none());
+        doc.redo();
+        assert!(finished.after_stroke(&doc).is_some());
+    }
+}
+
+#[test]
+fn visible_cache_rejects_topology_visibility_and_attribute_changes() {
+    let mut mesh = source();
+    mesh.hidden_faces.clear();
+    let display = Arc::new(DisplayMesh::new(&document(mesh.clone())));
+    for case in 0..7 {
+        let mut changed = mesh.clone();
+        match case {
+            0 => {
+                changed.hidden_faces = vec![false; changed.triangles.len()];
+                changed.hidden_faces[0] = true;
+            }
+            1 => changed.vertex_groups[0].visible = false,
+            2 => changed.polygroups[..2].fill(0),
+            3 => changed.triangles.swap(0, 1),
+            4 => changed.quads.swap(0, 1),
+            5 => changed.creases.push(changed.polygon_edges()[0]),
+            6 => changed.uv.seams.push(changed.polygon_edges()[0]),
+            _ => unreachable!(),
+        }
+        let mut doc = document(changed);
+        doc.begin_stroke();
+        assert!(display.during_stroke(&doc).is_none(), "live case {case}");
+        doc.end_stroke();
+        assert!(display.after_stroke(&doc).is_none(), "release case {case}");
+    }
+    for kind in [Kind::Standard, Kind::Paint, Kind::Mask] {
+        let mut doc = document(mesh.clone());
+        let brush = Brush::new(kind);
+        doc.apply_dab(&brush, dab());
+        let live = Arc::new(display.during_stroke(&doc).unwrap());
+        let mut next = dab();
+        next.center.0 -= 0.1;
+        doc.apply_dab(&brush, next);
+        doc.end_stroke();
+        assert!(live.after_stroke(&doc).is_none(), "unseen {kind:?} dab");
+    }
+}
+
+#[test]
+fn visible_release_rebuilds_exact_fans_after_sharpness_changes() {
+    let mut mesh = source();
+    mesh.hidden_faces.clear();
+    let original = mesh.clone();
+    let mut display = Arc::new(DisplayMesh::new(&document(mesh.clone())));
+    let topology = display.stroke_topology.as_ref().unwrap().source.clone();
+    let vertex = mesh
+        .vertices
+        .iter()
+        .position(|p| p.2 > 0.99 && p.0 <= 0.)
+        .unwrap();
+    let original_fans = display.shading.vertices.len();
+    for (height, split) in [(0.8, true), (0., false)] {
+        mesh.vertices[vertex].2 = original.vertices[vertex].2 + height;
+        let mut doc = document(mesh.clone());
+        doc.begin_stroke();
+        let live = display.during_stroke(&doc).unwrap();
+        let live = live.during_stroke(&doc).unwrap();
+        assert!(live.temporary_normals);
+        doc.end_stroke();
+        display = Arc::new(live).after_stroke(&doc).unwrap();
+        let canonical = DisplayMesh::new(&doc);
+        assert_visible_data(&display, &canonical);
+        assert_eq!(
+            display.vertices(display.vertex_stride()),
+            canonical.vertices(canonical.vertex_stride())
+        );
+        assert_eq!(display.shading.vertices.len() > original_fans, split);
+        assert!(Arc::ptr_eq(
+            &topology,
+            &display.stroke_topology.as_ref().unwrap().source
+        ));
     }
 }

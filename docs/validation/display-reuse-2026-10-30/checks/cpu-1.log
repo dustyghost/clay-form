@@ -1,0 +1,11 @@
+
+running 7 tests
+test sculpt::shading::tests::cached_corner_angles_match_reference_after_local_global_and_restored_edits ... ok
+test sculpt::shading::tests::cached_shading_matches_reference_across_edge_cases ... ok
+test sculpt::shading::tests::cached_shading_splits_and_merges_when_edge_crosses_sharpness_threshold ... ok
+test sculpt::shading::tests::hard_cube_edges_split_only_display_vertices ... ok
+test sculpt::shading::tests::polygroup_slicing_preserves_smooth_normals_despite_thin_cut_triangles ... ok
+test sculpt::shading::tests::shading_fans_keep_reference_order_for_reordered_disconnected_and_empty_faces ... ok
+test sculpt::shading::tests::trimmed_and_separated_caps_do_not_pull_wall_normals_into_the_cap ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 990 filtered out; finished in 0.16s

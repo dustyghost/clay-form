@@ -1,0 +1,5 @@
+
+running 1 test
+test viewport::gpu::profile::capacity::gpu_load_profile_display_stages ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 996 filtered out; finished in 24.57s

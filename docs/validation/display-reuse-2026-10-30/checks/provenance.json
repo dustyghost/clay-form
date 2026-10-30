@@ -1,0 +1,7 @@
+{
+  "baseline_revision": "81d8c2e5c7cfebe1d87e1efab24279d08114d946",
+  "baseline_source_sha256": "bf1e3f026ef8588e2d0e9f5de863bfc40a4f888917fc16d033f65bf91b178f8f",
+  "final_source_sha256": "5718385845609a2f3d44db0c9541a0a53e5f1b8ac0b3dffe8b2aa29405343159",
+  "baseline_patch_applies": true,
+  "all_measurement_source_hashes_match": true
+}

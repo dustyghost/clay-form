@@ -247,7 +247,7 @@ impl Scene {
         if renderer.is_none() {
             let lighting = crate::lighting::Lighting::current(painter.ctx());
             let mut rendered = egui::Mesh::default();
-            for &(i, normal) in &geometry.shading.vertices {
+            for &(i, normal) in geometry.shading.vertices.iter() {
                 let v = mesh.vertices[i];
                 let mask = if i < active_vertices {
                     1. - mesh.mask[i] * 0.75
@@ -428,7 +428,7 @@ impl Scene {
                 render_geometry,
             );
         }
-        for edge in outlines {
+        for edge in outlines.iter() {
             if let Some(line) = self.clip_segment(edge.map(|i| mesh.vertices[i])) {
                 painter.line_segment(
                     line,

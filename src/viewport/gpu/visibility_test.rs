@@ -67,6 +67,16 @@ fn gpu_visibility_hide_split_and_undo() {
 #[test]
 #[ignore = "requires Vulkan; checks dense hidden-surface stroke pixels, picking and history"]
 fn gpu_hidden_stroke_cache_pixels_picking_and_history() {
+    check_stroke_cache_pixels_picking_and_history(true);
+}
+
+#[test]
+#[ignore = "requires Vulkan; checks dense visible-surface stroke pixels, picking and history"]
+fn gpu_visible_stroke_cache_pixels_picking_and_history() {
+    check_stroke_cache_pixels_picking_and_history(false);
+}
+
+fn check_stroke_cache_pixels_picking_and_history(hidden: bool) {
     use crate::sculpt::{Brush, Dab, Geometry, Kind, Material, Mesh};
     fn draw(renderer: &Renderer, display: &Arc<DisplayMesh>, wire: bool) -> Vec<u8> {
         let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(256.));
@@ -103,7 +113,7 @@ fn gpu_hidden_stroke_cache_pixels_picking_and_history() {
         mesh.hidden_faces = mesh
             .triangles
             .iter()
-            .map(|t| t.iter().all(|&i| mesh.vertices[i].0 > 0.1))
+            .map(|t| hidden && t.iter().all(|&i| mesh.vertices[i].0 > 0.1))
             .collect();
         mesh.mask = mesh
             .vertices
@@ -138,15 +148,16 @@ fn gpu_hidden_stroke_cache_pixels_picking_and_history() {
             live = renderer.geometry(&doc);
             assert!(
                 renderer.live_display,
-                "dense hidden geometry must take the cached path"
+                "dense geometry must take the cached path"
             );
         }
         let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(256.));
         let scene = Scene::from_geometry(rect, &Camera::default(), live.clone(), false);
         assert!(scene.pick(egui::pos2(100., 128.)).is_some());
-        assert!(
+        assert_eq!(
             scene.pick(egui::pos2(190., 128.)).is_none(),
-            "hidden faces must not become pickable"
+            hidden,
+            "picking must follow face visibility"
         );
         assert_eq!(scene.pick_polygroup(egui::pos2(100., 128.), &doc), Some(1));
         let canonical = Arc::new(DisplayMesh::new(&doc));
@@ -209,23 +220,29 @@ fn gpu_hidden_stroke_cache_pixels_picking_and_history() {
         doc.redo();
         let redone = renderer.geometry(&doc);
         assert_eq!(draw(&renderer, &redone, false), after);
-        doc.show_all_faces().unwrap();
-        let all = renderer.geometry(&doc);
-        assert_eq!(all.mesh.triangles.len(), doc.mesh().triangles.len());
-        let scene = Scene::from_geometry(rect, &Camera::default(), all.clone(), false);
-        assert!(scene.pick(egui::pos2(190., 128.)).is_some());
-        let shown = draw(&renderer, &all, false);
-        assert_ne!(
-            &shown[(128 * 256 + 190) * 4..(128 * 256 + 190) * 4 + 4],
-            &background
-        );
-        doc.undo();
-        let hidden = renderer.geometry(&doc);
-        assert_eq!(draw(&renderer, &hidden, false), after);
+        if hidden {
+            doc.show_all_faces().unwrap();
+            let all = renderer.geometry(&doc);
+            assert_eq!(all.mesh.triangles.len(), doc.mesh().triangles.len());
+            let scene = Scene::from_geometry(rect, &Camera::default(), all.clone(), false);
+            assert!(scene.pick(egui::pos2(190., 128.)).is_some());
+            let shown = draw(&renderer, &all, false);
+            assert_ne!(
+                &shown[(128 * 256 + 190) * 4..(128 * 256 + 190) * 4 + 4],
+                &background
+            );
+            doc.undo();
+            let hidden = renderer.geometry(&doc);
+            assert_eq!(draw(&renderer, &hidden, false), after);
+        }
         rows.push([before, live_pixels, after, undone]);
         renderer.destroy();
     }
-    if let Ok(path) = std::env::var("CLAY_HIDDEN_STROKE_PREVIEW") {
+    if let Ok(path) = std::env::var(if hidden {
+        "CLAY_HIDDEN_STROKE_PREVIEW"
+    } else {
+        "CLAY_VISIBLE_STROKE_PREVIEW"
+    }) {
         let mut pixels = Vec::new();
         for row in rows {
             for y in (0..256).rev() {

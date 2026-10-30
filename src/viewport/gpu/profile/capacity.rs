@@ -730,3 +730,58 @@ fn gpu_load_profile_release_upload() {
         "scope":"Actual upload path with opt-in CPU checkpoints and separate queue submit/completion. Excludes display construction, drawing and orbit workload."});
     std::fs::write(output, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
 }
+
+/// Actual display code, with phase tracing disabled outside this probe.
+#[test]
+#[ignore = "manual display phase diagnosis; excluded from routine GPU CI"]
+fn gpu_load_profile_display_stages() {
+    let output = std::env::var("CLAY_DISPLAY_PROFILE").expect("output path");
+    let level = env_limit("CLAY_DISPLAY_LEVEL", 3);
+    let capacity = benchmark_capacity(level, 2_000_000, 4_000_000).unwrap();
+    crate::sculpt::capacity::initialize(capacity).unwrap();
+    let mut rows = Vec::new();
+    for name in ["sphere", "organic", "hidden"] {
+        let mut doc = document(fixture(name, level));
+        for trial in 0..3 {
+            for kind in [Kind::Standard, Kind::Paint] {
+                let mut display = Arc::new(DisplayMesh::new(&doc));
+                for step in 0..4 {
+                    assert!(doc.apply_dab(&brush(kind), dab(step)));
+                    let start = Instant::now();
+                    let (next, stages) = super::super::display::stroke_profile::capture(|| {
+                        display.during_stroke(&doc).unwrap()
+                    });
+                    let total = start.elapsed().as_secs_f64() * 1000.;
+                    display = Arc::new(next);
+                    rows.push(serde_json::json!({"fixture":name,"trial":trial,"brush":format!("{kind:?}"),"phase":"live","step":step,"total_ms":total,"stages_ms":stages}));
+                }
+                doc.end_stroke();
+                let start = Instant::now();
+                let (next, stages) = super::super::display::stroke_profile::capture(|| {
+                    finish_display(&display, &doc, true)
+                });
+                let total = start.elapsed().as_secs_f64() * 1000.;
+                // Reference work is outside the timers and after the live snapshot is dropped.
+                drop(display);
+                let canonical = DisplayMesh::new(&doc);
+                assert_eq!(
+                    next.vertices(next.vertex_stride()),
+                    canonical.vertices(canonical.vertex_stride())
+                );
+                assert_eq!(next.shading.triangles, canonical.shading.triangles);
+                rows.push(serde_json::json!({"fixture":name,"trial":trial,"brush":format!("{kind:?}"),"phase":"release","total_ms":total,"stages_ms":stages,"output_hash_fnv1a":fingerprint(doc.mesh())}));
+                drop(canonical);
+                drop(next);
+                doc.undo();
+            }
+        }
+    }
+    std::fs::write(
+        output,
+        serde_json::to_vec_pretty(
+            &serde_json::json!({"level":level,"rows":rows,"memory_final":memory()}),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+}
