@@ -1,26 +1,41 @@
 use super::*;
 use crate::sculpt::material::layers::Asset;
 impl Document {
+    /// Assignment always addresses this model's vertex material, regardless of the paint target.
+    pub(crate) fn assign_model_material(
+        &mut self,
+        material: crate::sculpt::Material,
+    ) -> Result<(), String> {
+        material.validate()?;
+        self.require_sculpt_mesh()?;
+        let mut brush = Brush::new(Kind::Paint);
+        brush.material = material;
+        self.edit_group_meshes("Assign model material", |mesh| {
+            mesh.fill_all_material(&brush);
+            Ok(())
+        })
+    }
+
     pub fn materials(&self) -> &[Asset] {
         &self.geometry.scene.materials
     }
-    /// Count active-resolution painted users; retained levels are updated as well.
+    /// Count all affected stored vertices, including inactive subdivision levels.
     pub(crate) fn material_usage(&self, id: u64) -> (usize, usize) {
         let mut models = 0;
         let mut vertices = 0;
         for index in 0..self.model_count() {
-            let count =
-                self.model(index)
-                    .unwrap()
-                    .mesh
-                    .materials
-                    .iter()
-                    .filter(|material| {
-                        material.links.iter().any(|link| {
-                            link.id == id && link.weights.iter().any(|weight| *weight > 0.)
-                        })
-                    })
-                    .count();
+            let model = self.model(index).unwrap();
+            let count = std::iter::once(model.mesh)
+                .chain(&model.settings.lower)
+                .chain(&model.settings.upper)
+                .flat_map(|mesh| &mesh.materials)
+                .filter(|material| {
+                    material
+                        .links
+                        .iter()
+                        .any(|link| link.id == id && link.weights.iter().any(|weight| *weight > 0.))
+                })
+                .count();
             models += usize::from(count > 0);
             vertices += count;
         }
@@ -167,6 +182,16 @@ mod tests {
         assert_eq!(document.material_usage(42), (2, count * 2));
         document.geometry.mesh.materials[0] = material.unlinked();
         assert_eq!(document.material_usage(42), (2, count * 2 - 1));
+    }
+
+    #[test]
+    fn shared_scope_includes_materials_used_only_in_retained_levels() {
+        let mut document = Document::default();
+        let mut retained = document.mesh().clone();
+        retained.materials = vec![Material::default().with_link(42); retained.vertices.len()];
+        let count = retained.vertices.len();
+        document.geometry.settings.upper.push(retained);
+        assert_eq!(document.material_usage(42), (1, count));
     }
 
     #[test]

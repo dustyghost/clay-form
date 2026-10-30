@@ -12,8 +12,8 @@ Paint colours, roughness and metallic effects onto the model, then adjust shared
 To begin:
 
 1. Convert a parametric primitive to a sculpt mesh if needed.
-2. Choose **Paint** in the brush library. In an older project without a Paint preset, choose **Add brush → Paint**.
-3. Choose a colour or material using the controls below, then make a short test stroke.
+2. Open **Materials** or **Colours** in the toolbar; you can keep your sculpting brush selected. The **Paint input preset** names the preset whose future strokes you are configuring.
+3. Select a material, then use **Assign material to model** only when you want to replace the active model’s vertex appearance. Or choose **Paint with these inputs** to make a local stroke.
 
 The stroke changes the surface appearance without moving the geometry. Use Undo to remove it.
 
@@ -23,9 +23,23 @@ Choose **Focus Paint workspace** to keep one painting sidebar and give the model
 
 In **Brush settings**, the Paint target shows the active model and whether strokes update **Vertices** or an image. Image targets show their dimensions and precision, including **32-bit float**, independently of export format. **Set up texture painting…** creates an image workflow; **UV / image view** opens the linked UV editor. Switching to a model without the selected image returns the target to Vertices.
 
-Use **Brush colour**, the palette and **Sample colour** for future strokes. These controls do not recolour existing paint or edit a shared material. Image painting currently exposes base colour only; roughness and metallic remain available as vertex material properties. With Vertices selected, **Paint channels** offers **Whole material**, **Colour only**, **Roughness only** or **Metallic only**.
+Use **Colours → Stroke colour**, the palette and **Sample colour** for future strokes. These controls do not recolour existing paint or edit a shared material. Image painting currently exposes base colour only; roughness and metallic remain available as vertex material properties. With Vertices selected, **Paint channels** offers **Whole material**, **Colour only**, **Roughness only** or **Metallic only**.
 
-Open **Material presets and shared editor** to choose a rendered material swatch. Drag **Drag to resize materials** to change the swatch area; larger libraries scroll within it. Choosing a material affects future strokes. Open **Edit shared project material** deliberately when you want to update existing painted uses; it shows how many models and vertices share that definition.
+Open **Materials** to choose a rendered material swatch. Drag **Drag to resize materials** to change the swatch area; larger libraries scroll within it. Choosing a material affects future strokes. Open **Edit shared project material** deliberately when you want to update existing painted uses; it shows how many models and vertices share that definition.
+
+**Materials**, **Colours** and **Textures** have their own toolbar menus. Materials and Colours can be pinned or docked into a workspace. Their open actions, and **Texture library…** / **UV layout…**, are available in custom menus and shortcut settings.
+
+There is one set of stroke inputs per Paint preset. The independent menus edit that preset directly; the Paint panel displays the same values. Switching Paint presets deliberately recalls that preset’s own material, colour, HDR values and channel settings. Choosing an ordinary colour detaches that preset’s material link without changing any shared project definition. No extra global override is applied to old presets.
+
+**New project material** creates a named definition. **Assign material to model** applies the whole selected material to all vertices and stored subdivision levels of the named active model, even when the current paint destination is an image. It preserves texture pixels and UVs; an opaque assigned image can still cover the material’s base colour. This is distinct from Paint’s target-dependent Fill commands.
+
+### Try the complete workflow
+
+1. Keep a sculpting brush active. Open **Materials**, choose Copper or create a **New project material**, and explicitly **Assign material to model**.
+2. Open **Colours**, select a palette colour, and check that the model has not changed. Choose **Paint with these inputs**, select **Vertices**, and make a stroke. Undo restores that stroke.
+3. Open **Textures → Open texture library**. Create/import a colour image, generate UVs if prompted, **Assign selected to model**, then **Paint assigned image**. The Paint panel names the image receiving pixels.
+4. Reopen Materials, choose the material used on the model, and expand **Edit shared project material**. Read the model/vertex usage count before changing shared settings. Undo restores the definition and all its painted uses. Changing a shared material does not repaint texture pixels.
+5. Save `.clay`, reopen it, and inspect the project material, library images and model assignment. The personal palette remains in preferences; project appearance and image edits use project Undo.
 
 New models start with a teal sculpting material (roughness 0.53, metallic 0). The warm Matte clay preset remains available in the material library. **View → Show vertex group colors** starts off so the material is visible; enable it when you want to inspect group colours.
 
@@ -51,7 +65,7 @@ Project material edits, copies and resets stay in the `.clay` project and suppor
 
 Click a palette swatch to select a brush colour. **+ Colour** opens a picker: choose a colour, then **Add colour** to save it to your personal palette and select it for painting. **Cancel** discards the choice. Right-click a swatch to remove it. **Sample colour** picks the visible surface's colour, including image paint, without lighting, mask shading or vertex-group tint. It samples once; **Escape** cancels.
 
-**Application** chooses Regular stroke, Airbrush or Spray dots, while **Stroke path** controls Freehand, Line or stamps. Continuous **Flow / second** is available for Freehand; hold the pen still to build up paint. Spray offers density and dot size as a percentage of brush radius. Use **Inspect** to switch between Lit material, Unlit colour, Roughness, Metallic and UV checker without editing paint.
+**Application** chooses Regular stroke, Airbrush or Spray dots, while **Stroke path** controls Freehand, Line or stamps. Continuous **Flow / second** is available for Freehand; hold the pen still to build up paint. Spray offers density and dot size as a percentage of brush radius. Use **Inspect** to switch between Lit material, Unlit colour and UV checker without editing paint.
 
 ![Paint brush settings and copper example](../images/material-copper.png)
 

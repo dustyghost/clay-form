@@ -9,6 +9,7 @@ use crate::{
 use eframe::egui::{self, Color32, Sense, Vec2};
 mod about;
 pub(crate) mod alphas;
+mod appearance;
 mod design;
 mod material;
 mod startup;
@@ -98,6 +99,7 @@ pub(crate) struct UiState {
     pub alpha_path: String,
     pub alphas: alphas::AlphaControls,
     pub materials: material::MaterialControls,
+    pub appearance_brush: Option<String>,
     pub light_controls: crate::lighting::LightControls,
     pub export_busy: bool,
     pub status: String,
@@ -184,6 +186,7 @@ impl Default for UiState {
             alpha_path: String::new(),
             alphas: Default::default(),
             materials: Default::default(),
+            appearance_brush: None,
             light_controls: Default::default(),
             export_busy: false,
             status: "Ready • Drag clay to sculpt; Alt-drag empty space to pan; Shift smooths"
@@ -275,6 +278,7 @@ impl UiState {
             .is_some_and(|b| b.kind == Kind::Paint)
         {
             self.show_polygroups = false;
+            self.appearance_brush = Some(document.brushes()[index].identity());
         }
         // Remember both the preset being left and a newly chosen Smooth variation.
         for i in [self.selected, index] {
@@ -304,8 +308,11 @@ impl UiState {
             ui.spacing_mut().item_spacing = Vec2::new(6., 5.);
             ui.horizontal_wrapped(|ui| {
                 ui.strong("CLAY FORM");
-                if ui.button("UVs / Textures").clicked() {
-                    self.uv.open = !self.uv.open;
+                self.builtin_menu(ui, BuiltinMenu::Materials, document, camera, &mut commands);
+                self.builtin_menu(ui, BuiltinMenu::Colours, document, camera, &mut commands);
+                self.builtin_menu(ui, BuiltinMenu::Textures, document, camera, &mut commands);
+                if ui.button("UV layout").customize(Action::OpenUv).clicked() {
+                    commands.push(Command::Action(Action::OpenUv));
                 }
                 if let Some(channel) = document.texture_paint {
                     ui.label(format!("Texture: {}", channel.label()));
@@ -1078,18 +1085,6 @@ impl UiState {
                 design::checkbox(ui, &mut b.pressure, "Pressure → strength");
                 design::checkbox(ui, &mut b.pressure_radius, "Pressure → radius");
                 ui.add(egui::Slider::new(&mut b.pressure_curve, 0.1..=4.).text("Pressure curve"));
-                if b.kind == Kind::Paint {
-                    ui.separator();
-                    ui.collapsing("Material presets and shared editor", |ui| {
-                        self.materials.show(
-                            ui,
-                            b,
-                            &mut self.preferences.materials,
-                            document,
-                            commands,
-                        );
-                    });
-                }
             }
             Tool::Alpha => {
                 self.alpha_panel(ui, document, selected, b, commands);

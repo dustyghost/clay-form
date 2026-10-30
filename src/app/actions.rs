@@ -10,6 +10,36 @@ impl App {
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         let active_brush = self.ui.brush_index_for_context(&self.document, ctx);
         let command = match action {
+            Action::OpenMaterials | Action::OpenColours => {
+                let menu = if action == Action::OpenMaterials {
+                    crate::preferences::BuiltinMenu::Materials
+                } else {
+                    crate::preferences::BuiltinMenu::Colours
+                };
+                if let Some(section) = self
+                    .ui
+                    .preferences
+                    .menu_sections
+                    .iter_mut()
+                    .find(|s| s.menu == menu)
+                {
+                    section.open = true;
+                } else if !self
+                    .ui
+                    .preferences
+                    .pinned_menus
+                    .iter()
+                    .any(|p| p.menu == menu)
+                {
+                    self.ui.preferences.pin_menu(menu, [30., 110.]);
+                }
+                None
+            }
+            Action::OpenTextures | Action::OpenUv => {
+                self.ui.uv.open = true;
+                self.ui.uv.texture_tab = action == Action::OpenTextures;
+                None
+            }
             Action::TemporaryMaskBrush
             | Action::TemporaryMaskLasso
             | Action::TemporaryMaskLine

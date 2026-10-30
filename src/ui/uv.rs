@@ -1,9 +1,23 @@
 use super::*;
 mod interaction;
+mod library;
 #[cfg(test)]
 mod tests;
 #[derive(Default)]
 pub(crate) struct UvControls {
+    pub asset_selected: Option<u64>,
+    pub asset_export_pending: Option<(u64, String)>,
+    asset_export_path: String,
+    asset_model: Option<(usize, u64)>,
+    asset_assignment: Option<(usize, u64, Option<u64>)>,
+    asset_name: String,
+    asset_name_id: Option<u64>,
+    asset_name_source: String,
+    asset_new_name: String,
+    asset_transparent: bool,
+    asset_delete: Option<u64>,
+    asset_replace: Option<u64>,
+    asset_previews: std::collections::HashMap<u64, ((usize, u64), egui::TextureHandle)>,
     islands: Vec<Vec<usize>>,
     expanded: bool,
     status_at_expand: String,
@@ -12,7 +26,7 @@ pub(crate) struct UvControls {
     drag: Option<interaction::Drag>,
     report: crate::sculpt::uv::Report,
     stretch: bool,
-    pub(super) texture_tab: bool,
+    pub texture_tab: bool,
     pub channel: crate::sculpt::texture::Channel,
     pub image_path: String,
     pub export_overwrite: Option<String>,
@@ -31,7 +45,7 @@ pub(crate) struct UvControls {
     geometry_hash: Option<u64>,
     size: u32,
     precision: crate::sculpt::texture::Precision,
-    export_path: String,
+    pub(super) export_path: String,
     pub open: bool,
     pub checker: bool,
     pub exposure: f32,
@@ -41,6 +55,46 @@ pub(crate) struct UvControls {
     scale: f32,
     angle: f32,
     revision: Option<u64>,
+}
+impl UvControls {
+    fn sync_asset_context(&mut self, document: &Document) {
+        let model = document.model(document.active_model_index()).unwrap();
+        let assigned = model
+            .mesh
+            .uv
+            .textures
+            .iter()
+            .find(|t| t.channel == crate::sculpt::texture::Channel::Color);
+        let model_key = (document.active_model_index(), model.metadata.model_id);
+        let assignment_key = (model_key.0, model_key.1, assigned.map(|t| t.id));
+        if self.asset_assignment != Some(assignment_key) {
+            self.asset_assignment = Some(assignment_key);
+            self.reload_conflict = false;
+            self.bake_replace = None;
+            self.export_overwrite = None;
+        }
+        if self.asset_model != Some(model_key) {
+            if self.asset_model.is_some() || self.asset_selected.is_none() {
+                self.asset_selected = assigned.map(|t| t.id);
+            }
+            self.asset_model = Some(model_key);
+            self.asset_replace = None;
+            self.asset_delete = None;
+        }
+    }
+    pub(crate) fn select_asset(&mut self, document: &Document, id: u64) {
+        self.asset_selected = Some(id);
+        self.asset_model = Some((
+            document.active_model_index(),
+            document
+                .model(document.active_model_index())
+                .unwrap()
+                .metadata
+                .model_id,
+        ));
+        self.asset_replace = None;
+        self.asset_delete = None;
+    }
 }
 impl UiState {
     pub(crate) fn uv_window(
@@ -53,6 +107,7 @@ impl UiState {
         if !self.uv.open {
             return commands;
         }
+        self.uv.sync_asset_context(document);
         // Colour is the editable image workflow; retained scalar assets still render/export.
         if self.uv.channel != crate::sculpt::texture::Channel::Color {
             self.uv.channel = crate::sculpt::texture::Channel::Color;
@@ -94,17 +149,21 @@ impl UiState {
             return commands;
         }
         let mut open = true;
-        egui::Window::new("UVs and textures")
-            .id(egui::Id::new("uv_editor"))
-            .open(&mut open)
-            .default_width(480.)
-            .default_pos(egui::pos2(20., 110.))
-            .default_height(800.)
-            .max_height((ctx.content_rect().height() - 140.).max(200.))
-            .vscroll(true)
-            .show(ctx, |ui| {
-                self.uv_contents(ui, document, model_faces, &mut commands)
-            });
+        egui::Window::new(if self.uv.texture_tab {
+            "Texture library"
+        } else {
+            "UV layout"
+        })
+        .id(egui::Id::new("uv_editor"))
+        .open(&mut open)
+        .default_width(480.)
+        .default_pos(egui::pos2(20., 110.))
+        .default_height(800.)
+        .max_height((ctx.content_rect().height() - 140.).max(200.))
+        .vscroll(true)
+        .show(ctx, |ui| {
+            self.uv_contents(ui, document, model_faces, &mut commands)
+        });
         if !open {
             self.uv.drag = None;
         }
@@ -125,6 +184,10 @@ impl UiState {
         if self.uv.texture_tab {
             ui.scope(|ui| self.texture_controls(ui, document, commands));
         }
+        if self.uv.texture_tab {
+            ui.separator();
+            ui.strong("Assigned image / UV preview");
+        }
         ui.add_enabled_ui(!self.mesh_busy && self.pending.is_none(), |ui| {
             self.uv_layout(ui, document, model_faces, commands)
         });
@@ -132,7 +195,7 @@ impl UiState {
     fn uv_header(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             ui.selectable_value(&mut self.uv.texture_tab, false, "UV layout");
-            ui.selectable_value(&mut self.uv.texture_tab, true, "Texture images");
+            ui.selectable_value(&mut self.uv.texture_tab, true, "Texture library");
             if ui
                 .button(if self.uv.expanded {
                     "Restore window"
@@ -235,6 +298,11 @@ impl UiState {
         document: &Document,
         commands: &mut Vec<Command>,
     ) {
+        egui::CollapsingHeader::new("Project image library")
+            .default_open(true)
+            .show(ui, |ui| {
+                self.texture_library_controls(ui, document, commands);
+            });
         let uv = &document.mesh().uv;
 
         use crate::app::textures::TextureCommand as T;
@@ -264,16 +332,17 @@ impl UiState {
                 commands.push(Command::Texture(retry));
             }
         }
-        ui.strong("Base colour texture");
+        ui.separator();
+        ui.strong("Active model image workflow");
         if self.uv.size == 0 {
             self.uv.size = 512;
         }
         let has_image = uv.textures.iter().any(|t| t.channel == self.uv.channel);
-        egui::CollapsingHeader::new("New texture / import")
+        egui::CollapsingHeader::new("Create from model surface")
             .id_salt(("new_texture", has_image))
             .default_open(!has_image)
             .show(ui, |ui| {
-                ui.label("New texture");
+                ui.label("Create an image and assign it to the active model");
                 egui::ComboBox::from_id_salt("texture_start")
                     .selected_text(match self.uv.initial {
                         TextureStart::Surface => "Use existing surface / vertex colour",
@@ -328,7 +397,7 @@ impl UiState {
                             );
                         });
                     if ui
-                        .add_enabled(can_create, egui::Button::new("Create texture"))
+                        .add_enabled(can_create, egui::Button::new("Create and assign image"))
                         .clicked()
                     {
                         commands.push(Command::Texture(T::Start(
@@ -349,18 +418,15 @@ impl UiState {
                             self.uv.precision,
                         )));
                     }
-                    if ui.button("Import PNG / JPEG / EXR…").clicked() {
-                        commands.push(Command::BrowseAsset(crate::command::AssetKind::Texture));
-                    }
                 });
             });
         ui.separator();
         ui.collapsing("Capture colour to texture", |ui| {
             ui.checkbox(&mut self.uv.bake_override, "Override colour image size and precision");
             ui.weak(if self.uv.bake_override {
-                "Capture uses the size and precision in New texture / import."
+                "Capture uses the size and precision in Create / import image."
             } else {
-                "Capture keeps the current colour image's size and precision. New images use New texture / import settings."
+                "Capture keeps the current colour image's size and precision. New images use Create / import image settings."
             });
             if ui.add_enabled(ready && !self.uv.exchange_busy, egui::Button::new("Capture vertex colour")).clicked() {
                 if uv.textures.iter().any(|texture| texture.channel == Channel::Color) {
@@ -425,11 +491,11 @@ impl UiState {
                 if ui.button("Make independent").clicked() {
                     commands.push(Command::Texture(T::Copy(self.uv.channel)));
                 }
-                if ui.button("Remove texture").clicked() {
+                if ui.button("Unassign from model").clicked() {
                     commands.push(Command::Texture(T::Remove(self.uv.channel)));
                 }
             });
-            ui.label("Images are shared by duplicated models. Make independent to edit only this model. Overlapping UVs share pixels.");
+            ui.label("Unassign keeps the pixels in the library. Make independent copies this model’s image; shared models keep the original. Overlapping UVs share pixels.");
             ui.weak("Paint on model returns to the 3D view. Strokes there update this image; this canvas previews the texture.");
             ui.horizontal_wrapped(|ui| {
                 ui.label("PNG / EXR export");
@@ -454,6 +520,9 @@ impl UiState {
                 });
             }
             ui.collapsing("External painting", |ui| {
+            ui.label(format!("Assigned image: {}", texture.name));
+            let users = document.texture_users(texture.id);
+            ui.weak(format!("Reload updates {} shared model uses: {}", users.len(), users.join(", ")));
             egui::ComboBox::from_id_salt("paint_working_format")
                 .selected_text(match self.uv.working_format { WorkingFormat::Auto => "Automatic working format", WorkingFormat::Psd => "PSD", WorkingFormat::Xcf => "XCF (GIMP)" })
                 .show_ui(ui, |ui| {

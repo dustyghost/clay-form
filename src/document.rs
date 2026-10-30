@@ -28,6 +28,7 @@ mod scene;
 mod stroke;
 #[cfg(test)]
 mod tests;
+mod texture_library;
 mod thickness;
 mod transform;
 mod uv;

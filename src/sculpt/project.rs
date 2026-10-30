@@ -94,6 +94,9 @@ impl ModelMetadata {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SceneSettings {
+    /// Images retained independently of model assignments. Live uses take precedence.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub texture_library: Vec<super::texture::Texture>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub materials: Vec<super::material::layers::Asset>,
     pub active_index: usize,
@@ -148,8 +151,9 @@ pub struct Project {
 impl Project {
     pub const VERSION: u32 = 3;
     pub fn validate(&self) -> Result<(), String> {
-        super::texture::validate_budget(
+        super::texture::validate_library(
             std::iter::once(&self.mesh).chain(self.submodels.iter().map(|m| &m.mesh)),
+            &self.scene.texture_library,
         )?;
         super::paths::validate_library(&self.paths)?;
         super::material::layers::validate_assets(&self.scene.materials)?;

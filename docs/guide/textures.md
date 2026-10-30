@@ -10,7 +10,7 @@ UVs lay out a model's surface on a flat image so you can paint details independe
 - [Edit in an external paint app](#edit-in-an-external-paint-app)
 - [Export to another 3D application](#export-to-maya-cinema-4d-and-other-dccs)
 
-Open **UVs / Textures** in the toolbar. Convert a parametric primitive to a sculpt mesh before editing UVs. The window has **UV layout** and **Texture images** tabs, with scrolling for small windows.
+Open **Textures → Open texture library** to manage images independently of Paint. Open **UV layout** for mapping. Convert a parametric primitive to a sculpt mesh before editing UVs. The window has **UV layout** and **Texture library** tabs, with scrolling for small windows.
 
 Choose **Expand editor** for a full-window workspace, with the canvas on the left and a scrollable control sidebar on the right. The image stays square and fits the available space; switching tools or scrolling the sidebar does not shrink it. **Restore window** returns to the floating editor, and **Close editor** returns to modelling.
 
@@ -72,25 +72,32 @@ The companion `clay_metadata.json` retains original UV corners, painted UV masks
 
 ## Paint an image
 
-The **Texture images** workflow currently authors **Base colour** only. Roughness and metallic remain material settings; separate image-authoring controls are deferred until their preview and workflow are complete. Existing scalar images are still saved, rendered and included in model exports.
+The **Texture library** workflow currently authors **Base colour** only. Roughness and metallic remain material settings; separate image-authoring controls are deferred until their preview and workflow are complete. Existing scalar images are still saved, rendered and included in model exports.
 
 To start painting:
 
-1. Open **Texture images** and choose a resolution from 256 to **4096 × 4096 (4K)**. Select **16-bit integer** or **32-bit float** precision; this is independent of export format.
-2. Choose how to start the image from the table below, or import PNG/JPEG/EXR.
-3. If UVs are missing, use **Generate UVs for painting**.
-4. Choose **Create & paint on model** for a new image, or **Paint on model** for an existing one. The editor closes and the Paint brush activates.
-5. Select a colour in Brush settings and paint on the 3D surface. Reopen the UV editor to inspect the image.
+1. Open **Create / import image**. Name a colour image, choose dimensions, then **Create library image** or **Import PNG / JPEG / EXR…**. This adds an unassigned image without changing a model; UVs are not required yet. New images use the chosen Paint input preset’s colour, or a transparent background. Advanced precision is under **Precision and encoding**.
+2. Select its thumbnail. **Selected image**, **Assigned image**, **Assignment model** and **Paint destination** distinguish the asset you are inspecting from the image currently used on the model.
+3. If prompted, choose **Generate UVs for this model**. Then **Assign selected to model**. Replacing this model’s assignment keeps its previous image in the library and leaves other models’ assignments intact.
+4. Choose **Paint assigned image**. The editor closes and activates the Paint preset configured through Materials/Colours. Pick **Stroke colour** and paint on the 3D surface.
+5. Reopen the library to **Inspect selected image** or **Export selected image**. PNG exports integer colour; EXR preserves float/HDR values. The separate **Assigned image / UV preview** displays the active model’s mapping.
 
-| Starting image | Result |
+Browsing thumbnails never changes an assignment or paint destination. Drag **Drag to resize images** to resize the browsing area. Switching models selects that model’s assigned image; the destination text updates with it. An unavailable image target falls back to vertices.
+
+| Library action | Effect |
 | --- | --- |
-| **Use existing surface / vertex colour** (default) | Captures the current surface to preserve its appearance |
-| **Blank transparent** | Reveals the material beneath |
-| **Solid brush colour** | Starts with the selected brush colour |
+| Rename image | Renames this identity in every use; pixels and assignments stay intact |
+| Duplicate image | Creates an unassigned independent copy with the same precision and pixels; disconnects external working files |
+| Assign selected to model | Changes only this model’s image use; retains the previous asset |
+| Unassign selected image | Removes this model’s use, retaining pixels in the library |
+| Replace image pixels… | Shows shared uses before choosing a file; replaces all uses of that identity and clears its old working-file link; float images require an EXR replacement |
+| Delete unused image… | Requires all model uses to be unassigned and explicit confirmation; Undo restores the pixels |
 
-The toolbar shows the active texture channel. Choose **Paint vertices** to return to vertex painting.
+All these project edits support Undo/Redo and save/reopen. Unassigned images count towards the project pixel and history budgets. The library retains up to 256 unused or explicitly imported images.
 
-The Paint brush settings provide a **Brush colour** picker and **Target**: choose **Vertices** or an existing **Base colour image**. **Set up texture painting…** opens UV layout when mapping is needed, or Texture images when UVs are ready. The UV image canvas is a preview; paint strokes are made on the model.
+To start from existing vertex paint instead, use **Active model image workflow → Create from model surface → Create & paint on model** when the model has no image assigned. It defaults to capturing existing surface/vertex colour; transparent and solid starting images remain available. **Capture colour to texture** updates an existing assignment with confirmation. Collapse **Project image library** to give these controls more room.
+
+The Paint **Target** selector names the receiving image, or **Vertices**. **Paint vertices** returns to vertex painting. **Set up texture painting…** opens the texture library even when UVs are missing, with a direct action to generate them. The image canvas is a preview; paint strokes are made on the model.
 
 Choose an application mode for continuous colour build-up:
 
@@ -149,7 +156,7 @@ Existing saved history preferences remain in effect. If the scene cannot fit one
 
 ## Capture vertex colour
 
-In **UVs and textures → Texture images**, expand **Capture colour to texture** and choose **Capture vertex colour**. This copies the model's vertex colour into the base-colour image. Replacing existing image paint requires confirmation; the confirmation shows the old and new size/precision and the number of linked models affected. Existing colour-image dimensions and precision are preserved unless you explicitly override them. New images use the selected size and precision.
+In **Textures → Open texture library**, expand **Capture colour to texture** and choose **Capture vertex colour**. This copies the model's vertex colour into the base-colour image. Replacing existing image paint requires confirmation; the confirmation shows the old and new size/precision and the number of linked models affected. Existing colour-image dimensions and precision are preserved unless you explicitly override them. New images use the selected size and precision.
 
 Capture requires current, nondegenerate UVs inside 0–1. Arrange overlapping islands first if they need different paint. It uses the active model, includes temporarily hidden faces, adds gutter padding and commits one Undo step. Existing texture identity and linked uses are retained. Roughness and metallic images already in the project are untouched. A running capture exposes progress and Cancel; cancelling preserves the original images. Size conversion uses area filtering when reducing an image and bilinear filtering when enlarging, in linear light with coverage-aware colour.
 
@@ -161,7 +168,7 @@ The generic **Bake material maps** action is hidden for now. The deferred workfl
 
 To send a texture to an external paint app:
 
-1. Select the texture and expand **External painting**.
+1. Assign the image to the intended model. Under **Active model image workflow**, check the image name, then expand **External painting**. These controls operate on the assigned image, independently of the thumbnail being inspected.
 2. Choose an executable under **External paint app**; the default is GIMP.
 3. Choose **Edit in external paint app**. The working document opens with **Texture paint** selected.
 4. Paint on that layer. Keep **Clay UV guide - excluded on reload** as a separate layer with its original name.

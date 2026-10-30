@@ -174,21 +174,37 @@ impl Texture {
         output.extend(self.packed_pixels());
     }
 }
-/// Three 4096² images or an equivalent mix, uploaded as bounded texture-array pages.
-pub(crate) fn validate_budget<'a>(
+/// Count library images and assigned images once by identity, including unused assets.
+pub(crate) fn validate_library<'a>(
     meshes: impl IntoIterator<Item = &'a Mesh>,
+    library: &[Texture],
 ) -> Result<(), String> {
-    let mut assets = std::collections::HashMap::new();
+    if library.len() > 256 {
+        return Err("Texture library is limited to 256 images".into());
+    }
+    let mut ids = std::collections::HashSet::new();
+    let mut sizes = std::collections::HashMap::new();
+    for image in library {
+        image.validate()?;
+        if !ids.insert(image.id) {
+            return Err("Duplicate texture library identity".into());
+        }
+        sizes.insert(image.id, image.width as usize * image.height as usize);
+    }
     for mesh in meshes {
-        for texture in &mesh.uv.textures {
-            assets.insert(texture.id, texture.width as usize * texture.height as usize);
+        for image in &mesh.uv.textures {
+            sizes
+                .entry(image.id)
+                .and_modify(|size| {
+                    *size = (*size).max(image.width as usize * image.height as usize)
+                })
+                .or_insert(image.width as usize * image.height as usize);
         }
     }
-    if assets.values().sum::<usize>() > MAX_PIXELS {
-        Err("Texture budget exceeded: use at most three 4K images (48 million unique pixels) across this project, or smaller images".into())
-    } else {
-        Ok(())
+    if sizes.values().sum::<usize>() > MAX_PIXELS {
+        return Err("Texture budget exceeded: remove unused library images or use smaller images (48 million unique pixels per project)".into());
     }
+    Ok(())
 }
 pub fn barycentric(q: [f32; 2], t: [[f32; 2]; 3]) -> Option<[f32; 3]> {
     let a = super::uv::area(t);

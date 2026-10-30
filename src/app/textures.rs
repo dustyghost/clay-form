@@ -16,6 +16,13 @@ pub(crate) enum WorkingFormat {
 }
 #[derive(Clone)]
 pub(crate) enum TextureCommand {
+    NewAsset(String, u32, Precision, bool),
+    RenameAsset(u64, String),
+    DuplicateAsset(u64),
+    AssignAsset(u64),
+    UnassignAsset(u64),
+    DeleteAsset(u64),
+    ExportAsset(u64, String, bool),
     #[cfg(test)]
     Create(Channel, u32, Precision),
     Start(Channel, u32, Precision, TextureStart, bool),
@@ -44,17 +51,39 @@ pub(super) struct ExchangeJob {
 }
 
 impl App {
+    fn select_assigned_colour_texture(&mut self) {
+        if let Some(id) = self
+            .document
+            .mesh()
+            .uv
+            .textures
+            .iter()
+            .find(|t| t.channel == Channel::Color)
+            .map(|t| t.id)
+        {
+            self.ui.uv.select_asset(&self.document, id);
+        }
+    }
+
     pub(super) fn sample_surface_material(
         &mut self,
         sampled: crate::sculpt::Material,
     ) -> Result<(), String> {
         use crate::sculpt::PaintChannels;
-        let mut brush = self.document.brushes()[self.ui.selected].clone();
-        let channels = match self.document.texture_paint {
-            Some(Channel::Color) => PaintChannels::Color,
-            Some(Channel::Roughness) => PaintChannels::Roughness,
-            Some(Channel::Metallic) => PaintChannels::Metallic,
-            None => brush.paint_channels,
+        let input_index = self
+            .ui
+            .paint_input_index(&self.document)
+            .unwrap_or(self.ui.selected);
+        let mut brush = self.document.brushes()[input_index].clone();
+        let channels = if self.ui.materials.sample_colour_only {
+            PaintChannels::Color
+        } else {
+            match self.document.texture_paint {
+                Some(Channel::Color) => PaintChannels::Color,
+                Some(Channel::Roughness) => PaintChannels::Roughness,
+                Some(Channel::Metallic) => PaintChannels::Metallic,
+                None => brush.paint_channels,
+            }
         };
         let float_colour =
             self.document.texture_paint == Some(Channel::Color)
@@ -88,7 +117,7 @@ impl App {
             PaintChannels::Roughness => brush.material.roughness = bounded.roughness,
             PaintChannels::Metallic => brush.material.metallic = bounded.metallic,
         }
-        self.document.update_brush(self.ui.selected, brush)?;
+        self.document.update_brush(input_index, brush)?;
         self.ui.status = if clipped { "Sampled values were limited to 0–1 for this target. Float colour textures retain HDR/negative colour samples." }
             else { "Sampled surface values into the brush for the selected paint channel." }.into();
         Ok(())
@@ -233,10 +262,12 @@ impl App {
                 let path = path.clone();
                 // Persist the working path even if the chosen editor cannot launch.
                 self.document.assign_textures(textures)?;
+                self.select_assigned_colour_texture();
                 persistence::gimp::open(&executable, std::path::Path::new(&path))?;
                 Ok("Working document ready. Save back to it, then Reload. The separate UV guide is excluded automatically.")
             } else {
                 self.document.assign_textures(textures)?;
+                self.select_assigned_colour_texture();
                 self.ui.uv.reload_conflict = false;
                 Ok(if job.bake {
                     if matches!(&retry, TextureCommand::Bake(true, _, _)) {
@@ -325,6 +356,99 @@ impl App {
                 .ok_or_else(|| "Create or import a texture for this channel first".to_string())
         };
         match command {
+            NewAsset(name, size, precision, transparent) => {
+                let index = self
+                    .ui
+                    .paint_input_index(&self.document)
+                    .unwrap_or(self.ui.selected);
+                let brush = &self.document.brushes()[index];
+                let mut material = brush.material.clone();
+                if precision == Precision::Float32 {
+                    material.base_color = brush.texture_colour.unwrap_or(material.base_color);
+                }
+                let mut texture =
+                    Texture::new_with_precision(Channel::Color, size, &material, precision)?;
+                texture.name = name.trim().to_owned();
+                if texture.name.is_empty() {
+                    return Err("Give the image a name".into());
+                }
+                if transparent {
+                    match &mut texture.pixels {
+                        crate::sculpt::texture::Pixels::U16(p) => {
+                            std::sync::Arc::make_mut(p).fill(0)
+                        }
+                        crate::sculpt::texture::Pixels::Float32(p) => {
+                            std::sync::Arc::make_mut(p).fill(0.)
+                        }
+                    }
+                }
+                let id = texture.id;
+                self.document.save_texture_asset(texture)?;
+                self.ui.uv.select_asset(&self.document, id);
+                self.ui.status = "Created library image. Assign it to a model to paint; UVs can be generated next.".into();
+            }
+            RenameAsset(id, name) => {
+                let mut texture = self
+                    .document
+                    .texture_asset(id)
+                    .ok_or("Image no longer exists")?
+                    .clone();
+                texture.name = name.trim().to_owned();
+                if texture.name.is_empty() {
+                    return Err("Give the image a name".into());
+                }
+                self.document.save_texture_asset(texture)?;
+            }
+            DuplicateAsset(id) => {
+                let mut texture = self
+                    .document
+                    .texture_asset(id)
+                    .ok_or("Image no longer exists")?
+                    .clone();
+                texture.id = Texture::new_id();
+                texture.name =
+                    format!("{} copy", texture.name.chars().take(48).collect::<String>());
+                texture.exchange = None;
+                let id = texture.id;
+                self.document.save_texture_asset(texture)?;
+                self.ui.uv.select_asset(&self.document, id);
+            }
+            AssignAsset(id) => {
+                let texture = self
+                    .document
+                    .texture_asset(id)
+                    .ok_or("Image no longer exists")?
+                    .clone();
+                self.document.assign_texture(texture)?;
+                self.ui.uv.select_asset(&self.document, id);
+                self.ui.status = "Assigned image to the active model. Previous image remains in the library; other assignments are unchanged.".into();
+            }
+            UnassignAsset(id) => {
+                self.document.unassign_texture_asset(id)?;
+            }
+            DeleteAsset(id) => {
+                self.document.delete_texture_asset(id)?;
+            }
+            ExportAsset(id, path, overwrite) => {
+                let texture = self
+                    .document
+                    .texture_asset(id)
+                    .ok_or("Image no longer exists")?;
+                let file = std::path::Path::new(&path);
+                if !file
+                    .extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("png") || e.eq_ignore_ascii_case("exr"))
+                {
+                    return Err("Export texture to .png (16-bit) or .exr (float)".into());
+                }
+                if file.exists() && !overwrite {
+                    self.ui.uv.asset_export_pending = Some((id, path));
+                    return Ok(());
+                }
+                persistence::texture::save(file, texture)?;
+                self.ui.uv.asset_export_pending = None;
+                self.ui.status = format!("Exported image to {path}");
+            }
             Cancel => {
                 if let Some(job) = &self.texture_exchange {
                     job.worker.cancel();
@@ -382,7 +506,11 @@ impl App {
                         Start(channel, size, precision, initial, paint),
                     )?;
                 } else {
-                    let brush = &self.document.brushes()[self.ui.selected];
+                    let index = self
+                        .ui
+                        .paint_input_index(&self.document)
+                        .unwrap_or(self.ui.selected);
+                    let brush = &self.document.brushes()[index];
                     let mut material = brush.material.clone();
                     if channel == Channel::Color && precision == Precision::Float32 {
                         material.base_color = brush.texture_colour.unwrap_or(material.base_color);
@@ -400,6 +528,7 @@ impl App {
                         }
                     }
                     self.document.assign_texture(texture)?;
+                    self.select_assigned_colour_texture();
                     if paint {
                         self.texture_command(Paint(Some(channel)))?;
                     }
@@ -466,16 +595,7 @@ impl App {
                         return Err("Pack UV islands inside 0–1 before painting; tiled UV painting is not supported".into());
                     }
                 }
-                let brushes = self.document.brushes();
-                let paint_index = brushes
-                    .get(self.ui.selected)
-                    .filter(|b| b.kind == crate::sculpt::Kind::Paint)
-                    .map(|_| self.ui.selected)
-                    .or_else(|| {
-                        brushes
-                            .iter()
-                            .position(|b| b.kind == crate::sculpt::Kind::Paint)
-                    });
+                let paint_index = self.ui.paint_input_index(&self.document);
                 if let Some(index) = paint_index {
                     self.ui.selected = index;
                 } else {
@@ -492,7 +612,7 @@ impl App {
                 self.ui.show_polygroups = false;
                 self.ui.uv.open = false;
                 self.ui.status = format!(
-                    "Paint {} directly on the 3D model. Choose a colour in Brush settings.",
+                    "Paint {} directly on the 3D model. Choose stroke inputs in Materials or Colours.",
                     channel.map_or("vertex materials", |c| c.label())
                 );
                 self.document.texture_paint = channel;
@@ -506,8 +626,11 @@ impl App {
             Copy(channel) => {
                 let mut texture = get(&self.document, channel)?;
                 texture.id = Texture::new_id();
+                texture.name =
+                    format!("{} copy", texture.name.chars().take(48).collect::<String>());
                 texture.exchange = None;
                 self.document.assign_texture(texture)?;
+                self.select_assigned_colour_texture();
             }
             Export(channel, path, overwrite) => {
                 let texture = get(&self.document, channel)?;
@@ -1000,7 +1123,7 @@ mod tests {
         let out = frame(&mut app, vec![]);
         capture.render(&ctx, out);
         let out = frame(&mut app, vec![]);
-        let p = point(&out, "UVs / Textures");
+        let p = point(&out, "UV layout");
         capture.render(&ctx, out);
         for events in [
             vec![egui::Event::PointerMoved(p), button(p, true)],
@@ -1010,7 +1133,7 @@ mod tests {
         }
         assert!(app.ui.uv.open);
         let out = frame(&mut app, vec![]);
-        let p = point(&out, "Texture images");
+        let p = point(&out, "Texture library");
         capture.render(&ctx, out);
         for events in [
             vec![egui::Event::PointerMoved(p), button(p, true)],
@@ -1019,6 +1142,15 @@ mod tests {
             capture.render(&ctx, frame(&mut app, events));
         }
         capture.render(&ctx, frame(&mut app, vec![]));
+        let out = frame(&mut app, vec![]);
+        let p = point(&out, "Project image library");
+        capture.render(&ctx, out);
+        for events in [
+            vec![egui::Event::PointerMoved(p), button(p, true)],
+            vec![button(p, false)],
+        ] {
+            capture.render(&ctx, frame(&mut app, events));
+        }
         let out = frame(&mut app, vec![]);
         let p = point(&out, "Create & paint on model");
         capture.render(&ctx, out);

@@ -11,6 +11,7 @@ impl UiState {
         commands: &mut Vec<Command>,
     ) {
         let glyph = match menu {
+            BuiltinMenu::Materials | BuiltinMenu::Colours | BuiltinMenu::Textures => Glyph::Layers,
             BuiltinMenu::Brushes => Glyph::Plus,
             BuiltinMenu::Transform => Glyph::Transform,
             BuiltinMenu::Slice => Glyph::Slice,
@@ -147,6 +148,11 @@ impl UiState {
                 .current_pos(pinned.position)
                 .constrain_to(ctx.content_rect())
                 .default_width(320.)
+                .default_height(if pinned.menu == BuiltinMenu::Materials {
+                    700.
+                } else {
+                    340.
+                })
                 .resizable(false)
                 .collapsible(false)
                 .max_height(max_height)
@@ -200,6 +206,24 @@ impl UiState {
             .iter()
             .any(|stack| stack.info.kind == Some(egui::UiKind::Menu));
         match menu {
+            BuiltinMenu::Materials | BuiltinMenu::Colours => {
+                self.appearance_controls(ui, document, commands, menu == BuiltinMenu::Colours)
+            }
+            BuiltinMenu::Textures => {
+                ui.weak("Browse project images independently of the active model. Assign an image explicitly before painting.");
+                if ui
+                    .button("Open texture library")
+                    .customize(Action::OpenTextures)
+                    .clicked()
+                {
+                    commands.push(Command::Action(Action::OpenTextures));
+                    if popup {
+                        ui.close_kind(egui::UiKind::Menu);
+                    }
+                }
+                ui.separator();
+                self.texture_library_controls(ui, document, commands);
+            }
             BuiltinMenu::Modeling => self.modeling_function_menu(ui, document, commands, popup),
             BuiltinMenu::References => self.reference_controls(ui, document, commands),
             BuiltinMenu::Brushes => {

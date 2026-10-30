@@ -10,6 +10,7 @@ pub(crate) struct MaterialControls {
     palette_draft: (egui::ecolor::Hsva, [f32; 3]),
 
     pub sampling: bool,
+    pub sample_colour_only: bool,
     usage: Option<(u64, u64, usize, usize)>,
     pending: Option<(u64, crate::sculpt::material::layers::Asset)>,
 }
@@ -167,7 +168,40 @@ impl MaterialControls {
             .and_then(|id| presets.iter().find(|a| a.id == id))
             .map_or("Custom material", |a| a.name.as_str())
             .to_owned();
-        ui.label(format!("Brush material: {name}"));
+        ui.label(format!("Selected material: {name}"));
+        if ui
+            .add_enabled(
+                document.materials().len() < 256,
+                egui::Button::new("New project material"),
+            )
+            .clicked()
+        {
+            let id = crate::sculpt::material::layers::fresh_id();
+            let material = Material::default();
+            brush.material = material.with_link(id);
+            commands.push(Command::SaveMaterial(Asset {
+                id,
+                name: "New material".into(),
+                material: material.clone(),
+                original: Some(material),
+            }));
+            return;
+        }
+        ui.separator();
+        ui.label(format!(
+            "Model: {}",
+            document.model(document.active_model_index()).unwrap().name
+        ));
+        if ui.add_enabled(document.primitive().is_none(), egui::Button::new("Assign material to model"))
+            .on_hover_text("Replace the whole material on all vertices, including masks, hidden regions and stored subdivision levels. Keeps UVs and image pixels. One Undo restores it.")
+            .clicked() {
+            commands.push(Command::AssignModelMaterial(brush.material.clone()));
+        }
+        ui.weak("Assign changes this model’s vertex appearance. Undo restores it.");
+        if !document.mesh().uv.textures.is_empty() {
+            ui.weak("Assigned images still overlay the material; unassign in Textures to reveal its base colour.");
+        }
+        ui.separator();
         ui.collapsing("Edit shared project material", |ui| {
         if let Some(id) = selected {
             let revision = document.display_revision();
@@ -176,7 +210,7 @@ impl MaterialControls {
                 self.usage = Some((revision, id, models, vertices));
             }
             let (_, _, models, vertices) = self.usage.unwrap();
-            ui.weak(format!("Edits update {vertices} painted vertices across {models} models, including stored subdivision levels. Project Undo restores them."));
+            ui.weak(format!("Edits update {vertices} stored vertices across {models} models, including inactive subdivision levels. Project Undo restores them."));
         } else {
             ui.weak("Create a named project material from this brush. Future strokes can share its settings.");
         }
@@ -341,12 +375,31 @@ impl MaterialControls {
         });
     }
 
+    pub(super) fn colour_input(
+        &mut self,
+        ui: &mut egui::Ui,
+        brush: &mut Brush,
+        library: &mut MaterialLibrary,
+    ) {
+        let mut colour = brush.material.base_color;
+        ui.horizontal(|ui| {
+            ui.label("Stroke colour");
+            if ui.color_edit_button_rgb(&mut colour).changed() {
+                brush.material = brush.material.unlinked();
+                brush.material.base_color = colour;
+                brush.texture_colour = None;
+            }
+        });
+        self.brush_palette(ui, brush, library);
+    }
+
     pub(super) fn sample_control(&mut self, ui: &mut egui::Ui, label: &str) {
         if ui.selectable_label(self.sampling, label)
-            .on_hover_text("Click the visible surface to sample the active paint channel into this brush. Esc cancels.")
+            .on_hover_text("Click the visible surface to sample these stroke inputs. Does not paint or edit shared materials. Esc cancels.")
             .clicked()
         {
             self.sampling = !self.sampling;
+            self.sample_colour_only = false;
         }
     }
 
@@ -357,7 +410,11 @@ impl MaterialControls {
         brush: &mut Brush,
         library: &mut MaterialLibrary,
     ) {
+        let was_sampling = self.sampling;
         self.sample_control(ui, "Sample colour");
+        if self.sampling && !was_sampling {
+            self.sample_colour_only = true;
+        }
         let mut remove = None;
         ui.horizontal_wrapped(|ui| {
             for (index, &colour) in library.palette.iter().enumerate() {

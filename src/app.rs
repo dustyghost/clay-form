@@ -415,11 +415,7 @@ impl App {
         } else {
             self.ui.preferences.visibility_hold.clone()
         });
-        self.ui.materials.sampling &= self
-            .document
-            .brushes()
-            .get(self.ui.selected)
-            .is_some_and(|b| b.kind == crate::sculpt::Kind::Paint);
+        self.ui.materials.sampling &= self.ui.paint_input_index(&self.document).is_some();
         if self.ui.materials.sampling && !self.viewport.sample_colour {
             self.viewport.cancel(&mut self.document);
         }

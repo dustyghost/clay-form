@@ -3556,22 +3556,13 @@ fn material_controls_offscreen_review() {
     assert!(!g.app.ui.show_polygroups);
     g.app.camera.yaw = 0.;
     g.app.camera.pitch = 0.;
-    g.panel(Tool::Brush, Dock::Right);
-    click_paint_control(&mut g, "Material presets and shared editor");
+    g.panel(Tool::Brush, Dock::Hidden);
+    g.app
+        .ui
+        .preferences
+        .dock_menu(BuiltinMenu::Materials, Dock::Right);
+    g.frame(vec![]);
     reach_paint_control(&mut g, "Drag to resize materials");
-    // Leave room below the resize handle so outer scrolling cannot absorb its drag.
-    let margin = g.size[0] as f32 - g.app.ui.preferences.right_width + 12.;
-    g.frame(vec![
-        egui::Event::PointerMoved(Pos2::new(margin, 500.)),
-        egui::Event::MouseWheel {
-            unit: egui::MouseWheelUnit::Point,
-            delta: Vec2::new(0., -1000.),
-            modifiers: Default::default(),
-        },
-    ]);
-    for _ in 0..3 {
-        g.frame(vec![]);
-    }
     let handle = |g: &Guide| {
         g.text_positions
             .iter()
@@ -3602,6 +3593,7 @@ fn material_controls_offscreen_review() {
         g.app.document.brushes()[g.app.ui.selected].material,
         material
     );
+    g.panel(Tool::Brush, Dock::Right);
     click_paint_control(&mut g, "Copper");
     let before = g.app.document.geometry_snapshot();
     let (rect, pixels_before) = g.frame(vec![egui::Event::PointerGone]);
@@ -4241,7 +4233,7 @@ fn paint_target_scope_inspection_offscreen_review() {
     click_guide_label(&mut g, "Unlit colour");
     assert_eq!(g.app.ui.preferences.paint_inspection, InspectionMode::Color);
     g.save("paint-inspection-unlit");
-    click_paint_control(&mut g, "Base colour image");
+    click_paint_control(&mut g, "Image: Base colour");
     assert!(!g.text_positions.iter().any(|(text, _)| matches!(
         text.as_str(),
         "Roughness (linear) image" | "Metallic (linear) image"
@@ -4263,7 +4255,7 @@ fn paint_target_scope_inspection_offscreen_review() {
     assert!(
         !g.text_positions
             .iter()
-            .any(|(text, _)| text == "Brush colour")
+            .any(|(text, _)| text == "Stroke colour")
     );
     let brush_colour = g.app.document.brushes()[g.app.ui.selected]
         .material
@@ -4317,7 +4309,7 @@ fn paint_target_scope_inspection_offscreen_review() {
         scalar_maps
     );
     click_paint_control(&mut g, "Vertices");
-    click_guide_label(&mut g, "Base colour image");
+    click_guide_label(&mut g, "Image: Base colour");
     g.app.dispatch(Command::SelectSubmodel(untextured), &g.ctx);
     g.frame(vec![]);
     assert_eq!(g.app.document.texture_paint, None);

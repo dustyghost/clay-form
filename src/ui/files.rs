@@ -6,7 +6,8 @@ use std::path::PathBuf;
 impl AssetKind {
     pub(crate) fn title(self) -> &'static str {
         match self {
-            Self::Texture => "Import material texture",
+            Self::Texture => "Import image into texture library",
+            Self::ReplaceTexture(_) => "Replace selected image and all shared uses",
             Self::PaintWorking => "Choose external paint working document",
             Self::Reference => "Add reference image",
             Self::Alpha => "Preview alpha image",
@@ -17,7 +18,9 @@ impl AssetKind {
     }
     pub(crate) fn filter_label(self) -> &'static str {
         match self {
-            Self::Texture => "PNG / JPEG / OpenEXR (.png, .jpg, .jpeg, .exr)",
+            Self::Texture | Self::ReplaceTexture(_) => {
+                "PNG / JPEG / OpenEXR (.png, .jpg, .jpeg, .exr)"
+            }
             Self::PaintWorking => "Paint working files (.psd, .xcf, .png, .exr)",
             Self::Reference | Self::Alpha => "PNG / JPEG images (.png, .jpg, .jpeg)",
             Self::Obj => "Wavefront models (.obj)",
@@ -30,7 +33,7 @@ impl AssetKind {
             return false;
         };
         let extensions: &[&str] = match self {
-            Self::Texture => &["png", "jpg", "jpeg", "exr"],
+            Self::Texture | Self::ReplaceTexture(_) => &["png", "jpg", "jpeg", "exr"],
             Self::PaintWorking => &["psd", "xcf", "png", "exr"],
             Self::Reference | Self::Alpha => &["png", "jpg", "jpeg"],
             Self::Obj => &["obj"],
@@ -64,7 +67,7 @@ pub(crate) struct FilePicker {
 impl UiState {
     pub(crate) fn asset_path_mut(&mut self, asset: AssetKind) -> &mut String {
         match asset {
-            AssetKind::Texture => &mut self.uv.image_path,
+            AssetKind::Texture | AssetKind::ReplaceTexture(_) => &mut self.uv.image_path,
             AssetKind::PaintWorking => &mut self.uv.working_path,
             AssetKind::Reference => &mut self.reference_path,
             AssetKind::Alpha => &mut self.alpha_path,
