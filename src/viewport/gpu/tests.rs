@@ -1096,7 +1096,7 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             "undo must invalidate cached geometry"
         );
         assert_eq!(
-            renderer.geometry(&document).mesh.vertices,
+            *renderer.geometry(&document).mesh.vertices,
             document.mesh().vertices
         );
         document.invert_mask().unwrap();
@@ -1131,9 +1131,9 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         document.set_temporary_thickness(0.2).unwrap();
         let base = renderer.geometry(&document);
         let shell = renderer.render_geometry.as_ref().unwrap().clone();
-        assert_eq!(base.mesh, original);
-        assert_eq!(shell.mesh, original.solidify(0.2).unwrap());
-        shell.mesh.validate_closed().unwrap();
+        assert_eq!(base.mesh.to_mesh(), original);
+        assert_eq!(shell.mesh.to_mesh(), original.solidify(0.2).unwrap());
+        shell.mesh.to_mesh().validate_closed().unwrap();
         {
             let mut gpu = renderer.gpu.lock().unwrap();
             gpu.upload(&shell);
@@ -1516,9 +1516,9 @@ fn dense_stroke_display_keeps_full_resolution_and_rejects_incompatible_topology(
         let preview = previous
             .during_stroke(&doc)
             .expect("dense fixed-topology stroke has a fast display path");
-        assert_eq!(preview.mesh.vertices, doc.mesh().vertices);
-        assert_eq!(preview.mesh.materials, doc.mesh().materials);
-        assert_eq!(preview.mesh.mask, doc.mesh().mask);
+        assert_eq!(*preview.mesh.vertices, doc.mesh().vertices);
+        assert_eq!(*preview.mesh.materials, doc.mesh().materials);
+        assert_eq!(*preview.mesh.mask, doc.mesh().mask);
         assert_eq!(preview.shading.triangles, previous.shading.triangles);
         assert!(
             preview

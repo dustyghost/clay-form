@@ -2,7 +2,47 @@ use super::Material;
 use std::sync::Arc;
 
 impl Material {
-    /// Exact slice equality, reusing successful comparisons of shared payloads.
+    /// Compare snapshot contents exactly, including signed zero and NaN bits.
+    /// Shared immutable layer/link payloads need at most one value comparison
+    /// per consecutive pair of allocations; no identities outlive this call.
+    pub(crate) fn slices_bitwise_equal(left: &[Self], right: &[Self]) -> bool {
+        if left.len() != right.len() {
+            return false;
+        }
+        let mut layers = None;
+        let mut links = None;
+        for (a, b) in left.iter().zip(right) {
+            if a.surface().values().map(f32::to_bits) != b.surface().values().map(f32::to_bits) {
+                return false;
+            }
+            let layer_pair = (a.layers.storage_id(), b.layers.storage_id());
+            if layer_pair.0 != layer_pair.1 && layers != Some(layer_pair) {
+                if !a.layers.iter().zip(b.layers.iter()).all(|(a, b)| {
+                    a.surface.values().map(f32::to_bits) == b.surface.values().map(f32::to_bits)
+                        && a.weight.to_bits() == b.weight.to_bits()
+                        && a.add.to_bits() == b.add.to_bits()
+                }) {
+                    return false;
+                }
+                layers = Some(layer_pair);
+            }
+            let link_pair = (Arc::as_ptr(&a.links), Arc::as_ptr(&b.links));
+            if link_pair.0 != link_pair.1 && links != Some(link_pair) {
+                if a.links.len() != b.links.len()
+                    || !a.links.iter().zip(b.links.iter()).all(|(a, b)| {
+                        a.id == b.id && a.weights.map(f32::to_bits) == b.weights.map(f32::to_bits)
+                    })
+                {
+                    return false;
+                }
+                links = Some(link_pair);
+            }
+        }
+        true
+    }
+
+    /// Previous numeric-equality path retained as a regression reference.
+    #[cfg(test)]
     pub(crate) fn slices_equal(left: &[Self], right: &[Self]) -> bool {
         if left.len() != right.len() {
             return false;
@@ -40,6 +80,52 @@ impl Material {
 mod tests {
     use super::*;
     use crate::sculpt::material::layers::{Influence, VALUE_COUNT, limits};
+
+    #[test]
+    fn snapshot_material_equality_checks_bits_in_all_channels_layers_and_links() {
+        let mut original = Material::default().with_link(7);
+        original.layers[0].weight = 0.5;
+        assert!(Material::slices_bitwise_equal(&[], &[]));
+        assert!(!Material::slices_bitwise_equal(
+            std::slice::from_ref(&original),
+            &[]
+        ));
+        for channel in 0..VALUE_COUNT {
+            let mut values = original.values();
+            // Toggle a bit rather than adding: covers signed zero as well as
+            // every base, layer, weight and blend channel.
+            values[channel] = f32::from_bits(values[channel].to_bits() ^ 0x80000000);
+            let changed = Material::from_values(values).with_link(7);
+            assert!(
+                !Material::slices_bitwise_equal(std::slice::from_ref(&original), &[changed]),
+                "channel {channel}"
+            );
+        }
+        for field in 0..5 {
+            let mut changed = original.clone();
+            let link = &mut Arc::make_mut(&mut changed.links)[0];
+            if field == 0 {
+                link.id += 1;
+            } else {
+                link.weights[field - 1] = -0.;
+            }
+            assert!(!Material::slices_bitwise_equal(
+                std::slice::from_ref(&original),
+                &[changed]
+            ));
+        }
+        let mut nan = original.clone();
+        nan.layers[0].surface.emission[0] = f32::from_bits(0x7fc00001);
+        let mut distinct = nan.clone();
+        // Force separate copy-on-write storage with identical bits.
+        distinct.layers[0].surface.emission[0] = f32::from_bits(0x7fc00001);
+        assert!(Material::slices_bitwise_equal(
+            std::slice::from_ref(&nan),
+            std::slice::from_ref(&distinct)
+        ));
+        distinct.layers[0].surface.emission[0] = f32::from_bits(0x7fc00002);
+        assert!(!Material::slices_bitwise_equal(&[nan], &[distinct]));
+    }
 
     fn check(left: &[Material], right: &[Material], expected: bool) {
         assert_eq!(left == right, expected);

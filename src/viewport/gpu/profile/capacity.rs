@@ -533,9 +533,9 @@ fn capacity_dense_live_display_preserves_edited_surface() {
             display = display
                 .during_stroke(&doc)
                 .expect("exercise the dense cached path");
-            assert_eq!(display.mesh.vertices, doc.mesh().vertices);
-            assert_eq!(display.mesh.triangles, doc.mesh().triangles);
-            assert_eq!(display.mesh.materials, doc.mesh().materials);
+            assert_eq!(*display.mesh.vertices, doc.mesh().vertices);
+            assert_eq!(*display.mesh.triangles, doc.mesh().triangles);
+            assert_eq!(*display.mesh.materials, doc.mesh().materials);
             assert!(
                 display
                     .shading
@@ -781,6 +781,84 @@ fn gpu_load_profile_display_stages() {
         serde_json::to_vec_pretty(
             &serde_json::json!({"level":level,"rows":rows,"memory_final":memory()}),
         )
+        .unwrap(),
+    )
+    .unwrap();
+}
+
+#[test]
+#[ignore = "manual camera/picking diagnosis; excluded from routine GPU CI"]
+fn gpu_load_profile_camera_picking() {
+    let output = std::env::var("CLAY_CAMERA_PROFILE").expect("output path");
+    let level = env_limit("CLAY_CAMERA_LEVEL", 3);
+    let capacity = benchmark_capacity(level, 2_000_000, 4_000_000).unwrap();
+    crate::sculpt::capacity::initialize(capacity).unwrap();
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800., 600.));
+    let mut rows = Vec::new();
+    let context = egui::Context::default();
+    let brush = brush(Kind::Standard);
+    for name in ["sphere", "organic", "hidden"] {
+        let doc = document(fixture(name, level));
+        let display = Arc::new(DisplayMesh::new(&doc));
+        for perspective in [false, true] {
+            let mut metrics = Measurements::default();
+            let mut face_counts = Vec::new();
+            for frame in 0..12 {
+                let camera = Camera {
+                    yaw: frame as f32 * 0.025,
+                    perspective,
+                    ..Default::default()
+                };
+                let scene = metrics.time("scene_projection", || {
+                    Scene::from_geometry(rect, &camera, display.clone(), false)
+                });
+                face_counts.push(scene.faces.len());
+                // Measure actual production picking. Build geometry outside the
+                // timers, vary sample locations, and keep assertions outside.
+                for offset in [-15., 0., 15.] {
+                    let point = rect.center() + egui::vec2(offset, 4.);
+                    let hit = metrics.time("pick_hit", || std::hint::black_box(scene.pick(point)));
+                    assert!(hit.is_some());
+                    assert!(scene.project(hit.unwrap().0).distance(point) < 0.002);
+                    let miss = metrics.time("pick_miss", || {
+                        std::hint::black_box(scene.pick(point + egui::vec2(2000., 2000.)))
+                    });
+                    assert!(miss.is_none());
+                }
+                let mut hit = false;
+                let painted = metrics.time("cursor_footprint", || {
+                    context.run(
+                        egui::RawInput {
+                            screen_rect: Some(rect),
+                            ..Default::default()
+                        },
+                        |ctx| {
+                            hit = scene.brush_cursor_with_footprint(
+                                &ctx.layer_painter(egui::LayerId::background()),
+                                rect.center(),
+                                50.,
+                                &brush,
+                                egui::Color32::WHITE,
+                                true,
+                            );
+                        },
+                    )
+                });
+                assert!(hit && !painted.shapes.is_empty());
+            }
+            rows.push(serde_json::json!({
+                "fixture":name, "perspective":perspective,
+                "source_triangles":doc.mesh().triangles.len(),
+                "display_triangles":display.mesh.triangles.len(),
+                "candidate_faces":face_counts, "metrics":metrics.summary(),
+            }));
+        }
+    }
+    std::fs::write(
+        output,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "level":level, "viewport":[800,600], "rows":rows, "memory_final":memory(),
+        }))
         .unwrap(),
     )
     .unwrap();

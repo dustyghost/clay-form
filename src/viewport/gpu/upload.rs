@@ -424,7 +424,7 @@ mod gpu_tests {
                 3 => {
                     let mut material = Material::default();
                     material.emission_strength = 0.5;
-                    data.mesh.materials = vec![material; data.mesh.vertices.len()];
+                    data.mesh.materials = Arc::new(vec![material; data.mesh.vertices.len()]);
                 }
                 4 => {
                     let vertex = data.shading.vertices[0];
@@ -432,8 +432,8 @@ mod gpu_tests {
                 }
                 5 => {
                     Arc::make_mut(&mut data.shading.triangles).clear();
-                    data.mesh.triangles.clear();
-                    data.mesh.quads.clear();
+                    Arc::make_mut(&mut data.mesh.triangles).clear();
+                    Arc::make_mut(&mut data.mesh.quads).clear();
                     Arc::make_mut(&mut data.poly_colors).clear();
                     Arc::make_mut(&mut data.uv_corners).clear();
                 }
@@ -487,7 +487,9 @@ mod gpu_tests {
                 let buffer = gpu.meshes[0].vertices.clone();
                 let mut painted = (*next).clone();
                 let data = Arc::make_mut(&mut painted.geometry);
-                for (material, position) in data.mesh.materials.iter_mut().zip(&data.mesh.vertices)
+                for (material, position) in Arc::make_mut(&mut data.mesh.materials)
+                    .iter_mut()
+                    .zip(data.mesh.vertices.iter())
                 {
                     if position.2 > 0.9 {
                         material.emission = [2., 0.1, 0.1];

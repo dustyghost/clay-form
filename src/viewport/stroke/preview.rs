@@ -289,7 +289,7 @@ mod tests {
         let now = Instant::now();
         let coarse = preview.update(request.clone(), &document, &ctx, now);
         assert_eq!(coarse.mesh.vertices.len(), document.mesh().vertices.len());
-        assert_ne!(coarse.mesh.vertices, document.mesh().vertices);
+        assert_ne!(*coarse.mesh.vertices, document.mesh().vertices);
         assert!(
             preview.0.borrow().job.is_none(),
             "no refinement while moving"
@@ -316,8 +316,8 @@ mod tests {
         assert_eq!(document.history_counts(), history);
         document.apply_dab(&request.brush, request.dabs[0][0]);
         document.end_stroke();
-        assert_eq!(detailed.mesh.vertices, document.mesh().vertices);
-        assert_eq!(detailed.mesh.triangles, document.mesh().triangles);
+        assert_eq!(*detailed.mesh.vertices, document.mesh().vertices);
+        assert_eq!(*detailed.mesh.triangles, document.mesh().triangles);
         document.undo();
         assert_eq!(document.geometry_snapshot(), original);
     }
@@ -359,10 +359,10 @@ mod tests {
                     .load(Ordering::Relaxed)
             );
         }
-        sender.send(Some(first.mesh.clone())).unwrap();
+        sender.send(Some(first.mesh.to_mesh())).unwrap();
         let current = preview.update(latest.clone(), &document, &ctx, now);
         let expected = latest.render(document.mesh(), false, &|| false).unwrap();
-        assert_eq!(current.mesh.vertices, expected.vertices);
+        assert_eq!(*current.mesh.vertices, expected.vertices);
         assert!(preview.0.borrow().job.is_none());
         assert!(cancel.load(Ordering::Relaxed));
         let (_sender, receiver) = mpsc::channel();
@@ -415,8 +415,8 @@ mod tests {
             preview.0.borrow().source.as_ref().unwrap()
         ));
         let expected = request.render(document.mesh(), false, &|| false).unwrap();
-        assert_eq!(masked.mesh.vertices, expected.vertices);
-        assert_eq!(masked.mesh.mask, expected.mask);
+        assert_eq!(*masked.mesh.vertices, expected.vertices);
+        assert_eq!(*masked.mesh.mask, expected.mask);
     }
 
     #[test]

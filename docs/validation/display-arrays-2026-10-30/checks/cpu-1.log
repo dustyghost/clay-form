@@ -1,0 +1,8 @@
+
+running 4 tests
+test sculpt::material::equality::tests::material_slice_equality_checks_every_surface_layer_and_link_value ... ok
+test sculpt::material::equality::tests::material_slice_equality_handles_distinct_storage_and_copy_on_write ... ok
+test sculpt::material::equality::tests::material_slice_equality_preserves_float_semantics_in_shared_payloads ... ok
+test sculpt::material::equality::tests::snapshot_material_equality_checks_bits_in_all_channels_layers_and_links ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 1004 filtered out; finished in 0.00s

@@ -282,7 +282,7 @@ impl Scene {
             let edge_key = |a: usize, b: usize| if a < b { (a, b) } else { (b, a) };
             let mut hidden = std::collections::HashSet::new();
             if !show_triangles {
-                for &[a, b, c, d] in &mesh.quads {
+                for &[a, b, c, d] in mesh.quads.iter() {
                     hidden.insert(edge_key(a, c));
                     hidden.insert(edge_key(b, d));
                 }

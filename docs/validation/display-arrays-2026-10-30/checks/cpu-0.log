@@ -1,0 +1,28 @@
+
+running 24 tests
+test viewport::gpu::display::live_normals::tests::change_discovery_includes_signed_zero_and_rejects_broad_edits ... ok
+test viewport::gpu::display::live_normals::tests::compact_corners_preserve_source_order_degenerates_and_empty_vertices ... ok
+test viewport::gpu::display::live_normals::tests::local_fans_match_full_bits_across_seams_boundaries_and_repeated_edits ... ok
+test viewport::gpu::display::live_normals::tests::scattered_changes_and_high_valence_choose_the_full_pass ... ok
+test viewport::gpu::display::packing_tests::vertex_packing_defaults_muted_models_and_active_masks_match_full_packing ... ok
+test viewport::gpu::display::packing_tests::vertex_packing_full_dirty_range_still_updates_later_records_and_handles_empty_data ... ok
+test viewport::gpu::display::packing_tests::vertex_packing_sparse_geometry_material_mask_and_fan_edits_match_full_packing ... ok
+test viewport::gpu::display::stroke_tests::broad_display_deformation_preserves_full_normals_without_allocating_adjacency ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_paint_matches_canonical_attributes_and_normals ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_preserves_filtered_faces_and_boundary_normals ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_rejects_visibility_group_and_topology_changes ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_release_rejects_material_only_edits_and_history ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_release_rejects_unseen_final_dab ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_release_updates_fans_for_the_next_stroke ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_supports_group_visibility_and_empty_displays ... ok
+test viewport::gpu::display::stroke_tests::local_display_normals_preserve_skipped_dabs_hidden_faces_and_snapshots ... ok
+test viewport::gpu::display::stroke_tests::local_display_normals_reuse_adjacency_after_fans_split_and_merge ... ok
+test viewport::gpu::display::stroke_tests::shared_display_arrays_follow_mixed_edits_and_preserve_older_snapshots ... ok
+test viewport::gpu::display::stroke_tests::visible_cache_rejects_topology_visibility_and_attribute_changes ... ok
+test viewport::gpu::display::stroke_tests::visible_release_rebuilds_exact_fans_after_sharpness_changes ... ok
+test viewport::gpu::display::stroke_tests::visible_strokes_share_immutable_payloads_and_preserve_snapshots ... ok
+test viewport::gpu::display::surface::tests::display_payload_reuse_preserves_float_bits_and_material_presence ... ok
+test viewport::gpu::display::tests::span_cut_colors_follow_local_axes_after_rotation_and_scaling ... ok
+test viewport::gpu::display::tests::texture_update_reuses_geometry_and_unmodified_atlas_chunks ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 984 filtered out; finished in 5.89s

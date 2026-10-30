@@ -50,19 +50,21 @@ fn vertex_packing_sparse_geometry_material_mask_and_fan_edits_match_full_packing
             material.emission_strength = 0.5;
         }
         let geometry = Arc::make_mut(&mut previous.geometry);
-        geometry.mesh.materials = vec![material; geometry.mesh.vertices.len()];
+        geometry.mesh.materials = Arc::new(vec![material; geometry.mesh.vertices.len()]);
         let mut next = previous.clone();
         let geometry = Arc::make_mut(&mut next.geometry);
         let a = geometry.shading.vertices[0].0;
         let b = geometry.shading.vertices[20].0;
-        geometry.mesh.vertices[a].0 += 0.05;
-        geometry.mesh.mask[b] = 0.8;
-        geometry.mesh.materials[b].base_color = [0.6, 0.2, 0.1];
-        geometry.mesh.materials[b].roughness = 0.2;
-        geometry.mesh.materials[b].metallic = 0.7;
+        Arc::make_mut(&mut geometry.mesh.vertices)[a].0 += 0.05;
+        Arc::make_mut(&mut geometry.mesh.mask)[b] = 0.8;
+        Arc::make_mut(&mut geometry.mesh.materials)[b].base_color = [0.6, 0.2, 0.1];
+        Arc::make_mut(&mut geometry.mesh.materials)[b].roughness = 0.2;
+        Arc::make_mut(&mut geometry.mesh.materials)[b].metallic = 0.7;
         if extended {
-            geometry.mesh.materials[b].layers[1].weight = 0.7;
-            geometry.mesh.materials[b].layers[1].surface.emission = [2., 0.1, 0.2];
+            Arc::make_mut(&mut geometry.mesh.materials)[b].layers[1].weight = 0.7;
+            Arc::make_mut(&mut geometry.mesh.materials)[b].layers[1]
+                .surface
+                .emission = [2., 0.1, 0.2];
         }
         Arc::make_mut(&mut geometry.shading.vertices).swap(3, 4);
         Arc::make_mut(&mut geometry.shading.vertices)[9].1 =
@@ -80,10 +82,11 @@ fn vertex_packing_defaults_muted_models_and_active_masks_match_full_packing() {
     let previous = DisplayMesh::new(&Document::default());
     let mut explicit = previous.clone();
     let geometry = Arc::make_mut(&mut explicit.geometry);
-    geometry.mesh.materials = vec![
-        Material::default().with_link(Material::DEFAULT_PRESET_ID);
+    geometry.mesh.materials = Arc::new(vec![
+        Material::default()
+            .with_link(Material::DEFAULT_PRESET_ID);
         geometry.mesh.vertices.len()
-    ];
+    ]);
     assert_eq!(
         assert_update(&previous, &explicit),
         0,
@@ -105,7 +108,7 @@ fn vertex_packing_defaults_muted_models_and_active_masks_match_full_packing() {
 fn vertex_packing_full_dirty_range_still_updates_later_records_and_handles_empty_data() {
     let previous = DisplayMesh::new(&Document::default());
     let mut next = previous.clone();
-    for p in &mut Arc::make_mut(&mut next.geometry).mesh.vertices {
+    for p in Arc::make_mut(&mut Arc::make_mut(&mut next.geometry).mesh.vertices) {
         p.0 += 0.1;
     }
     assert_eq!(assert_update(&previous, &next), next.shading.vertices.len());

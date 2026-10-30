@@ -80,7 +80,7 @@ fn hidden_stroke_cache_preserves_filtered_faces_and_boundary_normals() {
         // Smoothing includes both sides of the hidden boundary. Summing only
         // filtered display triangles would produce different boundary normals.
         let full_normals = doc.mesh().normals();
-        let filtered_normals = display.mesh.normals();
+        let filtered_normals = display.mesh.to_mesh().normals();
         assert!(
             full_normals
                 .iter()
@@ -310,8 +310,8 @@ fn hidden_stroke_cache_release_rejects_material_only_edits_and_history() {
             _ => unreachable!(),
         }
         doc.replace_geometry(geometry).unwrap();
-        assert_eq!(doc.mesh().vertices, display.mesh.vertices);
-        assert_eq!(doc.mesh().mask, display.mesh.mask);
+        assert_eq!(doc.mesh().vertices, *display.mesh.vertices);
+        assert_eq!(doc.mesh().mask, *display.mesh.mask);
         assert!(display.after_stroke(&doc).is_none(), "material edit {case}");
         let changed = Arc::new(DisplayMesh::new(&doc));
         doc.undo();
@@ -623,5 +623,66 @@ fn broad_display_deformation_preserves_full_normals_without_allocating_adjacency
         display = display.during_stroke(&doc).unwrap();
         assert_live_normal_bits(&display, doc.mesh());
         assert!(topology.normal_corners.get().is_none());
+    }
+}
+
+#[test]
+fn shared_display_arrays_follow_mixed_edits_and_preserve_older_snapshots() {
+    for hidden in [false, true] {
+        let mut mesh = source();
+        if !hidden {
+            mesh.hidden_faces.clear();
+        }
+        let mut previous = Arc::new(DisplayMesh::new(&document(mesh.clone())));
+        // Same topology, edits to each payload independently, then edits combined
+        // between displayed frames. Reuse must not depend on the active brush.
+        for case in 0..5 {
+            let old_mesh = previous.mesh.to_mesh();
+            let old_packed = previous.vertices(previous.vertex_stride());
+            let positions = matches!(case, 0 | 3);
+            let mask = matches!(case, 2 | 3);
+            let materials = matches!(case, 1 | 3);
+            if positions {
+                mesh.vertices[0].0 += 0.001;
+            }
+            if mask {
+                mesh.mask[1] = 0.25 + case as f32 * 0.1;
+            }
+            if materials {
+                mesh.materials[2].layers[1].weight = 0.5;
+                mesh.materials[2].layers[1].surface.emission[0] += 0.2;
+                mesh.materials[3] = mesh.materials[3].clone().with_link(7);
+            }
+            let mut doc = document(mesh.clone());
+            doc.begin_stroke();
+            let next = Arc::new(previous.during_stroke(&doc).unwrap());
+            assert!(Arc::ptr_eq(&previous.mesh.triangles, &next.mesh.triangles));
+            assert!(Arc::ptr_eq(&previous.mesh.quads, &next.mesh.quads));
+            assert_eq!(
+                Arc::ptr_eq(&previous.mesh.vertices, &next.mesh.vertices),
+                !positions
+            );
+            assert_eq!(Arc::ptr_eq(&previous.mesh.mask, &next.mesh.mask), !mask);
+            assert_eq!(
+                Arc::ptr_eq(&previous.mesh.materials, &next.mesh.materials),
+                !materials
+            );
+            assert_visible_data(&next, &DisplayMesh::new(&doc));
+            assert_eq!(previous.mesh.to_mesh(), old_mesh);
+            assert_eq!(previous.vertices(previous.vertex_stride()), old_packed);
+            doc.end_stroke();
+            let released = next.after_stroke(&doc).unwrap();
+            assert!(Arc::ptr_eq(&next.mesh.vertices, &released.mesh.vertices));
+            assert!(Arc::ptr_eq(&next.mesh.mask, &released.mesh.mask));
+            assert!(Arc::ptr_eq(&next.mesh.materials, &released.mesh.materials));
+            assert!(Arc::ptr_eq(&next.mesh.triangles, &released.mesh.triangles));
+            assert!(Arc::ptr_eq(&next.mesh.quads, &released.mesh.quads));
+            let canonical = DisplayMesh::new(&doc);
+            assert_eq!(
+                released.vertices(released.vertex_stride()),
+                canonical.vertices(canonical.vertex_stride())
+            );
+            previous = released;
+        }
     }
 }

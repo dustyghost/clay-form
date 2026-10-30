@@ -10,6 +10,8 @@ use std::{
 };
 
 mod live_normals;
+mod surface;
+use surface::DisplaySurface;
 
 #[derive(Clone)]
 pub(crate) struct DisplayMesh {
@@ -79,7 +81,7 @@ impl From<SurfaceShading> for DisplayShading {
 
 #[derive(Clone)]
 pub(crate) struct DisplayGeometry {
-    pub mesh: Mesh,
+    pub mesh: DisplaySurface,
     // Immutable face payloads survive live snapshots and canonical release.
     // Keep the Vec allocation when wrapping freshly built data in an Arc.
     pub uv_corners: Arc<Vec<[[f32; 4]; 3]>>,
@@ -198,8 +200,8 @@ impl DisplayMesh {
             &topology.fans
         } else {
             if source.has_hidden_faces()
-                || self.mesh.triangles != source.triangles
-                || self.mesh.quads != source.quads
+                || *self.mesh.triangles != source.triangles
+                || *self.mesh.quads != source.quads
             {
                 return None;
             }
@@ -207,20 +209,8 @@ impl DisplayMesh {
         };
         #[cfg(test)]
         stroke_profile::mark("live.validate");
-        let mesh = if self.stroke_topology.is_some() {
-            // Preserve display faces and source-face IDs. Copy current vertex
-            // attributes without putting hidden faces back into picking/rendering.
-            Mesh {
-                vertices: source.vertices.clone(),
-                mask: source.mask.clone(),
-                materials: source.materials.clone(),
-                triangles: self.mesh.triangles.clone(),
-                quads: self.mesh.quads.clone(),
-                ..Default::default()
-            }
-        } else {
-            source.clone()
-        };
+        let positions_unchanged = self.mesh.same_positions(source);
+        let mesh = self.mesh.update(source, positions_unchanged);
         #[cfg(test)]
         stroke_profile::mark("live.mesh_copy");
         let mut geometry = DisplayGeometry {
@@ -241,7 +231,7 @@ impl DisplayMesh {
         };
         #[cfg(test)]
         stroke_profile::mark("live.display_copy");
-        if self.mesh.vertices != source.vertices {
+        if !positions_unchanged {
             geometry.temporary_normals = true;
             geometry.shading.vertices = Arc::new(self.update_live_normals(source, fans).vertices);
             geometry.depth_extent = source
@@ -275,9 +265,9 @@ impl DisplayMesh {
             || !source.creases.is_empty()
             || !cached.source.matches(source, document.model(0)?.metadata.model_id)
             // A final dab or another edit may not have been displayed yet.
-            || self.mesh.vertices != source.vertices
-            || self.mesh.mask != source.mask
-            || !Material::slices_equal(&self.mesh.materials, &source.materials)
+            || !self.mesh.same_positions(source)
+            || !self.mesh.same_mask(source)
+            || !Material::slices_bitwise_equal(&self.mesh.materials, &source.materials)
         {
             return None;
         }
@@ -571,7 +561,7 @@ impl DisplayMesh {
             texture_info,
             texture_sources,
             geometry: Arc::new(DisplayGeometry {
-                mesh,
+                mesh: mesh.into(),
                 uv_corners: Arc::new(uv_corners),
                 shading,
                 owners: Arc::new(owners),
@@ -807,13 +797,13 @@ impl DisplayMesh {
         let key = |a, b| if a < b { (a, b) } else { (b, a) };
         let mut hidden = std::collections::HashSet::new();
         if !triangles {
-            for &[a, b, c, d] in &self.mesh.quads {
+            for &[a, b, c, d] in self.mesh.quads.iter() {
                 hidden.insert(key(a, c));
                 hidden.insert(key(b, d));
             }
         }
         let mut edges: HashMap<(usize, usize), (Vec3, Vec3)> = HashMap::new();
-        for &[a, b, c] in &self.mesh.triangles {
+        for &[a, b, c] in self.mesh.triangles.iter() {
             let normal = (self.mesh.vertices[b] - self.mesh.vertices[a])
                 .cross(self.mesh.vertices[c] - self.mesh.vertices[a])
                 .norm();
@@ -1013,11 +1003,10 @@ impl DisplayMesh {
             .matches(source, document.model(0).unwrap().metadata.model_id)));
         assert!(timed(&mut times, "validate.positions_mask", || self
             .mesh
-            .vertices
-            == source.vertices
-            && self.mesh.mask == source.mask));
+            .same_positions(source)
+            && self.mesh.same_mask(source)));
         assert!(timed(&mut times, "validate.materials", || {
-            Material::slices_equal(&self.mesh.materials, &source.materials)
+            Material::slices_bitwise_equal(&self.mesh.materials, &source.materials)
         }));
         if !self.temporary_normals {
             return times;

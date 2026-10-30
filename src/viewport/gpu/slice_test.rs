@@ -141,9 +141,9 @@ fn gpu_sliced_hemisphere_thickness_preview_matches_applied_shell() {
         let source = document.geometry_snapshot();
         let mut renderer = Renderer::new(&headless.state).unwrap();
         let base = renderer.geometry(&document);
-        assert_eq!(base.mesh.vertices, source.mesh.vertices);
+        assert_eq!(*base.mesh.vertices, source.mesh.vertices);
         let display = renderer.render_geometry.as_ref().unwrap().clone();
-        display.mesh.validate_closed().unwrap();
+        display.mesh.to_mesh().validate_closed().unwrap();
         let camera = Camera {
             yaw: 0.35,
             pitch: -0.45,
