@@ -2,6 +2,48 @@
 use super::*;
 
 impl UiState {
+    pub(super) fn appearance_window_bounds(&self, ctx: &egui::Context) -> egui::Rect {
+        let mut bounds = ctx.content_rect();
+        bounds.min.y = self
+            .appearance_bar_bottom
+            .max(bounds.top())
+            .min(bounds.bottom() - 120.);
+        bounds
+    }
+    pub(super) fn appearance_strip(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &Document,
+        commands: &mut Vec<Command>,
+    ) {
+        let Some(index) = self.paint_input_index(document) else {
+            ui.label("Material: no Paint inputs");
+            if ui.button("Materials…").clicked() {
+                commands.push(Command::Action(Action::OpenMaterials));
+            }
+            return;
+        };
+        let mut brush = document.brushes()[index].clone();
+        let name = material::MaterialControls::selected_name(
+            &brush,
+            &self.preferences.materials,
+            document,
+        );
+        let preview = self.materials.selected_swatch(ui.ctx(), &brush.material);
+        if ui.add(egui::Button::image_and_text(egui::Image::new((preview, egui::vec2(24., 24.))), format!("Material: {name}")))
+            .customize(Action::OpenMaterials)
+            .on_hover_text(format!("Stroke material for {}. Click to select, edit or explicitly assign a material. This is not the model’s assigned material.", brush.name)).clicked() {
+            commands.push(Command::Action(Action::OpenMaterials));
+        }
+        if ui.max_rect().width() < 500. {
+            ui.end_row();
+        }
+        self.materials.colour_slots(ui, &mut brush);
+        if brush != document.brushes()[index] {
+            commands.push(Command::UpdateBrush(index, brush));
+        }
+    }
+
     pub(crate) fn paint_input_index(&self, document: &Document) -> Option<usize> {
         let brushes = document.brushes();
         if brushes

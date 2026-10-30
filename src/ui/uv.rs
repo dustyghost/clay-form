@@ -57,6 +57,13 @@ pub(crate) struct UvControls {
     revision: Option<u64>,
 }
 impl UvControls {
+    pub(crate) fn close_expanded(&mut self) {
+        if self.expanded {
+            self.open = false;
+            self.expanded = false;
+            self.drag = None;
+        }
+    }
     fn sync_asset_context(&mut self, document: &Document) {
         let model = document.model(document.active_model_index()).unwrap();
         let assigned = model
@@ -155,6 +162,7 @@ impl UiState {
             "UV layout"
         })
         .id(egui::Id::new("uv_editor"))
+        .constrain_to(self.appearance_window_bounds(ctx))
         .open(&mut open)
         .default_width(480.)
         .default_pos(egui::pos2(20., 110.))
@@ -241,6 +249,8 @@ impl UiState {
                         .max_rect(sidebar.shrink(12.)),
                 );
                 controls.set_clip_rect(sidebar);
+                controls.horizontal_wrapped(|ui| self.appearance_strip(ui, document, commands));
+                controls.separator();
                 controls.heading("UVs and textures");
                 self.uv_header(&mut controls);
                 if controls.button("Close editor").clicked() {

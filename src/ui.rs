@@ -100,6 +100,7 @@ pub(crate) struct UiState {
     pub alphas: alphas::AlphaControls,
     pub materials: material::MaterialControls,
     pub appearance_brush: Option<String>,
+    appearance_bar_bottom: f32,
     pub light_controls: crate::lighting::LightControls,
     pub export_busy: bool,
     pub status: String,
@@ -187,6 +188,7 @@ impl Default for UiState {
             alphas: Default::default(),
             materials: Default::default(),
             appearance_brush: None,
+            appearance_bar_bottom: 0.,
             light_controls: Default::default(),
             export_busy: false,
             status: "Ready • Drag clay to sculpt; Alt-drag empty space to pan; Shift smooths"
@@ -306,6 +308,9 @@ impl UiState {
         let mut commands = Vec::new();
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
             ui.spacing_mut().item_spacing = Vec2::new(6., 5.);
+            let appearance = ui.horizontal_wrapped(|ui| self.appearance_strip(ui, document, &mut commands));
+            self.appearance_bar_bottom = appearance.response.rect.bottom() + 5.;
+            ui.separator();
             ui.horizontal_wrapped(|ui| {
                 ui.strong("CLAY FORM");
                 self.builtin_menu(ui, BuiltinMenu::Materials, document, camera, &mut commands);
@@ -769,6 +774,7 @@ impl UiState {
             let mut visible = true;
             if let Some(response) = egui::Window::new(panel.tool.label())
                 .id(egui::Id::new(("tool", panel.tool.label())))
+                .constrain_to(self.appearance_window_bounds(ctx))
                 .open(&mut visible)
                 .default_pos(panel.position)
                 .default_width(260.)

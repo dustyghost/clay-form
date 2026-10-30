@@ -146,7 +146,7 @@ impl UiState {
                 .open(&mut open)
                 .enabled(enabled)
                 .current_pos(pinned.position)
-                .constrain_to(ctx.content_rect())
+                .constrain_to(self.appearance_window_bounds(ctx))
                 .default_width(320.)
                 .default_height(if pinned.menu == BuiltinMenu::Materials {
                     700.

@@ -10,7 +10,19 @@ impl App {
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         let active_brush = self.ui.brush_index_for_context(&self.document, ctx);
         let command = match action {
+            Action::SwapPaintColours | Action::ResetPaintColours | Action::DefaultPaintMaterial => {
+                self.ui.paint_input_index(&self.document).map(|index| {
+                    let mut brush = self.document.brushes()[index].clone();
+                    match action {
+                        Action::SwapPaintColours => brush.swap_paint_colours(),
+                        Action::ResetPaintColours => brush.reset_paint_colours(),
+                        _ => brush.reset_paint_material(),
+                    }
+                    Command::UpdateBrush(index, brush)
+                })
+            }
             Action::OpenMaterials | Action::OpenColours => {
+                self.ui.uv.close_expanded();
                 let menu = if action == Action::OpenMaterials {
                     crate::preferences::BuiltinMenu::Materials
                 } else {

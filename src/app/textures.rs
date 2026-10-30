@@ -104,18 +104,23 @@ impl App {
             PaintChannels::Roughness => bounded.roughness != sampled.roughness,
             PaintChannels::Metallic => bounded.metallic != sampled.metallic,
         };
-        brush.material = brush.material.unlinked();
-        match channels {
-            PaintChannels::Material => {
-                brush.material = bounded;
-                brush.texture_colour = None;
+        if channels == PaintChannels::Color && self.ui.materials.sampling_secondary {
+            brush.secondary_colour = bounded.base_color;
+            brush.secondary_texture_colour = float_colour.then_some(sampled.base_color);
+        } else {
+            brush.material = brush.material.unlinked();
+            match channels {
+                PaintChannels::Material => {
+                    brush.material = bounded;
+                    brush.texture_colour = None;
+                }
+                PaintChannels::Color => {
+                    brush.material.base_color = bounded.base_color;
+                    brush.texture_colour = float_colour.then_some(sampled.base_color);
+                }
+                PaintChannels::Roughness => brush.material.roughness = bounded.roughness,
+                PaintChannels::Metallic => brush.material.metallic = bounded.metallic,
             }
-            PaintChannels::Color => {
-                brush.material.base_color = bounded.base_color;
-                brush.texture_colour = float_colour.then_some(sampled.base_color);
-            }
-            PaintChannels::Roughness => brush.material.roughness = bounded.roughness,
-            PaintChannels::Metallic => brush.material.metallic = bounded.metallic,
         }
         self.document.update_brush(input_index, brush)?;
         self.ui.status = if clipped { "Sampled values were limited to 0–1 for this target. Float colour textures retain HDR/negative colour samples." }

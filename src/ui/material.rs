@@ -1,3 +1,5 @@
+use super::customization::ActionResponse;
+use crate::action::Action;
 use crate::{
     preferences::MaterialLibrary,
     sculpt::{Brush, Material, Vec3},
@@ -7,6 +9,10 @@ use eframe::egui;
 #[derive(Default)]
 pub(crate) struct MaterialControls {
     textures: Vec<(Material, egui::TextureHandle)>,
+    selected_preview: Option<(Material, egui::TextureHandle)>,
+    default_preview: Option<egui::TextureHandle>,
+    secondary_edit: bool,
+    pub sampling_secondary: bool,
     palette_draft: (egui::ecolor::Hsva, [f32; 3]),
 
     pub sampling: bool,
@@ -95,6 +101,17 @@ impl MaterialControls {
             }
         }
         let mut selected = brush.material.primary_asset();
+        ui.horizontal_wrapped(|ui| {
+            let texture = self.default_preview.get_or_insert_with(|| ui.ctx().load_texture("default_material", render_swatch(Material::default()), egui::TextureOptions::LINEAR));
+            ui.image((texture.id(), egui::vec2(32., 32.)));
+            if ui.selectable_label(brush.material == Material::default(), "Default material")
+                .customize(Action::DefaultPaintMaterial)
+                .on_hover_text("Select the initial teal sculpt material for future strokes. Keeps existing surfaces and shared definitions unchanged.").clicked() {
+                brush.reset_paint_material();
+                self.pending = None;
+                selected = None;
+            }
+        });
         ui.weak("Choose a material for future strokes. Existing paint changes only in the shared material editor below.");
         ui.scope(|ui| {
             let height_id = ui.make_persistent_id("material_library_height");
@@ -166,7 +183,14 @@ impl MaterialControls {
         });
         let name = selected
             .and_then(|id| presets.iter().find(|a| a.id == id))
-            .map_or("Custom material", |a| a.name.as_str())
+            .map_or(
+                if brush.material == Material::default() {
+                    "Default material"
+                } else {
+                    "Custom material"
+                },
+                |a| a.name.as_str(),
+            )
             .to_owned();
         ui.label(format!("Selected material: {name}"));
         if ui
@@ -375,19 +399,106 @@ impl MaterialControls {
         });
     }
 
+    pub(super) fn selected_name(
+        brush: &Brush,
+        library: &MaterialLibrary,
+        document: &crate::document::Document,
+    ) -> String {
+        if let Some(id) = brush.material.primary_asset() {
+            if let Some(asset) = document.materials().iter().find(|a| a.id == id) {
+                return asset.name.clone();
+            }
+            if let Some(asset) = library.copies.iter().find(|a| a.id == id) {
+                return asset.name.clone();
+            }
+            if let Some(name) = id
+                .checked_sub(1)
+                .and_then(|i| library.names.get(i as usize))
+            {
+                return name.clone();
+            }
+        }
+        if brush.material == Material::default() {
+            "Default material"
+        } else {
+            "Custom material"
+        }
+        .into()
+    }
+
+    pub(super) fn selected_swatch(
+        &mut self,
+        ctx: &egui::Context,
+        material: &Material,
+    ) -> egui::TextureId {
+        if self
+            .selected_preview
+            .as_ref()
+            .is_none_or(|(old, _)| old != material)
+        {
+            let image = render_swatch(material.clone());
+            if let Some((old, handle)) = &mut self.selected_preview {
+                handle.set(image, egui::TextureOptions::LINEAR);
+                *old = material.clone();
+            } else {
+                self.selected_preview = Some((
+                    material.clone(),
+                    ctx.load_texture("selected_material", image, egui::TextureOptions::LINEAR),
+                ));
+            }
+        }
+        self.selected_preview.as_ref().unwrap().1.id()
+    }
+
+    pub(super) fn colour_slots(&mut self, ui: &mut egui::Ui, brush: &mut Brush) {
+        for (secondary, label) in [(false, "Primary"), (true, "Secondary")] {
+            ui.selectable_value(&mut self.secondary_edit, secondary, label)
+                .on_hover_text(if secondary {
+                    "Edit the standby colour. Swap colours to paint with it."
+                } else {
+                    "Primary is used for strokes. Select to edit it with the palette."
+                });
+            let mut colour = if secondary {
+                brush.secondary_colour
+            } else {
+                brush.material.base_color
+            };
+            if ui
+                .color_edit_button_rgb(&mut colour)
+                .on_hover_text(format!("Choose {label} colour for future strokes"))
+                .changed()
+            {
+                brush.set_paint_colour(secondary, colour);
+            }
+        }
+        if ui.button("Swap colours").customize(Action::SwapPaintColours).on_hover_text("Exchange Primary and Secondary, including HDR values. Primary paints; existing surfaces stay unchanged.").clicked() {
+            brush.swap_paint_colours();
+        }
+    }
+
     pub(super) fn colour_input(
         &mut self,
         ui: &mut egui::Ui,
         brush: &mut Brush,
         library: &mut MaterialLibrary,
     ) {
-        let mut colour = brush.material.base_color;
-        ui.horizontal(|ui| {
-            ui.label("Stroke colour");
-            if ui.color_edit_button_rgb(&mut colour).changed() {
-                brush.material = brush.material.unlinked();
-                brush.material.base_color = colour;
-                brush.texture_colour = None;
+        ui.horizontal_wrapped(|ui| self.colour_slots(ui, brush));
+        ui.weak(format!(
+            "Primary paints. Palette edits {}.",
+            if self.secondary_edit {
+                "Secondary"
+            } else {
+                "Primary"
+            }
+        ));
+        ui.horizontal_wrapped(|ui| {
+            let colour = Material::default().base_color;
+            let colour32 = egui::Color32::from(egui::Rgba::from_rgb(colour[0], colour[1], colour[2]));
+            if ui.add(egui::Button::new("Default colour").fill(colour32)).on_hover_text("Select the initial teal colour for the highlighted slot. Leaves the other slot and material properties unchanged.").clicked() {
+                brush.set_paint_colour(self.secondary_edit, colour);
+            }
+            if ui.button("Reset colours").customize(Action::ResetPaintColours).on_hover_text("Restore teal Primary and white Secondary. Resets HDR colour overrides; keeps other material properties and existing surfaces.").clicked() {
+                brush.reset_paint_colours();
             }
         });
         self.brush_palette(ui, brush, library);
@@ -400,6 +511,7 @@ impl MaterialControls {
         {
             self.sampling = !self.sampling;
             self.sample_colour_only = false;
+            self.sampling_secondary = false;
         }
     }
 
@@ -414,6 +526,7 @@ impl MaterialControls {
         self.sample_control(ui, "Sample colour");
         if self.sampling && !was_sampling {
             self.sample_colour_only = true;
+            self.sampling_secondary = self.secondary_edit;
         }
         let mut remove = None;
         ui.horizontal_wrapped(|ui| {
@@ -425,18 +538,24 @@ impl MaterialControls {
                         egui::Button::new("")
                             .fill(colour32)
                             .min_size(egui::vec2(20., 20.))
-                            .stroke(if brush.material.base_color == colour {
-                                ui.visuals().selection.stroke
-                            } else {
-                                egui::Stroke::NONE
-                            }),
+                            .stroke(
+                                if (if self.secondary_edit {
+                                    brush.secondary_colour
+                                } else {
+                                    brush.material.base_color
+                                }) == colour
+                                {
+                                    ui.visuals().selection.stroke
+                                } else {
+                                    egui::Stroke::NONE
+                                },
+                            ),
                     )
                     .on_hover_text(
                         "Brush colour · existing paint stays unchanged · right-click to remove",
                     );
                 if response.clicked() {
-                    brush.material = brush.material.unlinked();
-                    brush.material.base_color = colour;
+                    brush.set_paint_colour(self.secondary_edit, colour);
                 }
                 response.context_menu(|ui| {
                     if ui.button("Remove colour").clicked() {
@@ -449,7 +568,11 @@ impl MaterialControls {
                 .add_enabled(library.palette.len() < 32, egui::Button::new("+ Colour"))
                 .on_hover_text("Choose a colour to add to your personal palette");
             if add.clicked() {
-                let colour = brush.material.base_color;
+                let colour = if self.secondary_edit {
+                    brush.secondary_colour
+                } else {
+                    brush.material.base_color
+                };
                 self.palette_draft = (egui::ecolor::Hsva::from_rgb(colour), colour);
             }
             egui::Popup::menu(&add)
@@ -470,9 +593,7 @@ impl MaterialControls {
                     ui.horizontal(|ui| {
                         if ui.button("Add colour").clicked() {
                             library.add_colour(*colour);
-                            brush.material = brush.material.unlinked();
-                            brush.material.base_color = *colour;
-                            brush.texture_colour = None;
+                            brush.set_paint_colour(self.secondary_edit, *colour);
                             ui.close();
                         }
                         if ui.button("Cancel").clicked() {

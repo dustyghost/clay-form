@@ -5,6 +5,7 @@ Tickets #104 and #105 share selection and assignment conventions. The independen
 ## Interaction and data checks
 
 - `app::tests::appearance`: actual controls at 1200×900 and 720×600; create without UVs, generate UVs, assign, duplicate without assigning, unassign, confirmed deletion, undo, shared-use feedback and entering Paint. Independent material assignment works while a sculpting brush is selected. Opening an already docked menu preserves its placement.
+- `appearance_colour_pair_controls_and_defaults` clicks secondary selection, palette picking, swapping, default material/colour, colour reset and secondary sampling at both sizes, then saves/reopens and uses Swap in the expanded UV editor. It verifies these input changes leave the model untouched. `appearance_colour_pair_legacy_hdr_and_validation` checks older preset defaults, HDR swaps and invalid colour rejection.
 - `document::texture_library`: shared edits and history, retained-level image uses, preserving replaced images, float pixels through save/reopen, subsequent painting, and library/history memory limits.
 - `document::materials`: shared edits and usage counts, including inactive subdivision levels.
 - Existing `app::textures::tests` retain external-editor reload, conflict detection, float precision, capture and custom Paint presets.
@@ -20,12 +21,17 @@ Captured with the real egui controls, clicking and scrolling the workflow rather
 - [Independent Colours menu, compact](colours-720x600.png): future-stroke scope and palette access without changing an existing surface.
 - [Shared image replacement, compact](texture-shared-replace-720x600.png): image identity, named uses and confirmation before replacing shared pixels.
 - [Texture browser beside Alpha management](textures-beside-alphas-1200x900.png): thumbnail browsing, selected state and resize controls, with texture-specific assignment separated from the asset.
+- [Persistent material and colour strip, compact](appearance-strip-720x600.png): material preview/name, editable Primary and Secondary, and Swap remain visible with menus closed.
+- [Secondary colour editing, compact](primary-secondary-colours-720x600.png): explicit palette target, default colour and reset controls, while the strip stays above the pinned menu.
+- [Expanded UV appearance controls](appearance-expanded-uv-720x600.png): material and colour controls remain available in the editor sidebar.
 
 Reproduce the captures:
 
 ```sh
 CLAY_APPEARANCE_REVIEW=/tmp/clay-appearance-review \
   cargo test --locked --lib appearance_workflow_offscreen_review -- --ignored --nocapture
+CLAY_APPEARANCE_REVIEW=/tmp/clay-appearance-review \
+  cargo test --locked --lib appearance_colour_pair_offscreen_review -- --ignored --nocapture
 ```
 
 The guides provide a short [material/colour workflow](../../guide/materials.md#try-the-complete-workflow) and [texture workflow](../../guide/textures.md#paint-an-image). Image painting still exposes base colour only; scalar-map authoring remains #70. Personal palette/library edits remain separate from project Undo, and each Paint preset retains its own inputs.

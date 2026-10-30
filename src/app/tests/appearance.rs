@@ -78,14 +78,18 @@ impl AppearanceHarness {
         }
     }
     fn point(&self, label: &str) -> Option<Pos2> {
-        self.output.shapes.iter().find_map(|s| match &s.shape {
-            egui::Shape::Text(t) if t.galley.text() == label => {
-                let p = t.pos + t.galley.size() * 0.5;
-                (s.clip_rect.shrink(2.).contains(p) && self.ctx.content_rect().contains(p))
-                    .then_some(p)
-            }
-            _ => None,
-        })
+        self.output
+            .shapes
+            .iter()
+            .rev()
+            .find_map(|s| match &s.shape {
+                egui::Shape::Text(t) if t.galley.text() == label => {
+                    let p = t.pos + t.galley.size() * 0.5;
+                    (s.clip_rect.shrink(2.).contains(p) && self.ctx.content_rect().contains(p))
+                        .then_some(p)
+                }
+                _ => None,
+            })
     }
     fn scroll(&mut self, delta: f32) {
         self.frame(vec![
@@ -122,7 +126,17 @@ impl AppearanceHarness {
         panic!("Unreachable control {label}: {labels:?}");
     }
     fn click(&mut self, label: &str) {
-        let p = self.reach(label);
+        let mut p = self.reach(label);
+        // Let wheel easing settle before aiming at a control in a restored panel.
+        for _ in 0..12 {
+            self.frame(vec![]);
+            let next = self.point(label).unwrap_or_else(|| self.reach(label));
+            let settled = p.distance(next) < 0.1;
+            p = next;
+            if settled {
+                break;
+            }
+        }
         self.frame(vec![egui::Event::PointerMoved(p), primary_event(p, true)]);
         self.frame(vec![primary_event(p, false)]);
         self.frame(vec![]);
@@ -430,4 +444,190 @@ fn appearance_workflow_offscreen_review() {
         h.open(Action::OpenColours);
         h.save("colours");
     }
+}
+
+fn colour_pair_workflow(size: [i32; 2], capture: bool) {
+    let mut h = AppearanceHarness::new(size, capture);
+    h.app.ui.preferences.compact_toolbar = true;
+    let sculpt = h.app.ui.selected;
+    let input = h.app.ui.paint_input_index(&h.app.document).unwrap();
+    h.open(Action::OpenMaterials);
+    h.click("Copper");
+    let copper = h.app.document.brushes()[input].material.clone();
+    let geometry = h.app.document.geometry_snapshot();
+    h.app.ui.preferences.pinned_menus.clear();
+    h.frame(vec![]);
+    h.frame(vec![]);
+    assert!(
+        h.point("Material: Copper").is_some(),
+        "selected material is visible with menus closed and compact toolbar"
+    );
+    assert!(h.point("Primary").is_some());
+    assert!(h.point("Secondary").is_some());
+    h.save("appearance-strip");
+    h.open(Action::OpenColours);
+    h.click("Secondary");
+    h.click("Default colour");
+    assert_eq!(h.app.document.brushes()[input].material, copper);
+    assert_eq!(
+        h.app.document.brushes()[input].secondary_colour,
+        Material::default().base_color
+    );
+    // The palette picker targets the highlighted secondary slot too.
+    h.click("+ Colour");
+    let title = h.reach("Add palette colour");
+    let p = title + Vec2::new(0., 140.);
+    h.frame(vec![egui::Event::PointerMoved(p), primary_event(p, true)]);
+    h.frame(vec![primary_event(p, false)]);
+    h.click("Add colour");
+    let secondary = h.app.document.brushes()[input].secondary_colour;
+    assert_ne!(secondary, Material::default().base_color);
+    assert_eq!(h.app.document.brushes()[input].material, copper);
+    h.save("primary-secondary-colours");
+    h.click("Swap colours");
+    assert_eq!(
+        h.app.document.brushes()[input].material.base_color,
+        secondary
+    );
+    assert_eq!(
+        h.app.document.brushes()[input].secondary_colour,
+        copper.base_color
+    );
+    h.click("Reset colours");
+    let brush = &h.app.document.brushes()[input];
+    assert_eq!(brush.material.base_color, Material::default().base_color);
+    assert_eq!(brush.secondary_colour, [1.; 3]);
+    assert_eq!(brush.material.roughness, copper.roughness);
+    assert_eq!(h.app.document.geometry_snapshot(), geometry);
+    h.app.ui.preferences.pinned_menus.clear();
+    h.open(Action::OpenMaterials);
+    h.click("Default material");
+    assert_eq!(
+        h.app.document.brushes()[input].material,
+        Material::default()
+    );
+    h.app.ui.preferences.pinned_menus.clear();
+    h.frame(vec![]);
+    h.frame(vec![]);
+    assert!(h.point("Material: Default material").is_some());
+    assert_eq!(h.app.ui.selected, sculpt);
+    assert_eq!(h.app.document.geometry_snapshot(), geometry);
+    h.save("appearance-defaults");
+    h.open(Action::OpenColours);
+    h.click("Secondary");
+    h.click("Sample colour");
+    h.app
+        .sample_surface_material(Material::from_srgb([0.9, 0.1, 0.3], 0.1, 1.))
+        .unwrap();
+    assert_eq!(
+        h.app.document.brushes()[input].material,
+        Material::default()
+    );
+    assert_eq!(
+        h.app.document.brushes()[input].secondary_colour,
+        Material::from_srgb([0.9, 0.1, 0.3], 0.1, 1.).base_color
+    );
+    let brush = h.app.document.brushes()[input].clone();
+    let saved = crate::persistence::json_bytes(&h.app.document.project()).unwrap();
+    h.app
+        .document
+        .replace_project(serde_json::from_slice(&saved).unwrap(), "colour-pair.clay")
+        .unwrap();
+    assert!(h.app.document.brushes()[input] == brush);
+    h.app.ui.preferences.pinned_menus.clear();
+    h.open(Action::OpenUv);
+    h.click("Expand editor");
+    assert!(h.point("Restore window").is_some());
+    h.save("appearance-expanded-uv");
+    h.click("Swap colours");
+    assert_eq!(
+        h.app.document.brushes()[input].material.base_color,
+        brush.secondary_colour
+    );
+    h.click("Restore window");
+    h.save("appearance-restored-uv");
+    h.click("Expand editor");
+    h.click("Material: Custom material");
+    assert!(!h.app.ui.uv.open);
+    h.save("appearance-uv-material-selection");
+    h.click("Default material");
+    h.save("appearance-uv-material-default");
+    assert_eq!(
+        h.app.document.brushes()[input].material,
+        Material::default()
+    );
+}
+
+#[test]
+fn appearance_colour_pair_controls_and_defaults() {
+    for size in [[1200, 900], [720, 600]] {
+        colour_pair_workflow(size, false);
+    }
+}
+
+#[test]
+#[ignore = "manual persistent material and colour-pair layout review; requires Vulkan"]
+fn appearance_colour_pair_offscreen_review() {
+    for size in [[1200, 900], [720, 600]] {
+        colour_pair_workflow(size, true);
+    }
+}
+
+#[test]
+fn appearance_colour_pair_legacy_hdr_and_validation() {
+    let mut h = AppearanceHarness::new([900, 700], false);
+    let input = h.app.ui.paint_input_index(&h.app.document).unwrap();
+    let mut brush = h.app.document.brushes()[input].clone();
+    brush.material = Material::examples()[4].1.clone();
+    brush.texture_colour = Some([3., -1., 0.5]);
+    let mut legacy = serde_json::to_value(&brush).unwrap();
+    legacy.as_object_mut().unwrap().remove("secondary_colour");
+    legacy
+        .as_object_mut()
+        .unwrap()
+        .remove("secondary_texture_colour");
+    let restored: crate::sculpt::Brush = serde_json::from_value(legacy).unwrap();
+    assert_eq!(restored.material, brush.material);
+    assert_eq!(restored.texture_colour, brush.texture_colour);
+    assert_eq!(restored.secondary_colour, [1.; 3]);
+    brush.secondary_colour = [0.1, 0.2, 0.3];
+    // Equal HDR values must survive a swap even if the bounded colours differ.
+    brush.secondary_texture_colour = brush.texture_colour;
+    h.app.document.update_brush(input, brush.clone()).unwrap();
+    h.app
+        .dispatch(Command::Action(Action::SwapPaintColours), &h.ctx);
+    assert_eq!(
+        h.app.document.brushes()[input].texture_colour,
+        brush.texture_colour
+    );
+    assert_eq!(
+        h.app.document.brushes()[input].material.base_color,
+        brush.secondary_colour
+    );
+    h.app
+        .dispatch(Command::Action(Action::SwapPaintColours), &h.ctx);
+    assert_eq!(h.app.document.brushes()[input].material, brush.material);
+    assert_eq!(
+        h.app.document.brushes()[input].secondary_colour,
+        brush.secondary_colour
+    );
+    let mut invalid = brush.clone();
+    invalid.secondary_colour[0] = f32::NAN;
+    assert!(crate::sculpt::validate_brush(&invalid).is_err());
+    invalid.secondary_colour = [1.; 3];
+    invalid.secondary_texture_colour = Some([f32::INFINITY; 3]);
+    assert!(crate::sculpt::validate_brush(&invalid).is_err());
+    h.app
+        .dispatch(Command::Action(Action::ResetPaintColours), &h.ctx);
+    assert_eq!(h.app.document.brushes()[input].texture_colour, None);
+    assert_eq!(
+        h.app.document.brushes()[input].secondary_texture_colour,
+        None
+    );
+    h.app
+        .dispatch(Command::Action(Action::DefaultPaintMaterial), &h.ctx);
+    assert_eq!(
+        h.app.document.brushes()[input].material,
+        Material::default()
+    );
 }
