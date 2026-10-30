@@ -19,6 +19,32 @@ struct TextureSource {
     storage: usize,
     revision: u64,
 }
+
+/// Original topology behind a filtered display. Shared by successive stroke
+/// frames so hidden faces still contribute to the original smoothing fans.
+struct HiddenStrokeTopology {
+    model_id: u64,
+    triangles: Vec<[usize; 3]>,
+    quads: Vec<[usize; 4]>,
+    hidden_faces: Vec<bool>,
+    polygroups: Vec<usize>,
+    group_visibility: Vec<bool>,
+    fans: Vec<[usize; 3]>,
+}
+impl HiddenStrokeTopology {
+    fn matches(&self, mesh: &Mesh, model_id: u64) -> bool {
+        self.model_id == model_id
+            && self.triangles == mesh.triangles
+            && self.quads == mesh.quads
+            && self.hidden_faces == mesh.hidden_faces
+            && self.polygroups == mesh.polygroups
+            && self
+                .group_visibility
+                .iter()
+                .copied()
+                .eq(mesh.vertex_groups.iter().map(|g| g.visible))
+    }
+}
 #[derive(Clone)]
 pub(crate) struct DisplayGeometry {
     pub mesh: Mesh,
@@ -33,6 +59,7 @@ pub(crate) struct DisplayGeometry {
     pub active_vertices: usize,
     pub active: usize,
     pub(super) depth_extent: f32,
+    hidden_stroke_topology: Option<Arc<HiddenStrokeTopology>>,
 }
 impl std::ops::Deref for DisplayMesh {
     type Target = DisplayGeometry;
@@ -95,19 +122,46 @@ impl DisplayMesh {
             || document.model_count() != 1
             || !document.active_visible()
             || source.vertices.len() < 20_000
-            || source.has_hidden_faces()
             || document.model(0)?.metadata.temporary_thickness != 0.
             || document.primitive().is_some()
             || !source.uv.textures.is_empty()
             || !source.creases.is_empty()
             || self.mesh.vertices.len() != source.vertices.len()
-            || self.mesh.triangles != source.triangles
-            || self.mesh.quads != source.quads
         {
             return None;
         }
+        let fans = if let Some(topology) = &self.hidden_stroke_topology {
+            if !source.uv.is_empty()
+                || !topology.matches(source, document.model(0)?.metadata.model_id)
+            {
+                return None;
+            }
+            &topology.fans
+        } else {
+            if source.has_hidden_faces()
+                || self.mesh.triangles != source.triangles
+                || self.mesh.quads != source.quads
+            {
+                return None;
+            }
+            &self.shading.triangles
+        };
+        let mesh = if self.hidden_stroke_topology.is_some() {
+            // Preserve filtered faces and source-face IDs. Copy current vertex
+            // attributes without putting hidden faces back into picking/rendering.
+            Mesh {
+                vertices: source.vertices.clone(),
+                mask: source.mask.clone(),
+                materials: source.materials.clone(),
+                triangles: self.mesh.triangles.clone(),
+                quads: self.mesh.quads.clone(),
+                ..Default::default()
+            }
+        } else {
+            source.clone()
+        };
         let mut geometry = DisplayGeometry {
-            mesh: source.clone(),
+            mesh,
             uv_corners: self.uv_corners.clone(),
             shading: self.shading.clone(),
             owners: self.owners.clone(),
@@ -119,10 +173,11 @@ impl DisplayMesh {
             active_vertices: self.active_vertices,
             active: self.active,
             depth_extent: self.depth_extent,
+            hidden_stroke_topology: self.hidden_stroke_topology.clone(),
         };
         if self.mesh.vertices != source.vertices {
             let mut normals = vec![Vec3::default(); geometry.shading.vertices.len()];
-            for (ids, fans) in source.triangles.iter().zip(&geometry.shading.triangles) {
+            for (ids, fans) in source.triangles.iter().zip(fans) {
                 let [a, b, c] = ids.map(|i| source.vertices[i]);
                 let face = (b - a).cross(c - a);
                 for &i in fans {
@@ -182,6 +237,7 @@ impl DisplayMesh {
         let mut poly_colors = Vec::new();
         let mut outlines = Vec::new();
         let mut active_vertices = 0;
+        let mut hidden_stroke_topology = None;
         for index in
             std::iter::once(active).chain((0..document.model_count()).filter(|i| *i != active))
         {
@@ -291,6 +347,26 @@ impl DisplayMesh {
                 }
             }
             let surface_shading = surface.surface_shading();
+            if has_hidden
+                && document.model_count() == 1
+                && index == active
+                && active_mesh.is_none()
+                && surface.vertices.len() >= 20_000
+                && model.metadata.temporary_thickness == 0.
+                && model.settings.primitive.is_none()
+                && surface.creases.is_empty()
+                && surface.uv.is_empty()
+            {
+                hidden_stroke_topology = Some(Arc::new(HiddenStrokeTopology {
+                    model_id: model.metadata.model_id,
+                    triangles: surface.triangles.clone(),
+                    quads: surface.quads.clone(),
+                    hidden_faces: surface.hidden_faces.clone(),
+                    polygroups: surface.polygroups.clone(),
+                    group_visibility: surface.vertex_groups.iter().map(|g| g.visible).collect(),
+                    fans: surface_shading.triangles.clone(),
+                }));
+            }
             let shading_offset = shading.vertices.len();
             shading.vertices.extend(
                 surface_shading
@@ -363,6 +439,7 @@ impl DisplayMesh {
                 active_vertices,
                 active,
                 depth_extent,
+                hidden_stroke_topology,
             }),
         }
     }
@@ -650,3 +727,6 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod stroke_tests;

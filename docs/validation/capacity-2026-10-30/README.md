@@ -2,6 +2,8 @@
 
 Part of #103. This batch measures Clay Form's existing implementation and adds repeatable improvement checks. It does not change mesh caps or introduce a new sculpting architecture.
 
+Follow-up: [hidden-surface stroke caching and matched before/after results](../hidden-stroke-cache-2026-10-30/README.md).
+
 ## Measured baseline
 
 Production source base: `3e10b98ec637ac90425ade357d50c2f26ae5f2d5`, with the benchmark additions in this change. Each run records the combined source SHA-256 and compiler in `environment.json`. Hardware: Intel Core i7-7500U, two cores/four threads, 7.63 GiB usable RAM, Intel HD Graphics 620, Arch Linux, Rust 1.99.0. The browser was closed before the retained runs. About 4.4 GiB RAM was available at CPU-run start, although swap was already nearly full; this was not a dedicated benchmark host. Files were written under the repository's `target` directory on the local NVMe filesystem, not RAM-backed `/tmp`.

@@ -7,6 +7,7 @@
 *.tmp
 *.log
 !/docs/validation/capacity-2026-10-30/*/*.log
+!/docs/validation/hidden-stroke-cache-2026-10-30/*/*.log
 .DS_Store
 Thumbs.db
 .idea/
