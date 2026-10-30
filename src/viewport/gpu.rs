@@ -337,6 +337,11 @@ struct Gpu {
     back_uniform: wgpu::Buffer,
     meshes: Vec<MeshBuffers>,
     vertex_stride: usize,
+    mesh_geometry: Option<Arc<display::DisplayGeometry>>,
+    mesh_binding_limit: usize,
+    packed_vertices: Vec<f32>,
+    #[cfg(test)]
+    vertex_write_bytes: usize,
     texture_pixels: wgpu::Texture,
     texture_info: wgpu::Buffer,
     edges: Option<Vec<(wgpu::Buffer, u32)>>,
@@ -616,6 +621,11 @@ impl Gpu {
                 wgpu::BufferUsages::STORAGE,
             ),
             vertex_stride: 12,
+            mesh_geometry: None,
+            mesh_binding_limit: 0,
+            packed_vertices: Vec::new(),
+            #[cfg(test)]
+            vertex_write_bytes: 0,
             edges: None,
             triangle_edges: None,
             uploaded: None,
@@ -628,6 +638,9 @@ impl Gpu {
     fn clear(&mut self) {
         self.target = None;
         self.uploaded = None;
+        self.mesh_geometry = None;
+        self.mesh_binding_limit = 0;
+        self.packed_vertices = Vec::new();
         self.edges = None;
         self.triangle_edges = None;
         self.meshes = vec![Self::mesh_buffers(&self.device, &[], &[], &[], &[])];
@@ -650,7 +663,7 @@ impl Gpu {
                 device,
                 "mesh vertices",
                 bytemuck::cast_slice(vertices),
-                wgpu::BufferUsages::STORAGE,
+                wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             ),
             indices: buffer(
                 device,
@@ -690,10 +703,20 @@ impl Gpu {
         })
     }
     fn upload(&mut self, data: &Arc<DisplayMesh>) {
+        #[cfg(test)]
+        {
+            self.vertex_write_bytes = 0;
+        }
         if self
             .uploaded
             .as_ref()
             .is_some_and(|old| Arc::ptr_eq(old, data))
+            && self.mesh_binding_limit
+                == self.device.limits().max_storage_buffer_binding_size as usize
+            && self
+                .mesh_geometry
+                .as_ref()
+                .is_some_and(|old| Arc::ptr_eq(old, &data.geometry))
         {
             return;
         }
@@ -714,6 +737,10 @@ impl Gpu {
     // A document may contain several maximum-density models. Chunk the display
     // data at the device binding limit instead of imposing a new geometry limit.
     fn upload_meshes(&mut self, data: &DisplayMesh, limit: usize) {
+        #[cfg(test)]
+        {
+            self.vertex_write_bytes = 0;
+        }
         if let Some(old) = &self.uploaded
             && old.texture_pixels.len() == data.texture_pixels.len()
         {
@@ -744,17 +771,51 @@ impl Gpu {
                 wgpu::BufferUsages::STORAGE,
             );
         }
-        if limit == self.device.limits().max_storage_buffer_binding_size as usize
+        if limit == self.mesh_binding_limit
             && self
-                .uploaded
+                .mesh_geometry
                 .as_ref()
-                .is_some_and(|old| old.shares_geometry(data))
+                .is_some_and(|old| Arc::ptr_eq(old, &data.geometry))
         {
             return;
         }
-        self.vertex_stride = data.vertex_stride();
-        let stride = self.vertex_stride;
+        let stride = data.vertex_stride();
         let vertices = data.vertices(stride);
+        if self.meshes.len() == 1
+            && self.mesh_binding_limit == limit
+            && self.vertex_stride == stride
+            && self.packed_vertices.len() == vertices.len()
+            && self.mesh_geometry.as_ref().is_some_and(|old| {
+                old.shading.triangles == data.shading.triangles
+                    && old.poly_colors == data.poly_colors
+                    && old.uv_corners == data.uv_corners
+            })
+        {
+            let bytes = bytemuck::cast_slice(&vertices);
+            for range in upload::changed_ranges(bytemuck::cast_slice(&self.packed_vertices), bytes)
+            {
+                self.queue.write_buffer(
+                    &self.meshes[0].vertices,
+                    range.start as u64,
+                    &bytes[range.clone()],
+                );
+                #[cfg(test)]
+                {
+                    self.vertex_write_bytes += range.len();
+                }
+            }
+            self.packed_vertices = vertices;
+            self.mesh_geometry = Some(data.geometry.clone());
+            return;
+        }
+        self.vertex_stride = stride;
+        self.mesh_binding_limit = limit;
+        self.mesh_geometry = Some(data.geometry.clone());
+        self.packed_vertices = Vec::new();
+        #[cfg(test)]
+        {
+            self.vertex_write_bytes = vertices.len() * 4;
+        }
         let colors: Vec<[f32; 4]> = data
             .poly_colors
             .iter()
@@ -775,6 +836,7 @@ impl Gpu {
                 &colors,
                 &data.uv_corners,
             )];
+            self.packed_vertices = vertices;
             return;
         }
         self.meshes.clear();
@@ -1221,6 +1283,7 @@ mod display;
 mod profile;
 #[cfg(test)]
 mod tests;
+mod upload;
 pub(super) use display::DisplayMesh;
 #[cfg(all(test, target_os = "linux"))]
 mod backfaces_test;

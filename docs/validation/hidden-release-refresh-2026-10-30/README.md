@@ -2,6 +2,8 @@
 
 Follow-up to the [hidden-surface stroke cache](../hidden-stroke-cache-2026-10-30/README.md), under #103. The comparison baseline is commit `1a44de8`. Final measurements use source SHA-256 `6257c4da586fdd690bb30e85d858dc5734cb2acf1aaea24252ad8f19998c344e`; hardware, compiler, timestamps, individual samples and memory stages are retained in the [CPU results](cpu/index.json) and [GPU results](gpu/index.json).
 
+The upload-phase follow-up is recorded in [Reuse mesh buffers and upload changed vertex blocks](../vertex-upload-cache-2026-10-30/README.md).
+
 ## Change and scope
 
 Cached hidden-surface strokes now retain position-independent edge adjacency alongside the source topology. On release, deformation recomputes canonical angle-weighted normals and smoothing fans from that adjacency, while reusing filtered display faces, source-face IDs and attributes. It rechecks the sixty-degree smoothing threshold, so edges can become either sharp or smooth. Hidden faces still contribute to boundary normals, and the updated fan mapping is retained for the next stroke.

@@ -8,7 +8,7 @@ use std::{collections::HashMap, sync::Arc};
 
 #[derive(Clone)]
 pub(crate) struct DisplayMesh {
-    geometry: Arc<DisplayGeometry>,
+    pub(super) geometry: Arc<DisplayGeometry>,
     pub(super) texture_pixels: Atlas,
     pub texture_info: Vec<[u32; 4]>,
     texture_sources: Vec<TextureSource>,
