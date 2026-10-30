@@ -14,6 +14,11 @@ impl Document {
     }
     pub(crate) fn sync_geometry_texture_uses(geometry: &mut Geometry) {
         let textures = geometry.mesh.uv.textures.clone();
+        for image in &mut geometry.scene.texture_library {
+            if let Some(source) = textures.iter().find(|t| t.id == image.id) {
+                *image = source.clone();
+            }
+        }
         let sync = |mesh: &mut Mesh| {
             for t in &mut mesh.uv.textures {
                 if let Some(source) = textures.iter().find(|s| s.id == t.id) {
@@ -59,9 +64,27 @@ impl Document {
             texture.validate()?;
         }
         self.end_stroke();
-        let mut candidate = self.geometry.clone();
+        let mut candidate = self.geometry_snapshot();
         for texture in textures {
             texture.validate()?;
+            let previous: Vec<_> = std::iter::once(&candidate.mesh)
+                .chain(&candidate.settings.lower)
+                .chain(&candidate.settings.upper)
+                .flat_map(|mesh| &mesh.uv.textures)
+                .filter(|t| t.channel == texture.channel && t.id != texture.id)
+                .cloned()
+                .collect();
+            for old in previous {
+                Self::retain_texture(&mut candidate, old);
+            }
+            if let Some(old) = candidate
+                .scene
+                .texture_library
+                .iter_mut()
+                .find(|t| t.id == texture.id)
+            {
+                *old = texture.clone();
+            }
             let assign = |mesh: &mut Mesh| {
                 if let Some(old) = mesh
                     .uv
@@ -98,38 +121,15 @@ impl Document {
                 }
             }
         }
-        crate::sculpt::texture::validate_budget(
-            candidate
-                .submodels
-                .iter()
-                .map(|m| &m.mesh)
-                .chain(std::iter::once(&candidate.mesh)),
-        )?;
-        if candidate == self.geometry {
-            return Ok(());
-        }
-        self.replace_geometry_named(candidate, "Assign texture")
+        self.commit_texture_library(candidate, "Assign texture")
     }
     pub(crate) fn remove_texture(
         &mut self,
         channel: crate::sculpt::texture::Channel,
     ) -> Result<(), String> {
-        self.require_sculpt_mesh()?;
-        self.end_stroke();
-        let mut candidate = self.geometry.clone();
-        for mesh in std::iter::once(&mut candidate.mesh)
-            .chain(candidate.settings.lower.iter_mut())
-            .chain(candidate.settings.upper.iter_mut())
-        {
-            mesh.uv.textures.retain(|t| t.channel != channel);
-        }
-        if candidate == self.geometry {
-            return Ok(());
-        }
-        self.replace_geometry_named(candidate, "Remove texture")?;
-        self.reconcile_paint_target();
-        Ok(())
+        self.remove_texture_uses(|texture| texture.channel == channel)
     }
+
     pub(crate) fn edit_uv(
         &mut self,
         label: &'static str,

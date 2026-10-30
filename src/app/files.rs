@@ -206,8 +206,30 @@ impl App {
                 crate::app::textures::TextureCommand::Relink(self.ui.uv.channel, path.clone()),
             )?,
             AssetKind::Texture => {
-                let texture = persistence::texture::load(&path, self.ui.uv.channel)?;
-                self.document.assign_texture(texture)?;
+                let texture =
+                    persistence::texture::load(&path, crate::sculpt::texture::Channel::Color)?;
+                let id = texture.id;
+                self.document.save_texture_asset(texture)?;
+                self.ui.uv.select_asset(&self.document, id);
+                self.ui.status =
+                    "Imported image into the library. Assign to a model to paint.".into();
+            }
+            AssetKind::ReplaceTexture(id) => {
+                let old = self
+                    .document
+                    .texture_asset(id)
+                    .ok_or("Image no longer exists")?;
+                let mut texture = persistence::texture::load(&path, old.channel)?;
+                if old.pixels.precision() == crate::sculpt::texture::Precision::Float32
+                    && texture.pixels.precision() != crate::sculpt::texture::Precision::Float32
+                {
+                    return Err("Use an EXR replacement to preserve float precision. Import integer images as a separate asset.".into());
+                }
+                texture.id = id;
+                texture.name = old.name.clone();
+                self.document.save_texture_asset(texture)?;
+                self.ui.status =
+                    "Replaced image in all shared uses. Undo restores the original pixels.".into();
             }
             AssetKind::Reference => self.add_reference(egui::DroppedFile {
                 path: Some(path.clone().into()),

@@ -2,6 +2,7 @@ use super::*;
 use crate::viewport::Gesture;
 use eframe::egui::{Pos2, Vec2};
 mod about;
+mod appearance;
 mod startup;
 fn navigation_frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) -> egui::Rect {
     let mut rect = egui::Rect::NOTHING;

@@ -276,6 +276,9 @@ pub(crate) fn viewport_background(ctx: &egui::Context) -> egui::Color32 {
 /// Stable identities for built-in menus displayed as popups, windows or sections.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) enum BuiltinMenu {
+    Materials,
+    Colours,
+    Textures,
     References,
     Brushes,
     Transform,
@@ -295,6 +298,9 @@ pub(crate) enum BuiltinMenu {
 impl BuiltinMenu {
     pub fn label(self) -> &'static str {
         match self {
+            Self::Materials => "Materials",
+            Self::Colours => "Colours",
+            Self::Textures => "Textures",
             Self::References => "References",
             Self::Brushes => "Add brush",
             Self::Transform => "Transform",
@@ -426,8 +432,8 @@ impl Default for Preferences {
             materials: MaterialLibrary::default(),
             paint_inspection: Default::default(),
             lighting: Default::default(),
-            paint_shortcuts_version: 1,
-            brush_controls_version: 2,
+            paint_shortcuts_version: 2,
+            brush_controls_version: 3,
             visibility_selection: VisibilitySettings::default(),
             modeling_presets: Vec::new(),
             next_modeling_preset_id: 1,
@@ -790,7 +796,7 @@ impl Preferences {
                     .iter()
                     .find(|(_, b)| b.as_ref() == Some(&shortcut))
                 {
-                    if matches!(action, Action::OpenMenu(_))
+                    if matches!(action, Action::OpenMenu(_) | Action::SwapPaintColours)
                         && matches!(event, egui::Event::Key { repeat: true, .. })
                     {
                         return false;
@@ -832,11 +838,12 @@ impl Preferences {
     fn add_brush_controls(&mut self) {
         let id = self.add_menu();
         let menu = self.menus.last_mut().unwrap();
-        menu.name = "Brush controls".into();
+        menu.name = "Tool controls".into();
         menu.placement = Placement::LeftPanel;
         menu.columns = 1;
         menu.collapsible = true;
         menu.items = [
+            Action::AppearanceControls,
             Action::BrushIcon,
             Action::BrushSize,
             Action::BrushInnerRadius,
@@ -1031,6 +1038,19 @@ pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
         }
         prefs.paint_shortcuts_version = 1;
     }
+    if prefs.paint_shortcuts_version < 2 {
+        let shortcut = Action::SwapPaintColours.default_shortcut();
+        if !prefs.bindings.iter().any(|(_, key)| *key == shortcut)
+            && let Some((_, key)) = prefs
+                .bindings
+                .iter_mut()
+                .find(|(a, _)| *a == Action::SwapPaintColours)
+            && key.is_none()
+        {
+            *key = shortcut;
+        }
+        prefs.paint_shortcuts_version = 2;
+    }
     // This update introduces T and moves the stock selection-menu key from W to X.
     // Explicit unbindings and non-default assignments remain intact.
     if !prefs
@@ -1190,6 +1210,42 @@ pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
             }
         }
         prefs.brush_controls_version = 2;
+    }
+    if prefs.brush_controls_version < 3 {
+        for menu in prefs
+            .menus
+            .iter_mut()
+            .chain(prefs.workspaces.iter_mut().flat_map(|w| &mut w.menus))
+            .chain(
+                prefs
+                    .paint_workspace_backup
+                    .iter_mut()
+                    .flat_map(|(w, _)| &mut w.menus),
+            )
+        {
+            if menu
+                .items
+                .iter()
+                .any(|i| i.action == Some(Action::BrushIcon))
+                && menu
+                    .items
+                    .iter()
+                    .any(|i| i.action == Some(Action::BrushSize))
+            {
+                if menu.name == "Brush controls" {
+                    menu.name = "Tool controls".into();
+                }
+                if !menu
+                    .items
+                    .iter()
+                    .any(|i| i.action == Some(Action::AppearanceControls))
+                {
+                    menu.items
+                        .insert(0, CustomItem::action(Action::AppearanceControls));
+                }
+            }
+        }
+        prefs.brush_controls_version = 3;
     }
     prefs.validate()?;
     Ok(prefs)

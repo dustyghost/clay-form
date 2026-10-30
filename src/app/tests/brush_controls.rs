@@ -146,6 +146,11 @@ fn brush_controls_stay_visible_on_narrow_and_compact_workspaces() {
             frame(&mut app, &ctx, size, vec![]);
             let output = frame(&mut app, &ctx, size, vec![]);
             for label in [
+                "Tool controls",
+                "Material: Default clay",
+                "Primary",
+                "Secondary",
+                "Swap colours",
                 "Size",
                 "Strength",
                 "Inner radius",
@@ -234,6 +239,21 @@ fn brush_controls_popup_drag_edits_preset_without_closing_or_sculpting() {
             assert!(app.document.brushes()[0].radius > before.radius);
         }
     }
+    let input = app.ui.paint_input_index(&app.document).unwrap();
+    let primary = app.document.brushes()[input].material.base_color;
+    let secondary = app.document.brushes()[input].secondary_colour;
+    let pos = point(&output, |s| s == "Swap colours");
+    frame(
+        &mut app,
+        &ctx,
+        size,
+        vec![egui::Event::PointerMoved(pos), button(pos, true)],
+    );
+    frame(&mut app, &ctx, size, vec![button(pos, false)]);
+    output = frame(&mut app, &ctx, size, vec![]);
+    assert_eq!(app.document.brushes()[input].material.base_color, secondary);
+    assert_eq!(app.document.brushes()[input].secondary_colour, primary);
+    assert_eq!(app.ui.customization.popup_menu, Some(id));
     let footprint = app.document.brushes()[0].surface_cursor;
     let pos = point(&output, |s| s == "Surface footprint and normal");
     frame(
@@ -326,4 +346,88 @@ fn brush_controls_offscreen_review() {
         }
         app.viewport.destroy_renderer();
     }
+}
+
+#[test]
+fn appearance_controls_are_not_in_the_main_toolbar() {
+    let (mut app, ctx) = setup();
+    for _ in 0..2 {
+        let output = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    Pos2::ZERO,
+                    Vec2::new(1280., 720.),
+                )),
+                ..Default::default()
+            },
+            |ctx| {
+                app.ui.toolbar(ctx, &app.document, &app.camera);
+            },
+        );
+        assert!(!output.shapes.iter().any(|s| matches!(&s.shape, egui::Shape::Text(t) if t.galley.text().starts_with("Material:") || t.galley.text() == "Swap colours")));
+    }
+}
+
+#[test]
+fn startup_defaults_and_z_swap_colours_once_per_press() {
+    let (mut app, ctx) = setup();
+    let input = app.ui.paint_input_index(&app.document).unwrap();
+    let original = app.document.brushes()[input].clone();
+    assert_eq!(
+        original.material,
+        crate::sculpt::Material::default().with_link(crate::sculpt::Material::DEFAULT_PRESET_ID)
+    );
+    assert_eq!(original.secondary_colour, [1.; 3]);
+    assert_eq!(original.texture_colour, None);
+    assert_eq!(original.secondary_texture_colour, None);
+    let geometry = app.document.geometry_snapshot();
+    let mut press = |repeat: bool| {
+        if !repeat {
+            let mut release = key(egui::Key::Z);
+            if let egui::Event::Key { pressed, .. } = &mut release {
+                *pressed = false;
+            }
+            let _ = ctx.run(
+                egui::RawInput {
+                    events: vec![release],
+                    ..Default::default()
+                },
+                |ctx| app.shortcuts(ctx),
+            );
+        }
+        let mut event = key(egui::Key::Z);
+        if let egui::Event::Key { repeat: value, .. } = &mut event {
+            *value = repeat;
+        }
+        let _ = ctx.run(
+            egui::RawInput {
+                events: vec![event],
+                ..Default::default()
+            },
+            |ctx| app.shortcuts(ctx),
+        );
+        app.document.brushes()[input].clone()
+    };
+    let swapped = press(false);
+    assert_eq!(
+        swapped.material.primary_asset(),
+        original.material.primary_asset()
+    );
+    let mut surface = swapped.material.unlinked();
+    surface.base_color = original.material.base_color;
+    assert_eq!(surface, original.material.unlinked());
+    assert_eq!(swapped.material.base_color, original.secondary_colour);
+    assert_eq!(swapped.secondary_colour, original.material.base_color);
+    assert!(
+        press(true) == swapped,
+        "holding Z must not flicker between colours"
+    );
+    let restored = press(false);
+    assert_eq!(
+        restored.material.primary_asset(),
+        original.material.primary_asset()
+    );
+    assert_eq!(restored.material.base_color, original.material.base_color);
+    assert_eq!(restored.secondary_colour, original.secondary_colour);
+    assert_eq!(app.document.geometry_snapshot(), geometry);
 }

@@ -6,6 +6,22 @@ impl UiState {
         document: &Document,
         commands: &mut Vec<Command>,
     ) {
+        if !document.references().is_empty() {
+            self.selected_reference = self.selected_reference.min(document.references().len() - 1);
+            let index = self.selected_reference;
+            let image = &document.references()[index];
+            ui.horizontal_wrapped(|ui| {
+                ui.strong(&image.name);
+                if ui
+                    .add(design::button(ui, Glyph::Delete, "Remove image"))
+                    .on_hover_text("Remove this image from the project. The original file stays on disk. Hidden and locked images can also be removed.")
+                    .clicked()
+                {
+                    commands.push(Command::RemoveReference(index));
+                }
+            });
+            ui.separator();
+        }
         ui.label("Choose a PNG/JPEG image, or enter its path:");
         ui.add(
             egui::TextEdit::singleline(&mut self.reference_path)
@@ -54,16 +70,6 @@ impl UiState {
         self.selected_reference = self.selected_reference.min(document.references().len() - 1);
         let index = self.selected_reference;
         let image = &document.references()[index];
-        ui.horizontal_wrapped(|ui| {
-            ui.strong(&image.name);
-            if ui
-                .add(design::button(ui, Glyph::Delete, "Remove image"))
-                .on_hover_text("Remove this image from the project. The original file stays on disk. Hidden and locked images can also be removed.")
-                .clicked()
-            {
-                commands.push(Command::RemoveReference(index));
-            }
-        });
         egui::ScrollArea::vertical()
             .id_salt("reference_list")
             .max_height(140.)

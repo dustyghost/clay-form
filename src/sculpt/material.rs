@@ -207,10 +207,32 @@ impl Material {
         m
     }
     pub fn primary_asset(&self) -> Option<u64> {
-        if self.links.len() == 1 && self.links[0].weights == [1.; 4] {
+        if self.links.len() == 1 && self.links[0].weights[1..] == [1.; 3] {
             Some(self.links[0].id)
         } else {
             None
+        }
+    }
+    /// Override stroke colour without detaching the selected surface properties.
+    pub fn set_colour(&mut self, colour: [f32; 3]) {
+        if self.base_color != colour {
+            for link in std::sync::Arc::make_mut(&mut self.links) {
+                link.weights[0] = 0.;
+            }
+            self.base_color = colour;
+        }
+    }
+    pub fn sync_asset(&mut self, id: u64, material: &Self) {
+        let colour = self.base_color;
+        let override_colour = self
+            .links
+            .iter()
+            .any(|link| link.id == id && link.weights[0] == 0.);
+        *self = material.with_link(id);
+        if override_colour {
+            // Keep the override even if it currently equals the shared colour.
+            std::sync::Arc::make_mut(&mut self.links)[0].weights[0] = 0.;
+            self.base_color = colour;
         }
     }
     pub fn rebase_asset(&mut self, id: u64, old: &Self, new: &Self) {
@@ -305,7 +327,10 @@ impl Material {
         };
         m
     }
-    pub fn examples() -> [(&'static str, Self); 11] {
+    /// Stable built-in ID: append new presets without changing existing material links.
+    pub const DEFAULT_PRESET_ID: u64 = 12;
+
+    pub fn examples() -> [(&'static str, Self); 12] {
         [
             (
                 "Matte clay",
@@ -342,6 +367,7 @@ impl Material {
                 "Deep skin",
                 Self::organic([0.28, 0.14, 0.085], 0.58, 0.5, [1., 0.35, 0.2], 0.045),
             ),
+            ("Default clay", Self::default()),
         ]
     }
 }

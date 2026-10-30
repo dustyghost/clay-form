@@ -482,6 +482,7 @@ impl UiState {
                         && (columns == max_columns || used_width + width > available_width)
                     {
                         ui.end_row();
+                        ui.set_row_height(32.);
                         columns = 0;
                         used_width = 0.;
                     }

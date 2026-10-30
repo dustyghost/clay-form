@@ -81,6 +81,9 @@ impl History {
         let mut owned = 0;
         let mut textures = std::collections::HashMap::new();
         for entry in self.undo.iter().chain(&self.redo) {
+            for texture in &entry.geometry.scene.texture_library {
+                textures.insert(texture.pixels.storage_id(), texture.pixels.byte_len());
+            }
             for mesh in std::iter::once(&entry.geometry.mesh)
                 .chain(&entry.geometry.settings.lower)
                 .chain(&entry.geometry.settings.upper)
@@ -194,6 +197,7 @@ fn geometry_bytes(geometry: &Geometry) -> usize {
                     .sum::<usize>()
         })
         .sum::<usize>()
+        + geometry.scene.texture_library.iter().map(|t| std::mem::size_of::<crate::sculpt::texture::Texture>() + t.name.len() + t.profile.len() + t.exchange.as_ref().map_or(0, |e| e.path.len())).sum::<usize>()
         + path_bytes
         + asset_layer_bytes
         + geometry.scene.materials.iter().map(|a|a.name.len()+std::mem::size_of::<crate::sculpt::material::layers::Asset>()).sum::<usize>()

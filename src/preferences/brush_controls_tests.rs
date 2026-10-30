@@ -7,6 +7,10 @@ fn previous_brush_menu_gains_inner_radius_and_preserves_custom_placement() {
             brush_controls_version: 1,
             ..Default::default()
         };
+        prefs.menus[0].name = "Brush controls".into();
+        prefs.menus[0]
+            .items
+            .retain(|i| i.action != Some(Action::AppearanceControls));
         prefs.menus[0].placement = placement;
         prefs.menus[0].columns = 6;
         prefs.menus[0].collapsible = false;
@@ -29,7 +33,7 @@ fn previous_brush_menu_gains_inner_radius_and_preserves_custom_placement() {
             }
         );
         assert_eq!(
-            migrated.menus[0].items[2].action,
+            migrated.menus[0].items[3].action,
             Some(Action::BrushInnerRadius)
         );
         assert_eq!(migrated.workspaces[0].menus[0], migrated.menus[0]);
@@ -107,6 +111,57 @@ fn brush_controls_migrate_once_preserving_workspaces_and_shortcuts() {
             load(&path).unwrap(),
             migrated,
             "a removed default is not recreated"
+        );
+        std::fs::remove_file(path).unwrap();
+    }
+}
+
+#[test]
+fn tool_controls_migration_preserves_custom_names_layouts_and_backup() {
+    for name in ["Brush controls", "My sculpt tools"] {
+        let mut prefs = Preferences {
+            brush_controls_version: 2,
+            ..Default::default()
+        };
+        let menu = &mut prefs.menus[0];
+        menu.name = name.into();
+        menu.placement = Placement::Floating;
+        menu.position = [92., 138.];
+        menu.columns = 3;
+        menu.expanded = false;
+        menu.items
+            .retain(|i| i.action != Some(Action::AppearanceControls));
+        menu.items.push(CustomItem::action(Action::Wireframe));
+        let original = menu.clone();
+        prefs.save_workspace_as("Saved layout").unwrap();
+        prefs.paint_workspace_backup = Some((prefs.workspace("Paint backup".into()), None));
+        let bindings = prefs.bindings.clone();
+        let path = std::env::temp_dir().join(format!(
+            "clay-tool-controls-v3-{}-{name}.json",
+            std::process::id()
+        ));
+        save(&path, &prefs).unwrap();
+        let mut migrated = load(&path).unwrap();
+        let mut expected = original;
+        if name == "Brush controls" {
+            expected.name = "Tool controls".into();
+        }
+        expected
+            .items
+            .insert(0, CustomItem::action(Action::AppearanceControls));
+        assert_eq!(migrated.menus[0], expected);
+        assert_eq!(migrated.workspaces[0].menus[0], expected);
+        assert_eq!(
+            migrated.paint_workspace_backup.as_ref().unwrap().0.menus[0],
+            expected
+        );
+        assert_eq!(migrated.bindings, bindings);
+        migrated.menus[0].items.remove(0);
+        save(&path, &migrated).unwrap();
+        assert_eq!(
+            load(&path).unwrap(),
+            migrated,
+            "later customisation is respected"
         );
         std::fs::remove_file(path).unwrap();
     }

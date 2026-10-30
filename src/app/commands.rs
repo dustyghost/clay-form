@@ -375,6 +375,7 @@ impl App {
                 }
                 Ok(())
             }
+            Command::AssignModelMaterial(material) => self.document.assign_model_material(material),
             Command::SaveMaterial(asset) => self.document.save_material(asset),
             Command::SaveMaterialToLibrary(asset) => {
                 self.ui.preferences.materials.save_asset(&asset).map(|()| {
