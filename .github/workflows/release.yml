@@ -22,11 +22,16 @@ concurrency:
 jobs:
   prepare:
     runs-on: ubuntu-22.04
+    permissions:
+      # Draft releases are only included in listings with push access.
+      contents: write
     outputs:
       version: ${{ steps.version.outputs.version }}
       build_required: ${{ steps.release.outputs.build_required }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

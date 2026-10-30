@@ -47,10 +47,18 @@ run number as its bundle build counter; About retains the full alpha version.
 An existing release (including a draft) is never overwritten automatically.
 An existing tag must point to the release commit.
 
-Publishing a prepared draft can trigger the tag workflow. If that tag already
-has a release, the workflow skips native builds and source packaging. Manually
-requesting an existing release fails before builds start; API permission or
-service errors also stop the preflight rather than allowing a rebuild.
+Publishing a prepared draft or separately pushing its tag can trigger the tag
+workflow. If that tag already has a draft or published release, the workflow
+skips native builds and source packaging. Manually requesting an existing
+release fails before builds start.
+
+During Alpha 2 preparation, GitHub's release-by-tag endpoint returned 404 for
+an existing draft. A 404 alone therefore does not allow a build: the preflight
+then searches the authenticated release list, checking pages of 100 until it
+finds the exact tag or exhausts the list. The `prepare` job uses `contents: write`
+because [GitHub only lists drafts for callers with push access](https://docs.github.com/en/rest/releases/releases#list-releases).
+Pull requests skip this API lookup. API permission, service, or malformed-response
+errors stop the preflight, including a 404 from the release-list endpoint.
 
 ## Artifacts
 
