@@ -25,6 +25,10 @@ Get a clear look at the shape you are making. Start a sculpt stroke on clay; sta
 | Smooth temporarily | Hold Shift while sculpting |
 | Reverse the brush | Hold Alt while sculpting |
 
+Orbit follows the current screen axes: horizontal drags turn around screen-up, vertical drags turn around screen-right, and diagonal drags combine both. This stays consistent after tilting, rolling, or turning the view upside down, including through the poles. Empty-space and border drags, the orientation gizmo, **Rotate view**, and touch gestures configured for rotation all use this behavior.
+
+The orbit pivot is the shared model-space origin, in both orthographic and perspective views. Pan shifts that pivot on screen; it does not move it in model space. Off-centre geometry therefore travels around the origin when orbiting. All visible submodels orbit together around that same origin, rather than around the active submodel or the point under the pointer. **Reset view** fits and centres the visible geometry but keeps this pivot. Orbit and roll change only the camera, with no geometry, model-transform, dirty-state, or undo-history changes.
+
 A drag keeps the role it started with. An orbit drag stays navigation when it crosses clay. Alt-drag starting **on** clay reverses the brush instead of panning.
 
 ### Navigate when the model fills the view
@@ -33,7 +37,7 @@ The thin inset frame reserves a **20-pixel navigation strip**. Start a pen/left 
 
 ### Snap to an axis
 
-Tap X, Y, or Z on the top-right orientation gizmo. Dimmed axes face away from you. Drag the gizmo to orbit; vertical orbit can continue over the poles. Horizontal dragging keeps the same screen direction when the view is upside down, in both sculpting and modeling.
+Tap X, Y, or Z on the top-right orientation gizmo. Dimmed axes face away from you. Drag the gizmo to orbit using the current screen axes. Axis snaps clear roll; free orbit has no world-up constraint, in both sculpting and modeling.
 
 ## Zoom
 
