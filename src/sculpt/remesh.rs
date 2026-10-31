@@ -4,7 +4,7 @@
 use super::{
     Mesh, Vec3,
     math::closest_triangle,
-    subdivision::{MAX_TRIANGLES, MAX_VERTICES},
+    subdivision::{max_triangles, max_vertices},
 };
 use std::collections::HashMap;
 mod optimized;
@@ -352,7 +352,9 @@ impl Mesh {
                             mesh.triangles.push(triangle);
                         }
                     }
-                    if mesh.vertices.len() > MAX_VERTICES || mesh.triangles.len() > MAX_TRIANGLES {
+                    if mesh.vertices.len() > max_vertices()
+                        || mesh.triangles.len() > max_triangles()
+                    {
                         return Err("Remesh exceeds mesh limits; choose a lower resolution".into());
                     }
                 }

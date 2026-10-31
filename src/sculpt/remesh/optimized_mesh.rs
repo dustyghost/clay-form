@@ -1,5 +1,5 @@
 //! Transactional integration and independent validation of the quad optimiser.
-use super::{MAX_TRIANGLES, MAX_VERTICES, Mesh, Vec3, optimized};
+use super::{Mesh, Vec3, max_triangles, max_vertices, optimized};
 use crate::sculpt::projection::Surface;
 use std::collections::BTreeMap;
 
@@ -152,8 +152,8 @@ pub(super) fn redistribute(
                 return Err("Quad optimisation cancelled".into());
             }
         }
-        if result.vertices.len() + output.vertices.len() > MAX_VERTICES
-            || result.triangles.len() + output.triangles.len() > MAX_TRIANGLES
+        if result.vertices.len() + output.vertices.len() > max_vertices()
+            || result.triangles.len() + output.triangles.len() > max_triangles()
         {
             return Err("Optimized quads exceeds mesh limits; choose a lower resolution".into());
         }

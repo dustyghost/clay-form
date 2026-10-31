@@ -1,0 +1,8 @@
+running 5 tests
+test sculpt::stamp_normals::tests::broad_stamp_fallback_keeps_unsampled_outliers_safe ... ok
+test sculpt::stamp_normals::tests::local_stamp_normals_match_full_mesh_brush_results_after_edits ... ok
+test sculpt::stamp_normals::tests::profile_local_stamp_normals ... ignored, opt-in comparison of local and full normal preparation; no wall-clock assertions
+test sculpt::stamp_normals::tests::selected_normals_match_full_accumulation_bit_for_bit ... ok
+test sculpt::stamp_normals::tests::stamp_normal_selection_preserves_radius_boundary_and_special_brushes ... ok
+
+test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 985 filtered out; finished in 0.65s

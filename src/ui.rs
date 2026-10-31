@@ -26,6 +26,7 @@ mod brush_controls;
 mod icons;
 mod masking;
 mod menus;
+mod mesh_capacity;
 mod mirror;
 mod modeling;
 mod paint;
@@ -75,6 +76,7 @@ pub(crate) struct UiState {
     pub startup_notice_open: bool,
     pub startup_notice_skip: bool,
     pub settings_open: bool,
+    pub mesh_capacity_open: bool,
     pub diagnostics_open: bool,
     pub diagnostic_path: String,
     pub recovery_open: bool,
@@ -162,6 +164,7 @@ impl Default for UiState {
             startup_notice_open: false,
             startup_notice_skip: false,
             settings_open: false,
+            mesh_capacity_open: false,
             diagnostics_open: false,
             diagnostic_path: "clay-session".into(),
             recovery_open: false,

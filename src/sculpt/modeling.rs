@@ -1,7 +1,8 @@
 //! Explicit polygon edits. Results are built separately so failed previews never mutate a mesh.
 use super::{
-    MAX_TRIANGLES, MAX_VERTICES, Mesh, Vec3,
+    Mesh, Vec3,
     edges::{Polygon, edge},
+    max_triangles, max_vertices,
 };
 use std::collections::{BTreeMap, BTreeSet};
 mod components;
@@ -173,8 +174,8 @@ impl Mesh {
         if boundary.is_empty() {
             return Err("The selected region has no boundary to extrude".into());
         }
-        if self.vertices.len() + vertices.len() > MAX_VERTICES
-            || self.triangles.len() + boundary.len() * 2 > MAX_TRIANGLES
+        if self.vertices.len() + vertices.len() > max_vertices()
+            || self.triangles.len() + boundary.len() * 2 > max_triangles()
         {
             return Err("Extrusion would exceed the mesh size limit".into());
         }

@@ -1,0 +1,110 @@
+[
+  {
+    "level": 3,
+    "fixture": "sphere",
+    "trial": 0,
+    "before_and_after_hash": "e5d98a52d1fff8d4"
+  },
+  {
+    "level": 3,
+    "fixture": "sphere",
+    "trial": 1,
+    "before_and_after_hash": "e5d98a52d1fff8d4"
+  },
+  {
+    "level": 3,
+    "fixture": "sphere",
+    "trial": 2,
+    "before_and_after_hash": "e5d98a52d1fff8d4"
+  },
+  {
+    "level": 3,
+    "fixture": "organic",
+    "trial": 0,
+    "before_and_after_hash": "85527510a54f762a"
+  },
+  {
+    "level": 3,
+    "fixture": "organic",
+    "trial": 1,
+    "before_and_after_hash": "85527510a54f762a"
+  },
+  {
+    "level": 3,
+    "fixture": "organic",
+    "trial": 2,
+    "before_and_after_hash": "85527510a54f762a"
+  },
+  {
+    "level": 3,
+    "fixture": "hidden",
+    "trial": 0,
+    "before_and_after_hash": "114c65c5bc4797fd"
+  },
+  {
+    "level": 3,
+    "fixture": "hidden",
+    "trial": 1,
+    "before_and_after_hash": "114c65c5bc4797fd"
+  },
+  {
+    "level": 3,
+    "fixture": "hidden",
+    "trial": 2,
+    "before_and_after_hash": "114c65c5bc4797fd"
+  },
+  {
+    "level": 4,
+    "fixture": "sphere",
+    "trial": 0,
+    "before_and_after_hash": "0e229400c1996a40"
+  },
+  {
+    "level": 4,
+    "fixture": "sphere",
+    "trial": 1,
+    "before_and_after_hash": "0e229400c1996a40"
+  },
+  {
+    "level": 4,
+    "fixture": "sphere",
+    "trial": 2,
+    "before_and_after_hash": "0e229400c1996a40"
+  },
+  {
+    "level": 4,
+    "fixture": "organic",
+    "trial": 0,
+    "before_and_after_hash": "15b583f9dc71fca2"
+  },
+  {
+    "level": 4,
+    "fixture": "organic",
+    "trial": 1,
+    "before_and_after_hash": "15b583f9dc71fca2"
+  },
+  {
+    "level": 4,
+    "fixture": "organic",
+    "trial": 2,
+    "before_and_after_hash": "15b583f9dc71fca2"
+  },
+  {
+    "level": 4,
+    "fixture": "hidden",
+    "trial": 0,
+    "before_and_after_hash": "78abd220ee9280d2"
+  },
+  {
+    "level": 4,
+    "fixture": "hidden",
+    "trial": 1,
+    "before_and_after_hash": "78abd220ee9280d2"
+  },
+  {
+    "level": 4,
+    "fixture": "hidden",
+    "trial": 2,
+    "before_and_after_hash": "78abd220ee9280d2"
+  }
+]

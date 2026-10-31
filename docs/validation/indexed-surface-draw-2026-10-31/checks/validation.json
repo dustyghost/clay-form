@@ -1,0 +1,9 @@
+{
+  "binary_sha256": "646c3ca51121130ab16228d5ab6cb2b86675bbd7539a14c3c2a05840aa00c9ec",
+  "source_sha256": "37f795d4d152a60da16c0c75c15b42cf43f0747c5206055b48709f04fca167f5",
+  "viewport_shader_sha256": "d60b70a1df53553bd300d120eb8b95daba729e01e2bca53fe82fec303fc0d7c4",
+  "tests_passed": {
+    "cpu": 28,
+    "gpu": 16
+  }
+}

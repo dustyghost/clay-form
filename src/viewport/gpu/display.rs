@@ -2,16 +2,28 @@
 use super::atlas::Atlas;
 use crate::{
     document::Document,
-    sculpt::{Mesh, SurfaceShading, Vec3},
+    sculpt::{Material, Mesh, SurfaceShading, SurfaceShadingTopology, Vec3},
 };
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, OnceLock},
+};
+
+mod live_normals;
+mod surface;
+use surface::DisplaySurface;
 
 #[derive(Clone)]
 pub(crate) struct DisplayMesh {
-    geometry: Arc<DisplayGeometry>,
+    pub(super) geometry: Arc<DisplayGeometry>,
     pub(super) texture_pixels: Atlas,
     pub texture_info: Vec<[u32; 4]>,
     texture_sources: Vec<TextureSource>,
+}
+pub(super) struct VertexUpdate {
+    pub(super) ranges: Vec<std::ops::Range<usize>>,
+    #[cfg(test)]
+    pub(super) changed_vertices: usize,
 }
 #[derive(Clone)]
 struct TextureSource {
@@ -19,20 +31,94 @@ struct TextureSource {
     storage: usize,
     revision: u64,
 }
+
+/// Source topology shared by successive fixed-topology stroke frames.
+/// Hidden faces also contribute to the original smoothing fans.
+struct StrokeTopology {
+    source: Arc<StrokeSurfaceTopology>,
+    fans: Arc<Vec<[usize; 3]>>,
+}
+struct StrokeSurfaceTopology {
+    model_id: u64,
+    filtered: bool,
+    triangles: Vec<[usize; 3]>,
+    quads: Vec<[usize; 4]>,
+    hidden_faces: Vec<bool>,
+    polygroups: Vec<usize>,
+    group_visibility: Vec<bool>,
+    shading: SurfaceShadingTopology,
+    normal_corners: OnceLock<Option<live_normals::VertexCorners>>,
+}
+impl StrokeSurfaceTopology {
+    fn matches(&self, mesh: &Mesh, model_id: u64) -> bool {
+        self.model_id == model_id
+            && self.triangles == mesh.triangles
+            && self.quads == mesh.quads
+            && self.hidden_faces == mesh.hidden_faces
+            && self.polygroups == mesh.polygroups
+            && self
+                .group_visibility
+                .iter()
+                .copied()
+                .eq(mesh.vertex_groups.iter().map(|g| g.visible))
+    }
+}
+/// Display snapshots share immutable fan indices and normals. Deformation
+/// replaces only the normal payload; Paint keeps both allocations.
+#[derive(Clone, Default)]
+pub(crate) struct DisplayShading {
+    pub vertices: Arc<Vec<(usize, Vec3)>>,
+    pub triangles: Arc<Vec<[usize; 3]>>,
+}
+impl From<SurfaceShading> for DisplayShading {
+    fn from(shading: SurfaceShading) -> Self {
+        Self {
+            vertices: Arc::new(shading.vertices),
+            triangles: Arc::new(shading.triangles),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct DisplayGeometry {
-    pub mesh: Mesh,
-    pub uv_corners: Vec<[[f32; 4]; 3]>,
-    pub shading: SurfaceShading,
-    pub owners: Vec<usize>,
-    muted_vertices: Vec<bool>,
-    pub source_faces: Vec<usize>,
-    pub poly_colors: Vec<[u8; 4]>,
-    pub edge_colors: HashMap<(usize, usize), eframe::egui::Color32>,
-    pub outlines: Vec<[usize; 2]>,
+    pub mesh: DisplaySurface,
+    // Immutable face payloads survive live snapshots and canonical release.
+    // Keep the Vec allocation when wrapping freshly built data in an Arc.
+    pub uv_corners: Arc<Vec<[[f32; 4]; 3]>>,
+    pub shading: DisplayShading,
+    pub owners: Arc<Vec<usize>>,
+    muted_vertices: Arc<Vec<bool>>,
+    pub source_faces: Arc<Vec<usize>>,
+    pub poly_colors: Arc<Vec<[u8; 4]>>,
+    pub edge_colors: Arc<HashMap<(usize, usize), eframe::egui::Color32>>,
+    pub outlines: Arc<Vec<[usize; 2]>>,
     pub active_vertices: usize,
     pub active: usize,
-    pub(super) depth_extent: f32,
+    pub(in crate::viewport) depth_extent: f32,
+    stroke_topology: Option<Arc<StrokeTopology>>,
+    temporary_normals: bool,
+}
+impl DisplayGeometry {
+    /// Copy retained display data for release, without copying shading that the
+    /// caller immediately replaces with canonical normals and filtered fans.
+    fn clone_without_shading(&self) -> Self {
+        Self {
+            mesh: self.mesh.clone(),
+            uv_corners: self.uv_corners.clone(),
+            shading: DisplayShading::default(),
+            owners: self.owners.clone(),
+            muted_vertices: self.muted_vertices.clone(),
+            source_faces: self.source_faces.clone(),
+            poly_colors: self.poly_colors.clone(),
+            edge_colors: self.edge_colors.clone(),
+            outlines: self.outlines.clone(),
+            active_vertices: self.active_vertices,
+            active: self.active,
+            depth_extent: self.depth_extent,
+            stroke_topology: self.stroke_topology.clone(),
+            temporary_normals: self.temporary_normals,
+        }
+    }
 }
 impl std::ops::Deref for DisplayMesh {
     type Target = DisplayGeometry;
@@ -88,26 +174,47 @@ impl DisplayMesh {
 
     /// Reuse the smoothing fans while dragging a dense, fixed-topology mesh.
     /// Paint retains exact normals; deformation uses cheap temporary normals.
-    /// The renderer rebuilds full angle-weighted shading when the stroke ends.
+    /// The renderer restores full angle-weighted shading when the stroke ends.
     pub(super) fn during_stroke(&self, document: &Document) -> Option<Self> {
         let source = document.mesh();
         if !document.stroke_active()
             || document.model_count() != 1
             || !document.active_visible()
             || source.vertices.len() < 20_000
-            || source.has_hidden_faces()
             || document.model(0)?.metadata.temporary_thickness != 0.
             || document.primitive().is_some()
             || !source.uv.textures.is_empty()
             || !source.creases.is_empty()
             || self.mesh.vertices.len() != source.vertices.len()
-            || self.mesh.triangles != source.triangles
-            || self.mesh.quads != source.quads
         {
             return None;
         }
+        let fans = if let Some(topology) = &self.stroke_topology {
+            if !source.uv.is_empty()
+                || !topology
+                    .source
+                    .matches(source, document.model(0)?.metadata.model_id)
+            {
+                return None;
+            }
+            &topology.fans
+        } else {
+            if source.has_hidden_faces()
+                || *self.mesh.triangles != source.triangles
+                || *self.mesh.quads != source.quads
+            {
+                return None;
+            }
+            &self.shading.triangles
+        };
+        #[cfg(test)]
+        stroke_profile::mark("live.validate");
+        let positions_unchanged = self.mesh.same_positions(source);
+        let mesh = self.mesh.update(source, positions_unchanged);
+        #[cfg(test)]
+        stroke_profile::mark("live.mesh_copy");
         let mut geometry = DisplayGeometry {
-            mesh: source.clone(),
+            mesh,
             uv_corners: self.uv_corners.clone(),
             shading: self.shading.clone(),
             owners: self.owners.clone(),
@@ -119,19 +226,14 @@ impl DisplayMesh {
             active_vertices: self.active_vertices,
             active: self.active,
             depth_extent: self.depth_extent,
+            stroke_topology: self.stroke_topology.clone(),
+            temporary_normals: self.temporary_normals,
         };
-        if self.mesh.vertices != source.vertices {
-            let mut normals = vec![Vec3::default(); geometry.shading.vertices.len()];
-            for (ids, fans) in source.triangles.iter().zip(&geometry.shading.triangles) {
-                let [a, b, c] = ids.map(|i| source.vertices[i]);
-                let face = (b - a).cross(c - a);
-                for &i in fans {
-                    normals[i] = normals[i] + face;
-                }
-            }
-            for ((_, normal), sum) in geometry.shading.vertices.iter_mut().zip(normals) {
-                *normal = sum.norm();
-            }
+        #[cfg(test)]
+        stroke_profile::mark("live.display_copy");
+        if !positions_unchanged {
+            geometry.temporary_normals = true;
+            geometry.shading.vertices = Arc::new(self.update_live_normals(source, fans).vertices);
             geometry.depth_extent = source
                 .vertices
                 .iter()
@@ -139,12 +241,69 @@ impl DisplayMesh {
                 .fold(1_f32, f32::max)
                 + 1.;
         }
+        #[cfg(test)]
+        stroke_profile::mark("live.normals_and_bounds");
         Some(Self {
             geometry: Arc::new(geometry),
             texture_pixels: self.texture_pixels.clone(),
             texture_info: self.texture_info.clone(),
             texture_sources: self.texture_sources.clone(),
         })
+    }
+
+    /// Restore exact canonical shading using validated source topology.
+    /// All source faces still contribute, including faces hidden from display.
+    pub(super) fn after_stroke(self: &Arc<Self>, document: &Document) -> Option<Arc<Self>> {
+        let cached = self.stroke_topology.as_ref()?;
+        let source = document.mesh();
+        if document.stroke_active()
+            || document.model_count() != 1
+            || !document.active_visible()
+            || document.model(0)?.metadata.temporary_thickness != 0.
+            || document.primitive().is_some()
+            || !source.uv.is_empty()
+            || !source.creases.is_empty()
+            || !cached.source.matches(source, document.model(0)?.metadata.model_id)
+            // A final dab or another edit may not have been displayed yet.
+            || !self.mesh.same_positions(source)
+            || !self.mesh.same_mask(source)
+            || !Material::slices_bitwise_equal(&self.mesh.materials, &source.materials)
+        {
+            return None;
+        }
+        #[cfg(test)]
+        stroke_profile::mark("release.validate");
+        if !self.temporary_normals {
+            return Some(self.clone());
+        }
+        let shading = cached.source.shading.shade(source);
+        #[cfg(test)]
+        stroke_profile::mark("release.shade");
+        let mut geometry = self.geometry.clone_without_shading();
+        #[cfg(test)]
+        stroke_profile::mark("release.copy");
+        let fans = Arc::new(shading.triangles);
+        geometry.shading = DisplayShading {
+            vertices: Arc::new(shading.vertices),
+            triangles: if cached.source.filtered {
+                Arc::new(self.source_faces.iter().map(|&f| fans[f]).collect())
+            } else {
+                fans.clone()
+            },
+        };
+        geometry.stroke_topology = Some(Arc::new(StrokeTopology {
+            source: cached.source.clone(),
+            fans,
+        }));
+        geometry.temporary_normals = false;
+        #[cfg(test)]
+        stroke_profile::mark("release.fans");
+        Some(Arc::new(Self {
+            geometry: Arc::new(geometry),
+            texture_pixels: self.texture_pixels.clone(),
+            texture_info: self.texture_info.clone(),
+            texture_sources: self.texture_sources.clone(),
+        }))
     }
     pub fn new(document: &Document) -> Self {
         Self::build(document, false, None)
@@ -182,6 +341,7 @@ impl DisplayMesh {
         let mut poly_colors = Vec::new();
         let mut outlines = Vec::new();
         let mut active_vertices = 0;
+        let mut stroke_topology = None;
         for index in
             std::iter::once(active).chain((0..document.model_count()).filter(|i| *i != active))
         {
@@ -290,7 +450,19 @@ impl DisplayMesh {
                     texture_channels[texture.channel.index()] = id as f32;
                 }
             }
-            let surface_shading = surface.surface_shading();
+            let cache_stroke = document.model_count() == 1
+                && index == active
+                && active_mesh.is_none()
+                && surface.vertices.len() >= 20_000
+                && model.metadata.temporary_thickness == 0.
+                && model.settings.primitive.is_none()
+                && surface.creases.is_empty()
+                && surface.uv.is_empty();
+            let topology = cache_stroke.then(|| SurfaceShadingTopology::new(surface));
+            let surface_shading = topology.as_ref().map_or_else(
+                || surface.surface_shading(),
+                |topology| topology.shade(surface),
+            );
             let shading_offset = shading.vertices.len();
             shading.vertices.extend(
                 surface_shading
@@ -341,28 +513,68 @@ impl DisplayMesh {
                     [c[0], c[1], c[2], 255]
                 });
             }
+            if let Some(topology) = topology {
+                stroke_topology = Some(Arc::new(StrokeTopology {
+                    source: Arc::new(StrokeSurfaceTopology {
+                        model_id: model.metadata.model_id,
+                        filtered: has_hidden,
+                        triangles: surface.triangles.clone(),
+                        quads: surface.quads.clone(),
+                        hidden_faces: surface.hidden_faces.clone(),
+                        polygroups: surface.polygroups.clone(),
+                        group_visibility: surface.vertex_groups.iter().map(|g| g.visible).collect(),
+                        shading: topology,
+                        normal_corners: OnceLock::new(),
+                    }),
+                    fans: if has_hidden {
+                        Arc::new(surface_shading.triangles)
+                    } else {
+                        Arc::default()
+                    },
+                }));
+            }
             if index == active {
                 active_vertices = surface.vertices.len();
             }
         }
+        // Shared snapshots retain the builder allocation, so do not keep its
+        // geometric growth slack alive throughout the stroke.
+        uv_corners.shrink_to_fit();
+        poly_colors.shrink_to_fit();
+        owners.shrink_to_fit();
+        source_faces.shrink_to_fit();
+        muted_vertices.shrink_to_fit();
+        outlines.shrink_to_fit();
+        edge_colors.shrink_to_fit();
+        shading.vertices.shrink_to_fit();
+        shading.triangles.shrink_to_fit();
         let depth_extent = mesh.vertices.iter().map(|p| p.len()).fold(1_f32, f32::max) + 1.;
+        let shading = DisplayShading::from(shading);
+        if let Some(cached) = &mut stroke_topology {
+            // Only one model can take the cached path, so these indices are identical.
+            if !cached.source.filtered {
+                Arc::get_mut(cached).unwrap().fans = shading.triangles.clone();
+            }
+        }
         Self {
             texture_pixels,
             texture_info,
             texture_sources,
             geometry: Arc::new(DisplayGeometry {
-                mesh,
-                uv_corners,
+                mesh: mesh.into(),
+                uv_corners: Arc::new(uv_corners),
                 shading,
-                owners,
-                muted_vertices,
-                source_faces,
-                poly_colors,
-                edge_colors,
-                outlines,
+                owners: Arc::new(owners),
+                muted_vertices: Arc::new(muted_vertices),
+                source_faces: Arc::new(source_faces),
+                poly_colors: Arc::new(poly_colors),
+                edge_colors: Arc::new(edge_colors),
+                outlines: Arc::new(outlines),
                 active_vertices,
                 active,
                 depth_extent,
+                stroke_topology,
+                temporary_normals: false,
             }),
         }
     }
@@ -442,7 +654,47 @@ impl DisplayMesh {
     }
     pub(super) fn vertices(&self, stride: usize) -> Vec<f32> {
         let mut vertices = Vec::with_capacity(self.shading.vertices.len() * stride);
-        for &(i, n) in &self.shading.vertices {
+        let default = crate::sculpt::Material::default();
+        let muted =
+            crate::sculpt::Material::from_srgb([130., 143., 155.].map(|v| v / 255.), 0.85, 0.);
+        for &(i, n) in self.shading.vertices.iter() {
+            let p = self.mesh.vertices[i];
+            let material = if self.muted_vertices[i] {
+                &muted
+            } else {
+                self.mesh.materials.get(i).unwrap_or(&default)
+            };
+            let color = material.base_color;
+            let mask = if i < self.active_vertices {
+                self.mesh.mask[i]
+            } else {
+                -1.
+            };
+            vertices.extend_from_slice(&[
+                p.0,
+                p.1,
+                p.2,
+                n.0,
+                n.1,
+                n.2,
+                color[0],
+                color[1],
+                color[2],
+                mask,
+                material.roughness,
+                material.metallic,
+            ]);
+            if stride > 12 {
+                vertices.extend_from_slice(&material.values()[5..]);
+            }
+        }
+        vertices
+    }
+    // Frozen owned-material packer for byte-exact regression checks and diagnosis.
+    #[cfg(test)]
+    pub(super) fn reference_vertices(&self, stride: usize) -> Vec<f32> {
+        let mut vertices = Vec::with_capacity(self.shading.vertices.len() * stride);
+        for &(i, n) in self.shading.vertices.iter() {
             let p = self.mesh.vertices[i];
             let material = self.material(i);
             let color = material.base_color;
@@ -471,19 +723,87 @@ impl DisplayMesh {
         }
         vertices
     }
+    /// Refresh only records whose effective GPU values changed. This scans
+    /// inputs but avoids owned material copies, a second packed array and a
+    /// separate byte-difference pass. Fan mappings may change at the same size.
+    pub(super) fn update_vertices(&self, stride: usize, packed: &mut [f32]) -> VertexUpdate {
+        debug_assert!(stride == 12 || stride == crate::sculpt::material::layers::VERTEX_STRIDE);
+        assert_eq!(packed.len(), self.shading.vertices.len() * stride);
+        let default = crate::sculpt::Material::default();
+        let muted =
+            crate::sculpt::Material::from_srgb([130., 143., 155.].map(|v| v / 255.), 0.85, 0.);
+        let mut dirty = super::upload::DirtyRanges::new(packed.len() * 4);
+        #[cfg(test)]
+        let mut changed_vertices = 0;
+        for (fan, (record, &(i, n))) in packed
+            .chunks_exact_mut(stride)
+            .zip(self.shading.vertices.iter())
+            .enumerate()
+        {
+            let p = self.mesh.vertices[i];
+            let material = if self.muted_vertices[i] {
+                &muted
+            } else {
+                self.mesh.materials.get(i).unwrap_or(&default)
+            };
+            let mask = if i < self.active_vertices {
+                self.mesh.mask[i]
+            } else {
+                -1.
+            };
+            let compact = [
+                p.0,
+                p.1,
+                p.2,
+                n.0,
+                n.1,
+                n.2,
+                material.base_color[0],
+                material.base_color[1],
+                material.base_color[2],
+                mask,
+                material.roughness,
+                material.metallic,
+            ];
+            let extended = (stride > 12).then(|| material.values());
+            let same_compact = bytemuck::cast_slice::<_, u8>(&record[..12])
+                == bytemuck::cast_slice::<_, u8>(&compact);
+            let same_extended = extended.as_ref().is_none_or(|values| {
+                bytemuck::cast_slice::<_, u8>(&record[12..])
+                    == bytemuck::cast_slice::<_, u8>(&values[5..])
+            });
+            if same_compact && same_extended {
+                continue;
+            }
+            record[..12].copy_from_slice(&compact);
+            if let Some(values) = extended {
+                record[12..].copy_from_slice(&values[5..]);
+            }
+            dirty.mark(fan * stride * 4, (fan + 1) * stride * 4);
+            #[cfg(test)]
+            {
+                changed_vertices += 1;
+            }
+        }
+        VertexUpdate {
+            ranges: dirty.finish(),
+            #[cfg(test)]
+            changed_vertices,
+        }
+    }
     /// Adjacent face normals let the shader reject back-facing edges without
     /// rebuilding edge buffers on every camera movement.
     pub(super) fn edges(&self, triangles: bool) -> Vec<f32> {
         let key = |a, b| if a < b { (a, b) } else { (b, a) };
         let mut hidden = std::collections::HashSet::new();
         if !triangles {
-            for &[a, b, c, d] in &self.mesh.quads {
+            for &[a, b, c, d] in self.mesh.quads.iter() {
                 hidden.insert(key(a, c));
                 hidden.insert(key(b, d));
             }
         }
         let mut edges: HashMap<(usize, usize), (Vec3, Vec3)> = HashMap::new();
-        for &[a, b, c] in &self.mesh.triangles {
+        for &[a, b, c] in self.mesh.triangles.iter() {
             let normal = (self.mesh.vertices[b] - self.mesh.vertices[a])
                 .cross(self.mesh.vertices[c] - self.mesh.vertices[a])
                 .norm();
@@ -626,7 +946,7 @@ mod tests {
         let mut document = Document::default();
         document.replace_geometry(geometry).unwrap();
         let display = DisplayMesh::new(&document);
-        for (&(a, b), &color) in &display.edge_colors {
+        for (&(a, b), &color) in display.edge_colors.iter() {
             let a = display.mesh.vertices[a];
             let b = display.mesh.vertices[b];
             if a.0.abs() < 1e-6 && b.0.abs() < 1e-6 {
@@ -650,3 +970,82 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod stroke_tests;
+
+#[cfg(test)]
+mod packing_tests;
+
+#[cfg(test)]
+impl DisplayMesh {
+    pub(super) fn profile_after_stroke(
+        &self,
+        document: &Document,
+        use_angles: bool,
+    ) -> Vec<(&'static str, f64)> {
+        fn timed<T>(
+            out: &mut Vec<(&'static str, f64)>,
+            name: &'static str,
+            f: impl FnOnce() -> T,
+        ) -> T {
+            let start = std::time::Instant::now();
+            let result = f();
+            out.push((name, start.elapsed().as_secs_f64() * 1000.));
+            result
+        }
+        let mut times = Vec::new();
+        let cached = self.stroke_topology.as_ref().unwrap();
+        let source = document.mesh();
+        assert!(!document.stroke_active());
+        assert!(timed(&mut times, "validate.topology", || cached
+            .source
+            .matches(source, document.model(0).unwrap().metadata.model_id)));
+        assert!(timed(&mut times, "validate.positions_mask", || self
+            .mesh
+            .same_positions(source)
+            && self.mesh.same_mask(source)));
+        assert!(timed(&mut times, "validate.materials", || {
+            Material::slices_bitwise_equal(&self.mesh.materials, &source.materials)
+        }));
+        if !self.temporary_normals {
+            return times;
+        }
+        let (shading, shading_times) = cached.source.shading.profile_shade(source, use_angles);
+        times.extend(shading_times);
+        let mut geometry = timed(&mut times, "clone_geometry", || {
+            self.geometry.clone_without_shading()
+        });
+        geometry.shading = timed(&mut times, "filter_shading", || DisplayShading {
+            vertices: Arc::new(shading.vertices),
+            triangles: Arc::new(
+                self.source_faces
+                    .iter()
+                    .map(|&f| shading.triangles[f])
+                    .collect(),
+            ),
+        });
+        // Check the diagnostic's staged shading against the production result outside timers.
+        let expected = cached.source.shading.shade(source);
+        assert_eq!(*geometry.shading.vertices, expected.vertices);
+        assert_eq!(
+            *geometry.shading.triangles,
+            self.source_faces
+                .iter()
+                .map(|&f| expected.triangles[f])
+                .collect::<Vec<_>>()
+        );
+        times
+    }
+    pub(super) fn release_cache_stats(&self, document: &Document) -> (usize, usize) {
+        self.stroke_topology
+            .as_ref()
+            .unwrap()
+            .source
+            .shading
+            .angle_cache_stats(document.mesh())
+    }
+}
+
+#[cfg(test)]
+pub(in crate::viewport::gpu) mod stroke_profile;

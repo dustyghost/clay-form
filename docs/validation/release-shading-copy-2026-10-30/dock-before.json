@@ -1,0 +1,23 @@
+{
+  "ac_online": "1",
+  "cpu_governor": "powersave",
+  "energy_performance_preference": "balance_performance",
+  "outputs": [
+    {
+      "name": "eDP-1",
+      "width": 1920,
+      "height": 1080,
+      "refresh_millihz": 60049,
+      "scale": 1.0,
+      "active": true
+    },
+    {
+      "name": "DP-6",
+      "width": 1920,
+      "height": 1080,
+      "refresh_millihz": 74973,
+      "scale": 1.0,
+      "active": true
+    }
+  ]
+}

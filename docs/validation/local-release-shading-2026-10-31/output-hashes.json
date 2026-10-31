@@ -1,0 +1,254 @@
+[
+  {
+    "level": 3,
+    "fixture": "sphere",
+    "brush": "Standard",
+    "trial": 0,
+    "before_and_candidate_hash": "659abf56beae3b8d"
+  },
+  {
+    "level": 3,
+    "fixture": "sphere",
+    "brush": "Paint",
+    "trial": 0,
+    "before_and_candidate_hash": "e5d98a52d1fff8d4"
+  },
+  {
+    "level": 3,
+    "fixture": "sphere",
+    "brush": "Standard",
+    "trial": 1,
+    "before_and_candidate_hash": "659abf56beae3b8d"
+  },
+  {
+    "level": 3,
+    "fixture": "sphere",
+    "brush": "Paint",
+    "trial": 1,
+    "before_and_candidate_hash": "e5d98a52d1fff8d4"
+  },
+  {
+    "level": 3,
+    "fixture": "sphere",
+    "brush": "Standard",
+    "trial": 2,
+    "before_and_candidate_hash": "659abf56beae3b8d"
+  },
+  {
+    "level": 3,
+    "fixture": "sphere",
+    "brush": "Paint",
+    "trial": 2,
+    "before_and_candidate_hash": "e5d98a52d1fff8d4"
+  },
+  {
+    "level": 3,
+    "fixture": "organic",
+    "brush": "Standard",
+    "trial": 0,
+    "before_and_candidate_hash": "64a47832a926da10"
+  },
+  {
+    "level": 3,
+    "fixture": "organic",
+    "brush": "Paint",
+    "trial": 0,
+    "before_and_candidate_hash": "85527510a54f762a"
+  },
+  {
+    "level": 3,
+    "fixture": "organic",
+    "brush": "Standard",
+    "trial": 1,
+    "before_and_candidate_hash": "64a47832a926da10"
+  },
+  {
+    "level": 3,
+    "fixture": "organic",
+    "brush": "Paint",
+    "trial": 1,
+    "before_and_candidate_hash": "85527510a54f762a"
+  },
+  {
+    "level": 3,
+    "fixture": "organic",
+    "brush": "Standard",
+    "trial": 2,
+    "before_and_candidate_hash": "64a47832a926da10"
+  },
+  {
+    "level": 3,
+    "fixture": "organic",
+    "brush": "Paint",
+    "trial": 2,
+    "before_and_candidate_hash": "85527510a54f762a"
+  },
+  {
+    "level": 3,
+    "fixture": "hidden",
+    "brush": "Standard",
+    "trial": 0,
+    "before_and_candidate_hash": "1532a078f00242b3"
+  },
+  {
+    "level": 3,
+    "fixture": "hidden",
+    "brush": "Paint",
+    "trial": 0,
+    "before_and_candidate_hash": "114c65c5bc4797fd"
+  },
+  {
+    "level": 3,
+    "fixture": "hidden",
+    "brush": "Standard",
+    "trial": 1,
+    "before_and_candidate_hash": "1532a078f00242b3"
+  },
+  {
+    "level": 3,
+    "fixture": "hidden",
+    "brush": "Paint",
+    "trial": 1,
+    "before_and_candidate_hash": "114c65c5bc4797fd"
+  },
+  {
+    "level": 3,
+    "fixture": "hidden",
+    "brush": "Standard",
+    "trial": 2,
+    "before_and_candidate_hash": "1532a078f00242b3"
+  },
+  {
+    "level": 3,
+    "fixture": "hidden",
+    "brush": "Paint",
+    "trial": 2,
+    "before_and_candidate_hash": "114c65c5bc4797fd"
+  },
+  {
+    "level": 4,
+    "fixture": "sphere",
+    "brush": "Standard",
+    "trial": 0,
+    "before_and_candidate_hash": "0e83213c1cce4ac1"
+  },
+  {
+    "level": 4,
+    "fixture": "sphere",
+    "brush": "Paint",
+    "trial": 0,
+    "before_and_candidate_hash": "0e229400c1996a40"
+  },
+  {
+    "level": 4,
+    "fixture": "sphere",
+    "brush": "Standard",
+    "trial": 1,
+    "before_and_candidate_hash": "0e83213c1cce4ac1"
+  },
+  {
+    "level": 4,
+    "fixture": "sphere",
+    "brush": "Paint",
+    "trial": 1,
+    "before_and_candidate_hash": "0e229400c1996a40"
+  },
+  {
+    "level": 4,
+    "fixture": "sphere",
+    "brush": "Standard",
+    "trial": 2,
+    "before_and_candidate_hash": "0e83213c1cce4ac1"
+  },
+  {
+    "level": 4,
+    "fixture": "sphere",
+    "brush": "Paint",
+    "trial": 2,
+    "before_and_candidate_hash": "0e229400c1996a40"
+  },
+  {
+    "level": 4,
+    "fixture": "organic",
+    "brush": "Standard",
+    "trial": 0,
+    "before_and_candidate_hash": "e868a23f897caae5"
+  },
+  {
+    "level": 4,
+    "fixture": "organic",
+    "brush": "Paint",
+    "trial": 0,
+    "before_and_candidate_hash": "15b583f9dc71fca2"
+  },
+  {
+    "level": 4,
+    "fixture": "organic",
+    "brush": "Standard",
+    "trial": 1,
+    "before_and_candidate_hash": "e868a23f897caae5"
+  },
+  {
+    "level": 4,
+    "fixture": "organic",
+    "brush": "Paint",
+    "trial": 1,
+    "before_and_candidate_hash": "15b583f9dc71fca2"
+  },
+  {
+    "level": 4,
+    "fixture": "organic",
+    "brush": "Standard",
+    "trial": 2,
+    "before_and_candidate_hash": "e868a23f897caae5"
+  },
+  {
+    "level": 4,
+    "fixture": "organic",
+    "brush": "Paint",
+    "trial": 2,
+    "before_and_candidate_hash": "15b583f9dc71fca2"
+  },
+  {
+    "level": 4,
+    "fixture": "hidden",
+    "brush": "Standard",
+    "trial": 0,
+    "before_and_candidate_hash": "bb5b1735511731f9"
+  },
+  {
+    "level": 4,
+    "fixture": "hidden",
+    "brush": "Paint",
+    "trial": 0,
+    "before_and_candidate_hash": "78abd220ee9280d2"
+  },
+  {
+    "level": 4,
+    "fixture": "hidden",
+    "brush": "Standard",
+    "trial": 1,
+    "before_and_candidate_hash": "bb5b1735511731f9"
+  },
+  {
+    "level": 4,
+    "fixture": "hidden",
+    "brush": "Paint",
+    "trial": 1,
+    "before_and_candidate_hash": "78abd220ee9280d2"
+  },
+  {
+    "level": 4,
+    "fixture": "hidden",
+    "brush": "Standard",
+    "trial": 2,
+    "before_and_candidate_hash": "bb5b1735511731f9"
+  },
+  {
+    "level": 4,
+    "fixture": "hidden",
+    "brush": "Paint",
+    "trial": 2,
+    "before_and_candidate_hash": "78abd220ee9280d2"
+  }
+]

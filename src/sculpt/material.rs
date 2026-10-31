@@ -1,6 +1,7 @@
 //! Portable, opaque metallic/roughness surface values, independent of groups and masks.
 use super::{Brush, Dab, Mesh};
 use serde::{Deserialize, Serialize};
+mod equality;
 pub mod layers;
 use layers::{Influence, Layer, VALUE_COUNT, group, limits};
 fn links_empty(v: &std::sync::Arc<Vec<Influence>>) -> bool {
@@ -583,15 +584,23 @@ impl Mesh {
             scratch.normals = self.normals();
             scratch.eligible = self.sculptable_vertices();
         }
+        #[cfg(test)]
+        super::texture::profile::mark("normals_and_eligibility");
         for i in scratch.touched.drain(..) {
             scratch.weights[i] = (0., false);
         }
         scratch.weights.resize(self.vertices.len(), (0., false));
+        let footprint = brush.prepare_weight();
+        #[cfg(test)]
+        super::texture::profile::mark("weights_setup");
         for (j, dab) in dabs.iter().enumerate() {
             if dab.radius <= 0. {
                 continue;
             }
+            let pressure = brush.dab_pressure(dab);
             scratch.depth.prepare(self, dab, occluders);
+            #[cfg(test)]
+            super::texture::profile::mark("depth_query");
             for &i in &scratch.depth.active_vertices {
                 let point = self.vertices[i];
                 let offset = point - dab.center;
@@ -602,15 +611,11 @@ impl Mesh {
                 {
                     continue;
                 }
-                let local = brush.paint_weight(
+                let local = footprint.paint_weight(
                     offset.dot(dab.right) / dab.radius,
                     offset.dot(dab.up) / dab.radius,
                 ) * (1. - self.mask[i])
-                    * if brush.pressure {
-                        dab.pressure.powf(brush.pressure_curve)
-                    } else {
-                        1.
-                    }
+                    * pressure
                     * stencils.get(j).map_or(1., |s| s.weight(point));
                 let weight = brush.paint_opacity(local);
                 if weight > scratch.weights[i].0 && scratch.depth.visible(point, dab, None) {
@@ -621,6 +626,8 @@ impl Mesh {
                 }
             }
         }
+        #[cfg(test)]
+        super::texture::profile::mark("weights_and_visibility");
         let mut changed = false;
         for &i in &scratch.touched {
             let (strongest, erase) = scratch.weights[i];
@@ -646,6 +653,8 @@ impl Mesh {
                 changed = true;
             }
         }
+        #[cfg(test)]
+        super::texture::profile::mark("apply_materials");
         changed
     }
 }

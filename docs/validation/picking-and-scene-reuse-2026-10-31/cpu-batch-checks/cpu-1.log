@@ -1,0 +1,7 @@
+
+running 3 tests
+test viewport::gpu::scene_cache_tests::gpu_scene_cache_keeps_preview_and_picking_roles_separate ... ignored, requires Vulkan; validates separate base and preview preparation caches
+test viewport::gpu::scene_cache_tests::scene_cache_keys_every_camera_viewport_and_face_order_input ... ok
+test viewport::gpu::scene_cache_tests::scene_cache_rebinds_shading_and_materials_and_invalidates_geometry_inputs ... ok
+
+test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 1018 filtered out; finished in 0.50s

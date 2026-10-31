@@ -1,0 +1,10 @@
+running 7 tests
+test sculpt::deformation::scan_tests::compact_discovery_and_sparse_reductions_match_original_guards ... ok
+test sculpt::deformation::tests::directional_stamp_allows_steep_relief_but_rejects_projected_collapse ... ok
+test sculpt::deformation::tests::oversized_snake_pull_cannot_fold_the_surface ... ok
+test sculpt::deformation::tests::projection_fold_guard_is_local_and_preserves_existing_sharp_edges ... ok
+test sculpt::deformation::tests::smoothing_allows_valid_steep_dihedrals_without_pinning_a_safe_patch ... ok
+test sculpt::deformation::tests::smoothing_does_not_make_existing_slivers_worse ... ok
+test sculpt::deformation::tests::unsafe_motion_is_reduced_locally_and_cannot_cross_a_collapsed_face ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 983 filtered out; finished in 0.21s

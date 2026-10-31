@@ -391,6 +391,7 @@ pub(crate) struct Preferences {
     pub modeling_presets: Vec<ModelingPreset>,
     pub next_modeling_preset_id: u64,
     pub recovery: crate::recovery::Settings,
+    pub mesh_capacity: crate::sculpt::capacity::MeshCapacity,
     pub history_retention: crate::diagnostics::Retention,
     pub version: u32,
     pub bindings: Vec<(Action, Option<Shortcut>)>,
@@ -439,6 +440,7 @@ impl Default for Preferences {
             next_modeling_preset_id: 1,
             recovery: Default::default(),
             history_retention: Default::default(),
+            mesh_capacity: Default::default(),
             version: 1,
             touch: TouchSettings::default(),
             bindings: Action::ALL
@@ -492,6 +494,7 @@ impl Default for Preferences {
 }
 impl Preferences {
     pub fn validate(&self) -> Result<(), String> {
+        self.mesh_capacity.validate()?;
         self.touch.validate()?;
         self.materials.validate()?;
         self.lighting.validate()?;

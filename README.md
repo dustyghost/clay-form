@@ -79,7 +79,7 @@ When a feature changes, update its user guide alongside the code.
 
 Clay Form supports sculpting, subdivision, voxel remeshing and local adaptive mesh refinement. You can also paint colour, metallic and roughness values on vertices or textures, unwrap UVs and exchange images with GIMP. Quad retopology and sculpt layers are future work.
 
-Meshes are limited to **500,000 vertices** and **1,000,000 triangles**. Large scenes may become slow before reaching those limits. Mesh and alpha file sizes are also bounded when loading.
+Meshes default to **500,000 vertices** and **1,000,000 triangles** each. Raise these limits in **Settings → Mesh capacity**, then restart Clay Form. Settings allow up to **16 million vertices** and **32 million triangles** per mesh; usable capacity depends on your hardware and scene. Mesh and alpha file sizes remain bounded when loading. See [Change mesh capacity](docs/guide/workspace.md#change-mesh-capacity).
 
 Meshes retain quad topology where available; triangles are used for rendering and picking. The viewport supports orthographic and perspective views with wgpu rendering. Sculpting, picking and topology operations run on the CPU, which can limit editing speed in large scenes.
 

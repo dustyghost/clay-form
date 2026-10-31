@@ -1,0 +1,6 @@
+
+running 2 tests
+test sculpt::merge::tests::merge_preserves_topology_masks_groups_and_visibility_without_welding ... ok
+test sculpt::merge::tests::merge_rejects_limits_and_handles_long_duplicate_group_names ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 983 filtered out; finished in 0.02s

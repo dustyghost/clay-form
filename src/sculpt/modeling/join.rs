@@ -187,7 +187,7 @@ impl Mesh {
                 if t <= 1e-6 || t >= 1. - 1e-6 {
                     continue;
                 }
-                if out.vertices.len() >= MAX_VERTICES {
+                if out.vertices.len() >= max_vertices() {
                     return Err("Tunnel join would exceed the vertex limit".into());
                 }
                 let vertex = out.append_blend(
@@ -223,7 +223,7 @@ impl Mesh {
                     face
                 };
                 result.walls.push((face, group));
-                if result.walls.len() > MAX_TRIANGLES / 2 {
+                if result.walls.len() > max_triangles() / 2 {
                     return Err("Tunnel join would exceed the face limit".into());
                 }
             }

@@ -50,6 +50,7 @@ impl<'a> EditorPolicy<'a> {
         if (ui.recovery_open
             || ui.diagnostics_open
             || ui.settings_open
+            || ui.mesh_capacity_open
             || ui.layout_open
             || ui.viewport_controls.editor_open
             || ui.viewport_controls.arranging)
@@ -266,6 +267,7 @@ impl<'a> EditorPolicy<'a> {
                 !self.ui.recovery_open
                     && !self.ui.diagnostics_open
                     && !self.ui.settings_open
+                    && !self.ui.mesh_capacity_open
                     && !self.ui.layout_open
                     && self.ui.file_picker.is_none()
             }
@@ -488,13 +490,14 @@ mod tests {
     use crate::app::App;
     #[test]
     fn buttons_shortcuts_and_direct_edits_share_modal_and_job_policy() {
-        for mode in 0..5 {
+        for mode in 0..6 {
             let mut app = App::default();
             match mode {
                 0 => app.ui.mesh_busy = true,
                 1 => app.ui.projection.open = true,
                 2 => app.viewport.paths.active = true,
                 3 => app.ui.settings_open = true,
+                4 => app.ui.mesh_capacity_open = true,
                 _ => app.ui.pending = Some(crate::command::PendingAction::New),
             }
             app.sync_path_history_state();

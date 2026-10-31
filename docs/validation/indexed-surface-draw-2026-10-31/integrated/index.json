@@ -1,0 +1,38 @@
+[
+  {
+    "case": "sphere-l3",
+    "status": "measured",
+    "log": "sphere-l3.log",
+    "elapsed_seconds": 7.2280496440362185,
+    "sampled_peak_rss_bytes": 689840128,
+    "sampled_peak_swap_bytes": 0,
+    "minimum_available_bytes": 3421552640,
+    "progress": "sphere-l3.progress.json",
+    "last_stage": "complete",
+    "stage_status": "completed"
+  },
+  {
+    "case": "organic-l3",
+    "status": "measured",
+    "log": "organic-l3.log",
+    "elapsed_seconds": 8.834212749963626,
+    "sampled_peak_rss_bytes": 773824512,
+    "sampled_peak_swap_bytes": 0,
+    "minimum_available_bytes": 3263922176,
+    "progress": "organic-l3.progress.json",
+    "last_stage": "complete",
+    "stage_status": "completed"
+  },
+  {
+    "case": "hidden-l3",
+    "status": "measured",
+    "log": "hidden-l3.log",
+    "elapsed_seconds": 8.733283723006025,
+    "sampled_peak_rss_bytes": 775299072,
+    "sampled_peak_swap_bytes": 0,
+    "minimum_available_bytes": 3357007872,
+    "progress": "hidden-l3.progress.json",
+    "last_stage": "complete",
+    "stage_status": "completed"
+  }
+]

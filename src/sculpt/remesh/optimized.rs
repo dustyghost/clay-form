@@ -802,7 +802,9 @@ impl Work {
         Ok(())
     }
     fn subdivide(&mut self, cancel: &dyn Fn() -> bool) -> Result<Vec<Quad>, String> {
-        if self.count > 125_000 || self.p.len().saturating_add(self.count * 3) > 1_500_000 {
+        if self.count > super::max_triangles() / 8
+            || self.p.len().saturating_add(self.count * 3) > super::max_vertices() * 3
+        {
             return Err("Optimized quads exceeds mesh limits; choose a lower resolution".into());
         }
         let mut midpoints = BTreeMap::new();

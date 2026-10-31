@@ -1,0 +1,117 @@
+Optimized library disassembly, objdump -d -C.
+Before: source 8b1e3e3a3b8b76970917e8056ed878e1a38698ddb712e23a8860398607fc0794.
+After: first implementation source 937fafc93b5b5dc9db3c846b31cee9245c450e885b2dcf228f54cc7b8b7e7c31; final production code is identical.
+
+Original Brush::weight, sincosf and falloff powf before alpha dispatch:
+
+target/release/deps/clay_form-28c669c6ca701e80:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+000000000136a780 <<clay_form::sculpt::brush::Brush>::weight>:
+ 136a780:	55                   	push   %rbp
+ 136a781:	41 57                	push   %r15
+ 136a783:	41 56                	push   %r14
+ 136a785:	41 55                	push   %r13
+ 136a787:	41 54                	push   %r12
+ 136a789:	53                   	push   %rbx
+ 136a78a:	48 83 ec 38          	sub    $0x38,%rsp
+ 136a78e:	0f 29 0c 24          	movaps %xmm1,(%rsp)
+ 136a792:	f3 0f 11 44 24 20    	movss  %xmm0,0x20(%rsp)
+ 136a798:	48 89 fb             	mov    %rdi,%rbx
+ 136a79b:	f3 0f 10 87 14 01 00 	movss  0x114(%rdi),%xmm0
+ 136a7a2:	00
+ 136a7a3:	f3 0f 59 05 5d 97 d7 	mulss  -0x12868a3(%rip),%xmm0        # e3f08 <anon.e52369e1b7c48f60358c80e780a4f701.104.llvm.17698639262333465056+0xb8>
+ 136a7aa:	fe
+ 136a7ab:	48 8d 7c 24 1c       	lea    0x1c(%rsp),%rdi
+ 136a7b0:	48 8d 74 24 18       	lea    0x18(%rsp),%rsi
+ 136a7b5:	ff 15 2d 7f 94 00    	call   *0x947f2d(%rip)        # 1cb26e8 <sincosf@GLIBC_2.2.5>
+ 136a7bb:	f3 0f 10 44 24 1c    	movss  0x1c(%rsp),%xmm0
+ 136a7c1:	f3 0f 10 4c 24 18    	movss  0x18(%rsp),%xmm1
+ 136a7c7:	f3 0f 10 64 24 20    	movss  0x20(%rsp),%xmm4
+ 136a7cd:	0f 28 dc             	movaps %xmm4,%xmm3
+ 136a7d0:	f3 0f 59 d9          	mulss  %xmm1,%xmm3
+ 136a7d4:	0f 28 2c 24          	movaps (%rsp),%xmm5
+ 136a7d8:	0f 28 d5             	movaps %xmm5,%xmm2
+ 136a7db:	f3 0f 59 d0          	mulss  %xmm0,%xmm2
+ 136a7df:	f3 0f 5c da          	subss  %xmm2,%xmm3
+ 136a7e3:	f3 0f 59 e0          	mulss  %xmm0,%xmm4
+ 136a7e7:	0f 28 d5             	movaps %xmm5,%xmm2
+ 136a7ea:	f3 0f 59 d1          	mulss  %xmm1,%xmm2
+ 136a7ee:	f3 0f 58 d4          	addss  %xmm4,%xmm2
+ 136a7f2:	0f 28 c3             	movaps %xmm3,%xmm0
+ 136a7f5:	f3 0f 59 c3          	mulss  %xmm3,%xmm0
+ 136a7f9:	0f 29 14 24          	movaps %xmm2,(%rsp)
+ 136a7fd:	0f 28 ca             	movaps %xmm2,%xmm1
+ 136a800:	f3 0f 59 ca          	mulss  %xmm2,%xmm1
+ 136a804:	f3 0f 58 c8          	addss  %xmm0,%xmm1
+ 136a808:	0f 57 d2             	xorps  %xmm2,%xmm2
+ 136a80b:	f3 0f 51 d1          	sqrtss %xmm1,%xmm2
+ 136a80f:	0f 57 c0             	xorps  %xmm0,%xmm0
+ 136a812:	0f 2e 15 f7 71 d7 fe 	ucomiss -0x1288e09(%rip),%xmm2        # e1a10 <anon.d271b76c6e3b9e0a38fcbce1ee83c000.999.llvm.11049708527135429895>
+ 136a819:	0f 83 ec 02 00 00    	jae    136ab0b <<clay_form::sculpt::brush::Brush>::weight+0x38b>
+ 136a81f:	0f 29 5c 24 20       	movaps %xmm3,0x20(%rsp)
+ 136a824:	f3 0f 10 1d e4 71 d7 	movss  -0x1288e1c(%rip),%xmm3        # e1a10 <anon.d271b76c6e3b9e0a38fcbce1ee83c000.999.llvm.11049708527135429895>
+ 136a82b:	fe
+ 136a82c:	0f 28 cb             	movaps %xmm3,%xmm1
+ 136a82f:	f3 0f 5c ca          	subss  %xmm2,%xmm1
+ 136a833:	0f 28 c3             	movaps %xmm3,%xmm0
+ 136a836:	f3 0f 5c 83 08 01 00 	subss  0x108(%rbx),%xmm0
+ 136a83d:	00
+ 136a83e:	f3 0f 5f 05 da 93 d7 	maxss  -0x1286c26(%rip),%xmm0        # e3c20 <anon.a3bad1fc912214dc84f32f543a1dfd32.9.llvm.13694618274980194473+0x40>
+ 136a845:	fe
+ 136a846:	f3 0f 5e c8          	divss  %xmm0,%xmm1
+ 136a84a:	0f 57 d2             	xorps  %xmm2,%xmm2
+ 136a84d:	f3 0f 5f d1          	maxss  %xmm1,%xmm2
+ 136a851:	0f 28 c3             	movaps %xmm3,%xmm0
+ 136a854:	f3 0f 5d c2          	minss  %xmm2,%xmm0
+ 136a858:	f3 0f 10 8b 04 01 00 	movss  0x104(%rbx),%xmm1
+ 136a85f:	00
+ 136a860:	ff 15 3a 7f 94 00    	call   *0x947f3a(%rip)        # 1cb27a0 <powf@GLIBC_2.27>
+ 136a866:	48 8b 03             	mov    (%rbx),%rax
+ 136a869:	48 8d 0d 10 a4 eb fe 	lea    -0x1145bf0(%rip),%rcx        # 224c80 <anon.b5903993a881b44ecd9426d61bbbaf63.2065.llvm.1755052232972469840+0x17da>
+ 136a870:	48 63 04 81          	movslq (%rcx,%rax,4),%rax
+ 136a874:	48 01 c8             	add    %rcx,%rax
+ 136a877:	ff e0                	jmp    *%rax
+ 136a879:	f3 0f 10 05 8f 71 d7 	movss  -0x1288e71(%rip),%xmm0        # e1a10 <anon.d271b76c6e3b9e0a38fcbce1ee83c000.999.llvm.11049708527135429895>
+ 136a880:	fe
+ 136a881:	e9 85 02 00 00       	jmp    136ab0b <<clay_form::sculpt::brush::Brush>::weight+0x38b>
+ 136a886:	0f 28 05 53 27 d7 fe 	movaps -0x128d8ad(%rip),%xmm0        # dcfe0 <anon.b5903993a881b44ecd9426d61bbbaf63.8.llvm.1755052232972469840+0x2f0>
+ 136a88d:	0f 28 54 24 20       	movaps 0x20(%rsp),%xmm2
+ 136a892:	0f 54 d0             	andps  %xmm0,%xmm2
+ 136a895:	0f 28 24 24          	movaps (%rsp),%xmm4
+ 136a899:	0f 54 e0             	andps  %xmm0,%xmm4
+ 136a89c:	0f 28 dc             	movaps %xmm4,%xmm3
+ 136a89f:	f3 0f c2 dc 03       	cmpunordss %xmm4,%xmm3
+ 136a8a4:	0f 28 cb             	movaps %xmm3,%xmm1
+ 136a8a7:	0f 54 ca             	andps  %xmm2,%xmm1
+ 136a8aa:	f3 0f 5f d4          	maxss  %xmm4,%xmm2
+ 136a8ae:	0f 55 da             	andnps %xmm2,%xmm3
+ 136a8b1:	0f 56 d9             	orps   %xmm1,%xmm3
+
+Original sculpt loop, weight followed by pressure powf:
+  945556:	48 8b bc 24 58 01 00 	mov    0x158(%rsp),%rdi
+  94555d:	00
+  94555e:	e8 1d 52 a2 00       	call   136a780 <<clay_form::sculpt::brush::Brush>::weight>
+  945563:	0f 28 e8             	movaps %xmm0,%xmm5
+  945566:	f3 0f 10 44 24 48    	movss  0x48(%rsp),%xmm0
+  94556c:	80 bc 24 30 01 00 00 	cmpb   $0x0,0x130(%rsp)
+  945573:	00
+  945574:	74 25                	je     94559b <<clay_form::sculpt::mesh::Mesh>::stamp_many_with_flatten_planes+0x1e4b>
+  945576:	f3 41 0f 10 46 34    	movss  0x34(%r14),%xmm0
+  94557c:	f3 0f 10 8c 24 18 01 	movss  0x118(%rsp),%xmm1
+  945583:	00 00
+  945585:	0f 29 6c 24 50       	movaps %xmm5,0x50(%rsp)
+  94558a:	ff 15 10 d2 36 01    	call   *0x136d210(%rip)        # 1cb27a0 <powf@GLIBC_2.27>
+  945590:	0f 28 6c 24 50       	movaps 0x50(%rsp),%xmm5
+  945595:	f3 0f 59 44 24 48    	mulss  0x48(%rsp),%xmm0
+  94559b:	f3 0f 59 e8          	mulss  %xmm0,%xmm5
+  94559f:	4c 3b a4 24 90 00 00 	cmp    0x90(%rsp),%r12
+  9455a6:	00
+  9455a7:	0f 83 77 fc ff ff    	jae    945224 <<clay_form::sculpt::mesh::Mesh>::stamp_many_with_flatten_planes+0x1ad4>
+  9455ad:	0f 29 6c 24 50       	movaps %xmm5,0x50(%rsp)
+
+PreparedWeight::weight math-library calls (no sincosf):
+  f06498:	ff 25 82 e5 da 00    	jmp    *0xdae582(%rip)        # 1cb4a20 <powf@GLIBC_2.27>
+  f0674b:	ff 15 cf e2 da 00    	call   *0xdae2cf(%rip)        # 1cb4a20 <powf@GLIBC_2.27>

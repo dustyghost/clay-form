@@ -1,0 +1,74 @@
+[
+  {
+    "case": "sphere-l3",
+    "status": "measured",
+    "log": "sphere-l3.log",
+    "elapsed_seconds": 22.399008108011913,
+    "sampled_peak_rss_bytes": 714997760,
+    "sampled_peak_swap_bytes": 0,
+    "minimum_available_bytes": 3367944192,
+    "progress": "sphere-l3.progress.json",
+    "last_stage": "complete",
+    "stage_status": "completed"
+  },
+  {
+    "case": "sphere-l4",
+    "status": "measured",
+    "log": "sphere-l4.log",
+    "elapsed_seconds": 89.38501109997742,
+    "sampled_peak_rss_bytes": 2329432064,
+    "sampled_peak_swap_bytes": 0,
+    "minimum_available_bytes": 1477365760,
+    "progress": "sphere-l4.progress.json",
+    "last_stage": "complete",
+    "stage_status": "completed"
+  },
+  {
+    "case": "organic-l3",
+    "status": "measured",
+    "log": "organic-l3.log",
+    "elapsed_seconds": 26.411206615972333,
+    "sampled_peak_rss_bytes": 792940544,
+    "sampled_peak_swap_bytes": 0,
+    "minimum_available_bytes": 3245645824,
+    "progress": "organic-l3.progress.json",
+    "last_stage": "complete",
+    "stage_status": "completed"
+  },
+  {
+    "case": "organic-l4",
+    "status": "measured",
+    "log": "organic-l4.log",
+    "elapsed_seconds": 108.6599161910126,
+    "sampled_peak_rss_bytes": 2475192320,
+    "sampled_peak_swap_bytes": 0,
+    "minimum_available_bytes": 1336197120,
+    "progress": "organic-l4.progress.json",
+    "last_stage": "complete",
+    "stage_status": "completed"
+  },
+  {
+    "case": "hidden-l3",
+    "status": "measured",
+    "log": "hidden-l3.log",
+    "elapsed_seconds": 23.797279636957683,
+    "sampled_peak_rss_bytes": 773296128,
+    "sampled_peak_swap_bytes": 0,
+    "minimum_available_bytes": 3290808320,
+    "progress": "hidden-l3.progress.json",
+    "last_stage": "complete",
+    "stage_status": "completed"
+  },
+  {
+    "case": "hidden-l4",
+    "status": "measured",
+    "log": "hidden-l4.log",
+    "elapsed_seconds": 95.88235479098512,
+    "sampled_peak_rss_bytes": 2754707456,
+    "sampled_peak_swap_bytes": 0,
+    "minimum_available_bytes": 1270075392,
+    "progress": "hidden-l4.progress.json",
+    "last_stage": "complete",
+    "stage_status": "completed"
+  }
+]

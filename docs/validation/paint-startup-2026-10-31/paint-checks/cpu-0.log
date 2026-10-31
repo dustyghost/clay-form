@@ -1,0 +1,7 @@
+
+running 3 tests
+test sculpt::texture::surface::tests::paint_hierarchy_bounds_preserve_reference_partitions_for_reordered_faces ... ok
+test sculpt::texture::surface::tests::paint_hierarchy_reuse_validates_positions_visibility_and_occluders ... ok
+test sculpt::texture::surface::tests::paint_spatial_candidates_reuse_static_geometry_and_keep_distant_occluders ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 1023 filtered out; finished in 0.13s

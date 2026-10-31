@@ -95,6 +95,8 @@ impl Document {
                 &mut self.paint_scratch,
             )
         } else {
+            #[cfg(test)]
+            crate::sculpt::texture::profile::mark("document_setup");
             self.geometry.mesh.paint_material_with_scratch(
                 brush,
                 &dabs,

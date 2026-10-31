@@ -47,6 +47,20 @@ struct Surface {
  out.mask=max(mask,0.); out.is_active=step(0.,mask); out.group=groups[index/3u];
  return out;
 }
+// Plain surfaces have no per-corner inputs. An indexed draw lets shared
+// shading vertices reuse vertex-shader results across adjacent triangles.
+@vertex fn basic_surface_vertex(@builtin(vertex_index) index: u32) -> Surface {
+ let i=index*12u;
+ let p=vec3f(vertices[i],vertices[i+1u],vertices[i+2u]);
+ let mask=vertices[i+9u];
+ var out: Surface;
+ out.clip=project(p); out.position=p;
+ out.normal=vec3f(vertices[i+3u],vertices[i+4u],vertices[i+5u]);
+ out.color=vec3f(vertices[i+6u],vertices[i+7u],vertices[i+8u]);
+ out.material=vec2f(vertices[i+10u],vertices[i+11u]);
+ out.mask=max(mask,0.); out.is_active=step(0.,mask);
+ return out;
+}
 // Bilinear R32Float sampling without requiring FLOAT32_FILTERABLE.
 fn image_weight(q: vec2f) -> f32 {
  let size=vec2i(textureDimensions(alpha_image));

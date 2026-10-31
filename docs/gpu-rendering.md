@@ -11,6 +11,7 @@ Use this page to choose a rendering check, export a preview, or measure a slowdo
 | Check shaders, depth, or picking agreement | [Validation](#validation) |
 | Export guide images or a regression preview | [Preview images](#preview-images) |
 | Measure rendering and picking costs | [Load profile](#load-profile) |
+| Compare sculpting capacity, memory and stroke phases | [Capacity baseline and repeatable workloads](validation/capacity-2026-10-30/README.md) |
 | Measure transforms and masks without a window | [Document edit profile](#document-edit-profile) |
 | Change shading, groups, or wireframe | [Surface rendering](#surface-rendering) |
 | Check slices, visibility, or rotation controls | [Focused regressions](#focused-regressions) |
@@ -31,7 +32,7 @@ The View menu optionally draws back-facing surfaces in a separate translucent pa
 
 Lighting runs per fragment. The alpha footprint and symmetry guides run in the solid surface shader and stay on active visible surfaces. Tangent rings, the normal indicator, gizmos, and ordinary controls remain egui overlays.
 
-Mesh deformation, subdivision, remeshing, undo, and surface picking remain CPU operations. Picking scans triangles, using projected barycentrics in orthographic view and ray intersections in perspective view; moving rendering to the GPU does not remove that cost. The renderer uses the same immutable mesh snapshot for display and picking throughout each frame, including frames containing adaptive topology edits.
+Mesh deformation, subdivision, remeshing, undo, and surface picking remain CPU operations. Picking uses projected barycentrics in orthographic view and ray intersections in perspective view. A first query scans the facing triangles; later distinct queries can skip groups outside conservative screen bounds, and an identical query reuses its result. Prepared views are reused while the camera, viewport and geometric inputs remain unchanged. The renderer uses the same immutable mesh snapshot for display and picking throughout each frame, including frames containing adaptive topology edits. See the [picking and scene reuse measurements](validation/picking-and-scene-reuse-2026-10-31/README.md) for build costs and invalidation coverage.
 
 ## Validation
 
@@ -119,7 +120,7 @@ To regenerate all checked-in guide images, use `bash scripts/update-doc-screensh
 Run the repeatable profile in release mode, while other CPU/GPU-intensive work is idle:
 
 ```sh
-CLAY_GPU_PROFILE=/tmp/clay-gpu-profile.csv cargo test --release --locked gpu_load_profile -- --ignored --nocapture
+CLAY_GPU_PROFILE=/tmp/clay-gpu-profile.csv cargo test --release --locked --lib viewport::gpu::profile::gpu_load_profile -- --exact --ignored --nocapture
 ```
 
 The workload includes approximately 4.7k, 19k, 75k, and 301k vertices in a single model, plus four separate models at the low and medium densities. All models use the requested density rather than hiding the cost behind inactive-model LODs. The viewport is 256 × 256 physical pixels.
@@ -128,7 +129,14 @@ The CSV records display-mesh preparation, initial buffer upload, CPU view prepar
 
 The output identifies the wgpu adapter and backend. A `llvmpipe` result measures software rendering on the CPU and cannot establish hardware GPU performance. Compare runs on the same driver, hardware, resolution, and workload. Native application profiling at normal window size should also cover sustained strokes, adaptive topology, masks, symmetry, high-DPI screens, and repeated New/Open/undo/redo to check memory stability.
 
-Use those measurements to choose the next optimization. Likely candidates to investigate are a spatial index for picking, limiting uploads and normal updates to changed mesh regions, and spatial brush-neighborhood queries. Higher-density sculpting may need CPU geometry work even when drawing is fast.
+The dense draw diagnostic separates CPU paint preparation with a prepared scene from offscreen GPU drawing and completion. It saves six images for sphere, organic and hidden-face fixtures in both camera modes:
+
+```sh
+mkdir -p /tmp/clay-draw
+CLAY_CAMERA_LEVEL=3 CLAY_DRAW_PROFILE=/tmp/clay-draw/profile.json cargo test --release --locked --lib viewport::gpu::profile::capacity::gpu_load_profile_draw -- --exact --ignored --test-threads=1
+```
+
+Level 3 uses 602k source triangles; level 4 uses 2.4 million and needs a memory guard on constrained machines. The diagnostic excludes upload, cold scene construction, UI composition and desktop presentation. Higher-density sculpting still needs CPU geometry work even when drawing is fast.
 
 ### Software Vulkan validation sample
 
@@ -176,6 +184,10 @@ Transforms now prepare and check coordinates without cloning inactive models or 
 ### Polygroups
 
 Polygroup colors are cached per display triangle in a storage buffer. The vertex shader pulls indexed position/normal data and face colors using the draw vertex index, retaining sharp category boundaries without optional primitive-index features. Group registry order selects deliberately separated hues from a muted palette, so renaming keeps the color; masks, guides and brush previews still compose over the surface. The View toggle changes uniforms without rebuilding geometry.
+
+Plain surfaces with basic material channels use indexed draws, allowing shared shading vertices to reuse vertex-shader work. Texture maps, UV inspection, displayed polygroups and extended material channels select the per-corner pipeline. Both paths use the same fragment shader, depth rules and brush/guide overlays; hard-edge vertices remain split by the existing shading topology. GPU frames leave triangle clipping to the GPU rather than building the CPU painter's filtered face list. `gpu_indexed_surfaces_match_general_pixels_and_split_buffers` compares both paths pixel for pixel, including split buffers, masks, hidden and inactive models, wireframe and translucent backs.
+
+See the [dense drawing measurements](validation/indexed-surface-draw-2026-10-31/README.md) for timings, captured pixels, rounding bounds and memory limits.
 
 ### Wireframe depth
 

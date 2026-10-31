@@ -1,18 +1,44 @@
 use super::*;
 const SIDE: usize = 64;
 
-#[derive(Default)]
+#[derive(Default, Debug, PartialEq)]
 struct Node {
     center: Vec3,
     extent: Vec3,
     range: std::ops::Range<usize>,
     children: Option<(usize, usize)>,
 }
-/// A stroke-local world-space hierarchy and reusable projected front-surface bins.
+struct FaceBounds {
+    low: [f32; 3],
+    high: [f32; 3],
+    sum: [f32; 3],
+}
+impl FaceBounds {
+    fn new(points: &[Vec3; 3]) -> Self {
+        let points = points.map(|p| [p.0, p.1, p.2]);
+        Self {
+            low: std::array::from_fn(|axis| {
+                points.iter().map(|p| p[axis]).fold(f32::INFINITY, f32::min)
+            }),
+            high: std::array::from_fn(|axis| {
+                points
+                    .iter()
+                    .map(|p| p[axis])
+                    .fold(f32::NEG_INFINITY, f32::max)
+            }),
+            sum: std::array::from_fn(|axis| points.iter().map(|p| p[axis]).sum()),
+        }
+    }
+}
+/// A validated world-space hierarchy and reusable projected front-surface bins.
 /// Query bounds are unbounded along the view direction, retaining distant occluders.
 #[derive(Default)]
 pub(crate) struct DepthField {
     world_faces: Vec<[Vec3; 3]>,
+    visibility: Vec<bool>,
+    needs_validation: bool,
+    #[cfg(test)]
+    builds: usize,
     faces: Vec<[[f32; 3]; 3]>,
     order: Vec<usize>,
     nodes: Vec<Node>,
@@ -25,11 +51,12 @@ pub(crate) struct DepthField {
 }
 impl DepthField {
     fn reset(&mut self) {
-        self.world_faces.clear();
-        self.order.clear();
-        self.nodes.clear();
+        // Material/image paint does not move geometry. Retain the hierarchy,
+        // but validate exact input values before the next stroke can use it.
+        self.needs_validation = true;
     }
-    fn build_node(&mut self, start: usize, end: usize) -> usize {
+    #[cfg(test)]
+    fn build_node_reference(&mut self, start: usize, end: usize) -> usize {
         let mut low = [f32::INFINITY; 3];
         let mut high = [f32::NEG_INFINITY; 3];
         for &f in &self.order[start..end] {
@@ -59,27 +86,112 @@ impl DepthField {
             self.order[start..end].select_nth_unstable_by(mid - start, |&a, &b| {
                 coordinate(a).total_cmp(&coordinate(b))
             });
-            let left = self.build_node(start, mid);
-            let right = self.build_node(mid, end);
+            let left = self.build_node_reference(start, mid);
+            let right = self.build_node_reference(mid, end);
+            self.nodes[index].children = Some((left, right));
+        }
+        index
+    }
+    fn matches(&self, mesh: &Mesh, occluders: &[&Mesh]) -> bool {
+        let count: usize = std::iter::once(mesh)
+            .chain(occluders.iter().copied())
+            .map(|m| m.triangles.len())
+            .sum();
+        if count != self.world_faces.len() {
+            return false;
+        }
+        let mut index = 0;
+        for surface in std::iter::once(mesh).chain(occluders.iter().copied()) {
+            for (face, triangle) in surface.triangles.iter().enumerate() {
+                if surface.face_visible(face) != self.visibility[index]
+                    || triangle
+                        .iter()
+                        .zip(self.world_faces[index])
+                        .any(|(&i, old)| {
+                            let p = surface.vertices[i];
+                            [p.0.to_bits(), p.1.to_bits(), p.2.to_bits()]
+                                != [old.0.to_bits(), old.1.to_bits(), old.2.to_bits()]
+                        })
+                {
+                    return false;
+                }
+                index += 1;
+            }
+        }
+        true
+    }
+    fn build_node(&mut self, bounds: &[FaceBounds], start: usize, end: usize) -> usize {
+        let mut low = [f32::INFINITY; 3];
+        let mut high = [f32::NEG_INFINITY; 3];
+        for &f in &self.order[start..end] {
+            for axis in 0..3 {
+                low[axis] = low[axis].min(bounds[f].low[axis]);
+                high[axis] = high[axis].max(bounds[f].high[axis]);
+            }
+        }
+        let center = std::array::from_fn::<_, 3, _>(|i| (low[i] + high[i]) * 0.5);
+        let extent = std::array::from_fn::<_, 3, _>(|i| (high[i] - low[i]) * 0.5);
+        let index = self.nodes.len();
+        self.nodes.push(Node {
+            center: Vec3(center[0], center[1], center[2]),
+            extent: Vec3(extent[0], extent[1], extent[2]),
+            range: start..end,
+            children: None,
+        });
+        if end - start > 16 {
+            let axis = (0..3)
+                .max_by(|&a, &b| extent[a].total_cmp(&extent[b]))
+                .unwrap();
+            let mid = (start + end) / 2;
+            self.order[start..end].select_nth_unstable_by(mid - start, |&a, &b| {
+                bounds[a].sum[axis].total_cmp(&bounds[b].sum[axis])
+            });
+            let left = self.build_node(bounds, start, mid);
+            let right = self.build_node(bounds, mid, end);
             self.nodes[index].children = Some((left, right));
         }
         index
     }
     pub fn prepare(&mut self, mesh: &Mesh, dab: &Dab, occluders: &[&Mesh]) {
+        if self.needs_validation {
+            if !self.matches(mesh, occluders) {
+                self.world_faces.clear();
+                self.visibility.clear();
+                self.order.clear();
+                self.nodes.clear();
+            }
+            self.needs_validation = false;
+        }
+        #[cfg(test)]
+        super::profile::mark("depth_validate");
         if self.world_faces.is_empty() {
             for surface in std::iter::once(mesh).chain(occluders.iter().copied()) {
                 for (f, triangle) in surface.triangles.iter().enumerate() {
                     let index = self.world_faces.len();
                     self.world_faces.push(triangle.map(|i| surface.vertices[i]));
-                    if surface.face_visible(f) {
+                    let visible = surface.face_visible(f);
+                    self.visibility.push(visible);
+                    if visible {
                         self.order.push(index);
                     }
                 }
             }
             self.faces.resize(self.world_faces.len(), [[0.; 3]; 3]);
+            #[cfg(test)]
+            super::profile::mark("depth_copy");
             if !self.order.is_empty() {
-                self.build_node(0, self.order.len());
+                // Bounds and centroid comparisons otherwise repeat triangle
+                // loads/arithmetic at every level. This temporary array is
+                // released after construction; traversal storage is unchanged.
+                let bounds: Vec<_> = self.world_faces.iter().map(FaceBounds::new).collect();
+                self.build_node(&bounds, 0, self.order.len());
+                #[cfg(test)]
+                {
+                    self.builds += 1;
+                }
             }
+            #[cfg(test)]
+            super::profile::mark("depth_build");
         }
         self.bins.resize_with(SIDE * SIDE, Vec::new);
         for bin in &mut self.bins {
@@ -208,6 +320,100 @@ impl PaintScratch {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn assert_reference(mesh: &Mesh, occluders: &[&Mesh], depth: &DepthField, dab: &Dab) {
+        let mut reference = DepthField {
+            world_faces: depth.world_faces.clone(),
+            order: depth
+                .visibility
+                .iter()
+                .enumerate()
+                .filter_map(|(i, &v)| v.then_some(i))
+                .collect(),
+            ..Default::default()
+        };
+        if !reference.order.is_empty() {
+            reference.build_node_reference(0, reference.order.len());
+        }
+        assert_eq!(
+            depth.order, reference.order,
+            "partition and traversal order"
+        );
+        assert_eq!(depth.nodes, reference.nodes, "exact hierarchy bounds");
+        // Compare the retained cache with a fresh hierarchy and projection too.
+        reference.world_faces.clear();
+        reference.nodes.clear();
+        reference.order.clear();
+        reference.prepare(mesh, dab, occluders);
+        assert_eq!(depth.active_faces, reference.active_faces);
+        assert_eq!(depth.active_vertices, reference.active_vertices);
+        for y in -5..=5 {
+            for x in -5..=5 {
+                let p = dab.center
+                    + dab.right * (x as f32 * dab.radius / 5.)
+                    + dab.up * (y as f32 * dab.radius / 5.);
+                assert_eq!(depth.visible(p, dab, None), reference.visible(p, dab, None));
+            }
+        }
+    }
+    #[test]
+    fn paint_hierarchy_bounds_preserve_reference_partitions_for_reordered_faces() {
+        let mut mesh = Mesh::starting_sphere();
+        let dab = super::super::tests::dab();
+        for case in 0..4 {
+            match case {
+                1 => mesh.triangles.reverse(),
+                2 => mesh.triangles.rotate_left(137),
+                3 => {
+                    for p in &mut mesh.vertices {
+                        p.2 = 0.;
+                    }
+                }
+                _ => {}
+            }
+            let mut depth = DepthField::default();
+            depth.prepare(&mesh, &dab, &[]);
+            assert_reference(&mesh, &[], &depth, &dab);
+        }
+    }
+    #[test]
+    fn paint_hierarchy_reuse_validates_positions_visibility_and_occluders() {
+        let original = Mesh::starting_sphere();
+        let barrier = super::super::tests::sheets();
+        let dab = super::super::tests::dab();
+        for case in 0..7 {
+            let mut mesh = original.clone();
+            let mut occluder = barrier.clone();
+            let mut depth = DepthField::default();
+            depth.prepare(&mesh, &dab, &[&occluder]);
+            let builds = depth.builds;
+            depth.reset();
+            // Painting and masks leave the depth hierarchy unchanged.
+            mesh.mask[0] = 1.;
+            mesh.materials = vec![crate::sculpt::Material::default(); mesh.vertices.len()];
+            depth.prepare(&mesh, &dab, &[&occluder]);
+            assert_eq!(depth.builds, builds);
+            match case {
+                0 => mesh.vertices[0].0 += 0.1,
+                1 => mesh.triangles[0].swap(0, 1),
+                2 => {
+                    mesh.hidden_faces = vec![false; mesh.triangles.len()];
+                    mesh.hidden_faces[0] = true;
+                }
+                3 => mesh.vertex_groups[0].visible = false,
+                4 => occluder.vertices[0].2 += 0.1,
+                5 => {
+                    occluder.hidden_faces = vec![true; occluder.triangles.len()];
+                }
+                _ => {
+                    mesh.triangles.pop();
+                }
+            }
+            depth.reset();
+            depth.prepare(&mesh, &dab, &[&occluder]);
+            assert!(depth.builds > builds, "case {case}");
+            assert_reference(&mesh, &[&occluder], &depth, &dab);
+        }
+    }
     #[test]
     fn paint_spatial_candidates_reuse_static_geometry_and_keep_distant_occluders() {
         let mut mesh = super::super::tests::sheets();

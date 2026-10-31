@@ -1,0 +1,4 @@
+running 1 test
+test sculpt::tests::black_alpha_protects_from_every_brush ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 989 filtered out; finished in 0.06s

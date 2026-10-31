@@ -1,0 +1,9 @@
+
+running 5 tests
+test sculpt::clay::tests::clay_add_and_subtract_build_equivalent_masses_on_a_flat_surface ... ok
+test sculpt::clay::tests::clay_drag_stamp_does_not_overshoot_its_target_plane_at_full_strength ... ok
+test sculpt::clay::tests::clay_fills_low_spots_more_than_peaks_while_standard_keeps_the_relief ... ok
+test sculpt::clay::tests::clay_pressure_protection_alpha_and_symmetry_preserve_their_meaning ... ok
+test sculpt::clay::tests::clay_uses_the_surface_patch_instead_of_a_single_picked_normal ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 973 filtered out; finished in 0.01s

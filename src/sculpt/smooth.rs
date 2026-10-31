@@ -93,6 +93,8 @@ impl Mesh {
         let mut times = Vec::new();
         let mut limits = Vec::new();
         let mut signs = Vec::new();
+        let footprint = brush.prepare_weight();
+        let pressures: Vec<_> = dabs.iter().map(|dab| brush.dab_pressure(dab)).collect();
         for (i, &position) in self.vertices.iter().enumerate() {
             if !permitted[i] || self.mask[i] >= 1. {
                 continue;
@@ -106,12 +108,8 @@ impl Mesh {
                 if offset.len() > dab.radius * 1.5 || facing[i].dot(dab.normal) < 0. {
                     continue;
                 }
-                let pressure = if brush.pressure {
-                    dab.pressure.powf(brush.pressure_curve)
-                } else {
-                    1.
-                };
-                let influence = brush.weight(
+                let pressure = pressures[j];
+                let influence = footprint.weight(
                     offset.dot(dab.right) / dab.radius,
                     offset.dot(dab.up) / dab.radius,
                 ) * pressure
