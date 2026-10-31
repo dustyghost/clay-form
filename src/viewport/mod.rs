@@ -291,7 +291,11 @@ impl Viewport {
             && let Some((_, _, placement)) = placements
                 .iter()
                 .find(|(id, i, _)| *id == set && *i == slot)
-            && let Some(mesh) = document.instance_source(placement.piece.source)
+            && let Some(mesh) = placements
+                .meshes
+                .get(&(set, slot))
+                .map(|m| m.as_ref())
+                .or_else(|| document.instance_source(placement.piece.source))
         {
             for (face, tri) in mesh
                 .triangles
@@ -302,7 +306,13 @@ impl Viewport {
                 if !mesh.face_visible(face) {
                     continue;
                 }
-                let p = tri.map(|i| placement.point(mesh.vertices[i]));
+                let p = tri.map(|i| {
+                    if placements.meshes.contains_key(&(set, slot)) {
+                        mesh.vertices[i]
+                    } else {
+                        placement.point(mesh.vertices[i])
+                    }
+                });
                 for (a, b) in [(0, 1), (1, 2), (2, 0)] {
                     if let Some(line) = scene.clip_segment([p[a], p[b]]) {
                         painter.line_segment(
@@ -671,7 +681,14 @@ impl Viewport {
             && owner != document.active_model_index()
         {
             if document.select_instance_owner(owner) {
-                self.status = Some("Instance selected · edit it in Submodels → Instances; Make independent enables sculpting".into());
+                let joined = document.selected_instance.is_some_and(|(id, _)| {
+                    document
+                        .instances()
+                        .sets
+                        .iter()
+                        .any(|s| s.id == id && s.joined())
+                });
+                self.status = Some(if joined {"Joined path assembly selected · edit its settings or Bake to sculpt"} else {"Instance selected · edit it in Submodels → Instances; Make independent enables sculpting"}.into());
                 self.wait_for_release();
                 return;
             }

@@ -43,6 +43,10 @@ impl App {
                         fit_count: true,
                         twist: 0.,
                         scale: 1.,
+                        bend: false,
+                        fit_sections: true,
+                        join: JoinMode::Separate,
+                        join_distance: default_join_distance(),
                     })
                 } else {
                     Layout::Array(Array::new(piece))

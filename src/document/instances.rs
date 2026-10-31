@@ -2,7 +2,7 @@
 use super::*;
 use crate::sculpt::{Vec3, instances::*};
 
-pub type ResolvedInstances = std::sync::Arc<Vec<(u64, usize, Placement)>>;
+pub type ResolvedInstances = std::sync::Arc<ResolvedCopies>;
 
 pub(super) struct Preview {
     pub library: Library,
@@ -50,7 +50,7 @@ impl Document {
             .clone()
     }
     fn resolve_instance_placements(&self) -> Result<ResolvedInstances, String> {
-        let mut result = Vec::new();
+        let mut result = ResolvedCopies::default();
         let (mut vertices, mut triangles) = (0usize, 0usize);
         for set in &self.instances().sets {
             if !set.visible {
@@ -68,7 +68,18 @@ impl Document {
                 {
                     return Err("Instance display budget exceeded: reduce counts or source detail (256 copies, 1M vertices / 2M triangles)".into());
                 }
-                result.push((set.id, slot, p));
+                result.placements.push((set.id, slot, p));
+            }
+            if let Some(generated) =
+                set.generated(self.paths(), |s| self.instance_source(s), &|| false)?
+            {
+                result.placements.retain(|(id, _, _)| *id != set.id);
+                for copy in generated {
+                    result.placements.push((set.id, copy.slot, copy.placement));
+                    result
+                        .meshes
+                        .insert((set.id, copy.slot), std::sync::Arc::new(copy.mesh));
+                }
             }
         }
         Ok(std::sync::Arc::new(result))
@@ -147,7 +158,11 @@ impl Document {
             self.instance_cache.take();
             return Err(error);
         }
+        let resolved = self.instance_cache.take();
         self.display_changed();
+        if let Some(resolved) = resolved {
+            let _ = self.instance_cache.set(resolved);
+        }
         Ok(())
     }
     fn validate_instances(&self) -> Result<(), String> {
@@ -279,16 +294,35 @@ impl Document {
             .find(|s| s.id == set_id)
             .ok_or("Instance set no longer exists")?
             .clone();
+        if set.joined() {
+            return Err("Bake the joined assembly to create one editable model, or choose Separate before detaching a section".into());
+        }
         let p = set
             .placements(self.paths())?
             .into_iter()
             .find(|(i, _)| *i == slot)
             .ok_or("Instance is hidden or no longer exists")?
             .1;
-        let mesh = p.mesh(
-            self.instance_source(p.piece.source)
-                .ok_or("Source is missing")?,
-        )?;
+        let resolved = self.instance_placements()?;
+        let mesh = if let Some(mesh) = resolved.meshes.get(&(set_id, slot)) {
+            mesh.as_ref().clone()
+        } else if let Some(generated) =
+            set.generated(self.paths(), |source| self.instance_source(source), &|| {
+                false
+            })?
+        {
+            // Hidden sets have no display cache; still detach the deformed surface.
+            generated
+                .into_iter()
+                .find(|copy| copy.slot == slot)
+                .ok_or("Instance is hidden or no longer exists")?
+                .mesh
+        } else {
+            p.mesh(
+                self.instance_source(p.piece.source)
+                    .ok_or("Source is missing")?,
+            )?
+        };
         let name = format!(
             "{} copy {}",
             set.name.chars().take(90).collect::<String>(),
@@ -435,8 +469,12 @@ impl Document {
     }
     pub fn visit_instance_points(&self, mut visit: impl FnMut(Vec3)) {
         if let Ok(placements) = self.instance_placements() {
-            for &(_, _, p) in placements.iter() {
-                if let Some(mesh) = self.instance_source(p.piece.source) {
+            for &(id, slot, p) in placements.iter() {
+                if let Some(mesh) = placements.meshes.get(&(id, slot)) {
+                    for &v in &mesh.vertices {
+                        visit(v);
+                    }
+                } else if let Some(mesh) = self.instance_source(p.piece.source) {
                     for &v in &mesh.vertices {
                         visit(p.point(v));
                     }
@@ -675,6 +713,122 @@ mod tests {
         assert_eq!(open, original);
     }
     #[test]
+    fn reusable_path_bend_preview_cache_persistence_and_bake_are_transactional() {
+        use crate::sculpt::paths::{PathMode, PathPoint};
+        let mut d = document();
+        let path = d
+            .create_path(
+                "Rail".into(),
+                PathMode::Free,
+                vec![
+                    PathPoint {
+                        position: Vec3::default(),
+                        normal: axis(2),
+                    },
+                    PathPoint {
+                        position: Vec3(6., 0., 0.),
+                        normal: axis(2),
+                    },
+                ],
+                false,
+                0.,
+            )
+            .unwrap();
+        let piece = d.instance_piece(0).unwrap();
+        let set = Set {
+            id: 1,
+            name: "Joined rail".into(),
+            visible: true,
+            adjustments: Vec::new(),
+            layout: Layout::Path(PathAssembly {
+                path,
+                start: None,
+                middle: piece,
+                end: None,
+                count: 3,
+                spacing: 2.,
+                fit_count: true,
+                twist: 0.,
+                scale: 1.,
+                bend: true,
+                fit_sections: true,
+                join: JoinMode::Weld,
+                join_distance: 0.05,
+            }),
+        };
+        let before = d.project();
+        let history = d.history_counts();
+        d.preview_instance_set(set.clone()).unwrap();
+        let preview = d.instance_placements().unwrap();
+        assert_eq!(preview.len(), 1);
+        assert_eq!(preview.meshes.len(), 1);
+        assert!(std::sync::Arc::ptr_eq(
+            &preview,
+            &d.instance_placements().unwrap()
+        ));
+        assert!(d.project() == before);
+        assert_eq!(d.history_counts(), history);
+        d.cancel_instance_preview();
+        assert!(d.instance_placements().unwrap().is_empty());
+        d.preview_instance_set(set.clone()).unwrap();
+        d.apply_instance_preview().unwrap();
+        assert_eq!(d.history_counts().0, history.0 + 1);
+        let saved = d.project();
+        assert_eq!(saved.mesh, before.mesh);
+        let loaded: Project = serde_json::from_slice(&serde_json::to_vec(&saved).unwrap()).unwrap();
+        let mut reopened = document();
+        reopened.replace_project(loaded, "joined.clay").unwrap();
+        assert_eq!(
+            d.instance_placements().unwrap(),
+            reopened.instance_placements().unwrap()
+        );
+        assert!(d.detach_instance(1, 0).is_err());
+        let cached = d.instance_placements().unwrap();
+        let mut bad = set.clone();
+        if let Layout::Path(a) = &mut bad.layout {
+            a.fit_sections = false;
+            a.count = 8;
+        }
+        assert!(d.preview_instance_set(bad).is_err());
+        assert_eq!(cached, d.instance_placements().unwrap());
+        d.cancel_instance_preview();
+        let mut geometry = d.geometry_snapshot();
+        assert!(geometry.clone().bake_instances(1, false, &|| true).is_err());
+        geometry.bake_instances(1, false, &|| false).unwrap();
+        assert_eq!(geometry.mesh, cached.meshes[&(1, 0)].as_ref().clone());
+        assert!(geometry.scene.instances.sets.is_empty());
+        d.replace_geometry_named(geometry, "Bake instances")
+            .unwrap();
+        d.undo();
+        assert!(d.project() == saved);
+        d.redo();
+        assert_eq!(d.model_count(), 2);
+        let mut changed = reopened.path(path).unwrap().clone();
+        changed.points[1].position.0 = 9.;
+        reopened.update_path(changed).unwrap();
+        let updated = reopened.instance_placements().unwrap();
+        let end = updated.meshes[&(1, 0)]
+            .vertices
+            .iter()
+            .map(|p| p.0)
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!((end - 9.).abs() < 1e-4);
+        let mut separate = set;
+        if let Layout::Path(a) = &mut separate.layout {
+            a.join = JoinMode::Separate;
+        }
+        reopened.preview_instance_set(separate.clone()).unwrap();
+        reopened.apply_instance_preview().unwrap();
+        let expected = reopened.instance_placements().unwrap().meshes[&(1, 1)].clone();
+        separate.visible = false;
+        reopened.preview_instance_set(separate).unwrap();
+        reopened.apply_instance_preview().unwrap();
+        assert!(reopened.instance_placements().unwrap().meshes.is_empty());
+        reopened.detach_instance(1, 1).unwrap();
+        assert_eq!(reopened.model(1).unwrap().mesh, expected.as_ref());
+        reopened.project().validate().unwrap();
+    }
+    #[test]
     fn reusable_path_assembly_follows_edits_and_protects_path_deletion() {
         use crate::sculpt::paths::{PathMode, PathPoint};
         let mut d = document();
@@ -712,6 +866,10 @@ mod tests {
                 fit_count: true,
                 twist: 0.,
                 scale: 0.2,
+                bend: false,
+                fit_sections: false,
+                join: JoinMode::Separate,
+                join_distance: default_join_distance(),
             }),
         };
         d.preview_instance_set(set).unwrap();

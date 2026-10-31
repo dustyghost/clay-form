@@ -3,6 +3,8 @@
 use super::{Mesh, Vec3, paths::SurfacePath};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, sync::Arc};
+mod path_output;
+pub use path_output::{GeneratedCopy, JoinMode, ResolvedCopies};
 
 pub const MAX_INSTANCES: usize = 256;
 pub const MAX_ASSETS: usize = 64;
@@ -283,6 +285,17 @@ pub struct PathAssembly {
     pub fit_count: bool,
     pub twist: f32,
     pub scale: f32,
+    #[serde(default)]
+    pub bend: bool,
+    #[serde(default)]
+    pub fit_sections: bool,
+    #[serde(default)]
+    pub join: JoinMode,
+    #[serde(default = "default_join_distance")]
+    pub join_distance: f32,
+}
+pub fn default_join_distance() -> f32 {
+    0.05
 }
 impl PathAssembly {
     pub fn placements(&self, path: &SurfacePath) -> Result<Vec<Placement>, String> {
@@ -293,8 +306,12 @@ impl PathAssembly {
             || self.twist.abs() > 3600.
             || !self.scale.is_finite()
             || !(0.001..=1000.).contains(&self.scale)
+            || !self.join_distance.is_finite()
+            || !(0.00001..=1000.).contains(&self.join_distance)
         {
-            return Err("Invalid path assembly spacing, count, scale or twist".into());
+            return Err(
+                "Invalid path assembly spacing, count, scale, twist or join distance".into(),
+            );
         }
         for p in [self.start, Some(self.middle), self.end]
             .into_iter()
@@ -603,7 +620,17 @@ impl super::Geometry {
             .find(|s| s.id == id)
             .ok_or("Instance set no longer exists")?
             .clone();
-        let placements = set.placements(&self.paths)?;
+        let generated = set.generated(&self.paths, |s| self.instance_source(s), cancel)?;
+        let placements = if let Some(copies) = &generated {
+            copies.iter().map(|c| (c.slot, c.placement)).collect()
+        } else {
+            set.placements(&self.paths)?
+        };
+        let mut generated: std::collections::HashMap<_, _> = generated
+            .into_iter()
+            .flatten()
+            .map(|c| (c.slot, c.mesh))
+            .collect();
         if placements.is_empty() {
             return Err("No visible copies to bake".into());
         }
@@ -615,19 +642,27 @@ impl super::Geometry {
         }
         let mut meshes = Vec::new();
         let (mut vertices, mut triangles) = (0usize, 0usize);
-        for (_, p) in placements {
+        for (slot, p) in placements {
             if cancel() {
                 return Err("Operation cancelled".into());
             }
-            let source = self
-                .instance_source(p.piece.source)
+            let source = generated
+                .get(&slot)
+                .or_else(|| self.instance_source(p.piece.source))
                 .ok_or("Instance source is missing")?;
             vertices = vertices.saturating_add(source.vertices.len());
             triangles = triangles.saturating_add(source.triangles.len());
             if vertices > MAX_VERTICES || triangles > MAX_TRIANGLES {
                 return Err("Instance bake budget exceeded".into());
             }
-            let mesh = p.mesh(source)?;
+            let mesh = if let Some(mesh) = generated.remove(&slot) {
+                mesh
+            } else {
+                p.mesh(
+                    self.instance_source(p.piece.source)
+                        .ok_or("Instance source is missing")?,
+                )?
+            };
             if fuse {
                 let mut edges = std::collections::HashMap::new();
                 for &[a, b, c] in &mesh.triangles {
@@ -751,6 +786,10 @@ mod tests {
             fit_count: true,
             twist: 25.,
             scale: 0.1,
+            bend: false,
+            fit_sections: false,
+            join: JoinMode::Separate,
+            join_distance: default_join_distance(),
         };
         let p = a.placements(&path).unwrap();
         assert_eq!(p.len(), 12);

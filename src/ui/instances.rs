@@ -219,6 +219,29 @@ impl UiState {
                     }
                 }
                 Layout::Path(a) => {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label("Sections");
+                        ui.selectable_value(&mut a.bend, false, "Rigid");
+                        ui.selectable_value(&mut a.bend, true, "Bend along path");
+                    });
+                    if a.bend {
+                        ui.checkbox(&mut a.fit_sections, "Fit section lengths to spacing");
+                        ui.weak("Bending uses source vertices; subdivide along its Forward axis for smooth curves.");
+                    }
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label("Connections");
+                        ui.selectable_value(&mut a.join, JoinMode::Separate, "Separate");
+                        ui.selectable_value(&mut a.join, JoinMode::Weld, "Join neighbours");
+                    });
+                    if a.join == JoinMode::Weld {
+                        ui.add(
+                            egui::DragValue::new(&mut a.join_distance)
+                                .range(0.00001..=1000.)
+                                .speed(0.001)
+                                .prefix("Join distance "),
+                        );
+                        ui.weak("Welds matching planar end loops and removes internal caps. UVs are removed; source models are preserved.");
+                    }
                     egui::ComboBox::from_id_salt("assembly_path")
                         .selected_text(
                             document
@@ -268,13 +291,16 @@ impl UiState {
                             .prefix("Piece scale "),
                     );
                     ui.add(egui::Slider::new(&mut a.twist, -180.0..=180.).text("Twist °"));
-                    ui.weak("Rigid pieces follow the path. Bake + fuse joins overlapping closed pieces using voxel remeshing.");
+                    ui.weak("Bake makes the preview editable. Bake + fuse remeshes overlapping closed sections.");
                 }
                 Layout::Manual(p) => {
                     ui.label(format!("{} placed objects", p.len()));
                 }
             }
-            if let Some((id, slot)) = document.selected_instance.filter(|(id, _)| *id == set.id) {
+            if let Some((id, slot)) = document
+                .selected_instance
+                .filter(|(id, _)| *id == set.id && !set.joined())
+            {
                 ui.separator();
                 ui.label(format!("Selected copy {}", slot + 1));
                 let mut adjustment = set
@@ -336,11 +362,27 @@ impl UiState {
                 ui.push_id(set.id, |ui| instance_set(ui, document, set, commands));
             }
             if let Some((id, slot)) = document.selected_instance {
-                ui.label(format!(
-                    "Selected copy {} · Edit its set to move, rotate or scale",
-                    slot + 1
-                ));
-                if ui.button("Edit selected copy…").clicked() {
+                let joined = document
+                    .instances()
+                    .sets
+                    .iter()
+                    .any(|s| s.id == id && s.joined());
+                if joined {
+                    ui.label("Joined assembly selected · edit its path and connection settings");
+                } else {
+                    ui.label(format!(
+                        "Selected copy {} · Edit its set to move, rotate or scale",
+                        slot + 1
+                    ));
+                }
+                if ui
+                    .button(if joined {
+                        "Edit selected assembly…"
+                    } else {
+                        "Edit selected copy…"
+                    })
+                    .clicked()
+                {
                     commands.push(Command::Instances(C::Edit(id)));
                 }
             }
@@ -447,8 +489,8 @@ fn instance_set(ui: &mut egui::Ui, document: &Document, set: &Set, commands: &mu
         if ui.button("Edit").clicked() {
             commands.push(Command::Instances(C::Edit(set.id)));
         }
-        if ui.button("Bake")
-            .on_hover_text("Make independent submodels; retain source UVs, materials and masks")
+        if ui.button(if set.joined() {"Bake joined model"} else {"Bake"})
+            .on_hover_text("Make the current preview editable. Separate sections retain UVs; joined output has no UVs.")
             .clicked()
         {
             commands.push(Command::Instances(C::Bake(set.id, false)));
@@ -463,6 +505,10 @@ fn instance_set(ui: &mut egui::Ui, document: &Document, set: &Set, commands: &mu
             commands.push(Command::Instances(C::Remove(set.id)));
         }
     });
+    if set.joined() {
+        ui.weak("Joined assembly · Bake creates one editable model. Choose Separate to adjust individual copies.");
+        return;
+    }
     egui::CollapsingHeader::new("Copies").show(ui, |ui| {
         // Hidden copies must remain selectable so their visibility can be restored.
         let mut listed = set.clone();

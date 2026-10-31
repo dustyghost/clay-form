@@ -949,6 +949,82 @@ mod tests {
         assert!(scene(&doc).pick_object_target(point, &doc).is_none());
     }
     #[test]
+    fn reusable_path_bent_joined_display_and_picking_use_generated_surface() {
+        use crate::sculpt::{
+            Geometry, Primitive, PrimitiveKind,
+            instances::*,
+            paths::{PathMode, PathPoint},
+        };
+        let mut cube = Primitive::for_kind(PrimitiveKind::Cube);
+        cube.divisions = [8, 1, 1];
+        let mut mesh = cube.mesh().unwrap();
+        for p in &mut mesh.vertices {
+            *p = *p * 0.05;
+        }
+        let mut geometry = Geometry::new(mesh);
+        geometry.scene.active_metadata.visible = false;
+        let mut doc = Document::default();
+        doc.replace_geometry(geometry).unwrap();
+        let path = doc
+            .create_path(
+                "Arc".into(),
+                PathMode::Free,
+                vec![Vec3(-1., 0., 0.), Vec3(0., 0.6, 0.), Vec3(1., 0., 0.)]
+                    .into_iter()
+                    .map(|position| PathPoint {
+                        position,
+                        normal: axis(2),
+                    })
+                    .collect(),
+                false,
+                1.,
+            )
+            .unwrap();
+        let piece = doc.instance_piece(0).unwrap();
+        doc.preview_instance_set(Set {
+            id: 1,
+            name: "Joined arc".into(),
+            visible: true,
+            adjustments: Vec::new(),
+            layout: Layout::Path(PathAssembly {
+                path,
+                start: None,
+                middle: piece,
+                end: None,
+                count: 5,
+                spacing: 1.,
+                fit_count: true,
+                twist: 0.,
+                scale: 1.,
+                bend: true,
+                fit_sections: true,
+                join: JoinMode::Weld,
+                join_distance: 0.05,
+            }),
+        })
+        .unwrap();
+        doc.apply_instance_preview().unwrap();
+        let resolved = doc.instance_placements().unwrap();
+        let generated = &resolved.meshes[&(1, 0)];
+        let view = scene(&doc);
+        assert_eq!(*view.geometry.mesh.vertices, generated.vertices);
+        let face = generated
+            .triangles
+            .iter()
+            .find(|t| t.iter().all(|&i| generated.vertices[i].2 > 0.04))
+            .unwrap();
+        let p = face
+            .iter()
+            .map(|&i| generated.vertices[i])
+            .fold(Vec3::default(), |a, b| a + b)
+            * (1. / 3.);
+        let (owner, hit, _) = view.pick_model(view.project(p)).unwrap();
+        assert_eq!(owner, 1);
+        assert!((hit - p).len() < 1e-4);
+        assert!(doc.select_instance_owner(owner));
+        assert_eq!(doc.selected_instance, Some((1, 0)));
+    }
+    #[test]
     fn reusable_instances_render_pick_and_share_saved_source() {
         use crate::sculpt::{Geometry, Primitive, PrimitiveKind, instances::*};
         let mut doc = Document::default();

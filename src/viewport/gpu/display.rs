@@ -358,10 +358,22 @@ impl DisplayMesh {
             .chain((0..document.model_count()).filter(|i| *i != active))
             .chain(document.model_count()..document.model_count() + instances.len())
         {
+            let resolved = index
+                .checked_sub(document.model_count())
+                .map(|i| &instances[i]);
+            let generated = resolved.and_then(|&(id, slot, _)| instances.meshes.get(&(id, slot)));
             let placement = index
                 .checked_sub(document.model_count())
+                .filter(|_| generated.is_none())
                 .map(|i| instances[i].2);
-            let model = if let Some(p) = placement {
+            let model = if let Some(mesh) = generated {
+                crate::document::ModelRef {
+                    name: "Path assembly",
+                    metadata: &instance_metadata,
+                    mesh,
+                    settings: &instance_settings,
+                }
+            } else if let Some(p) = placement {
                 crate::document::ModelRef {
                     name: "Instance",
                     metadata: &instance_metadata,

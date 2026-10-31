@@ -2,7 +2,7 @@
 
 Implementation batch: shared arrays #16, path assemblies #18 and object brushes #15. Review remains pending; no PR is opened by this batch.
 
-Focused checks use `CARGO_PROFILE_TEST_DEBUG=0 cargo test --locked -j 1 --lib reusable_ -- --test-threads=1`, under the shared build lock. Eighteen ordinary tests cover private preview/apply/cancel, source edits, independent copies, bounded invalid input, save/reopen, source deletion protection, asset file round trips, path edits, closed-loop spacing and frames, real pointer gestures, sampling at different event rates, closed fusion, open-surface rejection, display picking, occlusion/mask/hidden-face protection, cache invalidation and project-switch tool reset and switching back to sculpt/transform tools. The Vulkan interaction check is ignored in ordinary runs and explicitly included in graphics CI.
+Focused checks use `CARGO_PROFILE_TEST_DEBUG=0 cargo test --locked -j 1 --lib reusable_ -- --test-threads=1`, under the shared build lock. Twenty-five ordinary tests cover private preview/apply/cancel, source edits, independent copies, bounded invalid input, save/reopen, source deletion protection, asset file round trips, path edits, closed-loop spacing and frames, real pointer gestures, sampling at different event rates, closed fusion, open-surface rejection, display picking, occlusion/mask/hidden-face protection, cache invalidation and project-switch tool reset and switching back to sculpt/transform tools. The Vulkan interaction check is ignored in ordinary runs and explicitly included in graphics CI.
 
 The real egui/wgpu walkthrough `reusable_models_offscreen_review` passed on Mesa llvmpipe (LLVM 23.1.4, Mesa 26.2.6), with one software-rendering thread. It clicks Apply for array/path previews, selects and restores a hidden copy through the real controls, brushes a row of objects on a sphere, checks one-step Undo/Redo and validates the saved project. The attached captures were visually inspected for visible Apply/Cancel controls, radial orientation, curved placement and surface contact:
 
@@ -17,3 +17,11 @@ The renderer expands placed geometry in the display snapshot. Sources and per-co
 The recent display/picking savings remain in use: resolved placements share one cached allocation across unchanged frames and texture-only edits; geometry and recipe edits invalidate it. Immutable asset meshes are validated at capture/import/load, rather than on each placement preview update. Thumbnail bounds and wire geometry are cached per asset. Hidden or fully detached copies retain the dense single-model stroke cache; making a copy visible invalidates both live-stroke and release reuse. Focused regressions exercise that transition and preserve the existing scene preparation and hidden-face stroke cache checks.
 
 The additional local compatibility/cache selection passed 27 tests (three Vulkan tests intentionally ignored there), including the exact version-1 JSON round trip, scene cache key/rebinding checks, hidden-face live/release cache checks and shared immutable display payloads.
+
+The optional bend/join extension adds five geometry regressions for actual vertex deformation, distinct caps, a hollow pipe bore, closed-loop welding, end-distance rejection, incompatible subdivisions, cancellation and generation limits. Document checks cover private previews, cached output, save/reopen, baking the exact preview mesh, Undo/Redo and path edits. Display/picking checks compare generated world positions with the visible and picked surface.
+
+`reusable_path_bend_join_offscreen_review` clicks Rigid/Bend and Separate/Join in both directions, applies the preview, clicks Bake joined model, verifies the baked geometry matches, and exercises Undo/Redo. It passed with the same software Vulkan renderer; captures were inspected for continuous bends, reachable controls and an unchanged source. Both control walkthroughs run explicitly in graphics CI.
+
+- [Rigid sections](06-path-rigid.png)
+- [Bent and joined preview](08-path-bent-joined.png)
+- [Baked joined model](09-path-joined-baked.png)

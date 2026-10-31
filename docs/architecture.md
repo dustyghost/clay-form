@@ -64,6 +64,8 @@ New `.clay` projects use version 4 for shared instance recipes and captured obje
 
 `sculpt/instances.rs` owns bounded placement recipes and baking. `SceneSettings.instances` stores stable source references and per-slot overrides; captured meshes use `Arc<Mesh>`. `document/instances.rs` owns private previews and transactional commits. Rendering expands positions in a shared display snapshot and reuses source shading. `viewport/objects.rs` handles placement gestures; `app/instances.rs` routes commands and cancellable baking. Referenced source/path deletion is blocked until consumers are baked or removed. Previews never enter save/recovery snapshots. Source and expanded-display limits are separate.
 
+Optional path bending and neighbour welding live in `sculpt/instances/path_output.rs` and its `weld` module. The document's resolved-instance cache owns transient world-space meshes for these modes; ordinary copies retain shared source shading. End-boundary analysis is shared per source/forward axis during generation. Welds join only consecutive compatible end loops, remove internal caps, and compact the result without voxel remeshing. The renderer, picking, selection overlay, view fitting and bake worker use the same generated geometry. Generated meshes are never persisted or copied into history; recipes retain the bend/fit/join settings and tolerance.
+
 Use `tests/fixtures/v1-project.json` to check legacy compatibility. See [storage details](architecture/integration.md#compatibility-and-storage) for references, shared image buffers, and fixture coverage.
 
 ## Find the detailed contract
