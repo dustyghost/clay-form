@@ -1,0 +1,8 @@
+
+running 4 tests
+test viewport::projection::tests::perspective_picking_recovers_world_barycentrics_across_angles_and_zoom ... ok
+test viewport::projection::tests::perspective_preserves_orbit_plane_framing_and_picks_near_clipped_faces ... ok
+test viewport::projection::tests::screen_orbit_preserves_shared_origin_pivot_and_picking_of_offset_geometry ... ok
+test viewport::projection::tests::screen_roll_keeps_projection_and_surface_picking_aligned ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 1010 filtered out; finished in 0.61s

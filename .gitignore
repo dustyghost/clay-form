@@ -6,6 +6,7 @@
 !/docs/examples/pyramid.obj
 *.tmp
 *.log
+!/docs/validation/footprint-picking-2026-10-31/*/*.log
 !/docs/validation/display-arrays-2026-10-30/*/*.log
 !/docs/validation/local-display-normals-2026-10-30/*/*.log
 !/docs/validation/display-reuse-2026-10-30/*/*.log

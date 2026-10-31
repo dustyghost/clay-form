@@ -94,7 +94,7 @@ pub(crate) struct DisplayGeometry {
     pub outlines: Arc<Vec<[usize; 2]>>,
     pub active_vertices: usize,
     pub active: usize,
-    pub(super) depth_extent: f32,
+    pub(in crate::viewport) depth_extent: f32,
     stroke_topology: Option<Arc<StrokeTopology>>,
     temporary_normals: bool,
 }

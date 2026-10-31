@@ -3,6 +3,7 @@ use super::gpu::{DisplayMesh, Renderer};
 use crate::{camera::Camera, document::Document, sculpt::Vec3};
 use eframe::egui::{self, Color32, Pos2};
 use std::sync::Arc;
+mod footprint;
 pub(super) struct Scene {
     pub scale: f32,
     pub(super) eye_distance: f32,
@@ -457,6 +458,48 @@ impl Scene {
         color: Color32,
         footprint: bool,
     ) -> bool {
+        self.paint_brush_cursor(
+            painter,
+            pos,
+            radius,
+            brush,
+            color,
+            footprint,
+            footprint::Footprint::new,
+        )
+    }
+
+    #[cfg(test)]
+    pub(super) fn reference_brush_cursor(
+        &self,
+        painter: &egui::Painter,
+        pos: Pos2,
+        radius: f32,
+        brush: &crate::sculpt::Brush,
+        color: Color32,
+    ) -> bool {
+        self.paint_brush_cursor(
+            painter,
+            pos,
+            radius,
+            brush,
+            color,
+            true,
+            footprint::Footprint::reference,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn paint_brush_cursor(
+        &self,
+        painter: &egui::Painter,
+        pos: Pos2,
+        radius: f32,
+        brush: &crate::sculpt::Brush,
+        color: Color32,
+        footprint: bool,
+        make_samples: impl FnOnce(&Scene, Pos2, f32) -> footprint::Footprint,
+    ) -> bool {
         let Some((center, normal)) = self.pick(pos) else {
             return false;
         };
@@ -464,41 +507,23 @@ impl Scene {
         // Sample visible surface points, using the same camera-plane alpha and
         // depth/normal limits as sculpting. Missing samples break the overlay.
         if footprint {
-            const N: usize = 17;
-            let bounds = egui::Rect::from_center_size(pos, egui::Vec2::splat(radius * 2.));
-            let candidates: Vec<_> = self
-                .all_faces
-                .iter()
-                .copied()
-                .filter(|(fi, _)| {
-                    let [a, b, c] = self.geometry.mesh.triangles[*fi].map(|i| self.positions[i]);
-                    let face_bounds = egui::Rect::from_min_max(
-                        Pos2::new(a.x.min(b.x).min(c.x), a.y.min(b.y).min(c.y)),
-                        Pos2::new(a.x.max(b.x).max(c.x), a.y.max(b.y).max(c.y)),
-                    );
-                    bounds.intersects(face_bounds)
-                })
-                .collect();
+            const N: usize = footprint::SIDE;
+            let grid = make_samples(self, pos, radius);
             let mut samples = vec![None; N * N];
-            for y in 0..N {
-                for x in 0..N {
-                    let u = x as f32 / (N - 1) as f32 * 2. - 1.;
-                    let v = 1. - y as f32 / (N - 1) as f32 * 2.;
-                    let point = pos + egui::vec2(u, -v) * radius;
-                    if let Some((p, n, face)) = pick_surface(self, &candidates, point)
-                        && self.geometry.owners[face] == self.active
-                        && (p - center).len() <= world_radius * 1.5
-                        && n.dot(normal) >= 0.1
-                    {
-                        let offset = p - center;
-                        samples[y * N + x] = Some((
-                            point,
-                            brush.weight(
-                                offset.dot(self.right) / world_radius,
-                                offset.dot(self.up) / world_radius,
-                            ),
-                        ));
-                    }
+            for (index, &point) in grid.points.iter().enumerate() {
+                if let Some((p, n, face)) = grid.pick(self, index)
+                    && self.geometry.owners[face] == self.active
+                    && (p - center).len() <= world_radius * 1.5
+                    && n.dot(normal) >= 0.1
+                {
+                    let offset = p - center;
+                    samples[index] = Some((
+                        point,
+                        brush.weight(
+                            offset.dot(self.right) / world_radius,
+                            offset.dot(self.up) / world_radius,
+                        ),
+                    ));
                 }
             }
             let mut overlay = egui::Mesh::default();
@@ -634,6 +659,13 @@ impl Scene {
     }
 }
 fn pick_surface(scene: &Scene, faces: &[(usize, f32)], point: Pos2) -> Option<(Vec3, Vec3, usize)> {
+    pick_faces(scene, faces.iter().map(|f| f.0), point)
+}
+fn pick_faces(
+    scene: &Scene,
+    faces: impl Iterator<Item = usize>,
+    point: Pos2,
+) -> Option<(Vec3, Vec3, usize)> {
     let geometry = &scene.geometry;
     let positions = &scene.positions;
     let view = scene.view;
@@ -642,7 +674,7 @@ fn pick_surface(scene: &Scene, faces: &[(usize, f32)], point: Pos2) -> Option<(V
     let triangles = &geometry.mesh.triangles;
     let mut hit = None;
     let mut depth = f32::NEG_INFINITY;
-    for &(fi, _) in faces {
+    for fi in faces {
         let t = triangles[fi];
         if scene.eye_distance > 0. {
             let [a, b, c] = t.map(|i| vertices[i]);
