@@ -31,7 +31,11 @@ impl PenInput {
         let mut pen_events = Vec::new();
         for event in events {
             match event {
-                Event::Touch { id, phase, pos, .. } if is_pen(id.0) => {
+                // Once a native down identifies the pen, keep that identity
+                // until release even if a later event has no native metadata.
+                // Otherwise its up is suppressed as a finger event, leaving
+                // egui's primary button held and preventing UI clicks.
+                Event::Touch { id, phase, pos, .. } if self.pen == Some(id.0) || is_pen(id.0) => {
                     pen_events.push(event.clone());
                     match phase {
                         TouchPhase::Start if self.pen.is_none() => {
@@ -184,6 +188,50 @@ mod tests {
         assert_eq!(input.events, events);
         assert!(routed.pen_events.is_empty());
         assert!(!routed.reset_gestures);
+    }
+
+    #[test]
+    fn active_pen_keeps_moves_pressure_and_release_without_new_metadata() {
+        for phase in [TouchPhase::End, TouchPhase::Cancel] {
+            let mut router = PenInput::default();
+            let mut pressure = super::super::NativePressure::default();
+            let (_, routed) = run(&mut router, vec![touch(2, TouchPhase::Start)]);
+            assert_eq!(pressure.update(&routed.pen_events), Some(0.4));
+            let mut moved = touch(2, TouchPhase::Move);
+            if let Event::Touch { pos, force, .. } = &mut moved {
+                *pos = egui::pos2(30., 40.);
+                *force = Some(0.8);
+            }
+            let mut input = egui::RawInput {
+                events: vec![touch(1, TouchPhase::Start), moved],
+                ..Default::default()
+            };
+            let routed = router.route(&mut input, |_| false);
+            assert_eq!(pressure.update(&routed.pen_events), Some(0.8));
+            assert_eq!(
+                input.events,
+                vec![Event::PointerMoved(egui::pos2(30., 40.))]
+            );
+            input.events = vec![touch(2, phase)];
+            let routed = router.route(&mut input, |_| false);
+            assert_eq!(pressure.update(&routed.pen_events), None);
+            assert!(
+                input
+                    .events
+                    .iter()
+                    .any(|e| matches!(e, Event::PointerButton { pressed: false, .. }))
+            );
+            assert!(router.pen.is_none());
+
+            // Lift the suppressed palm, then reuse the old pen ID for a finger.
+            run(&mut router, vec![touch(1, TouchPhase::End)]);
+            let finger = touch(2, TouchPhase::Start);
+            input.events = vec![finger.clone()];
+            let routed = router.route(&mut input, |_| false);
+            assert_eq!(input.events, vec![finger]);
+            assert!(routed.pen_events.is_empty());
+            assert!(!routed.reset_gestures);
+        }
     }
     #[test]
     fn finger_first_does_not_steal_pen_and_stays_suppressed_until_lift() {

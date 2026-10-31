@@ -7,6 +7,9 @@ Native metadata stays queued until its matching egui touch event is consumed:
 eframe can repaint between individual contacts from the same native frame.
 The raw-input adapter removes pen contacts from touch gestures, reads pressure
 only from those pen contacts, and synthesizes a pen-owned primary pointer.
+Once a native down identifies a pen, its contact keeps that identity through
+move, release and cancellation even if a later event lacks matching metadata.
+This prevents a missed release from leaving UI buttons held instead of clicked.
 It suppresses emulated finger/mouse pointer events during pen input and retains
 suppression for existing fingers until they lift. A takeover clears any camera
 gesture already in progress. No pressure threshold is used to identify a pen.
@@ -33,6 +36,11 @@ support:
    away from the app mid-stroke. Return and confirm no stuck stroke or gesture.
 7. Repeat pen sculpting with touch gestures disabled. Check mouse controls and
    ordinary UI buttons after all pen/finger contacts have ended.
+8. Use the pen to select several different brushes, both before and after
+   sculpting. Try quick taps and slower taps, then adjust brush size with the
+   pen. Confirm each brush highlights on release and the next stroke uses it.
+   Repeat with a finger resting on the drawing area, then lift all contacts and
+   confirm finger and mouse selection still work.
 
 Physical-device verification is required in addition to passing CI; synthetic
 input cannot establish what a particular driver delivers.

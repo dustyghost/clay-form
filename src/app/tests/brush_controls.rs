@@ -71,6 +71,94 @@ fn button(pos: Pos2, pressed: bool) -> egui::Event {
 }
 
 #[test]
+fn native_pen_selects_brushes_after_sculpting() {
+    use crate::preferences::Tool;
+    use egui::{Event, TouchPhase};
+
+    for (coalesced, release_classified) in [(false, true), (true, true), (false, false)] {
+        let (mut app, ctx) = setup();
+        let panel = app
+            .ui
+            .preferences
+            .panels
+            .iter_mut()
+            .find(|p| p.tool == Tool::Library)
+            .unwrap();
+        panel.dock = Dock::Left;
+        panel.open = true;
+        let size = Vec2::new(1100., 750.);
+        let mut router = crate::tablet::pen::PenInput::default();
+        frame(&mut app, &ctx, size, vec![]);
+        let output = frame(&mut app, &ctx, size, vec![]);
+        let target = app
+            .document
+            .brushes()
+            .iter()
+            .position(|b| b.name == "Smooth")
+            .unwrap();
+        let brush_pos = point(&output, |s| s == "Smooth");
+        let sculpt_pos = app.ui.viewport_menu.viewport_rect.unwrap().center();
+        for (pos, phases) in [
+            (sculpt_pos, vec![TouchPhase::Start]),
+            (sculpt_pos, vec![TouchPhase::Move]),
+            (sculpt_pos, vec![TouchPhase::End]),
+            (brush_pos, vec![TouchPhase::Move]),
+            (
+                brush_pos,
+                if coalesced {
+                    vec![TouchPhase::Start, TouchPhase::End]
+                } else {
+                    vec![TouchPhase::Start]
+                },
+            ),
+            (
+                brush_pos,
+                if coalesced {
+                    vec![]
+                } else {
+                    vec![TouchPhase::End]
+                },
+            ),
+        ] {
+            let mut input = egui::RawInput {
+                events: phases
+                    .into_iter()
+                    .map(|phase| Event::Touch {
+                        device_id: egui::TouchDeviceId(1),
+                        id: egui::TouchId(2),
+                        phase,
+                        pos,
+                        force: Some(0.5),
+                    })
+                    .collect(),
+                ..Default::default()
+            };
+            // A native down establishes pen ownership. Later updates may be
+            // delivered without matching metadata; the release must still click.
+            let classified = release_classified
+                || input.events.iter().any(|event| {
+                    matches!(
+                        event,
+                        Event::Touch {
+                            phase: TouchPhase::Start,
+                            ..
+                        }
+                    )
+                });
+            let routed = router.route(&mut input, |id| id == 2 && classified);
+            if routed.reset_gestures {
+                app.reset_touch_for_pen(&input.events);
+            }
+            frame(&mut app, &ctx, size, input.events);
+        }
+        assert_eq!(
+            app.ui.selected, target,
+            "coalesced={coalesced}, release_classified={release_classified}"
+        );
+    }
+}
+
+#[test]
 fn size_and_inner_radius_drags_keep_both_outlines_at_last_brush_position() {
     for popup in [false, true] {
         let (mut app, ctx) = setup();
