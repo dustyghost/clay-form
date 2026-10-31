@@ -1,0 +1,8 @@
+
+running 4 tests
+test document::paint::fill_all_tests::material_fill_all_ignores_protection_preserves_other_models_and_undoes_all_levels ... ok
+test document::paint::tests::material_strokes_history_cancel_save_fill_and_level_switching ... ok
+test document::paint::texture_target_tests::image_target_fill_respects_masks_channel_precision_and_history ... ok
+test document::paint::texture_target_tests::shared_images_detach_once_per_stroke_and_snapshots_are_canonical ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 1022 filtered out; finished in 1.14s

@@ -6,6 +6,8 @@ pub const MAX_SIZE: u32 = 4096;
 pub const MAX_PIXELS: usize = 3 * 4096 * 4096;
 pub(crate) mod bake;
 mod padding;
+#[cfg(test)]
+pub(crate) mod profile;
 mod surface;
 mod upload;
 pub(crate) use surface::PaintScratch;

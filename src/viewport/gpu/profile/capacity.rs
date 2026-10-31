@@ -731,6 +731,52 @@ fn gpu_load_profile_release_upload() {
     std::fs::write(output, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
 }
 
+#[test]
+#[ignore = "manual paint startup diagnosis; excluded from routine GPU CI"]
+fn gpu_load_profile_paint_startup() {
+    let output = std::env::var("CLAY_PAINT_PROFILE").expect("output path");
+    let level = env_limit("CLAY_PAINT_LEVEL", 3);
+    crate::sculpt::capacity::initialize(benchmark_capacity(level, 2_000_000, 4_000_000).unwrap())
+        .unwrap();
+    let mut rows = Vec::new();
+    for name in ["sphere", "organic", "hidden"] {
+        let mut doc = document(fixture(name, level));
+        let before = fingerprint(doc.mesh());
+        let mut expected = None;
+        for trial in 0..3 {
+            for step in 0..4 {
+                let start = Instant::now();
+                let (changed, stages) = crate::sculpt::texture::profile::capture(|| {
+                    doc.apply_dab(&brush(Kind::Paint), dab(step))
+                });
+                let total = start.elapsed().as_secs_f64() * 1000.;
+                assert!(changed);
+                rows.push(serde_json::json!({"fixture":name,"trial":trial,"step":step,"source_triangles":doc.mesh().triangles.len(),"total_ms":total,"stages_ms":stages}));
+            }
+            doc.end_stroke();
+            let after = fingerprint(doc.mesh());
+            if let Some(expected) = &expected {
+                assert_eq!(&after, expected);
+            }
+            expected = Some(after.clone());
+            doc.undo();
+            assert_eq!(fingerprint(doc.mesh()), before);
+            doc.redo();
+            assert_eq!(fingerprint(doc.mesh()), after);
+            doc.undo();
+            rows.push(serde_json::json!({"fixture":name,"trial":trial,"phase":"verified","output_hash_fnv1a":after}));
+        }
+    }
+    std::fs::write(
+        output,
+        serde_json::to_vec_pretty(
+            &serde_json::json!({"level":level,"rows":rows,"memory_final":memory()}),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+}
+
 /// Actual display code, with phase tracing disabled outside this probe.
 #[test]
 #[ignore = "manual display phase diagnosis; excluded from routine GPU CI"]

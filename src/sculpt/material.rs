@@ -584,17 +584,23 @@ impl Mesh {
             scratch.normals = self.normals();
             scratch.eligible = self.sculptable_vertices();
         }
+        #[cfg(test)]
+        super::texture::profile::mark("normals_and_eligibility");
         for i in scratch.touched.drain(..) {
             scratch.weights[i] = (0., false);
         }
         scratch.weights.resize(self.vertices.len(), (0., false));
         let footprint = brush.prepare_weight();
+        #[cfg(test)]
+        super::texture::profile::mark("weights_setup");
         for (j, dab) in dabs.iter().enumerate() {
             if dab.radius <= 0. {
                 continue;
             }
             let pressure = brush.dab_pressure(dab);
             scratch.depth.prepare(self, dab, occluders);
+            #[cfg(test)]
+            super::texture::profile::mark("depth_query");
             for &i in &scratch.depth.active_vertices {
                 let point = self.vertices[i];
                 let offset = point - dab.center;
@@ -620,6 +626,8 @@ impl Mesh {
                 }
             }
         }
+        #[cfg(test)]
+        super::texture::profile::mark("weights_and_visibility");
         let mut changed = false;
         for &i in &scratch.touched {
             let (strongest, erase) = scratch.weights[i];
@@ -645,6 +653,8 @@ impl Mesh {
                 changed = true;
             }
         }
+        #[cfg(test)]
+        super::texture::profile::mark("apply_materials");
         changed
     }
 }
