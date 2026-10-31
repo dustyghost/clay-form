@@ -1,0 +1,802 @@
+[
+  {
+    "alpha_index": 0,
+    "ms": 1.05328,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 1
+  },
+  {
+    "alpha_index": 0,
+    "ms": 1.572708,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 1
+  },
+  {
+    "alpha_index": 0,
+    "ms": 1.592733,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 2
+  },
+  {
+    "alpha_index": 0,
+    "ms": 1.02246,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 2
+  },
+  {
+    "alpha_index": 0,
+    "ms": 1.0683019999999999,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 3
+  },
+  {
+    "alpha_index": 0,
+    "ms": 2.5291580000000002,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 3
+  },
+  {
+    "alpha_index": 0,
+    "ms": 1.585581,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 4
+  },
+  {
+    "alpha_index": 0,
+    "ms": 1.287808,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 4
+  },
+  {
+    "alpha_index": 0,
+    "ms": 1.0493379999999999,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 5
+  },
+  {
+    "alpha_index": 0,
+    "ms": 1.577131,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 5
+  },
+  {
+    "alpha_index": 0,
+    "ms": 1.5748229999999999,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 6
+  },
+  {
+    "alpha_index": 0,
+    "ms": 1.0420710000000002,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 6
+  },
+  {
+    "alpha_index": 0,
+    "ms": 1.042006,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 7
+  },
+  {
+    "alpha_index": 0,
+    "ms": 1.602067,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 7
+  },
+  {
+    "alpha_index": 0,
+    "ms": 1.575571,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 8
+  },
+  {
+    "alpha_index": 0,
+    "ms": 1.041869,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 8
+  },
+  {
+    "alpha_index": 0,
+    "ms": 1.0420500000000001,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 9
+  },
+  {
+    "alpha_index": 0,
+    "ms": 1.6054439999999999,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 9
+  },
+  {
+    "alpha_index": 0,
+    "ms": 1.570203,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 10
+  },
+  {
+    "alpha_index": 0,
+    "ms": 1.042567,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1184226525,
+    "trial": 10
+  },
+  {
+    "alpha_index": 1,
+    "ms": 0.263767,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 1
+  },
+  {
+    "alpha_index": 1,
+    "ms": 1.561029,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 1
+  },
+  {
+    "alpha_index": 1,
+    "ms": 1.558814,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 2
+  },
+  {
+    "alpha_index": 1,
+    "ms": 0.26372199999999996,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 2
+  },
+  {
+    "alpha_index": 1,
+    "ms": 0.26623199999999997,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 3
+  },
+  {
+    "alpha_index": 1,
+    "ms": 1.55883,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 3
+  },
+  {
+    "alpha_index": 1,
+    "ms": 1.561039,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 4
+  },
+  {
+    "alpha_index": 1,
+    "ms": 0.263688,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 4
+  },
+  {
+    "alpha_index": 1,
+    "ms": 0.263703,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 5
+  },
+  {
+    "alpha_index": 1,
+    "ms": 1.578648,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 5
+  },
+  {
+    "alpha_index": 1,
+    "ms": 1.618447,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 6
+  },
+  {
+    "alpha_index": 1,
+    "ms": 0.26722300000000004,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 6
+  },
+  {
+    "alpha_index": 1,
+    "ms": 0.26372199999999996,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 7
+  },
+  {
+    "alpha_index": 1,
+    "ms": 1.561788,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 7
+  },
+  {
+    "alpha_index": 1,
+    "ms": 1.55891,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 8
+  },
+  {
+    "alpha_index": 1,
+    "ms": 0.266239,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 8
+  },
+  {
+    "alpha_index": 1,
+    "ms": 0.26365900000000003,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 9
+  },
+  {
+    "alpha_index": 1,
+    "ms": 1.558695,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 9
+  },
+  {
+    "alpha_index": 1,
+    "ms": 1.560518,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 10
+  },
+  {
+    "alpha_index": 1,
+    "ms": 0.263743,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1195859968,
+    "trial": 10
+  },
+  {
+    "alpha_index": 2,
+    "ms": 0.30773900000000004,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 1
+  },
+  {
+    "alpha_index": 2,
+    "ms": 1.622758,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 1
+  },
+  {
+    "alpha_index": 2,
+    "ms": 1.651242,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 2
+  },
+  {
+    "alpha_index": 2,
+    "ms": 0.30797399999999997,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 2
+  },
+  {
+    "alpha_index": 2,
+    "ms": 0.30770400000000003,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 3
+  },
+  {
+    "alpha_index": 2,
+    "ms": 1.622854,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 3
+  },
+  {
+    "alpha_index": 2,
+    "ms": 1.636952,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 4
+  },
+  {
+    "alpha_index": 2,
+    "ms": 0.307844,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 4
+  },
+  {
+    "alpha_index": 2,
+    "ms": 0.30774300000000004,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 5
+  },
+  {
+    "alpha_index": 2,
+    "ms": 1.62597,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 5
+  },
+  {
+    "alpha_index": 2,
+    "ms": 1.6301860000000001,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 6
+  },
+  {
+    "alpha_index": 2,
+    "ms": 0.330782,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 6
+  },
+  {
+    "alpha_index": 2,
+    "ms": 0.307784,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 7
+  },
+  {
+    "alpha_index": 2,
+    "ms": 1.6228,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 7
+  },
+  {
+    "alpha_index": 2,
+    "ms": 1.619924,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 8
+  },
+  {
+    "alpha_index": 2,
+    "ms": 0.310261,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 8
+  },
+  {
+    "alpha_index": 2,
+    "ms": 0.307711,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 9
+  },
+  {
+    "alpha_index": 2,
+    "ms": 1.62221,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 9
+  },
+  {
+    "alpha_index": 2,
+    "ms": 1.62037,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 10
+  },
+  {
+    "alpha_index": 2,
+    "ms": 0.30774399999999996,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1190717440,
+    "trial": 10
+  },
+  {
+    "alpha_index": 3,
+    "ms": 1.534566,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 1
+  },
+  {
+    "alpha_index": 3,
+    "ms": 2.389476,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 1
+  },
+  {
+    "alpha_index": 3,
+    "ms": 2.3908679999999998,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 2
+  },
+  {
+    "alpha_index": 3,
+    "ms": 1.533434,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 2
+  },
+  {
+    "alpha_index": 3,
+    "ms": 1.537098,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 3
+  },
+  {
+    "alpha_index": 3,
+    "ms": 2.389128,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 3
+  },
+  {
+    "alpha_index": 3,
+    "ms": 2.391093,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 4
+  },
+  {
+    "alpha_index": 3,
+    "ms": 1.533561,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 4
+  },
+  {
+    "alpha_index": 3,
+    "ms": 1.5349929999999998,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 5
+  },
+  {
+    "alpha_index": 3,
+    "ms": 2.391885,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 5
+  },
+  {
+    "alpha_index": 3,
+    "ms": 2.388758,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 6
+  },
+  {
+    "alpha_index": 3,
+    "ms": 1.535125,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 6
+  },
+  {
+    "alpha_index": 3,
+    "ms": 1.554807,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 7
+  },
+  {
+    "alpha_index": 3,
+    "ms": 2.414747,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 7
+  },
+  {
+    "alpha_index": 3,
+    "ms": 3.008254,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 8
+  },
+  {
+    "alpha_index": 3,
+    "ms": 1.617252,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 8
+  },
+  {
+    "alpha_index": 3,
+    "ms": 1.574147,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 9
+  },
+  {
+    "alpha_index": 3,
+    "ms": 2.389351,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 9
+  },
+  {
+    "alpha_index": 3,
+    "ms": 2.729876,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 10
+  },
+  {
+    "alpha_index": 3,
+    "ms": 1.578224,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1172164925,
+    "trial": 10
+  },
+  {
+    "alpha_index": 4,
+    "ms": 1.658286,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 1
+  },
+  {
+    "alpha_index": 4,
+    "ms": 2.4835909999999997,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 1
+  },
+  {
+    "alpha_index": 4,
+    "ms": 2.483299,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 2
+  },
+  {
+    "alpha_index": 4,
+    "ms": 1.632143,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 2
+  },
+  {
+    "alpha_index": 4,
+    "ms": 1.630793,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 3
+  },
+  {
+    "alpha_index": 4,
+    "ms": 2.49181,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 3
+  },
+  {
+    "alpha_index": 4,
+    "ms": 2.588158,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 4
+  },
+  {
+    "alpha_index": 4,
+    "ms": 1.634913,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 4
+  },
+  {
+    "alpha_index": 4,
+    "ms": 1.628361,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 5
+  },
+  {
+    "alpha_index": 4,
+    "ms": 2.4825239999999997,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 5
+  },
+  {
+    "alpha_index": 4,
+    "ms": 2.4793380000000003,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 6
+  },
+  {
+    "alpha_index": 4,
+    "ms": 1.6632140000000002,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 6
+  },
+  {
+    "alpha_index": 4,
+    "ms": 1.630378,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 7
+  },
+  {
+    "alpha_index": 4,
+    "ms": 2.480487,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 7
+  },
+  {
+    "alpha_index": 4,
+    "ms": 2.521273,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 8
+  },
+  {
+    "alpha_index": 4,
+    "ms": 1.628121,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 8
+  },
+  {
+    "alpha_index": 4,
+    "ms": 1.630718,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 9
+  },
+  {
+    "alpha_index": 4,
+    "ms": 2.478199,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 9
+  },
+  {
+    "alpha_index": 4,
+    "ms": 2.480775,
+    "prepared": false,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 10
+  },
+  {
+    "alpha_index": 4,
+    "ms": 1.628512,
+    "prepared": true,
+    "samples": 65536,
+    "sum_bits": 1171113097,
+    "trial": 10
+  }
+]

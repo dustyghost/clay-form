@@ -1,0 +1,5 @@
+
+running 1 test
+test preferences::migration_tests::existing_workspace_keeps_customizations_when_mesh_tools_are_added ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 984 filtered out; finished in 0.00s

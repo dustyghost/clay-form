@@ -1,0 +1,11 @@
+
+running 7 tests
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_paint_matches_canonical_attributes_and_normals ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_preserves_filtered_faces_and_boundary_normals ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_rejects_visibility_group_and_topology_changes ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_release_rejects_material_only_edits_and_history ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_release_rejects_unseen_final_dab ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_release_updates_fans_for_the_next_stroke ... ok
+test viewport::gpu::display::stroke_tests::hidden_stroke_cache_supports_group_visibility_and_empty_displays ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 965 filtered out; finished in 2.43s

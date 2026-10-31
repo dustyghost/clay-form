@@ -1,0 +1,6 @@
+
+running 2 tests
+test viewport::gpu::visibility_test::gpu_hidden_stroke_cache_pixels_picking_and_history ... ok
+test viewport::gpu::visibility_test::gpu_visibility_hide_split_and_undo ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 970 filtered out; finished in 3.97s

@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "revision": "cf6826f34139f1c1c723002765ce0fc7bb88f2c2",
+  "working_tree_dirty": true,
+  "source_sha256": "34b9a939367007cf54f5d16031143a806d95560a006bdb26b38b48ca24112618",
+  "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)",
+  "platform": "Linux-7.2.9-arch1-1-x86_64-with-glibc2.44",
+  "cpu": "Intel(R) Core(TM) i7-7500U CPU @ 2.70GHz",
+  "logical_cpus": 4,
+  "mem_total_kib": 7998776,
+  "mem_available_start_kib": 4228760,
+  "swap_free_start_kib": 380,
+  "profile": "release",
+  "gpu_requested": false,
+  "environment": {
+    "RUSTFLAGS": null,
+    "CARGO_ENCODED_RUSTFLAGS": null,
+    "CARGO_PROFILE_RELEASE_OPT_LEVEL": null,
+    "CARGO_PROFILE_RELEASE_LTO": null,
+    "CARGO_BUILD_TARGET": null,
+    "CLAY_GPU_SOFTWARE": null,
+    "VK_DRIVER_FILES": null,
+    "VK_ICD_FILENAMES": null,
+    "CLAY_SCENE_STAGES": null,
+    "CLAY_CAMERA_FIXTURE": null,
+    "CLAY_CAMERA_CURSOR": null,
+    "CLAY_CAMERA_LEVEL": null,
+    "MALLOC_MMAP_THRESHOLD_": null
+  },
+  "limits": {
+    "rss_mib": 3072,
+    "timeout_seconds": 600,
+    "min_available_mib": 768
+  },
+  "workload": "interactive",
+  "mesh_capacity": {
+    "vertices": 2000000,
+    "triangles": 4000000
+  },
+  "started_utc": "2026-10-31T10:55:56Z",
+  "binary_sha256": "368565be03339e0efcd5a2b9cdb46d57be283319964140ccc9bc07bc630bb9c7",
+  "checkout_source_sha256": "34b9a939367007cf54f5d16031143a806d95560a006bdb26b38b48ca24112618"
+}

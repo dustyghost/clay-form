@@ -1,0 +1,7 @@
+
+running 3 tests
+test viewport::gpu::upload::tests::face_payload_reuse_preserves_snapshots_and_float_fallback ... ok
+test viewport::gpu::upload::tests::vertex_upload_ranges_bound_fragmented_and_global_writes ... ok
+test viewport::gpu::upload::tests::vertex_upload_ranges_cover_sparse_edits_and_aligned_tail ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 1005 filtered out; finished in 0.00s

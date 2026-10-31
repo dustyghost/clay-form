@@ -1,0 +1,382 @@
+diff --git a/src/sculpt/shading.rs b/src/sculpt/shading.rs
+index 7e6bff2..824e0ca 100644
+--- a/src/sculpt/shading.rs
++++ b/src/sculpt/shading.rs
+@@ -3 +3 @@ use super::{Mesh, Vec3};
+-use std::collections::HashMap;
++use std::{collections::HashMap, sync::OnceLock};
+@@ -61,0 +62 @@ pub(crate) struct SurfaceShadingTopology {
++    reference_smooth: OnceLock<Vec<bool>>,
+@@ -111,0 +113 @@ impl SurfaceShadingTopology {
++            reference_smooth: OnceLock::new(),
+@@ -132,0 +135,113 @@ impl SurfaceShadingTopology {
++    /// Exact fan sums for a local edit whose smoothing connectivity is unchanged.
++    /// Caller validates the source topology and supplies its original canonical fans.
++    pub(crate) fn local_vertices(
++        &self,
++        mesh: &Mesh,
++        previous: &[(usize, Vec3)],
++        fans: &[[usize; 3]],
++    ) -> Option<Vec<(usize, Vec3)>> {
++        if mesh.vertices.len() != self.angles.positions.len()
++            || fans.len() != mesh.triangles.len()
++            || self.angles.values.len() != mesh.triangles.len()
++            || previous.len() > mesh.vertices.len().saturating_mul(2)
++        {
++            return None;
++        }
++        let mut changed_count = 0;
++        let changed: Vec<_> = mesh
++            .vertices
++            .iter()
++            .zip(&self.angles.positions)
++            .map(|(a, b)| {
++                let different = [a.0.to_bits(), a.1.to_bits(), a.2.to_bits()]
++                    != [b.0.to_bits(), b.1.to_bits(), b.2.to_bits()];
++                changed_count += usize::from(different);
++                different
++            })
++            .collect();
++        if changed_count > mesh.vertices.len() / 8 {
++            return None;
++        }
++        if changed_count == 0 {
++            return Some(previous.to_vec());
++        }
++        // Classify faces only as edge checks reach them. A split or merge can
++        // reject this path before scanning every source triangle or dirty fan.
++        let mut changed_faces = vec![0_u8; mesh.triangles.len()];
++        let mut face_count = 0;
++        #[inline]
++        fn changed_face(
++            face: usize,
++            mesh: &Mesh,
++            changed: &[bool],
++            states: &mut [u8],
++            count: &mut usize,
++        ) -> bool {
++            if states[face] == 0 {
++                let different = mesh.triangles[face].iter().any(|&v| changed[v]);
++                states[face] = if different { 2 } else { 1 };
++                *count += usize::from(different);
++            }
++            states[face] == 2
++        }
++        let reference_smooth = self.reference_smooth.get()?;
++        for (edge, &[a, b]) in self.paired_corners.iter().enumerate() {
++            let a = a / 3;
++            let b = b / 3;
++            if changed_face(a, mesh, &changed, &mut changed_faces, &mut face_count)
++                || changed_face(b, mesh, &changed, &mut changed_faces, &mut face_count)
++            {
++                if face_count > mesh.triangles.len() / 8 {
++                    return None;
++                }
++                let na = triangle_normal(&mesh.vertices, &mesh.triangles[a]);
++                let nb = triangle_normal(&mesh.vertices, &mesh.triangles[b]);
++                if (na.dot(nb) > 0.5) != reference_smooth[edge] {
++                    return None;
++                }
++            }
++        }
++        let mut dirty = vec![false; previous.len()];
++        for (i, ids) in fans.iter().enumerate() {
++            // Include open/unpaired faces that were not reached by an edge.
++            if changed_face(i, mesh, &changed, &mut changed_faces, &mut face_count) {
++                if face_count > mesh.triangles.len() / 8 {
++                    return None;
++                }
++                for &fan in ids {
++                    dirty[fan] = true;
++                }
++            }
++        }
++        let mut sums = vec![Vec3::default(); previous.len()];
++        for (face, t) in mesh.triangles.iter().enumerate() {
++            let ids = fans[face];
++            if !ids.iter().any(|&fan| dirty[fan]) {
++                continue;
++            }
++            let weights = if changed_faces[face] == 2 {
++                corner_angles(mesh, t)
++            } else {
++                self.angles.values[face]
++            };
++            let normal = triangle_normal(&mesh.vertices, t);
++            // Sum COMPLETE fans in source face/corner order, with the same
++            // weights and arithmetic as full shading. No subtractive deltas.
++            for (corner, angle) in weights.into_iter().enumerate() {
++                let fan = ids[corner];
++                if dirty[fan] {
++                    sums[fan] = sums[fan] + normal * angle;
++                }
++            }
++        }
++        Some(
++            previous
++                .iter()
++                .enumerate()
++                .map(|(fan, &(vertex, normal))| {
++                    (vertex, if dirty[fan] { sums[fan].norm() } else { normal })
++                })
++                .collect(),
++        )
++    }
++
+@@ -136,2 +251,20 @@ impl SurfaceShadingTopology {
+-        for &[a, x] in &self.paired_corners {
+-            join_smooth_edge(&mut parents, &normals, a, x);
++        let capture_reference = self.reference_smooth.get().is_none()
++            && mesh.vertices.len() == self.angles.positions.len()
++            && mesh
++                .vertices
++                .iter()
++                .zip(&self.angles.positions)
++                .all(|(a, b)| {
++                    [a.0.to_bits(), a.1.to_bits(), a.2.to_bits()]
++                        == [b.0.to_bits(), b.1.to_bits(), b.2.to_bits()]
++                });
++        if capture_reference {
++            let mut smooth = Vec::with_capacity(self.paired_corners.len());
++            for &[a, x] in &self.paired_corners {
++                smooth.push(join_smooth_edge(&mut parents, &normals, a, x));
++            }
++            let _ = self.reference_smooth.set(smooth);
++        } else {
++            for &[a, x] in &self.paired_corners {
++                join_smooth_edge(&mut parents, &normals, a, x);
++            }
+@@ -142,0 +276,9 @@ impl SurfaceShadingTopology {
++fn triangle_normal(vertices: &[Vec3], &[a, b, c]: &[usize; 3]) -> Vec3 {
++    let n = (vertices[b] - vertices[a]).cross(vertices[c] - vertices[a]);
++    let length = n.len();
++    if length > 0. {
++        n * (1. / length)
++    } else {
++        Vec3::default()
++    }
++}
+@@ -146,10 +288 @@ fn face_normals(mesh: &Mesh) -> Vec<Vec3> {
+-        .map(|&[a, b, c]| {
+-            let n =
+-                (mesh.vertices[b] - mesh.vertices[a]).cross(mesh.vertices[c] - mesh.vertices[a]);
+-            let length = n.len();
+-            if length > 0. {
+-                n * (1. / length)
+-            } else {
+-                Vec3::default()
+-            }
+-        })
++        .map(|t| triangle_normal(&mesh.vertices, t))
+@@ -159 +292 @@ fn face_normals(mesh: &Mesh) -> Vec<Vec3> {
+-fn join_smooth_edge(parents: &mut [usize], normals: &[Vec3], a: usize, x: usize) {
++fn join_smooth_edge(parents: &mut [usize], normals: &[Vec3], a: usize, x: usize) -> bool {
+@@ -164 +297,2 @@ fn join_smooth_edge(parents: &mut [usize], normals: &[Vec3], a: usize, x: usize)
+-    if normals[face].dot(normals[other]) > 0.5 {
++    let smooth = normals[face].dot(normals[other]) > 0.5;
++    if smooth {
+@@ -169,0 +304 @@ fn join_smooth_edge(parents: &mut [usize], normals: &[Vec3], a: usize, x: usize)
++    smooth
+@@ -312,0 +448,115 @@ mod tests {
++    fn assert_local_reference(
++        topology: &SurfaceShadingTopology,
++        original: &SurfaceShading,
++        mesh: &Mesh,
++    ) {
++        let vertices = topology
++            .local_vertices(mesh, &original.vertices, &original.triangles)
++            .expect("small edit keeps smoothing connectivity");
++        let expected = reference_shading(mesh);
++        assert_eq!(original.triangles, expected.triangles);
++        assert_eq!(vertices.len(), expected.vertices.len());
++        for ((i, a), (j, b)) in vertices.iter().zip(&expected.vertices) {
++            assert_eq!(i, j);
++            assert_eq!(
++                [a.0.to_bits(), a.1.to_bits(), a.2.to_bits()],
++                [b.0.to_bits(), b.1.to_bits(), b.2.to_bits()]
++            );
++        }
++    }
++
++    #[test]
++    fn local_shading_keeps_exact_fan_sums_across_edits_and_restoration() {
++        let reference = Mesh::starting_sphere();
++        let topology = SurfaceShadingTopology::new(&reference);
++        let shading = topology.shade(&reference);
++        let mut mesh = reference.clone();
++        assert_local_reference(&topology, &shading, &mesh);
++        assert!(topology.reference_smooth.get().is_some());
++        for vertex in [0, 7, 35] {
++            mesh.vertices[vertex].2 += 0.0001;
++            assert_local_reference(&topology, &shading, &mesh);
++        }
++        assert!(topology.reference_smooth.get().is_some());
++        assert_local_reference(&topology, &shading, &reference);
++        let zero = mesh.vertices.iter_mut().find(|p| p.0 == 0.).unwrap();
++        zero.0 = if zero.0.to_bits() == 0 { -0. } else { 0. };
++        assert_local_reference(&topology, &shading, &mesh);
++    }
++
++    fn local_plane() -> Mesh {
++        let mut mesh = Mesh::default();
++        for y in 0..9 {
++            for x in 0..9 {
++                mesh.vertices.push(Vec3(x as f32, y as f32, 0.));
++            }
++        }
++        for y in 0..8 {
++            for x in 0..8 {
++                let a = y * 9 + x;
++                mesh.triangles
++                    .extend([[a, a + 1, a + 10], [a, a + 10, a + 9]]);
++            }
++        }
++        mesh
++    }
++
++    #[test]
++    fn local_shading_falls_back_for_broad_edits_and_fan_splits_or_merges() {
++        let flat = local_plane();
++        let mut sharp = flat.clone();
++        sharp.vertices[40].2 = 4.;
++        for (reference, edited) in [(&flat, &sharp), (&sharp, &flat)] {
++            let topology = SurfaceShadingTopology::new(reference);
++            let shading = topology.shade(reference);
++            assert_ne!(shading.triangles, reference_shading(edited).triangles);
++            assert!(
++                topology
++                    .local_vertices(edited, &shading.vertices, &shading.triangles)
++                    .is_none()
++            );
++        }
++        let topology = SurfaceShadingTopology::new(&flat);
++        let shading = topology.shade(&flat);
++        let mut broad = flat.clone();
++        for p in &mut broad.vertices {
++            p.2 += 0.1;
++        }
++        assert!(
++            topology
++                .local_vertices(&broad, &shading.vertices, &shading.triangles)
++                .is_none()
++        );
++        assert!(topology.reference_smooth.get().is_some());
++        // A single high-valence edit can still touch too much of the surface.
++        let mut fan = flat.clone();
++        fan.triangles = (1..80).map(|i| [0, i, i + 1]).collect();
++        let topology = SurfaceShadingTopology::new(&fan);
++        let shading = topology.shade(&fan);
++        fan.vertices[0].2 = 0.01;
++        assert!(
++            topology
++                .local_vertices(&fan, &shading.vertices, &shading.triangles)
++                .is_none()
++        );
++        assert!(topology.reference_smooth.get().is_some());
++    }
++
++    #[test]
++    fn local_shading_preserves_open_creased_degenerate_and_nonmanifold_fans() {
++        for case in 0..4 {
++            let mut reference = local_plane();
++            match case {
++                1 => reference.creases = vec![[30, 40]],
++                2 => reference.triangles.push([40, 40, 41]),
++                3 => reference.triangles.extend_from_within(70..73),
++                _ => {}
++            }
++            let topology = SurfaceShadingTopology::new(&reference);
++            let shading = topology.shade(&reference);
++            let mut edited = reference.clone();
++            edited.vertices[40].2 = 0.001;
++            assert_local_reference(&topology, &shading, &edited);
++        }
++    }
++
+diff --git a/src/viewport/gpu/display.rs b/src/viewport/gpu/display.rs
+index 9bf2f27..6eee398 100644
+--- a/src/viewport/gpu/display.rs
++++ b/src/viewport/gpu/display.rs
+@@ -49,0 +50,2 @@ struct StrokeSurfaceTopology {
++    // Original canonical fans share the fixed angle-cache reference geometry.
++    canonical: OnceLock<DisplayShading>,
+@@ -279 +281,17 @@ impl DisplayMesh {
+-        let shading = cached.source.shading.shade(source);
++        let local = cached.source.canonical.get().and_then(|reference| {
++            cached
++                .source
++                .shading
++                .local_vertices(source, &reference.vertices, &reference.triangles)
++                .map(|vertices| DisplayShading {
++                    vertices: Arc::new(vertices),
++                    triangles: reference.triangles.clone(),
++                })
++        });
++        #[cfg(test)]
++        stroke_profile::mark(if local.is_some() {
++            "release.local"
++        } else {
++            "release.fallback"
++        });
++        let shading = local.unwrap_or_else(|| cached.source.shading.shade(source).into());
+@@ -285 +303 @@ impl DisplayMesh {
+-        let fans = Arc::new(shading.triangles);
++        let fans = shading.triangles;
+@@ -287 +305 @@ impl DisplayMesh {
+-            vertices: Arc::new(shading.vertices),
++            vertices: shading.vertices,
+@@ -526,0 +545 @@ impl DisplayMesh {
++                        canonical: OnceLock::new(),
+@@ -557,0 +577,7 @@ impl DisplayMesh {
++            // Avoid retaining an oversized reference for heavily split surfaces.
++            if shading.vertices.len() <= mesh.vertices.len().saturating_mul(2) {
++                let _ = cached.source.canonical.set(DisplayShading {
++                    vertices: shading.vertices.clone(),
++                    triangles: cached.fans.clone(),
++                });
++            }
+diff --git a/src/viewport/gpu/display/stroke_tests.rs b/src/viewport/gpu/display/stroke_tests.rs
+index 3153d29..e2c08ba 100644
+--- a/src/viewport/gpu/display/stroke_tests.rs
++++ b/src/viewport/gpu/display/stroke_tests.rs
+@@ -688,0 +689,40 @@ fn shared_display_arrays_follow_mixed_edits_and_preserve_older_snapshots() {
++
++#[test]
++fn local_release_reuses_canonical_fans_and_preserves_hidden_snapshots() {
++    for hidden in [false, true] {
++        let mut mesh = source();
++        if !hidden {
++            mesh.hidden_faces.clear();
++        }
++        let original = mesh.clone();
++        let mut display = Arc::new(DisplayMesh::new(&document(mesh.clone())));
++        let topology = display.stroke_topology.as_ref().unwrap().source.clone();
++        let reference = topology.canonical.get().unwrap();
++        let vertex = mesh
++            .vertices
++            .iter()
++            .position(|p| p.2 > 0.99 && p.0 <= 0.)
++            .unwrap();
++        for height in [0.0001, 0.0002, 0.] {
++            mesh.vertices[vertex].2 = original.vertices[vertex].2 + height;
++            let mut doc = document(mesh.clone());
++            let old_bytes = display.vertices(display.vertex_stride());
++            doc.begin_stroke();
++            let live = Arc::new(display.during_stroke(&doc).unwrap());
++            doc.end_stroke();
++            let released = live.after_stroke(&doc).unwrap();
++            assert!(Arc::ptr_eq(
++                &released.stroke_topology.as_ref().unwrap().fans,
++                &reference.triangles
++            ));
++            let canonical = DisplayMesh::new(&doc);
++            assert_visible_data(&released, &canonical);
++            assert_eq!(
++                released.vertices(released.vertex_stride()),
++                canonical.vertices(canonical.vertex_stride())
++            );
++            assert_eq!(display.vertices(display.vertex_stride()), old_bytes);
++            display = released;
++        }
++    }
++}

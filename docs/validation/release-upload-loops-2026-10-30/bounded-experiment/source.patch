@@ -1,0 +1,493 @@
+diff --git a/src/sculpt/shading.rs b/src/sculpt/shading.rs
+index 8e556c2..7e6bff2 100644
+--- a/src/sculpt/shading.rs
++++ b/src/sculpt/shading.rs
+@@ -175,8 +175,8 @@ fn finish_shading(
+     normals: &[Vec3],
+     angles: Option<&CornerAngles>,
+ ) -> SurfaceShading {
+-    let sums = accumulate_normals(mesh, &mut parents, normals, angles);
+-    emit_shading(mesh, &mut parents, &sums)
++    let (sums, fan_count) = accumulate_normals(mesh, &mut parents, normals, angles);
++    emit_shading(mesh, &mut parents, &sums, fan_count)
+ }
+
+ fn accumulate_normals(
+@@ -184,36 +184,58 @@ fn accumulate_normals(
+     parents: &mut [usize],
+     normals: &[Vec3],
+     angles: Option<&CornerAngles>,
+-) -> Vec<Vec3> {
++) -> (Vec<Vec3>, usize) {
+     let mut sums = vec![Vec3::default(); parents.len()];
++    let mut fan_count = 0;
+     for (face, t) in mesh.triangles.iter().enumerate() {
+         // Keep exact corner weights and accumulation order, including slivers
+         // and degenerate faces. Only the unchanged reference faces skip atan2.
+         let weights =
+             angles.map_or_else(|| corner_angles(mesh, t), |cache| cache.get(mesh, face, t));
+         for (corner, angle) in weights.into_iter().enumerate() {
+-            let r = root(parents, face * 3 + corner);
++            let id = face * 3 + corner;
++            let r = root(parents, id);
++            // Joining always chooses the smallest corner as root. Flatten once
++            // while accumulating; emission can reuse this table for output IDs.
++            parents[id] = r;
++            fan_count += usize::from(r == id);
+             sums[r] = sums[r] + normals[face] * angle;
+         }
+     }
+-    sums
++    (sums, fan_count)
+ }
+
+-fn emit_shading(mesh: &Mesh, parents: &mut [usize], sums: &[Vec3]) -> SurfaceShading {
+-    let mut shading = SurfaceShading::default();
+-    let mut indices = vec![usize::MAX; parents.len()];
++fn emit_shading(
++    mesh: &Mesh,
++    parents: &mut [usize],
++    sums: &[Vec3],
++    fan_count: usize,
++) -> SurfaceShading {
++    let mut shading = SurfaceShading {
++        vertices: Vec::with_capacity(fan_count),
++        triangles: Vec::with_capacity(mesh.triangles.len()),
++    };
+     for (face, t) in mesh.triangles.iter().enumerate() {
+         let mut triangle = [0; 3];
+         for corner in 0..3 {
+-            let r = root(parents, face * 3 + corner);
+-            if indices[r] == usize::MAX {
+-                indices[r] = shading.vertices.len();
++            let id = face * 3 + corner;
++            let r = parents[id];
++            debug_assert!(r <= id);
++            // A root is encountered before every other corner in its fan.
++            // Its slot already contains the emitted index for later corners.
++            let index = if r == id {
++                let index = shading.vertices.len();
+                 shading.vertices.push((t[corner], sums[r].norm()));
+-            }
+-            triangle[corner] = indices[r];
++                index
++            } else {
++                parents[r]
++            };
++            parents[id] = index;
++            triangle[corner] = index;
+         }
+         shading.triangles.push(triangle);
+     }
++    debug_assert_eq!(shading.vertices.len(), fan_count);
+     shading
+ }
+
+@@ -288,6 +310,46 @@ mod tests {
+         shading
+     }
+
++    #[test]
++    fn shading_fans_keep_reference_order_for_reordered_disconnected_and_empty_faces() {
++        let mut mesh = Mesh {
++            vertices: vec![
++                Vec3(9., 9., 9.),
++                Vec3(0., 0., 0.),
++                Vec3(1., 0., 0.),
++                Vec3(0., 1., 0.),
++                Vec3(0., -1., 0.),
++                Vec3(2., 0., 0.),
++                Vec3(3., 0., 0.),
++                Vec3(2., 1., 0.),
++            ],
++            triangles: vec![[1, 2, 3], [2, 1, 4], [5, 6, 7], [1, 1, 2]],
++            ..Default::default()
++        };
++        for pass in 0..6 {
++            if pass == 5 {
++                mesh.triangles.clear();
++            } else {
++                mesh.triangles.rotate_left(1);
++            }
++            let expected = reference_shading(&mesh);
++            for actual in [
++                mesh.surface_shading(),
++                SurfaceShadingTopology::new(&mesh).shade(&mesh),
++            ] {
++                assert_eq!(actual.triangles, expected.triangles);
++                assert_eq!(actual.vertices.len(), expected.vertices.len());
++                for ((i, a), (j, b)) in actual.vertices.iter().zip(&expected.vertices) {
++                    assert_eq!(i, j);
++                    assert_eq!(
++                        [a.0.to_bits(), a.1.to_bits(), a.2.to_bits()],
++                        [b.0.to_bits(), b.1.to_bits(), b.2.to_bits()]
++                    );
++                }
++            }
++        }
++    }
++
+     #[test]
+     fn cached_corner_angles_match_reference_after_local_global_and_restored_edits() {
+         let original = Mesh::starting_sphere();
+@@ -502,11 +564,11 @@ impl SurfaceShadingTopology {
+                 join_smooth_edge(&mut parents, &normals, a, x);
+             }
+         });
+-        let sums = timed(&mut times, "shading.angle_sums", || {
++        let (sums, fan_count) = timed(&mut times, "shading.angle_sums", || {
+             accumulate_normals(mesh, &mut parents, &normals, cached.then_some(&self.angles))
+         });
+         let shading = timed(&mut times, "shading.emit", || {
+-            emit_shading(mesh, &mut parents, &sums)
++            emit_shading(mesh, &mut parents, &sums, fan_count)
+         });
+         (shading, times)
+     }
+diff --git a/src/viewport/gpu.rs b/src/viewport/gpu.rs
+index a0a7c37..44021c6 100644
+--- a/src/viewport/gpu.rs
++++ b/src/viewport/gpu.rs
+@@ -620,7 +620,7 @@ impl Gpu {
+             composite_layout,
+             uniform: uniform(),
+             back_uniform: uniform(),
+-            meshes: vec![Self::mesh_buffers(device, &[], &[], &[], &[])],
++            meshes: vec![Self::mesh_buffers(device, &[], &[], &[], &[], None)],
+             texture_pixels: Self::pixel_texture(device, queue, &atlas::Atlas::default()),
+             texture_info: buffer(
+                 device,
+@@ -659,7 +659,7 @@ impl Gpu {
+         self.packed_vertices = Vec::new();
+         self.edges = None;
+         self.triangle_edges = None;
+-        self.meshes = vec![Self::mesh_buffers(&self.device, &[], &[], &[], &[])];
++        self.meshes = vec![Self::mesh_buffers(&self.device, &[], &[], &[], &[], None)];
+     }
+     fn mesh_buffers(
+         device: &wgpu::Device,
+@@ -667,6 +667,7 @@ impl Gpu {
+         indices: &[u32],
+         colors: &[[f32; 4]],
+         uv: &[[[f32; 4]; 3]],
++        vertex_limit: Option<usize>,
+     ) -> MeshBuffers {
+         MeshBuffers {
+             uv: buffer(
+@@ -675,11 +676,16 @@ impl Gpu {
+                 bytemuck::cast_slice(uv),
+                 wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+             ),
+-            vertices: buffer(
+-                device,
+-                "mesh vertices",
+-                bytemuck::cast_slice(vertices),
+-                wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
++            vertices: vertex_limit.map_or_else(
++                || {
++                    buffer(
++                        device,
++                        "mesh vertices",
++                        bytemuck::cast_slice(vertices),
++                        wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
++                    )
++                },
++                |limit| upload::vertex_buffer(device, bytemuck::cast_slice(vertices), limit),
+             ),
+             indices: buffer(
+                 device,
+@@ -850,11 +856,12 @@ impl Gpu {
+                 } else {
+                     // Fan splitting/merging and material-stride changes affect
+                     // vertex storage without invalidating the other buffers.
+-                    mesh.vertices = buffer(
++                    upload::write_vertices(
+                         &self.device,
+-                        "mesh vertices",
++                        &self.queue,
++                        &mut mesh.vertices,
+                         bytes,
+-                        wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
++                        limit,
+                     );
+                     #[cfg(test)]
+                     {
+@@ -938,6 +945,7 @@ impl Gpu {
+                     &indices,
+                     &colors,
+                     &data.uv_corners,
++                    Some(limit),
+                 )];
+                 #[cfg(test)]
+                 {
+@@ -996,11 +1004,12 @@ impl Gpu {
+                 &indices,
+                 &colors[start..start + triangles.len()],
+                 &data.uv_corners[start..start + triangles.len()],
++                None,
+             ));
+         }
+         if self.meshes.is_empty() {
+             self.meshes
+-                .push(Self::mesh_buffers(&self.device, &[], &[], &[], &[]));
++                .push(Self::mesh_buffers(&self.device, &[], &[], &[], &[], None));
+         }
+     }
+     fn upload_edges(&mut self) {
+diff --git a/src/viewport/gpu/display.rs b/src/viewport/gpu/display.rs
+index 96b786d..04c5d17 100644
+--- a/src/viewport/gpu/display.rs
++++ b/src/viewport/gpu/display.rs
+@@ -586,6 +586,46 @@ impl DisplayMesh {
+         }
+     }
+     pub(super) fn vertices(&self, stride: usize) -> Vec<f32> {
++        let mut vertices = Vec::with_capacity(self.shading.vertices.len() * stride);
++        let default = crate::sculpt::Material::default();
++        let muted =
++            crate::sculpt::Material::from_srgb([130., 143., 155.].map(|v| v / 255.), 0.85, 0.);
++        for &(i, n) in &self.shading.vertices {
++            let p = self.mesh.vertices[i];
++            let material = if self.muted_vertices[i] {
++                &muted
++            } else {
++                self.mesh.materials.get(i).unwrap_or(&default)
++            };
++            let color = material.base_color;
++            let mask = if i < self.active_vertices {
++                self.mesh.mask[i]
++            } else {
++                -1.
++            };
++            vertices.extend_from_slice(&[
++                p.0,
++                p.1,
++                p.2,
++                n.0,
++                n.1,
++                n.2,
++                color[0],
++                color[1],
++                color[2],
++                mask,
++                material.roughness,
++                material.metallic,
++            ]);
++            if stride > 12 {
++                vertices.extend_from_slice(&material.values()[5..]);
++            }
++        }
++        vertices
++    }
++    // Frozen owned-material packer for byte-exact regression checks and diagnosis.
++    #[cfg(test)]
++    pub(super) fn reference_vertices(&self, stride: usize) -> Vec<f32> {
+         let mut vertices = Vec::with_capacity(self.shading.vertices.len() * stride);
+         for &(i, n) in &self.shading.vertices {
+             let p = self.mesh.vertices[i];
+diff --git a/src/viewport/gpu/display/packing_tests.rs b/src/viewport/gpu/display/packing_tests.rs
+index 4c8d67c..36daf55 100644
+--- a/src/viewport/gpu/display/packing_tests.rs
++++ b/src/viewport/gpu/display/packing_tests.rs
+@@ -5,9 +5,17 @@ fn assert_update(previous: &DisplayMesh, next: &DisplayMesh) -> usize {
+     let stride = previous.vertex_stride();
+     assert_eq!(stride, next.vertex_stride());
+     let mut packed = previous.vertices(stride);
++    assert_eq!(
++        bytemuck::cast_slice::<_, u8>(&packed),
++        bytemuck::cast_slice::<_, u8>(&previous.reference_vertices(stride))
++    );
+     let mut uploaded = bytemuck::cast_slice::<_, u8>(&packed).to_vec();
+     // The original full packer is an independent byte-for-byte oracle.
+-    let expected = next.vertices(stride);
++    let expected = next.reference_vertices(stride);
++    assert_eq!(
++        bytemuck::cast_slice::<_, u8>(&next.vertices(stride)),
++        bytemuck::cast_slice::<_, u8>(&expected)
++    );
+     let expected_bytes = bytemuck::cast_slice::<_, u8>(&expected);
+     let changed = uploaded
+         .chunks_exact(stride * 4)
+diff --git a/src/viewport/gpu/profile/capacity.rs b/src/viewport/gpu/profile/capacity.rs
+index d75761f..a6dda99 100644
+--- a/src/viewport/gpu/profile/capacity.rs
++++ b/src/viewport/gpu/profile/capacity.rs
+@@ -486,8 +486,9 @@ fn gpu_load_profile_vertex_packing() {
+                 let prefix = format!("{kind:?}.{phase}");
+                 let stride = metrics.time(&format!("{prefix}.stride"), || next.vertex_stride());
+                 let (ranges, repacked_vertices) = if mode == "full" {
+-                    let vertices =
+-                        metrics.time(&format!("{prefix}.full_pack"), || next.vertices(stride));
++                    let vertices = metrics.time(&format!("{prefix}.full_pack"), || {
++                        next.reference_vertices(stride)
++                    });
+                     let ranges = metrics.time(&format!("{prefix}.dirty_blocks"), || {
+                         super::super::upload::changed_ranges(
+                             bytemuck::cast_slice(&packed),
+diff --git a/src/viewport/gpu/upload.rs b/src/viewport/gpu/upload.rs
+index 5848035..6453c15 100644
+--- a/src/viewport/gpu/upload.rs
++++ b/src/viewport/gpu/upload.rs
+@@ -80,6 +80,50 @@ impl DirtyRanges {
+     }
+ }
+
++/// Keep spare vertex storage below one dirty-write block, bounded by the
++/// binding limit. Crossing a block in either direction resizes the allocation.
++pub(super) fn vertex_capacity(bytes: usize, limit: usize) -> usize {
++    if bytes == 0 {
++        return 16;
++    }
++    debug_assert!(bytes.is_multiple_of(4) && bytes <= limit);
++    bytes.div_ceil(BLOCK).saturating_mul(BLOCK).min(limit & !3)
++}
++
++pub(super) fn vertex_buffer(
++    device: &super::wgpu::Device,
++    bytes: &[u8],
++    limit: usize,
++) -> super::wgpu::Buffer {
++    let buffer = device.create_buffer(&super::wgpu::BufferDescriptor {
++        label: Some("mesh vertices"),
++        size: vertex_capacity(bytes.len(), limit) as u64,
++        usage: super::wgpu::BufferUsages::STORAGE | super::wgpu::BufferUsages::COPY_DST,
++        mapped_at_creation: !bytes.is_empty(),
++    });
++    if !bytes.is_empty() {
++        buffer.slice(..).get_mapped_range_mut()[..bytes.len()].copy_from_slice(bytes);
++        buffer.unmap();
++    }
++    buffer
++}
++
++pub(super) fn write_vertices(
++    device: &super::wgpu::Device,
++    queue: &super::wgpu::Queue,
++    target: &mut super::wgpu::Buffer,
++    bytes: &[u8],
++    limit: usize,
++) {
++    if target.size() == vertex_capacity(bytes.len(), limit) as u64 {
++        if !bytes.is_empty() {
++            queue.write_buffer(target, 0, bytes);
++        }
++    } else {
++        *target = vertex_buffer(device, bytes, limit);
++    }
++}
++
+ /// Preserve an allocation when its payload size is unchanged. Exact-size
+ /// replacements keep growing/shrinking meshes within the binding limit.
+ pub(super) fn write_buffer(
+@@ -120,6 +164,27 @@ mod tests {
+         ranges
+     }
+
++    #[test]
++    fn vertex_upload_capacity_bounds_growth_shrink_and_binding_limits() {
++        assert_eq!(vertex_capacity(0, 16), 16);
++        for limit in [16, 48, 1000, BLOCK, BLOCK + 12, BLOCK * 3] {
++            for bytes in (4..=limit).step_by(4) {
++                let capacity = vertex_capacity(bytes, limit);
++                assert!(capacity >= bytes && capacity <= limit);
++                assert!(capacity - bytes < BLOCK);
++                assert_eq!(capacity % 4, 0);
++            }
++        }
++        assert_eq!(vertex_capacity(BLOCK - 4, BLOCK * 4), BLOCK);
++        assert_eq!(vertex_capacity(BLOCK, BLOCK * 4), BLOCK);
++        assert_eq!(vertex_capacity(BLOCK + 4, BLOCK * 4), BLOCK * 2);
++        assert_eq!(
++            vertex_capacity(BLOCK, BLOCK * 4),
++            BLOCK,
++            "shrinking releases extra blocks"
++        );
++    }
++
+     #[test]
+     fn vertex_upload_ranges_cover_sparse_edits_and_aligned_tail() {
+         let before = vec![0; BLOCK * 10 + 12];
+@@ -165,6 +230,7 @@ mod tests {
+ #[cfg(all(test, target_os = "linux"))]
+ mod gpu_tests {
+     use super::super::{ui_capture::Headless, *};
++    use super::BLOCK;
+     use crate::{
+         camera::Camera,
+         sculpt::{Dab, Geometry, Kind, Material, Mesh},
+@@ -349,7 +415,15 @@ mod gpu_tests {
+             assert_eq!(released.shading.vertices, canonical.shading.vertices);
+             assert_eq!(released.shading.triangles, canonical.shading.triangles);
+             gpu.upload(&released);
+-            assert_ne!(gpu.meshes[0].vertices, vertices);
++            assert_eq!(
++                gpu.meshes[0].vertices, vertices,
++                "small fan changes must reuse vertex storage"
++            );
++            assert!(
++                gpu.meshes[0].vertices.size() as usize
++                    - released.shading.vertices.len() * gpu.vertex_stride * 4
++                    < BLOCK
++            );
+             assert_eq!(
+                 gpu.meshes[0].indices, indices,
+                 "face count is stable even when fans change"
+@@ -376,7 +450,7 @@ mod gpu_tests {
+         let doc = Document::default();
+         let initial = Arc::new(DisplayMesh::new(&doc));
+         let mut gpu = Gpu::new(&headless.state.device, &headless.state.queue, COLOR);
+-        for case in 0..6 {
++        for case in 0..7 {
+             gpu.upload(&initial);
+             let previous = gpu.meshes[0].vertices.clone();
+             let indices = gpu.meshes[0].indices.clone();
+@@ -401,15 +475,30 @@ mod gpu_tests {
+                     data.poly_colors.clear();
+                     data.uv_corners.clear();
+                 }
++                6 => {
++                    // Cross more than one allocation block, then verify shrink below.
++                    let fan = data.shading.vertices[0];
++                    let extra = BLOCK / (initial.vertex_stride() * 4) + 2;
++                    data.shading
++                        .vertices
++                        .extend(std::iter::repeat_n(fan, extra));
++                }
+                 _ => unreachable!(),
+             }
+             let next = Arc::new(next);
+             gpu.upload(&next);
+-            if matches!(case, 3 | 4) {
+-                assert_ne!(
+-                    gpu.meshes[0].vertices, previous,
+-                    "only vertex storage must resize"
+-                );
++            if matches!(case, 3 | 4 | 6) {
++                if case == 4 {
++                    assert_eq!(
++                        gpu.meshes[0].vertices, previous,
++                        "one extra fan fits the existing block"
++                    );
++                } else {
++                    assert_ne!(
++                        gpu.meshes[0].vertices, previous,
++                        "larger layout changes resize vertex storage"
++                    );
++                }
+                 assert!(gpu.vertex_write_bytes > 0);
+             } else {
+                 assert_eq!(
+@@ -436,6 +525,13 @@ mod gpu_tests {
+                 );
+             }
+             assert_fresh_pixels(&headless, &mut gpu, &next);
++            if case == 6 {
++                let large = gpu.meshes[0].vertices.clone();
++                gpu.upload(&initial);
++                assert_ne!(gpu.meshes[0].vertices, large);
++                assert_eq!(gpu.meshes[0].vertices.size(), previous.size());
++                assert_fresh_pixels(&headless, &mut gpu, &initial);
++            }
+             if case == 3 {
+                 // Extended material records cross 4 KiB boundaries. Exercise
+                 // sparse writes to channels beyond the compact twelve floats.

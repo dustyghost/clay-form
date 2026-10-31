@@ -44,6 +44,9 @@ jobs:
       - name: Run tests
         run: cargo test --locked
 
+      - name: Check capacity benchmark comparisons
+        run: python3 scripts/test-benchmark-capacity.py
+
       - name: Run Clippy
         run: cargo clippy --locked --all-targets -- -D warnings
 

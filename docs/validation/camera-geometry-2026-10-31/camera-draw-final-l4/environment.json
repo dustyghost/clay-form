@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "revision": "b7cd92836dc6736fb3f067023793c1c2753e7060",
+  "working_tree_dirty": true,
+  "source_sha256": "6b90b6eee0982d3e5cf71e7683c51669d03cb6d8475849dc603f58dbaa8373ef",
+  "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)",
+  "platform": "Linux-7.2.9-arch1-1-x86_64-with-glibc2.44",
+  "cpu": "Intel(R) Core(TM) i7-7500U CPU @ 2.70GHz",
+  "logical_cpus": 4,
+  "mem_total_kib": 7998776,
+  "mem_available_start_kib": 4003984,
+  "swap_free_start_kib": 40,
+  "profile": "release",
+  "gpu_requested": true,
+  "environment": {
+    "RUSTFLAGS": null,
+    "CARGO_ENCODED_RUSTFLAGS": null,
+    "CARGO_PROFILE_RELEASE_OPT_LEVEL": null,
+    "CARGO_PROFILE_RELEASE_LTO": null,
+    "CARGO_BUILD_TARGET": null,
+    "CLAY_GPU_SOFTWARE": null,
+    "VK_DRIVER_FILES": null,
+    "VK_ICD_FILENAMES": null
+  },
+  "limits": {
+    "rss_mib": 3072,
+    "timeout_seconds": 600,
+    "min_available_mib": 768
+  },
+  "workload": "interactive",
+  "mesh_capacity": {
+    "vertices": 2000000,
+    "triangles": 4000000
+  },
+  "started_utc": "2026-10-31T12:58:39Z",
+  "binary_sha256": "c4eefdbaa340fa930dc4579cbd22229fd7dde55c39b7ab34d6a4d6745399b81d",
+  "viewport_shader_sha256": "d60b70a1df53553bd300d120eb8b95daba729e01e2bca53fe82fec303fc0d7c4",
+  "diagnostic": "gpu_load_profile_draw",
+  "effective_level": 4
+}

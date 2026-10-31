@@ -1,0 +1,13 @@
+
+running 9 tests
+test sculpt::symmetry::seam_depth_tests::standard_overlap_keeps_full_depth_when_mirrored_normals_diverge ... ok
+test sculpt::symmetry::seam_tests::mirrored_blending_respects_offset_planes_masks_and_single_copy_strength ... ok
+test sculpt::symmetry::seam_tests::tilted_standard_dabs_keep_the_mirror_seam_fixed_and_ignore_copy_order ... ok
+test sculpt::symmetry::soft_join_tests::close_soft_standard_footprints_join_without_a_central_dip ... ok
+test sculpt::symmetry::tests::combined_mirrors_reflect_points_and_grab_vectors_about_offset_center ... ok
+test sculpt::symmetry::tests::invalid_saved_settings_are_rejected ... ok
+test sculpt::symmetry::tests::near_plane_strokes_affect_both_sides_and_overlaps_do_not_double_strength ... ok
+test sculpt::symmetry::tests::radial_copies_rotate_around_the_selected_offset_axis ... ok
+test sculpt::symmetry::tests::radial_strokes_on_the_axis_do_not_multiply_strength ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 967 filtered out; finished in 0.07s

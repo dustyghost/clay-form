@@ -1,0 +1,10 @@
+
+running 5 tests
+test sculpt::texture::tests::float_texture_paint_preserves_hdr_outside_the_stroke ... ok
+test sculpt::texture::tests::removed_uv_faces_do_not_paint_but_still_occlude_other_faces ... ok
+test sculpt::texture::tests::small_texture_brush_bounds_work_to_footprint_and_preserves_samples ... 2K triangle: 2098176 samples in 28.558282ms; brush bounds 5460 samples in 99.02µs
+ok
+test sculpt::texture::tests::spray_respects_zero_pressure_masks_and_occluding_surfaces ... ok
+test sculpt::texture::tests::texture_stroke_respects_occlusion_masks_pressure_and_hidden_faces ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 1021 filtered out; finished in 0.04s

@@ -191,7 +191,7 @@ fn mirror_rejects_results_over_vertex_and_face_limits() {
         if vertex_limit {
             mesh.vertices.clear();
             mesh.triangles.clear();
-            for i in 0..MAX_VERTICES / 3 {
+            for i in 0..max_vertices() / 3 {
                 let base = i * 3;
                 mesh.vertices
                     .extend([Vec3(1., 0., 0.), Vec3(1., 1., 0.), Vec3(1., 0., 1.)]);
@@ -202,7 +202,7 @@ fn mirror_rejects_results_over_vertex_and_face_limits() {
             for p in &mut mesh.vertices {
                 p.0 += 3.;
             }
-            mesh.triangles = vec![mesh.triangles[0]; MAX_TRIANGLES / 2 + 1];
+            mesh.triangles = vec![mesh.triangles[0]; max_triangles() / 2 + 1];
         }
         mesh.validate().unwrap();
         assert!(

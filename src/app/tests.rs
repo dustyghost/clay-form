@@ -2,6 +2,7 @@ use super::*;
 use crate::viewport::Gesture;
 use eframe::egui::{Pos2, Vec2};
 mod about;
+mod appearance;
 mod startup;
 fn navigation_frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) -> egui::Rect {
     let mut rect = egui::Rect::NOTHING;
@@ -48,8 +49,10 @@ fn empty_space_drag_keeps_orbiting_when_crossing_clay() {
         &ctx,
         vec![egui::Event::PointerMoved(Pos2::new(500., 400.))],
     );
-    assert!(app.camera.yaw < -0.1);
-    assert!(app.camera.pitch < -0.1);
+    let mut expected = crate::camera::Camera::default();
+    expected.orbit(Vec2::new(400., 300.));
+    assert_eq!(app.camera.basis(), expected.basis());
+    assert!((app.camera.basis().2 - crate::sculpt::Vec3(0., 0., 1.)).len() > 0.1);
     assert!(!app.document.is_dirty());
     assert!(!app.document.can_undo());
 }

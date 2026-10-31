@@ -1,0 +1,8 @@
+{
+  "status": "measured",
+  "log": "profile.log",
+  "elapsed_seconds": 0.5023046659771353,
+  "sampled_peak_rss_bytes": 20582400,
+  "sampled_peak_swap_bytes": 0,
+  "minimum_available_bytes": 4338888704
+}

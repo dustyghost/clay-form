@@ -299,10 +299,10 @@ fn edge_limits_and_legacy_data_are_checked() {
     invalid.creases = vec![edge(q[0], q[2])];
     assert!(invalid.validate().is_err());
     let mut large = mesh;
-    large.vertices.resize(MAX_VERTICES, Vec3(0., 0., 0.));
-    large.mask.resize(MAX_VERTICES, 0.);
+    large.vertices.resize(max_vertices(), Vec3(0., 0., 0.));
+    large.mask.resize(max_vertices(), 0.);
     for g in &mut large.vertex_groups {
-        g.weights.resize(MAX_VERTICES, 0.);
+        g.weights.resize(max_vertices(), 0.);
     }
     large.validate().unwrap();
     assert!(

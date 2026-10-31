@@ -72,14 +72,6 @@ impl PaintEffect {
     }
 }
 impl Brush {
-    pub(crate) fn paint_weight(&self, x: f32, y: f32) -> f32 {
-        self.weight(x, y)
-            * if self.paint_effect.mode == PaintMode::Spray {
-                self.paint_effect.droplets(x, y)
-            } else {
-                1.
-            }
-    }
     pub(crate) fn paint_opacity(&self, local_weight: f32) -> f32 {
         if self.paint_effect.seconds > 0. {
             self.paint_strength_for_time(self.paint_effect.seconds * local_weight.max(0.))
@@ -104,6 +96,17 @@ impl Brush {
     }
 }
 
+impl super::brush::PreparedWeight<'_> {
+    pub(crate) fn paint_weight(&self, x: f32, y: f32) -> f32 {
+        self.weight(x, y)
+            * if self.brush.paint_effect.mode == PaintMode::Spray {
+                self.brush.paint_effect.droplets(x, y)
+            } else {
+                1.
+            }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -120,8 +123,10 @@ mod tests {
         let samples = |b: &Brush| {
             (0..160)
                 .flat_map(|y| {
-                    (0..160)
-                        .map(move |x| b.paint_weight(x as f32 / 100. - 0.8, y as f32 / 100. - 0.8))
+                    (0..160).map(move |x| {
+                        b.prepare_weight()
+                            .paint_weight(x as f32 / 100. - 0.8, y as f32 / 100. - 0.8)
+                    })
                 })
                 .collect::<Vec<_>>()
         };
@@ -137,7 +142,7 @@ mod tests {
         assert_ne!(samples(&brush), dense);
         brush.paint_effect.dot_size = 0.1;
         assert_ne!(samples(&brush), dense);
-        assert_eq!(brush.paint_weight(1.1, 0.), 0.);
+        assert_eq!(brush.prepare_weight().paint_weight(1.1, 0.), 0.);
     }
     #[test]
     fn paint_settings_roundtrip_and_old_presets_default_to_strokes() {

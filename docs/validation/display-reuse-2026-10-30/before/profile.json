@@ -1,0 +1,1302 @@
+{
+  "level": 3,
+  "memory_final": {
+    "process_peak_rss_bytes": 825851904,
+    "rss_bytes": 401821696
+  },
+  "rows": [
+    {
+      "brush": "Standard",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 7.1812439999999995,
+        "live.mesh_copy": 9.131683,
+        "live.normals_and_bounds": 12.694965000000002,
+        "live.validate": 2.3224080000000002,
+        "return_or_full_rebuild": 0.013387999999999999
+      },
+      "step": 0,
+      "total_ms": 31.345965000000003,
+      "trial": 0
+    },
+    {
+      "brush": "Standard",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 7.745951,
+        "live.mesh_copy": 4.657022,
+        "live.normals_and_bounds": 12.810874,
+        "live.validate": 2.2975589999999997,
+        "return_or_full_rebuild": 0.0033150000000000002
+      },
+      "step": 1,
+      "total_ms": 27.51547,
+      "trial": 0
+    },
+    {
+      "brush": "Standard",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.970084,
+        "live.mesh_copy": 2.929083,
+        "live.normals_and_bounds": 12.910069,
+        "live.validate": 2.4163069999999998,
+        "return_or_full_rebuild": 0.003613
+      },
+      "step": 2,
+      "total_ms": 21.22974,
+      "trial": 0
+    },
+    {
+      "brush": "Standard",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.206517,
+        "live.mesh_copy": 3.57872,
+        "live.normals_and_bounds": 12.439669,
+        "live.validate": 2.5525230000000003,
+        "return_or_full_rebuild": 0.0034869999999999996
+      },
+      "step": 3,
+      "total_ms": 21.781724,
+      "trial": 0
+    },
+    {
+      "brush": "Standard",
+      "fixture": "sphere",
+      "output_hash_fnv1a": "659abf56beae3b8d",
+      "phase": "release",
+      "stages_ms": {
+        "return_or_full_rebuild": 193.066868
+      },
+      "total_ms": 193.067872,
+      "trial": 0
+    },
+    {
+      "brush": "Paint",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 7.925554,
+        "live.mesh_copy": 15.091183,
+        "live.normals_and_bounds": 0.968512,
+        "live.validate": 2.549144,
+        "return_or_full_rebuild": 0.0030580000000000004
+      },
+      "step": 0,
+      "total_ms": 26.538177,
+      "trial": 0
+    },
+    {
+      "brush": "Paint",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 4.779664,
+        "live.mesh_copy": 8.482799,
+        "live.normals_and_bounds": 1.003283,
+        "live.validate": 2.7011040000000004,
+        "return_or_full_rebuild": 0.002777
+      },
+      "step": 1,
+      "total_ms": 16.970513999999998,
+      "trial": 0
+    },
+    {
+      "brush": "Paint",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.103559,
+        "live.mesh_copy": 9.634554999999999,
+        "live.normals_and_bounds": 1.006621,
+        "live.validate": 2.353358,
+        "return_or_full_rebuild": 0.002219
+      },
+      "step": 2,
+      "total_ms": 16.100959000000003,
+      "trial": 0
+    },
+    {
+      "brush": "Paint",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.763089,
+        "live.mesh_copy": 8.301541,
+        "live.normals_and_bounds": 0.993912,
+        "live.validate": 2.292511,
+        "return_or_full_rebuild": 0.0026469999999999996
+      },
+      "step": 3,
+      "total_ms": 15.354503000000001,
+      "trial": 0
+    },
+    {
+      "brush": "Paint",
+      "fixture": "sphere",
+      "output_hash_fnv1a": "e5d98a52d1fff8d4",
+      "phase": "release",
+      "stages_ms": {
+        "return_or_full_rebuild": 224.540944
+      },
+      "total_ms": 224.542069,
+      "trial": 0
+    },
+    {
+      "brush": "Standard",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.145587,
+        "live.mesh_copy": 3.443409,
+        "live.normals_and_bounds": 12.170134000000001,
+        "live.validate": 2.6878610000000003,
+        "return_or_full_rebuild": 0.003454
+      },
+      "step": 0,
+      "total_ms": 21.45111,
+      "trial": 1
+    },
+    {
+      "brush": "Standard",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.844843,
+        "live.mesh_copy": 3.2074130000000003,
+        "live.normals_and_bounds": 13.532029,
+        "live.validate": 2.378431,
+        "return_or_full_rebuild": 0.004595
+      },
+      "step": 1,
+      "total_ms": 22.968116000000002,
+      "trial": 1
+    },
+    {
+      "brush": "Standard",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.1388890000000003,
+        "live.mesh_copy": 3.502635,
+        "live.normals_and_bounds": 13.107138,
+        "live.validate": 2.628731,
+        "return_or_full_rebuild": 0.004058
+      },
+      "step": 2,
+      "total_ms": 22.382227,
+      "trial": 1
+    },
+    {
+      "brush": "Standard",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.043072,
+        "live.mesh_copy": 3.260424,
+        "live.normals_and_bounds": 13.050411,
+        "live.validate": 2.468661,
+        "return_or_full_rebuild": 0.004064000000000001
+      },
+      "step": 3,
+      "total_ms": 21.827477000000002,
+      "trial": 1
+    },
+    {
+      "brush": "Standard",
+      "fixture": "sphere",
+      "output_hash_fnv1a": "659abf56beae3b8d",
+      "phase": "release",
+      "stages_ms": {
+        "return_or_full_rebuild": 197.622397
+      },
+      "total_ms": 197.623624,
+      "trial": 1
+    },
+    {
+      "brush": "Paint",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 8.158932,
+        "live.mesh_copy": 13.174189,
+        "live.normals_and_bounds": 1.02178,
+        "live.validate": 2.420493,
+        "return_or_full_rebuild": 0.003141
+      },
+      "step": 0,
+      "total_ms": 24.779557,
+      "trial": 1
+    },
+    {
+      "brush": "Paint",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.706085,
+        "live.mesh_copy": 9.146108,
+        "live.normals_and_bounds": 1.043113,
+        "live.validate": 2.736536,
+        "return_or_full_rebuild": 0.002853
+      },
+      "step": 1,
+      "total_ms": 16.635415000000002,
+      "trial": 1
+    },
+    {
+      "brush": "Paint",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 7.480904,
+        "live.mesh_copy": 11.932583,
+        "live.normals_and_bounds": 1.0815620000000001,
+        "live.validate": 2.430448,
+        "return_or_full_rebuild": 0.003106
+      },
+      "step": 2,
+      "total_ms": 22.929488000000003,
+      "trial": 1
+    },
+    {
+      "brush": "Paint",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.133527,
+        "live.mesh_copy": 8.486273,
+        "live.normals_and_bounds": 1.361997,
+        "live.validate": 2.495561,
+        "return_or_full_rebuild": 0.004031
+      },
+      "step": 3,
+      "total_ms": 15.482334999999999,
+      "trial": 1
+    },
+    {
+      "brush": "Paint",
+      "fixture": "sphere",
+      "output_hash_fnv1a": "e5d98a52d1fff8d4",
+      "phase": "release",
+      "stages_ms": {
+        "return_or_full_rebuild": 211.90845099999999
+      },
+      "total_ms": 211.909608,
+      "trial": 1
+    },
+    {
+      "brush": "Standard",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.640741,
+        "live.mesh_copy": 3.52403,
+        "live.normals_and_bounds": 12.540474,
+        "live.validate": 2.8114749999999997,
+        "return_or_full_rebuild": 0.003797
+      },
+      "step": 0,
+      "total_ms": 22.521201,
+      "trial": 2
+    },
+    {
+      "brush": "Standard",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 6.953246,
+        "live.mesh_copy": 3.3865459999999996,
+        "live.normals_and_bounds": 12.037333,
+        "live.validate": 2.437103,
+        "return_or_full_rebuild": 0.004074
+      },
+      "step": 1,
+      "total_ms": 24.819184,
+      "trial": 2
+    },
+    {
+      "brush": "Standard",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 4.250113,
+        "live.mesh_copy": 3.1650039999999997,
+        "live.normals_and_bounds": 12.394720999999999,
+        "live.validate": 2.44596,
+        "return_or_full_rebuild": 0.004556
+      },
+      "step": 2,
+      "total_ms": 22.261239,
+      "trial": 2
+    },
+    {
+      "brush": "Standard",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.123705,
+        "live.mesh_copy": 3.0675149999999998,
+        "live.normals_and_bounds": 12.228222,
+        "live.validate": 2.4228,
+        "return_or_full_rebuild": 0.0036880000000000003
+      },
+      "step": 3,
+      "total_ms": 20.846515999999998,
+      "trial": 2
+    },
+    {
+      "brush": "Standard",
+      "fixture": "sphere",
+      "output_hash_fnv1a": "659abf56beae3b8d",
+      "phase": "release",
+      "stages_ms": {
+        "return_or_full_rebuild": 199.251137
+      },
+      "total_ms": 199.252161,
+      "trial": 2
+    },
+    {
+      "brush": "Paint",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 7.777687,
+        "live.mesh_copy": 12.868288999999999,
+        "live.normals_and_bounds": 1.005164,
+        "live.validate": 3.032986,
+        "return_or_full_rebuild": 0.003821
+      },
+      "step": 0,
+      "total_ms": 24.6887,
+      "trial": 2
+    },
+    {
+      "brush": "Paint",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 4.878126,
+        "live.mesh_copy": 9.325444000000001,
+        "live.normals_and_bounds": 1.22312,
+        "live.validate": 2.409402,
+        "return_or_full_rebuild": 0.003325
+      },
+      "step": 1,
+      "total_ms": 17.840168,
+      "trial": 2
+    },
+    {
+      "brush": "Paint",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.148156,
+        "live.mesh_copy": 8.620051,
+        "live.normals_and_bounds": 0.998858,
+        "live.validate": 2.43304,
+        "return_or_full_rebuild": 0.001846
+      },
+      "step": 2,
+      "total_ms": 15.202810000000001,
+      "trial": 2
+    },
+    {
+      "brush": "Paint",
+      "fixture": "sphere",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.0128809999999997,
+        "live.mesh_copy": 8.591339,
+        "live.normals_and_bounds": 0.973506,
+        "live.validate": 2.412826,
+        "return_or_full_rebuild": 0.002192
+      },
+      "step": 3,
+      "total_ms": 14.993349,
+      "trial": 2
+    },
+    {
+      "brush": "Paint",
+      "fixture": "sphere",
+      "output_hash_fnv1a": "e5d98a52d1fff8d4",
+      "phase": "release",
+      "stages_ms": {
+        "return_or_full_rebuild": 209.41286200000002
+      },
+      "total_ms": 209.41416199999998,
+      "trial": 2
+    },
+    {
+      "brush": "Standard",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 6.953514,
+        "live.mesh_copy": 11.461907,
+        "live.normals_and_bounds": 13.95649,
+        "live.validate": 2.426559,
+        "return_or_full_rebuild": 0.005372
+      },
+      "step": 0,
+      "total_ms": 34.804898,
+      "trial": 0
+    },
+    {
+      "brush": "Standard",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.060015,
+        "live.mesh_copy": 8.550874,
+        "live.normals_and_bounds": 12.823032,
+        "live.validate": 2.583314,
+        "return_or_full_rebuild": 0.0036959999999999996
+      },
+      "step": 1,
+      "total_ms": 27.021648,
+      "trial": 0
+    },
+    {
+      "brush": "Standard",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 5.827266,
+        "live.mesh_copy": 11.341426,
+        "live.normals_and_bounds": 12.377174,
+        "live.validate": 2.449906,
+        "return_or_full_rebuild": 0.004168
+      },
+      "step": 2,
+      "total_ms": 32.00066,
+      "trial": 0
+    },
+    {
+      "brush": "Standard",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.1355950000000004,
+        "live.mesh_copy": 9.256674,
+        "live.normals_and_bounds": 12.372918,
+        "live.validate": 2.536163,
+        "return_or_full_rebuild": 0.005098999999999999
+      },
+      "step": 3,
+      "total_ms": 27.307221,
+      "trial": 0
+    },
+    {
+      "brush": "Standard",
+      "fixture": "organic",
+      "output_hash_fnv1a": "64a47832a926da10",
+      "phase": "release",
+      "stages_ms": {
+        "return_or_full_rebuild": 205.123889
+      },
+      "total_ms": 205.12515000000002,
+      "trial": 0
+    },
+    {
+      "brush": "Paint",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 7.084007,
+        "live.mesh_copy": 15.382365,
+        "live.normals_and_bounds": 0.994046,
+        "live.validate": 2.811792,
+        "return_or_full_rebuild": 0.002127
+      },
+      "step": 0,
+      "total_ms": 26.27502,
+      "trial": 0
+    },
+    {
+      "brush": "Paint",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.941353,
+        "live.mesh_copy": 8.326382,
+        "live.normals_and_bounds": 1.015773,
+        "live.validate": 2.651937,
+        "return_or_full_rebuild": 0.001984
+      },
+      "step": 1,
+      "total_ms": 14.93835,
+      "trial": 0
+    },
+    {
+      "brush": "Paint",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 7.714842,
+        "live.mesh_copy": 12.505518,
+        "live.normals_and_bounds": 0.9933109999999999,
+        "live.validate": 2.5694239999999997,
+        "return_or_full_rebuild": 0.002222
+      },
+      "step": 2,
+      "total_ms": 23.786089,
+      "trial": 0
+    },
+    {
+      "brush": "Paint",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.9668870000000003,
+        "live.mesh_copy": 8.417914999999999,
+        "live.normals_and_bounds": 1.01044,
+        "live.validate": 2.533875,
+        "return_or_full_rebuild": 0.00249
+      },
+      "step": 3,
+      "total_ms": 14.93219,
+      "trial": 0
+    },
+    {
+      "brush": "Paint",
+      "fixture": "organic",
+      "output_hash_fnv1a": "85527510a54f762a",
+      "phase": "release",
+      "stages_ms": {
+        "return_or_full_rebuild": 199.522137
+      },
+      "total_ms": 199.523278,
+      "trial": 0
+    },
+    {
+      "brush": "Standard",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 4.423976,
+        "live.mesh_copy": 8.622015000000001,
+        "live.normals_and_bounds": 13.057972,
+        "live.validate": 2.654309,
+        "return_or_full_rebuild": 0.004391999999999999
+      },
+      "step": 0,
+      "total_ms": 28.763514999999998,
+      "trial": 1
+    },
+    {
+      "brush": "Standard",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 4.3424450000000006,
+        "live.mesh_copy": 8.138359,
+        "live.normals_and_bounds": 12.783136,
+        "live.validate": 2.755471,
+        "return_or_full_rebuild": 0.003647
+      },
+      "step": 1,
+      "total_ms": 28.02392,
+      "trial": 1
+    },
+    {
+      "brush": "Standard",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.799163,
+        "live.mesh_copy": 8.771482,
+        "live.normals_and_bounds": 12.474123,
+        "live.validate": 2.504755,
+        "return_or_full_rebuild": 0.004019999999999999
+      },
+      "step": 2,
+      "total_ms": 27.554307,
+      "trial": 1
+    },
+    {
+      "brush": "Standard",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.19361,
+        "live.mesh_copy": 8.611028999999998,
+        "live.normals_and_bounds": 12.338771999999999,
+        "live.validate": 2.485598,
+        "return_or_full_rebuild": 0.003854
+      },
+      "step": 3,
+      "total_ms": 26.633627999999998,
+      "trial": 1
+    },
+    {
+      "brush": "Standard",
+      "fixture": "organic",
+      "output_hash_fnv1a": "64a47832a926da10",
+      "phase": "release",
+      "stages_ms": {
+        "return_or_full_rebuild": 205.61739300000002
+      },
+      "total_ms": 205.618543,
+      "trial": 1
+    },
+    {
+      "brush": "Paint",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 6.9296,
+        "live.mesh_copy": 9.80685,
+        "live.normals_and_bounds": 1.00598,
+        "live.validate": 2.396811,
+        "return_or_full_rebuild": 0.004234
+      },
+      "step": 0,
+      "total_ms": 20.144450000000003,
+      "trial": 1
+    },
+    {
+      "brush": "Paint",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.302879,
+        "live.mesh_copy": 8.531699999999999,
+        "live.normals_and_bounds": 1.000291,
+        "live.validate": 2.393629,
+        "return_or_full_rebuild": 0.002254
+      },
+      "step": 1,
+      "total_ms": 15.231451,
+      "trial": 1
+    },
+    {
+      "brush": "Paint",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 6.403593,
+        "live.mesh_copy": 9.844366,
+        "live.normals_and_bounds": 1.0497880000000002,
+        "live.validate": 2.97111,
+        "return_or_full_rebuild": 0.004628
+      },
+      "step": 2,
+      "total_ms": 20.274510999999997,
+      "trial": 1
+    },
+    {
+      "brush": "Paint",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.9559059999999997,
+        "live.mesh_copy": 8.538179999999999,
+        "live.normals_and_bounds": 1.004659,
+        "live.validate": 2.448245,
+        "return_or_full_rebuild": 0.002453
+      },
+      "step": 3,
+      "total_ms": 14.95022,
+      "trial": 1
+    },
+    {
+      "brush": "Paint",
+      "fixture": "organic",
+      "output_hash_fnv1a": "85527510a54f762a",
+      "phase": "release",
+      "stages_ms": {
+        "return_or_full_rebuild": 196.306296
+      },
+      "total_ms": 196.307216,
+      "trial": 1
+    },
+    {
+      "brush": "Standard",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 4.241757,
+        "live.mesh_copy": 8.660003,
+        "live.normals_and_bounds": 12.445337,
+        "live.validate": 2.496378,
+        "return_or_full_rebuild": 0.0041860000000000005
+      },
+      "step": 0,
+      "total_ms": 27.848267999999997,
+      "trial": 2
+    },
+    {
+      "brush": "Standard",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.096676,
+        "live.mesh_copy": 8.519353,
+        "live.normals_and_bounds": 12.388471,
+        "live.validate": 2.3832660000000003,
+        "return_or_full_rebuild": 0.005538
+      },
+      "step": 1,
+      "total_ms": 26.394102,
+      "trial": 2
+    },
+    {
+      "brush": "Standard",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.469338,
+        "live.mesh_copy": 9.182805,
+        "live.normals_and_bounds": 12.529416999999999,
+        "live.validate": 2.432414,
+        "return_or_full_rebuild": 0.004158
+      },
+      "step": 2,
+      "total_ms": 27.618982,
+      "trial": 2
+    },
+    {
+      "brush": "Standard",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.3673420000000003,
+        "live.mesh_copy": 8.59067,
+        "live.normals_and_bounds": 12.42602,
+        "live.validate": 2.334381,
+        "return_or_full_rebuild": 0.0040230000000000005
+      },
+      "step": 3,
+      "total_ms": 26.723366,
+      "trial": 2
+    },
+    {
+      "brush": "Standard",
+      "fixture": "organic",
+      "output_hash_fnv1a": "64a47832a926da10",
+      "phase": "release",
+      "stages_ms": {
+        "return_or_full_rebuild": 209.99199
+      },
+      "total_ms": 209.992908,
+      "trial": 2
+    },
+    {
+      "brush": "Paint",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 6.278805999999999,
+        "live.mesh_copy": 12.033167,
+        "live.normals_and_bounds": 1.01074,
+        "live.validate": 2.425554,
+        "return_or_full_rebuild": 0.0027860000000000003
+      },
+      "step": 0,
+      "total_ms": 21.752289,
+      "trial": 2
+    },
+    {
+      "brush": "Paint",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.900102,
+        "live.mesh_copy": 9.100046,
+        "live.normals_and_bounds": 1.0415590000000001,
+        "live.validate": 2.694713,
+        "return_or_full_rebuild": 0.002161
+      },
+      "step": 1,
+      "total_ms": 15.739592,
+      "trial": 2
+    },
+    {
+      "brush": "Paint",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 6.581055,
+        "live.mesh_copy": 10.137277000000001,
+        "live.normals_and_bounds": 1.2676079999999998,
+        "live.validate": 2.429521,
+        "return_or_full_rebuild": 0.003235
+      },
+      "step": 2,
+      "total_ms": 20.419346,
+      "trial": 2
+    },
+    {
+      "brush": "Paint",
+      "fixture": "organic",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.870795,
+        "live.mesh_copy": 8.297966,
+        "live.normals_and_bounds": 1.0472380000000001,
+        "live.validate": 2.4012539999999998,
+        "return_or_full_rebuild": 0.002559
+      },
+      "step": 3,
+      "total_ms": 14.620836,
+      "trial": 2
+    },
+    {
+      "brush": "Paint",
+      "fixture": "organic",
+      "output_hash_fnv1a": "85527510a54f762a",
+      "phase": "release",
+      "stages_ms": {
+        "return_or_full_rebuild": 202.264536
+      },
+      "total_ms": 202.26565699999998,
+      "trial": 2
+    },
+    {
+      "brush": "Standard",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 5.145732,
+        "live.mesh_copy": 10.01376,
+        "live.normals_and_bounds": 13.463179,
+        "live.validate": 2.964057,
+        "return_or_full_rebuild": 0.003809
+      },
+      "step": 0,
+      "total_ms": 31.591411,
+      "trial": 0
+    },
+    {
+      "brush": "Standard",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.302103,
+        "live.mesh_copy": 7.451159,
+        "live.normals_and_bounds": 12.305926,
+        "live.validate": 2.9995960000000004,
+        "return_or_full_rebuild": 0.0031980000000000003
+      },
+      "step": 1,
+      "total_ms": 25.062692000000002,
+      "trial": 0
+    },
+    {
+      "brush": "Standard",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.219077,
+        "live.mesh_copy": 7.60402,
+        "live.normals_and_bounds": 12.147567,
+        "live.validate": 2.9668609999999997,
+        "return_or_full_rebuild": 0.0026469999999999996
+      },
+      "step": 2,
+      "total_ms": 24.940954,
+      "trial": 0
+    },
+    {
+      "brush": "Standard",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.680047,
+        "live.mesh_copy": 7.979592,
+        "live.normals_and_bounds": 12.237632,
+        "live.validate": 2.958951,
+        "return_or_full_rebuild": 0.003429
+      },
+      "step": 3,
+      "total_ms": 25.860318,
+      "trial": 0
+    },
+    {
+      "brush": "Standard",
+      "fixture": "hidden",
+      "output_hash_fnv1a": "1532a078f00242b3",
+      "phase": "release",
+      "stages_ms": {
+        "release.copy": 8.259977,
+        "release.fans": 1.449803,
+        "release.shade": 38.871207999999996,
+        "release.validate": 7.865461000000001,
+        "return_or_full_rebuild": 0.002364
+      },
+      "total_ms": 56.449723,
+      "trial": 0
+    },
+    {
+      "brush": "Paint",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 7.1243,
+        "live.mesh_copy": 12.962686,
+        "live.normals_and_bounds": 1.147458,
+        "live.validate": 3.190131,
+        "return_or_full_rebuild": 0.0038859999999999997
+      },
+      "step": 0,
+      "total_ms": 24.429553,
+      "trial": 0
+    },
+    {
+      "brush": "Paint",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 5.502245,
+        "live.mesh_copy": 8.080474,
+        "live.normals_and_bounds": 1.036383,
+        "live.validate": 3.055626,
+        "return_or_full_rebuild": 0.001841
+      },
+      "step": 1,
+      "total_ms": 17.677183999999997,
+      "trial": 0
+    },
+    {
+      "brush": "Paint",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.2558740000000004,
+        "live.mesh_copy": 6.673887,
+        "live.normals_and_bounds": 1.046128,
+        "live.validate": 3.1759399999999998,
+        "return_or_full_rebuild": 0.002122
+      },
+      "step": 2,
+      "total_ms": 13.154691,
+      "trial": 0
+    },
+    {
+      "brush": "Paint",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.035476,
+        "live.mesh_copy": 6.852088,
+        "live.normals_and_bounds": 1.043008,
+        "live.validate": 3.102013,
+        "return_or_full_rebuild": 0.001956
+      },
+      "step": 3,
+      "total_ms": 13.035457000000001,
+      "trial": 0
+    },
+    {
+      "brush": "Paint",
+      "fixture": "hidden",
+      "output_hash_fnv1a": "114c65c5bc4797fd",
+      "phase": "release",
+      "stages_ms": {
+        "release.validate": 8.347893000000001,
+        "return_or_full_rebuild": 0.001798
+      },
+      "total_ms": 8.350632000000001,
+      "trial": 0
+    },
+    {
+      "brush": "Standard",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 3.884585,
+        "live.mesh_copy": 8.596454,
+        "live.normals_and_bounds": 12.883690999999999,
+        "live.validate": 3.0924289999999997,
+        "return_or_full_rebuild": 0.003279
+      },
+      "step": 0,
+      "total_ms": 28.461298,
+      "trial": 1
+    },
+    {
+      "brush": "Standard",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 1.920291,
+        "live.mesh_copy": 6.5481560000000005,
+        "live.normals_and_bounds": 12.279171999999999,
+        "live.validate": 2.9091519999999997,
+        "return_or_full_rebuild": 0.003836
+      },
+      "step": 1,
+      "total_ms": 23.661275999999997,
+      "trial": 1
+    },
+    {
+      "brush": "Standard",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.313228,
+        "live.mesh_copy": 6.505491,
+        "live.normals_and_bounds": 13.585183,
+        "live.validate": 2.91041,
+        "return_or_full_rebuild": 0.0041659999999999996
+      },
+      "step": 2,
+      "total_ms": 25.319235,
+      "trial": 1
+    },
+    {
+      "brush": "Standard",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.106443,
+        "live.mesh_copy": 6.7699489999999996,
+        "live.normals_and_bounds": 12.449507,
+        "live.validate": 2.96621,
+        "return_or_full_rebuild": 0.005059
+      },
+      "step": 3,
+      "total_ms": 24.297698999999998,
+      "trial": 1
+    },
+    {
+      "brush": "Standard",
+      "fixture": "hidden",
+      "output_hash_fnv1a": "1532a078f00242b3",
+      "phase": "release",
+      "stages_ms": {
+        "release.copy": 8.446398,
+        "release.fans": 1.410161,
+        "release.shade": 36.459134,
+        "release.validate": 8.099763,
+        "return_or_full_rebuild": 0.0024360000000000002
+      },
+      "total_ms": 54.418413,
+      "trial": 1
+    },
+    {
+      "brush": "Paint",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.1070830000000003,
+        "live.mesh_copy": 6.881127,
+        "live.normals_and_bounds": 1.047567,
+        "live.validate": 3.373488,
+        "return_or_full_rebuild": 0.003657
+      },
+      "step": 0,
+      "total_ms": 13.413856000000001,
+      "trial": 1
+    },
+    {
+      "brush": "Paint",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.109071,
+        "live.mesh_copy": 6.811095,
+        "live.normals_and_bounds": 0.9985160000000001,
+        "live.validate": 3.122527,
+        "return_or_full_rebuild": 0.001651
+      },
+      "step": 1,
+      "total_ms": 13.043609,
+      "trial": 1
+    },
+    {
+      "brush": "Paint",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.6566490000000003,
+        "live.mesh_copy": 6.853484,
+        "live.normals_and_bounds": 1.331151,
+        "live.validate": 3.112034,
+        "return_or_full_rebuild": 0.003946
+      },
+      "step": 2,
+      "total_ms": 13.958043,
+      "trial": 1
+    },
+    {
+      "brush": "Paint",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.516647,
+        "live.mesh_copy": 7.419053,
+        "live.normals_and_bounds": 1.0697910000000002,
+        "live.validate": 3.1231980000000004,
+        "return_or_full_rebuild": 0.002198
+      },
+      "step": 3,
+      "total_ms": 14.131637000000001,
+      "trial": 1
+    },
+    {
+      "brush": "Paint",
+      "fixture": "hidden",
+      "output_hash_fnv1a": "114c65c5bc4797fd",
+      "phase": "release",
+      "stages_ms": {
+        "release.validate": 9.166509999999999,
+        "return_or_full_rebuild": 0.002798
+      },
+      "total_ms": 9.170177,
+      "trial": 1
+    },
+    {
+      "brush": "Standard",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.363703,
+        "live.mesh_copy": 6.742489,
+        "live.normals_and_bounds": 12.191288,
+        "live.validate": 3.026469,
+        "return_or_full_rebuild": 0.003323
+      },
+      "step": 0,
+      "total_ms": 24.327932999999998,
+      "trial": 2
+    },
+    {
+      "brush": "Standard",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.569039,
+        "live.mesh_copy": 6.588469,
+        "live.normals_and_bounds": 12.963004,
+        "live.validate": 3.0110509999999997,
+        "return_or_full_rebuild": 0.003964
+      },
+      "step": 1,
+      "total_ms": 25.13636,
+      "trial": 2
+    },
+    {
+      "brush": "Standard",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.157435,
+        "live.mesh_copy": 7.028944,
+        "live.normals_and_bounds": 12.183602,
+        "live.validate": 3.3487999999999998,
+        "return_or_full_rebuild": 0.0030759999999999997
+      },
+      "step": 2,
+      "total_ms": 24.722372,
+      "trial": 2
+    },
+    {
+      "brush": "Standard",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.073882,
+        "live.mesh_copy": 6.781369,
+        "live.normals_and_bounds": 12.119968,
+        "live.validate": 3.036749,
+        "return_or_full_rebuild": 0.0034649999999999998
+      },
+      "step": 3,
+      "total_ms": 24.016194000000002,
+      "trial": 2
+    },
+    {
+      "brush": "Standard",
+      "fixture": "hidden",
+      "output_hash_fnv1a": "1532a078f00242b3",
+      "phase": "release",
+      "stages_ms": {
+        "release.copy": 7.815338999999999,
+        "release.fans": 1.501734,
+        "release.shade": 38.718451,
+        "release.validate": 8.079325,
+        "return_or_full_rebuild": 0.002955
+      },
+      "total_ms": 56.118575,
+      "trial": 2
+    },
+    {
+      "brush": "Paint",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.062608,
+        "live.mesh_copy": 9.342556,
+        "live.normals_and_bounds": 1.005211,
+        "live.validate": 3.110982,
+        "return_or_full_rebuild": 0.002088
+      },
+      "step": 0,
+      "total_ms": 15.524242000000001,
+      "trial": 2
+    },
+    {
+      "brush": "Paint",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.1463099999999997,
+        "live.mesh_copy": 7.4473899999999995,
+        "live.normals_and_bounds": 0.951947,
+        "live.validate": 2.9482269999999997,
+        "return_or_full_rebuild": 0.0023
+      },
+      "step": 1,
+      "total_ms": 13.497162,
+      "trial": 2
+    },
+    {
+      "brush": "Paint",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 1.873957,
+        "live.mesh_copy": 7.14272,
+        "live.normals_and_bounds": 1.00949,
+        "live.validate": 2.969785,
+        "return_or_full_rebuild": 0.003042
+      },
+      "step": 2,
+      "total_ms": 12.999696,
+      "trial": 2
+    },
+    {
+      "brush": "Paint",
+      "fixture": "hidden",
+      "phase": "live",
+      "stages_ms": {
+        "live.display_copy": 2.326324,
+        "live.mesh_copy": 6.770199,
+        "live.normals_and_bounds": 0.991029,
+        "live.validate": 3.875233,
+        "return_or_full_rebuild": 0.0021959999999999996
+      },
+      "step": 3,
+      "total_ms": 13.965646,
+      "trial": 2
+    },
+    {
+      "brush": "Paint",
+      "fixture": "hidden",
+      "output_hash_fnv1a": "114c65c5bc4797fd",
+      "phase": "release",
+      "stages_ms": {
+        "release.validate": 8.750977,
+        "return_or_full_rebuild": 0.00266
+      },
+      "total_ms": 8.754603999999999,
+      "trial": 2
+    }
+  ]
+}

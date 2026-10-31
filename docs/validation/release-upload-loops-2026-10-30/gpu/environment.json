@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "revision": "7be63d319f42cbcd529a3a7e72562e8f7ad4eea8",
+  "working_tree_dirty": true,
+  "source_sha256": "ecc95ccc39d66bbf87839472a60c4ce1b9cab66a98547f9d097d5f73536fe80e",
+  "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)",
+  "platform": "Linux-7.2.9-arch1-1-x86_64-with-glibc2.44",
+  "cpu": "Intel(R) Core(TM) i7-7500U CPU @ 2.70GHz",
+  "logical_cpus": 4,
+  "mem_total_kib": 7998776,
+  "mem_available_start_kib": 4516424,
+  "swap_free_start_kib": 13544,
+  "profile": "release",
+  "gpu_requested": true,
+  "environment": {
+    "RUSTFLAGS": null,
+    "CARGO_ENCODED_RUSTFLAGS": null,
+    "CARGO_PROFILE_RELEASE_OPT_LEVEL": null,
+    "CARGO_PROFILE_RELEASE_LTO": null,
+    "CARGO_BUILD_TARGET": null,
+    "CLAY_GPU_SOFTWARE": null,
+    "VK_DRIVER_FILES": null,
+    "VK_ICD_FILENAMES": null
+  },
+  "limits": {
+    "rss_mib": 1536,
+    "timeout_seconds": 600
+  },
+  "started_utc": "2026-10-30T18:31:58Z"
+}

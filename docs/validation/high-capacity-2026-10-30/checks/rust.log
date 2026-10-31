@@ -1,0 +1,12 @@
+Compiling clay-form v0.1.0-alpha.2 (/home/mark/source/clay-form)
+    Finished `release` profile [optimized] target(s) in 2m 57s
+     Running unittests src/lib.rs (target/release/deps/clay_form-28c669c6ca701e80)
+
+running 5 tests
+test viewport::gpu::profile::capacity::capacity_canonical_display_is_reused_on_release ... ok
+test viewport::gpu::profile::capacity::capacity_checkpoints_preserve_completed_samples_when_next_phase_fails ... ok
+test viewport::gpu::profile::capacity::capacity_dense_live_display_preserves_edited_surface ... ok
+test viewport::gpu::profile::capacity::capacity_large_fixture_requires_explicit_valid_budgets ... ok
+test viewport::gpu::profile::capacity::capacity_workloads_preserve_mask_topology_and_exact_history ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 987 filtered out; finished in 1.50s

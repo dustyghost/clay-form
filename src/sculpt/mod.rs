@@ -1,6 +1,7 @@
 //! Sculpting data and algorithms, independent of windowing and UI.
 mod adaptive;
 mod brush;
+pub(crate) mod capacity;
 mod paint_effect;
 pub use paint_effect::{PaintEffect, PaintMode};
 mod clay;
@@ -18,6 +19,7 @@ mod remesh;
 mod topology;
 pub use topology::{QuadRemeshAlgorithm, Topology};
 mod smooth;
+mod stamp_normals;
 mod subdivision;
 mod symmetry;
 pub use adaptive::AdaptiveSettings;
@@ -29,7 +31,7 @@ pub use math::Vec3;
 pub use mesh::{Dab, Mesh};
 pub use project::{ModelMetadata, Project, SceneSettings, Submodel};
 pub use subdivision::MeshSettings;
-pub(crate) use subdivision::{MAX_TRIANGLES, MAX_VERTICES};
+pub(crate) use subdivision::{max_triangles, max_vertices};
 mod import;
 pub use symmetry::{Axis, GuidePlane, Symmetry};
 #[cfg(test)]
@@ -53,7 +55,7 @@ mod slice_path;
 pub use slice::{SliceMode, SliceOptions, SlicePlane};
 pub use slice_path::SlicePath;
 mod shading;
-pub(crate) use shading::SurfaceShading;
+pub(crate) use shading::{SurfaceShading, SurfaceShadingTopology};
 
 #[cfg(test)]
 mod group_tests;
@@ -91,3 +93,9 @@ pub use relaxation::{RelaxationOptions, RelaxationReport};
 
 #[cfg(test)]
 pub(crate) use relaxation::{inflated_relaxation_fixture, relaxation_fixture};
+
+#[cfg(test)]
+mod brush_loop_profile;
+
+#[cfg(test)]
+mod stamp_profile;

@@ -74,8 +74,12 @@ impl UiState {
                         }
                         if self.transform_operation == Operation::Universal {
                             ui.horizontal_wrapped(|ui| {
-                                ui.strong("Universal")
-                                    .on_hover_text(Operation::Universal.hint());
+                                // Keep the compact toolbar clear of the centre pivot
+                                // in a short, narrow viewport.
+                                if !compact || viewport.width() >= 500. {
+                                    ui.strong("Universal")
+                                        .on_hover_text(Operation::Universal.hint());
+                                }
                                 if ui
                                     .small_button("Reset pivot")
                                     .customize(Action::ResetPivot)

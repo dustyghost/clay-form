@@ -1,0 +1,9 @@
+
+running 5 tests
+test viewport::stroke::preview::tests::stamp_preview_cancellation_discards_partial_refinement ... ok
+test viewport::stroke::preview::tests::stamp_preview_discards_stale_work_and_cancels_on_drop ... ok
+test viewport::stroke::preview::tests::stamp_preview_invalidates_source_and_projection_inputs ... ok
+test viewport::stroke::preview::tests::stamp_preview_is_immediate_cached_and_refines_without_document_edits ... ok
+test viewport::stroke::preview::tests::stamp_preview_profile ... ignored, manual release-mode stamp preview timings
+
+test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 1003 filtered out; finished in 0.49s

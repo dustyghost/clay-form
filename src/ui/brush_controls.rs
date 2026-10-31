@@ -5,7 +5,8 @@ use crate::sculpt::StrokeMode;
 pub(super) fn is_control(action: &Action) -> bool {
     matches!(
         action,
-        Action::BrushIcon
+        Action::AppearanceControls
+            | Action::BrushIcon
             | Action::BrushSize
             | Action::BrushInnerRadius
             | Action::BrushStrength
@@ -32,6 +33,9 @@ impl UiState {
         label: &str,
         document: &Document,
     ) -> f32 {
+        if *action == Action::AppearanceControls {
+            return ui.available_width().min(540.);
+        }
         let (default, extra) = match action {
             Action::BrushIcon => (
                 self.brush_index_for_context(document, ui.ctx())
@@ -66,6 +70,13 @@ impl UiState {
         document: &Document,
         commands: &mut Vec<Command>,
     ) -> egui::Response {
+        if *action == Action::AppearanceControls {
+            return ui
+                .add_enabled_ui(!self.mesh_busy, |ui| {
+                    ui.horizontal_wrapped(|ui| self.appearance_strip(ui, document, commands));
+                })
+                .response;
+        }
         let Some(index) = self.brush_index_for_context(document, ui.ctx()) else {
             return ui.weak("No active brush");
         };

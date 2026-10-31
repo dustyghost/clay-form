@@ -264,8 +264,8 @@ impl Mesh {
                     sides.push(side);
                 }
             }
-            if work.vertices.len() > super::subdivision::MAX_VERTICES
-                || work.triangles.len() > super::subdivision::MAX_TRIANGLES
+            if work.vertices.len() > super::subdivision::max_vertices()
+                || work.triangles.len() > super::subdivision::max_triangles()
             {
                 return Err("Slice exceeds the mesh size limit; reduce resolution first".into());
             }
@@ -672,7 +672,7 @@ impl Mesh {
                 self.triangles.push(face);
                 self.polygroups.push(0);
             }
-            if self.triangles.len() + caps.len() > super::subdivision::MAX_TRIANGLES {
+            if self.triangles.len() + caps.len() > super::subdivision::max_triangles() {
                 return Err("Slice cap exceeds the mesh size limit".into());
             }
         }

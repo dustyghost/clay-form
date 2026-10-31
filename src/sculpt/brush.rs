@@ -295,8 +295,42 @@ pub struct Brush {
     /// Linear HDR colour for float texture targets; vertex materials remain bounded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub texture_colour: Option<[f32; 3]>,
+    /// Standby colour; primary remains material.base_color for legacy presets and painting.
+    #[serde(
+        default = "default_secondary_colour",
+        skip_serializing_if = "is_default_secondary_colour"
+    )]
+    pub secondary_colour: [f32; 3],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secondary_texture_colour: Option<[f32; 3]>,
 }
+pub fn default_secondary_colour() -> [f32; 3] {
+    [1.; 3]
+}
+fn is_default_secondary_colour(colour: &[f32; 3]) -> bool {
+    *colour == default_secondary_colour()
+}
+
 impl Brush {
+    pub fn set_paint_colour(&mut self, secondary: bool, colour: [f32; 3]) {
+        if secondary {
+            self.secondary_colour = colour;
+            self.secondary_texture_colour = None;
+        } else {
+            self.material.set_colour(colour);
+            self.texture_colour = None;
+        }
+    }
+    pub fn swap_paint_colours(&mut self) {
+        let primary = self.material.base_color;
+        self.material.set_colour(self.secondary_colour);
+        self.secondary_colour = primary;
+        std::mem::swap(&mut self.texture_colour, &mut self.secondary_texture_colour);
+    }
+    pub fn reset_paint_colours(&mut self) {
+        self.set_paint_colour(false, super::Material::default().base_color);
+        self.set_paint_colour(true, default_secondary_colour());
+    }
     /// A ready-to-place image stamp, independent of the Standard preset's identity.
     pub fn alpha_drag() -> Self {
         Self {
@@ -329,7 +363,7 @@ impl Brush {
                 _ => 0.25,
             },
             material: if kind == Kind::Paint {
-                super::Material::examples()[1].1.with_link(2)
+                super::Material::default().with_link(super::Material::DEFAULT_PRESET_ID)
             } else {
                 super::Material::default()
             },
@@ -349,6 +383,8 @@ impl Brush {
             pressure_curve: 1.,
             paint_effect: Default::default(),
             texture_colour: None,
+            secondary_colour: default_secondary_colour(),
+            secondary_texture_colour: None,
         }
     }
     /// Reset behavior for this operation without replacing the user's preset identity.
@@ -416,48 +452,31 @@ impl Brush {
         (dab.delta + dab.normal * (dab.delta.len() * 0.12)) * (gain * sign)
     }
     pub fn weight(&self, x: f32, y: f32) -> f32 {
-        let (s, c) = self.rotation.to_radians().sin_cos();
-        let (x, y) = (x * c - y * s, x * s + y * c);
-        let r = (x * x + y * y).sqrt();
-        if r >= 1. {
-            return 0.;
+        self.prepare_weight().weight(x, y)
+    }
+    pub(super) fn prepare_weight(&self) -> PreparedWeight<'_> {
+        PreparedWeight {
+            brush: self,
+            rotation: self.rotation.to_radians().sin_cos(),
+            fade_width: (1. - self.inner_radius).max(0.0001),
         }
-        let fade = ((1. - r) / (1. - self.inner_radius).max(0.0001))
-            .clamp(0., 1.)
-            .powf(self.falloff);
-        match &self.alpha {
-            Alpha::Soft => fade,
-            Alpha::Hard => 1.,
-            Alpha::Square => {
-                if x.abs().max(y.abs()) < 0.7 {
-                    1.
-                } else {
-                    0.
-                }
-            }
-            Alpha::Image {
-                width,
-                height,
-                pixels,
-            } => {
-                let px = (x + 1.) * 0.5 * (*width - 1) as f32;
-                let py = (1. - y) * 0.5 * (*height - 1) as f32;
-                let ix = px.floor() as usize;
-                let iy = py.floor() as usize;
-                let nx = (ix + 1).min(*width - 1);
-                let ny = (iy + 1).min(*height - 1);
-                let tx = px - ix as f32;
-                let ty = py - iy as f32;
-                let top = pixels[iy * width + ix] * (1. - tx) + pixels[iy * width + nx] * tx;
-                let bottom = pixels[ny * width + ix] * (1. - tx) + pixels[ny * width + nx] * tx;
-                (top * (1. - ty) + bottom * ty) * fade
-            }
+    }
+    pub(super) fn dab_pressure(&self, dab: &super::Dab) -> f32 {
+        if self.pressure {
+            dab.pressure.powf(self.pressure_curve)
+        } else {
+            1.
         }
     }
 }
 pub fn validate_brush(b: &Brush) -> Result<(), String> {
     if b.texture_colour
         .is_some_and(|c| c.iter().any(|v| !v.is_finite()))
+        || b.secondary_texture_colour
+            .is_some_and(|c| c.iter().any(|v| !v.is_finite()))
+        || b.secondary_colour
+            .iter()
+            .any(|v| !v.is_finite() || !(0. ..=1.).contains(v))
         || !b.paint_effect.valid()
         || b.name.len() > 256
         || !b.radius.is_finite()
@@ -498,6 +517,56 @@ pub fn validate_brush(b: &Brush) -> Result<(), String> {
     b.material.validate()?;
     b.alpha.validate()?;
     Ok(())
+}
+
+/// Borrowed for one operation, so edits cannot leave cached brush values stale.
+pub(super) struct PreparedWeight<'a> {
+    pub(super) brush: &'a Brush,
+    rotation: (f32, f32),
+    fade_width: f32,
+}
+impl PreparedWeight<'_> {
+    pub fn weight(&self, x: f32, y: f32) -> f32 {
+        let (s, c) = self.rotation;
+        let (x, y) = (x * c - y * s, x * s + y * c);
+        let r = (x * x + y * y).sqrt();
+        if r >= 1. {
+            return 0.;
+        }
+        let fade = || {
+            ((1. - r) / self.fade_width)
+                .clamp(0., 1.)
+                .powf(self.brush.falloff)
+        };
+        match &self.brush.alpha {
+            Alpha::Soft => fade(),
+            Alpha::Hard => 1.,
+            Alpha::Square => {
+                if x.abs().max(y.abs()) < 0.7 {
+                    1.
+                } else {
+                    0.
+                }
+            }
+            Alpha::Image {
+                width,
+                height,
+                pixels,
+            } => {
+                let px = (x + 1.) * 0.5 * (*width - 1) as f32;
+                let py = (1. - y) * 0.5 * (*height - 1) as f32;
+                let ix = px.floor() as usize;
+                let iy = py.floor() as usize;
+                let nx = (ix + 1).min(*width - 1);
+                let ny = (iy + 1).min(*height - 1);
+                let tx = px - ix as f32;
+                let ty = py - iy as f32;
+                let top = pixels[iy * width + ix] * (1. - tx) + pixels[iy * width + nx] * tx;
+                let bottom = pixels[ny * width + ix] * (1. - tx) + pixels[ny * width + nx] * tx;
+                (top * (1. - ty) + bottom * ty) * fade()
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -589,3 +658,6 @@ mod stroke_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod weight_tests;

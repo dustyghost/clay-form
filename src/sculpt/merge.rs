@@ -1,14 +1,14 @@
 //! Combine surfaces without welding vertices or changing their positions.
 use super::{
     Mesh, VertexGroup,
-    subdivision::{MAX_TRIANGLES, MAX_VERTICES},
+    subdivision::{max_triangles, max_vertices},
 };
 impl Mesh {
     pub fn merged_with(&self, other: &Mesh) -> Result<Self, String> {
         self.validate()?;
         other.validate()?;
-        if self.vertices.len() + other.vertices.len() > MAX_VERTICES
-            || self.triangles.len() + other.triangles.len() > MAX_TRIANGLES
+        if self.vertices.len() + other.vertices.len() > max_vertices()
+            || self.triangles.len() + other.triangles.len() > max_triangles()
         {
             return Err("Merged mesh would exceed the mesh size limit".into());
         }
@@ -140,7 +140,7 @@ mod tests {
         let mut large = surface();
         large
             .vertices
-            .resize(MAX_VERTICES / 2 + 1, super::super::Vec3::default());
+            .resize(max_vertices() / 2 + 1, super::super::Vec3::default());
         large.mask.resize(large.vertices.len(), 0.);
         assert!(
             large

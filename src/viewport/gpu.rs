@@ -34,6 +34,8 @@ impl InspectionMode {
 }
 
 pub(super) struct Renderer {
+    scene_cache: super::scene::cache::Cache,
+    preview_scene_cache: super::scene::cache::Cache,
     revision: Option<u64>,
     geometry_revision: Option<u64>,
     live_display: bool,
@@ -46,6 +48,8 @@ impl Renderer {
     pub fn new(state: &egui_wgpu::RenderState) -> Result<Self, String> {
         Ok(Self {
             preview: Arc::new(Mutex::new(Preview::default())),
+            scene_cache: Default::default(),
+            preview_scene_cache: Default::default(),
             revision: None,
             geometry_revision: None,
             live_display: false,
@@ -57,6 +61,23 @@ impl Renderer {
                 state.target_format,
             ))),
         })
+    }
+    pub(super) fn prepare_scene(
+        &mut self,
+        rect: egui::Rect,
+        camera: &crate::camera::Camera,
+        geometry: Arc<DisplayMesh>,
+        preview: bool,
+    ) -> Scene {
+        let cache = if preview {
+            &mut self.preview_scene_cache
+        } else {
+            &mut self.scene_cache
+        };
+        cache.get(rect, camera, geometry, false)
+    }
+    pub(super) fn clear_scene_preview(&mut self) {
+        self.preview_scene_cache.clear();
     }
     pub fn geometry(&mut self, document: &Document) -> Arc<DisplayMesh> {
         if self.revision != Some(document.display_revision())
@@ -87,14 +108,17 @@ impl Renderer {
                     self.render_geometry = Some(Arc::new(DisplayMesh::preview(document)));
                 }
             } else {
+                let finished = (self.live_display && !document.stroke_active())
+                    .then(|| self.geometry.as_ref()?.after_stroke(document))
+                    .flatten();
                 let preview = self
                     .geometry
                     .as_ref()
                     .and_then(|display| display.during_stroke(document));
                 self.live_display = preview.is_some();
-                self.geometry = Some(Arc::new(
-                    preview.unwrap_or_else(|| DisplayMesh::new(document)),
-                ));
+                self.geometry = Some(finished.unwrap_or_else(|| {
+                    Arc::new(preview.unwrap_or_else(|| DisplayMesh::new(document)))
+                }));
                 self.render_geometry = Some(
                     if (0..document.model_count())
                         .any(|i| document.model(i).unwrap().metadata.temporary_thickness > 0.)
@@ -324,6 +348,11 @@ struct Gpu {
     surface: wgpu::RenderPipeline,
     offset_surface: wgpu::RenderPipeline,
     backs: wgpu::RenderPipeline,
+    basic_surface: wgpu::RenderPipeline,
+    basic_offset_surface: wgpu::RenderPipeline,
+    basic_backs: wgpu::RenderPipeline,
+    #[cfg(test)]
+    force_general_surface: bool,
     lines: wgpu::RenderPipeline,
     xray_lines: wgpu::RenderPipeline,
     composite: wgpu::RenderPipeline,
@@ -334,6 +363,19 @@ struct Gpu {
     back_uniform: wgpu::Buffer,
     meshes: Vec<MeshBuffers>,
     vertex_stride: usize,
+    mesh_geometry: Option<Arc<display::DisplayGeometry>>,
+    mesh_binding_limit: usize,
+    single_mesh_upload: bool,
+    packed_vertices: Vec<f32>,
+    #[cfg(test)]
+    vertex_write_bytes: usize,
+    #[cfg(test)]
+    vertex_pack_count: usize,
+    #[cfg(test)]
+    upload_trace: upload::Trace,
+    /// Test accounting for index, face-colour and UV payloads, respectively.
+    #[cfg(test)]
+    face_write_bytes: [usize; 3],
     texture_pixels: wgpu::Texture,
     texture_info: wgpu::Buffer,
     edges: Option<Vec<(wgpu::Buffer, u32)>>,
@@ -425,7 +467,7 @@ impl Gpu {
             label: Some("viewport WGSL"),
             source: wgpu::ShaderSource::Wgsl(include_str!("gpu/viewport.wgsl").into()),
         });
-        let make_pipeline = |line: bool, xray: bool, back: bool, offset: bool| {
+        let make_pipeline = |line: bool, xray: bool, back: bool, offset: bool, basic: bool| {
             let attributes = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x3, 3 => Float32x3];
             let buffers = [wgpu::VertexBufferLayout {
                 array_stride: 48,
@@ -439,6 +481,8 @@ impl Gpu {
                     module: &shader,
                     entry_point: Some(if line {
                         "line_vertex"
+                    } else if basic {
+                        "basic_surface_vertex"
                     } else {
                         "surface_vertex"
                     }),
@@ -506,11 +550,14 @@ impl Gpu {
                 cache: None,
             })
         };
-        let surface = make_pipeline(false, false, false, false);
-        let offset_surface = make_pipeline(false, false, false, true);
-        let backs = make_pipeline(false, false, true, false);
-        let lines = make_pipeline(true, false, false, false);
-        let xray_lines = make_pipeline(true, true, false, false);
+        let surface = make_pipeline(false, false, false, false, false);
+        let offset_surface = make_pipeline(false, false, false, true, false);
+        let backs = make_pipeline(false, false, true, false, false);
+        let basic_surface = make_pipeline(false, false, false, false, true);
+        let basic_offset_surface = make_pipeline(false, false, false, true, true);
+        let basic_backs = make_pipeline(false, false, true, false, true);
+        let lines = make_pipeline(true, false, false, false, false);
+        let xray_lines = make_pipeline(true, true, false, false, false);
         let composite_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("viewport composite"),
             entries: &[
@@ -597,6 +644,11 @@ impl Gpu {
             surface,
             offset_surface,
             backs,
+            basic_surface,
+            basic_offset_surface,
+            basic_backs,
+            #[cfg(test)]
+            force_general_surface: false,
             lines,
             xray_lines,
             composite,
@@ -613,6 +665,18 @@ impl Gpu {
                 wgpu::BufferUsages::STORAGE,
             ),
             vertex_stride: 12,
+            mesh_geometry: None,
+            mesh_binding_limit: 0,
+            single_mesh_upload: false,
+            packed_vertices: Vec::new(),
+            #[cfg(test)]
+            vertex_write_bytes: 0,
+            #[cfg(test)]
+            vertex_pack_count: 0,
+            #[cfg(test)]
+            upload_trace: upload::Trace::default(),
+            #[cfg(test)]
+            face_write_bytes: [0; 3],
             edges: None,
             triangle_edges: None,
             uploaded: None,
@@ -625,6 +689,10 @@ impl Gpu {
     fn clear(&mut self) {
         self.target = None;
         self.uploaded = None;
+        self.mesh_geometry = None;
+        self.mesh_binding_limit = 0;
+        self.single_mesh_upload = false;
+        self.packed_vertices = Vec::new();
         self.edges = None;
         self.triangle_edges = None;
         self.meshes = vec![Self::mesh_buffers(&self.device, &[], &[], &[], &[])];
@@ -641,25 +709,27 @@ impl Gpu {
                 device,
                 "face UVs",
                 bytemuck::cast_slice(uv),
-                wgpu::BufferUsages::STORAGE,
+                wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             ),
             vertices: buffer(
                 device,
                 "mesh vertices",
                 bytemuck::cast_slice(vertices),
-                wgpu::BufferUsages::STORAGE,
+                wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             ),
             indices: buffer(
                 device,
                 "mesh indices",
                 bytemuck::cast_slice(indices),
-                wgpu::BufferUsages::STORAGE,
+                wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_DST
+                    | wgpu::BufferUsages::INDEX,
             ),
             colors: buffer(
                 device,
                 "face colors",
                 bytemuck::cast_slice(colors),
-                wgpu::BufferUsages::STORAGE,
+                wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             ),
             count: indices.len() as u32,
         }
@@ -687,10 +757,22 @@ impl Gpu {
         })
     }
     fn upload(&mut self, data: &Arc<DisplayMesh>) {
+        #[cfg(test)]
+        {
+            self.vertex_write_bytes = 0;
+            self.vertex_pack_count = 0;
+            self.face_write_bytes = [0; 3];
+        }
         if self
             .uploaded
             .as_ref()
             .is_some_and(|old| Arc::ptr_eq(old, data))
+            && self.mesh_binding_limit
+                == self.device.limits().max_storage_buffer_binding_size as usize
+            && self
+                .mesh_geometry
+                .as_ref()
+                .is_some_and(|old| Arc::ptr_eq(old, &data.geometry))
         {
             return;
         }
@@ -707,10 +789,18 @@ impl Gpu {
             self.triangle_edges = None;
         }
         self.uploaded = Some(data.clone());
+        #[cfg(test)]
+        self.upload_trace.mark("display_replace");
     }
     // A document may contain several maximum-density models. Chunk the display
     // data at the device binding limit instead of imposing a new geometry limit.
     fn upload_meshes(&mut self, data: &DisplayMesh, limit: usize) {
+        #[cfg(test)]
+        {
+            self.vertex_write_bytes = 0;
+            self.vertex_pack_count = 0;
+            self.face_write_bytes = [0; 3];
+        }
         if let Some(old) = &self.uploaded
             && old.texture_pixels.len() == data.texture_pixels.len()
         {
@@ -741,39 +831,181 @@ impl Gpu {
                 wgpu::BufferUsages::STORAGE,
             );
         }
-        if limit == self.device.limits().max_storage_buffer_binding_size as usize
+        if limit == self.mesh_binding_limit
             && self
-                .uploaded
+                .mesh_geometry
                 .as_ref()
-                .is_some_and(|old| old.shares_geometry(data))
+                .is_some_and(|old| Arc::ptr_eq(old, &data.geometry))
         {
             return;
         }
-        self.vertex_stride = data.vertex_stride();
-        let stride = self.vertex_stride;
-        let vertices = data.vertices(stride);
+        #[cfg(test)]
+        self.upload_trace.mark("texture_and_geometry_checks");
+        let stride = data.vertex_stride();
+        #[cfg(test)]
+        self.upload_trace.mark("stride");
+        let vertex_len = data.shading.vertices.len() * stride;
+        let single = vertex_len * 4 <= limit && data.shading.triangles.len() * 48 <= limit;
+        let (vertices, dirty_ranges) = if single
+            && self.single_mesh_upload
+            && self.mesh_binding_limit == limit
+            && self.vertex_stride == stride
+            && self.packed_vertices.len() == vertex_len
+        {
+            let mut vertices = std::mem::take(&mut self.packed_vertices);
+            let update = data.update_vertices(stride, &mut vertices);
+            #[cfg(test)]
+            {
+                self.vertex_pack_count = update.changed_vertices;
+            }
+            (vertices, Some(update.ranges))
+        } else {
+            #[cfg(test)]
+            {
+                self.vertex_pack_count = data.shading.vertices.len();
+            }
+            (data.vertices(stride), None)
+        };
+        #[cfg(test)]
+        self.upload_trace.mark("vertex_pack");
+        if single {
+            if self.single_mesh_upload && self.mesh_binding_limit == limit {
+                let old = self.mesh_geometry.as_ref().unwrap();
+                let mesh = &mut self.meshes[0];
+                let bytes = bytemuck::cast_slice(&vertices);
+                if let Some(ranges) = dirty_ranges {
+                    for range in ranges {
+                        self.queue.write_buffer(
+                            &mesh.vertices,
+                            range.start as u64,
+                            &bytes[range.clone()],
+                        );
+                        #[cfg(test)]
+                        {
+                            self.vertex_write_bytes += range.len();
+                        }
+                    }
+                } else {
+                    // Fan splitting/merging and material-stride changes affect
+                    // vertex storage without invalidating the other buffers.
+                    mesh.vertices = buffer(
+                        &self.device,
+                        "mesh vertices",
+                        bytes,
+                        wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    );
+                    #[cfg(test)]
+                    {
+                        self.vertex_write_bytes = bytes.len();
+                    }
+                }
+                #[cfg(test)]
+                self.upload_trace.mark("vertex_storage");
+                if old.shading.triangles != data.shading.triangles {
+                    let indices: Vec<u32> = data
+                        .shading
+                        .triangles
+                        .iter()
+                        .flatten()
+                        .map(|&i| i as u32)
+                        .collect();
+                    upload::write_buffer(
+                        &self.device,
+                        &self.queue,
+                        &mut mesh.indices,
+                        "mesh indices",
+                        bytemuck::cast_slice(&indices),
+                    );
+                    #[cfg(test)]
+                    {
+                        self.face_write_bytes[0] = indices.len() * 4;
+                    }
+                }
+                #[cfg(test)]
+                self.upload_trace.mark("index_compare_pack_write");
+                if !upload::face_data_unchanged(&old.poly_colors, &data.poly_colors) {
+                    let colors: Vec<[f32; 4]> = data
+                        .poly_colors
+                        .iter()
+                        .map(|c| c.map(|n| n as f32 / 255.))
+                        .collect();
+                    upload::write_buffer(
+                        &self.device,
+                        &self.queue,
+                        &mut mesh.colors,
+                        "face colors",
+                        bytemuck::cast_slice(&colors),
+                    );
+                    #[cfg(test)]
+                    {
+                        self.face_write_bytes[1] = colors.len() * 16;
+                    }
+                }
+                if !upload::face_data_unchanged(&old.uv_corners, &data.uv_corners) {
+                    upload::write_buffer(
+                        &self.device,
+                        &self.queue,
+                        &mut mesh.uv,
+                        "face UVs",
+                        bytemuck::cast_slice(&data.uv_corners),
+                    );
+                    #[cfg(test)]
+                    {
+                        self.face_write_bytes[2] = data.uv_corners.len() * 48;
+                    }
+                }
+                #[cfg(test)]
+                self.upload_trace.mark("face_compare_write");
+                mesh.count = (data.shading.triangles.len() * 3) as u32;
+            } else {
+                let indices: Vec<u32> = data
+                    .shading
+                    .triangles
+                    .iter()
+                    .flatten()
+                    .map(|&i| i as u32)
+                    .collect();
+                let colors: Vec<[f32; 4]> = data
+                    .poly_colors
+                    .iter()
+                    .map(|c| c.map(|n| n as f32 / 255.))
+                    .collect();
+                self.meshes = vec![Self::mesh_buffers(
+                    &self.device,
+                    &vertices,
+                    &indices,
+                    &colors,
+                    &data.uv_corners,
+                )];
+                #[cfg(test)]
+                {
+                    self.vertex_write_bytes = vertices.len() * 4;
+                    self.face_write_bytes = [
+                        indices.len() * 4,
+                        colors.len() * 16,
+                        data.uv_corners.len() * 48,
+                    ];
+                }
+            }
+            self.vertex_stride = stride;
+            self.mesh_binding_limit = limit;
+            self.single_mesh_upload = true;
+            self.mesh_geometry = Some(data.geometry.clone());
+            self.packed_vertices = vertices;
+            #[cfg(test)]
+            self.upload_trace.mark("cache_replace");
+            return;
+        }
+        self.vertex_stride = stride;
+        self.mesh_binding_limit = limit;
+        self.single_mesh_upload = false;
+        self.mesh_geometry = Some(data.geometry.clone());
+        self.packed_vertices = Vec::new();
         let colors: Vec<[f32; 4]> = data
             .poly_colors
             .iter()
             .map(|c| c.map(|n| n as f32 / 255.))
             .collect();
-        if vertices.len() * 4 <= limit && data.shading.triangles.len() * 48 <= limit {
-            let indices: Vec<u32> = data
-                .shading
-                .triangles
-                .iter()
-                .flatten()
-                .map(|&i| i as u32)
-                .collect();
-            self.meshes = vec![Self::mesh_buffers(
-                &self.device,
-                &vertices,
-                &indices,
-                &colors,
-                &data.uv_corners,
-            )];
-            return;
-        }
         self.meshes.clear();
         let per_batch = (limit / (3 * stride * 4)).max(1);
         for (batch, triangles) in data.shading.triangles.chunks(per_batch).enumerate() {
@@ -789,6 +1021,13 @@ impl Gpu {
                 indices.push(index);
             }
             let start = batch * per_batch;
+            #[cfg(test)]
+            {
+                self.vertex_write_bytes += packed.len() * 4;
+                self.face_write_bytes[0] += indices.len() * 4;
+                self.face_write_bytes[1] += triangles.len() * 16;
+                self.face_write_bytes[2] += triangles.len() * 48;
+            }
             self.meshes.push(Self::mesh_buffers(
                 &self.device,
                 &packed,
@@ -1096,6 +1335,21 @@ impl Gpu {
             size,
         });
     }
+    fn basic_surface_eligible(&self, preview: &Preview) -> bool {
+        #[cfg(test)]
+        if self.force_general_surface {
+            return false;
+        }
+        // UVs, face groups and extended channels require the per-corner path.
+        self.vertex_stride == 12
+            && !preview.show_polygroups
+            && !preview.uv_checker
+            && preview.inspection != InspectionMode::UvChecker
+            && self
+                .uploaded
+                .as_ref()
+                .is_some_and(|display| display.texture_info.len() == 1)
+    }
     #[allow(clippy::too_many_arguments)]
     fn encode(
         &mut self,
@@ -1115,23 +1369,28 @@ impl Gpu {
             self.upload_edges();
         }
         let u = self.uniforms(p, preview, mode);
+        let basic = self.basic_surface_eligible(preview);
         self.queue
             .write_buffer(&self.uniform, 0, bytemuck::bytes_of(&u));
-        let mut back_u = u;
-        back_u.flags[2] = 1.;
-        back_u.flags[3] = preview.backface_opacity;
-        self.queue
-            .write_buffer(&self.back_uniform, 0, bytemuck::bytes_of(&back_u));
         let bindings: Vec<_> = self
             .meshes
             .iter()
             .map(|m| self.bindings(&self.uniform, m))
             .collect();
-        let back_bindings: Vec<_> = self
-            .meshes
-            .iter()
-            .map(|m| self.bindings(&self.back_uniform, m))
-            .collect();
+        let back_bindings: Vec<_> =
+            if preview.backface_opacity > 0. && (!wire || mode != WireMode::Transparent) {
+                let mut back_u = u;
+                back_u.flags[2] = 1.;
+                back_u.flags[3] = preview.backface_opacity;
+                self.queue
+                    .write_buffer(&self.back_uniform, 0, bytemuck::bytes_of(&back_u));
+                self.meshes
+                    .iter()
+                    .map(|m| self.bindings(&self.back_uniform, m))
+                    .collect()
+            } else {
+                Vec::new()
+            };
         let target = self.target.as_ref().unwrap();
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("clay viewport"),
@@ -1161,20 +1420,35 @@ impl Gpu {
         });
         pass.set_bind_group(0, &bindings[0], &[]);
         if !wire || mode != WireMode::Transparent {
-            pass.set_pipeline(if wire && mode == WireMode::Visible {
-                &self.offset_surface
-            } else {
-                &self.surface
+            pass.set_pipeline(match (basic, wire && mode == WireMode::Visible) {
+                (true, true) => &self.basic_offset_surface,
+                (true, false) => &self.basic_surface,
+                (false, true) => &self.offset_surface,
+                (false, false) => &self.surface,
             });
             for (mesh, bind) in self.meshes.iter().zip(&bindings) {
                 pass.set_bind_group(0, bind, &[]);
-                pass.draw(0..mesh.count, 0..1);
+                if basic {
+                    pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..mesh.count, 0, 0..1);
+                } else {
+                    pass.draw(0..mesh.count, 0..1);
+                }
             }
             if preview.backface_opacity > 0. {
-                pass.set_pipeline(&self.backs);
+                pass.set_pipeline(if basic {
+                    &self.basic_backs
+                } else {
+                    &self.backs
+                });
                 for (mesh, bind) in self.meshes.iter().zip(&back_bindings) {
                     pass.set_bind_group(0, bind, &[]);
-                    pass.draw(0..mesh.count, 0..1);
+                    if basic {
+                        pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+                        pass.draw_indexed(0..mesh.count, 0, 0..1);
+                    } else {
+                        pass.draw(0..mesh.count, 0..1);
+                    }
                 }
                 pass.set_bind_group(0, &bindings[0], &[]);
             }
@@ -1215,9 +1489,14 @@ impl Gpu {
 
 mod display;
 #[cfg(all(test, target_os = "linux"))]
+mod indexed_test;
+#[cfg(all(test, target_os = "linux"))]
 mod profile;
 #[cfg(test)]
+mod scene_cache_tests;
+#[cfg(test)]
 mod tests;
+mod upload;
 pub(super) use display::DisplayMesh;
 #[cfg(all(test, target_os = "linux"))]
 mod backfaces_test;

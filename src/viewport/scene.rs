@@ -2,17 +2,33 @@
 use super::gpu::{DisplayMesh, Renderer};
 use crate::{camera::Camera, document::Document, sculpt::Vec3};
 use eframe::egui::{self, Color32, Pos2};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock};
+pub(in crate::viewport) mod cache;
+mod footprint;
+mod picking;
+#[cfg(test)]
+pub(in crate::viewport) mod profile;
+type PickMemo = Option<(Pos2, Option<(Vec3, Vec3, usize)>)>;
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct FaceGeometry {
+    normal: Vec3,
+    origin: Vec3,
+}
+
+#[derive(Clone)]
 pub(super) struct Scene {
     pub scale: f32,
     pub(super) eye_distance: f32,
     pub(super) rect: egui::Rect,
     pub(super) active_bounds: egui::Rect,
-    positions: Vec<Pos2>,
+    positions: Arc<Vec<Pos2>>,
     pub(super) geometry: Arc<DisplayMesh>,
-    pub(super) faces: Vec<(usize, f32)>,
+    // None borrows all_faces when every displayed vertex belongs to the active model.
+    active_faces: Option<Arc<Vec<(usize, f32)>>>,
     pub(super) view: Vec3,
-    all_faces: Vec<(usize, f32)>,
+    all_faces: Arc<Vec<(usize, f32)>>,
+    picking: Arc<OnceLock<picking::Index>>,
+    last_pick: Arc<Mutex<PickMemo>>,
     active: usize,
     pub(super) center: Pos2,
     pub(super) right: Vec3,
@@ -52,11 +68,12 @@ impl Scene {
         mut renderer: Option<&mut Renderer>,
     ) -> Self {
         let geometry = if let Some(renderer) = renderer.as_mut() {
+            renderer.clear_scene_preview();
             renderer.geometry(document)
         } else {
             Arc::new(DisplayMesh::new(document))
         };
-        let scene = Self::from_geometry(rect, camera, geometry, renderer.is_none());
+        let scene = Self::prepared(rect, camera, geometry, renderer.as_deref_mut(), false);
         scene.paint_geometry(
             painter,
             renderer.as_deref(),
@@ -86,9 +103,10 @@ impl Scene {
             } else {
                 Arc::new(DisplayMesh::new(document))
             };
-            let scene = Self::from_geometry(rect, camera, geometry, renderer.is_none());
+            let scene = Self::prepared(rect, camera, geometry, renderer.as_deref_mut(), false);
             let display = Arc::new(DisplayMesh::with_active_mesh(document, mesh));
-            let preview = Self::from_geometry(rect, camera, display.clone(), renderer.is_none());
+            let preview =
+                Self::prepared(rect, camera, display.clone(), renderer.as_deref_mut(), true);
             preview.paint_geometry(
                 painter,
                 renderer.as_deref(),
@@ -117,11 +135,11 @@ impl Scene {
             Arc::new(DisplayMesh::new(document))
         };
         // Pick against the original surface so moving/resizing never builds up a stamp.
-        let scene = Self::from_geometry(rect, camera, geometry, renderer.is_none());
+        let scene = Self::prepared(rect, camera, geometry, renderer.as_deref_mut(), false);
         let display = stroke
             .preview
             .display(stroke, document, &scene, painter.ctx());
-        let preview = Self::from_geometry(rect, camera, display.clone(), renderer.is_none());
+        let preview = Self::prepared(rect, camera, display.clone(), renderer.as_deref_mut(), true);
         preview.paint_geometry(
             painter,
             renderer.as_deref(),
@@ -132,13 +150,48 @@ impl Scene {
         );
         scene
     }
+    fn prepared(
+        rect: egui::Rect,
+        camera: &Camera,
+        geometry: Arc<DisplayMesh>,
+        renderer: Option<&mut Renderer>,
+        preview: bool,
+    ) -> Self {
+        if let Some(renderer) = renderer {
+            renderer.prepare_scene(rect, camera, geometry, preview)
+        } else {
+            Self::from_geometry(rect, camera, geometry, true)
+        }
+    }
+    #[cfg(test)]
+    pub(super) fn shares_preparation(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.positions, &other.positions)
+            && Arc::ptr_eq(&self.all_faces, &other.all_faces)
+            && Arc::ptr_eq(&self.picking, &other.picking)
+    }
     pub(super) fn from_geometry(
         rect: egui::Rect,
         camera: &Camera,
         geometry: Arc<DisplayMesh>,
         sort_faces: bool,
     ) -> Self {
+        Self::from_geometry_with_faces(rect, camera, geometry, sort_faces, None)
+    }
+    fn from_geometry_with_faces(
+        rect: egui::Rect,
+        camera: &Camera,
+        geometry: Arc<DisplayMesh>,
+        sort_faces: bool,
+        mut cached_faces: Option<&mut Vec<FaceGeometry>>,
+    ) -> Self {
         let mesh = &geometry.mesh;
+        let reuse_faces = cached_faces
+            .as_ref()
+            .is_some_and(|n| n.len() == mesh.triangles.len());
+        if !reuse_faces && let Some(faces) = cached_faces.as_mut() {
+            faces.clear();
+            faces.reserve(mesh.triangles.len());
+        }
         let active = geometry.active;
         let active_vertices = geometry.active_vertices;
         let owners = &geometry.owners;
@@ -158,55 +211,96 @@ impl Scene {
             )
         };
         let positions: Vec<_> = mesh.vertices.iter().copied().map(project).collect();
-        let mut faces: Vec<_> = mesh
-            .triangles
-            .iter()
-            .enumerate()
-            .filter(|(_, t)| {
-                let a = mesh.vertices[t[0]];
-                let b = mesh.vertices[t[1]];
-                let c = mesh.vertices[t[2]];
-                (b - a).cross(c - a).dot(if eye_distance == 0. {
+        #[cfg(test)]
+        profile::mark("project_vertices");
+        // Facing can retain at most one entry per displayed triangle. Reserve
+        // once so allocator history cannot trigger repeated large-list copies.
+        let mut faces = Vec::with_capacity(mesh.triangles.len());
+        if reuse_faces {
+            // Iterate contiguous face data without triangle or vertex lookups.
+            for (i, face) in cached_faces.as_ref().unwrap().iter().enumerate() {
+                let direction = if eye_distance == 0. {
+                    view
+                } else {
+                    view * eye_distance - face.origin
+                };
+                if face.normal.dot(direction) > 0. {
+                    faces.push((i, 0.));
+                }
+            }
+        } else {
+            for (i, t) in mesh.triangles.iter().enumerate() {
+                let [a, b, c] = t.map(|v| mesh.vertices[v]);
+                let face = FaceGeometry {
+                    normal: (b - a).cross(c - a),
+                    origin: a,
+                };
+                if let Some(cached) = cached_faces.as_mut() {
+                    cached.push(face);
+                }
+                let direction = if eye_distance == 0. {
                     view
                 } else {
                     view * eye_distance - a
-                }) > 0.
-            })
-            .map(|(i, t)| {
-                (
-                    i,
-                    (mesh.vertices[t[0]] + mesh.vertices[t[1]] + mesh.vertices[t[2]]).dot(view),
-                )
-            })
-            .collect();
+                };
+                if face.normal.dot(direction) > 0. {
+                    faces.push((i, 0.));
+                }
+            }
+        }
         if sort_faces {
+            for (i, depth) in &mut faces {
+                let [a, b, c] = mesh.triangles[*i].map(|v| mesh.vertices[v]);
+                *depth = (a + b + c).dot(view);
+            }
             faces.sort_by(|a, b| a.1.total_cmp(&b.1));
         }
+        #[cfg(test)]
+        profile::mark("facing_and_sort");
         let active_bounds = positions
             .iter()
             .take(active_vertices)
             .fold(egui::Rect::NOTHING, |bounds, &p| {
                 bounds.union(egui::Rect::from_min_max(p, p))
             });
+        #[cfg(test)]
+        profile::mark("active_bounds");
+        // Display construction appends inactive vertices after the active
+        // prefix. With no inactive vertices, both face views are identical.
+        let active_faces = (active_vertices != mesh.vertices.len()).then(|| {
+            Arc::new(
+                faces
+                    .iter()
+                    .copied()
+                    .filter(|(i, _)| owners[*i] == active)
+                    .collect(),
+            )
+        });
+        #[cfg(test)]
+        profile::mark("active_faces");
         Self {
             rect,
             active_bounds,
             scale,
             eye_distance,
-            positions,
+            positions: Arc::new(positions),
             geometry: geometry.clone(),
-            faces: faces
-                .iter()
-                .copied()
-                .filter(|(i, _)| owners[*i] == active)
-                .collect(),
-            all_faces: faces,
+            active_faces,
+            all_faces: Arc::new(faces),
+            picking: Arc::new(OnceLock::new()),
+            last_pick: Arc::new(Mutex::new(None)),
             active,
             view,
             center,
             right,
             up,
         }
+    }
+    pub(super) fn active_faces(&self) -> &[(usize, f32)] {
+        self.active_faces
+            .as_deref()
+            .map(Vec::as_slice)
+            .unwrap_or(&self.all_faces)
     }
     fn paint_geometry(
         &self,
@@ -227,17 +321,6 @@ impl Scene {
         let outlines = &geometry.outlines;
         let active_vertices = geometry.active_vertices;
         let positions = &self.positions;
-        let faces: Vec<_> = self
-            .all_faces
-            .iter()
-            .copied()
-            .filter(|(i, _)| {
-                mesh.triangles[*i]
-                    .iter()
-                    .all(|&v| self.visible_depth(mesh.vertices[v]))
-            })
-            .collect();
-        let faces = &faces;
         let project = |v| self.project(v);
         painter.rect_filled(
             rect,
@@ -245,9 +328,22 @@ impl Scene {
             crate::preferences::viewport_background(painter.ctx()),
         );
         if renderer.is_none() {
+            // GPU clipping happens in the render pipeline. Only the CPU
+            // painter needs a filtered copy of the visible face list.
+            let faces: Vec<_> = self
+                .all_faces
+                .iter()
+                .copied()
+                .filter(|(i, _)| {
+                    mesh.triangles[*i]
+                        .iter()
+                        .all(|&v| self.visible_depth(mesh.vertices[v]))
+                })
+                .collect();
+            let faces = &faces;
             let lighting = crate::lighting::Lighting::current(painter.ctx());
             let mut rendered = egui::Mesh::default();
-            for &(i, normal) in &geometry.shading.vertices {
+            for &(i, normal) in geometry.shading.vertices.iter() {
                 let v = mesh.vertices[i];
                 let mask = if i < active_vertices {
                     1. - mesh.mask[i] * 0.75
@@ -282,7 +378,7 @@ impl Scene {
             let edge_key = |a: usize, b: usize| if a < b { (a, b) } else { (b, a) };
             let mut hidden = std::collections::HashSet::new();
             if !show_triangles {
-                for &[a, b, c, d] in &mesh.quads {
+                for &[a, b, c, d] in mesh.quads.iter() {
                     hidden.insert(edge_key(a, c));
                     hidden.insert(edge_key(b, d));
                 }
@@ -428,7 +524,7 @@ impl Scene {
                 render_geometry,
             );
         }
-        for edge in outlines {
+        for edge in outlines.iter() {
             if let Some(line) = self.clip_segment(edge.map(|i| mesh.vertices[i])) {
                 painter.line_segment(
                     line,
@@ -457,6 +553,48 @@ impl Scene {
         color: Color32,
         footprint: bool,
     ) -> bool {
+        self.paint_brush_cursor(
+            painter,
+            pos,
+            radius,
+            brush,
+            color,
+            footprint,
+            footprint::Footprint::new,
+        )
+    }
+
+    #[cfg(test)]
+    pub(super) fn reference_brush_cursor(
+        &self,
+        painter: &egui::Painter,
+        pos: Pos2,
+        radius: f32,
+        brush: &crate::sculpt::Brush,
+        color: Color32,
+    ) -> bool {
+        self.paint_brush_cursor(
+            painter,
+            pos,
+            radius,
+            brush,
+            color,
+            true,
+            footprint::Footprint::reference,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn paint_brush_cursor(
+        &self,
+        painter: &egui::Painter,
+        pos: Pos2,
+        radius: f32,
+        brush: &crate::sculpt::Brush,
+        color: Color32,
+        footprint: bool,
+        make_samples: impl FnOnce(&Scene, Pos2, f32) -> footprint::Footprint,
+    ) -> bool {
         let Some((center, normal)) = self.pick(pos) else {
             return false;
         };
@@ -464,41 +602,23 @@ impl Scene {
         // Sample visible surface points, using the same camera-plane alpha and
         // depth/normal limits as sculpting. Missing samples break the overlay.
         if footprint {
-            const N: usize = 17;
-            let bounds = egui::Rect::from_center_size(pos, egui::Vec2::splat(radius * 2.));
-            let candidates: Vec<_> = self
-                .all_faces
-                .iter()
-                .copied()
-                .filter(|(fi, _)| {
-                    let [a, b, c] = self.geometry.mesh.triangles[*fi].map(|i| self.positions[i]);
-                    let face_bounds = egui::Rect::from_min_max(
-                        Pos2::new(a.x.min(b.x).min(c.x), a.y.min(b.y).min(c.y)),
-                        Pos2::new(a.x.max(b.x).max(c.x), a.y.max(b.y).max(c.y)),
-                    );
-                    bounds.intersects(face_bounds)
-                })
-                .collect();
+            const N: usize = footprint::SIDE;
+            let grid = make_samples(self, pos, radius);
             let mut samples = vec![None; N * N];
-            for y in 0..N {
-                for x in 0..N {
-                    let u = x as f32 / (N - 1) as f32 * 2. - 1.;
-                    let v = 1. - y as f32 / (N - 1) as f32 * 2.;
-                    let point = pos + egui::vec2(u, -v) * radius;
-                    if let Some((p, n, face)) = pick_surface(self, &candidates, point)
-                        && self.geometry.owners[face] == self.active
-                        && (p - center).len() <= world_radius * 1.5
-                        && n.dot(normal) >= 0.1
-                    {
-                        let offset = p - center;
-                        samples[y * N + x] = Some((
-                            point,
-                            brush.weight(
-                                offset.dot(self.right) / world_radius,
-                                offset.dot(self.up) / world_radius,
-                            ),
-                        ));
-                    }
+            for (index, &point) in grid.points.iter().enumerate() {
+                if let Some((p, n, face)) = grid.pick(self, index)
+                    && self.geometry.owners[face] == self.active
+                    && (p - center).len() <= world_radius * 1.5
+                    && n.dot(normal) >= 0.1
+                {
+                    let offset = p - center;
+                    samples[index] = Some((
+                        point,
+                        brush.weight(
+                            offset.dot(self.right) / world_radius,
+                            offset.dot(self.up) / world_radius,
+                        ),
+                    ));
                 }
             }
             let mut overlay = egui::Mesh::default();
@@ -562,8 +682,38 @@ impl Scene {
         painter.circle_filled(end, 3., color);
         true
     }
+    fn pick_surface(&self, point: Pos2) -> Option<(Vec3, Vec3, usize)> {
+        if !point.is_finite() {
+            return pick_surface(self, &self.all_faces, point);
+        }
+        let mut previous = self.last_pick.lock().unwrap();
+        if let Some((last, hit)) = *previous
+            && [last.x.to_bits(), last.y.to_bits()] == [point.x.to_bits(), point.y.to_bits()]
+        {
+            return hit;
+        }
+        // A one-off query should not pay for building the group lookup. Reuse
+        // identical queries; build bounds when a later point needs another scan.
+        let hit = if previous.is_none() && self.picking.get().is_none() {
+            pick_surface(self, &self.all_faces, point)
+        } else {
+            pick_faces(
+                self,
+                self.face_candidates(egui::Rect::from_min_max(point, point))
+                    .map(|f| f.0),
+                point,
+            )
+        };
+        *previous = Some((point, hit));
+        hit
+    }
+    fn face_candidates(&self, bounds: egui::Rect) -> impl Iterator<Item = (usize, f32)> + '_ {
+        self.picking
+            .get_or_init(|| picking::Index::new(self))
+            .candidates(self, bounds)
+    }
     pub fn pick_model(&self, point: Pos2) -> Option<(usize, Vec3, Vec3)> {
-        let (p, normal, face) = pick_surface(self, &self.all_faces, point)?;
+        let (p, normal, face) = self.pick_surface(point)?;
         Some((self.geometry.owners[face], p, normal))
     }
     /// Sample the underlying surface colour, independent of lighting and group overlays.
@@ -573,7 +723,7 @@ impl Scene {
     }
     /// Sample stored colour and scalar maps, before lights, exposure or overlays.
     pub(super) fn sample_material(&self, point: Pos2) -> Option<crate::sculpt::Material> {
-        let (p, _, face) = pick_surface(self, &self.all_faces, point)?;
+        let (p, _, face) = self.pick_surface(point)?;
         let mesh = &self.geometry.mesh;
         let ids = mesh.triangles[face];
         let [a, b, c] = ids.map(|i| mesh.vertices[i]);
@@ -610,11 +760,11 @@ impl Scene {
         Some(material)
     }
     pub(super) fn pick_face(&self, point: Pos2) -> Option<usize> {
-        let (_, _, face) = pick_surface(self, &self.all_faces, point)?;
+        let (_, _, face) = self.pick_surface(point)?;
         (self.geometry.owners[face] == self.active).then_some(self.geometry.source_faces[face])
     }
     pub fn pick_polygroup(&self, point: Pos2, document: &Document) -> Option<usize> {
-        let (_, _, face) = pick_surface(self, &self.all_faces, point)?;
+        let (_, _, face) = self.pick_surface(point)?;
         if self.geometry.owners[face] != self.active {
             return None;
         }
@@ -634,6 +784,13 @@ impl Scene {
     }
 }
 fn pick_surface(scene: &Scene, faces: &[(usize, f32)], point: Pos2) -> Option<(Vec3, Vec3, usize)> {
+    pick_faces(scene, faces.iter().map(|f| f.0), point)
+}
+fn pick_faces(
+    scene: &Scene,
+    faces: impl Iterator<Item = usize>,
+    point: Pos2,
+) -> Option<(Vec3, Vec3, usize)> {
     let geometry = &scene.geometry;
     let positions = &scene.positions;
     let view = scene.view;
@@ -642,7 +799,7 @@ fn pick_surface(scene: &Scene, faces: &[(usize, f32)], point: Pos2) -> Option<(V
     let triangles = &geometry.mesh.triangles;
     let mut hit = None;
     let mut depth = f32::NEG_INFINITY;
-    for &(fi, _) in faces {
+    for fi in faces {
         let t = triangles[fi];
         if scene.eye_distance > 0. {
             let [a, b, c] = t.map(|i| vertices[i]);
@@ -993,12 +1150,79 @@ mod tests {
         let view = scene(&document);
         assert_eq!(view.geometry.owners.len(), coarse_count * 5);
         assert_eq!(
-            view.faces.len(),
+            view.active_faces().len(),
             view.all_faces
                 .iter()
                 .filter(|(i, _)| view.geometry.owners[*i] == 0)
                 .count()
         );
         assert_eq!(document.geometry_snapshot(), original);
+    }
+    #[test]
+    fn active_face_view_preserves_order_across_visibility_and_model_changes() {
+        fn check(document: &Document, shared: bool) {
+            let display = Arc::new(DisplayMesh::new(document));
+            for perspective in [false, true] {
+                for sort in [false, true] {
+                    let scene = Scene::from_geometry(
+                        egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(800., 600.)),
+                        &Camera {
+                            yaw: 0.4,
+                            pitch: -0.2,
+                            perspective,
+                            ..Default::default()
+                        },
+                        display.clone(),
+                        sort,
+                    );
+                    let expected: Vec<_> = scene
+                        .all_faces
+                        .iter()
+                        .copied()
+                        .filter(|(i, _)| scene.geometry.owners[*i] == document.active_model_index())
+                        .collect();
+                    assert_eq!(scene.active_faces(), expected.as_slice());
+                    assert_eq!(scene.active_faces.is_none(), shared);
+                    if shared {
+                        assert!(std::ptr::eq(
+                            scene.active_faces(),
+                            scene.all_faces.as_slice()
+                        ));
+                    }
+                }
+            }
+        }
+        fn visible(document: &mut Document, index: usize, visible: bool) {
+            let model = document.model(index).unwrap();
+            let name = model.name.to_string();
+            let mut metadata = model.metadata.clone();
+            metadata.visible = visible;
+            document.set_model_metadata(index, name, metadata).unwrap();
+        }
+        let mut document = Document::default();
+        check(&document, true);
+        let mut geometry = document.geometry_snapshot();
+        geometry.mesh.hidden_faces = geometry
+            .mesh
+            .triangles
+            .iter()
+            .map(|t| t.iter().all(|&i| geometry.mesh.vertices[i].0 > 0.1))
+            .collect();
+        assert!(geometry.mesh.has_hidden_faces());
+        document.replace_geometry(geometry).unwrap();
+        check(&document, true);
+        let retained = scene(&document);
+        let retained_faces = retained.active_faces().to_vec();
+        document.duplicate_model(false).unwrap();
+        check(&document, false);
+        document.select_submodel(1).unwrap();
+        check(&document, false);
+        visible(&mut document, 0, false);
+        check(&document, true); // Active model need not be model zero.
+        visible(&mut document, 1, false);
+        check(&document, true); // Empty visible scene.
+        visible(&mut document, 0, true);
+        check(&document, false); // Hidden active model has no active faces.
+        assert_eq!(retained.active_faces(), retained_faces);
     }
 }

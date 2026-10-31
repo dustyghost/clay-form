@@ -7,6 +7,7 @@ Keep the controls you reach for visible and give the rest of the screen to your 
 - [Pin or dock a menu](#key-settings-and-workspace)
 - [Create a custom shelf](#create-a-custom-menu-or-shelf)
 - [Save a workspace](#save-and-switch-workspaces)
+- [Change mesh capacity](#change-mesh-capacity)
 - [Change shortcuts](#shortcuts)
 - [Find default keys](#default-shortcuts)
 
@@ -26,10 +27,11 @@ or docked in a sidebar. The **Panel** strip offers pin, dock left and dock right
 controls in each location. Hover an icon for its name. Existing saved workspace
 placements and shortcuts continue to apply.
 
-### Brush controls
+<a id="brush-controls"></a>
 
-The default **Brush controls** custom menu opens at the top of the left sidebar. It shows the
-active brush icon, draggable **Size** (radius in pixels), **Inner radius** (percent of
+### Tool controls
+
+The default **Tool controls** custom menu opens at the top of the left sidebar. It contains the selected material preview, editable **Primary** and **Secondary** colours, and **Swap colours** (**Z**), followed by the active brush icon, draggable **Size** (radius in pixels), **Inner radius** (percent of
 the outer radius), and **Strength** (percent),
 **Surface footprint and normal**, **Stroke mode**, and **Stroke stabilisation**
 with its trailing distance. You can move it to a top shelf, where it wraps to fit narrower windows.
@@ -39,14 +41,36 @@ left/right, or double-click it to type. Adjusting **Size** or **Inner radius** k
 the brush outline visible at its last viewport position (or the model centre if you
 have not hovered it yet), with both the outer and inner boundaries updating live.
 Adjustments keep the popup open; press
-**S** again, **Escape**, or click outside to dismiss it. Controls follow the active
-brush, and unsupported stroke options are disabled.
+**S** again, **Escape**, or click outside to dismiss it. Brush settings follow the active
+brush; material and colour controls use the Paint input preset selected in Materials or Colours. Unsupported stroke options are disabled.
 
 This is an ordinary custom menu: right-click its header or an item to edit it,
 or use **Settings → Customize workspace** to rename, reorder, remove, or move its
 controls. The menu remains visible with the compact toolbar. Existing preferences
-receive it once; later customisations are preserved. An existing custom **S**
+gain the appearance controls once. The stock Brush controls name becomes Tool controls; custom names, placements, collapsed state and the S shortcut are preserved. Later customisations are respected. An existing custom **S**
 binding is retained rather than overwritten.
+
+## Change mesh capacity
+
+Raise the mesh budget before importing or building a model that exceeds the default limits.
+
+1. Open **Settings → Mesh capacity**.
+2. Drag **Maximum vertices** and **Maximum triangles**, or click a number to type an exact value.
+3. Save your project, close Clay Form, and start it again. The settings save automatically.
+4. Reopen **Mesh capacity** and check the **Active** values before continuing.
+
+| Limit per mesh | Default | Largest allowed setting |
+| --- | ---: | ---: |
+| Vertices | 500,000 | 16,000,000 |
+| Triangles | 1,000,000 | 32,000,000 |
+
+Quads count as two triangles. Both limits apply independently, so raise both when increasing mesh density. **Reset mesh limits** restores the defaults for the next restart. Lowering a limit does not simplify a model; raise it again if an existing project exceeds the active budget.
+
+![Mesh capacity settings with higher saved limits and the current active limits](../images/mesh-capacity.png)
+
+The **Active** line shows this session's budget. The edited values in this example take effect after restarting.
+
+Higher limits allow more geometry; they do not reserve RAM or guarantee smooth editing at that size. File-size, texture, subdivision-level and operation work limits still apply. These are application preferences, independent of saved workspace layouts.
 
 ## Key settings and workspace
 
@@ -152,7 +176,8 @@ Shifted numbers use the physical number-row key, so `!` can bind as Shift+1. Oth
 | Transform quick menu | E |
 | Universal transform / return to sculpting | T |
 | Smaller / larger brush | [ / ] |
-| Brush controls popup | S |
+| Tool controls popup | S |
+| Swap Primary / Secondary colours | Z |
 | Previous / next brush | , / . |
 | Subdivide | Ctrl+D |
 | Lower / higher subdivision level | Shift+D / D |

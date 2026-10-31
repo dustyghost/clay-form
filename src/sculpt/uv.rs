@@ -236,14 +236,14 @@ impl UvMap {
                 .flatten()
                 .any(|v| !v.is_finite() || !(0. ..=1.).contains(v))
             || self.corners.len() != self.topology.len()
-            || self.corners.len() > super::MAX_TRIANGLES
+            || self.corners.len() > super::max_triangles()
             || self
                 .corners
                 .iter()
                 .flatten()
                 .flatten()
                 .any(|v| !v.is_finite() || v.abs() > 1e6)
-            || self.seams.len() > super::MAX_TRIANGLES * 3
+            || self.seams.len() > super::max_triangles() * 3
         {
             return Err("Invalid UV data".into());
         }

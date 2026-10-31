@@ -263,10 +263,11 @@ fn uv_island_controls_offscreen_review() {
     h.app.dispatch(Command::Undo, &h.ctx);
     h.frame(vec![]);
     assert_eq!(h.app.document.geometry_snapshot(), before_remove);
-    h.click("Texture images");
+    h.click("Texture library");
+    h.click("Project image library");
     assert_eq!(h.canvas(), big, "image controls stay in the sidebar too");
-    assert!(h.label("Create texture").x > big.right());
-    h.click("Create texture");
+    assert!(h.label("Create and assign image").x > big.right());
+    h.click("Create and assign image");
     h.app.finish_texture_exchange_for_test(&h.ctx);
     h.frame(vec![]);
     assert_eq!(h.app.document.mesh().uv.textures.len(), 1);

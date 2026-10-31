@@ -40,6 +40,7 @@ impl App {
             && !self.ui.arrange_references
             && self.mesh_job.is_none()
             && !self.ui.settings_open
+            && !self.ui.mesh_capacity_open
             && !self.ui.layout_open
             && self.ui.file_picker.is_none()
             && self.ui.pending.is_none()

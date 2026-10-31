@@ -22,7 +22,7 @@ pub(super) fn paint(
         } else {
             Color32::from_rgb(255, 215, 115)
         };
-        for &(face, _) in &scene.faces {
+        for &(face, _) in scene.active_faces() {
             let triangle = mesh.triangles[face].map(|i| mesh.vertices[i]);
             for segment in plane_segments(triangle, normal, symmetry.center) {
                 let Some([a, b]) = clip_guide(segment, guide.side, symmetry.center) else {

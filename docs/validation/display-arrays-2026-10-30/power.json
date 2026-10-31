@@ -1,0 +1,14 @@
+{
+  "/sys/devices/system/cpu/cpufreq/policy2/scaling_governor": "powersave",
+  "/sys/devices/system/cpu/cpufreq/policy0/scaling_governor": "powersave",
+  "/sys/devices/system/cpu/cpufreq/policy3/scaling_governor": "powersave",
+  "/sys/devices/system/cpu/cpufreq/policy1/scaling_governor": "powersave",
+  "/sys/devices/system/cpu/cpufreq/policy2/energy_performance_preference": "balance_performance",
+  "/sys/devices/system/cpu/cpufreq/policy0/energy_performance_preference": "balance_performance",
+  "/sys/devices/system/cpu/cpufreq/policy3/energy_performance_preference": "balance_performance",
+  "/sys/devices/system/cpu/cpufreq/policy1/energy_performance_preference": "balance_performance",
+  "/sys/class/power_supply/hid-0018:04F3:22E1.000C-battery-7/online": "1",
+  "/sys/class/power_supply/ADP1/online": "1",
+  "/sys/class/power_supply/hid-0018:04F3:22E1.000C-battery-7/status": "Discharging",
+  "/sys/class/power_supply/BAT0/status": "Full"
+}

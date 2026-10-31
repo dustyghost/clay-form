@@ -1,0 +1,4 @@
+running 1 test
+test sculpt::detail::tests::adaptive_detail_regularization_preserves_masked_and_distant_vertices ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 989 filtered out; finished in 0.06s

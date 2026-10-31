@@ -1,0 +1,6 @@
+
+running 2 tests
+test viewport::guides::tests::guides_intersect_the_surface_and_handle_vertices_on_the_plane ... ok
+test viewport::guides::tests::radial_boundaries_are_clipped_to_one_side_of_the_axis ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1021 filtered out; finished in 0.00s

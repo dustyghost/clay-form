@@ -1,0 +1,14 @@
+[
+  {
+    "case": "sphere-l4",
+    "status": "measured",
+    "log": "sphere-l4.log",
+    "elapsed_seconds": 39.660770218994,
+    "sampled_peak_rss_bytes": 2151395328,
+    "sampled_peak_swap_bytes": 0,
+    "minimum_available_bytes": 1667252224,
+    "progress": "sphere-l4.progress.json",
+    "last_stage": "complete",
+    "stage_status": "completed"
+  }
+]

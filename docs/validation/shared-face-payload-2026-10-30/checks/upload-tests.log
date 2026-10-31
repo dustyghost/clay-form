@@ -1,0 +1,7 @@
+
+running 3 tests
+test viewport::gpu::upload::gpu_tests::gpu_vertex_upload_layout_changes_match_fresh_buffers ... ok
+test viewport::gpu::upload::gpu_tests::gpu_vertex_upload_release_splits_and_merges_fans ... ok
+test viewport::gpu::upload::gpu_tests::gpu_vertex_upload_sparse_strokes_match_fresh_buffers ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 970 filtered out; finished in 18.49s

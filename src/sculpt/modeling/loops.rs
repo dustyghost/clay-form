@@ -133,7 +133,7 @@ impl Mesh {
             extra += u.len() * vv.len();
             triangles += 2 * (u.len() + 1) * (vv.len() + 1);
         }
-        if self.vertices.len() + extra > MAX_VERTICES || triangles > MAX_TRIANGLES {
+        if self.vertices.len() + extra > max_vertices() || triangles > max_triangles() {
             return Err("Loop cuts would exceed the mesh size limit".into());
         }
         let mut out = self.empty_topology();

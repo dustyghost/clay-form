@@ -6,6 +6,8 @@ pub const MAX_SIZE: u32 = 4096;
 pub const MAX_PIXELS: usize = 3 * 4096 * 4096;
 pub(crate) mod bake;
 mod padding;
+#[cfg(test)]
+pub(crate) mod profile;
 mod surface;
 mod upload;
 pub(crate) use surface::PaintScratch;
@@ -174,21 +176,37 @@ impl Texture {
         output.extend(self.packed_pixels());
     }
 }
-/// Three 4096² images or an equivalent mix, uploaded as bounded texture-array pages.
-pub(crate) fn validate_budget<'a>(
+/// Count library images and assigned images once by identity, including unused assets.
+pub(crate) fn validate_library<'a>(
     meshes: impl IntoIterator<Item = &'a Mesh>,
+    library: &[Texture],
 ) -> Result<(), String> {
-    let mut assets = std::collections::HashMap::new();
+    if library.len() > 256 {
+        return Err("Texture library is limited to 256 images".into());
+    }
+    let mut ids = std::collections::HashSet::new();
+    let mut sizes = std::collections::HashMap::new();
+    for image in library {
+        image.validate()?;
+        if !ids.insert(image.id) {
+            return Err("Duplicate texture library identity".into());
+        }
+        sizes.insert(image.id, image.width as usize * image.height as usize);
+    }
     for mesh in meshes {
-        for texture in &mesh.uv.textures {
-            assets.insert(texture.id, texture.width as usize * texture.height as usize);
+        for image in &mesh.uv.textures {
+            sizes
+                .entry(image.id)
+                .and_modify(|size| {
+                    *size = (*size).max(image.width as usize * image.height as usize)
+                })
+                .or_insert(image.width as usize * image.height as usize);
         }
     }
-    if assets.values().sum::<usize>() > MAX_PIXELS {
-        Err("Texture budget exceeded: use at most three 4K images (48 million unique pixels) across this project, or smaller images".into())
-    } else {
-        Ok(())
+    if sizes.values().sum::<usize>() > MAX_PIXELS {
+        return Err("Texture budget exceeded: remove unused library images or use smaller images (48 million unique pixels per project)".into());
     }
+    Ok(())
 }
 pub fn barycentric(q: [f32; 2], t: [[f32; 2]; 3]) -> Option<[f32; 3]> {
     let a = super::uv::area(t);
@@ -250,10 +268,12 @@ impl Mesh {
         let height = texture.height as usize;
         let weights = &mut scratch.pixels;
         weights.clear();
+        let footprint = brush.prepare_weight();
         for (di, dab) in dabs.iter().enumerate() {
             if dab.radius <= 0. {
                 continue;
             }
+            let pressure = brush.dab_pressure(dab);
             scratch.depth.prepare(self, dab, occluders);
             for &f in &scratch.depth.active_faces {
                 let t = &self.triangles[f];
@@ -297,13 +317,9 @@ impl Mesh {
                     }
                     let mask = (0..3).map(|c| self.mask[t[c]] * w[c]).sum::<f32>()
                         / w.iter().sum::<f32>().max(1e-10);
-                    let weight = brush.paint_weight(q[0], q[1])
+                    let weight = footprint.paint_weight(q[0], q[1])
                         * (1. - mask)
-                        * if brush.pressure {
-                            dab.pressure.powf(brush.pressure_curve)
-                        } else {
-                            1.
-                        }
+                        * pressure
                         * stencils.get(di).map_or(1., |s| s.weight(point));
                     let weight = brush.paint_opacity(weight);
                     if weight <= 0. {

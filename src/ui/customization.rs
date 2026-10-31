@@ -482,6 +482,7 @@ impl UiState {
                         && (columns == max_columns || used_width + width > available_width)
                     {
                         ui.end_row();
+                        ui.set_row_height(32.);
                         columns = 0;
                         used_width = 0.;
                     }
@@ -697,6 +698,7 @@ impl UiState {
         commands
     }
     pub fn settings(&mut self, ctx: &egui::Context, document: &Document) {
+        self.mesh_capacity_settings(ctx);
         if let Some(request) = ctx.data_mut(|d| {
             let request = d.get_temp::<Request>(request_id());
             d.remove::<Request>(request_id());

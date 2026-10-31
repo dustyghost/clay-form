@@ -1,0 +1,5 @@
+
+running 1 test
+test sculpt::subdivision::cancellation_tests::cancellation_during_subdivision_keeps_the_geometry_and_levels ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 984 filtered out; finished in 0.07s

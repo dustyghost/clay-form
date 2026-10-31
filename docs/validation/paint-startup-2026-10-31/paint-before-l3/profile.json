@@ -1,0 +1,657 @@
+{
+  "level": 3,
+  "memory_final": {
+    "process_peak_rss_bytes": 334155776,
+    "rss_bytes": 190009344
+  },
+  "rows": [
+    {
+      "fixture": "sphere",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 9.043944999999999,
+        "depth_build": 282.19037099999997,
+        "depth_copy": 17.115653000000002,
+        "depth_query": 2.16212,
+        "document_setup": 7.831136000000001,
+        "finish": 0.01095,
+        "normals_and_eligibility": 6.168825999999999,
+        "weights_and_visibility": 0.820939,
+        "weights_setup": 1.1663890000000001
+      },
+      "step": 0,
+      "total_ms": 326.52265800000004,
+      "trial": 0
+    },
+    {
+      "fixture": "sphere",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 1.370226,
+        "depth_query": 1.700766,
+        "document_setup": 0.013474,
+        "finish": 0.0009939999999999999,
+        "normals_and_eligibility": 0.00027,
+        "weights_and_visibility": 1.0347,
+        "weights_setup": 0.004613
+      },
+      "step": 1,
+      "total_ms": 4.125618,
+      "trial": 0
+    },
+    {
+      "fixture": "sphere",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 1.279619,
+        "depth_query": 1.159796,
+        "document_setup": 0.005096,
+        "finish": 0.00067,
+        "normals_and_eligibility": 0.000169,
+        "weights_and_visibility": 0.747332,
+        "weights_setup": 0.003288
+      },
+      "step": 2,
+      "total_ms": 3.1964509999999997,
+      "trial": 0
+    },
+    {
+      "fixture": "sphere",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 1.304503,
+        "depth_query": 1.4486320000000001,
+        "document_setup": 0.005033,
+        "finish": 0.001266,
+        "normals_and_eligibility": 0.000114,
+        "weights_and_visibility": 0.844734,
+        "weights_setup": 0.003599
+      },
+      "step": 3,
+      "total_ms": 3.608628,
+      "trial": 0
+    },
+    {
+      "fixture": "sphere",
+      "output_hash_fnv1a": "e5d98a52d1fff8d4",
+      "phase": "verified",
+      "trial": 0
+    },
+    {
+      "fixture": "sphere",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 9.235805999999998,
+        "depth_build": 280.274902,
+        "depth_copy": 6.883286,
+        "depth_query": 1.346935,
+        "document_setup": 13.630870999999999,
+        "finish": 0.002611,
+        "normals_and_eligibility": 6.135734,
+        "weights_and_visibility": 0.875874,
+        "weights_setup": 0.006557
+      },
+      "step": 0,
+      "total_ms": 318.39344200000005,
+      "trial": 1
+    },
+    {
+      "fixture": "sphere",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 1.245789,
+        "depth_query": 1.264507,
+        "document_setup": 0.011507,
+        "finish": 0.000629,
+        "normals_and_eligibility": 0.000325,
+        "weights_and_visibility": 0.8142130000000001,
+        "weights_setup": 0.004013
+      },
+      "step": 1,
+      "total_ms": 3.341412,
+      "trial": 1
+    },
+    {
+      "fixture": "sphere",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 1.230912,
+        "depth_query": 1.111941,
+        "document_setup": 0.003071,
+        "finish": 0.0008110000000000001,
+        "normals_and_eligibility": 0.00008,
+        "weights_and_visibility": 0.738078,
+        "weights_setup": 0.003263
+      },
+      "step": 2,
+      "total_ms": 3.088374,
+      "trial": 1
+    },
+    {
+      "fixture": "sphere",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 1.228747,
+        "depth_query": 0.991368,
+        "document_setup": 0.002636,
+        "finish": 0.00039999999999999996,
+        "normals_and_eligibility": 0.000082,
+        "weights_and_visibility": 0.724118,
+        "weights_setup": 0.003129
+      },
+      "step": 3,
+      "total_ms": 2.9506699999999997,
+      "trial": 1
+    },
+    {
+      "fixture": "sphere",
+      "output_hash_fnv1a": "e5d98a52d1fff8d4",
+      "phase": "verified",
+      "trial": 1
+    },
+    {
+      "fixture": "sphere",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 7.719118,
+        "depth_build": 287.622199,
+        "depth_copy": 7.064098,
+        "depth_query": 1.9757109999999998,
+        "document_setup": 8.463238,
+        "finish": 0.002428,
+        "normals_and_eligibility": 6.955223,
+        "weights_and_visibility": 0.8544200000000001,
+        "weights_setup": 0.006980999999999999
+      },
+      "step": 0,
+      "total_ms": 320.664811,
+      "trial": 2
+    },
+    {
+      "fixture": "sphere",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 1.753529,
+        "depth_query": 1.2612240000000001,
+        "document_setup": 0.009141,
+        "finish": 0.001852,
+        "normals_and_eligibility": 0.000505,
+        "weights_and_visibility": 0.945822,
+        "weights_setup": 0.003913
+      },
+      "step": 1,
+      "total_ms": 3.976836,
+      "trial": 2
+    },
+    {
+      "fixture": "sphere",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 1.344739,
+        "depth_query": 1.278122,
+        "document_setup": 0.00835,
+        "finish": 0.0004969999999999999,
+        "normals_and_eligibility": 0.000239,
+        "weights_and_visibility": 0.898697,
+        "weights_setup": 0.003515
+      },
+      "step": 2,
+      "total_ms": 3.5344059999999997,
+      "trial": 2
+    },
+    {
+      "fixture": "sphere",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 1.2545119999999998,
+        "depth_query": 1.159478,
+        "document_setup": 0.003687,
+        "finish": 0.000366,
+        "normals_and_eligibility": 0.000081,
+        "weights_and_visibility": 0.7449359999999999,
+        "weights_setup": 0.00317
+      },
+      "step": 3,
+      "total_ms": 3.166405,
+      "trial": 2
+    },
+    {
+      "fixture": "sphere",
+      "output_hash_fnv1a": "e5d98a52d1fff8d4",
+      "phase": "verified",
+      "trial": 2
+    },
+    {
+      "fixture": "organic",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.774683,
+        "depth_build": 283.282583,
+        "depth_copy": 13.957052,
+        "depth_query": 2.2194480000000003,
+        "document_setup": 9.440282,
+        "finish": 0.001615,
+        "normals_and_eligibility": 5.299563999999999,
+        "weights_and_visibility": 0.555035,
+        "weights_setup": 0.240671
+      },
+      "step": 0,
+      "total_ms": 315.77191500000004,
+      "trial": 0
+    },
+    {
+      "fixture": "organic",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.764734,
+        "depth_query": 1.1748450000000001,
+        "document_setup": 0.008996,
+        "finish": 0.0005859999999999999,
+        "normals_and_eligibility": 0.000221,
+        "weights_and_visibility": 0.49857199999999996,
+        "weights_setup": 0.002379
+      },
+      "step": 1,
+      "total_ms": 2.450696,
+      "trial": 0
+    },
+    {
+      "fixture": "organic",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.788435,
+        "depth_query": 1.0050700000000001,
+        "document_setup": 0.002845,
+        "finish": 0.000445,
+        "normals_and_eligibility": 0.000081,
+        "weights_and_visibility": 0.5061220000000001,
+        "weights_setup": 0.0020310000000000003
+      },
+      "step": 2,
+      "total_ms": 2.305202,
+      "trial": 0
+    },
+    {
+      "fixture": "organic",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.82216,
+        "depth_query": 1.0009000000000001,
+        "document_setup": 0.002751,
+        "finish": 0.00035400000000000004,
+        "normals_and_eligibility": 0.000083,
+        "weights_and_visibility": 0.53592,
+        "weights_setup": 0.002123
+      },
+      "step": 3,
+      "total_ms": 2.364451,
+      "trial": 0
+    },
+    {
+      "fixture": "organic",
+      "output_hash_fnv1a": "85527510a54f762a",
+      "phase": "verified",
+      "trial": 0
+    },
+    {
+      "fixture": "organic",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.789662,
+        "depth_build": 289.303925,
+        "depth_copy": 7.173184,
+        "depth_query": 1.455116,
+        "document_setup": 17.224102000000002,
+        "finish": 0.00168,
+        "normals_and_eligibility": 7.166775,
+        "weights_and_visibility": 0.569616,
+        "weights_setup": 0.005347
+      },
+      "step": 0,
+      "total_ms": 323.690637,
+      "trial": 1
+    },
+    {
+      "fixture": "organic",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.7698419999999999,
+        "depth_query": 1.189556,
+        "document_setup": 0.009084,
+        "finish": 0.000718,
+        "normals_and_eligibility": 0.00021799999999999999,
+        "weights_and_visibility": 0.5142410000000001,
+        "weights_setup": 0.002403
+      },
+      "step": 1,
+      "total_ms": 2.486431,
+      "trial": 1
+    },
+    {
+      "fixture": "organic",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.819468,
+        "depth_query": 1.031289,
+        "document_setup": 0.003302,
+        "finish": 0.0011710000000000002,
+        "normals_and_eligibility": 0.000093,
+        "weights_and_visibility": 0.50501,
+        "weights_setup": 0.002069
+      },
+      "step": 2,
+      "total_ms": 2.362694,
+      "trial": 1
+    },
+    {
+      "fixture": "organic",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.886075,
+        "depth_query": 1.694945,
+        "document_setup": 0.0054399999999999995,
+        "finish": 0.001501,
+        "normals_and_eligibility": 0.000096,
+        "weights_and_visibility": 0.82664,
+        "weights_setup": 0.002589
+      },
+      "step": 3,
+      "total_ms": 3.417852,
+      "trial": 1
+    },
+    {
+      "fixture": "organic",
+      "output_hash_fnv1a": "85527510a54f762a",
+      "phase": "verified",
+      "trial": 1
+    },
+    {
+      "fixture": "organic",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.789062,
+        "depth_build": 288.927725,
+        "depth_copy": 6.711518,
+        "depth_query": 1.421624,
+        "document_setup": 9.13542,
+        "finish": 0.002013,
+        "normals_and_eligibility": 5.744125,
+        "weights_and_visibility": 0.5299830000000001,
+        "weights_setup": 0.005066
+      },
+      "step": 0,
+      "total_ms": 313.267581,
+      "trial": 2
+    },
+    {
+      "fixture": "organic",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.84462,
+        "depth_query": 1.2062080000000002,
+        "document_setup": 0.008744,
+        "finish": 0.00113,
+        "normals_and_eligibility": 0.000209,
+        "weights_and_visibility": 0.569558,
+        "weights_setup": 0.002489
+      },
+      "step": 1,
+      "total_ms": 2.6336969999999997,
+      "trial": 2
+    },
+    {
+      "fixture": "organic",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.8140689999999999,
+        "depth_query": 1.253519,
+        "document_setup": 0.006004,
+        "finish": 0.0005589999999999999,
+        "normals_and_eligibility": 0.00009800000000000001,
+        "weights_and_visibility": 0.550034,
+        "weights_setup": 0.0023350000000000003
+      },
+      "step": 2,
+      "total_ms": 2.627099,
+      "trial": 2
+    },
+    {
+      "fixture": "organic",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.8369230000000001,
+        "depth_query": 1.1662350000000001,
+        "document_setup": 0.003703,
+        "finish": 0.000455,
+        "normals_and_eligibility": 0.000082,
+        "weights_and_visibility": 0.5544490000000001,
+        "weights_setup": 0.002216
+      },
+      "step": 3,
+      "total_ms": 2.564523,
+      "trial": 2
+    },
+    {
+      "fixture": "organic",
+      "output_hash_fnv1a": "85527510a54f762a",
+      "phase": "verified",
+      "trial": 2
+    },
+    {
+      "fixture": "hidden",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.7804490000000001,
+        "depth_build": 155.94096599999997,
+        "depth_copy": 15.50585,
+        "depth_query": 1.256202,
+        "document_setup": 9.634319000000001,
+        "finish": 0.001524,
+        "normals_and_eligibility": 6.416249,
+        "weights_and_visibility": 0.364157,
+        "weights_setup": 0.24520899999999998
+      },
+      "step": 0,
+      "total_ms": 190.145838,
+      "trial": 0
+    },
+    {
+      "fixture": "hidden",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.7749,
+        "depth_query": 0.568298,
+        "document_setup": 0.007908,
+        "finish": 0.000943,
+        "normals_and_eligibility": 0.000233,
+        "weights_and_visibility": 0.32938,
+        "weights_setup": 0.00221
+      },
+      "step": 1,
+      "total_ms": 1.6841519999999999,
+      "trial": 0
+    },
+    {
+      "fixture": "hidden",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 1.33765,
+        "depth_query": 0.562471,
+        "document_setup": 0.0036509999999999997,
+        "finish": 0.002055,
+        "normals_and_eligibility": 0.000077,
+        "weights_and_visibility": 0.37704,
+        "weights_setup": 0.002088
+      },
+      "step": 2,
+      "total_ms": 2.285869,
+      "trial": 0
+    },
+    {
+      "fixture": "hidden",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.847493,
+        "depth_query": 0.696098,
+        "document_setup": 0.009649,
+        "finish": 0.000822,
+        "normals_and_eligibility": 0.000229,
+        "weights_and_visibility": 0.39345899999999995,
+        "weights_setup": 0.0026479999999999997
+      },
+      "step": 3,
+      "total_ms": 1.950958,
+      "trial": 0
+    },
+    {
+      "fixture": "hidden",
+      "output_hash_fnv1a": "114c65c5bc4797fd",
+      "phase": "verified",
+      "trial": 0
+    },
+    {
+      "fixture": "hidden",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.798228,
+        "depth_build": 156.60794,
+        "depth_copy": 6.66967,
+        "depth_query": 0.722704,
+        "document_setup": 18.777461,
+        "finish": 0.001927,
+        "normals_and_eligibility": 7.292809,
+        "weights_and_visibility": 0.368625,
+        "weights_setup": 0.004599000000000001
+      },
+      "step": 0,
+      "total_ms": 191.245157,
+      "trial": 1
+    },
+    {
+      "fixture": "hidden",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.762823,
+        "depth_query": 0.5950719999999999,
+        "document_setup": 0.009345,
+        "finish": 0.00038,
+        "normals_and_eligibility": 0.000414,
+        "weights_and_visibility": 0.33582799999999996,
+        "weights_setup": 0.002349
+      },
+      "step": 1,
+      "total_ms": 1.706759,
+      "trial": 1
+    },
+    {
+      "fixture": "hidden",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.779496,
+        "depth_query": 0.476787,
+        "document_setup": 0.002884,
+        "finish": 0.000309,
+        "normals_and_eligibility": 0.000082,
+        "weights_and_visibility": 0.33566599999999996,
+        "weights_setup": 0.0020480000000000003
+      },
+      "step": 2,
+      "total_ms": 1.597427,
+      "trial": 1
+    },
+    {
+      "fixture": "hidden",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.8540719999999999,
+        "depth_query": 0.476815,
+        "document_setup": 0.0024619999999999998,
+        "finish": 0.000468,
+        "normals_and_eligibility": 0.00008,
+        "weights_and_visibility": 0.35062899999999997,
+        "weights_setup": 0.002128
+      },
+      "step": 3,
+      "total_ms": 1.68696,
+      "trial": 1
+    },
+    {
+      "fixture": "hidden",
+      "output_hash_fnv1a": "114c65c5bc4797fd",
+      "phase": "verified",
+      "trial": 1
+    },
+    {
+      "fixture": "hidden",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.81211,
+        "depth_build": 154.007823,
+        "depth_copy": 7.266839,
+        "depth_query": 0.685752,
+        "document_setup": 9.437275999999999,
+        "finish": 0.0020320000000000004,
+        "normals_and_eligibility": 6.422885,
+        "weights_and_visibility": 0.37366699999999997,
+        "weights_setup": 0.004390000000000001
+      },
+      "step": 0,
+      "total_ms": 179.01396,
+      "trial": 2
+    },
+    {
+      "fixture": "hidden",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.761459,
+        "depth_query": 0.5763600000000001,
+        "document_setup": 0.008992,
+        "finish": 0.000624,
+        "normals_and_eligibility": 0.00045900000000000004,
+        "weights_and_visibility": 0.330301,
+        "weights_setup": 0.002359
+      },
+      "step": 1,
+      "total_ms": 1.6808610000000002,
+      "trial": 2
+    },
+    {
+      "fixture": "hidden",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.7816620000000001,
+        "depth_query": 0.477465,
+        "document_setup": 0.002464,
+        "finish": 0.000313,
+        "normals_and_eligibility": 0.000096,
+        "weights_and_visibility": 0.334962,
+        "weights_setup": 0.002065
+      },
+      "step": 2,
+      "total_ms": 1.599186,
+      "trial": 2
+    },
+    {
+      "fixture": "hidden",
+      "source_triangles": 602112,
+      "stages_ms": {
+        "apply_materials": 0.8181729999999999,
+        "depth_query": 0.476729,
+        "document_setup": 0.002496,
+        "finish": 0.000319,
+        "normals_and_eligibility": 0.000107,
+        "weights_and_visibility": 0.34905400000000003,
+        "weights_setup": 0.002148
+      },
+      "step": 3,
+      "total_ms": 1.64918,
+      "trial": 2
+    },
+    {
+      "fixture": "hidden",
+      "output_hash_fnv1a": "114c65c5bc4797fd",
+      "phase": "verified",
+      "trial": 2
+    }
+  ]
+}

@@ -1,0 +1,386 @@
+{
+  "dabs_per_stroke": 12,
+  "fixture": "hidden",
+  "fixture_hash_fnv1a": "5465b1c03e0bb134",
+  "frames": [
+    {
+      "after_vertices": 301085,
+      "before_vertices": 301058,
+      "brush": "Standard",
+      "face_write_bytes": [
+        4349928,
+        0,
+        0
+      ],
+      "packed_vertices": 301085,
+      "stride": 12,
+      "trial": 0,
+      "vertex_write_bytes": 14452080
+    },
+    {
+      "after_vertices": 301110,
+      "before_vertices": 301058,
+      "brush": "Clay",
+      "face_write_bytes": [
+        4349928,
+        0,
+        0
+      ],
+      "packed_vertices": 301110,
+      "stride": 12,
+      "trial": 0,
+      "vertex_write_bytes": 14453280
+    },
+    {
+      "after_vertices": 301058,
+      "before_vertices": 301058,
+      "brush": "Paint",
+      "face_write_bytes": [
+        0,
+        0,
+        0
+      ],
+      "packed_vertices": 0,
+      "stride": 12,
+      "trial": 0,
+      "vertex_write_bytes": 0
+    },
+    {
+      "after_vertices": 301085,
+      "before_vertices": 301058,
+      "brush": "Standard",
+      "face_write_bytes": [
+        4349928,
+        0,
+        0
+      ],
+      "packed_vertices": 301085,
+      "stride": 12,
+      "trial": 1,
+      "vertex_write_bytes": 14452080
+    },
+    {
+      "after_vertices": 301110,
+      "before_vertices": 301058,
+      "brush": "Clay",
+      "face_write_bytes": [
+        4349928,
+        0,
+        0
+      ],
+      "packed_vertices": 301110,
+      "stride": 12,
+      "trial": 1,
+      "vertex_write_bytes": 14453280
+    },
+    {
+      "after_vertices": 301058,
+      "before_vertices": 301058,
+      "brush": "Paint",
+      "face_write_bytes": [
+        0,
+        0,
+        0
+      ],
+      "packed_vertices": 0,
+      "stride": 12,
+      "trial": 1,
+      "vertex_write_bytes": 0
+    },
+    {
+      "after_vertices": 301085,
+      "before_vertices": 301058,
+      "brush": "Standard",
+      "face_write_bytes": [
+        4349928,
+        0,
+        0
+      ],
+      "packed_vertices": 301085,
+      "stride": 12,
+      "trial": 2,
+      "vertex_write_bytes": 14452080
+    },
+    {
+      "after_vertices": 301110,
+      "before_vertices": 301058,
+      "brush": "Clay",
+      "face_write_bytes": [
+        4349928,
+        0,
+        0
+      ],
+      "packed_vertices": 301110,
+      "stride": 12,
+      "trial": 2,
+      "vertex_write_bytes": 14453280
+    },
+    {
+      "after_vertices": 301058,
+      "before_vertices": 301058,
+      "brush": "Paint",
+      "face_write_bytes": [
+        0,
+        0,
+        0
+      ],
+      "packed_vertices": 0,
+      "stride": 12,
+      "trial": 2,
+      "vertex_write_bytes": 0
+    }
+  ],
+  "gpu": "AdapterInfo { name: \"Intel(R) HD Graphics 620 (KBL GT2)\", vendor: 32902, device: 22806, device_type: IntegratedGpu, driver: \"Intel open-source Mesa driver\", driver_info: \"Mesa 26.2.4-arch1.1\", backend: Vulkan }",
+  "level": 3,
+  "memory_final": {
+    "process_peak_rss_bytes": 737583104,
+    "rss_bytes": 725172224
+  },
+  "metrics": {
+    "Clay.cache_replace": {
+      "max_ms": 0.748477,
+      "n": 3,
+      "p50_ms": 0.001606,
+      "p95_ms": 0.748477,
+      "samples_ms": [
+        0.001327,
+        0.001606,
+        0.748477
+      ]
+    },
+    "Clay.cpu_upload": {
+      "max_ms": 28.061621,
+      "n": 3,
+      "p50_ms": 27.805615999999997,
+      "p95_ms": 28.061621,
+      "samples_ms": [
+        27.805615999999997,
+        26.363446,
+        28.061621
+      ]
+    },
+    "Clay.display_replace": {
+      "max_ms": 0.0006889999999999999,
+      "n": 3,
+      "p50_ms": 0.000482,
+      "p95_ms": 0.0006889999999999999,
+      "samples_ms": [
+        0.000482,
+        0.00045,
+        0.0006889999999999999
+      ]
+    },
+    "Clay.face_compare_write": {
+      "max_ms": 5.043201,
+      "n": 3,
+      "p50_ms": 4.712193,
+      "p95_ms": 5.043201,
+      "samples_ms": [
+        4.68525,
+        4.712193,
+        5.043201
+      ]
+    },
+    "Clay.index_compare_pack_write": {
+      "max_ms": 8.50201,
+      "n": 3,
+      "p50_ms": 8.327356,
+      "p95_ms": 8.50201,
+      "samples_ms": [
+        8.50201,
+        8.250502,
+        8.327356
+      ]
+    },
+    "Clay.stride": {
+      "max_ms": 1.583022,
+      "n": 3,
+      "p50_ms": 1.497955,
+      "p95_ms": 1.583022,
+      "samples_ms": [
+        1.497955,
+        1.485231,
+        1.583022
+      ]
+    },
+    "Clay.submit_and_wait": {
+      "max_ms": 8.459886999999998,
+      "n": 3,
+      "p50_ms": 8.179331999999999,
+      "p95_ms": 8.459886999999998,
+      "samples_ms": [
+        8.459886999999998,
+        8.179331999999999,
+        7.479078
+      ]
+    },
+    "Clay.texture_and_geometry_checks": {
+      "max_ms": 0.003939,
+      "n": 3,
+      "p50_ms": 0.003648,
+      "p95_ms": 0.003939,
+      "samples_ms": [
+        0.003939,
+        0.0036160000000000003,
+        0.003648
+      ]
+    },
+    "Clay.vertex_pack": {
+      "max_ms": 10.876952000000001,
+      "n": 3,
+      "p50_ms": 10.5445,
+      "p95_ms": 10.876952000000001,
+      "samples_ms": [
+        10.876952000000001,
+        10.077744,
+        10.5445
+      ]
+    },
+    "Clay.vertex_storage": {
+      "max_ms": 2.2384470000000003,
+      "n": 3,
+      "p50_ms": 1.832242,
+      "p95_ms": 2.2384470000000003,
+      "samples_ms": [
+        2.2384470000000003,
+        1.832242,
+        1.8101390000000002
+      ]
+    },
+    "Paint.cpu_upload": {
+      "max_ms": 0.003729,
+      "n": 3,
+      "p50_ms": 0.002729,
+      "p95_ms": 0.003729,
+      "samples_ms": [
+        0.0027140000000000003,
+        0.003729,
+        0.002729
+      ]
+    },
+    "Paint.submit_and_wait": {
+      "max_ms": 0.45066300000000004,
+      "n": 3,
+      "p50_ms": 0.44198099999999996,
+      "p95_ms": 0.45066300000000004,
+      "samples_ms": [
+        0.45066300000000004,
+        0.44198099999999996,
+        0.366272
+      ]
+    },
+    "Standard.cache_replace": {
+      "max_ms": 0.564763,
+      "n": 3,
+      "p50_ms": 0.001862,
+      "p95_ms": 0.564763,
+      "samples_ms": [
+        0.001862,
+        0.0015799999999999998,
+        0.564763
+      ]
+    },
+    "Standard.cpu_upload": {
+      "max_ms": 61.308422,
+      "n": 3,
+      "p50_ms": 59.894616,
+      "p95_ms": 61.308422,
+      "samples_ms": [
+        59.894616,
+        59.194184,
+        61.308422
+      ]
+    },
+    "Standard.display_replace": {
+      "max_ms": 0.000613,
+      "n": 3,
+      "p50_ms": 0.00053,
+      "p95_ms": 0.000613,
+      "samples_ms": [
+        0.00051,
+        0.00053,
+        0.000613
+      ]
+    },
+    "Standard.face_compare_write": {
+      "max_ms": 5.033351000000001,
+      "n": 3,
+      "p50_ms": 4.987961,
+      "p95_ms": 5.033351000000001,
+      "samples_ms": [
+        4.987961,
+        4.726682,
+        5.033351000000001
+      ]
+    },
+    "Standard.index_compare_pack_write": {
+      "max_ms": 9.351201999999999,
+      "n": 3,
+      "p50_ms": 8.828669000000001,
+      "p95_ms": 9.351201999999999,
+      "samples_ms": [
+        9.351201999999999,
+        8.703826,
+        8.828669000000001
+      ]
+    },
+    "Standard.stride": {
+      "max_ms": 1.714634,
+      "n": 3,
+      "p50_ms": 1.478617,
+      "p95_ms": 1.714634,
+      "samples_ms": [
+        1.714634,
+        1.478617,
+        1.413708
+      ]
+    },
+    "Standard.submit_and_wait": {
+      "max_ms": 8.079868000000001,
+      "n": 3,
+      "p50_ms": 7.969609000000001,
+      "p95_ms": 8.079868000000001,
+      "samples_ms": [
+        7.969609000000001,
+        8.079868000000001,
+        7.920834999999999
+      ]
+    },
+    "Standard.texture_and_geometry_checks": {
+      "max_ms": 0.003762,
+      "n": 3,
+      "p50_ms": 0.0031599999999999996,
+      "p95_ms": 0.003762,
+      "samples_ms": [
+        0.003762,
+        0.003006,
+        0.0031599999999999996
+      ]
+    },
+    "Standard.vertex_pack": {
+      "max_ms": 10.109197,
+      "n": 3,
+      "p50_ms": 10.022018000000001,
+      "p95_ms": 10.109197,
+      "samples_ms": [
+        10.109197,
+        10.022018000000001,
+        9.992293
+      ]
+    },
+    "Standard.vertex_storage": {
+      "max_ms": 35.471207,
+      "n": 3,
+      "p50_ms": 34.257581,
+      "p95_ms": 35.471207,
+      "samples_ms": [
+        33.719113,
+        34.257581,
+        35.471207
+      ]
+    }
+  },
+  "repeats": 3,
+  "scope": "Actual upload path with opt-in CPU checkpoints and separate queue submit/completion. Excludes display construction, drawing and orbit workload.",
+  "vertices": 301058
+}

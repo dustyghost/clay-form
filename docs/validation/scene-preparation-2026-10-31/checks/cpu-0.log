@@ -1,0 +1,9 @@
+
+running 5 tests
+test viewport::scene::footprint::tests::footprint_bins_keep_occluding_inactive_models_and_source_face_order ... ok
+test viewport::scene::footprint::tests::footprint_bins_match_full_picks_across_cameras_hidden_faces_and_grid_edges ... ok
+test viewport::scene::footprint::tests::footprint_candidates_preserve_near_plane_crossings_and_depth_ties ... ok
+test viewport::scene::footprint::tests::footprint_lookup_is_local_bounded_and_rebuilt_for_changed_scenes ... ok
+test viewport::scene::footprint::tests::footprint_wide_overlapping_faces_fall_back_without_changing_hits ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 1010 filtered out; finished in 2.08s

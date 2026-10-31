@@ -1,17 +1,17 @@
-# Clay Form — Alpha 1
+# Clay Form — Alpha 2
 
 Clay Form is a desktop sculpting prototype. Shape a sphere with a mouse or pen, then save your model and return to it later.
 
-![A bearded head sculpt in Clay Form with teal material, brush controls on the left and submodels on the right](docs/images/head-sculpt-workspace.png)
+![A teal bearded head sculpt in Clay Form, with material and colour controls above, brushes on the left and mesh management on the right](docs/images/head-sculpt-workspace.png)
 
 *Head Sculpt*
 
-Version **0.1.0-alpha.1** is an early testing release.
+Version **0.1.0-alpha.2** is an early testing release.
 On startup, a development notice explains the current version and testing
 expectations. Choose **Continue to Clay Form** to begin; **Don’t show again for
 this version** remembers your choice until the version changes.
 
-**New to Clay Form?** [Download Alpha 1](https://github.com/dustyghost/clay-form/releases/tag/v0.1.0-alpha.1) or [build from source](docs/installation.md), then [make your first sculpt](docs/guide/getting-started.md) in about ten minutes.
+**New to Clay Form?** [Download Alpha 2](https://github.com/dustyghost/clay-form/releases/tag/v0.1.0-alpha.2) or [build from source](docs/installation.md), then [make your first sculpt](docs/guide/getting-started.md) in about ten minutes.
 
 Clay Form is free and open source under [GPLv3](LICENSE). Official downloads
 are free of charge. **Your creations belong to you:** use, sell, license or
@@ -19,7 +19,7 @@ keep your models, textures and other artwork private without crediting Clay
 Form or publishing source. Imported third-party material keeps its own terms.
 See [licensing and ownership](COPYRIGHT.md).
 
-Alpha 1 downloads are available for Windows, macOS and Linux on x86-64 and ARM64.
+Alpha 2 downloads are available for Windows, macOS and Linux on x86-64 and ARM64.
 The maintainer has tested Arch Linux; other platforms await user testing. See
 [release readiness and current limits](docs/open-source-readiness.md).
 [Release instructions](.github/RELEASING.md) cover
@@ -27,7 +27,7 @@ Windows, macOS, Linux and ARM64 artifacts, corresponding source and checksums.
 
 ## Run
 
-To use a packaged build, [download Alpha 1](https://github.com/dustyghost/clay-form/releases/tag/v0.1.0-alpha.1). The instructions below cover running from source.
+To use a packaged build, [download Alpha 2](https://github.com/dustyghost/clay-form/releases/tag/v0.1.0-alpha.2). The instructions below cover running from source.
 
 Windows packages require the [Microsoft Visual C++ v14 runtime](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist/)
 for their CPU architecture if it is not already installed.
@@ -79,7 +79,7 @@ When a feature changes, update its user guide alongside the code.
 
 Clay Form supports sculpting, subdivision, voxel remeshing and local adaptive mesh refinement. You can also paint colour, metallic and roughness values on vertices or textures, unwrap UVs and exchange images with GIMP. Quad retopology and sculpt layers are future work.
 
-Meshes are limited to **500,000 vertices** and **1,000,000 triangles**. Large scenes may become slow before reaching those limits. Mesh and alpha file sizes are also bounded when loading.
+Meshes default to **500,000 vertices** and **1,000,000 triangles** each. Raise these limits in **Settings → Mesh capacity**, then restart Clay Form. Settings allow up to **16 million vertices** and **32 million triangles** per mesh; usable capacity depends on your hardware and scene. Mesh and alpha file sizes remain bounded when loading. See [Change mesh capacity](docs/guide/workspace.md#change-mesh-capacity).
 
 Meshes retain quad topology where available; triangles are used for rendering and picking. The viewport supports orthographic and perspective views with wgpu rendering. Sculpting, picking and topology operations run on the CPU, which can limit editing speed in large scenes.
 

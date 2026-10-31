@@ -3,7 +3,7 @@ use super::{
     Alpha, Brush, Dab, Kind, Mesh, Vec3,
     alpha::Projection,
     math::closest_triangle,
-    subdivision::{MAX_TRIANGLES, MAX_VERTICES},
+    subdivision::{max_triangles, max_vertices},
 };
 mod quads;
 mod relief;
@@ -753,8 +753,8 @@ impl Mesh {
         // Each manifold edge adds one vertex and two faces. Leave headroom for
         // malformed/nonmanifold inputs as well; adaptive mode validates closure.
         let capacity = limit
-            .min(MAX_VERTICES.saturating_sub(self.vertices.len()))
-            .min(MAX_TRIANGLES.saturating_sub(self.triangles.len()) / 2);
+            .min(max_vertices().saturating_sub(self.vertices.len()))
+            .min(max_triangles().saturating_sub(self.triangles.len()) / 2);
         retain_split_candidates(&mut candidates, capacity);
         if candidates.is_empty() {
             return 0;

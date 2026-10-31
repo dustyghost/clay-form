@@ -29,8 +29,8 @@ impl Mesh {
             &vec![Some(0); polygons.len()],
             BorderTarget::Holes,
         )?;
-        if self.vertices.len() + incidence.len() + polygons.len() > MAX_VERTICES
-            || polygons.iter().map(|p| p.vertices.len() * 2).sum::<usize>() > MAX_TRIANGLES
+        if self.vertices.len() + incidence.len() + polygons.len() > max_vertices()
+            || polygons.iter().map(|p| p.vertices.len() * 2).sum::<usize>() > max_triangles()
         {
             return Err("Smooth subdivision exceeds the mesh size limit".into());
         }

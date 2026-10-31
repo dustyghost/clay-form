@@ -1,0 +1,12 @@
+
+running 8 tests
+test viewport::scene::tests::hiding_a_polygroup_removes_picking_and_wire_edges_without_changing_mesh ... ok
+test viewport::scene::tests::inactive_display_uses_lowest_level_without_changing_stored_detail ... ok
+test viewport::scene::tests::inactive_foreground_occludes_active_picks_and_hidden_models_disappear ... ok
+test viewport::scene::tests::material_sampler_interpolates_surface_colours_without_display_shading ... ok
+test viewport::scene::tests::rectangle_visibility_filters_faces_picking_and_quad_wire_edges ... ok
+test viewport::scene::tests::sampler_filters_hdr_colour_by_coverage_and_reads_scalar_maps ... ok
+test viewport::scene::tests::surface_cursor_renders_on_clay_and_falls_back_off_surface ... ok
+test viewport::scene::tests::wire_modes_hide_occluded_edges_and_transparency_removes_surfaces ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 989 filtered out; finished in 0.69s

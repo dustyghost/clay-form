@@ -83,11 +83,11 @@ Import does not center, resize, or weld the mesh. Multiple OBJ objects combine i
 
 Simple planar polygons with up to **256 corners** are triangulated, including concave shapes. Triangulate non-planar, self-intersecting, or degenerate polygons in your source app; errors identify the line.
 
-Positive/negative indices, UV/normal index forms, comments, line continuations, and UTF-8 names are accepted. Trailing NUL padding from ZBrush exports is accepted. Normals are regenerated. OBJ `g` names become full-weight vertex groups; if a face has several groups, the first supplies its color. Long names receive unique shortened versions.
+Positive/negative indices, UV/normal index forms, comments, line continuations, and UTF-8 names are accepted. Trailing NUL padding is accepted. Normals are regenerated. OBJ `g` names become full-weight vertex groups; if a face has several groups, the first supplies its color. Long names receive unique shortened versions.
 
 ### Import limits
 
-Maximum **128 MB**, **500,000 vertices**, **1,000,000 triangles** after triangulation, **64 groups**, and **64 scene submodels**. Errors and cancellation leave the original scene intact.
+Maximum **128 MB**, **64 groups**, and **64 scene submodels**. Vertex and triangle counts use the active [Mesh capacity settings](workspace.md#change-mesh-capacity), defaulting to **500,000 vertices** and **1,000,000 triangles** after triangulation. Save higher limits and restart before importing a larger mesh. Errors and cancellation leave the original scene intact.
 
 ## Export an OBJ
 

@@ -10,6 +10,70 @@ impl App {
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         let active_brush = self.ui.brush_index_for_context(&self.document, ctx);
         let command = match action {
+            Action::SwapPaintColours | Action::ResetPaintColours => {
+                self.ui.paint_input_index(&self.document).map(|index| {
+                    let mut brush = self.document.brushes()[index].clone();
+                    match action {
+                        Action::SwapPaintColours => brush.swap_paint_colours(),
+                        _ => brush.reset_paint_colours(),
+                    }
+                    Command::UpdateBrush(index, brush)
+                })
+            }
+            Action::DefaultPaintMaterial => {
+                self.ui.paint_input_index(&self.document).map(|index| {
+                    let id = crate::sculpt::Material::DEFAULT_PRESET_ID;
+                    let asset = self
+                        .document
+                        .materials()
+                        .iter()
+                        .find(|asset| asset.id == id)
+                        .cloned()
+                        .unwrap_or_else(|| crate::sculpt::material::layers::Asset {
+                            id,
+                            name: self.ui.preferences.materials.names[id as usize - 1].clone(),
+                            material: self.ui.preferences.materials.values[id as usize - 1]
+                                .unlinked(),
+                            original: Some(crate::sculpt::Material::default()),
+                        });
+                    let mut brush = self.document.brushes()[index].clone();
+                    brush.material = asset.material.with_link(id);
+                    brush.texture_colour = None;
+                    self.dispatch(Command::SaveMaterial(asset), ctx);
+                    Command::UpdateBrush(index, brush)
+                })
+            }
+            Action::OpenMaterials | Action::OpenColours => {
+                self.ui.uv.close_expanded();
+                let menu = if action == Action::OpenMaterials {
+                    crate::preferences::BuiltinMenu::Materials
+                } else {
+                    crate::preferences::BuiltinMenu::Colours
+                };
+                if let Some(section) = self
+                    .ui
+                    .preferences
+                    .menu_sections
+                    .iter_mut()
+                    .find(|s| s.menu == menu)
+                {
+                    section.open = true;
+                } else if !self
+                    .ui
+                    .preferences
+                    .pinned_menus
+                    .iter()
+                    .any(|p| p.menu == menu)
+                {
+                    self.ui.preferences.pin_menu(menu, [30., 110.]);
+                }
+                None
+            }
+            Action::OpenTextures | Action::OpenUv => {
+                self.ui.uv.open = true;
+                self.ui.uv.texture_tab = action == Action::OpenTextures;
+                None
+            }
             Action::TemporaryMaskBrush
             | Action::TemporaryMaskLasso
             | Action::TemporaryMaskLine
@@ -752,6 +816,10 @@ impl App {
                     self.ui.customization.popup_position = ctx.pointer_hover_pos();
                 }
                 self.viewport.wait_for_release();
+                None
+            }
+            Action::AppearanceControls => {
+                self.execute_action(Action::OpenColours, ctx);
                 None
             }
             Action::BrushIcon

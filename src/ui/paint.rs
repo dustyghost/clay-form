@@ -36,6 +36,19 @@ impl UiState {
                 .find(|texture| texture.channel == channel)
         });
         ui.strong("Paint");
+        self.appearance_brush = Some(brush.identity());
+        ui.label(format!("Inputs: {}", brush.name));
+        ui.horizontal_wrapped(|ui| {
+            for (label, action) in [
+                ("Materials…", Action::OpenMaterials),
+                ("Colours…", Action::OpenColours),
+                ("Textures…", Action::OpenTextures),
+            ] {
+                if ui.button(label).customize(action.clone()).clicked() {
+                    commands.push(Command::Action(action));
+                }
+            }
+        });
         if self.preferences.paint_workspace_backup.is_none()
             && ui.button("Focus Paint workspace").on_hover_text("Keep one paint sidebar and give the model more screen space. Restore your layout from the top toolbar.").clicked()
         {
@@ -58,9 +71,7 @@ impl UiState {
                 }
             });
         egui::ComboBox::from_label("Target")
-            .selected_text(texture.map_or("Vertices".into(), |t| {
-                format!("{} image", t.channel.label())
-            }))
+            .selected_text(texture.map_or("Vertices".into(), |t| format!("Image: {}", t.name)))
             .show_ui(ui, |ui| {
                 if ui
                     .selectable_label(paint_target.is_none(), "Vertices")
@@ -77,7 +88,7 @@ impl UiState {
                     if ui
                         .selectable_label(
                             paint_target == Some(texture.channel),
-                            format!("{} image", texture.channel.label()),
+                            format!("Image: {}", texture.name),
                         )
                         .clicked()
                     {
@@ -115,7 +126,7 @@ impl UiState {
         ui.horizontal_wrapped(|ui| {
             if ui.button("Set up texture painting…").clicked() {
                 self.uv.open = true;
-                self.uv.texture_tab = mesh.uv.current(mesh);
+                self.uv.texture_tab = true;
             }
             if ui
                 .button("UV / image view")
@@ -178,11 +189,7 @@ impl UiState {
         let mut material = brush.material.clone();
         let mut changed = false;
         if colour {
-            ui.horizontal(|ui| {
-                ui.label("Brush colour");
-                changed |= ui.color_edit_button_rgb(&mut material.base_color)
-                    .on_hover_text("Set colour for future strokes. Existing paint and shared materials stay unchanged.").changed();
-            });
+            ui.label("Colour applies to future strokes only");
         }
         if roughness {
             changed |= ui
@@ -226,7 +233,7 @@ impl UiState {
         }
         if colour {
             self.materials
-                .brush_palette(ui, brush, &mut self.preferences.materials);
+                .colour_input(ui, brush, &mut self.preferences.materials);
         } else {
             self.materials.sample_control(
                 ui,

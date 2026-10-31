@@ -1,0 +1,12 @@
+[
+  {
+    "case": "hidden-l2",
+    "status": "measured",
+    "log": "hidden-l2.log"
+  },
+  {
+    "case": "hidden-l3",
+    "status": "measured",
+    "log": "hidden-l3.log"
+  }
+]

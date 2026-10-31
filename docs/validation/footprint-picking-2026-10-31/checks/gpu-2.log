@@ -1,0 +1,9 @@
+
+running 2 tests
+test viewport::gpu::visibility_test::gpu_hidden_stroke_cache_pixels_picking_and_history ... ok
+test viewport::gpu::visibility_test::gpu_visible_stroke_cache_pixels_picking_and_history ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1012 filtered out; finished in 6.64s
+
+wgpu adapter: AdapterInfo { name: "Intel(R) HD Graphics 620 (KBL GT2)", vendor: 32902, device: 22806, device_type: IntegratedGpu, driver: "Intel open-source Mesa driver", driver_info: "Mesa 26.2.4-arch1.1", backend: Vulkan }
+wgpu adapter: AdapterInfo { name: "Intel(R) HD Graphics 620 (KBL GT2)", vendor: 32902, device: 22806, device_type: IntegratedGpu, driver: "Intel open-source Mesa driver", driver_info: "Mesa 26.2.4-arch1.1", backend: Vulkan }

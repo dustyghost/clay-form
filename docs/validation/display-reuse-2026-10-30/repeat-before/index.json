@@ -1,0 +1,14 @@
+[
+  {
+    "case": "organic-l4",
+    "status": "measured",
+    "log": "organic-l4.log",
+    "elapsed_seconds": 109.5505757870269,
+    "sampled_peak_rss_bytes": 2522415104,
+    "sampled_peak_swap_bytes": 0,
+    "minimum_available_bytes": 1321381888,
+    "progress": "organic-l4.progress.json",
+    "last_stage": "complete",
+    "stage_status": "completed"
+  }
+]

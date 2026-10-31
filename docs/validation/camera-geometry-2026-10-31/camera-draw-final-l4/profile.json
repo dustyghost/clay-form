@@ -1,0 +1,322 @@
+{
+  "driver": "AdapterInfo { name: \"Intel(R) HD Graphics 620 (KBL GT2)\", vendor: 32902, device: 22806, device_type: IntegratedGpu, driver: \"Intel open-source Mesa driver\", driver_info: \"Mesa 26.2.4-arch1.1\", backend: Vulkan }",
+  "level": 4,
+  "memory_final": {
+    "process_peak_rss_bytes": 1302736896,
+    "rss_bytes": 188907520
+  },
+  "rows": [
+    {
+      "capture": "sphere-orthographic.png",
+      "display_triangles": 2408448,
+      "fixture": "sphere",
+      "metrics": {
+        "draw_and_wait": {
+          "max_ms": 23.582393,
+          "n": 12,
+          "p50_ms": 16.887601,
+          "p95_ms": 23.582393,
+          "samples_ms": [
+            16.749354,
+            23.119736,
+            16.56661,
+            16.887601,
+            19.964618,
+            16.645391,
+            20.526148000000003,
+            16.373065999999998,
+            16.858101,
+            23.356977,
+            23.582393,
+            21.162504
+          ]
+        },
+        "paint_prepare": {
+          "max_ms": 0.03646,
+          "n": 12,
+          "p50_ms": 0.033905000000000005,
+          "p95_ms": 0.03646,
+          "samples_ms": [
+            0.033429,
+            0.036263000000000004,
+            0.032728,
+            0.034373,
+            0.033432,
+            0.03646,
+            0.034177,
+            0.035965,
+            0.033618,
+            0.033905000000000005,
+            0.033721,
+            0.03427
+          ]
+        }
+      },
+      "perspective": false,
+      "reference_capture": "sphere-orthographic-general.png",
+      "reference_differing_pixels": 1,
+      "reference_max_channel_delta": 1,
+      "source_triangles": 2408448
+    },
+    {
+      "capture": "sphere-perspective.png",
+      "display_triangles": 2408448,
+      "fixture": "sphere",
+      "metrics": {
+        "draw_and_wait": {
+          "max_ms": 25.281417,
+          "n": 12,
+          "p50_ms": 21.725749999999998,
+          "p95_ms": 25.281417,
+          "samples_ms": [
+            21.92306,
+            18.321308000000002,
+            24.73393,
+            18.476591,
+            24.161894,
+            18.658159,
+            22.141123,
+            20.18141,
+            21.980124,
+            25.281417,
+            18.570144,
+            21.725749999999998
+          ]
+        },
+        "paint_prepare": {
+          "max_ms": 0.035976999999999995,
+          "n": 12,
+          "p50_ms": 0.034180999999999996,
+          "p95_ms": 0.035976999999999995,
+          "samples_ms": [
+            0.035913,
+            0.034075,
+            0.035670999999999994,
+            0.035976999999999995,
+            0.032759,
+            0.032958,
+            0.033436,
+            0.034180999999999996,
+            0.035500000000000004,
+            0.033131,
+            0.035271000000000004,
+            0.035298
+          ]
+        }
+      },
+      "perspective": true,
+      "reference_capture": "sphere-perspective-general.png",
+      "reference_differing_pixels": 2,
+      "reference_max_channel_delta": 1,
+      "source_triangles": 2408448
+    },
+    {
+      "capture": "organic-orthographic.png",
+      "display_triangles": 2408448,
+      "fixture": "organic",
+      "metrics": {
+        "draw_and_wait": {
+          "max_ms": 24.194253999999997,
+          "n": 12,
+          "p50_ms": 19.409624,
+          "p95_ms": 24.194253999999997,
+          "samples_ms": [
+            20.690264,
+            17.233127,
+            19.409624,
+            17.576798,
+            16.284706999999997,
+            16.311326,
+            17.950355000000002,
+            19.760140999999997,
+            20.779125999999998,
+            24.194253999999997,
+            23.918943000000002,
+            22.972651
+          ]
+        },
+        "paint_prepare": {
+          "max_ms": 0.034124,
+          "n": 12,
+          "p50_ms": 0.032069,
+          "p95_ms": 0.034124,
+          "samples_ms": [
+            0.03333,
+            0.032051,
+            0.03281,
+            0.031862,
+            0.032832,
+            0.033145999999999995,
+            0.0313,
+            0.033444,
+            0.034124,
+            0.030525000000000004,
+            0.032069,
+            0.031594000000000004
+          ]
+        }
+      },
+      "perspective": false,
+      "reference_capture": "organic-orthographic-general.png",
+      "reference_differing_pixels": 1,
+      "reference_max_channel_delta": 1,
+      "source_triangles": 2408448
+    },
+    {
+      "capture": "organic-perspective.png",
+      "display_triangles": 2408448,
+      "fixture": "organic",
+      "metrics": {
+        "draw_and_wait": {
+          "max_ms": 25.129275999999997,
+          "n": 12,
+          "p50_ms": 24.319181,
+          "p95_ms": 25.129275999999997,
+          "samples_ms": [
+            20.478920000000002,
+            23.505969,
+            24.729117,
+            25.129275999999997,
+            25.115671,
+            24.260469999999998,
+            24.521454000000002,
+            17.90934,
+            24.319181,
+            24.889407,
+            24.644402,
+            24.075505
+          ]
+        },
+        "paint_prepare": {
+          "max_ms": 0.036167,
+          "n": 12,
+          "p50_ms": 0.033456,
+          "p95_ms": 0.036167,
+          "samples_ms": [
+            0.033616,
+            0.033456,
+            0.035155,
+            0.033019,
+            0.033721,
+            0.031956,
+            0.033182,
+            0.032775,
+            0.03266,
+            0.036167,
+            0.033994,
+            0.033643000000000006
+          ]
+        }
+      },
+      "perspective": true,
+      "reference_capture": "organic-perspective-general.png",
+      "reference_differing_pixels": 0,
+      "reference_max_channel_delta": 0,
+      "source_triangles": 2408448
+    },
+    {
+      "capture": "hidden-orthographic.png",
+      "display_triangles": 1448235,
+      "fixture": "hidden",
+      "metrics": {
+        "draw_and_wait": {
+          "max_ms": 21.072162,
+          "n": 12,
+          "p50_ms": 16.803813,
+          "p95_ms": 21.072162,
+          "samples_ms": [
+            17.279553,
+            14.258916,
+            14.714288000000002,
+            13.663585000000001,
+            14.643210999999999,
+            17.033462,
+            17.321349,
+            16.803813,
+            21.072162,
+            17.089133999999998,
+            14.492042,
+            17.764154
+          ]
+        },
+        "paint_prepare": {
+          "max_ms": 0.042379,
+          "n": 12,
+          "p50_ms": 0.034638,
+          "p95_ms": 0.042379,
+          "samples_ms": [
+            0.034952,
+            0.042379,
+            0.033117,
+            0.034638,
+            0.035602,
+            0.036145000000000004,
+            0.033455,
+            0.036257000000000005,
+            0.033475,
+            0.032611,
+            0.033327,
+            0.034845999999999995
+          ]
+        }
+      },
+      "perspective": false,
+      "reference_capture": "hidden-orthographic-general.png",
+      "reference_differing_pixels": 1,
+      "reference_max_channel_delta": 1,
+      "source_triangles": 2408448
+    },
+    {
+      "capture": "hidden-perspective.png",
+      "display_triangles": 1448235,
+      "fixture": "hidden",
+      "metrics": {
+        "draw_and_wait": {
+          "max_ms": 18.67952,
+          "n": 12,
+          "p50_ms": 15.123877,
+          "p95_ms": 18.67952,
+          "samples_ms": [
+            15.823882000000001,
+            18.46419,
+            14.741643999999999,
+            15.123877,
+            18.67952,
+            14.741061,
+            15.333760999999999,
+            18.408424,
+            14.809206,
+            14.78413,
+            18.05385,
+            14.614692999999999
+          ]
+        },
+        "paint_prepare": {
+          "max_ms": 0.041350000000000005,
+          "n": 12,
+          "p50_ms": 0.034236,
+          "p95_ms": 0.041350000000000005,
+          "samples_ms": [
+            0.0329,
+            0.031271,
+            0.037363,
+            0.041350000000000005,
+            0.035027,
+            0.034242999999999996,
+            0.034619000000000004,
+            0.034236,
+            0.033523,
+            0.033813,
+            0.036537,
+            0.034004
+          ]
+        }
+      },
+      "perspective": true,
+      "reference_capture": "hidden-perspective-general.png",
+      "reference_differing_pixels": 0,
+      "reference_max_channel_delta": 0,
+      "source_triangles": 2408448
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+45 focused CPU tests and five Vulkan tests passed.
+Visible and hidden capture PNGs match the parent artifacts byte for byte.
+Primary and repeated GPU comparisons: input/output hashes, workload coverage and sample counts match.
+Phase probes: all 18 released hashes match; canonical packed display checks passed.
+Baseline source reconstruction and all measurement source hashes verified.
+cargo fmt --all -- --check: passed.

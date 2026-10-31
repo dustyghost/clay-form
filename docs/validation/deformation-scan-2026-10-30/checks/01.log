@@ -1,0 +1,17 @@
+
+running 7 tests
+test sculpt::smooth::tests::exported_groove_loses_relief_instead_of_only_improving_triangle_metrics ... stamped: exported groove residual 0.17946294 (initial 0.007820369)
+already smoothed: exported groove residual 0.15555678 (initial 0.0072014253)
+ok
+test sculpt::smooth::tests::hidden_faces_creases_and_symmetry_overlap_are_protected ... ok
+test sculpt::smooth::tests::irregular_plane_stays_flat_and_zero_influence_is_exact ... ok
+test sculpt::smooth::tests::nearby_opposing_sheet_is_untouched ... ok
+test sculpt::smooth::tests::smooth_can_remove_a_pulled_out_bump_without_changing_topology ... pulled peak 1.1612802 -> 0.9358034
+ok
+test sculpt::smooth::tests::smoothing_reduces_noise_at_both_densities_and_preserves_protection ... 24: noise ratio 0.20218462
+48: noise ratio 0.15532622
+ok
+test sculpt::smooth::tests::steep_groove_relaxes_instead_of_pinning_its_sidewalls ... groove depth 0.08 -> 0.014529645
+ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 971 filtered out; finished in 0.22s

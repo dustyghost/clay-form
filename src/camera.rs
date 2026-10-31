@@ -117,22 +117,195 @@ impl Camera {
         if !delta.is_finite() {
             return;
         }
-        // Interpret the drag in screen axes even after rolling the view.
-        let (s, c) = self.roll.sin_cos();
-        let delta = Vec2::new(c * delta.x + s * delta.y, -s * delta.x + c * delta.y);
-        // Wrap complete turns for precision, without imposing a pole limit.
-        let wrap = |angle: f32| angle % std::f32::consts::TAU;
-        // After crossing a pole, world-up points down on screen. Reverse the
-        // yaw axis there so horizontal dragging keeps the same screen direction.
-        let up = if self.pitch.cos() >= 0. { 1. } else { -1. };
-        self.yaw = wrap(self.yaw - delta.x * 0.008 * up);
-        self.pitch = wrap(self.pitch - delta.y * 0.008);
+        let distance = delta.length();
+        if distance == 0. || !distance.is_finite() {
+            return;
+        }
+        let (right, up, view) = self.basis();
+        // One finite rotation about the drag's screen-plane axis. Combining
+        // both components avoids an arbitrary yaw-first/pitch-first order and
+        // makes subdividing a straight drag equivalent to one large event.
+        let axis = (right * -delta.y + up * -delta.x) * (1. / distance);
+        let angle = distance * 0.008;
+        self.set_basis(right.rotated(axis, angle), view.rotated(axis, angle));
+    }
+
+    /// Encode the rotated frame for existing axis snaps and diagnostic files.
+    /// Euler angles are storage only: navigation never increments world yaw or
+    /// pitch. At a pole yaw is free; keep it and recover roll from screen-right.
+    fn set_basis(&mut self, right: Vec3, view: Vec3) {
+        let horizontal = view.0.hypot(view.2);
+        let yaw = if horizontal < 1e-6 {
+            self.yaw
+        } else {
+            view.0.atan2(view.2)
+        };
+        let pitch = (-view.1).atan2(horizontal);
+        let wrap = |a: f32| {
+            let a = a % std::f32::consts::TAU;
+            if a > std::f32::consts::PI {
+                a - std::f32::consts::TAU
+            } else if a < -std::f32::consts::PI {
+                a + std::f32::consts::TAU
+            } else {
+                a
+            }
+        };
+        let candidate = |yaw: f32, pitch: f32| {
+            let (s, c) = yaw.sin_cos();
+            let (p, q) = pitch.sin_cos();
+            let roll = right
+                .dot(Vec3(s * p, q, c * p))
+                .atan2(right.dot(Vec3(c, 0., -s)));
+            let angles = [yaw, pitch, roll];
+            let previous = [self.yaw, self.pitch, self.roll];
+            let distance: f32 = angles
+                .into_iter()
+                .zip(previous)
+                .map(|(a, b)| wrap(a - b).powi(2))
+                .sum();
+            (distance, angles)
+        };
+        // Equivalent Euler encodings exist on either side of a pole. Choose
+        // the closer one so diagnostic angles also stay useful across poles.
+        let a = candidate(yaw, pitch);
+        let b = candidate(yaw + std::f32::consts::PI, std::f32::consts::PI - pitch);
+        let (_, angles) = if a.0 <= b.0 { a } else { b };
+        [self.yaw, self.pitch, self.roll] = angles.map(wrap);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn tilted_orbit_rotates_about_screen_up_not_world_y() {
+        let mut camera = Camera {
+            yaw: 0.4,
+            pitch: 1.1,
+            ..Default::default()
+        };
+        let (right, up, view) = camera.basis();
+        camera.orbit(Vec2::new(50., 0.));
+        let after = camera.basis();
+        assert!(
+            (after.1 - up).len() < 1e-6,
+            "horizontal orbit must keep screen-up fixed"
+        );
+        assert!((after.0 - right.rotated(up, -0.4)).len() < 1e-6);
+        assert!((after.2 - view.rotated(up, -0.4)).len() < 1e-6);
+    }
+    fn assert_basis_close(a: (Vec3, Vec3, Vec3), b: (Vec3, Vec3, Vec3), tolerance: f32) {
+        for (a, b) in [(a.0, b.0), (a.1, b.1), (a.2, b.2)] {
+            assert!((a - b).len() < tolerance, "{a:?} != {b:?}");
+        }
+    }
+
+    #[test]
+    fn orbit_axes_and_angle_follow_screen_at_poles_after_roll_and_inverted() {
+        for pitch in [
+            0.,
+            1.1,
+            std::f32::consts::FRAC_PI_2 - 1e-6,
+            std::f32::consts::FRAC_PI_2,
+            std::f32::consts::FRAC_PI_2 + 1e-6,
+            -std::f32::consts::FRAC_PI_2,
+            2.,
+            std::f32::consts::PI,
+        ] {
+            for roll in [0., 0.7, std::f32::consts::FRAC_PI_2, 3.] {
+                for delta in [Vec2::new(40., 0.), Vec2::new(0., -40.), Vec2::new(24., 32.)] {
+                    let mut camera = Camera {
+                        yaw: 0.4,
+                        pitch,
+                        roll,
+                        ..Default::default()
+                    };
+                    let before = camera.basis();
+                    // Express the expected local rotation directly as matrix
+                    // columns, independently of the implementation's world axis.
+                    let local_axis = Vec3(-delta.y, -delta.x, 0.).norm();
+                    let transform = |p: Vec3| {
+                        let p = p.rotated(local_axis, 0.32);
+                        before.0 * p.0 + before.1 * p.1 + before.2 * p.2
+                    };
+                    camera.orbit(delta);
+                    assert_basis_close(
+                        camera.basis(),
+                        (
+                            transform(Vec3(1., 0., 0.)),
+                            transform(Vec3(0., 1., 0.)),
+                            transform(Vec3(0., 0., 1.)),
+                        ),
+                        2e-6,
+                    );
+                    camera.orbit(-delta);
+                    assert_basis_close(camera.basis(), before, 3e-6);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn diagonal_orbit_is_independent_of_event_subdivision() {
+        let mut whole = Camera {
+            yaw: 0.4,
+            pitch: 1.3,
+            roll: 0.8,
+            ..Default::default()
+        };
+        let mut split = whole;
+        whole.orbit(Vec2::new(130., -175.));
+        for _ in 0..100 {
+            split.orbit(Vec2::new(1.3, -1.75));
+        }
+        assert_basis_close(whole.basis(), split.basis(), 2e-5);
+    }
+
+    #[test]
+    fn repeated_mixed_orbit_and_roll_preserve_frame_and_navigation_settings() {
+        for perspective in [false, true] {
+            let mut camera = Camera {
+                perspective,
+                pan: Vec2::new(42., -70.),
+                zoom: 0.6,
+                perspective_radius: 8.,
+                field_of_view: 60.,
+                ..Default::default()
+            };
+            let before = camera;
+            for i in 0..4000 {
+                let old = camera.basis();
+                let delta = if i % 2 == 0 {
+                    Vec2::new(2., 3.)
+                } else {
+                    Vec2::new(-3., 1.)
+                };
+                camera.orbit(delta);
+                let new = camera.basis();
+                assert!((new.2 - old.2).len() < 0.03, "unexpected pole jump");
+                camera.roll_by(0.01);
+                let (r, u, v) = camera.basis();
+                assert!((r.len() - 1.).abs() < 1e-6);
+                assert!((u.len() - 1.).abs() < 1e-6);
+                assert!((v.len() - 1.).abs() < 1e-6);
+                assert!((r.cross(u) - v).len() < 1e-6);
+            }
+            assert_eq!(camera.pan, before.pan);
+            assert_eq!(camera.zoom, before.zoom);
+            assert_eq!(camera.eye_distance(), before.eye_distance());
+            let basis = camera.basis();
+            for delta in [
+                Vec2::ZERO,
+                Vec2::new(f32::NAN, 0.),
+                Vec2::new(0., f32::INFINITY),
+            ] {
+                camera.orbit(delta);
+                assert_eq!(camera.basis(), basis);
+            }
+        }
+    }
+
     #[test]
     fn screen_roll_rotates_projection_without_changing_depth_or_view_direction() {
         for (yaw, pitch) in [(0., 0.), (0.7, 0.4), (-1.2, 2.)] {
@@ -200,13 +373,13 @@ mod tests {
                         pitch,
                         ..Default::default()
                     };
-                    let visible_point = camera.basis().2;
+                    let before = camera.basis();
+                    let visible_point = before.2;
                     camera.orbit(Vec2::new(dx, 0.));
                     let screen_x = visible_point.dot(camera.basis().0);
                     assert!(screen_x * dx > 0., "pitch {pitch}, yaw {yaw}, drag {dx}");
                     camera.orbit(Vec2::new(-dx, 0.));
-                    assert!((camera.yaw - yaw).abs() < 1e-6);
-                    assert_eq!(camera.pitch, pitch);
+                    assert_basis_close(camera.basis(), before, 2e-6);
                 }
             }
         }
@@ -221,10 +394,7 @@ mod tests {
         assert!((camera.basis().2 - before).len() > 0.5);
         let basis = camera.basis();
         for _ in 0..20 {
-            camera.orbit(Vec2::new(
-                std::f32::consts::TAU / 0.008,
-                std::f32::consts::TAU / 0.008,
-            ));
+            camera.orbit(Vec2::new(0., std::f32::consts::TAU / 0.008));
         }
         for (a, b) in [
             (basis.0, camera.basis().0),

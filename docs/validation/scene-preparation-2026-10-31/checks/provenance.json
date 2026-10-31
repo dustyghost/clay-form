@@ -1,0 +1,8 @@
+{
+  "source_sha256": "34b9a939367007cf54f5d16031143a806d95560a006bdb26b38b48ca24112618",
+  "binary_sha256": "368565be03339e0efcd5a2b9cdb46d57be283319964140ccc9bc07bc630bb9c7",
+  "passed": {
+    "cpu": 24,
+    "gpu": 4
+  }
+}

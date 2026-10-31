@@ -8,6 +8,121 @@ use crate::{
 
 #[cfg(target_os = "linux")]
 #[test]
+#[ignore = "requires Vulkan; compare footprint pixels with exhaustive surface picks"]
+fn gpu_footprint_bins_match_exhaustive_overlay_pixels() {
+    use crate::sculpt::{Alpha, Brush, Kind, Mesh};
+    let mut capture = UiCapture::new([256, 256]);
+    let context = egui::Context::default();
+    let mut renderer = Renderer::new(&capture.state).unwrap();
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(256., 256.));
+    let mut frames = Vec::new();
+    // Keep one document so its revisions also invalidate the renderer cache
+    // when the fixture changes from a whole sphere to a hidden-face cut.
+    let mut doc = Document::default();
+    for hidden in [false, true] {
+        let mut mesh = Mesh::starting_sphere();
+        if hidden {
+            mesh.hidden_faces = mesh
+                .triangles
+                .iter()
+                .map(|t| t.iter().all(|&i| mesh.vertices[i].0 > 0.1))
+                .collect();
+        }
+        assert_eq!(mesh.has_hidden_faces(), hidden);
+        let visible_faces = mesh.triangles.len() - mesh.hidden_face_count();
+        doc.replace_geometry(Geometry::new(mesh)).unwrap();
+        for perspective in [false, true] {
+            let camera = Camera {
+                perspective,
+                roll: 0.2,
+                ..Default::default()
+            };
+            for image_alpha in [false, true] {
+                let mut brush = Brush::new(Kind::Standard);
+                brush.inner_radius = 0.35;
+                if image_alpha {
+                    brush.alpha = Alpha::Image {
+                        width: 2,
+                        height: 2,
+                        pixels: vec![0., 1., 0.7, 0.2].into(),
+                    };
+                }
+                let mut render = |mode| {
+                    let output = context.run(
+                        egui::RawInput {
+                            screen_rect: Some(rect),
+                            ..Default::default()
+                        },
+                        |ctx| {
+                            let painter = ctx.layer_painter(egui::LayerId::background());
+                            let scene = Scene::paint_with_renderer(
+                                &painter,
+                                rect,
+                                &doc,
+                                &camera,
+                                false,
+                                WireMode::Visible,
+                                false,
+                                Some(&mut renderer),
+                            );
+                            assert_eq!(scene.geometry.mesh.triangles.len(), visible_faces);
+                            let pos = rect.center() + egui::vec2(-15., 0.);
+                            let hit = if mode == 1 {
+                                scene.reference_brush_cursor(
+                                    &painter,
+                                    pos,
+                                    55.,
+                                    &brush,
+                                    egui::Color32::YELLOW,
+                                )
+                            } else {
+                                scene.brush_cursor_with_footprint(
+                                    &painter,
+                                    pos,
+                                    55.,
+                                    &brush,
+                                    egui::Color32::YELLOW,
+                                    mode == 2,
+                                )
+                            };
+                            assert!(hit);
+                        },
+                    );
+                    capture.render(&context, output)
+                };
+                let bare = render(0);
+                let expected = render(1);
+                let actual = render(2);
+                assert_ne!(bare, actual, "the footprint must add visible pixels");
+                assert_eq!(
+                    actual, expected,
+                    "hidden={hidden}, perspective={perspective}, image={image_alpha}"
+                );
+                frames.push(actual);
+            }
+        }
+    }
+    if let Ok(path) = std::env::var("CLAY_FOOTPRINT_PREVIEW") {
+        let mut pixels = Vec::new();
+        for y in (0..256).rev() {
+            for frame in &frames {
+                pixels.extend_from_slice(&frame[y * 256 * 4..(y + 1) * 256 * 4]);
+            }
+        }
+        image::save_buffer(
+            path,
+            &pixels,
+            256 * frames.len() as u32,
+            256,
+            image::ColorType::Rgba8,
+        )
+        .unwrap();
+    }
+    renderer.destroy();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 #[ignore = "requires Vulkan; float pixels retain HDR range through the GPU and exposure preview"]
 fn gpu_float_texture_hdr_values_survive_upload_and_filtering() {
     use crate::sculpt::texture::{Channel, Pixels, Precision, Texture};
@@ -24,6 +139,7 @@ fn gpu_float_texture_hdr_values_survive_upload_and_filtering() {
     let mut doc = Document::default();
     doc.replace_geometry(Geometry::new(mesh)).unwrap();
     gpu.upload(&Arc::new(DisplayMesh::new(&doc)));
+    assert!(!gpu.basic_surface_eligible(&Preview::default()));
     let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(128.));
     let params = Params::new(
         rect,
@@ -413,6 +529,7 @@ fn gpu_material_channels_match_linear_reference_and_survive_batching() {
             );
         }
         if material.needs_extended_shading() {
+            assert!(!gpu.basic_surface_eligible(&Preview::default()));
             assert_eq!(gpu.vertex_stride, 77);
             gpu.upload_meshes(&display, 1024);
             gpu.paint(
@@ -430,6 +547,7 @@ fn gpu_material_channels_match_linear_reference_and_survive_batching() {
             );
         } else {
             assert_eq!(gpu.vertex_stride, 12);
+            assert!(gpu.basic_surface_eligible(&Preview::default()));
         }
         samples.push(rgba[center..center + 3].to_vec());
     }
@@ -1096,7 +1214,7 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
             "undo must invalidate cached geometry"
         );
         assert_eq!(
-            renderer.geometry(&document).mesh.vertices,
+            *renderer.geometry(&document).mesh.vertices,
             document.mesh().vertices
         );
         document.invert_mask().unwrap();
@@ -1131,9 +1249,9 @@ fn gpu_offscreen_depth_wireframe_and_cache() {
         document.set_temporary_thickness(0.2).unwrap();
         let base = renderer.geometry(&document);
         let shell = renderer.render_geometry.as_ref().unwrap().clone();
-        assert_eq!(base.mesh, original);
-        assert_eq!(shell.mesh, original.solidify(0.2).unwrap());
-        shell.mesh.validate_closed().unwrap();
+        assert_eq!(base.mesh.to_mesh(), original);
+        assert_eq!(shell.mesh.to_mesh(), original.solidify(0.2).unwrap());
+        shell.mesh.to_mesh().validate_closed().unwrap();
         {
             let mut gpu = renderer.gpu.lock().unwrap();
             gpu.upload(&shell);
@@ -1516,9 +1634,9 @@ fn dense_stroke_display_keeps_full_resolution_and_rejects_incompatible_topology(
         let preview = previous
             .during_stroke(&doc)
             .expect("dense fixed-topology stroke has a fast display path");
-        assert_eq!(preview.mesh.vertices, doc.mesh().vertices);
-        assert_eq!(preview.mesh.materials, doc.mesh().materials);
-        assert_eq!(preview.mesh.mask, doc.mesh().mask);
+        assert_eq!(*preview.mesh.vertices, doc.mesh().vertices);
+        assert_eq!(*preview.mesh.materials, doc.mesh().materials);
+        assert_eq!(*preview.mesh.mask, doc.mesh().mask);
         assert_eq!(preview.shading.triangles, previous.shading.triangles);
         assert!(
             preview

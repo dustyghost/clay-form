@@ -1,0 +1,5 @@
+
+running 1 test
+test viewport::gpu::tests::gpu_uv_texture_pixels_and_checker_survive_batching ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 972 filtered out; finished in 0.60s

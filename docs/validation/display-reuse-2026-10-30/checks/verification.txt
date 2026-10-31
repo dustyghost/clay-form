@@ -1,0 +1,6 @@
+38 focused CPU tests passed; five Vulkan tests passed.
+Phase probes: 18 released hashes match; canonical packed display checks passed.
+Large GPU comparison and organic/hidden repeats: all input/output hashes and sample counts match.
+Baseline patch applies and reconstructs the measured source digest; final source matches its measurement digest.
+cargo fmt --all -- --check: passed.
+git diff --cached --check: passed after normalizing log endings and CSV line endings.

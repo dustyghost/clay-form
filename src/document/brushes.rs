@@ -11,6 +11,8 @@ impl Document {
         if (brush.material.base_color != target.material.base_color
             || brush.material.primary_asset() != target.material.primary_asset())
             && brush.texture_colour == target.texture_colour
+            && brush.secondary_colour == target.secondary_colour
+            && brush.secondary_texture_colour == target.secondary_texture_colour
         {
             brush.texture_colour = None;
         }

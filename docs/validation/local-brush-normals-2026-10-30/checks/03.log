@@ -1,0 +1,10 @@
+running 7 tests
+test sculpt::projection::tests::projection_blends_positions_preserving_topology_masks_groups_and_hidden_boundaries ... ok
+test sculpt::projection::tests::projection_bvh_matches_exhaustive_nearest_surface ... ok
+test sculpt::projection::tests::projection_cannot_fold_neighbouring_faces_back_against_each_other ... ok
+test sculpt::projection::tests::projection_hidden_reference_faces_cancellation_invalid_options_and_noops ... ok
+test sculpt::projection::tests::projection_of_a_steep_bowl_stays_stable_through_subdivision ... ok
+test sculpt::projection::tests::projection_recovers_remeshed_surface_with_a_bounded_triangle_search ... ok
+test sculpt::projection::tests::projection_skips_misses_opposing_sheets_and_ambiguous_disconnected_parts ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 983 filtered out; finished in 0.43s

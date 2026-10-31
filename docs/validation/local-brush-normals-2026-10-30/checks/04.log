@@ -1,0 +1,8 @@
+running 4 tests
+test sculpt::relaxation::tests::relaxation_after_aggressive_inflate_reduces_stretch_and_retains_the_bulge ... Inflate region aspect: 1.2645746 -> 1.1925095; RelaxationReport { moved: 450, protected: 416, limited: 0, max_deviation: 0.007157728 }
+ok
+test sculpt::relaxation::tests::relaxation_groove_repeated_passes_preserve_shape_topology_and_attributes ... ok
+test sculpt::relaxation::tests::relaxation_plane_boundaries_masks_hidden_faces_and_thin_sheets_are_protected ... ok
+test sculpt::relaxation::tests::relaxation_redistributes_beyond_original_fan_without_changing_the_surface ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 986 filtered out; finished in 1.42s

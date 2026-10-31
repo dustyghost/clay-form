@@ -222,13 +222,18 @@ impl Mesh {
         self.validate_materials()?;
         self.validate_groups()?;
         self.validate_creases()?;
-        if self.vertices.len() > super::subdivision::MAX_VERTICES
-            || self.triangles.len() > super::subdivision::MAX_TRIANGLES
-            || self
-                .quads
-                .iter()
-                .flatten()
-                .any(|&i| i >= self.vertices.len())
+        let capacity = super::capacity::current();
+        if self.vertices.len() > capacity.vertices || self.triangles.len() > capacity.triangles {
+            return Err(format!(
+                "Mesh exceeds configured limits ({} vertices, {} triangles). Increase Settings → Mesh capacity and restart.",
+                capacity.vertices, capacity.triangles
+            ));
+        }
+        if self
+            .quads
+            .iter()
+            .flatten()
+            .any(|&i| i >= self.vertices.len())
             || self.mask.len() != self.vertices.len()
             || self
                 .vertices
@@ -327,8 +332,14 @@ impl Mesh {
         let dabs = stable_dabs.as_deref().unwrap_or(dabs);
         let mut deformed = false;
         let old = self.vertices.clone();
-        let normals = self.normals();
+        #[cfg(test)]
+        super::stamp_profile::mark("clone_positions");
         let mut sculptable = self.sculptable_vertices();
+        #[cfg(test)]
+        super::stamp_profile::mark("eligibility");
+        let normals = self.stamp_normals(b.kind, dabs, &mut sculptable);
+        #[cfg(test)]
+        super::stamp_profile::mark("normals");
         let polish = (b.kind == Kind::Polish)
             .then(|| self.polish_planes(b, dabs, &normals, &mut sculptable));
         let sampled = (b.kind == Kind::Clay
@@ -340,6 +351,13 @@ impl Mesh {
             && dabs.len() > 1
             && stencils.is_empty();
         let origin = dabs.first().map_or(Vec3::default(), |dab| dab.center);
+        let footprint = b.prepare_weight();
+        let strengths: Vec<_> = dabs
+            .iter()
+            .map(|dab| b.strength * b.dab_pressure(dab))
+            .collect();
+        #[cfg(test)]
+        super::stamp_profile::mark("planes_and_brush");
         for i in 0..old.len() {
             if !sculptable[i] {
                 continue;
@@ -367,17 +385,12 @@ impl Mesh {
                 let weight = if b.kind == Kind::Snake {
                     b.snake_weight(*dab, offset)
                 } else {
-                    b.weight(
+                    footprint.weight(
                         offset.dot(dab.right) / dab.radius,
                         offset.dot(dab.up) / dab.radius,
                     )
                 };
-                let strength = b.strength
-                    * if b.pressure {
-                        dab.pressure.powf(b.pressure_curve)
-                    } else {
-                        1.
-                    };
+                let strength = strengths[dab_index];
                 let influence =
                     weight * strength * stencils.get(dab_index).map_or(1., |s| s.weight(old[i]));
                 if influence <= 0. {
@@ -497,6 +510,8 @@ impl Mesh {
             self.vertices[i] = old[i] + displacement * stamp_gain;
             deformed |= self.vertices[i] != old[i];
         }
+        #[cfg(test)]
+        super::stamp_profile::mark("vertex_loop");
         if deformed {
             if b.kind == Kind::Standard
                 && dabs.len() == 1

@@ -1,0 +1,30 @@
+{
+  "recorded_utc": "2026-10-30T19:32:56Z",
+  "ac_online": "1",
+  "cpu_governor": "powersave",
+  "energy_performance_preference": "balance_performance",
+  "outputs": [
+    {
+      "name": "eDP-1",
+      "mode": {
+        "width": 1920,
+        "height": 1080,
+        "refresh": 60049,
+        "picture_aspect_ratio": "none"
+      },
+      "scale": 1.0,
+      "active": true
+    },
+    {
+      "name": "DP-6",
+      "mode": {
+        "width": 1920,
+        "height": 1080,
+        "refresh": 74973,
+        "picture_aspect_ratio": "none"
+      },
+      "scale": 1.0,
+      "active": true
+    }
+  ]
+}

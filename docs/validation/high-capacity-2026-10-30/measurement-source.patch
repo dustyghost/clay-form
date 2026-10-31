@@ -1,0 +1,9 @@
+--- a/scripts/benchmark-capacity.py
++++ b/scripts/benchmark-capacity.py
+@@ -112,5 +112,5 @@
+                 "sampled_peak_swap_bytes": peak_swap * 1024,
+                 "minimum_available_bytes": None if minimum_available is None else minimum_available * 1024}
+-    if reason or code != 0:
++    if code != 0:
+         return {"status": "failed", "reason": reason or f"test exit {code}", "log": log.name, **observed}
+     return {"status": "measured", "log": log.name, **observed}

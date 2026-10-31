@@ -1,0 +1,20 @@
+{
+  "test": "viewport::gpu::profile::capacity::gpu_load_profile_display_stages",
+  "level": 3,
+  "fixtures": [
+    "sphere",
+    "organic",
+    "hidden"
+  ],
+  "trials": 3,
+  "dabs_per_brush": 4,
+  "brushes": [
+    "Standard",
+    "Paint"
+  ],
+  "mesh_capacity": {
+    "vertices": 2000000,
+    "triangles": 4000000
+  },
+  "note": "The probe sets capacity internally. Generic environment.json mesh_capacity/workload fields came from runner defaults and do not configure this diagnostic."
+}

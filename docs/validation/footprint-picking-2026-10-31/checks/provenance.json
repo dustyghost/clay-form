@@ -1,0 +1,7 @@
+{
+  "source_sha256": "59819d8fb5f8ce950aa33d6d1687bf89d00c487efbd26aa5631e9562e4f35bd9",
+  "binary_sha256": "bd886bba8da9ba23f0d92f14cc7b26cd95a4cbe4ba60a52e335191e302e5f3f2",
+  "cpu_passed": 21,
+  "gpu_passed": 4,
+  "capture_sha256": "3617ad694ad9a725bac7492ee7fff8b8af0c633825d320b0f03332d0c7027f60"
+}

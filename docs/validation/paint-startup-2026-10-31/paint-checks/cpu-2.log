@@ -1,0 +1,6 @@
+
+running 2 tests
+test sculpt::material::paint_regressions::channel_edits_retain_layer_storage_and_unselected_values ... ok
+test sculpt::material::paint_regressions::vertex_paint_rejects_occluded_sheets_and_other_models ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1024 filtered out; finished in 0.00s

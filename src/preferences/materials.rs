@@ -248,20 +248,24 @@ mod tests {
     }
 
     #[test]
-    fn material_library_migrates_six_presets_without_losing_custom_names_or_values() {
-        let mut library = MaterialLibrary::default();
-        library.names[4] = "My copper".into();
-        library.values[4].roughness = 0.7;
-        let mut old = serde_json::to_value(&library).unwrap();
-        old["names"].as_array_mut().unwrap().truncate(6);
-        old["values"].as_array_mut().unwrap().truncate(6);
-        let migrated: MaterialLibrary = serde_json::from_value(old).unwrap();
-        migrated.validate().unwrap();
-        assert_eq!(migrated.names[4], "My copper");
-        assert_eq!(migrated.values[4].roughness, 0.7);
-        assert_eq!(migrated.names.len(), 11);
-        assert_eq!(migrated.names[7], "Beeswax");
-        assert!(migrated.values[9].subsurface > 0.);
+    fn material_library_migrates_presets_without_losing_custom_names_or_values() {
+        for count in [6, 11] {
+            let mut library = MaterialLibrary::default();
+            library.names[4] = "My copper".into();
+            library.values[4].roughness = 0.7;
+            library.hidden_builtins.push(3);
+            let mut old = serde_json::to_value(&library).unwrap();
+            old["names"].as_array_mut().unwrap().truncate(count);
+            old["values"].as_array_mut().unwrap().truncate(count);
+            let migrated: MaterialLibrary = serde_json::from_value(old).unwrap();
+            migrated.validate().unwrap();
+            assert_eq!(migrated.names[..count], library.names[..count]);
+            assert_eq!(migrated.values[..count], library.values[..count]);
+            assert_eq!(migrated.hidden_builtins, [3]);
+            let index = Material::DEFAULT_PRESET_ID as usize - 1;
+            assert_eq!(migrated.names[index], "Default clay");
+            assert_eq!(migrated.values[index], Material::default());
+        }
     }
     #[test]
     fn material_library_copies_and_palette_survive_preferences_round_trip() {
@@ -339,6 +343,55 @@ mod tests {
             load(&path).unwrap().shortcut(&Action::PolygroupColors),
             old.shortcut(&Action::PolygroupColors)
         );
+        std::fs::remove_file(path).unwrap();
+    }
+    #[test]
+    fn colour_swap_shortcut_migrates_once_and_preserves_custom_keys() {
+        let path =
+            std::env::temp_dir().join(format!("clay-colour-swap-keys-{}.json", std::process::id()));
+        for mode in 0..3 {
+            let mut old = Preferences {
+                paint_shortcuts_version: 1,
+                ..Default::default()
+            };
+            old.clear_binding(&Action::SwapPaintColours);
+            if mode == 1 {
+                old.bind(Action::Wireframe, Shortcut::new(Key::Z, Modifiers::NONE))
+                    .unwrap();
+            } else if mode == 2 {
+                old.bind(
+                    Action::SwapPaintColours,
+                    Shortcut::new(Key::Z, Modifiers::ALT),
+                )
+                .unwrap();
+            }
+            save(&path, &old).unwrap();
+            let mut migrated = load(&path).unwrap();
+            let expected = match mode {
+                0 => Some(Shortcut::new(Key::Z, Modifiers::NONE)),
+                1 => None,
+                _ => Some(Shortcut::new(Key::Z, Modifiers::ALT)),
+            };
+            assert_eq!(
+                migrated.shortcut(&Action::SwapPaintColours),
+                expected.as_ref()
+            );
+            assert_eq!(
+                migrated.shortcut(&Action::Wireframe),
+                old.shortcut(&Action::Wireframe)
+            );
+            assert_eq!(
+                migrated.shortcut(&Action::Undo),
+                old.shortcut(&Action::Undo)
+            );
+            assert_eq!(
+                migrated.shortcut(&Action::Redo),
+                old.shortcut(&Action::Redo)
+            );
+            migrated.clear_binding(&Action::SwapPaintColours);
+            save(&path, &migrated).unwrap();
+            assert_eq!(load(&path).unwrap(), migrated);
+        }
         std::fs::remove_file(path).unwrap();
     }
 }

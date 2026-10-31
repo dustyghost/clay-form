@@ -70,8 +70,8 @@ impl Mesh {
             );
         }
         let added: usize = borders.values().map(|b| b.len() * count as usize).sum();
-        if self.vertices.len() + added > MAX_VERTICES
-            || self.triangles.len() + added * 2 > MAX_TRIANGLES
+        if self.vertices.len() + added > max_vertices()
+            || self.triangles.len() + added * 2 > max_triangles()
         {
             return Err("Support loops exceed the mesh size limit".into());
         }

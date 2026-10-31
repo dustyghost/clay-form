@@ -1,0 +1,7 @@
+
+running 3 tests
+test sculpt::paint_effect::deposition_regressions::weighted_airbrush_opacity_is_independent_of_time_partition ... ok
+test sculpt::paint_effect::tests::airbrush_flow_is_time_based_and_spray_has_adjustable_separate_droplets ... ok
+test sculpt::paint_effect::tests::paint_settings_roundtrip_and_old_presets_default_to_strokes ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 1023 filtered out; finished in 0.01s

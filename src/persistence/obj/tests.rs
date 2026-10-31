@@ -205,19 +205,19 @@ fn invalid_faces_and_unsupported_geometry_are_rejected_with_context() {
 fn size_and_cancellation_limits_apply_before_scene_commit() {
     assert!(
         parse(
-            &format!("{}f 1 2 3", "v 0 0 0\n".repeat(MAX_VERTICES + 1)),
+            &format!("{}f 1 2 3", "v 0 0 0\n".repeat(max_vertices() + 1)),
             &|| false
         )
         .unwrap_err()
-        .contains("500,000")
+        .contains("vertex limit")
     );
     assert!(
         parse(
-            &format!("{SQUARE}{}", "f 1 2 3 4\n".repeat(MAX_TRIANGLES / 2 + 1)),
+            &format!("{SQUARE}{}", "f 1 2 3 4\n".repeat(max_triangles() / 2 + 1)),
             &|| false
         )
         .unwrap_err()
-        .contains("1,000,000")
+        .contains("triangle limit")
     );
     assert!(
         parse(
