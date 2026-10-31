@@ -1,4 +1,5 @@
 //! Short-lived candidate lists for the fixed brush-footprint sample grid.
+use super::picking::{face_bounds, may_cross_near};
 use super::{Pos2, Scene, Vec3, egui, pick_faces};
 
 pub(super) const SIDE: usize = 17;
@@ -36,8 +37,7 @@ impl Footprint {
             };
         }
         let bounds = egui::Rect::from_min_max(points[0], points[SAMPLES - 1]);
-        let check_near = scene.eye_distance > 0.
-            && scene.eye_distance - scene.geometry.depth_extent < scene.near();
+        let check_near = may_cross_near(scene);
         let candidates = Self::bins(scene, &points, bounds, check_near, budget)
             .map(Candidates::Bins)
             .unwrap_or_else(|| {
@@ -46,9 +46,8 @@ impl Footprint {
                 // candidate scan in that case, with conservative clip bounds.
                 Candidates::Scan(
                     scene
-                        .all_faces
-                        .iter()
-                        .filter_map(|&(face, _)| {
+                        .face_candidates(bounds)
+                        .filter_map(|(face, _)| {
                             bounds
                                 .intersects(face_bounds(scene, face, check_near))
                                 .then_some(face)
@@ -70,7 +69,7 @@ impl Footprint {
         let ys: [_; SIDE] = std::array::from_fn(|i| points[i * SIDE].y);
         let mut bins: Box<Bins> = Box::new(std::array::from_fn(|_| Vec::new()));
         let mut references = 0;
-        for &(face, _) in &scene.all_faces {
+        for (face, _) in scene.face_candidates(bounds) {
             let b = face_bounds(scene, face, check_near);
             if !bounds.intersects(b) {
                 continue;
@@ -109,38 +108,6 @@ impl Footprint {
         // Independent broad phase: test every front-facing face at every point.
         result.candidates = Candidates::Scan(scene.all_faces.iter().map(|f| f.0).collect());
         result
-    }
-}
-
-fn face_bounds(scene: &Scene, face: usize, check_near: bool) -> egui::Rect {
-    let triangle = scene.geometry.mesh.triangles[face];
-    if check_near
-        && triangle
-            .iter()
-            .any(|&i| !scene.visible_depth(scene.geometry.mesh.vertices[i]))
-    {
-        // Clamped projections do not bound a triangle crossing the near plane.
-        // Let the exact ray intersection and depth check decide every sample.
-        return egui::Rect::EVERYTHING;
-    }
-    let [a, b, c] = triangle.map(|i| scene.positions[i]);
-    if ![a, b, c].iter().all(|p| p.is_finite()) {
-        return egui::Rect::EVERYTHING;
-    }
-    let bounds = egui::Rect::from_min_max(
-        Pos2::new(a.x.min(b.x).min(c.x), a.y.min(b.y).min(c.y)),
-        Pos2::new(a.x.max(b.x).max(c.x), a.y.max(b.y).max(c.y)),
-    );
-    if scene.eye_distance == 0. {
-        bounds
-    } else {
-        // The perspective picker works in world space. Leave room for rounding
-        // between ray arithmetic and screen projection at shared edges.
-        let magnitude = [bounds.min.x, bounds.min.y, bounds.max.x, bounds.max.y]
-            .into_iter()
-            .map(f32::abs)
-            .fold(1_f32, f32::max);
-        bounds.expand(magnitude * (32. * f32::EPSILON))
     }
 }
 

@@ -30,6 +30,11 @@ fn check(view: &Scene, pos: Pos2, radius: f32, budget: usize) -> Footprint {
     for (i, &point) in grid.points.iter().enumerate() {
         let full = super::super::pick_surface(view, &view.all_faces, point);
         assert_eq!(
+            bits(view.pick_surface(point)),
+            bits(full),
+            "ordinary pick at sample {i}"
+        );
+        assert_eq!(
             bits(grid.pick(view, i)),
             bits(full),
             "sample {i}: {point:?}, radius {radius}"

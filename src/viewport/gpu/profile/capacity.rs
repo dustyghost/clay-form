@@ -901,3 +901,62 @@ fn gpu_load_profile_camera_picking() {
     )
     .unwrap();
 }
+
+#[test]
+#[ignore = "manual prepared-scene reuse diagnosis; excluded from routine GPU CI"]
+fn gpu_load_profile_scene_reuse() {
+    use crate::viewport::scene::cache::Cache;
+    let output = std::env::var("CLAY_REUSE_PROFILE").expect("output path");
+    let level = env_limit("CLAY_CAMERA_LEVEL", 3);
+    crate::sculpt::capacity::initialize(benchmark_capacity(level, 2_000_000, 4_000_000).unwrap())
+        .unwrap();
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800., 600.));
+    let bits = |hit: Option<(Vec3, Vec3)>| {
+        hit.map(|(p, n)| [p.0, p.1, p.2, n.0, n.1, n.2].map(f32::to_bits))
+    };
+    let mut rows = Vec::new();
+    for name in ["sphere", "organic", "hidden"] {
+        let doc = document(fixture(name, level));
+        let display = Arc::new(DisplayMesh::new(&doc));
+        for perspective in [false, true] {
+            for moving in [false, true] {
+                let mut cache = Cache::default();
+                let mut previous: Option<Scene> = None;
+                let mut metrics = Measurements::default();
+                for frame in 0..12 {
+                    let camera = Camera {
+                        perspective,
+                        yaw: if moving { frame as f32 * 0.025 } else { 0. },
+                        ..Default::default()
+                    };
+                    let fresh = metrics.time("fresh_scene", || {
+                        Scene::from_geometry(rect, &camera, display.clone(), false)
+                    });
+                    let cached = metrics.time("cached_scene", || {
+                        cache.get(rect, &camera, display.clone(), false)
+                    });
+                    if let Some(previous) = &previous {
+                        assert_eq!(cached.shares_preparation(previous), !moving);
+                    }
+                    let point = rect.center() + egui::vec2((frame % 3) as f32 * 5., 4.);
+                    let expected = metrics.time("fresh_pick", || fresh.pick(point));
+                    let actual = metrics.time("cached_pick", || cached.pick(point));
+                    assert!(actual.is_some());
+                    assert_eq!(bits(actual), bits(expected));
+                    let repeated = metrics.time("repeat_pick", || cached.pick(point));
+                    assert_eq!(bits(repeated), bits(expected));
+                    previous = Some(cached);
+                }
+                rows.push(serde_json::json!({"fixture":name,"perspective":perspective,"moving":moving,"source_triangles":doc.mesh().triangles.len(),"display_triangles":display.mesh.triangles.len(),"metrics":metrics.summary()}));
+            }
+        }
+    }
+    std::fs::write(
+        output,
+        serde_json::to_vec_pretty(
+            &serde_json::json!({"level":level,"rows":rows,"memory_final":memory()}),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+}

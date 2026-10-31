@@ -34,6 +34,8 @@ impl InspectionMode {
 }
 
 pub(super) struct Renderer {
+    scene_cache: super::scene::cache::Cache,
+    preview_scene_cache: super::scene::cache::Cache,
     revision: Option<u64>,
     geometry_revision: Option<u64>,
     live_display: bool,
@@ -46,6 +48,8 @@ impl Renderer {
     pub fn new(state: &egui_wgpu::RenderState) -> Result<Self, String> {
         Ok(Self {
             preview: Arc::new(Mutex::new(Preview::default())),
+            scene_cache: Default::default(),
+            preview_scene_cache: Default::default(),
             revision: None,
             geometry_revision: None,
             live_display: false,
@@ -57,6 +61,23 @@ impl Renderer {
                 state.target_format,
             ))),
         })
+    }
+    pub(super) fn prepare_scene(
+        &mut self,
+        rect: egui::Rect,
+        camera: &crate::camera::Camera,
+        geometry: Arc<DisplayMesh>,
+        preview: bool,
+    ) -> Scene {
+        let cache = if preview {
+            &mut self.preview_scene_cache
+        } else {
+            &mut self.scene_cache
+        };
+        cache.get(rect, camera, geometry, false)
+    }
+    pub(super) fn clear_scene_preview(&mut self) {
+        self.preview_scene_cache.clear();
     }
     pub fn geometry(&mut self, document: &Document) -> Arc<DisplayMesh> {
         if self.revision != Some(document.display_revision())
@@ -1417,6 +1438,8 @@ impl Gpu {
 mod display;
 #[cfg(all(test, target_os = "linux"))]
 mod profile;
+#[cfg(test)]
+mod scene_cache_tests;
 #[cfg(test)]
 mod tests;
 mod upload;

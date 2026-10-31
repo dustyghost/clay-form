@@ -2,21 +2,28 @@
 use super::gpu::{DisplayMesh, Renderer};
 use crate::{camera::Camera, document::Document, sculpt::Vec3};
 use eframe::egui::{self, Color32, Pos2};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock};
+pub(in crate::viewport) mod cache;
 mod footprint;
+mod picking;
 #[cfg(test)]
 pub(in crate::viewport) mod profile;
+type PickMemo = Option<(Pos2, Option<(Vec3, Vec3, usize)>)>;
+
+#[derive(Clone)]
 pub(super) struct Scene {
     pub scale: f32,
     pub(super) eye_distance: f32,
     pub(super) rect: egui::Rect,
     pub(super) active_bounds: egui::Rect,
-    positions: Vec<Pos2>,
+    positions: Arc<Vec<Pos2>>,
     pub(super) geometry: Arc<DisplayMesh>,
     // None borrows all_faces when every displayed vertex belongs to the active model.
-    active_faces: Option<Vec<(usize, f32)>>,
+    active_faces: Option<Arc<Vec<(usize, f32)>>>,
     pub(super) view: Vec3,
-    all_faces: Vec<(usize, f32)>,
+    all_faces: Arc<Vec<(usize, f32)>>,
+    picking: Arc<OnceLock<picking::Index>>,
+    last_pick: Arc<Mutex<PickMemo>>,
     active: usize,
     pub(super) center: Pos2,
     pub(super) right: Vec3,
@@ -56,11 +63,12 @@ impl Scene {
         mut renderer: Option<&mut Renderer>,
     ) -> Self {
         let geometry = if let Some(renderer) = renderer.as_mut() {
+            renderer.clear_scene_preview();
             renderer.geometry(document)
         } else {
             Arc::new(DisplayMesh::new(document))
         };
-        let scene = Self::from_geometry(rect, camera, geometry, renderer.is_none());
+        let scene = Self::prepared(rect, camera, geometry, renderer.as_deref_mut(), false);
         scene.paint_geometry(
             painter,
             renderer.as_deref(),
@@ -90,9 +98,10 @@ impl Scene {
             } else {
                 Arc::new(DisplayMesh::new(document))
             };
-            let scene = Self::from_geometry(rect, camera, geometry, renderer.is_none());
+            let scene = Self::prepared(rect, camera, geometry, renderer.as_deref_mut(), false);
             let display = Arc::new(DisplayMesh::with_active_mesh(document, mesh));
-            let preview = Self::from_geometry(rect, camera, display.clone(), renderer.is_none());
+            let preview =
+                Self::prepared(rect, camera, display.clone(), renderer.as_deref_mut(), true);
             preview.paint_geometry(
                 painter,
                 renderer.as_deref(),
@@ -121,11 +130,11 @@ impl Scene {
             Arc::new(DisplayMesh::new(document))
         };
         // Pick against the original surface so moving/resizing never builds up a stamp.
-        let scene = Self::from_geometry(rect, camera, geometry, renderer.is_none());
+        let scene = Self::prepared(rect, camera, geometry, renderer.as_deref_mut(), false);
         let display = stroke
             .preview
             .display(stroke, document, &scene, painter.ctx());
-        let preview = Self::from_geometry(rect, camera, display.clone(), renderer.is_none());
+        let preview = Self::prepared(rect, camera, display.clone(), renderer.as_deref_mut(), true);
         preview.paint_geometry(
             painter,
             renderer.as_deref(),
@@ -135,6 +144,25 @@ impl Scene {
             Some(display),
         );
         scene
+    }
+    fn prepared(
+        rect: egui::Rect,
+        camera: &Camera,
+        geometry: Arc<DisplayMesh>,
+        renderer: Option<&mut Renderer>,
+        preview: bool,
+    ) -> Self {
+        if let Some(renderer) = renderer {
+            renderer.prepare_scene(rect, camera, geometry, preview)
+        } else {
+            Self::from_geometry(rect, camera, geometry, true)
+        }
+    }
+    #[cfg(test)]
+    pub(super) fn shares_preparation(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.positions, &other.positions)
+            && Arc::ptr_eq(&self.all_faces, &other.all_faces)
+            && Arc::ptr_eq(&self.picking, &other.picking)
     }
     pub(super) fn from_geometry(
         rect: egui::Rect,
@@ -204,11 +232,13 @@ impl Scene {
         // Display construction appends inactive vertices after the active
         // prefix. With no inactive vertices, both face views are identical.
         let active_faces = (active_vertices != mesh.vertices.len()).then(|| {
-            faces
-                .iter()
-                .copied()
-                .filter(|(i, _)| owners[*i] == active)
-                .collect()
+            Arc::new(
+                faces
+                    .iter()
+                    .copied()
+                    .filter(|(i, _)| owners[*i] == active)
+                    .collect(),
+            )
         });
         #[cfg(test)]
         profile::mark("active_faces");
@@ -217,10 +247,12 @@ impl Scene {
             active_bounds,
             scale,
             eye_distance,
-            positions,
+            positions: Arc::new(positions),
             geometry: geometry.clone(),
             active_faces,
-            all_faces: faces,
+            all_faces: Arc::new(faces),
+            picking: Arc::new(OnceLock::new()),
+            last_pick: Arc::new(Mutex::new(None)),
             active,
             view,
             center,
@@ -229,7 +261,10 @@ impl Scene {
         }
     }
     pub(super) fn active_faces(&self) -> &[(usize, f32)] {
-        self.active_faces.as_deref().unwrap_or(&self.all_faces)
+        self.active_faces
+            .as_deref()
+            .map(Vec::as_slice)
+            .unwrap_or(&self.all_faces)
     }
     fn paint_geometry(
         &self,
@@ -609,8 +644,38 @@ impl Scene {
         painter.circle_filled(end, 3., color);
         true
     }
+    fn pick_surface(&self, point: Pos2) -> Option<(Vec3, Vec3, usize)> {
+        if !point.is_finite() {
+            return pick_surface(self, &self.all_faces, point);
+        }
+        let mut previous = self.last_pick.lock().unwrap();
+        if let Some((last, hit)) = *previous
+            && [last.x.to_bits(), last.y.to_bits()] == [point.x.to_bits(), point.y.to_bits()]
+        {
+            return hit;
+        }
+        // A one-off query should not pay for building the group lookup. Reuse
+        // identical queries; build bounds when a later point needs another scan.
+        let hit = if previous.is_none() && self.picking.get().is_none() {
+            pick_surface(self, &self.all_faces, point)
+        } else {
+            pick_faces(
+                self,
+                self.face_candidates(egui::Rect::from_min_max(point, point))
+                    .map(|f| f.0),
+                point,
+            )
+        };
+        *previous = Some((point, hit));
+        hit
+    }
+    fn face_candidates(&self, bounds: egui::Rect) -> impl Iterator<Item = (usize, f32)> + '_ {
+        self.picking
+            .get_or_init(|| picking::Index::new(self))
+            .candidates(self, bounds)
+    }
     pub fn pick_model(&self, point: Pos2) -> Option<(usize, Vec3, Vec3)> {
-        let (p, normal, face) = pick_surface(self, &self.all_faces, point)?;
+        let (p, normal, face) = self.pick_surface(point)?;
         Some((self.geometry.owners[face], p, normal))
     }
     /// Sample the underlying surface colour, independent of lighting and group overlays.
@@ -620,7 +685,7 @@ impl Scene {
     }
     /// Sample stored colour and scalar maps, before lights, exposure or overlays.
     pub(super) fn sample_material(&self, point: Pos2) -> Option<crate::sculpt::Material> {
-        let (p, _, face) = pick_surface(self, &self.all_faces, point)?;
+        let (p, _, face) = self.pick_surface(point)?;
         let mesh = &self.geometry.mesh;
         let ids = mesh.triangles[face];
         let [a, b, c] = ids.map(|i| mesh.vertices[i]);
@@ -657,11 +722,11 @@ impl Scene {
         Some(material)
     }
     pub(super) fn pick_face(&self, point: Pos2) -> Option<usize> {
-        let (_, _, face) = pick_surface(self, &self.all_faces, point)?;
+        let (_, _, face) = self.pick_surface(point)?;
         (self.geometry.owners[face] == self.active).then_some(self.geometry.source_faces[face])
     }
     pub fn pick_polygroup(&self, point: Pos2, document: &Document) -> Option<usize> {
-        let (_, _, face) = pick_surface(self, &self.all_faces, point)?;
+        let (_, _, face) = self.pick_surface(point)?;
         if self.geometry.owners[face] != self.active {
             return None;
         }
