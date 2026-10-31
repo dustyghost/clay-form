@@ -72,7 +72,7 @@ fn button(pos: Pos2, pressed: bool) -> egui::Event {
 
 #[test]
 fn native_pen_selects_brushes_after_sculpting() {
-    use crate::preferences::Tool;
+    use crate::preferences::{SidebarSection, Tool};
     use egui::{Event, TouchPhase};
 
     for (coalesced, release_classified) in [(false, true), (true, true), (false, false)] {
@@ -86,6 +86,11 @@ fn native_pen_selects_brushes_after_sculpting() {
             .unwrap();
         panel.dock = Dock::Left;
         panel.open = true;
+        // Keep the target visible regardless of the default tool shelf's height.
+        app.ui
+            .preferences
+            .sidebar_order
+            .insert(0, SidebarSection::Tool(Tool::Library));
         let size = Vec2::new(1100., 750.);
         let mut router = crate::tablet::pen::PenInput::default();
         frame(&mut app, &ctx, size, vec![]);
