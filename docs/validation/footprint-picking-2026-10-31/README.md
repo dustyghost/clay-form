@@ -2,6 +2,8 @@
 
 Follow-up to [shared display arrays and camera diagnosis](../display-arrays-2026-10-30/README.md), under #103.
 
+The follow-up [scene-allocation investigation and fix](../scene-preparation-2026-10-31/README.md) resolves the hidden orthographic preparation increase recorded below.
+
 ## Change
 
 The optional brush footprint samples the surface at 17×17 screen points. Previously, every point scanned the same coarse list of triangles intersecting the whole footprint. A temporary lookup now assigns each triangle only to samples within its projected bounds. Each sample uses the existing exact triangle-intersection routine and keeps the original traversal order, closest-hit rules, normals and brush weights. The centre pick still uses the ordinary picker.
@@ -46,8 +48,10 @@ The repeat confirms footprint p50 at 25.1–28.9 ms versus 76.3–93.0 ms before
 
 | Hidden orthographic, 2.4m source | Combined before p50 / p95 (ms) | Combined after p50 / p95 (ms) |
 | --- | --- | --- |
-| Initial pair | 114.7 / 122.9 | 77.0 / 80.3 |
-| Repeat pair | 114.7 / 140.5 | 72.9 / 80.9 |
+| Initial pair | 113.9 / 122.9 | 76.1 / 80.3 |
+| Repeat pair | 114.4 / 140.5 | 72.9 / 80.9 |
+
+The combined table uses the profiler’s nearest-rank percentile convention (the sixth sorted sample for p50 of 12); its p50 values were corrected from an upper-middle sample calculation. The 33–36% conclusion is unchanged.
 
 The primary tables retain the original pair. [Repeat comparison](repeat-comparison.csv), [baseline repeat](before-l4-repeat/) and [optimized repeat](after-l4-repeat/) retain all controls and samples. No gain is claimed for footprint-disabled interaction. These measurements also do not establish the performance of fallback-heavy overlapping geometry.
 

@@ -791,6 +791,15 @@ fn gpu_load_profile_display_stages() {
 fn gpu_load_profile_camera_picking() {
     let output = std::env::var("CLAY_CAMERA_PROFILE").expect("output path");
     let level = env_limit("CLAY_CAMERA_LEVEL", 3);
+    let stages = std::env::var_os("CLAY_SCENE_STAGES").is_some();
+    let selected = std::env::var("CLAY_CAMERA_FIXTURE").ok();
+    assert!(
+        selected
+            .as_deref()
+            .is_none_or(|s| matches!(s, "sphere" | "organic" | "hidden"))
+    );
+    let cursor = std::env::var("CLAY_CAMERA_CURSOR").unwrap_or_else(|_| "footprint".into());
+    assert!(matches!(cursor.as_str(), "footprint" | "rings" | "none"));
     let capacity = benchmark_capacity(level, 2_000_000, 4_000_000).unwrap();
     crate::sculpt::capacity::initialize(capacity).unwrap();
     let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800., 600.));
@@ -798,6 +807,9 @@ fn gpu_load_profile_camera_picking() {
     let context = egui::Context::default();
     let brush = brush(Kind::Standard);
     for name in ["sphere", "organic", "hidden"] {
+        if selected.as_deref().is_some_and(|s| s != name) {
+            continue;
+        }
         let doc = document(fixture(name, level));
         let display = Arc::new(DisplayMesh::new(&doc));
         for perspective in [false, true] {
@@ -809,10 +821,25 @@ fn gpu_load_profile_camera_picking() {
                     perspective,
                     ..Default::default()
                 };
-                let scene = metrics.time("scene_projection", || {
-                    Scene::from_geometry(rect, &camera, display.clone(), false)
-                });
-                face_counts.push(scene.faces.len());
+                let mut build = || {
+                    metrics.time("scene_projection", || {
+                        Scene::from_geometry(rect, &camera, display.clone(), false)
+                    })
+                };
+                let scene = if stages {
+                    let (scene, times) = crate::viewport::scene::profile::capture(build);
+                    for (stage, ms) in times {
+                        metrics
+                            .values
+                            .entry(format!("scene.{stage}"))
+                            .or_default()
+                            .push(ms);
+                    }
+                    scene
+                } else {
+                    build()
+                };
+                face_counts.push(scene.active_faces().len());
                 // Measure actual production picking. Build geometry outside the
                 // timers, vary sample locations, and keep assertions outside.
                 for offset in [-15., 0., 15.] {
@@ -825,25 +852,35 @@ fn gpu_load_profile_camera_picking() {
                     });
                     assert!(miss.is_none());
                 }
+                if cursor == "none" {
+                    continue;
+                }
                 let mut hit = false;
-                let painted = metrics.time("cursor_footprint", || {
-                    context.run(
-                        egui::RawInput {
-                            screen_rect: Some(rect),
-                            ..Default::default()
-                        },
-                        |ctx| {
-                            hit = scene.brush_cursor_with_footprint(
-                                &ctx.layer_painter(egui::LayerId::background()),
-                                rect.center(),
-                                50.,
-                                &brush,
-                                egui::Color32::WHITE,
-                                true,
-                            );
-                        },
-                    )
-                });
+                let painted = metrics.time(
+                    if cursor == "footprint" {
+                        "cursor_footprint"
+                    } else {
+                        "cursor_rings"
+                    },
+                    || {
+                        context.run(
+                            egui::RawInput {
+                                screen_rect: Some(rect),
+                                ..Default::default()
+                            },
+                            |ctx| {
+                                hit = scene.brush_cursor_with_footprint(
+                                    &ctx.layer_painter(egui::LayerId::background()),
+                                    rect.center(),
+                                    50.,
+                                    &brush,
+                                    egui::Color32::WHITE,
+                                    cursor == "footprint",
+                                );
+                            },
+                        )
+                    },
+                );
                 assert!(hit && !painted.shapes.is_empty());
             }
             rows.push(serde_json::json!({
@@ -858,6 +895,7 @@ fn gpu_load_profile_camera_picking() {
         output,
         serde_json::to_vec_pretty(&serde_json::json!({
             "level":level, "viewport":[800,600], "rows":rows, "memory_final":memory(),
+            "scene_stages":stages, "cursor":cursor, "fixture":selected,
         }))
         .unwrap(),
     )

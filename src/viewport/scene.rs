@@ -4,6 +4,8 @@ use crate::{camera::Camera, document::Document, sculpt::Vec3};
 use eframe::egui::{self, Color32, Pos2};
 use std::sync::Arc;
 mod footprint;
+#[cfg(test)]
+pub(in crate::viewport) mod profile;
 pub(super) struct Scene {
     pub scale: f32,
     pub(super) eye_distance: f32,
@@ -11,7 +13,8 @@ pub(super) struct Scene {
     pub(super) active_bounds: egui::Rect,
     positions: Vec<Pos2>,
     pub(super) geometry: Arc<DisplayMesh>,
-    pub(super) faces: Vec<(usize, f32)>,
+    // None borrows all_faces when every displayed vertex belongs to the active model.
+    active_faces: Option<Vec<(usize, f32)>>,
     pub(super) view: Vec3,
     all_faces: Vec<(usize, f32)>,
     active: usize,
@@ -159,36 +162,56 @@ impl Scene {
             )
         };
         let positions: Vec<_> = mesh.vertices.iter().copied().map(project).collect();
-        let mut faces: Vec<_> = mesh
-            .triangles
-            .iter()
-            .enumerate()
-            .filter(|(_, t)| {
-                let a = mesh.vertices[t[0]];
-                let b = mesh.vertices[t[1]];
-                let c = mesh.vertices[t[2]];
-                (b - a).cross(c - a).dot(if eye_distance == 0. {
-                    view
-                } else {
-                    view * eye_distance - a
-                }) > 0.
-            })
-            .map(|(i, t)| {
-                (
-                    i,
-                    (mesh.vertices[t[0]] + mesh.vertices[t[1]] + mesh.vertices[t[2]]).dot(view),
-                )
-            })
-            .collect();
+        #[cfg(test)]
+        profile::mark("project_vertices");
+        // Facing can retain at most one entry per displayed triangle. Reserve
+        // once so allocator history cannot trigger repeated large-list copies.
+        let mut faces = Vec::with_capacity(mesh.triangles.len());
+        faces.extend(
+            mesh.triangles
+                .iter()
+                .enumerate()
+                .filter(|(_, t)| {
+                    let a = mesh.vertices[t[0]];
+                    let b = mesh.vertices[t[1]];
+                    let c = mesh.vertices[t[2]];
+                    (b - a).cross(c - a).dot(if eye_distance == 0. {
+                        view
+                    } else {
+                        view * eye_distance - a
+                    }) > 0.
+                })
+                .map(|(i, t)| {
+                    (
+                        i,
+                        (mesh.vertices[t[0]] + mesh.vertices[t[1]] + mesh.vertices[t[2]]).dot(view),
+                    )
+                }),
+        );
         if sort_faces {
             faces.sort_by(|a, b| a.1.total_cmp(&b.1));
         }
+        #[cfg(test)]
+        profile::mark("facing_and_sort");
         let active_bounds = positions
             .iter()
             .take(active_vertices)
             .fold(egui::Rect::NOTHING, |bounds, &p| {
                 bounds.union(egui::Rect::from_min_max(p, p))
             });
+        #[cfg(test)]
+        profile::mark("active_bounds");
+        // Display construction appends inactive vertices after the active
+        // prefix. With no inactive vertices, both face views are identical.
+        let active_faces = (active_vertices != mesh.vertices.len()).then(|| {
+            faces
+                .iter()
+                .copied()
+                .filter(|(i, _)| owners[*i] == active)
+                .collect()
+        });
+        #[cfg(test)]
+        profile::mark("active_faces");
         Self {
             rect,
             active_bounds,
@@ -196,11 +219,7 @@ impl Scene {
             eye_distance,
             positions,
             geometry: geometry.clone(),
-            faces: faces
-                .iter()
-                .copied()
-                .filter(|(i, _)| owners[*i] == active)
-                .collect(),
+            active_faces,
             all_faces: faces,
             active,
             view,
@@ -208,6 +227,9 @@ impl Scene {
             right,
             up,
         }
+    }
+    pub(super) fn active_faces(&self) -> &[(usize, f32)] {
+        self.active_faces.as_deref().unwrap_or(&self.all_faces)
     }
     fn paint_geometry(
         &self,
@@ -1025,12 +1047,79 @@ mod tests {
         let view = scene(&document);
         assert_eq!(view.geometry.owners.len(), coarse_count * 5);
         assert_eq!(
-            view.faces.len(),
+            view.active_faces().len(),
             view.all_faces
                 .iter()
                 .filter(|(i, _)| view.geometry.owners[*i] == 0)
                 .count()
         );
         assert_eq!(document.geometry_snapshot(), original);
+    }
+    #[test]
+    fn active_face_view_preserves_order_across_visibility_and_model_changes() {
+        fn check(document: &Document, shared: bool) {
+            let display = Arc::new(DisplayMesh::new(document));
+            for perspective in [false, true] {
+                for sort in [false, true] {
+                    let scene = Scene::from_geometry(
+                        egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(800., 600.)),
+                        &Camera {
+                            yaw: 0.4,
+                            pitch: -0.2,
+                            perspective,
+                            ..Default::default()
+                        },
+                        display.clone(),
+                        sort,
+                    );
+                    let expected: Vec<_> = scene
+                        .all_faces
+                        .iter()
+                        .copied()
+                        .filter(|(i, _)| scene.geometry.owners[*i] == document.active_model_index())
+                        .collect();
+                    assert_eq!(scene.active_faces(), expected.as_slice());
+                    assert_eq!(scene.active_faces.is_none(), shared);
+                    if shared {
+                        assert!(std::ptr::eq(
+                            scene.active_faces(),
+                            scene.all_faces.as_slice()
+                        ));
+                    }
+                }
+            }
+        }
+        fn visible(document: &mut Document, index: usize, visible: bool) {
+            let model = document.model(index).unwrap();
+            let name = model.name.to_string();
+            let mut metadata = model.metadata.clone();
+            metadata.visible = visible;
+            document.set_model_metadata(index, name, metadata).unwrap();
+        }
+        let mut document = Document::default();
+        check(&document, true);
+        let mut geometry = document.geometry_snapshot();
+        geometry.mesh.hidden_faces = geometry
+            .mesh
+            .triangles
+            .iter()
+            .map(|t| t.iter().all(|&i| geometry.mesh.vertices[i].0 > 0.1))
+            .collect();
+        assert!(geometry.mesh.has_hidden_faces());
+        document.replace_geometry(geometry).unwrap();
+        check(&document, true);
+        let retained = scene(&document);
+        let retained_faces = retained.active_faces().to_vec();
+        document.duplicate_model(false).unwrap();
+        check(&document, false);
+        document.select_submodel(1).unwrap();
+        check(&document, false);
+        visible(&mut document, 0, false);
+        check(&document, true); // Active model need not be model zero.
+        visible(&mut document, 1, false);
+        check(&document, true); // Empty visible scene.
+        visible(&mut document, 0, true);
+        check(&document, false); // Hidden active model has no active faces.
+        assert_eq!(retained.active_faces(), retained_faces);
     }
 }
