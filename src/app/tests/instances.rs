@@ -230,7 +230,7 @@ fn reusable_path_inline_thickness_handles_share_preview_and_preserve_navigation(
     }
     let edited = app.document.instances().sets[0].clone();
     let (_, position, _, _) = handle(&ctx, "Path point 2");
-    let camera = app.camera.clone();
+    let camera = app.camera;
     let end = position + Vec2::new(25., 10.);
     let secondary = |pos, pressed| egui::Event::PointerButton {
         pos,
