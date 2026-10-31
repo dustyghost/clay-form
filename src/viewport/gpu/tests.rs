@@ -139,6 +139,7 @@ fn gpu_float_texture_hdr_values_survive_upload_and_filtering() {
     let mut doc = Document::default();
     doc.replace_geometry(Geometry::new(mesh)).unwrap();
     gpu.upload(&Arc::new(DisplayMesh::new(&doc)));
+    assert!(!gpu.basic_surface_eligible(&Preview::default()));
     let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(128.));
     let params = Params::new(
         rect,
@@ -528,6 +529,7 @@ fn gpu_material_channels_match_linear_reference_and_survive_batching() {
             );
         }
         if material.needs_extended_shading() {
+            assert!(!gpu.basic_surface_eligible(&Preview::default()));
             assert_eq!(gpu.vertex_stride, 77);
             gpu.upload_meshes(&display, 1024);
             gpu.paint(
@@ -545,6 +547,7 @@ fn gpu_material_channels_match_linear_reference_and_survive_batching() {
             );
         } else {
             assert_eq!(gpu.vertex_stride, 12);
+            assert!(gpu.basic_surface_eligible(&Preview::default()));
         }
         samples.push(rgba[center..center + 3].to_vec());
     }

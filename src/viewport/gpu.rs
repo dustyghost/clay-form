@@ -348,6 +348,11 @@ struct Gpu {
     surface: wgpu::RenderPipeline,
     offset_surface: wgpu::RenderPipeline,
     backs: wgpu::RenderPipeline,
+    basic_surface: wgpu::RenderPipeline,
+    basic_offset_surface: wgpu::RenderPipeline,
+    basic_backs: wgpu::RenderPipeline,
+    #[cfg(test)]
+    force_general_surface: bool,
     lines: wgpu::RenderPipeline,
     xray_lines: wgpu::RenderPipeline,
     composite: wgpu::RenderPipeline,
@@ -462,7 +467,7 @@ impl Gpu {
             label: Some("viewport WGSL"),
             source: wgpu::ShaderSource::Wgsl(include_str!("gpu/viewport.wgsl").into()),
         });
-        let make_pipeline = |line: bool, xray: bool, back: bool, offset: bool| {
+        let make_pipeline = |line: bool, xray: bool, back: bool, offset: bool, basic: bool| {
             let attributes = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x3, 3 => Float32x3];
             let buffers = [wgpu::VertexBufferLayout {
                 array_stride: 48,
@@ -476,6 +481,8 @@ impl Gpu {
                     module: &shader,
                     entry_point: Some(if line {
                         "line_vertex"
+                    } else if basic {
+                        "basic_surface_vertex"
                     } else {
                         "surface_vertex"
                     }),
@@ -543,11 +550,14 @@ impl Gpu {
                 cache: None,
             })
         };
-        let surface = make_pipeline(false, false, false, false);
-        let offset_surface = make_pipeline(false, false, false, true);
-        let backs = make_pipeline(false, false, true, false);
-        let lines = make_pipeline(true, false, false, false);
-        let xray_lines = make_pipeline(true, true, false, false);
+        let surface = make_pipeline(false, false, false, false, false);
+        let offset_surface = make_pipeline(false, false, false, true, false);
+        let backs = make_pipeline(false, false, true, false, false);
+        let basic_surface = make_pipeline(false, false, false, false, true);
+        let basic_offset_surface = make_pipeline(false, false, false, true, true);
+        let basic_backs = make_pipeline(false, false, true, false, true);
+        let lines = make_pipeline(true, false, false, false, false);
+        let xray_lines = make_pipeline(true, true, false, false, false);
         let composite_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("viewport composite"),
             entries: &[
@@ -634,6 +644,11 @@ impl Gpu {
             surface,
             offset_surface,
             backs,
+            basic_surface,
+            basic_offset_surface,
+            basic_backs,
+            #[cfg(test)]
+            force_general_surface: false,
             lines,
             xray_lines,
             composite,
@@ -706,7 +721,9 @@ impl Gpu {
                 device,
                 "mesh indices",
                 bytemuck::cast_slice(indices),
-                wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_DST
+                    | wgpu::BufferUsages::INDEX,
             ),
             colors: buffer(
                 device,
@@ -1318,6 +1335,21 @@ impl Gpu {
             size,
         });
     }
+    fn basic_surface_eligible(&self, preview: &Preview) -> bool {
+        #[cfg(test)]
+        if self.force_general_surface {
+            return false;
+        }
+        // UVs, face groups and extended channels require the per-corner path.
+        self.vertex_stride == 12
+            && !preview.show_polygroups
+            && !preview.uv_checker
+            && preview.inspection != InspectionMode::UvChecker
+            && self
+                .uploaded
+                .as_ref()
+                .is_some_and(|display| display.texture_info.len() == 1)
+    }
     #[allow(clippy::too_many_arguments)]
     fn encode(
         &mut self,
@@ -1337,23 +1369,28 @@ impl Gpu {
             self.upload_edges();
         }
         let u = self.uniforms(p, preview, mode);
+        let basic = self.basic_surface_eligible(preview);
         self.queue
             .write_buffer(&self.uniform, 0, bytemuck::bytes_of(&u));
-        let mut back_u = u;
-        back_u.flags[2] = 1.;
-        back_u.flags[3] = preview.backface_opacity;
-        self.queue
-            .write_buffer(&self.back_uniform, 0, bytemuck::bytes_of(&back_u));
         let bindings: Vec<_> = self
             .meshes
             .iter()
             .map(|m| self.bindings(&self.uniform, m))
             .collect();
-        let back_bindings: Vec<_> = self
-            .meshes
-            .iter()
-            .map(|m| self.bindings(&self.back_uniform, m))
-            .collect();
+        let back_bindings: Vec<_> =
+            if preview.backface_opacity > 0. && (!wire || mode != WireMode::Transparent) {
+                let mut back_u = u;
+                back_u.flags[2] = 1.;
+                back_u.flags[3] = preview.backface_opacity;
+                self.queue
+                    .write_buffer(&self.back_uniform, 0, bytemuck::bytes_of(&back_u));
+                self.meshes
+                    .iter()
+                    .map(|m| self.bindings(&self.back_uniform, m))
+                    .collect()
+            } else {
+                Vec::new()
+            };
         let target = self.target.as_ref().unwrap();
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("clay viewport"),
@@ -1383,20 +1420,35 @@ impl Gpu {
         });
         pass.set_bind_group(0, &bindings[0], &[]);
         if !wire || mode != WireMode::Transparent {
-            pass.set_pipeline(if wire && mode == WireMode::Visible {
-                &self.offset_surface
-            } else {
-                &self.surface
+            pass.set_pipeline(match (basic, wire && mode == WireMode::Visible) {
+                (true, true) => &self.basic_offset_surface,
+                (true, false) => &self.basic_surface,
+                (false, true) => &self.offset_surface,
+                (false, false) => &self.surface,
             });
             for (mesh, bind) in self.meshes.iter().zip(&bindings) {
                 pass.set_bind_group(0, bind, &[]);
-                pass.draw(0..mesh.count, 0..1);
+                if basic {
+                    pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..mesh.count, 0, 0..1);
+                } else {
+                    pass.draw(0..mesh.count, 0..1);
+                }
             }
             if preview.backface_opacity > 0. {
-                pass.set_pipeline(&self.backs);
+                pass.set_pipeline(if basic {
+                    &self.basic_backs
+                } else {
+                    &self.backs
+                });
                 for (mesh, bind) in self.meshes.iter().zip(&back_bindings) {
                     pass.set_bind_group(0, bind, &[]);
-                    pass.draw(0..mesh.count, 0..1);
+                    if basic {
+                        pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+                        pass.draw_indexed(0..mesh.count, 0, 0..1);
+                    } else {
+                        pass.draw(0..mesh.count, 0..1);
+                    }
                 }
                 pass.set_bind_group(0, &bindings[0], &[]);
             }
@@ -1436,6 +1488,8 @@ impl Gpu {
 }
 
 mod display;
+#[cfg(all(test, target_os = "linux"))]
+mod indexed_test;
 #[cfg(all(test, target_os = "linux"))]
 mod profile;
 #[cfg(test)]

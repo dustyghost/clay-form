@@ -1,0 +1,50 @@
+[
+  {
+    "capture": "sphere-orthographic.png",
+    "general_reference_matches_baseline": true,
+    "reference_sha256": "792f33b3a8fc7ec1be2a4866277b87f72f8d5726089f5935759d2fa743d13acc",
+    "indexed_sha256": "9d7976202a7a7d80d1714bf8d4402fbef834803aaae56e64c8b347975814a35d",
+    "differing_pixels": 1,
+    "max_channel_delta": 1
+  },
+  {
+    "capture": "sphere-perspective.png",
+    "general_reference_matches_baseline": true,
+    "reference_sha256": "a4b29cd6bf4234442351b6e7984dd56178dc50ffafaa9566338c501bdab679bb",
+    "indexed_sha256": "438925748acf618daed6e8ece4a721a16ee5902b1862d8fbd4da86d5724f21e0",
+    "differing_pixels": 2,
+    "max_channel_delta": 1
+  },
+  {
+    "capture": "organic-orthographic.png",
+    "general_reference_matches_baseline": true,
+    "reference_sha256": "80b10905677ea79d236b1d920524fb1aee64574f14cd7831a5a2ff9ab793920e",
+    "indexed_sha256": "8a420c08de82c2d74df3e6e965d8a4daec418460d1d7347310e545725a54a34a",
+    "differing_pixels": 1,
+    "max_channel_delta": 1
+  },
+  {
+    "capture": "organic-perspective.png",
+    "general_reference_matches_baseline": true,
+    "reference_sha256": "6a199720e8c227b10e1d966753298caaa048120dc526c119d4fb81bf9f440b06",
+    "indexed_sha256": "6a199720e8c227b10e1d966753298caaa048120dc526c119d4fb81bf9f440b06",
+    "differing_pixels": 0,
+    "max_channel_delta": 0
+  },
+  {
+    "capture": "hidden-orthographic.png",
+    "general_reference_matches_baseline": true,
+    "reference_sha256": "6a3b583e83f66b1494630e87762fed0e57d2f720ef543a18684d7bb071e1d56c",
+    "indexed_sha256": "cfc85bbb98ebbc82f87698dbe510a04b18008850f5d953dc41c73114556a90ce",
+    "differing_pixels": 1,
+    "max_channel_delta": 1
+  },
+  {
+    "capture": "hidden-perspective.png",
+    "general_reference_matches_baseline": true,
+    "reference_sha256": "6a199720e8c227b10e1d966753298caaa048120dc526c119d4fb81bf9f440b06",
+    "indexed_sha256": "6a199720e8c227b10e1d966753298caaa048120dc526c119d4fb81bf9f440b06",
+    "differing_pixels": 0,
+    "max_channel_delta": 0
+  }
+]

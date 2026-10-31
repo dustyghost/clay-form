@@ -101,12 +101,7 @@ pub(super) fn write_buffer(
             queue.write_buffer(target, 0, bytes);
         }
     } else {
-        *target = super::buffer(
-            device,
-            label,
-            bytes,
-            super::wgpu::BufferUsages::STORAGE | super::wgpu::BufferUsages::COPY_DST,
-        );
+        *target = super::buffer(device, label, bytes, target.usage());
     }
 }
 

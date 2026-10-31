@@ -6,6 +6,7 @@
 !/docs/examples/pyramid.obj
 *.tmp
 *.log
+!/docs/validation/indexed-surface-draw-2026-10-31/*/*.log
 !/docs/validation/picking-and-scene-reuse-2026-10-31/*/*.log
 !/docs/validation/scene-preparation-2026-10-31/*/*.log
 !/docs/validation/footprint-picking-2026-10-31/*/*.log

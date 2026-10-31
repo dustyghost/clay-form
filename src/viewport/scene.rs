@@ -285,17 +285,6 @@ impl Scene {
         let outlines = &geometry.outlines;
         let active_vertices = geometry.active_vertices;
         let positions = &self.positions;
-        let faces: Vec<_> = self
-            .all_faces
-            .iter()
-            .copied()
-            .filter(|(i, _)| {
-                mesh.triangles[*i]
-                    .iter()
-                    .all(|&v| self.visible_depth(mesh.vertices[v]))
-            })
-            .collect();
-        let faces = &faces;
         let project = |v| self.project(v);
         painter.rect_filled(
             rect,
@@ -303,6 +292,19 @@ impl Scene {
             crate::preferences::viewport_background(painter.ctx()),
         );
         if renderer.is_none() {
+            // GPU clipping happens in the render pipeline. Only the CPU
+            // painter needs a filtered copy of the visible face list.
+            let faces: Vec<_> = self
+                .all_faces
+                .iter()
+                .copied()
+                .filter(|(i, _)| {
+                    mesh.triangles[*i]
+                        .iter()
+                        .all(|&v| self.visible_depth(mesh.vertices[v]))
+                })
+                .collect();
+            let faces = &faces;
             let lighting = crate::lighting::Lighting::current(painter.ctx());
             let mut rendered = egui::Mesh::default();
             for &(i, normal) in geometry.shading.vertices.iter() {

@@ -960,3 +960,169 @@ fn gpu_load_profile_scene_reuse() {
     )
     .unwrap();
 }
+
+#[test]
+#[ignore = "manual dense drawing/preparation profile; excluded from routine GPU CI"]
+fn gpu_load_profile_draw() {
+    let output = std::path::PathBuf::from(std::env::var("CLAY_DRAW_PROFILE").expect("output path"));
+    let level = env_limit("CLAY_CAMERA_LEVEL", 3);
+    crate::sculpt::capacity::initialize(benchmark_capacity(level, 2_000_000, 4_000_000).unwrap())
+        .unwrap();
+    let headless = Headless::new();
+    let driver = format!("{:?}", headless.state.adapter.get_info());
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800., 600.));
+    let context = egui::Context::default();
+    let mut rows = Vec::new();
+    for name in ["sphere", "organic", "hidden"] {
+        let doc = document(fixture(name, level));
+        let mut renderer = Renderer::new(&headless.state).unwrap();
+        let display = renderer.geometry(&doc);
+        renderer.gpu.lock().unwrap().upload(&display);
+        headless.state.queue.submit([]);
+        headless.wait();
+        for perspective in [false, true] {
+            let mut metrics = Measurements::default();
+            let mut last_params = None;
+            for frame in 0..15 {
+                let camera = Camera {
+                    perspective,
+                    yaw: frame as f32 * 0.025,
+                    ..Default::default()
+                };
+                // Measure the UI preparation with the current view already prepared.
+                // Cold/orbit scene construction has a separate CPU diagnostic.
+                let scene = renderer.prepare_scene(rect, &camera, display.clone(), false);
+                let mut prepare = || {
+                    context.run(
+                        egui::RawInput {
+                            screen_rect: Some(rect),
+                            ..Default::default()
+                        },
+                        |ctx| {
+                            Scene::paint_with_renderer(
+                                &ctx.layer_painter(egui::LayerId::background()),
+                                rect,
+                                &doc,
+                                &camera,
+                                false,
+                                WireMode::Visible,
+                                false,
+                                Some(&mut renderer),
+                            );
+                        },
+                    )
+                };
+                let prepared = if frame < 3 {
+                    prepare()
+                } else {
+                    metrics.time("paint_prepare", prepare)
+                };
+                assert!(!prepared.shapes.is_empty());
+                drop(prepared);
+                let mut params = Params::new(
+                    rect,
+                    scene.right,
+                    scene.up,
+                    scene.view,
+                    scene.scale,
+                    scene.center,
+                    display.depth_extent,
+                );
+                params.set_perspective(scene.eye_distance, display.depth_extent);
+                let mut gpu = renderer.gpu.lock().unwrap();
+                let mut draw = || {
+                    gpu.paint(
+                        &params,
+                        [800, 600],
+                        false,
+                        WireMode::Visible,
+                        false,
+                        &Preview::default(),
+                    );
+                    headless.wait();
+                };
+                if frame < 3 {
+                    draw();
+                } else {
+                    metrics.time("draw_and_wait", draw);
+                }
+                last_params = Some(params);
+            }
+            let mut gpu = renderer.gpu.lock().unwrap();
+            let pixels = gpu.read();
+            // Compare both pipelines in the same process, outside timers.
+            // Repeated renders must be stable; dense triangles can differ at
+            // an 8-bit rounding boundary after shared-vertex interpolation.
+            let params = last_params.unwrap();
+            let mut render = |general| {
+                gpu.force_general_surface = general;
+                gpu.paint(
+                    &params,
+                    [800, 600],
+                    false,
+                    WireMode::Visible,
+                    false,
+                    &Preview::default(),
+                );
+                gpu.read()
+            };
+            assert_eq!(pixels, render(false), "indexed renders must be stable");
+            let reference = render(true);
+            assert_eq!(reference, render(true), "reference renders must be stable");
+            gpu.force_general_surface = false;
+            let mut differing_pixels = 0;
+            let mut max_channel_delta = 0;
+            for (actual, expected) in pixels.chunks_exact(4).zip(reference.chunks_exact(4)) {
+                assert_eq!(actual[3], expected[3], "alpha must match");
+                assert_eq!(
+                    actual[..3] == params.background,
+                    expected[..3] == params.background,
+                    "surface coverage must match"
+                );
+                differing_pixels += usize::from(actual != expected);
+                for (&a, &b) in actual.iter().zip(expected) {
+                    max_channel_delta = max_channel_delta.max(a.abs_diff(b));
+                }
+            }
+            assert!(
+                max_channel_delta <= 1,
+                "shading differs beyond 8-bit rounding"
+            );
+            let capture = format!(
+                "{name}-{}.png",
+                if perspective {
+                    "perspective"
+                } else {
+                    "orthographic"
+                }
+            );
+            image::save_buffer(
+                output.parent().unwrap().join(&capture),
+                &pixels,
+                800,
+                600,
+                image::ColorType::Rgba8,
+            )
+            .unwrap();
+            let reference_capture = capture.replace(".png", "-general.png");
+            image::save_buffer(
+                output.parent().unwrap().join(&reference_capture),
+                &reference,
+                800,
+                600,
+                image::ColorType::Rgba8,
+            )
+            .unwrap();
+            rows.push(serde_json::json!({"fixture":name,"perspective":perspective,"source_triangles":doc.mesh().triangles.len(),"display_triangles":display.mesh.triangles.len(),"capture":capture,"reference_capture":reference_capture,"reference_differing_pixels":differing_pixels,"reference_max_channel_delta":max_channel_delta,"metrics":metrics.summary()}));
+        }
+        renderer.destroy();
+    }
+    std::fs::write(
+        output,
+        serde_json::to_vec_pretty(
+            &serde_json::json!({"level":level,"driver":driver,"rows":rows,"memory_final":memory()}),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+}
