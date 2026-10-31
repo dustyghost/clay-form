@@ -754,6 +754,24 @@ mod tests {
                 fit_sections: true,
                 join: JoinMode::Weld,
                 join_distance: 0.05,
+                thickness: Thickness {
+                    mode: ThicknessMode::Profile,
+                    points: vec![
+                        ThicknessPoint {
+                            position: 0.,
+                            factor: 0.5,
+                        },
+                        ThicknessPoint {
+                            position: 0.4,
+                            factor: 1.5,
+                        },
+                        ThicknessPoint {
+                            position: 1.,
+                            factor: 0.8,
+                        },
+                    ],
+                    ..Default::default()
+                },
             }),
         };
         let before = d.project();
@@ -870,6 +888,7 @@ mod tests {
                 fit_sections: false,
                 join: JoinMode::Separate,
                 join_distance: default_join_distance(),
+                thickness: Default::default(),
             }),
         };
         d.preview_instance_set(set).unwrap();

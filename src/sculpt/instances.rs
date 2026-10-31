@@ -5,6 +5,10 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, sync::Arc};
 mod path_output;
 pub use path_output::{GeneratedCopy, JoinMode, ResolvedCopies};
+mod thickness;
+pub use thickness::{
+    MAX_THICKNESS, MAX_THICKNESS_POINTS, MIN_THICKNESS, Thickness, ThicknessMode, ThicknessPoint,
+};
 
 pub const MAX_INSTANCES: usize = 256;
 pub const MAX_ASSETS: usize = 64;
@@ -293,6 +297,8 @@ pub struct PathAssembly {
     pub join: JoinMode,
     #[serde(default = "default_join_distance")]
     pub join_distance: f32,
+    #[serde(default)]
+    pub thickness: Thickness,
 }
 pub fn default_join_distance() -> f32 {
     0.05
@@ -313,6 +319,7 @@ impl PathAssembly {
                 "Invalid path assembly spacing, count, scale, twist or join distance".into(),
             );
         }
+        self.thickness.validate()?;
         for p in [self.start, Some(self.middle), self.end]
             .into_iter()
             .flatten()
@@ -790,6 +797,7 @@ mod tests {
             fit_sections: false,
             join: JoinMode::Separate,
             join_distance: default_join_distance(),
+            thickness: Default::default(),
         };
         let p = a.placements(&path).unwrap();
         assert_eq!(p.len(), 12);

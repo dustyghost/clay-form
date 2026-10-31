@@ -47,6 +47,7 @@ impl App {
                         fit_sections: true,
                         join: JoinMode::Separate,
                         join_distance: default_join_distance(),
+                        thickness: Default::default(),
                     })
                 } else {
                     Layout::Array(Array::new(piece))

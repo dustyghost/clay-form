@@ -439,6 +439,16 @@ impl App {
         if let Some(brush) = &mut self.viewport.object_brush {
             brush.options = self.ui.instances.brush;
         }
+        self.viewport.path_thickness.configure(
+            self.ui
+                .instances
+                .editor
+                .as_ref()
+                .filter(|_| self.ui.instances.inline_thickness && !self.ui.instances.invalid)
+                .map(|set| set.id),
+            self.ui.instances.thickness_path_points,
+            self.ui.instances.thickness_sections,
+        );
         self.viewport.show(
             ui,
             &mut self.document,
@@ -515,6 +525,10 @@ impl App {
                 },
             },
         );
+        if let Some(set) = self.viewport.path_thickness.updated.take() {
+            self.ui.instances.editor = Some(set);
+            self.ui.instances.invalid = false;
+        }
         self.ui.materials.sampling = self.viewport.sample_colour;
         let sampled = self.viewport.sampled_material.take().or_else(|| {
             self.viewport.sampled_colour.take().map(|colour| {

@@ -66,6 +66,8 @@ New `.clay` projects use version 4 for shared instance recipes and captured obje
 
 Optional path bending and neighbour welding live in `sculpt/instances/path_output.rs` and its `weld` module. The document's resolved-instance cache owns transient world-space meshes for these modes; ordinary copies retain shared source shading. End-boundary analysis is shared per source/forward axis during generation. Welds join only consecutive compatible end loops, remove internal caps, and compact the result without voxel remeshing. The renderer, picking, selection overlay, view fitting and bake worker use the same generated geometry. Generated meshes are never persisted or copied into history; recipes retain the bend/fit/join settings and tolerance.
 
+`sculpt/instances/thickness.rs` evaluates a bounded positive cross-section multiplier by normalized arc distance. It supports uniform size, end-to-end taper and a piecewise profile; closed curves wrap continuously at the seam. `viewport/path_thickness.rs` places inline controls at endpoints, path control points and section centres, caching route samples and handle locations independently of thickness and camera edits. Dragging updates the existing private instance preview and synchronizes the sidebar editor; it neither moves the path nor records history before Apply. Profiles retain normalized distances across route and repeat edits. Source topology, shading caches for ordinary instances and generated-mesh budgets are unchanged.
+
 Use `tests/fixtures/v1-project.json` to check legacy compatibility. See [storage details](architecture/integration.md#compatibility-and-storage) for references, shared image buffers, and fixture coverage.
 
 ## Find the detailed contract

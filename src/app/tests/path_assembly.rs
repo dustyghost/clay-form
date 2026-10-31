@@ -99,6 +99,62 @@ fn reusable_path_bend_join_offscreen_review() {
     click_guide_label(&mut g, "Join neighbours");
     let before = g.app.document.history_counts().0;
     g.save("08-path-bent-joined");
+    drag_thickness_handle(&mut g, "Start", -0.5);
+    drag_thickness_handle(&mut g, "End", 1.);
+    g.save("10-thickness-taper-inline");
+    drag_thickness_handle(&mut g, "Path point 2", 0.8);
+    drag_thickness_handle(&mut g, "Section 4", -0.3);
+    g.save("11-thickness-profile-inline");
+    click_guide_label(&mut g, "Thickness along path");
+    click_guide_label(&mut g, "Uniform");
+    click_guide_label(&mut g, "End-to-end taper");
+    click_guide_label(&mut g, "Along-curve profile");
+    for _ in 0..3 {
+        g.frame(vec![]);
+    }
+    let (plot, max) = g
+        .ctx
+        .data(|d| d.get_temp::<(egui::Rect, f32)>(egui::Id::new("path_thickness_plot")))
+        .unwrap();
+    let crate::sculpt::instances::Layout::Path(a) =
+        &g.app.ui.instances.editor.as_ref().unwrap().layout
+    else {
+        unreachable!()
+    };
+    let point = a.thickness.points[1];
+    let start = egui::pos2(
+        plot.left() + point.position * plot.width(),
+        plot.bottom() - point.factor / max * plot.height(),
+    );
+    let end = start - egui::vec2(0., 0.25 / max * plot.height());
+    g.frame(vec![
+        egui::Event::PointerMoved(start),
+        primary_event(start, true),
+    ]);
+    g.frame(vec![egui::Event::PointerMoved(end)]);
+    g.frame(vec![primary_event(end, false), egui::Event::PointerGone]);
+    let crate::sculpt::instances::Layout::Path(a) =
+        &g.app.ui.instances.editor.as_ref().unwrap().layout
+    else {
+        unreachable!()
+    };
+    assert!(
+        (a.thickness.points[1].factor - point.factor - 0.25).abs() < 1e-3,
+        "graph drag changes the same profile as the inline handles"
+    );
+    let count = a.thickness.points.len();
+    g.save("12-thickness-profile-panel");
+    click_guide_label(&mut g, "Add point");
+    click_guide_label(&mut g, "Remove point");
+    let crate::sculpt::instances::Layout::Path(a) =
+        &g.app.ui.instances.editor.as_ref().unwrap().layout
+    else {
+        unreachable!()
+    };
+    assert_eq!(a.thickness.points.len(), count);
+    click_guide_label(&mut g, "Inline thickness handles");
+    g.save("12-thickness-profile-panel");
+    click_guide_label(&mut g, "Thickness along path");
     click_guide_label(&mut g, "Apply instances");
     assert!(
         !g.app.document.instance_preview_active(),
@@ -118,9 +174,51 @@ fn reusable_path_bend_join_offscreen_review() {
     assert_eq!(g.app.document.model_count(), 2);
     assert_eq!(g.app.document.mesh(), expected.as_ref());
     assert_eq!(g.app.document.model(0).unwrap().mesh, &source);
-    g.save("09-path-joined-baked");
+    g.save("13-thickness-baked");
     g.app.dispatch(Command::Undo, &g.ctx);
     assert!(g.app.document.instances().sets[0].joined());
     g.app.dispatch(Command::Redo, &g.ctx);
     g.app.document.project().validate().unwrap();
+}
+
+fn drag_thickness_handle(g: &mut Guide, label: &str, amount: f32) {
+    g.frame(vec![]);
+    let (_, position, axis, t) = g
+        .ctx
+        .data(|d| {
+            d.get_temp::<Vec<(String, egui::Pos2, egui::Vec2, f32)>>(egui::Id::new(
+                "path_thickness_handles",
+            ))
+        })
+        .unwrap()
+        .into_iter()
+        .find(|h| h.0 == label)
+        .unwrap_or_else(|| panic!("{label} handle is visible"));
+    let crate::sculpt::instances::Layout::Path(a) =
+        &g.app.ui.instances.editor.as_ref().unwrap().layout
+    else {
+        unreachable!()
+    };
+    let old = a.thickness.at(t, false);
+    let end = position + axis * (amount * 60.);
+    g.frame(vec![
+        egui::Event::PointerMoved(position),
+        primary_event(position, true),
+    ]);
+    for step in 1..=3 {
+        g.frame(vec![egui::Event::PointerMoved(
+            position.lerp(end, step as f32 / 3.),
+        )]);
+    }
+    g.frame(vec![primary_event(end, false), egui::Event::PointerGone]);
+    let crate::sculpt::instances::Layout::Path(a) =
+        &g.app.ui.instances.editor.as_ref().unwrap().layout
+    else {
+        unreachable!()
+    };
+    assert!(
+        (a.thickness.at(t, false) - old - amount).abs() < 1e-3,
+        "{label}: {}",
+        g.app.ui.status
+    );
 }

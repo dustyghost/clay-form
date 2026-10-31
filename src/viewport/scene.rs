@@ -1000,6 +1000,7 @@ mod tests {
                 fit_sections: true,
                 join: JoinMode::Weld,
                 join_distance: 0.05,
+                thickness: Default::default(),
             }),
         })
         .unwrap();

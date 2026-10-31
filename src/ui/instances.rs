@@ -3,6 +3,7 @@ use crate::{
     command::InstanceCommand as C,
     sculpt::{Vec3, instances::*},
 };
+mod thickness;
 
 pub(crate) struct Controls {
     pub editor: Option<Set>,
@@ -15,6 +16,9 @@ pub(crate) struct Controls {
     pub asset_path: String,
     pub brush: crate::viewport::objects::BrushOptions,
     pub stop_placing: bool,
+    pub inline_thickness: bool,
+    pub thickness_path_points: bool,
+    pub thickness_sections: bool,
     thumbnails: std::collections::HashMap<u64, Thumbnail>,
 }
 impl Default for Controls {
@@ -30,6 +34,9 @@ impl Default for Controls {
             asset_path: "object.object.json".into(),
             brush: Default::default(),
             stop_placing: false,
+            inline_thickness: true,
+            thickness_path_points: true,
+            thickness_sections: true,
             thumbnails: Default::default(),
         }
     }
@@ -226,6 +233,25 @@ impl UiState {
                     });
                     if a.bend {
                         ui.checkbox(&mut a.fit_sections, "Fit section lengths to spacing");
+                        ui.checkbox(
+                            &mut self.instances.inline_thickness,
+                            "Inline thickness handles",
+                        );
+                        let closed = document.path(a.path).is_some_and(|p| p.closed);
+                        egui::CollapsingHeader::new("Thickness along path").show(ui, |ui| {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.checkbox(
+                                    &mut self.instances.thickness_path_points,
+                                    "Path points",
+                                );
+                                ui.checkbox(
+                                    &mut self.instances.thickness_sections,
+                                    "Section centres",
+                                );
+                            });
+                            ui.weak("Gold: ends · Teal: path points · Purple: sections");
+                            thickness::controls(ui, &mut a.thickness, closed);
+                        });
                         ui.weak("Bending uses source vertices; subdivide along its Forward axis for smooth curves.");
                     }
                     ui.horizontal_wrapped(|ui| {

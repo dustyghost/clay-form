@@ -144,17 +144,7 @@ impl Set {
         } else {
             recipe.spacing
         };
-        let distances: Vec<_> = (0..n)
-            .map(|i| {
-                if n == 1 {
-                    frames.length * 0.5
-                } else if !path.closed && recipe.end.is_some() && i == n - 1 {
-                    frames.length
-                } else {
-                    i as f32 * step
-                }
-            })
-            .collect();
+        let distances = recipe.section_distances(frames.length, path.closed, n);
         let mut copies = Vec::with_capacity(placements.len());
         for (slot, placement) in placements {
             if cancel() {
@@ -191,8 +181,9 @@ impl Set {
                         distances[slot] + local.0 * recipe.scale
                     };
                     let frame = frames.at(d);
-                    let world =
-                        frame.origin + frame.vector(Vec3(0., local.1, local.2)) * recipe.scale;
+                    let thickness = recipe.thickness.at(d / frames.length, path.closed);
+                    let world = frame.origin
+                        + frame.vector(Vec3(0., local.1, local.2)) * (recipe.scale * thickness);
                     // Per-copy edits apply after deformation, around the original pivot.
                     let b = base[slot].transform;
                     let delta = world - b.origin;
@@ -225,6 +216,27 @@ impl Set {
             }];
         }
         Ok(Some(copies))
+    }
+}
+
+impl PathAssembly {
+    pub(crate) fn section_distances(&self, length: f32, closed: bool, n: usize) -> Vec<f32> {
+        let step = if self.fit_count {
+            length / (n - usize::from(!closed)).max(1) as f32
+        } else {
+            self.spacing
+        };
+        (0..n)
+            .map(|i| {
+                if n == 1 {
+                    length * 0.5
+                } else if !closed && self.end.is_some() && i + 1 == n {
+                    length
+                } else {
+                    i as f32 * step
+                }
+            })
+            .collect()
     }
 }
 

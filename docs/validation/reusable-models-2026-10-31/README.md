@@ -2,7 +2,7 @@
 
 Implementation batch: shared arrays #16, path assemblies #18 and object brushes #15. Review remains pending; no PR is opened by this batch.
 
-Focused checks use `CARGO_PROFILE_TEST_DEBUG=0 cargo test --locked -j 1 --lib reusable_ -- --test-threads=1`, under the shared build lock. Twenty-five ordinary tests cover private preview/apply/cancel, source edits, independent copies, bounded invalid input, save/reopen, source deletion protection, asset file round trips, path edits, closed-loop spacing and frames, real pointer gestures, sampling at different event rates, closed fusion, open-surface rejection, display picking, occlusion/mask/hidden-face protection, cache invalidation and project-switch tool reset and switching back to sculpt/transform tools. The Vulkan interaction check is ignored in ordinary runs and explicitly included in graphics CI.
+Focused checks use `CARGO_PROFILE_TEST_DEBUG=0 cargo test --locked -j 1 --lib reusable_ -- --test-threads=1`, under the shared build lock. Twenty-nine ordinary tests cover private preview/apply/cancel, source edits, independent copies, bounded invalid input, save/reopen, source deletion protection, asset file round trips, path edits, closed-loop spacing and frames, real pointer gestures, sampling at different event rates, closed fusion, open-surface rejection, display picking, occlusion/mask/hidden-face protection, cache invalidation and project-switch tool reset and switching back to sculpt/transform tools. The Vulkan interaction check is ignored in ordinary runs and explicitly included in graphics CI.
 
 The real egui/wgpu walkthrough `reusable_models_offscreen_review` passed on Mesa llvmpipe (LLVM 23.1.4, Mesa 26.2.6), with one software-rendering thread. It clicks Apply for array/path previews, selects and restores a hidden copy through the real controls, brushes a row of objects on a sphere, checks one-step Undo/Redo and validates the saved project. The attached captures were visually inspected for visible Apply/Cancel controls, radial orientation, curved placement and surface contact:
 
@@ -25,3 +25,12 @@ The optional bend/join extension adds five geometry regressions for actual verte
 - [Rigid sections](06-path-rigid.png)
 - [Bent and joined preview](08-path-bent-joined.png)
 - [Baked joined model](09-path-joined-baked.png)
+
+The thickness extension adds three geometry/profile regressions and a real-pointer application check. Uniform/taper/profile values change width and depth without changing section length, preserve closed joins, reject invalid input, and survive preview/save/reopen/bake/Undo. Inline Start/End, path-point and section-centre drags share the same private profile, leave the saved path unchanged, and reuse cached path samples across thickness and camera edits. Right-drag navigation and one-step Apply/Undo are checked. The focused reusable/legacy selection passed 30 tests; both software Vulkan walkthroughs passed.
+
+The path walkthrough now also drags each inline handle type, switches all three thickness modes, edits a point in the profile graph, adds/removes a point, and bakes the exact displayed geometry. Its first run exposed a crowded profile panel; the compacted controls passed the interaction check. The following captures were inspected:
+
+- [End-to-end taper with inline controls](10-thickness-taper-inline.png)
+- [Local thickness with both sets of inline handles](11-thickness-profile-inline.png)
+- [Shared profile editor](12-thickness-profile-panel.png)
+- [Baked thickness profile](13-thickness-baked.png)

@@ -111,6 +111,156 @@ fn reusable_array_preview_blocks_sculpt_and_supports_custom_actions() {
     app.dispatch(Command::Instances(C::Cancel), &ctx);
     assert_eq!(app.document.instances().sets[0], set);
 }
+
+#[test]
+fn reusable_path_inline_thickness_handles_share_preview_and_preserve_navigation() {
+    use crate::sculpt::{
+        instances::*,
+        paths::{PathMode, PathPoint},
+    };
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let mut cube = Primitive::for_kind(PrimitiveKind::Cube);
+    cube.divisions = [8, 2, 2];
+    let mut mesh = cube.mesh().unwrap();
+    for p in &mut mesh.vertices {
+        p.0 *= 0.15;
+        p.1 *= 0.04;
+        p.2 *= 0.04;
+    }
+    let mut geometry = Geometry::new(mesh);
+    geometry.scene.active_metadata.visible = false;
+    app.document.replace_geometry(geometry).unwrap();
+    app.document
+        .create_path(
+            "Handle curve".into(),
+            PathMode::Free,
+            [Vec3(-0.8, -0.3, 0.), Vec3(0., 0.5, 0.), Vec3(0.8, -0.3, 0.)]
+                .map(|position| PathPoint {
+                    position,
+                    normal: Vec3(0., 0., 1.),
+                })
+                .to_vec(),
+            false,
+            1.,
+        )
+        .unwrap();
+    let before = app.document.project();
+    let history = app.document.history_counts();
+    app.dispatch(Command::Instances(C::NewPath), &ctx);
+    let mut set = app.ui.instances.editor.clone().unwrap();
+    let Layout::Path(a) = &mut set.layout else {
+        unreachable!()
+    };
+    a.bend = true;
+    a.join = JoinMode::Weld;
+    app.ui.instances.editor = Some(set.clone());
+    app.dispatch(Command::Instances(C::Preview(Box::new(set.clone()))), &ctx);
+    navigation_frame(&mut app, &ctx, vec![]);
+    let handle = |ctx: &egui::Context, label: &str| {
+        ctx.data(|d| {
+            d.get_temp::<Vec<(String, Pos2, Vec2, f32)>>(egui::Id::new("path_thickness_handles"))
+        })
+        .unwrap()
+        .into_iter()
+        .find(|h| h.0 == label)
+        .unwrap_or_else(|| panic!("{label} handle must be visible"))
+    };
+    let (_, start, _, _) = handle(&ctx, "Start");
+    for pressed in [true, false] {
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::PointerMoved(start),
+                primary_event(start, pressed),
+            ],
+        );
+    }
+    assert_eq!(
+        app.document.instances().sets[0],
+        set,
+        "selecting a handle must not change thickness"
+    );
+    let builds = app.viewport.path_thickness.cache_builds;
+    for (label, amount) in [
+        ("Start", -0.3),
+        ("End", 0.5),
+        ("Path point 2", 0.6),
+        ("Section 4", 0.25),
+    ] {
+        navigation_frame(&mut app, &ctx, vec![]);
+        let (_, position, axis, t) = handle(&ctx, label);
+        let Layout::Path(a) = &app.document.instances().sets[0].layout else {
+            unreachable!()
+        };
+        let old = a.thickness.at(t, false);
+        let end = position + axis * (60. * amount);
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::PointerMoved(position),
+                primary_event(position, true),
+            ],
+        );
+        navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![primary_event(end, false), egui::Event::PointerGone],
+        );
+        let Layout::Path(a) = &app.document.instances().sets[0].layout else {
+            unreachable!()
+        };
+        assert!(
+            (a.thickness.at(t, false) - old - amount).abs() < 1e-4,
+            "{label} updates the shared profile"
+        );
+        assert_eq!(
+            app.ui.instances.editor.as_ref().unwrap(),
+            &app.document.instances().sets[0]
+        );
+        assert!(app.document.project() == before);
+        assert_eq!(app.document.history_counts(), history);
+        assert_eq!(
+            app.viewport.path_thickness.cache_builds, builds,
+            "thickness-only edits reuse sampled path positions"
+        );
+    }
+    let edited = app.document.instances().sets[0].clone();
+    let (_, position, _, _) = handle(&ctx, "Path point 2");
+    let camera = app.camera.clone();
+    let end = position + Vec2::new(25., 10.);
+    let secondary = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Secondary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(position),
+            secondary(position, true),
+        ],
+    );
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+    navigation_frame(&mut app, &ctx, vec![secondary(end, false)]);
+    assert_ne!(app.camera.yaw, camera.yaw);
+    assert_eq!(app.document.instances().sets[0], edited);
+    assert_eq!(app.viewport.path_thickness.cache_builds, builds);
+    app.dispatch(Command::Instances(C::Apply), &ctx);
+    assert_eq!(app.document.history_counts().0, history.0 + 1);
+    app.document.undo();
+    assert!(app.document.project() == before);
+    app.document.redo();
+    assert_eq!(app.document.instances().sets[0], edited);
+    app.dispatch(Command::Instances(C::Edit(1)), &ctx);
+    app.dispatch(Command::Instances(C::Cancel), &ctx);
+    assert_eq!(app.document.instances().sets[0], edited);
+}
 #[test]
 fn reusable_object_spacing_is_independent_of_pointer_event_count() {
     let run = |steps: usize| {

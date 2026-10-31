@@ -20,6 +20,7 @@ mod guided;
 mod guides;
 mod navigation;
 mod path_follow;
+pub(crate) mod path_thickness;
 mod primitive;
 mod references;
 mod scene;
@@ -64,6 +65,7 @@ pub(crate) struct Viewport {
     pub(crate) sampled_material: Option<crate::sculpt::Material>,
     pub(crate) session: interaction::InteractionSession,
     pub(crate) paths: paths::PathEditor,
+    pub(crate) path_thickness: path_thickness::Editor,
     pub(crate) modeling: modeling::ModelingState,
     edge_selection: Vec<[usize; 2]>,
     edge_revision: u64,
@@ -138,6 +140,7 @@ impl Viewport {
         }
     }
     pub(crate) fn cancel(&mut self, document: &mut Document) {
+        self.path_thickness.reset();
         if let Some(brush) = &mut self.object_brush {
             brush.cancel(document);
         }
@@ -497,6 +500,15 @@ impl Viewport {
         if self.update_objects(
             ui, &response, &painter, &scene, document, options, gizmo_rect,
         ) {
+            draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
+            return;
+        }
+        if self.path_thickness.show(
+            ui, &response, &painter, &scene, document, options, gizmo_rect,
+        ) {
+            if let Some(notice) = self.path_thickness.notice.take() {
+                self.status = Some(notice);
+            }
             draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
             return;
         }
