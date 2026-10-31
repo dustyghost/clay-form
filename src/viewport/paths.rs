@@ -9,6 +9,7 @@ use crate::{
     },
 };
 use eframe::egui::{self, Color32, Pos2, Stroke, Vec2};
+pub(crate) mod transform;
 
 #[derive(Clone, Copy, Default, PartialEq)]
 pub(crate) enum PathTool {
@@ -17,6 +18,7 @@ pub(crate) enum PathTool {
     Move,
     Insert,
     Ring,
+    Whole,
 }
 #[derive(Clone, Copy, Default, PartialEq)]
 pub(crate) enum RingMode {
@@ -73,6 +75,7 @@ pub(crate) struct PathEditor {
     pub ring_mode: RingMode,
     pub ring_axis: RingAxis,
     pub notice: Option<String>,
+    pub transform: transform::State,
     drag: Option<(usize, SurfacePath)>,
     corner_drag: Option<CornerDrag>,
     ring_drag: Option<SurfacePath>,
@@ -84,6 +87,7 @@ pub(crate) struct PathEditor {
 }
 impl PathEditor {
     pub(crate) fn select(&mut self, path: SurfacePath) {
+        self.transform.reset();
         self.draft = Some(path);
         self.selected = None;
         self.drag = None;
@@ -96,6 +100,7 @@ impl PathEditor {
         self.draft
             .as_ref()
             .is_some_and(|p| document.path(p.id) != Some(p))
+            || self.transform.pending_section_scale != 1.
     }
     /// Geometry and draft edits invalidate the guide; camera navigation does not.
     fn refresh_guide(&mut self, document: &Document) {
@@ -109,6 +114,11 @@ impl PathEditor {
             .as_ref()
             .is_some_and(|cache| cache.revision == revision && cache.draft == *path)
         {
+            self.transform.route_start = self
+                .guide
+                .as_ref()
+                .and_then(|g| g.points.first())
+                .map(|p| p.position);
             return;
         }
         let mut points = path.dense_curve();
@@ -160,6 +170,7 @@ impl PathEditor {
         {
             self.notice = warning.clone();
         }
+        self.transform.route_start = points.first().map(|p| p.position);
         self.guide = Some(GuideCache {
             draft: path.clone(),
             revision,
@@ -352,6 +363,9 @@ impl PathEditor {
         let escape =
             ui.input(|i| i.key_pressed(egui::Key::Escape)) && !ui.ctx().wants_keyboard_input();
         if escape || !options.enabled {
+            if let Some(path) = &mut self.draft {
+                self.transform.cancel(path);
+            }
             if let Some(drag) = self.corner_drag.take() {
                 self.draft = Some(drag.before);
             }
@@ -378,7 +392,11 @@ impl PathEditor {
                 && !escape
                 && let Some(pos) = pos
             {
-                if let Some(handle) = self.corner_at(scene, pos) {
+                if self.tool == PathTool::Whole {
+                    if let Some(path) = &self.draft {
+                        self.navigating = !self.transform.press(path, scene, pos);
+                    }
+                } else if let Some(handle) = self.corner_at(scene, pos) {
                     if let Some(before) = self.draft.clone() {
                         let amount = before.corner_rounding(handle.index);
                         self.corner_drag = Some(CornerDrag {
@@ -447,7 +465,13 @@ impl PathEditor {
             } else if !self.frozen
                 && let Some(pos) = pos
             {
-                if let Some(drag) = &self.corner_drag {
+                if self.tool == PathTool::Whole {
+                    if let Some(path) = &mut self.draft
+                        && let Err(error) = self.transform.update(path, scene, pos)
+                    {
+                        self.notice = Some(error);
+                    }
+                } else if let Some(drag) = &self.corner_drag {
                     let amount = (drag.amount
                         + (pos - drag.start).dot(drag.handle.axis) / drag.handle.pixels_per_amount)
                         .max(0.);
@@ -488,6 +512,7 @@ impl PathEditor {
             }
         }
         if !primary {
+            self.transform.finish();
             self.corner_drag = None;
             self.ring_drag = None;
             self.ring_last = None;
@@ -624,6 +649,11 @@ impl PathEditor {
                     .is_some_and(|d| d.handle.diamond == handle.diamond)
                     || pos.is_some_and(|p| p.distance(handle.position) <= controls::HIT_RADIUS),
             );
+        }
+        if self.tool == PathTool::Whole
+            && let Some(path) = &self.draft
+        {
+            self.transform.paint(path, scene, painter, pos);
         }
         painter.text(
             response.rect.center_bottom() - egui::vec2(0., 26.),

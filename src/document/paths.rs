@@ -78,13 +78,23 @@ impl Document {
         self.replace_geometry_named(next, "Create path")?;
         Ok(id)
     }
-    pub fn update_path(&mut self, mut path: SurfacePath) -> Result<(), String> {
+    pub fn update_path(&mut self, path: SurfacePath) -> Result<(), String> {
+        self.update_path_with_section_scale(path, 1.)
+    }
+    pub fn update_path_with_section_scale(
+        &mut self,
+        mut path: SurfacePath,
+        section_scale: f32,
+    ) -> Result<(), String> {
+        if !section_scale.is_finite() || section_scale <= 0. {
+            return Err("Linked section scale must be finite and positive".into());
+        }
         path.validate()?;
         let old = self.path(path.id).ok_or("Path no longer exists")?;
         if path.target != old.target || path.mode != old.mode {
             return Err("Use explicit reprojection to change a path attachment".into());
         }
-        if path == *old {
+        if path == *old && section_scale == 1. {
             return Ok(());
         }
         let shape_changed = path.points != old.points
@@ -96,7 +106,9 @@ impl Document {
         if shape_changed && !preserves_route {
             path.attached_route = None;
         }
-        self.require_path_target(old)?;
+        if old.mode == PathMode::Surface {
+            self.require_path_target(old)?;
+        }
         if old.is_stale(self.mesh()) && shape_changed {
             return Err("Path surface changed; reproject it before editing its shape".into());
         }
@@ -107,7 +119,34 @@ impl Document {
         let mut next = self.geometry.clone();
         let id = path.id;
         *next.paths.iter_mut().find(|p| p.id == id).unwrap() = path;
+        if section_scale != 1. {
+            for set in &mut next.scene.instances.sets {
+                if let crate::sculpt::instances::Layout::Path(recipe) = &mut set.layout
+                    && recipe.path == id
+                {
+                    recipe.scale *= section_scale;
+                    if !recipe.fit_count {
+                        recipe.spacing *= section_scale;
+                    }
+                    for adjustment in &mut set.adjustments {
+                        adjustment.offset = adjustment.offset * section_scale;
+                    }
+                    set.placements(&next.paths)?;
+                }
+            }
+        }
         self.replace_geometry_named(next, "Edit path")
+    }
+    pub fn detach_path(&mut self, id: u64) -> Result<(), String> {
+        let path = self.path(id).ok_or("Path no longer exists")?;
+        if path.mode == PathMode::Free {
+            return Ok(());
+        }
+        let path = path.detached();
+        path.validate()?;
+        let mut next = self.geometry.clone();
+        *next.paths.iter_mut().find(|p| p.id == id).unwrap() = path;
+        self.replace_geometry_named(next, "Detach path from surface")
     }
     pub fn delete_path(&mut self, id: u64) -> Result<(), String> {
         if self

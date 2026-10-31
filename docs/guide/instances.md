@@ -34,6 +34,8 @@ Joining preserves masks, vertex materials and compatible groups, but removes UVs
 
 Applied assemblies follow edits to their saved path and sources. Path assemblies use saved world-space paths; surface changes require the usual path reprojection. Bake or remove an assembly before deleting its path.
 
+Use **Editable paths → Transform whole path** to move, rotate or uniformly scale the complete route. Save path updates linked assemblies; **Scale linked sections** also scales their cross-section size and fixed spacing. Their thickness profiles remain at the same percentages along the curve. Return to **Edit points** to continue ordinary point editing. See [whole-path transforms](paths.md#move-rotate-and-scale-the-whole-path).
+
 ## Capture and brush objects
 
 Expand **Capture object brush**, enter a name, contact point and axes, then choose **Capture active model**. The embedded geometry snapshot and thumbnail survive editing or deleting the original.

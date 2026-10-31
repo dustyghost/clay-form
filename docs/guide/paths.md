@@ -18,6 +18,16 @@ A free path can leave the surface and is useful as a spatial guide. Save it, the
 
 **Add / draw** keeps dense guides readable by showing only the start, open endpoint, selected point, and the point under the pointer. Choose **Move points** or **Insert point** to show every editable control-point handle. These handles are not brush dabs or mesh vertices.
 
+## Move, rotate and scale the whole path
+
+Choose **Transform whole path** in Editable paths. **Move path** provides a centre handle for movement in the view plane and coloured world-axis handles. **Rotate path** uses the same projected rotation rings as mesh transforms, including an outer ring for rotation around the view. **Scale path** has a square handle for uniform scaling. Choose **Centre**, **Start** or **Origin** as the pivot. Numeric values and **Apply transform to draft** provide precise offsets, rotation angles and scale factors.
+
+The route remains a private draft: **Save path** commits it and updates its linked assemblies in one undo step. **Escape** during a drag restores the previous draft; **Discard edits** restores the saved path. Camera navigation remains available. **Edit points** returns to the ordinary point editor.
+
+**Scale linked sections** is enabled by default. Saving a scaled path also scales the linked assemblies' cross-sections, active fixed spacing and individual offsets, preserving the assembly's overall proportions. Disable it to resize only the route while keeping section sizes and spacing unchanged. Source meshes stay unchanged. Thickness profiles retain their relative positions along the route.
+
+Surface paths must first use **Detach from surface** for free transforms. Detaching a saved path preserves its current world-space route and is independently undoable. After transforming, **Attach saved path to surface** can reproject it explicitly. Free paths can be edited and transformed while their original target model is hidden.
+
 ## Round individual corners
 
 Choose **Move points** and select a corner. Use **Round** and adjust **Rounding (model units)**, or drag the diamond handle toward the inside of the bend. The two circular handles adjust how far the rounding extends along the adjoining segments. Choose **Sharp** to remove that corner’s explicit rounding.

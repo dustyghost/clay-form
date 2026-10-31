@@ -68,6 +68,8 @@ Optional path bending and neighbour welding live in `sculpt/instances/path_outpu
 
 `sculpt/instances/thickness.rs` evaluates a bounded positive cross-section multiplier by normalized arc distance. It supports uniform size, end-to-end taper and a piecewise profile; closed curves wrap continuously at the seam. `viewport/path_thickness.rs` places inline controls at endpoints, path control points and section centres, caching route samples and handle locations independently of thickness and camera edits. Dragging updates the existing private instance preview and synchronizes the sidebar editor; it neither moves the path nor records history before Apply. Profiles retain normalized distances across route and repeat edits. Source topology, shading caches for ordinary instances and generated-mesh budgets are unchanged.
 
+Whole-path transforms use `sculpt/paths/transform.rs` for shape-preserving uniform transforms and explicit surface detachment. The path editor owns the private transform draft and pending linked-section scale. Its viewport gizmos reuse projected mesh rotation rings and cached route samples for the start pivot. Saving commits the route and optional linked recipe scaling atomically, invalidating resolved-instance geometry through the existing document revision. Source meshes remain shared and unchanged. Retained surface routes, corner rounding and normals transform with the path; Escape restores the pre-drag draft.
+
 Use `tests/fixtures/v1-project.json` to check legacy compatibility. See [storage details](architecture/integration.md#compatibility-and-storage) for references, shared image buffers, and fixture coverage.
 
 ## Find the detailed contract

@@ -222,3 +222,138 @@ fn drag_thickness_handle(g: &mut Guide, label: &str, amount: f32) {
         g.app.ui.status
     );
 }
+
+#[test]
+#[ignore = "requires Vulkan; clicks whole-path transform controls and drags their gizmos"]
+fn whole_path_transform_offscreen_review() {
+    use crate::{
+        command::PathCommand,
+        preferences::{Dock, Tool},
+        sculpt::{Primitive, PrimitiveKind},
+    };
+    let directory = std::path::PathBuf::from(
+        std::env::var("CLAY_GUIDE_PREVIEW").unwrap_or_else(|_| "/tmp/clay-whole-path".into()),
+    );
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1280, 900]);
+    g.interactive = true;
+    g.panel(Tool::Submodels, Dock::Right);
+    let mut cube = Primitive::for_kind(PrimitiveKind::Cube);
+    cube.divisions = [12, 2, 2];
+    let mut source = cube.mesh().unwrap();
+    for p in &mut source.vertices {
+        p.0 *= 0.15;
+        p.1 *= 0.06;
+        p.2 *= 0.06;
+    }
+    let mut geometry = Geometry::new(source.clone());
+    geometry.scene.active_metadata.visible = false;
+    g.app.document.replace_geometry(geometry).unwrap();
+    let id = g
+        .app
+        .document
+        .create_path(
+            "Transformable rail".into(),
+            PathMode::Free,
+            [Vec3(-1.1, -0.4, 0.), Vec3(0., 0.5, 0.), Vec3(1.1, -0.4, 0.)]
+                .map(|position| PathPoint {
+                    position,
+                    normal: Vec3(0., 0., 1.),
+                })
+                .to_vec(),
+            false,
+            1.,
+        )
+        .unwrap();
+    g.app.dispatch(Command::Instances(C::NewPath), &g.ctx);
+    click_guide_label(&mut g, "Bend along path");
+    click_guide_label(&mut g, "Join neighbours");
+    click_guide_label(&mut g, "Apply instances");
+    let before = g.app.document.project();
+    let history = g.app.document.history_counts().0;
+    g.app.dispatch(Command::Path(PathCommand::Open), &g.ctx);
+    assert!(g.app.viewport.paths.active, "{}", g.app.ui.status);
+    g.save("14-before-path-transform");
+    click_guide_label(&mut g, "Transform whole path");
+    let controls = |g: &Guide| {
+        g.ctx
+            .data(|d| {
+                d.get_temp::<(egui::Pos2, Vec<(String, egui::Pos2)>)>(egui::Id::new(
+                    "whole_path_transform_controls",
+                ))
+            })
+            .unwrap()
+    };
+    let drag = |g: &mut Guide, start: egui::Pos2, end: egui::Pos2| {
+        g.frame(vec![
+            egui::Event::PointerMoved(start),
+            primary_event(start, true),
+        ]);
+        for i in 1..=4 {
+            g.frame(vec![egui::Event::PointerMoved(
+                start.lerp(end, i as f32 / 4.),
+            )]);
+        }
+        g.frame(vec![primary_event(end, false), egui::Event::PointerGone]);
+    };
+    g.frame(vec![]);
+    let (center, _) = controls(&g);
+    drag(&mut g, center, center + egui::vec2(25., -15.));
+    assert!(g.app.document.project() == before);
+    click_guide_label(&mut g, "Save path");
+    assert_eq!(
+        g.app.document.history_counts().0,
+        history + 1,
+        "{}",
+        g.app.ui.status
+    );
+    g.save("14-whole-path-move");
+    click_guide_label(&mut g, "Rotate path");
+    g.frame(vec![]);
+    let (center, _) = controls(&g);
+    drag(
+        &mut g,
+        center + egui::vec2(100., 0.),
+        center + egui::vec2(70.71068, -70.71068),
+    );
+    click_guide_label(&mut g, "Save path");
+    assert_eq!(
+        g.app.document.history_counts().0,
+        history + 2,
+        "{}",
+        g.app.ui.status
+    );
+    g.save("15-whole-path-rotate");
+    click_guide_label(&mut g, "Scale path");
+    g.frame(vec![]);
+    let (_, handles) = controls(&g);
+    let scale = handles.iter().find(|h| h.0 == "Scale path").unwrap().1;
+    drag(
+        &mut g,
+        scale,
+        scale - egui::vec2(1., -1.).normalized() * 20.,
+    );
+    click_guide_label(&mut g, "Save path");
+    assert_eq!(
+        g.app.document.history_counts().0,
+        history + 3,
+        "{}",
+        g.app.ui.status
+    );
+    let crate::sculpt::instances::Layout::Path(recipe) = &g.app.document.instances().sets[0].layout
+    else {
+        unreachable!()
+    };
+    assert!((recipe.scale - 0.8).abs() < 1e-5);
+    assert_eq!(g.app.document.mesh(), &source);
+    g.save("16-whole-path-scale");
+    let saved = g.app.document.project();
+    click_guide_label(&mut g, "Edit points");
+    assert!(g.app.viewport.paths.tool == crate::viewport::paths::PathTool::Move);
+    g.app.dispatch(Command::Path(PathCommand::Close), &g.ctx);
+    g.app.dispatch(Command::Undo, &g.ctx);
+    g.app.dispatch(Command::Redo, &g.ctx);
+    assert!(g.app.document.project() == saved);
+    assert!(g.app.document.path(id).is_some());
+    g.app.document.project().validate().unwrap();
+}

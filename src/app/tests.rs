@@ -4,6 +4,7 @@ use eframe::egui::{Pos2, Vec2};
 mod about;
 mod appearance;
 mod instances;
+mod path_transform;
 mod startup;
 fn navigation_frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) -> egui::Rect {
     let mut rect = egui::Rect::NOTHING;

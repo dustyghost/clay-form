@@ -34,3 +34,11 @@ The path walkthrough now also drags each inline handle type, switches all three 
 - [Local thickness with both sets of inline handles](11-thickness-profile-inline.png)
 - [Shared profile editor](12-thickness-profile-panel.png)
 - [Baked thickness profile](13-thickness-baked.png)
+
+Whole-path transforms add five ordinary regressions covering move/rotation/uniform scale, corner rounding and normals, retained surface routes and closed seams, explicit detachment, real pointer drags, Escape rollback, the start pivot, route-only scaling, linked assembly proportions, invalid-scale rejection, save/reopen and one-step Undo/Redo. The final focused selection passed 37 tests with three Vulkan tests intentionally ignored. Existing path-guide cache, corner-rounding, reusable-model and legacy persistence checks were included.
+
+`whole_path_transform_offscreen_review` passed on software Vulkan. It opens Editable paths, clicks the whole-path controls, drags each gizmo, saves each change, returns to point editing and verifies Undo/Redo. The captures below were inspected for reachable controls, visible gizmos and the joined assembly following each saved transformation. This interaction test runs explicitly in graphics CI.
+
+- [Whole-path move](14-whole-path-move.png)
+- [Whole-path rotation](15-whole-path-rotate.png)
+- [Whole-path scale with linked sections](16-whole-path-scale.png)

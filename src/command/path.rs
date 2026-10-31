@@ -10,6 +10,7 @@ pub(crate) enum PathCommand {
     Discard,
     Delete,
     Reproject,
+    Detach,
     Preview,
     StrokeEntirePath,
     Apply,

@@ -847,6 +847,113 @@ mod tests {
         reopened.project().validate().unwrap();
     }
     #[test]
+    fn whole_path_transform_updates_linked_geometry_and_undoes_atomically() {
+        use crate::sculpt::paths::{PathMode, PathPoint};
+        for fit_count in [false, true] {
+            let mut d = document();
+            d.geometry.scene.active_metadata.visible = false;
+            let id = d
+                .create_path(
+                    "Route".into(),
+                    PathMode::Free,
+                    [Vec3::default(), Vec3(6., 0., 0.)]
+                        .map(|position| PathPoint {
+                            position,
+                            normal: axis(2),
+                        })
+                        .to_vec(),
+                    false,
+                    0.,
+                )
+                .unwrap();
+            let set = Set {
+                id: 1,
+                name: "Rail".into(),
+                visible: true,
+                adjustments: Vec::new(),
+                layout: Layout::Path(PathAssembly {
+                    path: id,
+                    start: None,
+                    middle: d.instance_piece(0).unwrap(),
+                    end: None,
+                    count: 3,
+                    spacing: 2.,
+                    fit_count,
+                    twist: 0.,
+                    scale: 1.,
+                    bend: true,
+                    fit_sections: true,
+                    join: JoinMode::Weld,
+                    join_distance: 0.05,
+                    thickness: Thickness {
+                        mode: ThicknessMode::Taper,
+                        start: 0.5,
+                        end: 1.5,
+                        ..Default::default()
+                    },
+                }),
+            };
+            d.preview_instance_set(set).unwrap();
+            d.apply_instance_preview().unwrap();
+            let before = d.project();
+            let history = d.history_counts().0;
+            let old_mesh = d.instance_placements().unwrap().meshes[&(1, 0)].clone();
+            let path = d
+                .path(id)
+                .unwrap()
+                .transformed(
+                    Vec3::default(),
+                    Vec3(1., 2., 3.),
+                    axis(2),
+                    std::f32::consts::FRAC_PI_2,
+                    2.,
+                )
+                .unwrap();
+            d.update_path_with_section_scale(path, 2.).unwrap();
+            assert_eq!(d.history_counts().0, history + 1);
+            assert_eq!(d.mesh(), &before.mesh);
+            let generated = d.instance_placements().unwrap();
+            assert_eq!(
+                generated.meshes[&(1, 0)].vertices.len(),
+                old_mesh.vertices.len()
+            );
+            for (&a, &b) in old_mesh
+                .vertices
+                .iter()
+                .zip(&generated.meshes[&(1, 0)].vertices)
+            {
+                let expected = Vec3(-a.1, a.0, a.2) * 2. + Vec3(1., 2., 3.);
+                assert!(
+                    (expected - b).len() < 1e-4,
+                    "uniform whole-path transform must include the linked cross-section"
+                );
+            }
+            let Layout::Path(recipe) = &d.instances().sets[0].layout else {
+                unreachable!()
+            };
+            assert_eq!(recipe.scale, 2.);
+            assert_eq!(recipe.spacing, if fit_count { 2. } else { 4. });
+            let saved = d.project();
+            d.undo();
+            assert!(d.project() == before);
+            d.redo();
+            assert!(d.project() == saved);
+            let mut reopened = document();
+            reopened
+                .replace_project(
+                    serde_json::from_slice(&serde_json::to_vec(&saved).unwrap()).unwrap(),
+                    "transformed.clay",
+                )
+                .unwrap();
+            assert_eq!(reopened.instance_placements().unwrap(), generated);
+            let history = d.history_counts();
+            let same = d.path(id).unwrap().clone();
+            assert!(d.update_path_with_section_scale(same, 1e20).is_err());
+            assert!(d.project() == saved);
+            assert_eq!(d.history_counts(), history);
+        }
+    }
+    #[test]
     fn reusable_path_assembly_follows_edits_and_protects_path_deletion() {
         use crate::sculpt::paths::{PathMode, PathPoint};
         let mut d = document();
