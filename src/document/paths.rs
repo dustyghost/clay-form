@@ -125,6 +125,7 @@ impl Document {
                     && recipe.path == id
                 {
                     recipe.scale *= section_scale;
+                    recipe.join_distance *= section_scale;
                     if !recipe.fit_count {
                         recipe.spacing *= section_scale;
                     }

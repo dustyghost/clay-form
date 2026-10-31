@@ -954,6 +954,62 @@ mod tests {
         }
     }
     #[test]
+    fn whole_path_scale_preserves_nearby_neighbour_joins() {
+        use crate::sculpt::paths::{PathMode, PathPoint};
+        let mut d = document();
+        let id = d
+            .create_path(
+                "Nearby ends".into(),
+                PathMode::Free,
+                [Vec3::default(), Vec3(2.03, 0., 0.)]
+                    .map(|position| PathPoint {
+                        position,
+                        normal: axis(2),
+                    })
+                    .to_vec(),
+                false,
+                0.,
+            )
+            .unwrap();
+        let set = Set {
+            id: 1,
+            name: "Joined cubes".into(),
+            visible: true,
+            adjustments: Vec::new(),
+            layout: Layout::Path(PathAssembly {
+                path: id,
+                start: None,
+                middle: d.instance_piece(0).unwrap(),
+                end: None,
+                count: 2,
+                spacing: 2.03,
+                fit_count: true,
+                twist: 0.,
+                scale: 1.,
+                bend: false,
+                fit_sections: false,
+                join: JoinMode::Weld,
+                join_distance: 0.05,
+                thickness: Default::default(),
+            }),
+        };
+        d.preview_instance_set(set).unwrap();
+        d.apply_instance_preview().unwrap();
+        let before = d.instance_placements().unwrap().meshes[&(1, 0)].clone();
+        let path = d
+            .path(id)
+            .unwrap()
+            .transformed(Vec3::default(), Vec3::default(), axis(2), 0., 2.)
+            .unwrap();
+        d.update_path_with_section_scale(path, 2.).unwrap();
+        let after = d.instance_placements().unwrap();
+        let mesh = &after.meshes[&(1, 0)];
+        assert_eq!(before.triangles, mesh.triangles);
+        for (a, b) in before.vertices.iter().zip(&mesh.vertices) {
+            assert!((*a * 2. - *b).len() < 1e-5);
+        }
+    }
+    #[test]
     fn reusable_path_assembly_follows_edits_and_protects_path_deletion() {
         use crate::sculpt::paths::{PathMode, PathPoint};
         let mut d = document();

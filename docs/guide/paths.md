@@ -24,7 +24,7 @@ Choose **Transform whole path** in Editable paths. **Move path** provides a cent
 
 The route remains a private draft: **Save path** commits it and updates its linked assemblies in one undo step. **Escape** during a drag restores the previous draft; **Discard edits** restores the saved path. Camera navigation remains available. **Edit points** returns to the ordinary point editor.
 
-**Scale linked sections** is enabled by default. Saving a scaled path also scales the linked assemblies' cross-sections, active fixed spacing and individual offsets, preserving the assembly's overall proportions. Disable it to resize only the route while keeping section sizes and spacing unchanged. Source meshes stay unchanged. Thickness profiles retain their relative positions along the route.
+**Scale linked sections** is enabled by default. Saving a scaled path also scales the linked assemblies' cross-sections, active fixed spacing, join distance and individual offsets, preserving the assembly's overall proportions and nearby joins. Disable it to resize only the route while keeping section sizes and spacing unchanged. Source meshes stay unchanged. Thickness profiles retain their relative positions along the route.
 
 Surface paths must first use **Detach from surface** for free transforms. Detaching a saved path preserves its current world-space route and is independently undoable. After transforming, **Attach saved path to surface** can reproject it explicitly. Free paths can be edited and transformed while their original target model is hidden.
 

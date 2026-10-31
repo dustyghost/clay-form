@@ -63,7 +63,7 @@ pub(super) fn controls(
                     .suffix("×"),
             );
             ui.checkbox(&mut state.scale_sections, "Scale linked sections")
-                .on_hover_text("Also scales section size, fixed repeat spacing and per-copy offsets when the path is saved. Reusable source meshes stay unchanged.");
+                .on_hover_text("Also scales section size, fixed repeat spacing, join distance and per-copy offsets when the path is saved. Reusable source meshes stay unchanged.");
             ui.weak("Drag the square handle to scale the entire path uniformly around the pivot.");
         }
     }
