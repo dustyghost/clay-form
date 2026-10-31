@@ -9,6 +9,11 @@ mod picking;
 #[cfg(test)]
 pub(in crate::viewport) mod profile;
 type PickMemo = Option<(Pos2, Option<(Vec3, Vec3, usize)>)>;
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct FaceGeometry {
+    normal: Vec3,
+    origin: Vec3,
+}
 
 #[derive(Clone)]
 pub(super) struct Scene {
@@ -170,7 +175,23 @@ impl Scene {
         geometry: Arc<DisplayMesh>,
         sort_faces: bool,
     ) -> Self {
+        Self::from_geometry_with_faces(rect, camera, geometry, sort_faces, None)
+    }
+    fn from_geometry_with_faces(
+        rect: egui::Rect,
+        camera: &Camera,
+        geometry: Arc<DisplayMesh>,
+        sort_faces: bool,
+        mut cached_faces: Option<&mut Vec<FaceGeometry>>,
+    ) -> Self {
         let mesh = &geometry.mesh;
+        let reuse_faces = cached_faces
+            .as_ref()
+            .is_some_and(|n| n.len() == mesh.triangles.len());
+        if !reuse_faces && let Some(faces) = cached_faces.as_mut() {
+            faces.clear();
+            faces.reserve(mesh.triangles.len());
+        }
         let active = geometry.active;
         let active_vertices = geometry.active_vertices;
         let owners = &geometry.owners;
@@ -195,28 +216,43 @@ impl Scene {
         // Facing can retain at most one entry per displayed triangle. Reserve
         // once so allocator history cannot trigger repeated large-list copies.
         let mut faces = Vec::with_capacity(mesh.triangles.len());
-        faces.extend(
-            mesh.triangles
-                .iter()
-                .enumerate()
-                .filter(|(_, t)| {
-                    let a = mesh.vertices[t[0]];
-                    let b = mesh.vertices[t[1]];
-                    let c = mesh.vertices[t[2]];
-                    (b - a).cross(c - a).dot(if eye_distance == 0. {
-                        view
-                    } else {
-                        view * eye_distance - a
-                    }) > 0.
-                })
-                .map(|(i, t)| {
-                    (
-                        i,
-                        (mesh.vertices[t[0]] + mesh.vertices[t[1]] + mesh.vertices[t[2]]).dot(view),
-                    )
-                }),
-        );
+        if reuse_faces {
+            // Iterate contiguous face data without triangle or vertex lookups.
+            for (i, face) in cached_faces.as_ref().unwrap().iter().enumerate() {
+                let direction = if eye_distance == 0. {
+                    view
+                } else {
+                    view * eye_distance - face.origin
+                };
+                if face.normal.dot(direction) > 0. {
+                    faces.push((i, 0.));
+                }
+            }
+        } else {
+            for (i, t) in mesh.triangles.iter().enumerate() {
+                let [a, b, c] = t.map(|v| mesh.vertices[v]);
+                let face = FaceGeometry {
+                    normal: (b - a).cross(c - a),
+                    origin: a,
+                };
+                if let Some(cached) = cached_faces.as_mut() {
+                    cached.push(face);
+                }
+                let direction = if eye_distance == 0. {
+                    view
+                } else {
+                    view * eye_distance - a
+                };
+                if face.normal.dot(direction) > 0. {
+                    faces.push((i, 0.));
+                }
+            }
+        }
         if sort_faces {
+            for (i, depth) in &mut faces {
+                let [a, b, c] = mesh.triangles[*i].map(|v| mesh.vertices[v]);
+                *depth = (a + b + c).dot(view);
+            }
             faces.sort_by(|a, b| a.1.total_cmp(&b.1));
         }
         #[cfg(test)]

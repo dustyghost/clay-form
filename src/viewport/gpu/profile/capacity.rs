@@ -953,6 +953,7 @@ fn gpu_load_profile_camera_picking() {
 fn gpu_load_profile_scene_reuse() {
     use crate::viewport::scene::cache::Cache;
     let output = std::env::var("CLAY_REUSE_PROFILE").expect("output path");
+    let trace_stages = std::env::var_os("CLAY_SCENE_STAGES").is_some();
     let level = env_limit("CLAY_CAMERA_LEVEL", 3);
     crate::sculpt::capacity::initialize(benchmark_capacity(level, 2_000_000, 4_000_000).unwrap())
         .unwrap();
@@ -978,9 +979,25 @@ fn gpu_load_profile_scene_reuse() {
                     let fresh = metrics.time("fresh_scene", || {
                         Scene::from_geometry(rect, &camera, display.clone(), false)
                     });
-                    let cached = metrics.time("cached_scene", || {
-                        cache.get(rect, &camera, display.clone(), false)
-                    });
+                    let cached = if trace_stages {
+                        let (scene, stages) = crate::viewport::scene::profile::capture(|| {
+                            metrics.time("cached_scene", || {
+                                cache.get(rect, &camera, display.clone(), false)
+                            })
+                        });
+                        for (name, elapsed) in stages {
+                            metrics
+                                .values
+                                .entry(format!("cached.{name}"))
+                                .or_default()
+                                .push(elapsed);
+                        }
+                        scene
+                    } else {
+                        metrics.time("cached_scene", || {
+                            cache.get(rect, &camera, display.clone(), false)
+                        })
+                    };
                     if let Some(previous) = &previous {
                         assert_eq!(cached.shares_preparation(previous), !moving);
                     }

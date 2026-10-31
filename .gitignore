@@ -6,6 +6,8 @@
 !/docs/examples/pyramid.obj
 *.tmp
 *.log
+!/docs/validation/camera-geometry-2026-10-31/*/*.log
+!/docs/validation/local-release-shading-2026-10-31/*/*.log
 !/docs/validation/paint-startup-2026-10-31/*/*.log
 !/docs/validation/indexed-surface-draw-2026-10-31/*/*.log
 !/docs/validation/picking-and-scene-reuse-2026-10-31/*/*.log
