@@ -41,6 +41,8 @@ impl App {
                 }
             }
         }
+        self.document
+            .visit_instance_points(|p| bounds.extend_with(egui::pos2(p.0, -p.1)));
         if !bounds.is_finite() {
             return;
         }
@@ -81,6 +83,8 @@ impl App {
                 }
             }
         }
+        self.document
+            .visit_instance_points(|p| radius = radius.max(p.len()));
         self.camera.perspective_radius = radius;
         let (mut old_extent, mut new_extent) = (0_f32, 0_f32);
         for index in 0..self.document.model_count() {
@@ -96,6 +100,10 @@ impl App {
             old_extent = old_extent.max(before.projected_extent(points.clone()));
             new_extent = new_extent.max(self.camera.projected_extent(points));
         }
+        self.document.visit_instance_points(|p| {
+            old_extent = old_extent.max(before.projected_extent(std::iter::once(p)));
+            new_extent = new_extent.max(self.camera.projected_extent(std::iter::once(p)));
+        });
         if old_extent > 1e-6 && new_extent > 1e-6 {
             self.camera.set_zoom(before.zoom * old_extent / new_extent);
         }
@@ -138,6 +146,13 @@ impl App {
                 self.ui.status = error;
             }
             self.sync_path_history_state();
+            return;
+        }
+        if let Command::Instances(command) = command {
+            if let Err(error) = self.dispatch_instances(command) {
+                self.ui.instances.invalid = true;
+                self.ui.status = error;
+            }
             return;
         }
         if matches!(command, Command::Undo | Command::Redo)
@@ -265,7 +280,7 @@ impl App {
                 self.ui.modeling.tool = crate::viewport::ModelTool::Select;
                 Ok(())
             }
-            Command::Path(_) => unreachable!(),
+            Command::Path(_) | Command::Instances(_) => unreachable!(),
             command @ (Command::ModelingMode(..)
             | Command::ModelingComponent(..)
             | Command::ClearModelSelection

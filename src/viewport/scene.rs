@@ -716,6 +716,30 @@ impl Scene {
         let (p, normal, face) = self.pick_surface(point)?;
         Some((self.geometry.owners[face], p, normal))
     }
+    /// Placement targets the active surface through its preview copies, while
+    /// retaining hidden-face filtering and conservative mask protection.
+    pub(super) fn pick_object_target(
+        &self,
+        point: Pos2,
+        document: &Document,
+    ) -> Option<(Vec3, Vec3)> {
+        let (p, n, face) = pick_faces(
+            self,
+            self.face_candidates(egui::Rect::from_min_max(point, point))
+                .map(|f| f.0)
+                .filter(|&f| self.geometry.owners[f] < document.model_count()),
+            point,
+        )?;
+        if self.geometry.owners[face] != self.active {
+            return None;
+        }
+        let source_face = self.geometry.source_faces[face];
+        let tri = document.mesh().triangles.get(source_face)?;
+        if tri.iter().any(|&i| document.mesh().mask[i] > 0.001) {
+            return None;
+        }
+        Some((p, n))
+    }
     /// Sample the underlying surface colour, independent of lighting and group overlays.
     #[cfg(test)]
     pub(super) fn pick_colour(&self, point: Pos2) -> Option<[f32; 3]> {
@@ -875,6 +899,110 @@ fn pick_faces(
 mod tests {
     use super::*;
     use crate::sculpt::{Transform, Vec3};
+    #[test]
+    fn reusable_object_picking_ignores_copies_but_respects_occlusion_masks_and_visibility() {
+        use crate::sculpt::{Geometry, Primitive, PrimitiveKind, Submodel, instances::*};
+        let mut plane = Primitive::for_kind(PrimitiveKind::Plane);
+        plane.divisions = [1; 3];
+        let mut doc = Document::default();
+        doc.replace_geometry(Geometry::new(plane.mesh().unwrap()))
+            .unwrap();
+        let piece = doc.instance_piece(0).unwrap();
+        let mut array = Array::new(piece);
+        array.count = 1;
+        array.center.2 = 4.;
+        doc.preview_instance_set(Set {
+            id: 1,
+            name: "Foreground copy".into(),
+            visible: true,
+            layout: Layout::Array(array),
+            adjustments: Vec::new(),
+        })
+        .unwrap();
+        doc.apply_instance_preview().unwrap();
+        let view = scene(&doc);
+        let point = view.project(Vec3::default());
+        assert_eq!(view.pick_model(point).unwrap().0, 1);
+        assert!(view.pick_object_target(point, &doc).unwrap().0.2.abs() < 1e-5);
+        let mut g = doc.geometry_snapshot();
+        let mut blocker = g.mesh.clone();
+        for p in &mut blocker.vertices {
+            p.2 += 2.;
+        }
+        g.submodels.push(Submodel {
+            name: "Occluder".into(),
+            metadata: Default::default(),
+            mesh: blocker,
+            mesh_settings: Default::default(),
+        });
+        doc.replace_geometry(g.clone()).unwrap();
+        assert!(scene(&doc).pick_object_target(point, &doc).is_none());
+        g.submodels[0].metadata.visible = false;
+        doc.replace_geometry(g.clone()).unwrap();
+        assert!(scene(&doc).pick_object_target(point, &doc).is_some());
+        g.mesh.mask.fill(1.);
+        doc.replace_geometry(g.clone()).unwrap();
+        assert!(scene(&doc).pick_object_target(point, &doc).is_none());
+        g.mesh.mask.fill(0.);
+        g.mesh.hidden_faces = vec![true; g.mesh.triangles.len()];
+        doc.replace_geometry(g).unwrap();
+        assert!(scene(&doc).pick_object_target(point, &doc).is_none());
+    }
+    #[test]
+    fn reusable_instances_render_pick_and_share_saved_source() {
+        use crate::sculpt::{Geometry, Primitive, PrimitiveKind, instances::*};
+        let mut doc = Document::default();
+        let mut cube = Primitive::for_kind(PrimitiveKind::Cube);
+        cube.divisions = [3; 3];
+        let mut mesh = cube.mesh().unwrap();
+        for v in &mut mesh.vertices {
+            *v = *v * 0.03;
+        }
+        let source_faces = mesh.triangles.len();
+        doc.replace_geometry(Geometry::new(mesh)).unwrap();
+        let piece = doc.instance_piece(0).unwrap();
+        let mut array = Array::new(piece);
+        array.kind = ArrayKind::Grid;
+        array.count = 128;
+        array.columns = 16;
+        array.spacing = Vec3(0.12, 0.12, 0.);
+        array.center = Vec3(-0.9, -0.42, 0.);
+        doc.preview_instance_set(Set {
+            id: 1,
+            name: "Grid".into(),
+            visible: true,
+            layout: Layout::Array(array),
+            adjustments: Vec::new(),
+        })
+        .unwrap();
+        doc.apply_instance_preview().unwrap();
+        let bytes = serde_json::to_vec(&doc.project()).unwrap().len();
+        let start = std::time::Instant::now();
+        let view = scene(&doc);
+        let prepared = start.elapsed();
+        assert_eq!(view.geometry.mesh.triangles.len(), source_faces * 129);
+        let placement = doc.instance_placements().unwrap().last().unwrap().2;
+        let point = view.project(placement.transform.origin);
+        let start = std::time::Instant::now();
+        let hit = view.pick_model(point).unwrap();
+        let cold = start.elapsed();
+        assert_eq!(hit.0, 128);
+        assert!(doc.select_instance_owner(hit.0));
+        assert_eq!(doc.selected_instance, Some((1, 127)));
+        assert!(doc.project().submodels.is_empty());
+        eprintln!(
+            "128 instances: {source_faces} source triangles, {} display triangles, {bytes} saved bytes, prepare {prepared:?}, cold pick {cold:?}",
+            view.geometry.mesh.triangles.len()
+        );
+        let mut edited = doc.geometry_snapshot();
+        for v in &mut edited.mesh.vertices {
+            v.2 += 0.02;
+        }
+        doc.replace_geometry(edited).unwrap();
+        let updated = scene(&doc);
+        let hit_after = updated.pick_model(point).unwrap();
+        assert!((hit_after.1.2 - hit.1.2 - 0.02).abs() < 1e-4);
+    }
     fn wire_shapes(
         document: &Document,
         mode: super::super::WireMode,

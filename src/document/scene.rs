@@ -105,6 +105,8 @@ impl Document {
         self.display_changed();
     }
     pub fn select_submodel(&mut self, index: usize) -> Result<(), String> {
+        self.cancel_instance_preview();
+        self.selected_instance = None;
         self.end_edit();
         if index >= self.model_count() {
             return Err("Submodel no longer exists".into());
@@ -138,6 +140,9 @@ impl Document {
     /// empty, ordinary mesh slot because projects always own one active model.
     /// Returns false when that slot is already empty and reset.
     pub fn delete_submodel(&mut self) -> bool {
+        if self.instance_source_in_use(self.active_model_index()) {
+            return false;
+        }
         let active = self.active_model_index();
         let mut models = self.ordered_models();
         let next = if models.len() == 1 {
@@ -245,6 +250,11 @@ impl Document {
             .merge_down_target()
             .ok_or("There is no submodel below the active one")?;
         let active = self.active_model_index();
+        if self.instance_source_in_use(active) || self.instance_source_in_use(target) {
+            return Err(
+                "Bake or remove linked instance sets before merging their source models".into(),
+            );
+        }
         let surface = |model: ModelRef<'_>| -> Result<Mesh, String> {
             if model.settings.primitive.is_some() && model.mesh.triangles.is_empty() {
                 return Err("Fill the primitive before merging it into a sculpting mesh".into());

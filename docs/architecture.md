@@ -60,7 +60,9 @@ Introduce a trait when a second implementation needs one. Current concrete modul
 
 ## Compatibility and storage
 
-New `.clay` projects use version 3 for UVs and texture images; versions 1 and 2 remain readable. The `.brush.json` format remains version 1. Optional fields omit defaults, keeping older single-model files valid. Camera and undo state are never saved in a project; preferences use an independent versioned JSON file.
+New `.clay` projects use version 4 for shared instance recipes and captured objects; versions 1–3 remain readable, including version 3 UVs and texture images. The `.brush.json` format remains version 1. Optional fields omit defaults, keeping older single-model files valid. Camera and undo state are never saved in a project; preferences use an independent versioned JSON file.
+
+`sculpt/instances.rs` owns bounded placement recipes and baking. `SceneSettings.instances` stores stable source references and per-slot overrides; captured meshes use `Arc<Mesh>`. `document/instances.rs` owns private previews and transactional commits. Rendering expands positions in a shared display snapshot and reuses source shading. `viewport/objects.rs` handles placement gestures; `app/instances.rs` routes commands and cancellable baking. Referenced source/path deletion is blocked until consumers are baked or removed. Previews never enter save/recovery snapshots. Source and expanded-display limits are separate.
 
 Use `tests/fixtures/v1-project.json` to check legacy compatibility. See [storage details](architecture/integration.md#compatibility-and-storage) for references, shared image buffers, and fixture coverage.
 

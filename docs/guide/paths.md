@@ -4,6 +4,8 @@
 
 Use **Mesh → Editable paths** to draw a reusable guide, edit it while orbiting, and guide your brush as you sculpt on the model. Paths belong to a submodel and save with the project. They are separate from [mesh edge-loop selections](edges.md).
 
+Saved paths also drive [assemblies of reusable models](instances.md#assemble-pieces-along-a-path), with repeating middle pieces and optional start/end caps.
+
 ## Draw and edit a path
 
 1. Select the submodel, open **Mesh → Editable paths**, and choose **New surface path** or **New free path**.

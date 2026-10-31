@@ -4,6 +4,7 @@ mod controls;
 mod edges;
 mod interaction;
 mod modeling;
+pub(crate) mod objects;
 pub(crate) use modeling::{
     Component, ComponentMode, ModelAxis, ModelConstruction, ModelInteraction, ModelTool,
     ModelingOptions, SelectionChange, SelectionSpan,
@@ -55,6 +56,7 @@ pub(crate) enum Gesture {
 }
 #[derive(Default)]
 pub(crate) struct Viewport {
+    pub(crate) object_brush: Option<objects::ObjectBrush>,
     pub(crate) size_preview: Option<Brush>,
     last_brush_position: Option<Pos2>,
     pub(crate) sample_colour: bool,
@@ -136,6 +138,9 @@ impl Viewport {
         }
     }
     pub(crate) fn cancel(&mut self, document: &mut Document) {
+        if let Some(brush) = &mut self.object_brush {
+            brush.cancel(document);
+        }
         self.blocked_until_release |= self.session.guided.dragging()
             || self.references.dragging()
             || self.session.stencil_overlay.controls.capturing();
@@ -280,6 +285,33 @@ impl Viewport {
         if let Some(renderer) = &self.renderer {
             renderer.set_backfaces(options.backface_opacity);
             renderer.set_polygroups(options.show_polygroups);
+        }
+        if let Some((set, slot)) = document.selected_instance
+            && let Ok(placements) = document.instance_placements()
+            && let Some((_, _, placement)) = placements
+                .iter()
+                .find(|(id, i, _)| *id == set && *i == slot)
+            && let Some(mesh) = document.instance_source(placement.piece.source)
+        {
+            for (face, tri) in mesh
+                .triangles
+                .iter()
+                .enumerate()
+                .step_by((mesh.triangles.len() / 300).max(1))
+            {
+                if !mesh.face_visible(face) {
+                    continue;
+                }
+                let p = tri.map(|i| placement.point(mesh.vertices[i]));
+                for (a, b) in [(0, 1), (1, 2), (2, 0)] {
+                    if let Some(line) = scene.clip_segment([p[a], p[b]]) {
+                        painter.line_segment(
+                            line,
+                            egui::Stroke::new(1_f32, Color32::from_rgb(75, 225, 200)),
+                        );
+                    }
+                }
+            }
         }
         if let Some(brush) = &self.size_preview {
             let position = self
@@ -452,6 +484,25 @@ impl Viewport {
         if frame_press {
             self.session.gesture = Some(Gesture::Orbit);
         }
+        if self.update_objects(
+            ui, &response, &painter, &scene, document, options, gizmo_rect,
+        ) {
+            draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
+            return;
+        }
+        if document.instance_preview_active()
+            && self.object_brush.is_none()
+            && self.session.gesture.is_none()
+            && !options.zoom_hold.active(modifiers)
+            && !options.pan_hold.active(modifiers)
+            && ui.input(|i| i.pointer.primary_down() || i.pointer.primary_released())
+            && response
+                .hover_pos()
+                .is_some_and(|p| !gizmo_rect.contains(p) && !navigation::contains(rect, p))
+        {
+            draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
+            return;
+        }
         if self.update_visibility(
             ui,
             &response,
@@ -619,6 +670,11 @@ impl Viewport {
             && !options.temporary_mask
             && owner != document.active_model_index()
         {
+            if document.select_instance_owner(owner) {
+                self.status = Some("Instance selected · edit it in Submodels → Instances; Make independent enables sculpting".into());
+                self.wait_for_release();
+                return;
+            }
             let _ = document.select_submodel(owner);
             self.wait_for_release();
             return;

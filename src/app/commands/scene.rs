@@ -34,6 +34,12 @@ impl App {
             }
             Command::DeleteSubmodel => {
                 self.viewport.cancel(&mut self.document);
+                if self
+                    .document
+                    .instance_source_in_use(self.document.active_model_index())
+                {
+                    return Err("This model supplies linked instances. Bake or remove its instance sets before deleting the source".into());
+                }
                 let name = self
                     .document
                     .model(self.document.active_model_index())

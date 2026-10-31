@@ -110,6 +110,14 @@ impl Document {
         self.replace_geometry_named(next, "Edit path")
     }
     pub fn delete_path(&mut self, id: u64) -> Result<(), String> {
+        if self
+            .instances()
+            .sets
+            .iter()
+            .any(|s| matches!(&s.layout, crate::sculpt::instances::Layout::Path(a) if a.path == id))
+        {
+            return Err("Bake or remove this path's assembly before deleting the path".into());
+        }
         if self.path(id).is_none() {
             return Err("Path no longer exists".into());
         }

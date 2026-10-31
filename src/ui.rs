@@ -24,6 +24,7 @@ mod viewport_controls;
 pub(crate) use files::{FileEntry, FilePicker};
 mod brush_controls;
 mod icons;
+mod instances;
 mod masking;
 mod menus;
 mod mesh_capacity;
@@ -39,6 +40,7 @@ mod sidebar;
 mod transform;
 use customization::ActionResponse;
 pub(crate) struct UiState {
+    pub instances: instances::Controls,
     pub uv: uv::UvControls,
     pub viewport_controls: viewport_controls::ControlsState,
     pub viewport_menu: context_menu::ViewportMenuState,
@@ -119,6 +121,7 @@ pub(crate) struct UiState {
 impl Default for UiState {
     fn default() -> Self {
         Self {
+            instances: Default::default(),
             viewport_controls: Default::default(),
             uv: Default::default(),
             viewport_menu: Default::default(),
@@ -1162,6 +1165,8 @@ impl UiState {
         document: &Document,
         commands: &mut Vec<Command>,
     ) {
+        self.instance_controls(ui, document, commands);
+        ui.separator();
         ui.label("Click a model row to select it. The eye toggles visibility.");
         ui.add_enabled_ui(!self.mesh_busy, |ui| {
             ui.label("OBJ path");

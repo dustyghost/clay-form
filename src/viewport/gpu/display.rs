@@ -144,6 +144,11 @@ impl DisplayMesh {
                 sources.entry(texture.id).or_insert(texture);
             }
         }
+        for asset in &document.instances().assets {
+            for texture in &asset.mesh.uv.textures {
+                sources.entry(texture.id).or_insert(texture);
+            }
+        }
         for (i, previous) in next.texture_sources.iter_mut().enumerate() {
             let texture = *sources.get(&previous.id)?;
             let info = next.texture_info[i + 1];
@@ -178,6 +183,7 @@ impl DisplayMesh {
     pub(super) fn during_stroke(&self, document: &Document) -> Option<Self> {
         let source = document.mesh();
         if !document.stroke_active()
+            || !document.instance_placements().ok()?.is_empty()
             || document.model_count() != 1
             || !document.active_visible()
             || source.vertices.len() < 20_000
@@ -257,6 +263,7 @@ impl DisplayMesh {
         let cached = self.stroke_topology.as_ref()?;
         let source = document.mesh();
         if document.stroke_active()
+            || !document.instance_placements().ok()?.is_empty()
             || document.model_count() != 1
             || !document.active_visible()
             || document.model(0)?.metadata.temporary_thickness != 0.
@@ -342,10 +349,30 @@ impl DisplayMesh {
         let mut outlines = Vec::new();
         let mut active_vertices = 0;
         let mut stroke_topology = None;
-        for index in
-            std::iter::once(active).chain((0..document.model_count()).filter(|i| *i != active))
+        let mut shared_shading: HashMap<crate::sculpt::instances::Source, Arc<SurfaceShading>> =
+            HashMap::new();
+        let instances = document.instance_placements().unwrap_or_default();
+        let instance_metadata = crate::sculpt::ModelMetadata::default();
+        let instance_settings = crate::sculpt::MeshSettings::default();
+        for index in std::iter::once(active)
+            .chain((0..document.model_count()).filter(|i| *i != active))
+            .chain(document.model_count()..document.model_count() + instances.len())
         {
-            let model = document.model(index).unwrap();
+            let placement = index
+                .checked_sub(document.model_count())
+                .map(|i| instances[i].2);
+            let model = if let Some(p) = placement {
+                crate::document::ModelRef {
+                    name: "Instance",
+                    metadata: &instance_metadata,
+                    mesh: document
+                        .instance_source(p.piece.source)
+                        .expect("validated instance source"),
+                    settings: &instance_settings,
+                }
+            } else {
+                document.model(index).unwrap()
+            };
             if !model.metadata.visible {
                 continue;
             }
@@ -409,7 +436,12 @@ impl DisplayMesh {
                     eframe::egui::Color32::from_rgb(255, 170, 65),
                 );
             }
-            mesh.vertices.extend_from_slice(&surface.vertices);
+            mesh.vertices.extend(
+                surface
+                    .vertices
+                    .iter()
+                    .map(|&p| placement.map_or(p, |instance| instance.point(p))),
+            );
             mesh.mask.extend_from_slice(&surface.mask);
             muted_vertices.extend(std::iter::repeat_n(
                 index != active && surface.materials.is_empty(),
@@ -451,6 +483,7 @@ impl DisplayMesh {
                 }
             }
             let cache_stroke = document.model_count() == 1
+                && instances.is_empty()
                 && index == active
                 && active_mesh.is_none()
                 && surface.vertices.len() >= 20_000
@@ -459,17 +492,37 @@ impl DisplayMesh {
                 && surface.creases.is_empty()
                 && surface.uv.is_empty();
             let topology = cache_stroke.then(|| SurfaceShadingTopology::new(surface));
-            let surface_shading = topology.as_ref().map_or_else(
-                || surface.surface_shading(),
-                |topology| topology.shade(surface),
-            );
+            let surface_shading = if let Some(placement) = placement {
+                shared_shading
+                    .entry(placement.piece.source)
+                    .or_insert_with(|| Arc::new(surface.surface_shading()))
+                    .clone()
+            } else {
+                let result = Arc::new(topology.as_ref().map_or_else(
+                    || surface.surface_shading(),
+                    |topology| topology.shade(surface),
+                ));
+                if shell.is_none()
+                    && std::ptr::eq(surface, model.mesh)
+                    && model.metadata.model_id != 0
+                    && !instances.is_empty()
+                {
+                    shared_shading.insert(
+                        crate::sculpt::instances::Source::Model(model.metadata.model_id),
+                        result.clone(),
+                    );
+                }
+                result
+            };
             let shading_offset = shading.vertices.len();
-            shading.vertices.extend(
-                surface_shading
-                    .vertices
-                    .iter()
-                    .map(|&(i, n)| (i + offset, n)),
-            );
+            shading
+                .vertices
+                .extend(surface_shading.vertices.iter().map(|&(i, n)| {
+                    (
+                        i + offset,
+                        placement.map_or(n, |instance| instance.normal(n)),
+                    )
+                }));
             for (face, &triangle) in surface.triangles.iter().enumerate() {
                 if !surface.face_visible(face) {
                     continue;
@@ -527,7 +580,13 @@ impl DisplayMesh {
                         normal_corners: OnceLock::new(),
                     }),
                     fans: if has_hidden {
-                        Arc::new(surface_shading.triangles)
+                        Arc::new(
+                            Arc::try_unwrap(surface_shading)
+                                .unwrap_or_else(|_| {
+                                    unreachable!("single-model stroke owns its shading")
+                                })
+                                .triangles,
+                        )
                     } else {
                         Arc::default()
                     },

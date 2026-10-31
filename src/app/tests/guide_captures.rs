@@ -21,6 +21,119 @@ struct Guide {
 }
 
 #[test]
+#[ignore = "reusable model control interaction and visual capture; requires Vulkan"]
+fn reusable_models_offscreen_review() {
+    use crate::{
+        command::InstanceCommand as C,
+        sculpt::{
+            Geometry, Vec3,
+            instances::*,
+            paths::{PathMode, PathPoint},
+        },
+    };
+    let directory = std::path::PathBuf::from(
+        std::env::var("CLAY_GUIDE_PREVIEW").unwrap_or_else(|_| "/tmp/clay-reusable-models".into()),
+    );
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1280, 900]);
+    g.interactive = true;
+    g.panel(Tool::Submodels, Dock::Right);
+    let mut cube = Primitive::for_kind(PrimitiveKind::Cube);
+    cube.divisions = [1; 3];
+    let mut mesh = cube.mesh().unwrap();
+    for p in &mut mesh.vertices {
+        *p = *p * 0.12;
+    }
+    g.app
+        .document
+        .replace_geometry(Geometry::new(mesh))
+        .unwrap();
+    g.app.dispatch(Command::Instances(C::NewArray), &g.ctx);
+    let mut set = g.app.ui.instances.editor.clone().unwrap();
+    if let Layout::Array(a) = &mut set.layout {
+        a.kind = ArrayKind::Radial;
+        a.count = 12;
+        a.radius = 1.15;
+        a.center = Vec3::default();
+    }
+    g.app.ui.instances.editor = Some(set.clone());
+    g.app
+        .dispatch(Command::Instances(C::Preview(Box::new(set))), &g.ctx);
+    g.save("01-array-preview");
+    click_guide_label(&mut g, "Apply instances");
+    assert!(
+        !g.app.document.instance_preview_active(),
+        "{}",
+        g.app.ui.status
+    );
+    assert_eq!(g.app.document.instance_placements().unwrap().len(), 12);
+    g.save("02-linked-array");
+    g.app.dispatch(Command::Instances(C::Remove(1)), &g.ctx);
+    g.app
+        .document
+        .create_path(
+            "Curved border".into(),
+            PathMode::Free,
+            vec![
+                PathPoint {
+                    position: Vec3(-1.1, -0.5, 0.),
+                    normal: Vec3(0., 0., 1.),
+                },
+                PathPoint {
+                    position: Vec3(-0.3, 0.7, 0.),
+                    normal: Vec3(0., 0., 1.),
+                },
+                PathPoint {
+                    position: Vec3(0.6, 0.6, 0.),
+                    normal: Vec3(0., 0., 1.),
+                },
+                PathPoint {
+                    position: Vec3(1.2, -0.3, 0.),
+                    normal: Vec3(0., 0., 1.),
+                },
+            ],
+            false,
+            0.8,
+        )
+        .unwrap();
+    g.app.dispatch(Command::Instances(C::NewPath), &g.ctx);
+    g.save("03-path-preview");
+    click_guide_label(&mut g, "Apply instances");
+    assert!(!g.app.document.instance_preview_active());
+    g.save("04-path-assembly");
+    g.app.dispatch(Command::Instances(C::Remove(1)), &g.ctx);
+    g.app.dispatch(
+        Command::Instances(C::Capture("Square stud".into(), Vec3(0., 0., -0.12), 0, 2)),
+        &g.ctx,
+    );
+    let mut geometry = g.app.document.geometry_snapshot();
+    geometry.mesh = crate::sculpt::Mesh::starting_sphere();
+    g.app.document.replace_geometry(geometry).unwrap();
+    g.app.ui.instances.brush.scale = 0.8;
+    g.app.ui.instances.brush.spacing = 0.3;
+    g.app.dispatch(Command::Instances(C::StartBrush(1)), &g.ctx);
+    let (rect, _) = g.frame(vec![]);
+    let before = g.app.document.history_counts().0;
+    g.stroke(
+        rect.center() - egui::vec2(150., 0.),
+        rect.center() + egui::vec2(150., 0.),
+    );
+    assert_eq!(
+        g.app.document.history_counts().0,
+        before + 1,
+        "{}",
+        g.app.ui.status
+    );
+    assert!(g.app.document.instance_placements().unwrap().len() > 3);
+    g.save("05-object-stroke");
+    g.app.dispatch(Command::Instances(C::StopBrush), &g.ctx);
+    g.app.document.undo();
+    assert!(g.app.document.instances().sets.is_empty());
+    g.app.document.redo();
+    g.app.document.project().validate().unwrap();
+}
+
+#[test]
 #[ignore = "manual reset-view capture; requires Vulkan and optionally CLAY_OBJ_REVIEW"]
 fn reset_view_manual_capture() {
     let directory = std::path::PathBuf::from(

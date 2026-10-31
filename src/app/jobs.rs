@@ -3,7 +3,10 @@ use super::*;
 
 impl App {
     pub(super) fn start_mesh_job(&mut self, operation: Operation) -> Result<(), String> {
-        if matches!(operation, Operation::ImportObj(_)) {
+        if matches!(
+            operation,
+            Operation::ImportObj(_) | Operation::BakeInstances(..)
+        ) {
             if self.document.model_count() >= 64 {
                 return Err("Submodels are limited to 64".into());
             }

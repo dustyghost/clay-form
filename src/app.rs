@@ -18,6 +18,7 @@ mod context_menu;
 mod diagnostics;
 mod exports;
 mod files;
+mod instances;
 mod jobs;
 mod masking;
 pub(crate) mod paths;
@@ -430,6 +431,9 @@ impl App {
             .brush_size_preview
             .filter(|(frame, _)| *frame == ui.ctx().cumulative_frame_nr())
             .and_then(|(_, index)| self.document.brushes().get(index).cloned());
+        if let Some(brush) = &mut self.viewport.object_brush {
+            brush.options = self.ui.instances.brush;
+        }
         self.viewport.show(
             ui,
             &mut self.document,

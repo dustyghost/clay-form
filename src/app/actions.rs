@@ -575,6 +575,20 @@ impl App {
             Action::Primitive => Some(Command::RequestPrimitive),
             Action::ConvertPrimitive => Some(Command::ConvertPrimitive),
             Action::DuplicateModel => Some(Command::DuplicateModel),
+            Action::CreateInstanceArray => Some(Command::Instances(
+                crate::command::InstanceCommand::NewArray,
+            )),
+            Action::CreatePathAssembly => {
+                Some(Command::Instances(crate::command::InstanceCommand::NewPath))
+            }
+            Action::CaptureObjectBrush => Some(Command::Instances(
+                crate::command::InstanceCommand::Capture(
+                    self.ui.instances.name.clone(),
+                    self.ui.instances.pivot,
+                    self.ui.instances.forward,
+                    self.ui.instances.up,
+                ),
+            )),
             Action::DeleteSubmodel => Some(Command::DeleteSubmodel),
             Action::MergeDown => Some(Command::MergeDown),
             Action::ExtractMasked => Some(Command::ExtractMasked),
