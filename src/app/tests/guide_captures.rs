@@ -1,4 +1,6 @@
 //! Purpose-built documentation scenes, rendered with the real app controls.
+#[path = "array_layers.rs"]
+mod array_layers;
 #[path = "object_kits.rs"]
 mod object_kits;
 #[path = "path_assembly.rs"]

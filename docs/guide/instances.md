@@ -6,11 +6,24 @@ Open **Submodels → Instances and object brushes**. Copies share their source g
 
 ## Arrays and individual copies
 
-Select a submodel and choose **New array…**. Choose Linear, Radial or Grid, then adjust count, origin and spacing. Radial arrays also offer radius, arc angle, axis and rotation of the copies. A full circle has no duplicate endpoint. Grids use X/Y spacing and a column count.
+Select a submodel and choose **Linked copy…** for a single instance, or **New array…** for a pattern. Both keep a live link to the source mesh. Choose Linear, Radial or Grid, then adjust count, origin and spacing. Radial arrays also offer radius, arc angle, axis and rotation of the copies. A full circle has no duplicate endpoint. Grids use X/Y spacing and a column count.
+
+**Add layer** repeats everything in the preceding layers. For example, set Layer 1 to a linear row of six vents along X, then add Layer 2 with four copies along Y: the result is 24 shared vents. Change Layer 1 to five copies and all four rows update. Each layer can be Linear, Grid, or Radial. Click its numbered tab to edit it; **Remove layer** removes that repeat operation. The first layer stays in place.
+
+Each layer has two kinds of transform:
+
+| Control | What it changes |
+| --- | --- |
+| **Origin / radial centre** or **Layer origin offset** | Places the first layer in the scene, or moves a later layer relative to the preceding layer's origin. |
+| **Whole layer transform** | Sets X/Y/Z rotation in degrees and X/Y/Z size for the entire pattern around its origin, including the distance between copies. Works on a single linked copy too. |
+| **Step between copies** | Adds the given X/Y/Z distance for each linear repeat. Grid uses X/Y column and row spacing; Radial uses its axis, radius and arc. Both offer an **Additional position step** under **Per-repeat transforms**, for example to raise a ring into a helix. |
+| **Per-repeat transforms** | Adds X/Y/Z rotation and multiplies X/Y/Z size for each successive repeat. A Z rotation of 10° and an X size factor of 0.9 give angles of 0°, 10°, 20° and widths of 1, 0.9, 0.81 times the original. The first repeat keeps the input's orientation and size. |
+
+**Repeat this array…** uses a saved array as the live source for a separate array. Leave **Copies** at one to place one linked rack; increase it to repeat the whole rack. You can use the same source array in several patterns. Choose **Edit source array…** beside a linked array to change the pattern they share. Editing its layers, source mesh, or individual copy adjustments updates each use. Each linked array keeps its own placement relative to the source pattern’s origin. Turning off **Show instances** on the source hides that occurrence in the scene; arrays using it still appear. Hiding an individual source copy, in contrast, hides that part in every use. Bake or remove dependent arrays before removing or baking their source.
 
 Inspect the preview and choose **Apply instances**, or **Cancel preview**. Each applied edit is one undo step. Previews never enter project saves or recovery copies. Choose **Edit** beside a set to change its recipe later.
 
-Click a copy in the viewport or expand **Copies**. **Edit selected copy…** exposes Move, Rotate, Scale and Show this copy. Adjustments belong to numbered slots and survive recipe changes; reducing and restoring the count restores those slots' adjustments. **Independent** makes a copy an editable submodel unaffected by subsequent source edits. Undo restores its link. Hide a complete set with **Show instances** in its editor.
+Click a copy in the viewport or expand **Copies**. **Edit selected copy…** exposes Move, Rotate, Scale and Show this copy. Array copies also have independent X/Y/Z size factors. Adjustments belong to numbered slots and survive recipe changes; reducing and restoring the count restores those slots' adjustments. **Independent** makes a copy an editable submodel unaffected by subsequent source edits. Undo restores its link. Hide a complete set with **Show instances** in its editor.
 
 Source visibility is separate from copy visibility. Bake or remove linked sets before deleting or merging their source. Instances use the source's current mesh, masks, face visibility, attributes, creases and valid UVs/textures. Apply a source's Thickness modifier first if required; inactive subdivision levels are not instanced.
 
@@ -59,6 +72,6 @@ Placements use model-space spacing on the active visible surface and respect occ
 
 Mesh exporters export the active submodel: bake first, then select the result to export. Native `.clay` version 4 preserves recipes, links and captured assets. Versions 1–3 remain readable; earlier app versions cannot read version 4 saves.
 
-Limits: 256 copies per project; 64 captured assets and 64 named object brushes per project; 100,000 vertices / 200,000 triangles per captured asset; one million captured source vertices in total. Instance display/baking is bounded to one million expanded vertices / two million triangles. A bent or joined assembly is limited to 250,000 expanded vertices / 500,000 triangles, with up to 4,096 boundary vertices per joining end. Generated geometry is cached across unchanged frames; projects store source geometry and recipes. A later source edit exceeding a budget or making joins incompatible produces an Instances-panel warning and omits copies until settings or source detail are corrected. Bake also respects the 64-submodel limit and configured mesh capacity.
+Limits: 256 copies per project, with at most eight layers per array and 16 levels of linked arrays. Layer counts multiply: a 16 × 16 pattern produces 256 copies. Scale factors must be positive; overly large, small or flat combinations are rejected before Apply. Other limits: 64 captured assets and 64 named object brushes per project; 100,000 vertices / 200,000 triangles per captured asset; one million captured source vertices in total. Instance display/baking is bounded to one million expanded vertices / two million triangles. A bent or joined assembly is limited to 250,000 expanded vertices / 500,000 triangles, with up to 4,096 boundary vertices per joining end. Generated geometry is cached across unchanged frames; projects store source geometry and recipes. A later source edit exceeding a budget or making joins incompatible produces an Instances-panel warning and omits copies until settings or source detail are corrected. Bake also respects the 64-submodel limit and configured mesh capacity.
 
 Create linked array, Create path assembly and Capture object brush are available through custom menus and configurable shortcuts.

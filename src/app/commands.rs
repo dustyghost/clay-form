@@ -152,6 +152,8 @@ impl App {
             let preview_command = matches!(
                 &command,
                 crate::command::InstanceCommand::NewArray
+                    | crate::command::InstanceCommand::NewLinkedCopy
+                    | crate::command::InstanceCommand::RepeatArray(_)
                     | crate::command::InstanceCommand::NewPath
                     | crate::command::InstanceCommand::Edit(_)
                     | crate::command::InstanceCommand::Preview(_)

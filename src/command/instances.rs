@@ -1,6 +1,8 @@
 use crate::sculpt::{Vec3, instances::Set};
 pub(crate) enum InstanceCommand {
     NewArray,
+    NewLinkedCopy,
+    RepeatArray(u64),
     NewPath,
     Edit(u64),
     Preview(Box<Set>),

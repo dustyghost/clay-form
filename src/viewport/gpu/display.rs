@@ -527,12 +527,16 @@ impl DisplayMesh {
                 result
             };
             let shading_offset = shading.vertices.len();
+            let normal_basis = placement.map(|p| (p.normal_basis(), p.transform.basis.is_some()));
             shading
                 .vertices
                 .extend(surface_shading.vertices.iter().map(|&(i, n)| {
                     (
                         i + offset,
-                        placement.map_or(n, |instance| instance.normal(n)),
+                        normal_basis.map_or(n, |(basis, stretched)| {
+                            let normal = basis.vector(n);
+                            if stretched { normal.norm() } else { normal }
+                        }),
                     )
                 }));
             for (face, &triangle) in surface.triangles.iter().enumerate() {

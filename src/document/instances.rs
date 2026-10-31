@@ -53,11 +53,12 @@ impl Document {
     fn resolve_instance_placements(&self) -> Result<ResolvedInstances, String> {
         let mut result = ResolvedCopies::default();
         let (mut vertices, mut triangles) = (0usize, 0usize);
+        let mut resolver = ArrayResolver::new(self.instances());
         for set in &self.instances().sets {
             if !set.visible {
                 continue;
             }
-            for (slot, p) in set.placements(self.paths())? {
+            for (slot, p) in resolver.placements(set, self.paths())? {
                 let source = self
                     .instance_source(p.piece.source)
                     .ok_or("Instance source is missing")?;
@@ -204,6 +205,7 @@ impl Document {
         Ok(())
     }
     pub fn remove_instance_set(&mut self, id: u64) -> Result<(), String> {
+        self.instances().ensure_array_unreferenced(id)?;
         self.cancel_instance_preview();
         if !self.instances().sets.iter().any(|s| s.id == id) {
             return Err("Instance set no longer exists".into());
@@ -317,8 +319,8 @@ impl Document {
         if set.joined() {
             return Err("Bake the joined assembly to create one editable model, or choose Separate before detaching a section".into());
         }
-        let p = set
-            .placements(self.paths())?
+        let p = ArrayResolver::new(self.instances())
+            .placements(&set, self.paths())?
             .into_iter()
             .find(|(i, _)| *i == slot)
             .ok_or("Instance is hidden or no longer exists")?
@@ -510,6 +512,7 @@ impl Document {
 #[cfg(test)]
 mod tests {
     use super::*;
+    mod array_layers;
     fn document() -> Document {
         let mut p = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Cube);
         p.divisions = [1; 3];

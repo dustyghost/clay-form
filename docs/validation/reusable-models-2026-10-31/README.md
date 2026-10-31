@@ -50,3 +50,10 @@ The multi-object brush checks cover shared membership, project save/reopen, atom
 - [Hull vent capture and orientation](17-object-capture-orientation.png)
 - [Two strokes from the Ship fittings brush](18-ship-fittings-strokes.png)
 - [Ship fittings in the personal brush library](19-ship-fittings-library.png)
+
+Layered arrays repeat whole patterns, and separately placed arrays can share the same editable source array. Five focused regressions cover independent XYZ transforms, the order of scale and rotation, shading normals on sheared copies, radial repetition about an offset pivot, stable slots for hidden parts, bounds and cycles, legacy array data, source edits, preview cancellation, project round trips, Undo/Redo, bake/detach and picking the displayed surface. The combined local selection passed 36 ordinary tests.
+
+The Vulkan walkthrough `layered_array_controls_offscreen_review` opens Linked copy, adds and removes an array layer, then uses a saved four-part row as the source for six radial repeats. It opens the source through **Edit source array…**, changes the row to three parts and verifies that all six repeats update together, including after Undo/Redo. The existing `reusable_models_offscreen_review` also passed. These shots show the controls and the geometry from the actual UI:
+
+- [Five fittings per row, repeated with XYZ offsets, rotation and scale](20-layered-array-xyz.png)
+- [Six radial repeats of one shared, editable row](21-linked-array-of-rows.png)

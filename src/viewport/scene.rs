@@ -1080,6 +1080,58 @@ mod tests {
         let hit_after = updated.pick_model(point).unwrap();
         assert!((hit_after.1.2 - hit.1.2 - 0.02).abs() < 1e-4);
     }
+    #[test]
+    fn layered_array_picking_matches_the_baked_surface_after_nested_xyz_scale() {
+        use crate::sculpt::{Geometry, Primitive, PrimitiveKind, instances::*};
+        let mut doc = Document::default();
+        let mut cube = Primitive::for_kind(PrimitiveKind::Cube);
+        cube.divisions = [1; 3];
+        let mut mesh = cube.mesh().unwrap();
+        for v in &mut mesh.vertices {
+            *v = *v * 0.12;
+        }
+        let mut g = Geometry::new(mesh);
+        g.scene.active_metadata.visible = false;
+        doc.replace_geometry(g).unwrap();
+        let mut a = Array::new(doc.instance_piece(0).unwrap());
+        a.count = 2;
+        a.spacing = Vec3(0.52, 0., 0.);
+        a.rotation = Vec3(20., 16., 10.);
+        a.size = Vec3(0.6, 1.4, 1.);
+        a.center = Vec3(-0.3, -0.28, 0.);
+        let mut l = ArrayLayer::repeat();
+        l.spacing = Vec3(0., 0.55, 0.);
+        l.step_scale = Vec3(1.2, 0.8, 1.5);
+        l.step_rotation = Vec3(-12., 15., 28.);
+        a.layers.push(l);
+        doc.preview_instance_set(Set {
+            id: 1,
+            name: "Nested".into(),
+            visible: true,
+            layout: Layout::Array(a),
+            adjustments: Vec::new(),
+        })
+        .unwrap();
+        doc.apply_instance_preview().unwrap();
+        let last = doc.instance_placements().unwrap()[3].2;
+        let baked = last.mesh(doc.mesh()).unwrap();
+        let view = scene(&doc);
+        assert!(view.geometry.mesh.vertices.ends_with(&baked.vertices));
+        let front = baked
+            .triangles
+            .iter()
+            .map(|t| {
+                t.iter()
+                    .fold(Vec3::default(), |acc, &v| acc + baked.vertices[v])
+                    * (1. / 3.)
+            })
+            .max_by(|a, b| a.dot(view.view).total_cmp(&b.dot(view.view)))
+            .unwrap();
+        let (owner, hit, _) = view.pick_model(view.project(front)).unwrap();
+        assert!((hit - front).len() < 1e-4, "{hit:?} != {front:?}");
+        assert!(doc.select_instance_owner(owner));
+        assert_eq!(doc.selected_instance, Some((1, 3)));
+    }
     fn wire_shapes(
         document: &Document,
         mode: super::super::WireMode,

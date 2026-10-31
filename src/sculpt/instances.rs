@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, sync::Arc};
 mod path_output;
 pub use path_output::{GeneratedCopy, JoinMode, ResolvedCopies};
+mod arrays;
+pub use arrays::{Array, ArrayKind, ArrayLayer, ArrayResolver, Basis, MAX_ARRAY_LAYERS};
 mod brushes;
 mod thickness;
 pub use brushes::{BrushBundle, BrushGroup};
@@ -122,6 +124,8 @@ pub fn rotate(mut p: Vec3, degrees: Vec3) -> Vec3 {
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Transform {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub basis: Option<Basis>,
     pub origin: Vec3,
     pub forward: Vec3,
     pub up: Vec3,
@@ -130,6 +134,7 @@ pub struct Transform {
 impl Default for Transform {
     fn default() -> Self {
         Self {
+            basis: None,
             origin: Vec3::default(),
             forward: axis(0),
             up: axis(2),
@@ -139,6 +144,9 @@ impl Default for Transform {
 }
 impl Transform {
     pub fn validate(&self) -> Result<(), String> {
+        if let Some(b) = self.basis {
+            b.scaled(self.scale).validate()?;
+        }
         if !finite(self.origin)
             || !finite(self.forward)
             || !finite(self.up)
@@ -155,7 +163,11 @@ impl Transform {
         Ok(())
     }
     pub fn vector(&self, p: Vec3) -> Vec3 {
-        self.forward * p.0 + self.up.cross(self.forward) * p.1 + self.up * p.2
+        if let Some(b) = self.basis {
+            b.vector(p)
+        } else {
+            self.forward * p.0 + self.up.cross(self.forward) * p.1 + self.up * p.2
+        }
     }
     pub fn point(&self, p: Vec3) -> Vec3 {
         self.origin + self.vector(p) * self.scale
@@ -170,10 +182,15 @@ impl Placement {
     pub fn point(&self, p: Vec3) -> Vec3 {
         self.transform.point(self.piece.local(p))
     }
-    pub fn normal(&self, n: Vec3) -> Vec3 {
+    pub fn normal_basis(&self) -> Basis {
+        // Map source-space normals once per placement, including inherited shear.
         let mut piece = self.piece;
         piece.pivot = Vec3::default();
-        self.transform.vector(piece.local(n))
+        let normals = self.transform.basis.map(Basis::cofactors);
+        Basis(std::array::from_fn(|i| {
+            let local = piece.local(axis(i));
+            normals.map_or_else(|| self.transform.vector(local), |b| b.vector(local))
+        }))
     }
     pub fn mesh(&self, source: &Mesh) -> Result<Mesh, String> {
         self.piece.validate()?;
@@ -184,99 +201,6 @@ impl Placement {
         }
         mesh.validate()?;
         Ok(mesh)
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ArrayKind {
-    Linear,
-    Radial,
-    Grid,
-}
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Array {
-    pub piece: Piece,
-    pub kind: ArrayKind,
-    pub count: usize,
-    pub columns: usize,
-    pub spacing: Vec3,
-    pub center: Vec3,
-    pub radius: f32,
-    pub angle: f32,
-    pub radial_axis: usize,
-    pub rotate_copies: bool,
-}
-impl Array {
-    pub fn new(piece: Piece) -> Self {
-        Self {
-            piece,
-            kind: ArrayKind::Linear,
-            count: 5,
-            columns: 3,
-            spacing: Vec3(2., 2., 0.),
-            center: piece.pivot,
-            radius: 3.,
-            angle: 360.,
-            radial_axis: 2,
-            rotate_copies: true,
-        }
-    }
-    pub fn placements(&self) -> Result<Vec<Placement>, String> {
-        self.piece.validate()?;
-        if !(1..=MAX_INSTANCES).contains(&self.count)
-            || !(1..=MAX_INSTANCES).contains(&self.columns)
-            || !finite(self.spacing)
-            || !finite(self.center)
-            || self.radial_axis > 2
-            || !self.radius.is_finite()
-            || !(0.001..=1e5).contains(&self.radius)
-            || !self.angle.is_finite()
-            || !(0.01..=360.).contains(&self.angle)
-        {
-            return Err(
-                "Invalid array count, spacing, radius or angle (maximum 256 copies)".into(),
-            );
-        }
-        Ok((0..self.count)
-            .map(|i| {
-                let mut t = Transform {
-                    origin: self.center,
-                    forward: axis(self.piece.forward),
-                    up: axis(self.piece.up),
-                    scale: 1.,
-                };
-                match self.kind {
-                    ArrayKind::Linear => t.origin = t.origin + self.spacing * i as f32,
-                    ArrayKind::Grid => {
-                        t.origin = t.origin
-                            + Vec3(
-                                self.spacing.0 * (i % self.columns) as f32,
-                                self.spacing.1 * (i / self.columns) as f32,
-                                0.,
-                            )
-                    }
-                    ArrayKind::Radial => {
-                        let denominator = if self.angle == 360. {
-                            self.count
-                        } else {
-                            self.count.saturating_sub(1).max(1)
-                        };
-                        let angle = (self.angle * i as f32 / denominator as f32).to_radians();
-                        let normal = axis(self.radial_axis);
-                        let radial = axis((self.radial_axis + 1) % 3).rotated(normal, angle);
-                        t.origin = t.origin + radial * self.radius;
-                        if self.rotate_copies {
-                            t.forward = t.forward.rotated(normal, angle);
-                            t.up = t.up.rotated(normal, angle);
-                        }
-                    }
-                }
-                Placement {
-                    piece: self.piece,
-                    transform: t,
-                }
-            })
-            .collect())
     }
 }
 
@@ -377,6 +301,7 @@ impl PathAssembly {
                 .norm()
                 .rotated(tangent, self.twist.to_radians());
             Transform {
+                basis: None,
                 origin: a.position * (1. - f) + b.position * f,
                 forward: tangent,
                 up,
@@ -431,6 +356,8 @@ pub struct Adjustment {
     pub slot: usize,
     pub offset: Vec3,
     pub rotation: Vec3,
+    #[serde(default = "arrays::ones", skip_serializing_if = "arrays::unit_scale")]
+    pub axis_scale: Vec3,
     pub scale: f32,
     pub visible: bool,
     /// A detached copy is omitted even when the recipe is regenerated.
@@ -442,6 +369,7 @@ impl Adjustment {
             slot,
             offset: Vec3::default(),
             rotation: Vec3::default(),
+            axis_scale: arrays::ones(),
             scale: 1.,
             visible: true,
             detached: false,
@@ -458,17 +386,28 @@ pub struct Set {
 }
 impl Set {
     pub fn placements(&self, paths: &[SurfacePath]) -> Result<Vec<(usize, Placement)>, String> {
-        if self.id == 0 || !name_valid(&self.name) || self.adjustments.len() > MAX_INSTANCES {
-            return Err("Invalid instance set".into());
+        if let Layout::Array(a) = &self.layout {
+            return Ok(arrays::numbered(self.adjust_slots(a.unlinked_slots()?)?));
         }
         let base =
             match &self.layout {
                 Layout::Manual(p) => p.clone(),
-                Layout::Array(a) => a.placements()?,
                 Layout::Path(a) => a.placements(paths.iter().find(|p| p.id == a.path).ok_or(
                     "Assembly path is missing; undo its deletion or remove the assembly",
                 )?)?,
+                Layout::Array(_) => unreachable!(),
             };
+        Ok(arrays::numbered(
+            self.adjust_slots(base.into_iter().map(Some).collect())?,
+        ))
+    }
+    fn adjust_slots(
+        &self,
+        mut base: Vec<Option<Placement>>,
+    ) -> Result<Vec<Option<Placement>>, String> {
+        if self.id == 0 || !name_valid(&self.name) || self.adjustments.len() > MAX_INSTANCES {
+            return Err("Invalid instance set".into());
+        }
         if base.len() > MAX_INSTANCES {
             return Err("Instance sets are limited to 256 copies".into());
         }
@@ -478,29 +417,34 @@ impl Set {
                 || !slots.insert(a.slot)
                 || !finite(a.offset)
                 || !finite(a.rotation)
+                || !arrays::valid_scale(a.axis_scale)
                 || !a.scale.is_finite()
                 || !(0.001..=1000.).contains(&a.scale)
             {
                 return Err("Invalid instance adjustment".into());
             }
         }
-        let mut out = Vec::new();
-        for (slot, mut p) in base.into_iter().enumerate() {
+        for (slot, entry) in base.iter_mut().enumerate() {
+            let Some(p) = entry else { continue };
             p.piece.validate()?;
             p.transform.validate()?;
             if let Some(a) = self.adjustments.iter().find(|a| a.slot == slot) {
                 if a.detached || !a.visible {
+                    *entry = None;
                     continue;
                 }
                 p.transform.origin = p.transform.origin + a.offset;
-                p.transform.forward = rotate(p.transform.forward, a.rotation);
-                p.transform.up = rotate(p.transform.up, a.rotation);
+                if a.rotation != Vec3::default() || !arrays::unit_scale(&a.axis_scale) {
+                    p.transform.prepend(
+                        Basis::step(a.rotation, a.axis_scale),
+                        arrays::unit_scale(&a.axis_scale),
+                    );
+                }
                 p.transform.scale *= a.scale;
                 p.transform.validate()?;
             }
-            out.push((slot, p));
         }
-        Ok(out)
+        Ok(base)
     }
     pub fn sources_mut(&mut self, mut f: impl FnMut(&mut Source)) {
         match &mut self.layout {
@@ -509,7 +453,8 @@ impl Set {
                     f(&mut p.piece.source);
                 }
             }
-            Layout::Array(a) => f(&mut a.piece.source),
+            Layout::Array(a) if a.source_array.is_none() => f(&mut a.piece.source),
+            Layout::Array(_) => {}
             Layout::Path(a) => {
                 f(&mut a.middle.source);
                 for p in [&mut a.start, &mut a.end].into_iter().flatten() {
@@ -576,6 +521,7 @@ impl Library {
         }
         let mut ids = HashSet::new();
         let mut count = 0;
+        let mut resolver = ArrayResolver::new(self);
         for set in &self.sets {
             if !ids.insert(set.id) {
                 return Err("Duplicate instance set identity".into());
@@ -591,7 +537,7 @@ impl Library {
             if missing {
                 return Err("Instance source is missing".into());
             }
-            count += set.placements(paths)?.len();
+            count += resolver.placements(set, paths)?.len();
         }
         if count > MAX_INSTANCES {
             return Err("Projects are limited to 256 instances".into());
@@ -632,11 +578,12 @@ impl super::Geometry {
             .find(|s| s.id == id)
             .ok_or("Instance set no longer exists")?
             .clone();
+        self.scene.instances.ensure_array_unreferenced(id)?;
         let generated = set.generated(&self.paths, |s| self.instance_source(s), cancel)?;
         let placements = if let Some(copies) = &generated {
             copies.iter().map(|c| (c.slot, c.placement)).collect()
         } else {
-            set.placements(&self.paths)?
+            ArrayResolver::new(&self.scene.instances).placements(&set, &self.paths)?
         };
         let mut generated: std::collections::HashMap<_, _> = generated
             .into_iter()

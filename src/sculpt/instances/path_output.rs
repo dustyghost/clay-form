@@ -95,6 +95,7 @@ impl Frames {
             origin = origin + forward * (distance - d);
         }
         Transform {
+            basis: None,
             origin,
             forward,
             up,

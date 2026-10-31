@@ -105,6 +105,7 @@ impl ObjectBrush {
         Placement {
             piece: self.piece,
             transform: Transform {
+                basis: None,
                 origin: center + normal * self.options.offset,
                 forward,
                 up: normal,

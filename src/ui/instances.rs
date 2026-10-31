@@ -3,11 +3,13 @@ use crate::{
     command::InstanceCommand as C,
     sculpt::{Vec3, instances::*},
 };
+mod arrays;
 mod brushes;
 mod thickness;
 
 pub(crate) struct Controls {
     pub editor: Option<Set>,
+    pub array_layer: usize,
     pub invalid: bool,
     pub asset: Option<u64>,
     pub group: Option<u64>,
@@ -33,6 +35,7 @@ impl Default for Controls {
     fn default() -> Self {
         Self {
             editor: None,
+            array_layer: 0,
             invalid: false,
             asset: None,
             group: None,
@@ -205,43 +208,7 @@ impl UiState {
             ui.checkbox(&mut set.visible, "Show instances");
             match &mut set.layout {
                 Layout::Array(a) => {
-                    choose_piece(ui, "Source", &mut a.piece, document);
-                    ui.horizontal_wrapped(|ui| {
-                        for (kind, name) in [
-                            (ArrayKind::Linear, "Linear"),
-                            (ArrayKind::Radial, "Radial"),
-                            (ArrayKind::Grid, "Grid"),
-                        ] {
-                            ui.selectable_value(&mut a.kind, kind, name);
-                        }
-                    });
-                    ui.add(egui::Slider::new(&mut a.count, 1..=256).text("Copies"));
-                    vector(ui, "Origin / radial centre", &mut a.center);
-                    match a.kind {
-                        ArrayKind::Linear => {
-                            vector(ui, "Step between copies", &mut a.spacing);
-                        }
-                        ArrayKind::Grid => {
-                            ui.add(egui::Slider::new(&mut a.columns, 1..=256).text("Columns"));
-                            vector(ui, "Grid spacing", &mut a.spacing);
-                        }
-                        ArrayKind::Radial => {
-                            ui.add(
-                                egui::DragValue::new(&mut a.radius)
-                                    .range(0.001..=1e5)
-                                    .speed(0.05)
-                                    .prefix("Radius "),
-                            );
-                            ui.add(egui::Slider::new(&mut a.angle, 0.01..=360.).text("Arc °"));
-                            ui.horizontal(|ui| {
-                                ui.label("Axis");
-                                for (i, n) in ["X", "Y", "Z"].iter().enumerate() {
-                                    ui.selectable_value(&mut a.radial_axis, i, *n);
-                                }
-                            });
-                            ui.checkbox(&mut a.rotate_copies, "Rotate copies around centre");
-                        }
-                    }
+                    arrays::editor(ui, a, &mut self.instances.array_layer, document)
                 }
                 Layout::Path(a) => {
                     ui.horizontal_wrapped(|ui| {
@@ -364,6 +331,9 @@ impl UiState {
                         .speed(0.01)
                         .prefix("Scale "),
                 );
+                if matches!(set.layout, Layout::Array(_)) {
+                    vector(ui, "Scale on X / Y / Z", &mut a.axis_scale);
+                }
                 ui.weak(format!("Set {id}: changes affect this copy only."));
                 if old != adjustment {
                     if let Some(a) = set.adjustments.iter_mut().find(|a| a.slot == slot) {
@@ -390,6 +360,13 @@ impl UiState {
                     .clicked()
                 {
                     commands.push(Command::Instances(C::NewArray));
+                }
+                if ui
+                    .button("Linked copy…")
+                    .on_hover_text("Place one copy that follows edits to the source model.")
+                    .clicked()
+                {
+                    commands.push(Command::Instances(C::NewLinkedCopy));
                 }
                 if ui
                     .add_enabled(
@@ -524,6 +501,31 @@ fn instance_set(ui: &mut egui::Ui, document: &Document, set: &Set, commands: &mu
             commands.push(Command::Instances(C::Remove(set.id)));
         }
     });
+    if let Layout::Array(array) = &set.layout {
+        ui.horizontal_wrapped(|ui| {
+            if ui
+                .button("Repeat this array…")
+                .on_hover_text(
+                    "Use the whole array as a live source for a separate instance or array.",
+                )
+                .clicked()
+            {
+                commands.push(Command::Instances(C::RepeatArray(set.id)));
+            }
+            if let Some(id) = array.source_array {
+                if ui.small_button("Edit source array…").clicked() {
+                    commands.push(Command::Instances(C::Edit(id)));
+                }
+            } else if let Source::Model(id) = array.piece.source
+                && let Some(index) =
+                    (0..document.model_count()).find(|&i| document.instance_model_id(i) == id)
+                && index != document.active_model_index()
+                && ui.small_button("Select source model").clicked()
+            {
+                commands.push(Command::SelectSubmodel(index));
+            }
+        });
+    }
     if set.joined() {
         ui.weak("Joined assembly · Bake creates one editable model. Choose Separate to adjust individual copies.");
         return;
@@ -534,7 +536,9 @@ fn instance_set(ui: &mut egui::Ui, document: &Document, set: &Set, commands: &mu
         for adjustment in &mut listed.adjustments {
             adjustment.visible = true;
         }
-        if let Ok(placements) = listed.placements(document.paths()) {
+        if let Ok(placements) =
+            ArrayResolver::new(document.instances()).placements(&listed, document.paths())
+        {
             egui::ScrollArea::vertical()
                 .max_height(160.)
                 .show(ui, |ui| {

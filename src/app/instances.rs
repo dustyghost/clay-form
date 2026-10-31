@@ -102,7 +102,7 @@ impl App {
             return Err("Finish the current object stroke before changing brushes".into());
         }
         match command {
-            C::NewArray | C::NewPath => {
+            C::NewArray | C::NewLinkedCopy | C::RepeatArray(_) | C::NewPath => {
                 if matches!(command, C::NewPath) && self.document.paths().is_empty() {
                     return Err("Create a path before making a path assembly".into());
                 }
@@ -114,9 +114,28 @@ impl App {
                 self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
                 self.ui.selection_tool = None;
                 self.ui.slice_active = false;
-                let piece = self
-                    .document
-                    .instance_piece(self.document.active_model_index())?;
+                let linked = if let C::RepeatArray(id) = command {
+                    let source = self
+                        .document
+                        .instances()
+                        .sets
+                        .iter()
+                        .find(|s| s.id == id)
+                        .ok_or("Source array no longer exists")?;
+                    let Layout::Array(a) = &source.layout else {
+                        return Err("Choose an array to repeat".into());
+                    };
+                    Some((id, a.piece, a.pivot()))
+                } else {
+                    None
+                };
+                let piece = if let Some((_, piece, _)) = linked {
+                    piece
+                } else {
+                    self.document
+                        .instance_piece(self.document.active_model_index())?
+                };
+                self.ui.instances.array_layer = 0;
                 let layout = if matches!(command, C::NewPath) {
                     let path = self
                         .document
@@ -141,12 +160,26 @@ impl App {
                         thickness: Default::default(),
                     })
                 } else {
-                    Layout::Array(Array::new(piece))
+                    let mut a = Array::new(piece);
+                    if let Some((id, _, pivot)) = linked {
+                        a.source_array = Some(id);
+                        a.count = 1;
+                        a.center = pivot + axis(1) * 2.;
+                        a.spacing = axis(1) * 2.;
+                    } else if matches!(command, C::NewLinkedCopy) {
+                        a.count = 1;
+                        a.center = piece.pivot + axis(0) * 2.;
+                    }
+                    Layout::Array(a)
                 };
                 let set = Set {
                     id: self.document.next_instance_set_id()?,
                     name: if matches!(command, C::NewPath) {
                         "Path assembly"
+                    } else if linked.is_some() {
+                        "Linked array"
+                    } else if matches!(command, C::NewLinkedCopy) {
+                        "Linked copy"
                     } else {
                         "Array"
                     }
@@ -162,6 +195,7 @@ impl App {
                     "Instance preview · adjust the controls, then Apply or Cancel".into();
             }
             C::Edit(id) => {
+                self.ui.instances.array_layer = 0;
                 self.viewport.cancel(&mut self.document);
                 self.viewport.object_brush = None;
                 self.document.cancel_instance_preview();
