@@ -205,8 +205,10 @@ fn hidden_stroke_cache_supports_group_visibility_and_empty_displays() {
         .unwrap();
     for (pair, hidden) in mesh
         .polygroups
-        .chunks_exact_mut(2)
-        .zip(mesh.hidden_faces.chunks_exact(2))
+        .as_chunks_mut::<2>()
+        .0
+        .iter_mut()
+        .zip(mesh.hidden_faces.as_chunks::<2>().0)
     {
         pair.fill(if hidden.iter().any(|&h| h) { 2 } else { 1 });
     }

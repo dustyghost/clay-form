@@ -140,10 +140,8 @@ fn broad_stamp_fallback_keeps_unsampled_outliers_safe() {
     let original = mesh.vertices[1];
     let mut expected = mesh.clone();
     let brush = Brush::new(Kind::Standard);
-    assert_eq!(
-        mesh.stamp(&brush, d),
-        full_normals(|| expected.stamp(&brush, d))
-    );
+    mesh.stamp(&brush, d);
+    full_normals(|| expected.stamp(&brush, d));
     assert_eq!(mesh, expected);
     assert_eq!(mesh.vertices[1], original);
 }

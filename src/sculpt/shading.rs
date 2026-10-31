@@ -240,6 +240,53 @@ fn emit_shading(
 }
 
 #[cfg(test)]
+impl SurfaceShadingTopology {
+    pub(crate) fn profile_shade(
+        &self,
+        mesh: &Mesh,
+        cached: bool,
+    ) -> (SurfaceShading, Vec<(&'static str, f64)>) {
+        fn timed<T>(
+            out: &mut Vec<(&'static str, f64)>,
+            name: &'static str,
+            f: impl FnOnce() -> T,
+        ) -> T {
+            let start = std::time::Instant::now();
+            let result = f();
+            out.push((name, start.elapsed().as_secs_f64() * 1000.));
+            result
+        }
+        let mut times = Vec::new();
+        let mut parents: Vec<_> = timed(&mut times, "shading.parents", || {
+            (0..mesh.triangles.len() * 3).collect()
+        });
+        let normals = timed(&mut times, "shading.face_normals", || face_normals(mesh));
+        timed(&mut times, "shading.join_fans", || {
+            for &[a, x] in &self.paired_corners {
+                join_smooth_edge(&mut parents, &normals, a, x);
+            }
+        });
+        let (sums, fan_count) = timed(&mut times, "shading.angle_sums", || {
+            accumulate_normals(mesh, &mut parents, &normals, cached.then_some(&self.angles))
+        });
+        let shading = timed(&mut times, "shading.emit", || {
+            emit_shading(mesh, &mut parents, &sums, fan_count)
+        });
+        (shading, times)
+    }
+    pub(crate) fn angle_cache_stats(&self, mesh: &Mesh) -> (usize, usize) {
+        let bytes = self.angles.positions.len() * std::mem::size_of::<Vec3>()
+            + self.angles.values.len() * std::mem::size_of::<[f32; 3]>();
+        let unchanged = mesh
+            .triangles
+            .iter()
+            .filter(|t| self.angles.unchanged(mesh, t))
+            .count();
+        (bytes, unchanged)
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::sculpt::{Primitive, PrimitiveKind, SliceMode, SliceOptions, SlicePlane};
@@ -534,52 +581,5 @@ mod tests {
             assert_eq!(n.0.abs() + n.1.abs() + n.2.abs(), 1.);
         }
         mesh.validate_closed().unwrap();
-    }
-}
-
-#[cfg(test)]
-impl SurfaceShadingTopology {
-    pub(crate) fn profile_shade(
-        &self,
-        mesh: &Mesh,
-        cached: bool,
-    ) -> (SurfaceShading, Vec<(&'static str, f64)>) {
-        fn timed<T>(
-            out: &mut Vec<(&'static str, f64)>,
-            name: &'static str,
-            f: impl FnOnce() -> T,
-        ) -> T {
-            let start = std::time::Instant::now();
-            let result = f();
-            out.push((name, start.elapsed().as_secs_f64() * 1000.));
-            result
-        }
-        let mut times = Vec::new();
-        let mut parents: Vec<_> = timed(&mut times, "shading.parents", || {
-            (0..mesh.triangles.len() * 3).collect()
-        });
-        let normals = timed(&mut times, "shading.face_normals", || face_normals(mesh));
-        timed(&mut times, "shading.join_fans", || {
-            for &[a, x] in &self.paired_corners {
-                join_smooth_edge(&mut parents, &normals, a, x);
-            }
-        });
-        let (sums, fan_count) = timed(&mut times, "shading.angle_sums", || {
-            accumulate_normals(mesh, &mut parents, &normals, cached.then_some(&self.angles))
-        });
-        let shading = timed(&mut times, "shading.emit", || {
-            emit_shading(mesh, &mut parents, &sums, fan_count)
-        });
-        (shading, times)
-    }
-    pub(crate) fn angle_cache_stats(&self, mesh: &Mesh) -> (usize, usize) {
-        let bytes = self.angles.positions.len() * std::mem::size_of::<Vec3>()
-            + self.angles.values.len() * std::mem::size_of::<[f32; 3]>();
-        let unchanged = mesh
-            .triangles
-            .iter()
-            .filter(|t| self.angles.unchanged(mesh, t))
-            .count();
-        (bytes, unchanged)
     }
 }

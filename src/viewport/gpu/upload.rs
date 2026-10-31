@@ -33,7 +33,7 @@ pub(super) fn changed_ranges(before: &[u8], after: &[u8]) -> Vec<Range<usize>> {
         // Global normal changes and scattered edits should use one write, not
         // hundreds of tiny staging allocations. All packed data is f32-aligned.
         if ranges.len() > MAX_WRITES || changed > after.len() / 2 {
-            return vec![0..after.len()];
+            return std::iter::once(0..after.len()).collect();
         }
     }
     ranges
@@ -79,7 +79,7 @@ impl DirtyRanges {
     }
     pub(super) fn finish(self) -> Vec<Range<usize>> {
         if self.full {
-            vec![0..self.len]
+            std::iter::once(0..self.len).collect()
         } else {
             self.ranges
         }
@@ -417,8 +417,10 @@ mod gpu_tests {
                 1 => Arc::make_mut(&mut data.poly_colors)[0] = [255, 0, 0, 255],
                 2 => Arc::make_mut(&mut data.uv_corners)[0][0] = [0.1, 0.2, 1., 0.],
                 3 => {
-                    let mut material = Material::default();
-                    material.emission_strength = 0.5;
+                    let material = Material {
+                        emission_strength: 0.5,
+                        ..Default::default()
+                    };
                     data.mesh.materials = Arc::new(vec![material; data.mesh.vertices.len()]);
                 }
                 4 => {

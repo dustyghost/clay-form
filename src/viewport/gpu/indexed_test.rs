@@ -113,7 +113,13 @@ fn gpu_indexed_surfaces_match_general_pixels_and_split_buffers() {
                     gpu.force_general_surface = true;
                     gpu.paint(&params, [253, 189], wire, mode, false, preview);
                     let expected = gpu.read();
-                    assert!(expected.chunks_exact(4).any(|p| p[..3] != [23, 26, 31]));
+                    assert!(
+                        expected
+                            .as_chunks::<4>()
+                            .0
+                            .iter()
+                            .any(|p| p[..3] != [23, 26, 31])
+                    );
                     assert_eq!(
                         actual,
                         expected,

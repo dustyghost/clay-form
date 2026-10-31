@@ -179,8 +179,10 @@ fn assert_restored(doc: &Document, before: &Geometry) {
 /// The gpu_load_profile prefix keeps this out of the existing GPU CI selection.
 #[test]
 #[ignore = "manual optimized capacity benchmark; no timing thresholds in CI"]
-fn gpu_load_profile_capacity() {
-    assert!(!cfg!(debug_assertions), "run benchmarks with --release");
+fn gpu_load_profile_capacity() -> Result<(), &'static str> {
+    if cfg!(debug_assertions) {
+        return Err("run benchmarks with --release");
+    }
     let output = std::env::var("CLAY_CAPACITY_OUTPUT").expect("set CLAY_CAPACITY_OUTPUT");
     let name = std::env::var("CLAY_CAPACITY_FIXTURE").unwrap_or_else(|_| "sphere".into());
     let level: usize = std::env::var("CLAY_CAPACITY_LEVEL")
@@ -422,6 +424,7 @@ fn gpu_load_profile_capacity() {
     }
     std::fs::write(output, serde_json::to_vec_pretty(&result).unwrap()).unwrap();
     metrics.checkpoint("complete", "completed");
+    Ok(())
 }
 
 fn env_limit(name: &str, default: usize) -> usize {
@@ -1135,7 +1138,12 @@ fn gpu_load_profile_draw() {
             gpu.force_general_surface = false;
             let mut differing_pixels = 0;
             let mut max_channel_delta = 0;
-            for (actual, expected) in pixels.chunks_exact(4).zip(reference.chunks_exact(4)) {
+            for (actual, expected) in pixels
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .zip(reference.as_chunks::<4>().0)
+            {
                 assert_eq!(actual[3], expected[3], "alpha must match");
                 assert_eq!(
                     actual[..3] == params.background,

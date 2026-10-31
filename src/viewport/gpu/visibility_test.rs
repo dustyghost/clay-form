@@ -166,8 +166,13 @@ fn check_stroke_cache_pixels_picking_and_history(hidden: bool) {
         for wire in [false, true] {
             let actual = draw(&renderer, &live, wire);
             let expected = draw(&renderer, &canonical, wire);
-            for (a, b) in actual.chunks_exact(4).zip(expected.chunks_exact(4)) {
-                if b == background {
+            for (a, b) in actual
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .zip(expected.as_chunks::<4>().0)
+            {
+                if *b == background {
                     assert_eq!(a, b, "hidden/background pixels must stay absent");
                 }
             }

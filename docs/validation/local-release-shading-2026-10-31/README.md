@@ -29,9 +29,9 @@ The candidate retains one boolean per paired edge and shares the original canoni
 
 ## Reproduction
 
-Baseline: saved `b7cd928` executable. Candidate source SHA-256: `ad155c5c8dd70c7322fb97d627a453d769d79766d882d38e5578a08e5afedf0e`; executable: `7d571e2e37cc3ae76114ce46df678bd502ca4471c39dad68970d13ffaf551814`. The [experiment patch](experiment.patch) applies to the accompanying camera implementation and restores only the three experimental shading/display source files. It is a recorded prototype, not an active feature. Camera-loop changes were also present in the measured candidate; this display-stage diagnostic does not construct camera scenes.
+Baseline: saved `b7cd928` executable. Candidate source SHA-256: `ad155c5c8dd70c7322fb97d627a453d769d79766d882d38e5578a08e5afedf0e`; executable: `7d571e2e37cc3ae76114ce46df678bd502ca4471c39dad68970d13ffaf551814`. The [experiment patch](experiment.patch) applies to the measured camera implementation at commit `1f781ab8a03773ff74b8376ecb5200252b930ef3` and restores only the three experimental shading/display source files. It is a recorded prototype, not an active feature. Camera-loop changes were also present in the measured candidate; this display-stage diagnostic does not construct camera scenes.
 
-In an isolated checkout, apply the zero-context archive with `git apply --unidiff-zero docs/validation/local-release-shading-2026-10-31/experiment.patch`, then run:
+In an isolated checkout of `1f781ab8a03773ff74b8376ecb5200252b930ef3`, apply the zero-context archive with `git apply --unidiff-zero docs/validation/local-release-shading-2026-10-31/experiment.patch`, then run:
 
 ```sh
 CLAY_DISPLAY_LEVEL=3 CLAY_DISPLAY_PROFILE=/tmp/release-stages.json cargo test --release --locked --lib viewport::gpu::profile::capacity::gpu_load_profile_display_stages -- --exact --ignored --test-threads=1
