@@ -149,8 +149,17 @@ impl App {
             return;
         }
         if let Command::Instances(command) = command {
+            let preview_command = matches!(
+                &command,
+                crate::command::InstanceCommand::NewArray
+                    | crate::command::InstanceCommand::NewPath
+                    | crate::command::InstanceCommand::Edit(_)
+                    | crate::command::InstanceCommand::Preview(_)
+            );
             if let Err(error) = self.dispatch_instances(command) {
-                self.ui.instances.invalid = true;
+                if preview_command {
+                    self.ui.instances.invalid = true;
+                }
                 self.ui.status = error;
             }
             return;
@@ -430,6 +439,7 @@ impl App {
                 let label = self.document.undo_label();
                 self.document.undo();
                 self.refresh_path_after_history();
+                self.refresh_object_after_history();
                 self.ui.status =
                     label.map_or("Nothing to undo".into(), |label| format!("Undid: {label}"));
                 Ok(())
@@ -443,6 +453,7 @@ impl App {
                 let label = self.document.redo_label();
                 self.document.redo();
                 self.refresh_path_after_history();
+                self.refresh_object_after_history();
                 self.ui.status =
                     label.map_or("Nothing to redo".into(), |label| format!("Redid: {label}"));
                 Ok(())

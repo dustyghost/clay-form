@@ -436,7 +436,17 @@ impl App {
         {
             brush.cancel(&mut self.document);
         }
-        if let Some(brush) = &mut self.viewport.object_brush {
+        self.viewport.capture_axes = (self.ui.instances.capture_frame
+            == Some(ui.ctx().cumulative_frame_nr())
+            && self.document.active_visible())
+        .then_some((
+            self.ui.instances.pivot,
+            self.ui.instances.forward,
+            self.ui.instances.up,
+        ));
+        if let Some(brush) = &mut self.viewport.object_brush
+            && !brush.stroking()
+        {
             brush.options = self.ui.instances.brush;
         }
         self.viewport.path_thickness.configure(

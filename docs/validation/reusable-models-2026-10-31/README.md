@@ -42,3 +42,11 @@ Whole-path transforms add six ordinary regressions covering move/rotation/unifor
 - [Whole-path move](14-whole-path-move.png)
 - [Whole-path rotation](15-whole-path-rotate.png)
 - [Whole-path scale with linked sections](16-whole-path-scale.png)
+
+The multi-object brush checks cover shared membership, project save/reopen, atomic brush import with new object IDs, and switching parts between strokes. A stroke retains its chosen part and settings until release. Undo/Redo restores those settings with the placements. Removing a personal-library copy leaves previously imported project objects and placements intact. The focused selection passed nine ordinary tests.
+
+`object_kit_library_and_strokes_offscreen_review` and the existing `reusable_models_offscreen_review` both passed on software Vulkan. The kit walkthrough captures a hull vent and a sensor dome with different mounting axes, paints a row of each without restarting the brush tool, then adds the saved brush to a fresh project and checks both parts. The captures show the labelled contact and orientation guides, the two painted strokes, and the saved brush with its membership visible:
+
+- [Hull vent capture and orientation](17-object-capture-orientation.png)
+- [Two strokes from the Ship fittings brush](18-ship-fittings-strokes.png)
+- [Ship fittings in the personal brush library](19-ship-fittings-library.png)

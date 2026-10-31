@@ -1,4 +1,6 @@
 //! Purpose-built documentation scenes, rendered with the real app controls.
+#[path = "object_kits.rs"]
+mod object_kits;
 #[path = "path_assembly.rs"]
 mod path_assembly;
 use super::*;

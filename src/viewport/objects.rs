@@ -3,6 +3,62 @@ use super::*;
 use crate::sculpt::instances::*;
 
 pub(crate) use crate::sculpt::instances::ObjectOptions as BrushOptions;
+pub(super) fn paint_capture_axes(
+    painter: &egui::Painter,
+    scene: &Scene,
+    pivot: Vec3,
+    forward: usize,
+    up: usize,
+) {
+    if !scene.visible_depth(pivot) || forward > 2 || up > 2 {
+        return;
+    }
+    let centre = scene.project(pivot);
+    if !scene.rect.contains(centre) {
+        return;
+    }
+    for (label, index, offset) in [("Forward", forward, -20.), ("Up", up, 7.)] {
+        let direction = scene.axis_direction(pivot, axis(index));
+        let delta = direction * 88.;
+        let colour = controls::AXES[index];
+        let axis_name = ["X", "Y", "Z"][index];
+        if delta.length() > 8. {
+            painter.arrow(centre, delta, egui::Stroke::new(2.5_f32, colour));
+            controls::label(
+                painter,
+                centre + delta + egui::vec2(6., offset),
+                &format!("{label} +{axis_name}"),
+                colour,
+            );
+        } else {
+            let facing = if axis(index).dot(scene.view) > 0. {
+                "towards view"
+            } else {
+                "away"
+            };
+            painter.circle_stroke(centre, 10., egui::Stroke::new(2_f32, colour));
+            controls::label(
+                painter,
+                centre + egui::vec2(14., offset),
+                &format!("{label} +{axis_name} · {facing}"),
+                colour,
+            );
+        }
+    }
+    controls::marker(
+        painter,
+        centre,
+        controls::Marker::Diamond,
+        controls::ACTION,
+        false,
+    );
+    controls::label(
+        painter,
+        centre + egui::vec2(-62., 12.),
+        "Contact",
+        controls::ACTION,
+    );
+}
 pub(crate) struct ObjectBrush {
     pub piece: Piece,
     pub options: BrushOptions,
@@ -12,6 +68,9 @@ pub(crate) struct ObjectBrush {
     travelled: f32,
 }
 impl ObjectBrush {
+    pub(crate) fn stroking(&self) -> bool {
+        self.stroke.is_some()
+    }
     pub fn new(piece: Piece) -> Self {
         Self {
             piece,
@@ -249,11 +308,7 @@ impl Viewport {
             ui.ctx().request_repaint();
         }
         if released && let Some(set) = brush.stroke.take() {
-            let result = if brush.options.independent {
-                document.apply_object_stroke_independent(set.id)
-            } else {
-                document.apply_instance_preview()
-            };
+            let result = document.finish_object_stroke(set.id, brush.piece.source, brush.options);
             if let Err(error) = result {
                 document.cancel_instance_preview();
                 self.status = Some(error);

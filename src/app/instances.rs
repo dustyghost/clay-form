@@ -1,7 +1,72 @@
 use super::*;
+use crate::persistence::object_brushes as shelf;
 use crate::{command::InstanceCommand as C, sculpt::instances::*};
 
 impl App {
+    fn personal_brush_directory(&self) -> Result<std::path::PathBuf, String> {
+        self.preferences_path
+            .as_ref()
+            .map(|p| p.with_file_name("object-brushes"))
+            .ok_or_else(|| "Personal library location is unavailable".into())
+    }
+    fn remember_object_options(&mut self) -> Result<(), String> {
+        if let Some(id) = self.ui.instances.asset
+            && self.document.instances().assets.iter().any(|a| a.id == id)
+        {
+            self.document
+                .set_object_options(id, self.ui.instances.brush)?;
+        }
+        Ok(())
+    }
+    fn pick_object(&mut self, id: Option<u64>) -> Result<(), String> {
+        if let Some(id) = id {
+            let asset = self
+                .document
+                .instances()
+                .assets
+                .iter()
+                .find(|a| a.id == id)
+                .ok_or("Captured object no longer exists")?;
+            self.ui.instances.brush = asset.options;
+            if let Some(active) = &mut self.viewport.object_brush {
+                active.piece = Piece {
+                    source: Source::Asset(id),
+                    pivot: asset.pivot,
+                    forward: asset.forward,
+                    up: asset.up,
+                };
+                active.options = asset.options;
+            }
+        } else {
+            self.viewport.object_brush = None;
+        }
+        self.ui.instances.asset = id;
+        Ok(())
+    }
+    fn pick_group(&mut self, group: Option<u64>) -> Result<(), String> {
+        let objects = self.document.instances();
+        let next = if let Some(id) = group {
+            let brush = objects
+                .brushes
+                .iter()
+                .find(|b| b.id == id)
+                .ok_or("Object brush no longer exists")?;
+            self.ui.instances.group_name = brush.name.clone();
+            self.ui
+                .instances
+                .asset
+                .filter(|id| brush.objects.contains(id))
+                .or_else(|| brush.objects.first().copied())
+        } else {
+            self.ui
+                .instances
+                .asset
+                .filter(|id| objects.assets.iter().any(|a| a.id == *id))
+                .or_else(|| objects.assets.first().map(|a| a.id))
+        };
+        self.ui.instances.group = group;
+        self.pick_object(next)
+    }
     fn start_instance_bake(&mut self, id: u64, fuse: bool) -> Result<(), String> {
         self.document.cancel_instance_preview();
         self.document.selected_instance = None;
@@ -9,7 +74,33 @@ impl App {
         self.viewport.object_brush = None;
         self.start_mesh_job(Operation::BakeInstances(id, fuse))
     }
+    pub(super) fn refresh_object_after_history(&mut self) {
+        let library = self.document.instances();
+        let group = self
+            .ui
+            .instances
+            .group
+            .and_then(|id| library.brushes.iter().find(|b| b.id == id));
+        self.ui.instances.group = group.map(|b| b.id);
+        if let Some(b) = group {
+            self.ui.instances.group_name = b.name.clone();
+        }
+        let asset = self.ui.instances.asset.filter(|id| {
+            library.assets.iter().any(|a| a.id == *id)
+                && group.is_none_or(|b| b.objects.contains(id))
+        });
+        let _ = self.pick_object(asset);
+    }
     pub(super) fn dispatch_instances(&mut self, command: C) -> Result<(), String> {
+        if self
+            .viewport
+            .object_brush
+            .as_ref()
+            .is_some_and(|b| b.stroking())
+            && !matches!(&command, C::StopBrush)
+        {
+            return Err("Finish the current object stroke before changing brushes".into());
+        }
         match command {
             C::NewArray | C::NewPath => {
                 if matches!(command, C::NewPath) && self.document.paths().is_empty() {
@@ -117,12 +208,103 @@ impl App {
                     "Independent submodel created · linked copies still use their source".into();
             }
             C::Capture(name, pivot, forward, up) => {
-                let id = self.document.capture_object(name, pivot, forward, up)?;
-                self.ui.instances.asset = Some(id);
-                self.ui.status = "Object brush captured and embedded in the project".into();
+                let name = if name.trim().is_empty() {
+                    self.document
+                        .model(self.document.active_model_index())
+                        .ok_or("Select a source model")?
+                        .name
+                        .to_owned()
+                } else {
+                    name.trim().to_owned()
+                };
+                let id = self.document.capture_brush_object(
+                    self.ui.instances.group,
+                    name.clone(),
+                    pivot,
+                    forward,
+                    up,
+                )?;
+                self.pick_object(Some(id))?;
+                self.ui.status = format!("Captured {name} in the project");
+            }
+            C::CreateBrush(name) => {
+                self.remember_object_options()?;
+                let id = self.document.create_object_brush(name)?;
+                self.pick_group(Some(id))?;
+            }
+            C::RenameBrush(id, name) => {
+                self.document.rename_object_brush(id, name)?;
+                self.pick_group(Some(id))?;
+            }
+            C::RemoveBrush(id) => {
+                self.document.remove_object_brush(id)?;
+                self.pick_group(None)?;
+            }
+            C::BrushMember(group, object, include) => {
+                self.remember_object_options()?;
+                self.document.set_brush_member(group, object, include)?;
+                self.pick_group(Some(group))?;
+            }
+            C::ChooseBrush(group) => {
+                self.remember_object_options()?;
+                self.pick_group(group)?;
+            }
+            C::ChooseObject(id) => {
+                if self.ui.instances.group.is_some_and(|g| {
+                    !self
+                        .document
+                        .instances()
+                        .brushes
+                        .iter()
+                        .any(|b| b.id == g && b.objects.contains(&id))
+                }) {
+                    return Err("Choose an object from the current brush".into());
+                }
+                self.remember_object_options()?;
+                self.pick_object(Some(id))?;
+            }
+            C::ListPersonalBrushes => {
+                self.ui.instances.personal_brushes =
+                    shelf::list_personal(&self.personal_brush_directory()?)?;
+            }
+            C::SavePersonalBrush(id) => {
+                self.remember_object_options()?;
+                let directory = self.personal_brush_directory()?;
+                let bundle = self.document.instances().brush_bundle(id)?;
+                shelf::save_personal(&directory, &bundle)?;
+                self.ui.instances.personal_brushes = shelf::list_personal(&directory)?;
+                self.ui.status = format!("Saved {} in your personal brush library", bundle.name);
+            }
+            C::LoadPersonalBrush(name) => {
+                let path = shelf::personal_path(&self.personal_brush_directory()?, &name)?;
+                let id = self
+                    .document
+                    .import_object_brush(shelf::load(&path.to_string_lossy())?)?;
+                self.pick_group(Some(id))?;
+            }
+            C::RemovePersonalBrush(name) => {
+                let directory = self.personal_brush_directory()?;
+                std::fs::remove_file(shelf::personal_path(&directory, &name)?)
+                    .map_err(|e| e.to_string())?;
+                self.ui.instances.personal_brushes = shelf::list_personal(&directory)?;
+                self.ui.instances.remove_saved = None;
+                self.ui.status = format!(
+                    "Removed {name} from your personal library; project objects are unchanged"
+                );
+            }
+            C::ExportBrush(id, path) => {
+                self.remember_object_options()?;
+                shelf::save(&path, &self.document.instances().brush_bundle(id)?)?;
+                self.ui.status = format!("Exported object brush: {path}");
+            }
+            C::ImportBrush(path) => {
+                let id = self.document.import_object_brush(shelf::load(&path)?)?;
+                self.pick_group(Some(id))?;
+                self.ui.status = "Multi-object brush imported".into();
             }
             C::StartBrush(id) => {
                 self.ui.instances.stop_placing = false;
+                self.ui.instances.asset = Some(id);
                 self.viewport.cancel(&mut self.document);
                 self.document.cancel_instance_preview();
                 self.ui.instances.brush.validate()?;
@@ -171,9 +353,9 @@ impl App {
             }
             C::ImportAsset(path) => {
                 let asset = crate::persistence::load_object_asset(&path)?;
-                let options = asset.options;
-                self.ui.instances.asset = Some(self.document.import_object_asset(asset)?);
-                self.ui.instances.brush = options;
+                let id = self.document.import_object_asset(asset)?;
+                self.ui.instances.group = None;
+                self.pick_object(Some(id))?;
                 self.ui.status = "Object brush imported".into();
             }
             C::RemoveAsset(id) => {

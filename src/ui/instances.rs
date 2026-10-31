@@ -3,12 +3,20 @@ use crate::{
     command::InstanceCommand as C,
     sculpt::{Vec3, instances::*},
 };
+mod brushes;
 mod thickness;
 
 pub(crate) struct Controls {
     pub editor: Option<Set>,
     pub invalid: bool,
     pub asset: Option<u64>,
+    pub group: Option<u64>,
+    pub group_name: String,
+    pub library_open: bool,
+    pub capture_frame: Option<u64>,
+    pub personal_brushes: Vec<String>,
+    pub remove_saved: Option<String>,
+    pub bundle_path: String,
     pub name: String,
     pub pivot: Vec3,
     pub forward: usize,
@@ -27,7 +35,14 @@ impl Default for Controls {
             editor: None,
             invalid: false,
             asset: None,
-            name: "Object brush".into(),
+            group: None,
+            group_name: "New brush".into(),
+            library_open: false,
+            capture_frame: None,
+            personal_brushes: Vec::new(),
+            remove_saved: None,
+            bundle_path: "kit.objects.json".into(),
+            name: String::new(),
             pivot: Vec3::default(),
             forward: 0,
             up: 2,
@@ -155,6 +170,9 @@ impl UiState {
                     self.instance_contents(ui, document, commands);
                 });
             });
+        if self.instances.library_open {
+            brushes::manager(ui.ctx(), &mut self.instances, document, commands);
+        }
     }
     fn instance_contents(
         &mut self,
@@ -384,6 +402,9 @@ impl UiState {
                     commands.push(Command::Instances(C::NewPath));
                 }
             });
+            if !document.instances().assets.is_empty() {
+                self.object_palette(ui, document, commands);
+            }
             for set in &document.instances().sets {
                 ui.push_id(set.id, |ui| instance_set(ui, document, set, commands));
             }
@@ -412,100 +433,72 @@ impl UiState {
                     commands.push(Command::Instances(C::Edit(id)));
                 }
             }
-            ui.separator();
-            egui::CollapsingHeader::new("Capture object brush").show(ui, |ui| {
-                ui.text_edit_singleline(&mut self.instances.name);
-                vector(
-                    ui,
-                    "Contact point (source coordinates)",
-                    &mut self.instances.pivot,
-                );
-                axes(ui, &mut self.instances.forward, &mut self.instances.up);
-                if ui
-                    .button("Capture active model")
-                    .customize(Action::CaptureObjectBrush)
-                    .clicked()
+            if document.instances().assets.is_empty() {
+                self.object_palette(ui, document, commands);
+            }
+        }
+    }
+    fn object_palette(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &Document,
+        commands: &mut Vec<Command>,
+    ) {
+        ui.separator();
+        brushes::palette(ui, &mut self.instances, document, commands);
+        if let Some(id) = self.instances.asset {
+            ui.add(
+                egui::DragValue::new(&mut self.instances.brush.scale)
+                    .range(0.001..=1000.)
+                    .speed(0.01)
+                    .prefix("Size "),
+            );
+            ui.add(
+                egui::DragValue::new(&mut self.instances.brush.spacing)
+                    .range(0.001..=1000.)
+                    .speed(0.01)
+                    .prefix("Repeat spacing "),
+            );
+            ui.add(
+                egui::DragValue::new(&mut self.instances.brush.offset)
+                    .speed(0.01)
+                    .prefix("Surface offset "),
+            );
+            ui.add(
+                egui::Slider::new(&mut self.instances.brush.rotation, -180.0..=180.)
+                    .text("Rotation °"),
+            );
+            ui.checkbox(
+                &mut self.instances.brush.independent,
+                "Create independent geometry",
+            );
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("Place / brush objects").clicked() {
+                    commands.push(Command::Instances(C::StartBrush(id)));
+                }
+                if ui.button("Stop placing").clicked() {
+                    commands.push(Command::Instances(C::StopBrush));
+                }
+            });
+        }
+        egui::CollapsingHeader::new("Single object files").show(ui, |ui| {
+            ui.text_edit_singleline(&mut self.instances.asset_path);
+            ui.horizontal(|ui| {
+                if ui.button("Import object").clicked() {
+                    commands.push(Command::Instances(C::ImportAsset(
+                        self.instances.asset_path.clone(),
+                    )));
+                }
+                if let Some(id) = self.instances.asset
+                    && ui.button("Export object").clicked()
                 {
-                    commands.push(Command::Instances(C::Capture(
-                        self.instances.name.clone(),
-                        self.instances.pivot,
-                        self.instances.forward,
-                        self.instances.up,
+                    commands.push(Command::Instances(C::ExportAsset(
+                        id,
+                        self.instances.asset_path.clone(),
                     )));
                 }
             });
-            for asset in &document.instances().assets {
-                ui.horizontal(|ui| {
-                    thumbnail(ui, asset, &mut self.instances.thumbnails);
-                    if ui
-                        .selectable_value(&mut self.instances.asset, Some(asset.id), &asset.name)
-                        .changed()
-                    {
-                        self.instances.brush = asset.options;
-                    }
-                    if ui
-                        .small_button("×")
-                        .on_hover_text("Remove unused object brush")
-                        .clicked()
-                    {
-                        commands.push(Command::Instances(C::RemoveAsset(asset.id)));
-                    }
-                });
-            }
-            if let Some(id) = self.instances.asset {
-                ui.add(
-                    egui::DragValue::new(&mut self.instances.brush.scale)
-                        .range(0.001..=1000.)
-                        .speed(0.01)
-                        .prefix("Size "),
-                );
-                ui.add(
-                    egui::DragValue::new(&mut self.instances.brush.spacing)
-                        .range(0.001..=1000.)
-                        .speed(0.01)
-                        .prefix("Repeat spacing "),
-                );
-                ui.add(
-                    egui::DragValue::new(&mut self.instances.brush.offset)
-                        .speed(0.01)
-                        .prefix("Surface offset "),
-                );
-                ui.add(
-                    egui::Slider::new(&mut self.instances.brush.rotation, -180.0..=180.)
-                        .text("Rotation °"),
-                );
-                ui.checkbox(
-                    &mut self.instances.brush.independent,
-                    "Create independent geometry",
-                );
-                ui.horizontal_wrapped(|ui| {
-                    if ui.button("Place / brush objects").clicked() {
-                        commands.push(Command::Instances(C::StartBrush(id)));
-                    }
-                    if ui.button("Stop placing").clicked() {
-                        commands.push(Command::Instances(C::StopBrush));
-                    }
-                });
-            }
-            egui::CollapsingHeader::new("Object brush files").show(ui, |ui| {
-                ui.text_edit_singleline(&mut self.instances.asset_path);
-                ui.horizontal(|ui| {
-                    if ui.button("Import object").clicked() {
-                        commands.push(Command::Instances(C::ImportAsset(
-                            self.instances.asset_path.clone(),
-                        )));
-                    }
-                    if let Some(id) = self.instances.asset
-                        && ui.button("Export object").clicked()
-                    {
-                        commands.push(Command::Instances(C::ExportAsset(
-                            id,
-                            self.instances.asset_path.clone(),
-                        )));
-                    }
-                });
-            });
-        }
+        });
     }
 }
 
@@ -614,7 +607,7 @@ fn thumbnail(
     ui: &mut egui::Ui,
     asset: &Asset,
     cache: &mut std::collections::HashMap<u64, Thumbnail>,
-) {
+) -> egui::Response {
     let cached = cache.entry(asset.id).or_insert_with(|| Thumbnail {
         source: asset.mesh.clone(),
         lines: thumbnail_lines(&asset.mesh),
@@ -623,7 +616,7 @@ fn thumbnail(
         cached.source = asset.mesh.clone();
         cached.lines = thumbnail_lines(&asset.mesh);
     }
-    let (r, _) = ui.allocate_exact_size(egui::vec2(42., 42.), egui::Sense::hover());
+    let (r, response) = ui.allocate_exact_size(egui::vec2(42., 42.), egui::Sense::click());
     let painter = ui.painter();
     painter.rect_filled(r, 3., ui.visuals().extreme_bg_color);
     for line in &cached.lines {
@@ -632,4 +625,5 @@ fn thumbnail(
             egui::Stroke::new(0.6_f32, egui::Color32::from_rgb(100, 195, 185)),
         );
     }
+    response
 }

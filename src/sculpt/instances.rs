@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, sync::Arc};
 mod path_output;
 pub use path_output::{GeneratedCopy, JoinMode, ResolvedCopies};
+mod brushes;
 mod thickness;
+pub use brushes::{BrushBundle, BrushGroup};
 pub use thickness::{
     MAX_THICKNESS, MAX_THICKNESS_POINTS, MIN_THICKNESS, Thickness, ThicknessMode, ThicknessPoint,
 };
@@ -522,12 +524,15 @@ impl Set {
 pub struct Library {
     pub assets: Vec<Asset>,
     pub sets: Vec<Set>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub brushes: Vec<BrushGroup>,
 }
 impl Library {
     pub fn is_empty(&self) -> bool {
-        self.assets.is_empty() && self.sets.is_empty()
+        self.assets.is_empty() && self.sets.is_empty() && self.brushes.is_empty()
     }
     pub fn validate(&self, models: &[(u64, &Mesh)], paths: &[SurfacePath]) -> Result<(), String> {
+        self.validate_brushes()?;
         super::texture::validate_library(self.assets.iter().map(|a| a.mesh.as_ref()), &[])?;
         if self.assets.len() > MAX_ASSETS || self.sets.len() > MAX_INSTANCES {
             return Err("Too many object assets or instance sets".into());

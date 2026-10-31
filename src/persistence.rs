@@ -2,6 +2,7 @@
 pub(crate) mod gimp;
 pub mod material_export;
 mod obj;
+pub mod object_brushes;
 pub mod texture;
 pub use obj::load_obj;
 pub(crate) use obj::load_obj_cancellable;
@@ -104,6 +105,7 @@ pub fn save_object_asset(
     crate::sculpt::instances::Library {
         assets: vec![asset.clone()],
         sets: Vec::new(),
+        brushes: Vec::new(),
     }
     .validate(&[], &[])?;
     write_json(
@@ -125,6 +127,7 @@ pub fn load_object_asset(path: &str) -> Result<crate::sculpt::instances::Asset, 
     crate::sculpt::instances::Library {
         assets: vec![file.asset.clone()],
         sets: Vec::new(),
+        brushes: Vec::new(),
     }
     .validate(&[], &[])?;
     Ok(file.asset)

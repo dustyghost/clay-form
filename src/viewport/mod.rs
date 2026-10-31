@@ -58,6 +58,7 @@ pub(crate) enum Gesture {
 #[derive(Default)]
 pub(crate) struct Viewport {
     pub(crate) object_brush: Option<objects::ObjectBrush>,
+    pub(crate) capture_axes: Option<(Vec3, usize, usize)>,
     pub(crate) size_preview: Option<Brush>,
     last_brush_position: Option<Pos2>,
     pub(crate) sample_colour: bool,
@@ -393,6 +394,9 @@ impl Viewport {
             return;
         }
         self.session.guided.paint(document, &scene, &painter);
+        if let Some((pivot, forward, up)) = self.capture_axes {
+            objects::paint_capture_axes(&painter, &scene, pivot, forward, up);
+        }
         if self.session.attach_stencil {
             self.session
                 .stencil_overlay

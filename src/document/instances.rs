@@ -1,6 +1,7 @@
 //! Instance edits are transactional; previews never enter saves or history.
 use super::*;
 use crate::sculpt::{Vec3, instances::*};
+mod brushes;
 
 pub type ResolvedInstances = std::sync::Arc<ResolvedCopies>;
 
@@ -228,6 +229,16 @@ impl Document {
         forward: usize,
         up: usize,
     ) -> Result<u64, String> {
+        self.capture_brush_object(None, name, pivot, forward, up)
+    }
+    pub fn capture_brush_object(
+        &mut self,
+        brush: Option<u64>,
+        name: String,
+        pivot: Vec3,
+        forward: usize,
+        up: usize,
+    ) -> Result<u64, String> {
         self.cancel_instance_preview();
         self.end_edit();
         self.end_stroke();
@@ -263,6 +274,15 @@ impl Document {
             up,
             options: Default::default(),
         });
+        if let Some(brush) = brush {
+            library
+                .brushes
+                .iter_mut()
+                .find(|b| b.id == brush)
+                .ok_or("Object brush no longer exists")?
+                .objects
+                .push(id);
+        }
         let models: Vec<_> = (0..self.model_count())
             .map(|i| (self.instance_model_id(i), self.model(i).unwrap().mesh))
             .collect();
@@ -463,6 +483,9 @@ impl Document {
         self.end_stroke();
         self.record_edit("Remove object brush");
         self.geometry.scene.instances.assets.retain(|a| a.id != id);
+        for brush in &mut self.geometry.scene.instances.brushes {
+            brush.objects.retain(|object| *object != id);
+        }
         self.dirty = true;
         self.display_changed();
         Ok(())
@@ -623,6 +646,81 @@ mod tests {
             bad.validate().is_err(),
             "uncommitted model IDs must not leak into saves"
         );
+    }
+    #[test]
+    fn object_kit_members_share_assets_and_import_atomically_without_scene_ids() {
+        let mut d = document();
+        let ship = d.create_object_brush("Ship parts".into()).unwrap();
+        let floor = d.create_object_brush("Floor props".into()).unwrap();
+        let a = d
+            .capture_brush_object(Some(ship), "Vent".into(), Vec3(0., 0., -1.), 0, 2)
+            .unwrap();
+        let b = d
+            .capture_brush_object(Some(ship), "Hatch".into(), Vec3(0., -1., 0.), 2, 1)
+            .unwrap();
+        let options = ObjectOptions {
+            scale: 0.4,
+            rotation: 35.,
+            ..Default::default()
+        };
+        d.set_object_options(b, options).unwrap();
+        let source = d.instances().assets[0].mesh.clone();
+        d.set_brush_member(floor, a, true).unwrap();
+        assert_eq!(d.instances().assets.len(), 2);
+        assert!(std::sync::Arc::ptr_eq(
+            &source,
+            &d.instances().assets[0].mesh
+        ));
+        let history = d.history_counts();
+        d.set_brush_member(floor, a, true).unwrap();
+        assert!(d.set_brush_member(floor, 99, true).is_err());
+        assert!(d.rename_object_brush(ship, "Floor props".into()).is_err());
+        assert_eq!(d.history_counts(), history);
+        let original = d.project();
+        let mut reopened = document();
+        reopened
+            .replace_project(
+                serde_json::from_slice(&serde_json::to_vec(&original).unwrap()).unwrap(),
+                "kits.clay",
+            )
+            .unwrap();
+        let bundle = reopened.instances().brush_bundle(ship).unwrap();
+        assert_eq!(bundle.objects[0].pivot, Vec3(0., 0., -1.));
+        assert_eq!(bundle.objects[1].options, options);
+        assert_eq!(bundle.objects[1].up, 1);
+        d.remove_object_asset(a).unwrap();
+        assert_eq!(d.instances().brushes[0].objects, vec![b]);
+        assert!(d.instances().brushes[1].objects.is_empty());
+        d.undo();
+        assert!(d.project() == original);
+        d.remove_object_brush(ship).unwrap();
+        assert_eq!(d.instances().assets.len(), 2);
+        d.undo();
+        assert!(d.project() == original);
+        let mut target = document();
+        target.create_object_brush("Body parts".into()).unwrap();
+        target
+            .capture_object("Existing".into(), Vec3::default(), 0, 2)
+            .unwrap();
+        let before = target.project();
+        let history = target.history_counts();
+        let mut invalid = bundle.clone();
+        invalid.objects[1].id = invalid.objects[0].id;
+        assert!(target.import_object_brush(invalid).is_err());
+        assert!(target.project() == before);
+        assert_eq!(target.history_counts(), history);
+        let new = target.import_object_brush(bundle).unwrap();
+        assert_ne!(new, ship);
+        let saved = target.project();
+        saved.validate().unwrap();
+        assert_eq!(target.instances().brushes[1].objects, vec![2, 3]);
+        assert_eq!(target.instances().assets[2].options, options);
+        assert_eq!(target.instances().assets[0].name, "Existing");
+        assert_eq!(target.history_counts().0, history.0 + 1);
+        target.undo();
+        assert!(target.project() == before);
+        target.redo();
+        assert!(target.project() == saved);
     }
     #[test]
     fn reusable_object_capture_survives_source_deletion_and_file_roundtrip() {

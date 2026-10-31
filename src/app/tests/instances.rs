@@ -23,6 +23,103 @@ fn setup() -> (App, egui::Context) {
     (app, ctx)
 }
 #[test]
+fn object_kit_picks_a_part_per_stroke_and_reuses_personal_brushes_across_projects() {
+    use crate::sculpt::instances::{Layout, Source};
+    let (mut app, ctx) = setup();
+    let dir = std::env::temp_dir().join(format!("clay-brush-shelf-{}", std::process::id()));
+    app.preferences_path = Some(dir.join("preferences.json"));
+    app.dispatch(Command::Instances(C::StopBrush), &ctx);
+    app.dispatch(
+        Command::Instances(C::CreateBrush("Ship / fittings".into())),
+        &ctx,
+    );
+    app.dispatch(Command::Instances(C::BrushMember(1, 1, true)), &ctx);
+    app.dispatch(
+        Command::Instances(C::Capture("Dome".into(), Vec3(0., -1., 0.), 0, 1)),
+        &ctx,
+    );
+    app.dispatch(Command::Instances(C::ChooseObject(1)), &ctx);
+    app.dispatch(Command::Instances(C::StartBrush(1)), &ctx);
+    let start = Pos2::new(450., 400.);
+    let end = Pos2::new(550., 400.);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    app.dispatch(Command::Instances(C::ChooseObject(2)), &ctx);
+    assert_eq!(app.ui.instances.asset, Some(1));
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(end), primary_event(end, false)],
+    );
+    let first = app.document.instances().sets[0].clone();
+    let Layout::Manual(items) = &first.layout else {
+        panic!()
+    };
+    assert!(
+        !items.is_empty()
+            && items
+                .iter()
+                .all(|p| p.piece.source == Source::Asset(1) && p.piece.up == 2)
+    );
+    app.dispatch(Command::Instances(C::ChooseObject(2)), &ctx);
+    assert_eq!(
+        app.viewport.object_brush.as_ref().unwrap().piece.source,
+        Source::Asset(2)
+    );
+    let next = Pos2::new(500., 350.);
+    app.ui.instances.brush.rotation = 42.;
+    let history = app.document.history_counts().0;
+    navigation_frame(&mut app, &ctx, vec![]);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(next), primary_event(next, true)],
+    );
+    navigation_frame(&mut app, &ctx, vec![primary_event(next, false)]);
+    assert_eq!(app.document.instances().sets[0], first);
+    let Layout::Manual(items) = &app.document.instances().sets[1].layout else {
+        panic!()
+    };
+    assert_eq!(items[0].piece.source, Source::Asset(2));
+    assert_eq!(items[0].piece.up, 1);
+    assert!((items[0].point(Vec3(0., -1., 0.)) - items[0].transform.origin).len() < 1e-6);
+    assert_eq!(app.document.instances().assets[1].options.rotation, 42.);
+    assert_eq!(app.document.history_counts().0, history + 1);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.instances().sets.len(), 1);
+    assert_eq!(app.ui.instances.brush.rotation, 0.);
+    app.dispatch(Command::Redo, &ctx);
+    assert_eq!(app.ui.instances.brush.rotation, 42.);
+    app.dispatch(Command::Instances(C::StopBrush), &ctx);
+    app.dispatch(Command::Instances(C::SavePersonalBrush(1)), &ctx);
+    assert_eq!(app.ui.instances.personal_brushes, vec!["Ship / fittings"]);
+    let mut app = App {
+        preferences_path: Some(dir.join("preferences.json")),
+        ..Default::default()
+    };
+    assert!(app.document.instances().assets.is_empty());
+    app.dispatch(Command::Instances(C::ListPersonalBrushes), &ctx);
+    app.dispatch(
+        Command::Instances(C::LoadPersonalBrush("Ship / fittings".into())),
+        &ctx,
+    );
+    assert_eq!(app.document.instances().brushes[0].objects.len(), 2);
+    assert_eq!(app.ui.instances.asset, Some(1));
+    assert_eq!(app.document.instances().assets[1].pivot, Vec3(0., -1., 0.));
+    app.document.project().validate().unwrap();
+    let project = app.document.project();
+    app.dispatch(
+        Command::Instances(C::RemovePersonalBrush("Ship / fittings".into())),
+        &ctx,
+    );
+    assert!(app.ui.instances.personal_brushes.is_empty());
+    assert!(app.document.project() == project);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+#[test]
 fn reusable_object_tool_resets_when_changing_projects() {
     let (mut app, ctx) = setup();
     assert!(app.viewport.object_brush.is_some());
