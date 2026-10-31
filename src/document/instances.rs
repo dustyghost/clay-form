@@ -200,7 +200,11 @@ impl Document {
             .sets
             .retain(|s| s.id != id);
         self.instance_cache.take();
-        self.apply_instance_preview()
+        self.apply_instance_preview()?;
+        if self.selected_instance.is_some_and(|(set, _)| set == id) {
+            self.selected_instance = None;
+        }
+        Ok(())
     }
     pub fn capture_object(
         &mut self,
@@ -448,9 +452,10 @@ mod tests {
     fn document() -> Document {
         let mut p = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Cube);
         p.divisions = [1; 3];
-        let mut d = Document::default();
-        d.geometry = Geometry::new(p.mesh().unwrap());
-        d
+        Document {
+            geometry: Geometry::new(p.mesh().unwrap()),
+            ..Default::default()
+        }
     }
     fn array(d: &mut Document, count: usize) -> Set {
         let piece = d.instance_piece(0).unwrap();
@@ -490,7 +495,9 @@ mod tests {
         d.display_changed();
         assert!(!Arc::ptr_eq(&applied, &d.instance_placements().unwrap()));
         assert_eq!(applied, d.instance_placements().unwrap());
+        d.selected_instance = Some((1, 0));
         d.remove_instance_set(1).unwrap();
+        assert!(d.selected_instance.is_none());
         assert!(d.instance_placements().unwrap().is_empty());
         d.undo();
         assert_eq!(d.instance_placements().unwrap().len(), 2);

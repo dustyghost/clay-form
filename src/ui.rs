@@ -277,6 +277,7 @@ impl UiState {
     }
 
     pub(crate) fn select_brush(&mut self, index: usize, document: &Document) {
+        self.instances.stop_placing = true;
         self.materials.sampling = false;
         if document
             .brushes()

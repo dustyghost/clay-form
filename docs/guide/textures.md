@@ -141,7 +141,7 @@ Vertex and integer targets keep bounded material values and report when sampling
 
 Convert extra AOVs, deep/multilayer files and colour files declaring other primaries before import. ICC profiles belong to the PNG workflow. Alpha remains coverage inside 0–1; additive transparent-emission rendering is not supported.
 
-Texture pixels are embedded in `.clay`, so moving the project does not depend on an exchange directory. New saves use project version 3; versions 1 and 2 remain readable. Duplicated models share their texture identity: painting or reloading changes every linked use. Choose **Make independent** to give the active model a separate image.
+Texture pixels are embedded in `.clay`, so moving the project does not depend on an exchange directory. New saves use project version 4; versions 1–3 remain readable. Duplicated models share their texture identity: painting or reloading changes every linked use. Choose **Make independent** to give the active model a separate image.
 
 | Capacity | Limit or memory use |
 | --- | --- |

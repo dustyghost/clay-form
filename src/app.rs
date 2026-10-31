@@ -431,6 +431,11 @@ impl App {
             .brush_size_preview
             .filter(|(frame, _)| *frame == ui.ctx().cumulative_frame_nr())
             .and_then(|(_, index)| self.document.brushes().get(index).cloned());
+        if std::mem::take(&mut self.ui.instances.stop_placing)
+            && let Some(mut brush) = self.viewport.object_brush.take()
+        {
+            brush.cancel(&mut self.document);
+        }
         if let Some(brush) = &mut self.viewport.object_brush {
             brush.options = self.ui.instances.brush;
         }

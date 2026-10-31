@@ -4,6 +4,7 @@ use crate::{command::InstanceCommand as C, sculpt::instances::*};
 impl App {
     fn start_instance_bake(&mut self, id: u64, fuse: bool) -> Result<(), String> {
         self.document.cancel_instance_preview();
+        self.document.selected_instance = None;
         self.ui.instances.editor = None;
         self.viewport.object_brush = None;
         self.start_mesh_job(Operation::BakeInstances(id, fuse))
@@ -16,6 +17,7 @@ impl App {
                 }
                 self.viewport.cancel(&mut self.document);
                 self.document.cancel_instance_preview();
+                self.document.selected_instance = None;
                 self.viewport.object_brush = None;
                 self.ui.modeling.active = false;
                 self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
@@ -115,6 +117,7 @@ impl App {
                 self.ui.status = "Object brush captured and embedded in the project".into();
             }
             C::StartBrush(id) => {
+                self.ui.instances.stop_placing = false;
                 self.viewport.cancel(&mut self.document);
                 self.document.cancel_instance_preview();
                 self.ui.instances.brush.validate()?;

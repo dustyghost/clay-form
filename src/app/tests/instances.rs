@@ -32,6 +32,20 @@ fn reusable_object_tool_resets_when_changing_projects() {
     assert!(app.document.instances().is_empty());
 }
 #[test]
+fn reusable_object_tool_yields_to_sculpt_brush_and_transform_selection() {
+    let (mut app, ctx) = setup();
+    app.ui.select_brush(0, &app.document);
+    navigation_frame(&mut app, &ctx, vec![]);
+    assert!(app.viewport.object_brush.is_none());
+    app.dispatch(Command::Instances(C::StartBrush(1)), &ctx);
+    app.dispatch(
+        Command::TransformMode(crate::viewport::TransformMode::World),
+        &ctx,
+    );
+    navigation_frame(&mut app, &ctx, vec![]);
+    assert!(app.viewport.object_brush.is_none());
+}
+#[test]
 fn reusable_objects_real_pointer_stroke_and_cancel_are_one_transaction() {
     let (mut app, ctx) = setup();
     let before = app.document.project();

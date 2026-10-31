@@ -14,6 +14,7 @@ pub(crate) struct Controls {
     pub up: usize,
     pub asset_path: String,
     pub brush: crate::viewport::objects::BrushOptions,
+    pub stop_placing: bool,
     thumbnails: std::collections::HashMap<u64, Thumbnail>,
 }
 impl Default for Controls {
@@ -28,6 +29,7 @@ impl Default for Controls {
             up: 2,
             asset_path: "object.object.json".into(),
             brush: Default::default(),
+            stop_placing: false,
             thumbnails: Default::default(),
         }
     }
@@ -162,6 +164,18 @@ impl UiState {
         if let Some(set) = &mut self.instances.editor {
             let before = set.clone();
             ui.label("Preview · Apply saves one undo step");
+            let (apply, cancel) = ui
+                .horizontal(|ui| {
+                    (
+                        ui.add_enabled(
+                            !self.instances.invalid,
+                            egui::Button::new("Apply instances"),
+                        )
+                        .clicked(),
+                        ui.button("Cancel preview").clicked(),
+                    )
+                })
+                .inner;
             ui.text_edit_singleline(&mut set.name);
             ui.checkbox(&mut set.visible, "Show instances");
             match &mut set.layout {
@@ -271,6 +285,7 @@ impl UiState {
                     .unwrap_or_else(|| Adjustment::new(slot));
                 let old = adjustment.clone();
                 let a = &mut adjustment;
+                ui.checkbox(&mut a.visible, "Show this copy");
                 vector(ui, "Move", &mut a.offset);
                 vector(ui, "Rotate °", &mut a.rotation);
                 ui.add(
@@ -279,7 +294,6 @@ impl UiState {
                         .speed(0.01)
                         .prefix("Scale "),
                 );
-                ui.checkbox(&mut a.visible, "Show this copy");
                 ui.weak(format!("Set {id}: changes affect this copy only."));
                 if old != adjustment {
                     if let Some(a) = set.adjustments.iter_mut().find(|a| a.slot == slot) {
@@ -292,21 +306,10 @@ impl UiState {
             if before != *set {
                 commands.push(Command::Instances(C::Preview(Box::new(set.clone()))));
             }
-            ui.horizontal(|ui| {
-                if ui
-                    .add_enabled(
-                        !self.instances.invalid,
-                        egui::Button::new("Apply instances"),
-                    )
-                    .clicked()
-                {
-                    commands.push(Command::Instances(C::Apply));
-                }
-                if ui.button("Cancel preview").clicked() {
-                    commands.push(Command::Instances(C::Cancel));
-                }
-            });
-            if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            if apply {
+                commands.push(Command::Instances(C::Apply));
+            }
+            if cancel || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                 commands.push(Command::Instances(C::Cancel));
             }
         } else {
@@ -330,44 +333,7 @@ impl UiState {
                 }
             });
             for set in &document.instances().sets {
-                ui.push_id(set.id,|ui|{
-                            ui.label(&set.name);
-                            ui.horizontal_wrapped(|ui|{
-                                if ui.button("Edit").clicked(){
-commands.push(Command::Instances(C::Edit(set.id)));
-}
-                                if ui.button("Bake").on_hover_text("Make independent submodels; retain source UVs, materials and masks").clicked(){
-commands.push(Command::Instances(C::Bake(set.id,false)));
-}
-                                if ui.button("Bake + fuse").on_hover_text("Union overlapping closed pieces with voxel remeshing. Rebuilds topology and removes UVs; keeps the reusable source.").clicked(){
-commands.push(Command::Instances(C::Bake(set.id,true)));
-}
-                                if ui.small_button("Remove set").clicked(){
-commands.push(Command::Instances(C::Remove(set.id)));
-}
-                            }
-);
-                            egui::CollapsingHeader::new("Copies").show(ui,|ui|{
-                                if let Ok(placements)=set.placements(document.paths()){
-                                    egui::ScrollArea::vertical().max_height(160.).show(ui,|ui|{
-                                        for (slot,_) in placements {
-                                            ui.horizontal(|ui|{
-                                                if ui.selectable_label(document.selected_instance==Some((set.id,slot)),format!("Copy {}",slot+1)).clicked(){
-commands.push(Command::Instances(C::Select(set.id,slot)));
-}
-                                                if ui.small_button("Independent").clicked(){
-commands.push(Command::Instances(C::Detach(set.id,slot)));
-}
-                                            }
-);
-                                        }
-                                    }
-);
-                                }
-                            }
-);
-                        }
-);
+                ui.push_id(set.id, |ui| instance_set(ui, document, set, commands));
             }
             if let Some((id, slot)) = document.selected_instance {
                 ui.label(format!(
@@ -473,6 +439,72 @@ commands.push(Command::Instances(C::Detach(set.id,slot)));
             });
         }
     }
+}
+
+fn instance_set(ui: &mut egui::Ui, document: &Document, set: &Set, commands: &mut Vec<Command>) {
+    ui.label(&set.name);
+    ui.horizontal_wrapped(|ui| {
+        if ui.button("Edit").clicked() {
+            commands.push(Command::Instances(C::Edit(set.id)));
+        }
+        if ui.button("Bake")
+            .on_hover_text("Make independent submodels; retain source UVs, materials and masks")
+            .clicked()
+        {
+            commands.push(Command::Instances(C::Bake(set.id, false)));
+        }
+        if ui.button("Bake + fuse")
+            .on_hover_text("Union overlapping closed pieces with voxel remeshing. Rebuilds topology and removes UVs; keeps the reusable source.")
+            .clicked()
+        {
+            commands.push(Command::Instances(C::Bake(set.id, true)));
+        }
+        if ui.small_button("Remove set").clicked() {
+            commands.push(Command::Instances(C::Remove(set.id)));
+        }
+    });
+    egui::CollapsingHeader::new("Copies").show(ui, |ui| {
+        // Hidden copies must remain selectable so their visibility can be restored.
+        let mut listed = set.clone();
+        for adjustment in &mut listed.adjustments {
+            adjustment.visible = true;
+        }
+        if let Ok(placements) = listed.placements(document.paths()) {
+            egui::ScrollArea::vertical()
+                .max_height(160.)
+                .show(ui, |ui| {
+                    for (slot, _) in placements {
+                        let visible = set
+                            .adjustments
+                            .iter()
+                            .find(|a| a.slot == slot)
+                            .is_none_or(|a| a.visible);
+                        ui.horizontal(|ui| {
+                            let label = format!(
+                                "Copy {}{}",
+                                slot + 1,
+                                if visible { "" } else { " (hidden)" }
+                            );
+                            if ui
+                                .selectable_label(
+                                    document.selected_instance == Some((set.id, slot)),
+                                    label,
+                                )
+                                .clicked()
+                            {
+                                commands.push(Command::Instances(C::Select(set.id, slot)));
+                            }
+                            if ui
+                                .add_enabled(visible, egui::Button::new("Independent").small())
+                                .clicked()
+                            {
+                                commands.push(Command::Instances(C::Detach(set.id, slot)));
+                            }
+                        });
+                    }
+                });
+        }
+    });
 }
 
 struct Thumbnail {

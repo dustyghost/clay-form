@@ -107,7 +107,16 @@ impl Viewport {
         let Some(mut brush) = self.object_brush.take() else {
             return false;
         };
-        if document.instance_source(brush.piece.source).is_none() {
+        if document.instance_source(brush.piece.source).is_none()
+            || options.transform_mode != TransformMode::Sculpt
+            || options.modeling.is_some()
+            || options.select.is_some()
+            || options.slice.is_some()
+            || options.edge_select
+            || options.arrange_references
+            || self.paths.active
+            || self.sample_colour
+        {
             brush.cancel(document);
             return false;
         }

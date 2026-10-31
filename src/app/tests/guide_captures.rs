@@ -67,6 +67,20 @@ fn reusable_models_offscreen_review() {
         g.app.ui.status
     );
     assert_eq!(g.app.document.instance_placements().unwrap().len(), 12);
+    let mut hidden = g.app.document.instances().sets[0].clone();
+    let mut adjustment = Adjustment::new(0);
+    adjustment.visible = false;
+    hidden.adjustments.push(adjustment);
+    g.app.document.preview_instance_set(hidden).unwrap();
+    g.app.document.apply_instance_preview().unwrap();
+    assert_eq!(g.app.document.instance_placements().unwrap().len(), 11);
+    click_guide_label(&mut g, "Copies");
+    click_guide_label(&mut g, "Copy 1 (hidden)");
+    assert_eq!(g.app.document.selected_instance, Some((1, 0)));
+    click_guide_label(&mut g, "Edit selected copy…");
+    click_guide_label(&mut g, "Show this copy");
+    click_guide_label(&mut g, "Apply instances");
+    assert_eq!(g.app.document.instance_placements().unwrap().len(), 12);
     g.save("02-linked-array");
     g.app.dispatch(Command::Instances(C::Remove(1)), &g.ctx);
     g.app
