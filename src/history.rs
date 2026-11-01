@@ -188,6 +188,7 @@ fn geometry_bytes(geometry: &Geometry) -> usize {
                 + mesh.materials.iter().map(|m|m.links.len()*std::mem::size_of::<crate::sculpt::material::layers::Influence>()).sum::<usize>()
                 + mesh.triangles.len() * std::mem::size_of::<[usize; 3]>()
                 + mesh.quads.len() * std::mem::size_of::<[usize; 4]>()
+                + mesh.shading_seams.as_ref().map_or(0, |seams| seams.retained_bytes())
                 + mesh.creases.len() * std::mem::size_of::<[usize; 2]>()
                 + mesh.hidden_faces.len()
                 + mesh.polygroups.len() * std::mem::size_of::<usize>()
@@ -217,6 +218,7 @@ mod tests {
         let mut mesh = Geometry::new(Mesh {
             uv: Default::default(),
             creases: Vec::new(),
+            shading_seams: None,
             materials: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),

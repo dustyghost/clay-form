@@ -10,6 +10,14 @@ The fixture has a rectangular body, a round boss and a through-bore. Both crops 
 
 The walkthrough also captures the same fixture at 24 and 96 samples. The geometric regression checks for a shared cap and wall vertex near the source rim in every 15-degree sector at 48 samples. Coarse grids can lose thin features. A faceted cutter can still produce a faceted opening.
 
+## Smooth shading at the rim
+
+Both views below use smooth shading, the same lights and camera, a 48-sample grid, and 9,824 triangles. The close-ups magnify the original viewport pixels three times. The old cap picked up a dark streak from the curved wall. The updated fit chooses the flatter triangulation and separates the lighting normals at source-surface joins, including the shallow join underneath the block.
+
+![Smooth shading before and after, with a close-up of the lower right rim](smooth-rim-comparison.png)
+
+On the near-planar triangles of the front cap, the worst corner normal moved from 46.2° off the cap normal to 1.2° or less. On the underside it moved from 30.8° to less than 0.3°. The regression also checks that the lighting normals follow the outer cylinder and the bore as they turn.
+
 ## Flat shading
 
 The **View → Flat shading** switch shows the triangles along the bore and rim. The two crops use the same cached Boolean result, camera and lights. The viewport toggle test switches on flat shading and then restores the original smooth pixels.

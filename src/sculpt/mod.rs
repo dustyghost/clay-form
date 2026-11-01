@@ -57,6 +57,7 @@ mod slice_path;
 pub use slice::{SliceMode, SliceOptions, SlicePlane};
 pub use slice_path::SlicePath;
 mod shading;
+pub use shading::ShadingSeams;
 pub(crate) use shading::{SurfaceShading, SurfaceShadingTopology};
 
 #[cfg(test)]

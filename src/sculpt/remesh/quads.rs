@@ -121,7 +121,14 @@ pub(super) fn extract(
     field: &[f32],
     cancelled: &dyn Fn() -> bool,
 ) -> Result<Mesh, String> {
-    extract_with(grid, field, cancelled, false, |center, _, _| center)
+    extract_with(
+        grid,
+        field,
+        cancelled,
+        false,
+        |center, _, _| center,
+        |_, _, _| {},
+    )
 }
 
 pub(super) fn extract_with(
@@ -130,6 +137,7 @@ pub(super) fn extract_with(
     cancelled: &dyn Fn() -> bool,
     triangulate: bool,
     place_vertex: impl Fn(Vec3, &[(usize, usize)], Vec3) -> Vec3,
+    mut record_face: impl FnMut(usize, usize, [usize; 4]),
 ) -> Result<Mesh, String> {
     let [nx, ny, nz] = grid.dims;
     let mut cells = vec![usize::MAX; field.len()];
@@ -246,18 +254,30 @@ pub(super) fn extract_with(
                     if field[start] >= 0. {
                         q.reverse();
                     }
-                    let valid_diagonal = |q: [usize; 4]| {
-                        let [a, b, c, d] = q.map(|i| mesh.vertices[i]);
+                    let alignment = |corners: [usize; 4]| {
+                        let [a, b, c, d] = corners.map(|i| mesh.vertices[i]);
                         let n0 = (b - a).cross(c - a);
                         let n1 = (c - a).cross(d - a);
-                        n0.len().min(n1.len()) >= grid.step * grid.step * 1e-8 && n0.dot(n1) > 0.
+                        let (l0, l1) = (n0.len(), n1.len());
+                        if l0.min(l1) < grid.step * grid.step * 1e-8 {
+                            return 0.;
+                        }
+                        let dot = n0.dot(n1);
+                        if triangulate { dot / (l0 * l1) } else { dot }
                     };
-                    let valid = valid_diagonal(q)
-                        || (triangulate && {
-                            q.rotate_left(1);
-                            valid_diagonal(q)
-                        });
-                    if valid {
+                    let mut score = alignment(q);
+                    // A sliver along a fitted rim can tilt far enough to join the
+                    // cap and wall smoothing fans. Prefer the flatter triangle pair.
+                    if triangulate && score < 0.9999 {
+                        let [a, b, c, d] = q;
+                        let other = [b, c, d, a];
+                        let alternative = alignment(other);
+                        if alternative > score {
+                            q = other;
+                            score = alternative;
+                        }
+                    }
+                    if score > 0. {
                         if !triangulate {
                             mesh.quads.push(q);
                         }
@@ -281,6 +301,7 @@ pub(super) fn extract_with(
                     } else {
                         return Err("Quad remesh would create folded or degenerate faces. Increase Resolution or choose Triangles; the original model is unchanged.".into());
                     }
+                    record_face(start, end, q);
                     if mesh.triangles.len() > max_triangles() {
                         return Err(
                             "Quad remesh exceeds mesh limits; choose a lower resolution".into()

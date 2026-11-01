@@ -90,6 +90,7 @@ mod tests {
         let mesh = Mesh {
             uv: Default::default(),
             creases: Vec::new(),
+            shading_seams: None,
             vertices,
             triangles: vec![[0, 1, 2]],
             quads: vec![],

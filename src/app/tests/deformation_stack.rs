@@ -178,6 +178,61 @@ fn boolean_stack_bore_keeps_a_sharp_rim_at_preview_resolution() {
 }
 
 #[test]
+fn boolean_stack_smooth_shading_respects_caps_walls_and_shallow_joins() {
+    let mut doc = Document::default();
+    doc.replace_geometry(boolean_fixture()).unwrap();
+    let mesh =
+        crate::sculpt::boolean::evaluate(&doc.boolean_operands().unwrap(), 48, &|| false).unwrap();
+    let shading = mesh.surface_shading();
+    let mut flat_faces = [0; 3];
+    let mut curved_faces = [0; 2];
+    for (triangle, fans) in mesh.triangles.iter().zip(&shading.triangles) {
+        let [a, b, c] = triangle.map(|v| mesh.vertices[v]);
+        let center = (a + b + c) * (1. / 3.);
+        let face = (b - a).cross(c - a).norm();
+        let normals = fans.map(|v| shading.vertices[v].1);
+        // Check both sides of the boss cap, the body front/back, and its shallow
+        // junction with the boss along the upper/lower face of the block.
+        for (i, (distance, normal)) in [
+            (center.2.abs() - 0.375, Vec3(0., 0., center.2.signum())),
+            (center.2.abs() - 0.21, Vec3(0., 0., center.2.signum())),
+            (center.1.abs() - 0.55, Vec3(0., center.1.signum(), 0.)),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            if distance.abs() < 0.001 && face.dot(normal) > 0.9998 {
+                assert!(
+                    normals
+                        .iter()
+                        .all(|n| n.dot(normal) > 2_f32.to_radians().cos()),
+                    "tilted lighting normal on flat face at {center:?}"
+                );
+                flat_faces[i] += 1;
+            }
+        }
+        // Lighting must interpolate around both cylinders in smooth view.
+        if (0.24..0.34).contains(&center.2.abs()) && face.2.abs() < 0.02 {
+            let radius = (center.0 + 0.6).hypot(center.1);
+            for (i, (r, sign)) in [(0.71, 1.), (0.30, -1.)].into_iter().enumerate() {
+                if (radius - r).abs() >= 0.01 {
+                    continue;
+                }
+                for (v, n) in [a, b, c].into_iter().zip(normals) {
+                    let radial = Vec3(v.0 + 0.6, v.1, 0.).norm() * sign;
+                    assert!(n.dot(radial) > 4_f32.to_radians().cos());
+                }
+                if normals[0].dot(normals[1]) < 1_f32.to_radians().cos() {
+                    curved_faces[i] += 1;
+                }
+            }
+        }
+    }
+    assert!(flat_faces.iter().all(|&count| count > 100));
+    assert!(curved_faces.iter().all(|&count| count > 100));
+}
+
+#[test]
 fn boolean_stack_live_result_refresh_and_picking() {
     let mut app = App::default();
     let ctx = egui::Context::default();

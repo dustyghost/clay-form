@@ -46,6 +46,7 @@ struct StrokeSurfaceTopology {
     hidden_faces: Vec<bool>,
     polygroups: Vec<usize>,
     group_visibility: Vec<bool>,
+    shading_seams: Option<Arc<crate::sculpt::ShadingSeams>>,
     shading: SurfaceShadingTopology,
     normal_corners: OnceLock<Option<live_normals::VertexCorners>>,
 }
@@ -54,6 +55,7 @@ impl StrokeSurfaceTopology {
         self.model_id == model_id
             && self.triangles == mesh.triangles
             && self.quads == mesh.quads
+            && self.shading_seams == mesh.shading_seams
             && self.hidden_faces == mesh.hidden_faces
             && self.polygroups == mesh.polygroups
             && self
@@ -371,6 +373,7 @@ impl DisplayMesh {
         let mut mesh = Mesh {
             uv: Default::default(),
             creases: Vec::new(),
+            shading_seams: None,
             materials: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
@@ -650,6 +653,7 @@ impl DisplayMesh {
                         hidden_faces: surface.hidden_faces.clone(),
                         polygroups: surface.polygroups.clone(),
                         group_visibility: surface.vertex_groups.iter().map(|g| g.visible).collect(),
+                        shading_seams: surface.shading_seams.clone(),
                         shading: topology,
                         normal_corners: OnceLock::new(),
                     }),

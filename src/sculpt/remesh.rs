@@ -314,6 +314,7 @@ impl Grid {
         let mut mesh = Mesh {
             uv: Default::default(),
             creases: Vec::new(),
+            shading_seams: None,
             materials: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
@@ -438,6 +439,7 @@ mod tests {
         Mesh {
             uv: Default::default(),
             creases: Vec::new(),
+            shading_seams: None,
             materials: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),

@@ -65,12 +65,36 @@ pub(crate) fn evaluate(
         return Ok(Mesh::default());
     }
     let planes = surface_crossings(&grid, &field, &owners, operands, cancel)?;
-    let fitted = super::quads::extract_with(&grid, &field, cancel, true, |center, edges, low| {
-        fit_contour(&planes, center, edges, low, grid.step)
-    });
+    let mut pending = HashMap::<[usize; 2], Plane>::new();
+    let mut seams = Vec::new();
+    let fitted = super::quads::extract_with(
+        &grid,
+        &field,
+        cancel,
+        true,
+        |center, edges, low| fit_contour(&planes, center, edges, low, grid.step),
+        |start, end, corners| {
+            let Some(&(_, plane)) = planes.get(&(start, end)) else {
+                return;
+            };
+            for i in 0..4 {
+                let edge = crate::sculpt::uv::edge(corners[i], corners[(i + 1) % 4]);
+                if let Some(other) = pending.remove(&edge) {
+                    if plane.shading_boundary(other) {
+                        seams.push(edge);
+                    }
+                } else {
+                    pending.insert(edge, plane);
+                }
+            }
+        },
+    );
+    drop(pending);
+    drop(planes);
     // Singular saddle cells can require the tetrahedral representation.
-    match fitted.and_then(|mesh| {
+    match fitted.and_then(|mut mesh| {
         mesh.validate_closed()?;
+        mesh.set_shading_seams(seams);
         Ok(mesh)
     }) {
         Ok(mesh) => Ok(mesh),
@@ -87,6 +111,20 @@ pub(crate) fn evaluate(
 struct Plane {
     normal: Vec3,
     offset: f32,
+    owner: u8,
+}
+
+impl Plane {
+    fn shading_boundary(self, other: Self) -> bool {
+        // Keep neighboring facets of a single curved operand smooth. At an
+        // intersection, even a shallow change of surface can form a real rim.
+        let threshold = if self.owner == other.owner {
+            0.5
+        } else {
+            5_f32.to_radians().cos()
+        };
+        self.normal.dot(other.normal) < threshold
+    }
 }
 
 type Crossings = HashMap<(usize, usize), (f32, Plane)>;
@@ -112,6 +150,7 @@ fn surface_crossings(
             let plane = Plane {
                 normal,
                 offset: normal.dot(a),
+                owner: owner as u8,
             };
             let [a, b, c] = world.map(|p| {
                 let v = (p - grid.origin) * (1. / grid.step);
@@ -159,6 +198,17 @@ fn surface_crossings(
                         }
                         let guess = field[start] / (field[start] - field[end]);
                         let error = (hit.fract() - guess).abs();
+                        // Orient the source plane toward the outside of the result,
+                        // including subtraction and inward-wound source meshes.
+                        let plane = if (det > 0.) == (field[start] < 0.) {
+                            plane
+                        } else {
+                            Plane {
+                                normal: plane.normal * -1.,
+                                offset: -plane.offset,
+                                ..plane
+                            }
+                        };
                         let entry = cuts.entry((start, end)).or_insert((error, plane));
                         if error < entry.0 {
                             *entry = (error, plane);

@@ -98,6 +98,19 @@ fn boolean_stack_order_move_visibility_bake_undo_and_roundtrip() {
     assert!(d.model(0).unwrap().metadata.visible);
     assert!((1..4).all(|i| !d.model(i).unwrap().metadata.visible));
     d.mesh().validate_closed().unwrap();
+    assert!(d.mesh().shading_seams.is_some());
+    loaded
+        .replace_project(
+            serde_json::from_slice(&serde_json::to_vec(&d.project()).unwrap()).unwrap(),
+            "baked.clay",
+        )
+        .unwrap();
+    assert_eq!(loaded.mesh(), &preview);
+    assert_eq!(
+        loaded.mesh().surface_shading().vertices,
+        preview.surface_shading().vertices
+    );
+    assert!(loaded.mesh().remesh(16).unwrap().shading_seams.is_none());
     d.undo();
     assert_eq!(d.geometry_snapshot(), before);
 }
