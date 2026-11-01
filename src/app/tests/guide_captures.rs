@@ -66,6 +66,11 @@ fn reusable_models_offscreen_review() {
     g.app
         .dispatch(Command::Instances(C::Preview(Box::new(set))), &g.ctx);
     g.save("01-array-preview");
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(s, _)| s == "Editing · Array #1 · 12 visible copies")
+    );
     click_guide_label(&mut g, "Apply instances");
     assert!(
         !g.app.document.instance_preview_active(),
@@ -84,10 +89,58 @@ fn reusable_models_offscreen_review() {
     click_guide_label(&mut g, "Copy 1 (hidden)");
     assert_eq!(g.app.document.selected_instance, Some((1, 0)));
     click_guide_label(&mut g, "Edit selected copy…");
+    g.frame(vec![]);
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(s, _)| s == "Editing · Array #1 · Copy 1 · Hidden")
+    );
     click_guide_label(&mut g, "Show this copy");
-    click_guide_label(&mut g, "Apply instances");
+    g.save("edit-one-placement");
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(s, _)| s == "Editing · Array #1 · Copy 1")
+    );
+    assert!(!g.text_positions.iter().any(|(s, _)| s == "Add layer"));
+    click_guide_label(&mut g, "Apply placement");
     assert_eq!(g.app.document.instance_placements().unwrap().len(), 12);
     g.save("02-linked-array");
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(s, _)| s == "Selected · Array #1 · Copy 1")
+    );
+    click_guide_label(&mut g, "Edit selected copy…");
+    g.frame(vec![]);
+    let before = g.app.document.instance_placements().unwrap();
+    let x = g
+        .text_positions
+        .iter()
+        .find(|(s, _)| s.starts_with("X "))
+        .unwrap()
+        .1;
+    let end = x - Vec2::new(16., 0.);
+    g.frame(vec![egui::Event::PointerMoved(x), primary_event(x, true)]);
+    g.frame(vec![egui::Event::PointerMoved(end)]);
+    g.frame(vec![egui::Event::PointerMoved(end - Vec2::new(6., 0.))]);
+    g.frame(vec![primary_event(end, false)]);
+    let moved = g.app.document.instance_placements().unwrap();
+    assert_ne!(
+        moved[0], before[0],
+        "Move X previews the selected placement"
+    );
+    assert_eq!(moved[1..], before[1..]);
+    click_guide_label(&mut g, "Cancel preview");
+    assert_eq!(g.app.document.instance_placements().unwrap(), before);
+    click_guide_label(&mut g, "Edit array…");
+    g.save("edit-whole-array");
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(s, _)| s == "Editing · Array #1 · 12 visible copies")
+    );
+    click_guide_label(&mut g, "Cancel preview");
     g.app.dispatch(Command::Instances(C::Remove(1)), &g.ctx);
     g.app
         .document

@@ -360,12 +360,13 @@ impl<'a> ArrayResolver<'a> {
     }
 }
 impl Library {
-    pub fn ensure_array_unreferenced(&self, id: u64) -> Result<(), String> {
-        if self
-            .sets
+    pub fn array_is_repeated(&self, id: u64) -> bool {
+        self.sets
             .iter()
-            .any(|s| matches!(&s.layout,Layout::Array(a) if a.source_array==Some(id)))
-        {
+            .any(|s| matches!(&s.layout, Layout::Array(a) if a.source_array == Some(id)))
+    }
+    pub fn ensure_array_unreferenced(&self, id: u64) -> Result<(), String> {
+        if self.array_is_repeated(id) {
             return Err(
                 "Other arrays use this source. Bake or remove those linked arrays first".into(),
             );

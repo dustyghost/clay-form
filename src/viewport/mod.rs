@@ -18,6 +18,7 @@ mod projection;
 pub(crate) use gpu::ui_capture::UiCapture;
 mod guided;
 mod guides;
+pub(crate) mod instances;
 mod navigation;
 mod path_follow;
 pub(crate) mod path_thickness;
@@ -78,6 +79,7 @@ pub(crate) struct Viewport {
 }
 #[derive(Clone, Copy)]
 pub(crate) struct ViewportOptions {
+    pub instance_editor: Option<u64>,
     pub edge_select: bool,
     pub modeling: Option<ModelingOptions>,
     pub arrange_references: bool,
@@ -290,43 +292,7 @@ impl Viewport {
             renderer.set_backfaces(options.backface_opacity);
             renderer.set_polygroups(options.show_polygroups);
         }
-        if let Some((set, slot)) = document.selected_instance
-            && let Ok(placements) = document.instance_placements()
-            && let Some((_, _, placement)) = placements
-                .iter()
-                .find(|(id, i, _)| *id == set && *i == slot)
-            && let Some(mesh) = placements
-                .meshes
-                .get(&(set, slot))
-                .map(|m| m.as_ref())
-                .or_else(|| document.instance_source(placement.piece.source))
-        {
-            for (face, tri) in mesh
-                .triangles
-                .iter()
-                .enumerate()
-                .step_by((mesh.triangles.len() / 300).max(1))
-            {
-                if !mesh.face_visible(face) {
-                    continue;
-                }
-                let p = tri.map(|i| {
-                    if placements.meshes.contains_key(&(set, slot)) {
-                        mesh.vertices[i]
-                    } else {
-                        placement.point(mesh.vertices[i])
-                    }
-                });
-                for (a, b) in [(0, 1), (1, 2), (2, 0)] {
-                    if let Some(line) = scene.clip_segment([p[a], p[b]]) {
-                        painter.line_segment(
-                            line,
-                            egui::Stroke::new(1_f32, Color32::from_rgb(75, 225, 200)),
-                        );
-                    }
-                }
-            }
-        }
+        instances::paint(&scene, &painter, document, options.instance_editor);
         if let Some(brush) = &self.size_preview {
             let position = self
                 .last_brush_position

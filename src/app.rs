@@ -472,6 +472,7 @@ impl App {
             &mut self.document,
             &mut self.camera,
             ViewportOptions {
+                instance_editor: self.ui.instances.editor.as_ref().map(|s| s.id),
                 edge_select: self.ui.edges.selecting
                     && !temporary_visibility
                     && !self.ui.mask_active,

@@ -1,4 +1,5 @@
 use super::*;
+use crate::viewport::instances::{COPY_COLOR, SET_COLOR};
 use crate::{
     command::InstanceCommand as C,
     sculpt::{Vec3, instances::*},
@@ -93,20 +94,22 @@ fn axes(ui: &mut egui::Ui, forward: &mut usize, up: &mut usize) -> bool {
     });
     before != (*forward, *up)
 }
-fn choose_piece(ui: &mut egui::Ui, label: &str, piece: &mut Piece, document: &Document) -> bool {
-    let before = *piece;
-    let selected = match piece.source {
+fn source_name(document: &Document, source: Source) -> Option<&str> {
+    match source {
         Source::Model(id) => (0..document.model_count())
             .find(|&i| document.instance_model_id(i) == id)
-            .map(|i| document.model(i).unwrap().name.to_owned()),
+            .and_then(|i| document.model(i).map(|m| m.name)),
         Source::Asset(id) => document
             .instances()
             .assets
             .iter()
             .find(|a| a.id == id)
-            .map(|a| a.name.clone()),
+            .map(|a| a.name.as_str()),
     }
-    .unwrap_or_else(|| "Missing source".into());
+}
+fn choose_piece(ui: &mut egui::Ui, label: &str, piece: &mut Piece, document: &Document) -> bool {
+    let before = *piece;
+    let selected = source_name(document, piece.source).unwrap_or("Missing source");
     egui::ComboBox::from_id_salt(label)
         .selected_text(format!("{label}: {selected}"))
         .show_ui(ui, |ui| {
@@ -196,25 +199,57 @@ impl UiState {
         }
         if let Some(set) = &mut self.instances.editor {
             let before = set.clone();
-            ui.label("Preview · Apply saves one undo step");
+            let copy = document
+                .selected_instance
+                .filter(|(id, _)| *id == set.id && !set.joined())
+                .map(|(_, slot)| slot);
+            let color = if copy.is_some() {
+                COPY_COLOR
+            } else {
+                SET_COLOR
+            };
+            ui.colored_label(color, egui::RichText::new(set.target_name(copy)).strong());
+            if copy.is_some() {
+                ui.label("Edit placement · Move, rotate, resize or hide the gold-framed copy.");
+            } else {
+                ui.label(match &set.layout {
+                    Layout::Array(_) => "Edit whole array · Change the count, spacing or layout of the blue-framed copies.",
+                    Layout::Path(_) => "Edit path assembly · Change the route, pieces or how they fit together.",
+                    Layout::Manual(_) => "Edit whole stroke · Rename it or show and hide all its copies together.",
+                });
+            }
+            if document.instances().array_is_repeated(set.id) {
+                ui.weak("Arrays that repeat this set also inherit these changes.");
+            }
             let (apply, cancel) = ui
                 .horizontal(|ui| {
                     (
                         ui.add_enabled(
                             !self.instances.invalid,
-                            egui::Button::new("Apply instances"),
+                            egui::Button::new(if copy.is_some() {
+                                "Apply placement"
+                            } else {
+                                "Apply instances"
+                            }),
                         )
                         .clicked(),
                         ui.button("Cancel preview").clicked(),
                     )
                 })
                 .inner;
-            if let Some((_, slot)) = document
-                .selected_instance
-                .filter(|(id, _)| *id == set.id && !set.joined())
-            {
+            if let Some(slot) = copy {
                 ui.separator();
-                ui.strong(format!("Editing copy {} of {}", slot + 1, set.name));
+                let source = document.instance_placements().ok().and_then(|placements| {
+                    placements
+                        .iter()
+                        .find(|(id, n, _)| (*id, *n) == (set.id, slot))
+                        .map(|(_, _, p)| p.piece.source)
+                });
+                if let Some(name) = source.and_then(|source| source_name(document, source)) {
+                    ui.label(format!("Linked shape · {name}"));
+                } else {
+                    ui.label("Shape stays linked to its source.");
+                }
                 let mut adjustment = set
                     .adjustments
                     .iter()
@@ -224,6 +259,11 @@ impl UiState {
                 let old = adjustment.clone();
                 let a = &mut adjustment;
                 ui.checkbox(&mut a.visible, "Show this copy");
+                if !set.visible {
+                    ui.weak("This whole set is hidden. Enable Show instances in the set editor to see the copy.");
+                } else if !a.visible {
+                    ui.weak("Enable Show this copy to see its placement.");
+                }
                 vector(ui, "Move", &mut a.offset);
                 vector(ui, "Rotate °", &mut a.rotation);
                 ui.add(
@@ -236,7 +276,7 @@ impl UiState {
                     vector(ui, "Scale on X / Y / Z", &mut a.axis_scale);
                 }
                 ui.weak(
-                    "Apply saves these changes to this copy. Other copies keep their settings.",
+                    "Drag a value to preview it. Apply placement keeps the edit. To sculpt this copy separately, choose Make independent in the Copies list.",
                 );
                 if old != adjustment {
                     if let Some(a) = set.adjustments.iter_mut().find(|a| a.slot == slot) {
@@ -246,7 +286,6 @@ impl UiState {
                     }
                 }
             } else {
-                ui.strong("Editing the whole set");
                 ui.text_edit_singleline(&mut set.name);
                 ui.checkbox(&mut set.visible, "Show instances");
                 match &mut set.layout {
@@ -387,19 +426,18 @@ impl UiState {
                     commands.push(Command::Instances(C::NewPath));
                 }
             });
-            if let Some((id, slot)) = document.selected_instance {
-                let joined = document
-                    .instances()
-                    .sets
-                    .iter()
-                    .any(|s| s.id == id && s.joined());
+            if let Some((id, slot)) = document.selected_instance
+                && let Some(set) = document.instances().sets.iter().find(|s| s.id == id)
+            {
+                let joined = set.joined();
+                ui.colored_label(
+                    if joined { SET_COLOR } else { COPY_COLOR },
+                    egui::RichText::new(set.target_name(Some(slot))).strong(),
+                );
                 if joined {
-                    ui.label("Joined assembly selected · edit its path and connection settings");
+                    ui.label("Joined assembly selected · edit its path and connections.");
                 } else {
-                    ui.label(format!(
-                        "Copy {} selected · Edit its position, rotation, scale or visibility",
-                        slot + 1
-                    ));
+                    ui.label("Edit this placement to move, rotate, size or hide the copy.");
                 }
                 if ui
                     .button(if joined {
@@ -502,7 +540,7 @@ fn instance_set(
     commands: &mut Vec<Command>,
 ) {
     ui.separator();
-    ui.strong(&set.name);
+    ui.strong(set.target_name(None));
     ui.horizontal_wrapped(|ui| {
         let edit_label = match set.layout {
             Layout::Array(_) => "Edit array…",

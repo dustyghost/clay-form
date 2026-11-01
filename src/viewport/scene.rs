@@ -22,6 +22,7 @@ pub(super) struct Scene {
     pub(super) rect: egui::Rect,
     pub(super) active_bounds: egui::Rect,
     positions: Arc<Vec<Pos2>>,
+    instance_bounds: Arc<OnceLock<Vec<OnceLock<egui::Rect>>>>,
     pub(super) geometry: Arc<DisplayMesh>,
     // None borrows all_faces when every displayed vertex belongs to the active model.
     active_faces: Option<Arc<Vec<(usize, f32)>>>,
@@ -284,6 +285,7 @@ impl Scene {
             scale,
             eye_distance,
             positions: Arc::new(positions),
+            instance_bounds: Arc::default(),
             geometry: geometry.clone(),
             active_faces,
             all_faces: Arc::new(faces),
@@ -295,6 +297,43 @@ impl Scene {
             right,
             up,
         }
+    }
+    // Instance owners follow all submodels and are appended in placement order.
+    pub(super) fn instance_faces(&self, owner: usize) -> &[[usize; 3]] {
+        let owners = &self.geometry.owners;
+        let first = owners.partition_point(|&n| n < owner);
+        let end = owners.partition_point(|&n| n <= owner);
+        &self.geometry.mesh.triangles[first..end]
+    }
+    /// Cache only requested frames. Selecting one copy of a dense array visits just its visible faces.
+    pub(super) fn instance_bounds(&self, owner: usize) -> egui::Rect {
+        let entries = self.instance_bounds.get_or_init(|| {
+            let count = self.geometry.owners.last().map_or(0, |&n| n + 1);
+            (0..count).map(|_| OnceLock::new()).collect()
+        });
+        let Some(entry) = entries.get(owner) else {
+            return egui::Rect::NOTHING;
+        };
+        *entry.get_or_init(|| {
+            let mut rect = egui::Rect::NOTHING;
+            let vertices = &self.geometry.mesh.vertices;
+            for tri in self.instance_faces(owner) {
+                if self.eye_distance == 0. || tri.iter().all(|&i| self.visible_depth(vertices[i])) {
+                    for &i in tri {
+                        rect.extend_with(self.positions[i]);
+                    }
+                } else {
+                    let points = tri.map(|i| vertices[i]);
+                    for (a, b) in [(0, 1), (1, 2), (2, 0)] {
+                        if let Some([a, b]) = self.clip_segment([points[a], points[b]]) {
+                            rect.extend_with(a);
+                            rect.extend_with(b);
+                        }
+                    }
+                }
+            }
+            rect
+        })
     }
     pub(super) fn active_faces(&self) -> &[(usize, f32)] {
         self.active_faces
@@ -1066,6 +1105,8 @@ mod tests {
         assert_eq!(hit.0, 128);
         assert!(doc.select_instance_owner(hit.0));
         assert_eq!(doc.selected_instance, Some((1, 127)));
+        assert!(view.instance_bounds(hit.0).contains(point));
+        assert!(!view.instance_bounds(hit.0 - 1).contains(point));
         assert!(doc.project().submodels.is_empty());
         eprintln!(
             "128 instances: {source_faces} source triangles, {} display triangles, {bytes} saved bytes, prepare {prepared:?}, cold pick {cold:?}",

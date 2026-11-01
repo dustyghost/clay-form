@@ -394,6 +394,15 @@ pub struct Set {
     pub adjustments: Vec<Adjustment>,
 }
 impl Set {
+    /// Include the stable set number because several arrays or strokes can share a name.
+    pub(crate) fn target_name(&self, slot: Option<usize>) -> String {
+        let name = format!("{} #{}", self.name, self.id);
+        match slot {
+            Some(slot) if !self.joined() => format!("{name} · Copy {}", slot + 1),
+            _ => name,
+        }
+    }
+
     pub fn placements(&self, paths: &[SurfacePath]) -> Result<Vec<(usize, Placement)>, String> {
         if let Layout::Array(a) = &self.layout {
             return Ok(arrays::numbered(self.adjust_slots(a.unlinked_slots()?)?));
