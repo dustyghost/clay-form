@@ -143,8 +143,17 @@ fn reusable_path_bend_join_offscreen_review() {
         "graph drag changes the same profile as the inline handles"
     );
     let count = a.thickness.points.len();
+    // The expanded profile can extend below the sidebar's visible area.
+    reach_sidebar_control(&mut g, "Add point");
     g.save("12-thickness-profile-panel");
     click_guide_label(&mut g, "Add point");
+    let crate::sculpt::instances::Layout::Path(a) =
+        &g.app.ui.instances.editor.as_ref().unwrap().layout
+    else {
+        unreachable!()
+    };
+    assert_eq!(a.thickness.points.len(), count + 1);
+    reach_sidebar_control(&mut g, "Remove point");
     click_guide_label(&mut g, "Remove point");
     let crate::sculpt::instances::Layout::Path(a) =
         &g.app.ui.instances.editor.as_ref().unwrap().layout
@@ -152,9 +161,12 @@ fn reusable_path_bend_join_offscreen_review() {
         unreachable!()
     };
     assert_eq!(a.thickness.points.len(), count);
+    reach_sidebar_control(&mut g, "Inline thickness handles");
     click_guide_label(&mut g, "Inline thickness handles");
     g.save("12-thickness-profile-panel");
+    reach_sidebar_control(&mut g, "Thickness along path");
     click_guide_label(&mut g, "Thickness along path");
+    reach_sidebar_control(&mut g, "Apply instances");
     click_guide_label(&mut g, "Apply instances");
     assert!(
         !g.app.document.instance_preview_active(),
