@@ -140,8 +140,5 @@ impl UiState {
             response.header_response.scroll_to_me(None);
         }
         self.primitive_controls_requested = false;
-        if !ui.input(|i| i.pointer.primary_down()) {
-            commands.push(Command::EndPrimitiveEdit);
-        }
     }
 }

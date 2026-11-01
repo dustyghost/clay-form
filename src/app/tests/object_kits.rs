@@ -229,5 +229,70 @@ fn object_kit_library_and_strokes_offscreen_review() {
     assert_eq!(library.assets[1].up, 1);
     assert_eq!(library.assets[1].options.spacing, 0.27);
     assert!(library.sets.is_empty());
+    check_primitive_handles(&mut g);
     std::fs::remove_dir_all(personal).unwrap();
+}
+
+fn check_primitive_handles(g: &mut Guide) {
+    let populated = g.app.ui.instances.group.unwrap();
+    g.app
+        .dispatch(Command::Action(Action::NewBrush("Object".into())), &g.ctx);
+    g.app.dispatch(Command::RequestPrimitive, &g.ctx);
+    g.app.dispatch(Command::ConfirmPrimitive, &g.ctx);
+    let cone = Primitive::for_kind(PrimitiveKind::Cone);
+    g.app.dispatch(Command::UpdatePrimitive(cone), &g.ctx);
+    g.app.camera = Default::default();
+    g.frame(vec![]);
+    let (rect, _) = g.frame(vec![]);
+    let scale = rect.width().min(rect.height()) * 0.35;
+
+    // An empty brush and a brush containing models must both yield to a shape handle.
+    for group in [g.app.ui.instances.group.unwrap(), populated] {
+        g.app.dispatch(
+            Command::Instances(crate::command::InstanceCommand::ChooseBrush(group)),
+            &g.ctx,
+        );
+        let radius = g.app.document.primitive().unwrap().top_radius;
+        g.frame(vec![egui::Event::PointerMoved(rect.center())]);
+        assert!(
+            g.text_positions
+                .iter()
+                .any(|(text, _)| text.starts_with("Sides · ")),
+            "primitive controls must remain visible over the surface"
+        );
+        let handle = rect.center() + egui::vec2(radius * scale + 16., -scale);
+        g.frame(vec![egui::Event::PointerMoved(handle)]);
+        assert!(
+            g.text_positions
+                .iter()
+                .any(|(text, pos)| text == "Top radius" && rect.contains(*pos))
+        );
+        g.frame(vec![primary_event(handle, true)]);
+        let end = handle + egui::vec2(28., 0.);
+        g.frame(vec![egui::Event::PointerMoved(end)]);
+        g.frame(vec![primary_event(end, false)]);
+        assert!(g.app.document.primitive().unwrap().top_radius > radius);
+        assert!(g.app.document.instances().sets.is_empty());
+        assert_eq!(g.app.ui.instances.group, Some(group));
+    }
+    g.save("object-brush-cone-handles");
+    // A stroke that starts on the surface owns its release, even over a handle.
+    let radius = g.app.document.primitive().unwrap().top_radius;
+    let handle = rect.center() + egui::vec2(radius * scale + 16., -scale);
+    g.frame(vec![
+        egui::Event::PointerMoved(rect.center()),
+        primary_event(rect.center(), true),
+        egui::Event::PointerMoved(handle),
+        primary_event(handle, false),
+    ]);
+    assert_eq!(g.app.document.instances().sets.len(), 1);
+    assert_eq!(g.app.document.primitive().unwrap().top_radius, radius);
+
+    let previous = g.app.ui.status.clone();
+    g.app.ui.diagnostics_open = true;
+    g.frame(vec![]);
+    assert_eq!(
+        g.app.ui.status, previous,
+        "idle primitive controls changed the status while a dialog was open"
+    );
 }

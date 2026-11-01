@@ -502,8 +502,18 @@ impl Viewport {
             self.session.gesture = Some(Gesture::Orbit);
         }
         if self.update_objects(
-            ui, &response, &painter, &scene, document, options, gizmo_rect,
+            ui,
+            &response,
+            &painter,
+            &scene,
+            document,
+            options,
+            gizmo_rect,
+            frame_start,
         ) {
+            self.session
+                .primitive
+                .paint(document, &scene, &painter, response.hover_pos());
             draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
             return;
         }
@@ -946,13 +956,6 @@ impl Viewport {
                 .primitive
                 .paint(document, &scene, &painter, pointer);
             draw_gizmo(camera, &painter, gizmo_rect, pointer);
-            painter.text(
-                navigation::inner(rect).left_bottom() + Vec2::new(8., -8.),
-                egui::Align2::LEFT_BOTTOM,
-                "Primitive · teal: shape · axis-colored diamonds: spans (drag left / right) · convert to sculpt",
-                egui::FontId::proportional(13.),
-                controls::NEUTRAL,
-            );
             return;
         }
         if stencil.is_some() && matches!(brush.kind, Kind::Grab | Kind::Snake | Kind::Detail) {

@@ -169,6 +169,7 @@ impl Viewport {
         document: &mut Document,
         options: ViewportOptions,
         gizmo: egui::Rect,
+        primary_press: Option<Pos2>,
     ) -> bool {
         let Some(mut brush) = self.object_brush.take() else {
             return false;
@@ -213,7 +214,12 @@ impl Viewport {
             self.object_brush = Some(brush);
             return false;
         }
-        if navigation {
+        // The initial press owns the entire drag, even when it crosses a handle.
+        let primitive_handle = !brush.stroking()
+            && primary_press
+                .or_else(|| response.hover_pos())
+                .is_some_and(|p| self.session.primitive.can_drag(document, scene, p));
+        if navigation || primitive_handle {
             if brush.stroke.is_some() {
                 brush.cancel(document);
             }

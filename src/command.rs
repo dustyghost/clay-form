@@ -102,7 +102,6 @@ pub(crate) enum Command {
     ConfirmPrimitive,
     CancelPrimitive,
     UpdatePrimitive(crate::sculpt::Primitive),
-    EndPrimitiveEdit,
     ConvertPrimitive,
     SelectSubmodel(usize),
     EditSubmodel(usize, String, crate::sculpt::ModelMetadata),

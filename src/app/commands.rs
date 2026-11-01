@@ -540,10 +540,6 @@ impl App {
                 }
             }
             Command::UpdatePrimitive(primitive) => self.document.update_primitive(primitive),
-            Command::EndPrimitiveEdit => {
-                self.document.end_primitive_edit();
-                Ok(())
-            }
             Command::ConvertPrimitive => {
                 self.viewport.cancel(&mut self.document);
                 self.document.convert_primitive().map(|()| {
