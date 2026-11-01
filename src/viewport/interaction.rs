@@ -15,6 +15,7 @@ pub(crate) struct InteractionSession {
     pub(super) stencil_overlay: stencil::Overlay,
     pub(crate) projection_preview: Option<std::sync::Arc<crate::sculpt::Mesh>>,
     pub(crate) projection_mode: bool,
+    pub(crate) retopology_guides: Option<crate::sculpt::retopology::GuideCurves>,
     pub(crate) gesture: Option<Gesture>,
     pub(super) gizmo_dragged: bool,
     pub(super) gizmo_start: Option<Pos2>,

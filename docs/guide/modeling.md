@@ -548,6 +548,18 @@ Enable **Adapt only unmasked areas** there to protect masked topology during loc
 
 Mesh operations run in the background. Cancel keeps the original surface; Undo restores prior geometry and settings. A failed remesh keeps the original model so you can adjust the settings and try again.
 
+## Guide a retopology preview
+
+Use **Mesh → Guided retopology…** to make a lower-polygon copy of a sculpt. This experimental tool accepts open or closed manifold meshes with up to 24,000 source triangles. Convert parametric primitives first, show hidden faces and use a source without UVs or textures.
+
+1. To direct edges, draw and save a **Surface** path in **Editable paths**. Open curves and closed loops both work. To keep more vertices in an area, paint that area with the **Mask** brush.
+2. Open **Guided retopology…**, set **Target polygons** and choose a path under **Edge direction**. Set **Path strength** and **Density strength** independently. Use **No guide** and zero density strength for an unguided comparison. **Mirror path influence** adds a reflected guide across world X = 0.
+3. Choose **Preview layout**. Orbit the wireframe, check the actual quad and triangle counts, and use **Hide path overlay** to inspect the edges beneath the guide. Sharp bends, creases and open boundaries can keep the result above target. Change a setting and preview again, or choose **Cancel** to discard the draft.
+4. Choose **Apply as new model**. The editable result contains interpolated vertex paint, mask and group weights. The hidden source below it keeps its paths and subdivision levels. **Undo** reverses the entire operation.
+5. To recover sculpted detail, subdivide the result if it needs more vertices, then use **Project details…** with the model below as the reference. Reduce the result's mask where vertices should move. Save the project to keep both models.
+
+[Feasibility decision, matched wireframes and measurements](../validation/guided-retopology/README.md)
+
 ## Recover detail after remeshing
 
 Keep an unchanged reference before rebuilding topology, then move the remeshed vertices back toward that surface.

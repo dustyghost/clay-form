@@ -323,6 +323,21 @@ impl Viewport {
             return;
         }
         if self.session.projection_mode {
+            if let Some(guides) = &self.session.retopology_guides {
+                for samples in guides.iter() {
+                    for pair in samples.windows(2) {
+                        if guided::front(&scene, &pair[0])
+                            && let Some(segment) =
+                                scene.clip_segment([pair[0].position, pair[1].position])
+                        {
+                            painter.line_segment(
+                                segment,
+                                egui::Stroke::new(2_f32, Color32::from_rgb(255, 187, 80)),
+                            );
+                        }
+                    }
+                }
+            }
             if options.enabled && response.hovered() {
                 camera.zoom_by(ui.input(|i| i.smooth_scroll_delta.y));
             }

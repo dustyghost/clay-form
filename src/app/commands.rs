@@ -647,6 +647,7 @@ impl App {
                 Ok(())
             }
             Command::OpenProjection => self.open_projection(),
+            Command::OpenRetopology => self.open_retopology(),
             Command::OpenRelaxation => self.open_relaxation(),
             Command::KeepProjectionReference => {
                 self.viewport.cancel(&mut self.document);

@@ -2,7 +2,7 @@
 use super::*;
 use crate::background_job::BackgroundJob;
 use crate::sculpt::{Mesh, ProjectionOptions};
-use crate::ui::SurfaceReport;
+use crate::ui::{SurfaceMode, SurfaceReport};
 use std::sync::Arc;
 
 pub(super) struct ProjectionDraft {
@@ -29,7 +29,7 @@ impl App {
         }
         self.viewport.cancel(&mut self.document);
         self.ui.projection.open = true;
-        self.ui.projection.relaxation = false;
+        self.ui.projection.mode = SurfaceMode::Projection;
         if self
             .ui
             .projection
@@ -60,7 +60,10 @@ impl App {
         if !self.ui.projection.open || self.mesh_job.is_some() {
             return Err("Open a surface preview when no mesh job is running".into());
         }
-        if self.ui.projection.relaxation {
+        if self.ui.projection.mode == SurfaceMode::Retopology {
+            return self.start_retopology();
+        }
+        if self.ui.projection.mode == SurfaceMode::Relaxation {
             return self.start_relaxation();
         }
         let source = self
@@ -131,10 +134,10 @@ impl App {
             .draft
             .take()
             .ok_or("Preview the surface edit before applying it")?;
-        let apply = if self.ui.projection.relaxation {
-            Document::apply_relaxation
-        } else {
-            Document::apply_projection
+        let apply = match self.ui.projection.mode {
+            SurfaceMode::Projection => Document::apply_projection,
+            SurfaceMode::Relaxation => Document::apply_relaxation,
+            SurfaceMode::Retopology => Document::apply_retopology,
         };
         let result = apply(
             &mut self.document,
@@ -143,18 +146,77 @@ impl App {
             Some(draft.settings),
         );
         if result.is_ok()
-            && self.ui.projection.relaxation
+            && self.ui.projection.mode == SurfaceMode::Relaxation
             && let Some((revision, _)) = &mut self.projection.reference
         {
             *revision = self.document.display_revision();
+        }
+        if result.is_ok() && self.ui.projection.mode == SurfaceMode::Retopology {
+            self.ui.projection.source = Some(crate::document::ProjectionSource::Submodel(
+                self.document.active_model_index() + 1,
+            ));
+            self.ui.status =
+                "Layout applied. The hidden model below is the detail projection reference.".into();
         }
         self.cancel_projection();
         result
     }
     pub(super) fn open_relaxation(&mut self) -> Result<(), String> {
         self.open_projection()?;
-        self.ui.projection.relaxation = true;
+        self.ui.projection.mode = SurfaceMode::Relaxation;
         self.ui.status = "Mask protected areas, then preview mesh relaxation".into();
+        Ok(())
+    }
+    pub(super) fn open_retopology(&mut self) -> Result<(), String> {
+        self.document.require_retopology_target()?;
+        self.viewport.cancel(&mut self.document);
+        let state = &mut self.ui.projection;
+        state.mode = SurfaceMode::Retopology;
+        state.open = true;
+        state.layout.target = (self.document.mesh().triangles.len() / 3).max(1);
+        state.flow_path = None;
+        Ok(())
+    }
+    fn start_retopology(&mut self) -> Result<(), String> {
+        self.document.require_retopology_target()?;
+        self.clear_projection_preview();
+        self.viewport.cancel(&mut self.document);
+        let options = self.ui.projection.layout;
+        let path = self
+            .ui
+            .projection
+            .flow_path
+            .map(|id| {
+                self.document
+                    .path(id)
+                    .filter(|p| p.target == self.document.active_model_id())
+                    .cloned()
+                    .ok_or("Select a surface path on the active model")
+            })
+            .transpose()?;
+        let mesh = self.document.mesh().clone();
+        let job = BackgroundJob::start("clay-guided-retopology", move |cancel| {
+            let layout = mesh.guided_retopology(options, path.as_ref(), &cancel)?;
+            let report = SurfaceReport::Retopology {
+                quads: layout.mesh.quads.len(),
+                polygons: layout.polygons,
+                changed: layout.mesh != mesh,
+                guides: layout.guides,
+            };
+            Ok((layout.mesh, report))
+        })?;
+        let mut settings = self.document.capture_edit_settings();
+        let view = settings
+            .view_input
+            .get_or_insert_with(|| serde_json::json!({}));
+        view["guided_retopology"] = serde_json::json!({"target":options.target,"path":self.ui.projection.flow_path,"path_strength":options.flow,"density_strength":options.density,"mirror_path_x":options.mirror_path_x,"preserve_sharp":options.preserve_sharp});
+        self.projection.worker = Some(Worker {
+            job,
+            revision: self.document.display_revision(),
+            settings,
+        });
+        self.ui.projection.busy = true;
+        self.ui.status = "Computing retopology preview…".into();
         Ok(())
     }
     fn start_relaxation(&mut self) -> Result<(), String> {

@@ -52,6 +52,7 @@ pub(crate) enum Command {
     FillAllMaterial(Brush),
     OpenProjection,
     OpenRelaxation,
+    OpenRetopology,
     KeepProjectionReference,
     PreviewProjection,
     ClearProjectionPreview,

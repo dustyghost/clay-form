@@ -412,6 +412,16 @@ impl App {
             .clone()
             .or_else(|| self.projection.draft.as_ref().map(|d| d.mesh.clone()));
         self.viewport.session.projection_mode = self.ui.projection.open;
+        let layout_preview = self.ui.projection.open
+            && self.ui.projection.mode == crate::ui::SurfaceMode::Retopology;
+        self.viewport.session.retopology_guides = match &self.ui.projection.report {
+            Some(crate::ui::SurfaceReport::Retopology { guides, .. })
+                if layout_preview && !self.ui.projection.hide_flow_guide =>
+            {
+                Some(guides.clone())
+            }
+            _ => None,
+        };
         self.viewport.session.guided.enabled =
             self.ui.guide_paths && !self.ui.mask_active && !temporary_visibility;
         self.viewport.session.guided.path_starts_only = self.ui.path_starts_only;
@@ -470,9 +480,9 @@ impl App {
                 temporary_mask: self.ui.mask_active,
                 mask_erase: self.ui.preferences.mask_preset.erase ^ ui.input(|i| i.modifiers.alt),
                 pressure: self.pressure,
-                wire: self.ui.wire,
+                wire: self.ui.wire || layout_preview,
                 wire_mode: self.ui.wire_mode,
-                wire_triangles: self.ui.wire_triangles,
+                wire_triangles: self.ui.wire_triangles && !layout_preview,
                 show_polygroups: self.ui.show_polygroups,
                 backface_opacity: if self.ui.show_backfaces {
                     self.ui.backface_opacity

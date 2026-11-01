@@ -400,6 +400,7 @@ impl App {
                 Some(Command::EditEdges(edit))
             }
             Action::ProjectDetails => Some(Command::OpenProjection),
+            Action::GuidedRetopology => Some(Command::OpenRetopology),
             Action::RelaxMesh => Some(Command::OpenRelaxation),
             Action::KeepProjectionReference => Some(Command::KeepProjectionReference),
             Action::Subdivide => Some(Command::Subdivide),
