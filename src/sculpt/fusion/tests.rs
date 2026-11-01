@@ -345,6 +345,108 @@ fn spheres(segments: [u32; 2], separation: f32) -> [Mesh; 2] {
     })
 }
 
+pub(crate) fn small_cube(center: Vec3, scale: f32) -> Mesh {
+    let mut primitive = super::super::Primitive::for_kind(super::super::PrimitiveKind::Cube);
+    primitive.divisions = [1; 3];
+    let mut mesh = primitive.mesh().unwrap();
+    for p in &mut mesh.vertices {
+        *p = *p * scale + center;
+    }
+    mesh
+}
+
+pub(crate) fn cap_tube_end(mesh: &mut Mesh, top: bool) {
+    let n = mesh.vertices.len() / 2;
+    let offset = if top { n } else { 0 };
+    let center = mesh.vertices.len();
+    mesh.vertices.push(Vec3(0., 0., mesh.vertices[offset].2));
+    mesh.mask.push(0.);
+    for i in 0..n {
+        let a = offset + i;
+        let b = offset + (i + 1) % n;
+        mesh.push_polygon(&if top { [center, a, b] } else { [center, b, a] }, 0, false);
+    }
+}
+
+#[test]
+fn fusion_culls_nested_shells_without_creating_spurious_cut_loops() {
+    let [a, b] = spheres([48, 48], 0.6);
+    let (exterior, _) = fuse(&a, &b, 1, JoinOptions::default(), &|| false).unwrap();
+    // This cube is inside A but crosses B. Its inward-facing child is two shells deep.
+    let center = Vec3(-0.7, 0.03, 0.02);
+    let cube = small_cube(center, 0.12);
+    let mut nested = small_cube(center, 0.03);
+    nested.quads.clear();
+    for triangle in &mut nested.triangles {
+        triangle.swap(1, 2);
+    }
+    let inner = merge(&cube, &nested).unwrap();
+    let mut source = merge(&a, &inner).unwrap();
+    let (joined, report) = fuse(&source, &b, 1, JoinOptions::default(), &|| false).unwrap();
+    assert_eq!(report.enclosed_faces, inner.polygons().len());
+    assert_eq!(report.joins, 1);
+    assert_eq!(compact(joined), compact(exterior));
+    source.mask[a.vertices.len()] = 1.;
+    assert!(
+        fuse(&source, &b, 1, JoinOptions::default(), &|| false)
+            .unwrap_err()
+            .contains("masked")
+    );
+}
+
+#[test]
+fn fusion_keeps_components_exposed_through_a_tunnel() {
+    let p = super::super::Primitive::for_kind(super::super::PrimitiveKind::Torus);
+    let torus = p.mesh().unwrap();
+    let exposed = merge(&torus, &small_cube(Vec3::default(), 0.04)).unwrap();
+    let mesh = merge(&exposed, &small_cube(Vec3(p.radius, 0., 0.), 0.04)).unwrap();
+    let buried = spatial::enclosed_triangles(&mesh, true, &|| false).unwrap();
+    assert!(buried[..exposed.triangles.len()].iter().all(|&b| !b));
+    assert!(buried[exposed.triangles.len()..].iter().all(|&b| b));
+}
+
+#[test]
+fn open_ends_cull_only_when_closed_and_only_inside_the_actual_surface() {
+    let inner = small_cube(Vec3::default(), 0.08);
+    // This shell is inside the joined tube's bounding box, outside its octagonal cross-section.
+    let outside = small_cube(Vec3(0.85, 0.85, 0.), 0.03);
+    for closed in [false, true] {
+        let mut a = tube(8, -1., -0.35, 1.);
+        let mut b = tube(8, 0.35, 1., 1.);
+        if closed {
+            cap_tube_end(&mut a, false);
+        }
+        cap_tube_end(&mut b, true);
+        let source = merge(&merge(&a, &b).unwrap(), &outside).unwrap();
+        let with_inside = merge(&source, &inner).unwrap();
+        let rings = boundaries(&source).unwrap();
+        let first = &rings
+            .iter()
+            .find(|r| r.center.2 < 0. && r.center.2 > -0.5)
+            .unwrap()
+            .vertices;
+        let second = &rings.iter().find(|r| r.center.2 > 0.).unwrap().vertices;
+        let (joined, report) =
+            join_open_ends(&with_inside, first, second, JoinOptions::default(), &|| {
+                false
+            })
+            .unwrap();
+        if closed {
+            let baseline =
+                bridge(&source, first, second, JoinOptions::default(), &|| false).unwrap();
+            assert_eq!(report.enclosed_faces, inner.polygons().len());
+            assert_eq!(report.retained_triangles, source.triangles.len());
+            assert_eq!(compact(joined), compact(baseline));
+        } else {
+            assert_eq!(report.enclosed_faces, 0);
+            assert_eq!(
+                &joined.triangles[..with_inside.triangles.len()],
+                with_inside.triangles
+            );
+        }
+    }
+}
+
 #[test]
 fn fusion_preserves_retained_face_attributes_through_compaction() {
     let [mut a, mut b] = spheres([48, 48], 0.6);

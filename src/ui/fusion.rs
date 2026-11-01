@@ -14,6 +14,7 @@ pub(crate) struct FusionControls {
     pub ready: bool,
     pub show_patch: bool,
     pub show_removed: bool,
+    pub has_removed_faces: bool,
     pub notice: String,
 }
 impl Default for FusionControls {
@@ -31,6 +32,7 @@ impl Default for FusionControls {
             ready: false,
             show_patch: true,
             show_removed: false,
+            has_removed_faces: false,
             notice: String::new(),
         }
     }
@@ -138,10 +140,10 @@ impl UiState {
                             });
                             if s.intersections {
                                 ui.label("Fuse overlapping closed solids with local patches.");
-                                ui.weak("Buried and crossing polygons are removed. Other source faces stay exact.");
+                                ui.weak("The join removes buried faces and fully enclosed shells.");
                             } else {
                                 ui.label("Connect two selected holes across a gap.");
-                                ui.weak("Original surfaces stay fixed. The connector adds local faces.");
+                                ui.weak("The connector adds local faces. Closed joins cull enclosed shells.");
                             }
                             for side in 0..2 {
                                 s.source_selector(ui, document, side, old.sources == s.sources);
@@ -164,7 +166,7 @@ impl UiState {
                         ui.add(egui::Label::new(&s.notice).wrap());
                         if s.ready {
                             ui.checkbox(&mut s.show_patch, "Highlight new patch");
-                            if s.intersections {
+                            if s.has_removed_faces {
                                 ui.checkbox(&mut s.show_removed, "Show removed source faces");
                             }
                         }

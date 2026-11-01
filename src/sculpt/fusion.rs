@@ -4,7 +4,7 @@ use super::{Mesh, Vec3, max_triangles, max_vertices};
 use std::collections::{BTreeMap, BTreeSet};
 mod intersection;
 mod spatial;
-pub(crate) use intersection::{FusionReport, fuse};
+pub(crate) use intersection::{FusionReport, fuse, join_open_ends};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct JoinOptions {

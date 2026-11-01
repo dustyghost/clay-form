@@ -32,6 +32,10 @@ impl Bounds {
     fn overlaps(self, other: Self) -> bool {
         (0..3).all(|i| self.low[i] <= other.high[i] && other.low[i] <= self.high[i])
     }
+    fn contains(self, other: Self) -> bool {
+        (0..3).all(|i| self.low[i] <= other.low[i] && self.high[i] >= other.high[i])
+    }
+
     fn ray(self, p: Vec3, d: Vec3) -> bool {
         let mut lo = 0_f64;
         let mut hi = f64::INFINITY;
@@ -64,9 +68,17 @@ pub(super) struct Index<'a> {
 }
 impl<'a> Index<'a> {
     pub fn new(mesh: &'a Mesh, cancel: &dyn Fn() -> bool) -> Result<Self, String> {
+        Self::from_faces(mesh, (0..mesh.triangles.len()).collect(), cancel)
+    }
+
+    pub fn from_faces(
+        mesh: &'a Mesh,
+        faces: Vec<usize>,
+        cancel: &dyn Fn() -> bool,
+    ) -> Result<Self, String> {
         let mut s = Self {
             mesh,
-            faces: (0..mesh.triangles.len()).collect(),
+            faces,
             nodes: Vec::new(),
         };
         if !s.faces.is_empty() {
@@ -141,15 +153,25 @@ impl<'a> Index<'a> {
         }
     }
     pub fn inside(&self, p: Vec3) -> Result<bool, String> {
+        let hits = self.ray_crossings(p, |_| true, |hits: &mut usize, _| *hits += 1)?;
+        Ok(hits % 2 == 1)
+    }
+
+    fn ray_crossings<T: Default>(
+        &self,
+        p: Vec3,
+        include: impl Fn(usize) -> bool,
+        record: impl Fn(&mut T, usize),
+    ) -> Result<T, String> {
         if self.nodes.is_empty() {
-            return Ok(false);
+            return Ok(T::default());
         }
         for direction in [
             Vec3(1., 0.371, 0.193),
             Vec3(0.217, 1., 0.419),
             Vec3(0.513, 0.231, 1.),
         ] {
-            let mut crossings = 0;
+            let mut crossings = T::default();
             let mut ambiguous = false;
             let mut todo = vec![0];
             while let Some(id) = todo.pop() {
@@ -161,6 +183,9 @@ impl<'a> Index<'a> {
                     todo.extend(children);
                 } else {
                     for &f in &self.faces[n.range.clone()] {
+                        if !include(f) {
+                            continue;
+                        }
                         let q = self.mesh.triangles[f].map(|v| self.mesh.vertices[v]);
                         if let Some([t, u, v]) = ray_hit(p, direction, q)
                             && t >= -1e-8
@@ -172,7 +197,7 @@ impl<'a> Index<'a> {
                                 ambiguous = true;
                                 break;
                             }
-                            crossings += 1;
+                            record(&mut crossings, f);
                         }
                     }
                 }
@@ -181,7 +206,7 @@ impl<'a> Index<'a> {
                 }
             }
             if !ambiguous {
-                return Ok(crossings % 2 == 1);
+                return Ok(crossings);
             }
         }
         Err("The surfaces touch or coincide ambiguously; adjust their overlap before fusing".into())
@@ -315,25 +340,38 @@ pub(super) fn validate_connector(
     Ok(())
 }
 
-/// Intersection mode treats each connected closed shell as an outward solid.
-/// Inward cavity shells need a different containment model and are rejected.
-pub(super) fn require_outward_shells(mesh: &Mesh, cancel: &dyn Fn() -> bool) -> Result<(), String> {
+struct Shell {
+    bounds: Bounds,
+    sample: Vec3,
+    outward: bool,
+}
+
+/// On disjoint, closed manifold shells, a point on one shell is inside
+/// another iff the entire shell is enclosed. Count ray hits separately for
+/// each potential container so double nesting cannot cancel to "outside".
+/// Exclude the sampled shell itself from the ray test.
+pub(super) fn enclosed_triangles(
+    mesh: &Mesh,
+    outward_exterior: bool,
+    cancel: &dyn Fn() -> bool,
+) -> Result<Vec<bool>, String> {
     let mut incident = vec![Vec::new(); mesh.vertices.len()];
     for (f, t) in mesh.triangles.iter().enumerate() {
         for &v in t {
             incident[v].push(f);
         }
     }
-    let mut seen = vec![false; mesh.triangles.len()];
+    let mut shell_of = vec![usize::MAX; mesh.triangles.len()];
+    let mut shells = Vec::new();
     for first in 0..mesh.triangles.len() {
-        if seen[first] {
+        if shell_of[first] != usize::MAX {
             continue;
         }
         let origin = v(mesh.vertices[mesh.triangles[first][0]]);
         let mut volume = 0.;
         let mut pending = vec![first];
         let mut bounds = Bounds::empty();
-        seen[first] = true;
+        shell_of[first] = shells.len();
         while let Some(f) = pending.pop() {
             if f % 256 == 0 {
                 cancelled(cancel)?;
@@ -346,8 +384,8 @@ pub(super) fn require_outward_shells(mesh: &Mesh, cancel: &dyn Fn() -> bool) -> 
             volume += dot(a, cross(b, c));
             for i in mesh.triangles[f] {
                 for &other in &incident[i] {
-                    if !seen[other] {
-                        seen[other] = true;
+                    if shell_of[other] == usize::MAX {
+                        shell_of[other] = shells.len();
                         pending.push(other);
                     }
                 }
@@ -356,9 +394,37 @@ pub(super) fn require_outward_shells(mesh: &Mesh, cancel: &dyn Fn() -> bool) -> 
         let extent = (0..3)
             .map(|i| (bounds.high[i] - bounds.low[i]) as f64)
             .fold(0., f64::max);
-        if volume <= extent.powi(3) * 1e-12 {
-            return Err("Intersection fusion requires outward-facing solid shells; inward or hollow cavity shells are unsupported".into());
+        shells.push(Shell {
+            bounds,
+            sample: mesh.vertices[mesh.triangles[first][0]],
+            outward: volume > extent.powi(3) * 1e-12,
+        });
+    }
+    let mut enclosed = vec![false; shells.len()];
+    if shells.len() > 1 {
+        let index = Index::new(mesh, cancel)?;
+        for (id, shell) in shells.iter().enumerate() {
+            cancelled(cancel)?;
+            let containers = index.ray_crossings(
+                shell.sample,
+                |f| shell_of[f] != id && shells[shell_of[f]].bounds.contains(shell.bounds),
+                |odd: &mut BTreeSet<usize>, f| {
+                    let other = shell_of[f];
+                    if !odd.insert(other) {
+                        odd.remove(&other);
+                    }
+                },
+            )?;
+            enclosed[id] = !containers.is_empty();
         }
     }
-    Ok(())
+    if outward_exterior
+        && shells
+            .iter()
+            .zip(&enclosed)
+            .any(|(shell, inside)| !inside && !shell.outward)
+    {
+        return Err("Intersection fusion requires outward-facing exterior solid shells".into());
+    }
+    Ok(shell_of.into_iter().map(|shell| enclosed[shell]).collect())
 }

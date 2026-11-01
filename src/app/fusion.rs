@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 enum ResultMesh {
     Openings(Mesh, [Vec<Boundary>; 2]),
-    Preview(Mesh, Option<fusion::FusionReport>),
+    Preview(Mesh, fusion::FusionReport),
 }
 struct Worker {
     job: BackgroundJob<ResultMesh>,
@@ -129,7 +129,7 @@ impl App {
             let [a, b] = self.document.fusion_sources(sources)?;
             BackgroundJob::start("clay-local-fusion", move |cancel| {
                 fusion::fuse(&a, &b, collar, options, cancel)
-                    .map(|(mesh, report)| ResultMesh::Preview(mesh, Some(report)))
+                    .map(|(mesh, report)| ResultMesh::Preview(mesh, report))
             })?
         } else {
             let first = self.ui.fusion.loops[0]
@@ -143,8 +143,8 @@ impl App {
                 .vertices
                 .clone();
             BackgroundJob::start("clay-local-join", move |cancel| {
-                fusion::bridge(&mesh, &first, &second, options, cancel)
-                    .map(|mesh| ResultMesh::Preview(mesh, None))
+                fusion::join_open_ends(&mesh, &first, &second, options, cancel)
+                    .map(|(mesh, report)| ResultMesh::Preview(mesh, report))
             })?
         };
         self.clear_fusion();
@@ -189,9 +189,7 @@ impl App {
                 Ok(ResultMesh::Preview(mesh, report)) => {
                     if let Some((source, _, _)) = &self.fusion.prepared {
                         use std::collections::BTreeSet;
-                        let start = report
-                            .as_ref()
-                            .map_or(source.triangles.len(), |r| r.retained_triangles);
+                        let start = report.retained_triangles;
                         let edges = |triangles: &[[usize; 3]]| {
                             triangles
                                 .iter()
@@ -233,19 +231,24 @@ impl App {
                             self.fusion.display =
                                 Some(crate::viewport::JoinDisplay::new(&document));
                             self.viewport.set_join_preview(self.fusion.display.clone());
-                            self.ui.fusion.notice = match report {
-                                Some(r) => format!(
+                            self.ui.fusion.notice = if self.ui.fusion.intersections {
+                                format!(
                                     "{} join(s) · {} + {} source polygons removed · {} original polygons retained. Inspect the new local patches.",
-                                    r.joins,
-                                    r.removed_faces[0],
-                                    r.removed_faces[1],
-                                    r.retained_faces
-                                ),
-                                None => {
-                                    "Preview ready. Inspect the connector, then Apply or Cancel."
-                                        .into()
-                                }
+                                    report.joins,
+                                    report.removed_faces[0],
+                                    report.removed_faces[1],
+                                    report.retained_faces
+                                )
+                            } else {
+                                "Preview ready. Inspect the connector, then Apply or Cancel.".into()
                             };
+                            self.ui.fusion.has_removed_faces = !self.fusion.removed.is_empty();
+                            if report.enclosed_faces > 0 {
+                                self.ui.fusion.notice.push_str(&format!(
+                                    " Culled {} enclosed polygons.",
+                                    report.enclosed_faces
+                                ));
+                            }
                             self.ui.fusion.ready = true;
                             self.fusion.draft = Some(Draft {
                                 mesh,

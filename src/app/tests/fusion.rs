@@ -141,3 +141,51 @@ fn fusion_can_join_within_one_model_and_retains_the_source_level_stack() {
     app.dispatch(Command::Undo, &ctx);
     assert_eq!(app.document.geometry_snapshot(), geometry);
 }
+
+#[test]
+fn fusion_closed_bridge_previews_and_commits_the_cull_in_one_undo() {
+    use crate::sculpt::{
+        Vec3,
+        fusion::{
+            self,
+            tests::{cap_tube_end, small_cube},
+        },
+    };
+    let (mut app, ctx) = setup_fusion();
+    let mut scene = app.document.geometry_snapshot();
+    cap_tube_end(&mut scene.mesh, false);
+    cap_tube_end(&mut scene.submodels[0].mesh, true);
+    let interior = small_cube(Vec3::default(), 0.07);
+    scene.mesh = fusion::merge(&scene.mesh, &interior).unwrap();
+    app.document.replace_geometry(scene.clone()).unwrap();
+    app.dispatch(Command::OpenFusion, &ctx);
+    finish_fusion(&mut app);
+    app.ui.fusion.selected = [Some(0), Some(0)];
+    app.dispatch(Command::PreviewFusion, &ctx);
+    finish_fusion(&mut app);
+    assert!(app.ui.fusion.ready, "{}", app.ui.fusion.notice);
+    assert!(app.ui.fusion.notice.contains("Culled 6 enclosed polygons"));
+    assert!(app.ui.fusion.has_removed_faces);
+    assert!(
+        app.fusion
+            .removed
+            .iter()
+            .flatten()
+            .all(|v| interior.vertices.contains(v))
+    );
+    assert_eq!(app.document.geometry_snapshot(), scene);
+    app.dispatch(Command::ApplyFusion, &ctx);
+    app.document.mesh().validate_closed().unwrap();
+    assert!(
+        app.document
+            .mesh()
+            .vertices
+            .iter()
+            .all(|v| !interior.vertices.contains(v))
+    );
+    let joined = app.document.geometry_snapshot();
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), scene);
+    app.dispatch(Command::Redo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), joined);
+}

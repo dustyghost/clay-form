@@ -8,12 +8,14 @@ pub(crate) struct FusionReport {
     pub joins: usize,
     pub retained_faces: usize,
     pub retained_triangles: usize,
+    pub enclosed_faces: usize,
 }
 
 fn cut(
     mesh: &Mesh,
     other: &spatial::Index<'_>,
     contacts: &[bool],
+    enclosed: &[bool],
     collar: usize,
     cancel: &dyn Fn() -> bool,
 ) -> Result<(Mesh, usize), String> {
@@ -23,6 +25,11 @@ fn cut(
     for (i, p) in polygons.iter().enumerate() {
         if i % 256 == 0 {
             cancelled(cancel)?;
+        }
+        // Only the completed surface can tell whether this entire shell is
+        // still enclosed. Carry it through stitching without using it as a cut.
+        if enclosed[faces[i][0]] {
+            continue;
         }
         removed[i] = if faces[i].iter().any(|&f| contacts[f]) {
             true
@@ -54,18 +61,34 @@ fn cut(
             }
         }
     }
+    let removed_count = removed.iter().filter(|&&x| x).count();
+    Ok((
+        remove_polygons(mesh, &polygons, &faces, &removed, cancel)?,
+        removed_count,
+    ))
+}
+
+// Preserve source vertex indices and face order for material/UV transfer and
+// preview overlays. Document commit later compacts unreferenced vertices.
+fn remove_polygons(
+    mesh: &Mesh,
+    polygons: &[super::super::edges::Polygon],
+    faces: &[Vec<usize>],
+    removed: &[bool],
+    cancel: &dyn Fn() -> bool,
+) -> Result<Mesh, String> {
     let mut remove_triangle = vec![false; mesh.triangles.len()];
     for (i, p) in polygons.iter().enumerate() {
         if removed[i] {
             if !p.visible || p.vertices.iter().any(|&v| mesh.mask[v] > 0.) {
-                return Err("The fusion would remove hidden or masked faces; show and unmask the joining region first".into());
+                return Err("Fusion would remove hidden or masked faces. Show and unmask the affected geometry first.".into());
             }
             for &f in &faces[i] {
                 remove_triangle[f] = true;
             }
         }
     }
-    let removed_count = removed.iter().filter(|&&x| x).count();
+    cancelled(cancel)?;
     let mut out = mesh.clone();
     out.triangles.clear();
     out.polygroups.clear();
@@ -109,7 +132,68 @@ fn cut(
         out.uv.topology = out.triangles.clone();
     }
     validate_surface(&out)?;
-    Ok((out, removed_count))
+    Ok(out)
+}
+
+impl FusionReport {
+    /// Preserve the source/patch boundary in triangle order when a shell is culled.
+    fn finish_closed(
+        mut self,
+        mesh: Mesh,
+        check_source_crossings: bool,
+        cancel: &dyn Fn() -> bool,
+    ) -> Result<(Mesh, Self), String> {
+        let enclosed = spatial::enclosed_triangles(&mesh, false, cancel)?;
+        if !enclosed.iter().any(|&inside| inside) {
+            return Ok((mesh, self));
+        }
+        // Intersection fusion already checked its sources. Open ends only
+        // checked new connector faces, so verify the shells are disjoint
+        // before treating a single sample as proof of containment.
+        if check_source_crossings {
+            spatial::validate_connector(&mesh, 0, cancel)?;
+        }
+        let polygons = mesh.polygons();
+        let faces = super::super::uv::polygon_triangles(&mesh);
+        let removed: Vec<_> = faces.iter().map(|fs| enclosed[fs[0]]).collect();
+        for (fs, &remove) in faces.iter().zip(&removed) {
+            if remove {
+                self.enclosed_faces += 1;
+                if fs[0] < self.retained_triangles {
+                    self.retained_faces -= 1;
+                }
+            }
+        }
+        self.retained_triangles -= enclosed[..self.retained_triangles]
+            .iter()
+            .filter(|&&x| x)
+            .count();
+        let out = remove_polygons(&mesh, &polygons, &faces, &removed, cancel)?;
+        out.validate_closed()?;
+        Ok((out, self))
+    }
+}
+
+pub(crate) fn join_open_ends(
+    mesh: &Mesh,
+    first: &[usize],
+    second: &[usize],
+    options: JoinOptions,
+    cancel: &dyn Fn() -> bool,
+) -> Result<(Mesh, FusionReport), String> {
+    let out = bridge(mesh, first, second, options, cancel)?;
+    let report = FusionReport {
+        removed_faces: [0; 2],
+        joins: 1,
+        retained_faces: mesh.polygons().len(),
+        retained_triangles: mesh.triangles.len(),
+        enclosed_faces: 0,
+    };
+    if boundaries(&out)?.is_empty() {
+        report.finish_closed(out, true, cancel)
+    } else {
+        Ok((out, report))
+    }
 }
 
 pub(crate) fn fuse(
@@ -125,22 +209,30 @@ pub(crate) fn fuse(
     options.validate()?;
     check_uv(a)?;
     check_uv(b)?;
-    for mesh in [a, b] {
+    let prepare = |mesh: &Mesh| -> Result<Vec<bool>, String> {
         cancelled(cancel)?;
         validate_surface(mesh)?;
         mesh.validate_closed().map_err(|_| {
             "Intersection fusion requires closed solids; use Join open ends for holes".to_string()
         })?;
-        spatial::require_outward_shells(mesh, cancel)?;
         spatial::validate_connector(mesh, 0, cancel)?;
-    }
-    let ia = spatial::Index::new(a, cancel)?;
-    let ib = spatial::Index::new(b, cancel)?;
+        spatial::enclosed_triangles(mesh, true, cancel)
+    };
+    let enclosed_a = prepare(a)?;
+    let enclosed_b = prepare(b)?;
+    // Interior input shells must not punch extra cut loops or change parity
+    // inside the other operand. Keep their original face IDs for the overlay.
+    let exterior = |mask: &[bool]| (0..mask.len()).filter(|&i| !mask[i]).collect();
+    let ia = spatial::Index::from_faces(a, exterior(&enclosed_a), cancel)?;
+    let ib = spatial::Index::from_faces(b, exterior(&enclosed_b), cancel)?;
     let mut ca = vec![false; a.triangles.len()];
     let mut cb = vec![false; b.triangles.len()];
     for (i, t) in a.triangles.iter().enumerate() {
         if i % 128 == 0 {
             cancelled(cancel)?;
+        }
+        if enclosed_a[i] {
+            continue;
         }
         ib.contacts(t.map(|v| a.vertices[v]), |j| {
             ca[i] = true;
@@ -150,8 +242,8 @@ pub(crate) fn fuse(
     if !ca.iter().any(|&x| x) {
         return Err("The surfaces do not cross. Move them into overlap, or use Join open ends for separated holes".into());
     }
-    let (a, na) = cut(a, &ib, &ca, collar, cancel)?;
-    let (b, nb) = cut(b, &ia, &cb, collar, cancel)?;
+    let (a, na) = cut(a, &ib, &ca, &enclosed_a, collar, cancel)?;
+    let (b, nb) = cut(b, &ia, &cb, &enclosed_b, collar, cancel)?;
     let la = boundaries(&a)?;
     let lb = boundaries(&b)?;
     if la.is_empty() || la.len() != lb.len() || la.len() > 16 {
@@ -194,13 +286,12 @@ pub(crate) fn fuse(
             .map_err(|e| format!("{e}. Try adjusting the collar rings or source overlap."))?;
     }
     out.validate_closed()?;
-    Ok((
-        out,
-        FusionReport {
-            removed_faces: [na, nb],
-            joins: pairs.len(),
-            retained_faces,
-            retained_triangles,
-        },
-    ))
+    FusionReport {
+        removed_faces: [na, nb],
+        joins: pairs.len(),
+        retained_faces,
+        retained_triangles,
+        enclosed_faces: 0,
+    }
+    .finish_closed(out, false, cancel)
 }

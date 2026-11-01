@@ -658,7 +658,7 @@ Open **Mesh → Join meshes…**. Choose two visible sculpt meshes, or choose th
 
 ![Selected 8- and 12-vertex openings joined across a gap](../validation/local-fusion/02-open-ends-preview.png)
 
-The connector shares the original rim vertices. All source vertices and polygons stay fixed, including unselected holes. Unequal vertex counts use a mixture of triangles and quads; aligned spans use quads. Curvature bends only the new connector toward the adjoining surfaces. It does not smooth the sources. Segment count controls divisions along the gap; the combined spacing of both rims determines intermediate ring resolution. Alignment offset changes the circular correspondence by one vertex on the second rim.
+The connector shares the original rim vertices. If other holes remain open, the tool keeps every source polygon. Closing the last holes also runs the enclosed-shell cleanup described below. Unequal vertex counts use a mixture of triangles and quads; aligned spans use quads. Curvature bends only the new connector toward the adjoining surfaces. It does not smooth the sources. Segment count controls divisions along the gap; the combined spacing of both rims determines intermediate ring resolution. Alignment offset changes the circular correspondence by one vertex on the second rim.
 
 **Modeling → Topology → Bridge boundaries** remains available for the existing equal-count, active-mesh workflow and its symmetry copies.
 
@@ -670,13 +670,17 @@ Choose **Intersections** for two overlapping, closed, outward-facing solids. Pre
 
 This is a polygon-boundary reconstruction: its outline follows the source tessellation. Increasing collar rings broadens the local cut; it does not guarantee a smoother result. All retained vertices, triangles and quads remain exact. Buried faces are removed even beyond the narrow patch. The tool rejects a connector that folds into another surface; try different collar rings, alignment or source overlap. Always inspect the silhouette before applying.
 
+### Remove enclosed geometry from a closed join
+
+When the result closes, the preview removes separate shells fully enclosed by its outer surface. This includes sealed cavity walls and loose parts trapped inside a new connector. The preview reports how many enclosed polygons it culled. **Show removed source faces** highlights their edges, and Apply commits the preview. A surface seen through a tunnel or behind another part stays on the model if it borders the outside. Masks and face visibility protections apply to the cleanup.
+
 ### Attributes and supported sources
 
 Untouched masks, vertex materials, group weights, creases and compatible face-corner UVs survive. Separate source groups remain separate, with duplicate names renamed. New vertices interpolate materials and group weights from both rims; new faces have no polygroup and are unmapped in UVs. New edges are not creased. Unwrap the connector afterwards. Sources with different texture images must first share an atlas; stale UV mappings must be restored or cleared.
 
 Convert parametric primitives and apply or remove Thickness before joining. Disable symmetry: this tool operates on the explicitly chosen pair. It uses each source's current stored mesh level and gives the joined result a fresh subdivision stack. Higher and lower levels remain on the hidden originals. Path bindings remain attached to those originals; the joined result is an independent sculpt mesh.
 
-Masked or hidden geometry needed by the join must be exposed and unmasked first. Invalid borders, non-manifold surfaces, collapsed faces, crossed connectors, ambiguous intersections and resource-limit failures leave the scene unchanged. Intersection mode requires an actual crossing seam: tangencies, coincident surfaces, containment alone and inward cavity shells are unsupported. It does not route a connector around obstacles. At most 4,096 vertices per rim, 64 connector segments and 16 intersection pairs are supported, subject to the application's mesh and model limits.
+Masked or hidden geometry needed by the join must be exposed and unmasked first. Invalid borders, non-manifold surfaces, collapsed faces, crossed connectors, ambiguous intersections and resource-limit failures leave the scene unchanged. Intersection mode requires a crossing seam and outward-facing exterior shells. Tangencies, coincident faces and containment alone are unsupported. It does not route a connector around obstacles. At most 4,096 vertices per rim, 64 connector segments and 16 intersection pairs are supported, subject to the application's mesh and model limits.
 
 ## Merge down
 
