@@ -1574,3 +1574,124 @@ fn modeling_double_point_ring_has_eight_exact_radius_vertices_and_repeats() {
         );
     }
 }
+
+#[test]
+fn modeling_cell_notch_removes_one_cell_and_preserves_the_surrounding_grid() {
+    let mut mesh = cube(3);
+    let ridge = mesh
+        .polygon_edges()
+        .into_iter()
+        .find(|e| {
+            e.iter().all(|&v| {
+                let p = mesh.vertices[v];
+                p.1 == 1. && p.2 == 1. && p.0.abs() < 0.5
+            })
+        })
+        .unwrap();
+    mesh.creases = mesh.polygon_edges();
+    mesh.create_vertex_group("Ridge".into(), 0., true).unwrap();
+    let symmetry = ModelingSymmetry::new(&mesh, &mirror_x()).unwrap();
+    let cell = mesh.cell_notch(ridge).unwrap();
+    let delta = Vec3(0., -2. / 3., -2. / 3.);
+    assert!((cell.travel - delta).len() < 1e-5);
+    assert!(cell.reached(delta * 1.2));
+    assert!(!cell.reached(delta * 0.75));
+    assert!(!cell.reached(Vec3(0., -1., 0.)));
+    let mut mirrored = mirror_x();
+    mirrored.mirror = [true, true, false];
+    let both = cell
+        .apply(
+            &mesh,
+            true,
+            &ModelingSymmetry::new(&mesh, &mirrored).unwrap(),
+        )
+        .unwrap();
+    both.validate_closed().unwrap();
+    assert_eq!(both.quads.len(), 58);
+    let cut = cell.apply(&mesh, true, &symmetry).unwrap();
+    cut.validate_closed().unwrap();
+    assert_eq!(cut.vertices.len(), mesh.vertices.len() + 2);
+    assert_eq!(cut.quads.len(), 56);
+    assert_eq!(cut.triangles.len(), cut.quads.len() * 2);
+    let mut original_quads = 0;
+    for (q, out) in mesh.quads.iter().zip(&cut.quads) {
+        if !ridge.iter().all(|v| q.contains(v)) {
+            assert_eq!(q.map(|i| mesh.vertices[i]), out.map(|i| cut.vertices[i]));
+            original_quads += 1;
+        }
+    }
+    assert_eq!(original_quads, 52);
+    let volume: f32 = cut
+        .triangles
+        .iter()
+        .map(|&[a, b, c]| cut.vertices[a].dot(cut.vertices[b].cross(cut.vertices[c])) / 6.)
+        .sum();
+    assert!((volume - 8. * 26. / 27.).abs() < 1e-5);
+    for &v in &ridge {
+        assert!((cut.vertices[v] - mesh.vertices[v] - delta).len() < 1e-5);
+    }
+    assert!(cut.creases.contains(&ridge));
+    assert!(cut.vertex_groups[0].weights.iter().all(|&w| w == 1.));
+
+    // The same local grid is recoverable if the user releases the edge partway in.
+    let partial = mesh
+        .transform_components(
+            &ridge,
+            Vec3(0., 1., 1.),
+            ComponentTransform::Move(delta * 0.35),
+            true,
+            &symmetry,
+        )
+        .unwrap();
+    let remaining = partial.cell_notch(ridge).unwrap();
+    assert!((remaining.travel - delta * 0.65).len() < 1e-5);
+    let completed = remaining.apply(&partial, true, &symmetry).unwrap();
+    assert_eq!(completed.quads, cut.quads);
+    assert!(
+        completed
+            .vertices
+            .iter()
+            .zip(&cut.vertices)
+            .all(|(&a, &b)| (a - b).len() < 1e-5)
+    );
+
+    let affected = mesh
+        .quads
+        .iter()
+        .find(|q| ridge.iter().all(|v| q.contains(v)))
+        .unwrap();
+    let rim = *affected.iter().find(|v| !ridge.contains(v)).unwrap();
+    mesh.mask[rim] = 1.;
+    assert!(cell.apply(&mesh, true, &symmetry).is_err());
+    assert!(cell.apply(&mesh, false, &symmetry).is_ok());
+    mesh.hidden_faces = mesh
+        .triangles
+        .iter()
+        .map(|t| t.iter().all(|v| affected.contains(v)))
+        .collect();
+    assert!(cell.apply(&mesh, false, &symmetry).is_err());
+}
+
+#[test]
+fn modeling_cell_notch_rejects_contact_with_the_far_wall() {
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
+    primitive.divisions = [3, 3, 1];
+    let mesh = primitive.mesh().unwrap();
+    let ridge = mesh
+        .polygon_edges()
+        .into_iter()
+        .find(|e| {
+            e.iter().all(|&v| {
+                let p = mesh.vertices[v];
+                p.0.abs() < 0.5 && p.1 == 1. && p.2 == 1.
+            })
+        })
+        .unwrap();
+    let cell = mesh.cell_notch(ridge).unwrap();
+    let symmetry = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    assert!(
+        cell.apply(&mesh, true, &symmetry)
+            .unwrap_err()
+            .contains("occupies this grid cell")
+    );
+}

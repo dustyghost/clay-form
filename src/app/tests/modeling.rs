@@ -1403,6 +1403,7 @@ fn modeling_transform_presets_preserve_modes_vectors_and_legacy_axes() {
     let (mut app, ctx, _) = setup();
     app.dispatch(Command::Action(Action::ModelTool(ModelTool::Move)), &ctx);
     app.ui.modeling.transform_direction = crate::sculpt::Vec3(0.6, 0.8, 0.);
+    app.ui.modeling.snap_cell = true;
     app.ui.modeling.amount = 0.25;
     let options = app.ui.modeling.options();
     let encoded = serde_json::to_value(options).unwrap();
@@ -1424,9 +1425,11 @@ fn modeling_transform_presets_preserve_modes_vectors_and_legacy_axes() {
     let mut old = encoded;
     old.as_object_mut().unwrap().remove("interaction");
     old.as_object_mut().unwrap().remove("transform_direction");
+    old.as_object_mut().unwrap().remove("snap_cell");
     let old: crate::viewport::ModelingOptions = serde_json::from_value(old).unwrap();
     old.validate().unwrap();
     assert_eq!(old.interaction, ModelInteraction::Axis);
+    assert!(!old.snap_cell);
 }
 
 #[test]
@@ -1841,5 +1844,82 @@ fn modeling_selection_eraser_respects_depth_and_covers_edges_and_points() {
             app.viewport.modeling.selected.is_empty(),
             "brush reaches {mode:?} away from its centre"
         );
+    }
+}
+
+#[test]
+fn modeling_cell_notch_from_middle_top_front_edge() {
+    use crate::sculpt::Vec3;
+
+    for perspective in [false, true] {
+        let (mut app, ctx, rect) = setup();
+        assert!(!app.ui.modeling.snap_cell);
+        app.ui.modeling.snap_cell = true;
+        app.camera.perspective = perspective;
+        app.camera.yaw = 0.65;
+        app.camera.pitch = -0.38;
+        app.dispatch(Command::ModelingComponent(ComponentMode::Edge), &ctx);
+        app.dispatch(Command::Action(Action::ModelTool(ModelTool::Move)), &ctx);
+        navigation_frame(&mut app, &ctx, vec![]);
+        let (right, up, _) = app.camera.basis();
+        let project = |p: Vec3| {
+            rect.center()
+                + Vec2::new(p.dot(right), -p.dot(up)) * app.camera.scale_at(rect.size(), p)
+        };
+        let start = project(Vec3(0., 1., 1.));
+        let target = project(Vec3(0., 1. / 3., 1. / 3.));
+        let end = start + (target - start) * 1.15;
+        let before = app.document.geometry_snapshot();
+        let history = app.document.history_counts();
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+        );
+        navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+        let preview = app
+            .viewport
+            .modeling
+            .preview()
+            .expect("edge move preview")
+            .clone();
+        assert_eq!(
+            preview.quads.len(),
+            before.mesh.quads.len() + 2,
+            "two new side walls"
+        );
+        assert_eq!(app.document.geometry_snapshot(), before);
+        navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Escape, true)]);
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![
+                primary_event(end, false),
+                slice_key(egui::Key::Escape, false),
+            ],
+        );
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert_eq!(app.document.history_counts(), history);
+        pen_drag(&mut app, &ctx, start, end);
+        assert_eq!(app.document.mesh(), &preview);
+        preview.validate_closed().unwrap();
+        assert_eq!(app.document.history_counts().0, history.0 + 1);
+        let moved = app.viewport.modeling.selected_vertices(app.document.mesh());
+        assert_eq!(moved.len(), 2);
+        for v in moved {
+            let p = preview.vertices[v];
+            assert!((p.1 - 1. / 3.).abs() < 1e-5 && (p.2 - 1. / 3.).abs() < 1e-5);
+        }
+        app.dispatch(Command::Undo, &ctx);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        app.dispatch(Command::Redo, &ctx);
+        assert_eq!(app.document.mesh(), &preview);
+        if !perspective {
+            app.dispatch(Command::Undo, &ctx);
+            app.ui.modeling.snap_cell = false;
+            pen_drag(&mut app, &ctx, start, end);
+            assert_eq!(app.document.mesh().quads, before.mesh.quads);
+            assert_ne!(app.document.mesh().vertices, before.mesh.vertices);
+        }
     }
 }

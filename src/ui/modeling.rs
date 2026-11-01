@@ -14,6 +14,7 @@ pub(crate) struct ModelingControls {
     pub join: bool,
     pub axis: crate::viewport::ModelAxis,
     pub interaction: crate::viewport::ModelInteraction,
+    pub snap_cell: bool,
     pub transform_direction: crate::sculpt::Vec3,
     pub directions: std::collections::BTreeMap<ModelTool, crate::sculpt::Vec3>,
     pub amount: f32,
@@ -55,6 +56,7 @@ impl ModelingControls {
         self.directions.insert(self.tool, self.transform_direction);
         self.directions.insert(o.tool, o.transform_direction);
         self.interaction = o.interaction;
+        self.snap_cell = o.snap_cell;
         self.transform_direction = o.transform_direction;
         self.mode = o.mode;
         self.tool = o.tool;
@@ -87,6 +89,7 @@ impl ModelingControls {
             axis: self.axis,
             interaction: self.interaction,
             transform_direction: self.transform_direction,
+            snap_cell: self.snap_cell,
             amount: self.amount,
             protect_mask: self.protect_mask,
             individual: self.individual,
@@ -330,6 +333,12 @@ impl UiState {
                 ModelTool::Move | ModelTool::Rotate | ModelTool::Scale | ModelTool::Slide => {
                     use crate::viewport::ModelInteraction;
                     let direct = self.modeling.tool.is_transform();
+                    if self.modeling.tool == ModelTool::Move && self.modeling.mode == ComponentMode::Edge {
+                        design::help(
+                            design::checkbox(ui, &mut self.modeling.snap_cell, "Snap to cell notch"),
+                            "Drag one ridge segment to the interior corner of a grid cell to expose its floor and walls.",
+                        );
+                    }
                     if direct {
                         ui.horizontal_wrapped(|ui| {
                             for mode in [ModelInteraction::Free,ModelInteraction::Gizmo,ModelInteraction::Axis] {

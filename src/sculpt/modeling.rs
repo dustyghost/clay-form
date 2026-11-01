@@ -13,6 +13,8 @@ pub use construction::Construction;
 mod dissolve;
 mod join;
 mod loops;
+mod notch;
+pub(crate) use notch::CellNotch;
 mod selection;
 mod symmetry;
 mod topology;

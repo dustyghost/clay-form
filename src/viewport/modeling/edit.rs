@@ -324,6 +324,17 @@ impl ModelingState {
         if direct && axis.len() < 1e-8 && options.tool != ModelTool::Scale {
             return Ok(EditOutcome::new(mesh.clone(), amount, false));
         }
+        let symmetry = ModelingSymmetry::new(mesh, document.symmetry())?;
+        if let Some(cell) = Self::move_cell(options, components, mesh, anchor, &symmetry)
+            && cell.reached(axis * amount)
+        {
+            return Ok(EditOutcome {
+                mesh: cell.apply(mesh, options.protect_mask, &symmetry)?,
+                amount: cell.travel.len().copysign(amount),
+                retain_caps: false,
+                notice: "One-cell notch snapped",
+            });
+        }
         let transform = match options.tool {
             ModelTool::Move => ComponentTransform::Move(axis * amount),
             ModelTool::Rotate => ComponentTransform::Rotate(axis, amount.to_radians()),
@@ -342,7 +353,7 @@ impl ModelingState {
             anchor,
             transform,
             options.protect_mask,
-            &ModelingSymmetry::new(mesh, document.symmetry())?,
+            &symmetry,
         )
         .map(|mesh| EditOutcome::new(mesh, amount, false))
     }

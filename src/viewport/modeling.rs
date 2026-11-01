@@ -220,6 +220,8 @@ pub(crate) struct ModelingOptions {
     pub interaction: ModelInteraction,
     #[serde(default)]
     pub transform_direction: Vec3,
+    #[serde(default)]
+    pub snap_cell: bool,
     pub amount: f32,
     pub protect_mask: bool,
     pub individual: bool,
@@ -639,6 +641,14 @@ impl Viewport {
         let selected = Color32::from_rgb(70, 225, 240);
         let highlighted = Color32::from_rgb(255, 205, 95);
         if let Some(drag) = &self.modeling.edit_drag {
+            if let Some(target) = drag
+                .direct
+                .as_ref()
+                .and_then(|d| d.cell_target(drag.anchor))
+                && scene.visible_depth(target)
+            {
+                painter.circle_stroke(scene.project(target), 5., (1.5, highlighted));
+            }
             if let Some(Ok(result)) = &drag.result {
                 let components = if matches!(
                     model.tool,

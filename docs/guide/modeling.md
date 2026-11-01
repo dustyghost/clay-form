@@ -234,6 +234,14 @@ A free or gizmo drag remembers its direction and amount. **Apply amount** reuses
 
 Transform modes, directions and amounts save in presets; older presets retain Axis / amount behavior. Right-click Free, Gizmo or Axis / amount to add it to a custom menu or shelf, or assign a shortcut.
 
+### Cut a one-cell notch
+
+To cut a square notch in a **3 × 3 × 3** cube, orbit until you can see the top and front. Choose **Edge → Move**, set **Target → Single**, and turn on **Snap to cell notch**. Press the middle segment of the top-front edge. Drag down and back toward the small gold ring until **One-cell notch snapped** appears, then release. The notch has a floor, a back wall and two side walls. The surrounding squares stay in place.
+
+![A one-cell notch in the middle of the top-front edge of a 3 × 3 × 3 cube](../images/modeling-cell-notch.png)
+
+The snap works on a right-angle ridge with rectangular quads continuing past both ends of the segment. Dragging partway makes a regular Move. You can finish the notch with a second drag, or turn off **Snap to cell notch** for free shaping.
+
 ### Extrude a face or flat region
 
 1. Choose **Face → Extrude**.

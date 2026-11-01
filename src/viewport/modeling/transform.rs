@@ -1,5 +1,6 @@
 //! Selection-local direct manipulation. Geometry stays a draft until release.
 use super::*;
+use crate::sculpt::CellNotch;
 use crate::viewport::transform::rotation::{Ring, RotationDrag};
 
 const SIZE: f32 = 85.;
@@ -15,7 +16,13 @@ pub(super) struct DirectDrag {
     pub direction: Vec3,
     pivot: Vec3,
     handle: Handle,
+    cell: Option<CellNotch>,
     rotation: Option<RotationDrag>,
+}
+impl DirectDrag {
+    pub(super) fn cell_target(&self, anchor: Vec3) -> Option<Vec3> {
+        self.cell.as_ref().map(|cell| anchor + cell.travel)
+    }
 }
 fn axes() -> [(Vec3, Color32, &'static str); 3] {
     [
@@ -57,6 +64,39 @@ fn trackball(scene: &Scene, point: Pos2, pivot: Vec3) -> Vec3 {
     (scene.right * p.x - scene.up * p.y + scene.view * z).norm()
 }
 impl ModelingState {
+    /// A selection expanded by symmetry may still represent a single picked edge.
+    pub(super) fn move_cell(
+        options: ModelingOptions,
+        components: &BTreeSet<Component>,
+        mesh: &Mesh,
+        anchor: Vec3,
+        symmetry: &ModelingSymmetry,
+    ) -> Option<CellNotch> {
+        if !options.snap_cell
+            || options.tool != ModelTool::Move
+            || options.mode != ComponentMode::Edge
+        {
+            return None;
+        }
+        let nearest = components
+            .iter()
+            .filter_map(|c| match c {
+                Component::Edge(e) => Some(*e),
+                _ => None,
+            })
+            .min_by(|a, b| {
+                let distance = |[u, v]: [usize; 2]| {
+                    ((mesh.vertices[u] + mesh.vertices[v]) * 0.5 - anchor).len()
+                };
+                distance(*a).total_cmp(&distance(*b))
+            })?;
+        let copies = symmetry.edges(&[nearest]);
+        components
+            .iter()
+            .all(|c| matches!(c, Component::Edge(e) if copies.contains(e)))
+            .then(|| mesh.cell_notch(nearest))?
+    }
+
     fn transform_frame(&self, document: &Document) -> Option<(Vec3, Vec3)> {
         let vertices = self.selected_vertices(document.mesh());
         let anchor = self
@@ -115,6 +155,7 @@ impl ModelingState {
                 direction: options.transform_direction,
                 pivot,
                 handle,
+                cell: Self::move_cell(options, &components, document.mesh(), anchor, &symmetry),
                 rotation: if let Handle::Ring(axis) = handle {
                     Some(ring(axis, pivot, Color32::WHITE, "").begin(scene, point))
                 } else {
@@ -183,6 +224,25 @@ impl ModelingState {
                     },
                     _ => scene.at_depth(point, pivot) - scene.at_depth(drag.start, pivot),
                 };
+                // A free drag only supplies two coordinates. Match the projected cell
+                // diagonal so a pen can reach the interior corner from an oblique view.
+                let displacement = direct
+                    .cell
+                    .as_ref()
+                    .filter(|cell| {
+                        if direct.handle != Handle::Free {
+                            return cell.reached(displacement);
+                        }
+                        let screen =
+                            scene.project(drag.anchor + cell.travel) - scene.project(drag.anchor);
+                        let fraction =
+                            (screen.dot(delta) / delta.length_sq().max(1.)).clamp(0., 1.);
+                        screen.length() > 12.
+                            && (screen - delta * fraction).length()
+                                <= (screen.length() * 0.08).clamp(3., 10.)
+                    })
+                    .map(|cell| cell.travel)
+                    .unwrap_or(displacement);
                 (displacement.norm(), displacement.len())
             }
             ModelTool::Scale => {
