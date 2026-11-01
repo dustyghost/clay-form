@@ -20,8 +20,24 @@ pub(super) struct DirectDrag {
     rotation: Option<RotationDrag>,
 }
 impl DirectDrag {
-    pub(super) fn cell_target(&self, anchor: Vec3) -> Option<Vec3> {
-        self.cell.as_ref().map(|cell| anchor + cell.travel)
+    pub(super) fn cell_target(&self, scene: &Scene, anchor: Vec3) -> Option<Pos2> {
+        let cell = self.cell.as_ref()?;
+        let target = anchor + cell.travel();
+        if !scene.visible_depth(target) {
+            return None;
+        }
+        let start = scene.project(anchor);
+        let projected = scene.project(target);
+        // Straight-on, an inward face push has no screen direction. Offer a down-drag
+        // of one cell at the local zoom, with the ring at that same pen position.
+        if self.handle == Handle::Free
+            && matches!(cell, CellNotch::Face(_))
+            && projected.distance(start) < 12.
+        {
+            Some(start + egui::Vec2::Y * (scene.scale_at(anchor) * cell.travel().len()).max(14.))
+        } else {
+            Some(projected)
+        }
     }
 }
 fn axes() -> [(Vec3, Color32, &'static str); 3] {
@@ -64,7 +80,7 @@ fn trackball(scene: &Scene, point: Pos2, pivot: Vec3) -> Vec3 {
     (scene.right * p.x - scene.up * p.y + scene.view * z).norm()
 }
 impl ModelingState {
-    /// A selection expanded by symmetry may still represent a single picked edge.
+    /// All selected components must belong to one symmetry orbit.
     pub(super) fn move_cell(
         options: ModelingOptions,
         components: &BTreeSet<Component>,
@@ -72,29 +88,53 @@ impl ModelingState {
         anchor: Vec3,
         symmetry: &ModelingSymmetry,
     ) -> Option<CellNotch> {
-        if !options.snap_cell
-            || options.tool != ModelTool::Move
-            || options.mode != ComponentMode::Edge
-        {
+        if options.tool != ModelTool::Move {
             return None;
         }
-        let nearest = components
+        let first = *components.first()?;
+        let copies: Vec<Component> = match first {
+            Component::Face(f) if options.mode == ComponentMode::Face && options.snap_face_cell => {
+                symmetry
+                    .face_copies(f)
+                    .into_iter()
+                    .map(Component::Face)
+                    .collect()
+            }
+            Component::Edge(e) if options.mode == ComponentMode::Edge && options.snap_cell => {
+                symmetry
+                    .edges(&[e])
+                    .into_iter()
+                    .map(Component::Edge)
+                    .collect()
+            }
+            _ => return None,
+        };
+        if !components.iter().all(|c| copies.contains(c)) {
+            return None;
+        }
+        let distance = |c: &Component| {
+            let pivot = match *c {
+                Component::Face(f) => {
+                    let Some(q) = mesh.quads.get(f) else {
+                        return f32::INFINITY;
+                    };
+                    q.iter()
+                        .fold(Vec3::default(), |sum, &v| sum + mesh.vertices[v])
+                        * 0.25
+                }
+                Component::Edge([a, b]) => (mesh.vertices[a] + mesh.vertices[b]) * 0.5,
+                _ => return f32::INFINITY,
+            };
+            (pivot - anchor).len()
+        };
+        match *components
             .iter()
-            .filter_map(|c| match c {
-                Component::Edge(e) => Some(*e),
-                _ => None,
-            })
-            .min_by(|a, b| {
-                let distance = |[u, v]: [usize; 2]| {
-                    ((mesh.vertices[u] + mesh.vertices[v]) * 0.5 - anchor).len()
-                };
-                distance(*a).total_cmp(&distance(*b))
-            })?;
-        let copies = symmetry.edges(&[nearest]);
-        components
-            .iter()
-            .all(|c| matches!(c, Component::Edge(e) if copies.contains(e)))
-            .then(|| mesh.cell_notch(nearest))?
+            .min_by(|a, b| distance(a).total_cmp(&distance(b)))?
+        {
+            Component::Face(f) => mesh.face_cell_notch(f),
+            Component::Edge(e) => mesh.cell_notch(e),
+            _ => None,
+        }
     }
 
     fn transform_frame(&self, document: &Document) -> Option<(Vec3, Vec3)> {
@@ -200,6 +240,7 @@ impl ModelingState {
         }
         let delta = point - drag.start;
         let pivot = direct.pivot;
+        let mut snapped = None;
         let (direction, amount) = match options.tool {
             ModelTool::Move => {
                 let displacement = match direct.handle {
@@ -224,24 +265,40 @@ impl ModelingState {
                     },
                     _ => scene.at_depth(point, pivot) - scene.at_depth(drag.start, pivot),
                 };
-                // A free drag only supplies two coordinates. Match the projected cell
-                // diagonal so a pen can reach the interior corner from an oblique view.
                 let displacement = direct
                     .cell
                     .as_ref()
-                    .filter(|cell| {
+                    .and_then(|cell| {
                         if direct.handle != Handle::Free {
-                            return cell.reached(displacement);
+                            if cell.reached(displacement) {
+                                snapped = Some(cell);
+                                return Some(cell.travel());
+                            }
+                            return None;
                         }
                         let screen =
-                            scene.project(drag.anchor + cell.travel) - scene.project(drag.anchor);
+                            direct.cell_target(scene, drag.anchor)? - scene.project(drag.anchor);
+                        if screen.length() < 12. {
+                            return None;
+                        }
+                        let progress = delta.dot(screen) / screen.length_sq();
+                        let radius = (screen.length() * 0.08).clamp(3., 10.);
                         let fraction =
                             (screen.dot(delta) / delta.length_sq().max(1.)).clamp(0., 1.);
-                        screen.length() > 12.
-                            && (screen - delta * fraction).length()
-                                <= (screen.length() * 0.08).clamp(3., 10.)
+                        if (screen - delta * fraction).length() <= radius
+                            || cell.reached(displacement)
+                        {
+                            snapped = Some(cell);
+                            Some(cell.travel())
+                        } else if matches!(cell, CellNotch::Face(_))
+                            && (0. ..1.).contains(&progress)
+                            && (delta - screen * progress).length() <= radius
+                        {
+                            Some(cell.travel() * progress)
+                        } else {
+                            None
+                        }
                     })
-                    .map(|cell| cell.travel)
                     .unwrap_or(displacement);
                 (displacement.norm(), displacement.len())
             }
@@ -281,13 +338,23 @@ impl ModelingState {
         direct.direction = direction;
         options.transform_direction = direction;
         drag.amount = amount;
-        drag.result = Some(Self::edit_result(
-            document,
-            &drag.components,
-            drag.anchor,
-            options,
-            amount,
-        ));
+        // The grid plane and depth were measured on press. Use that plan throughout
+        // the gesture, including when the pointer retreats out of snap range.
+        drag.result = Some(if let Some(cell) = snapped {
+            ModelingSymmetry::new(document.mesh(), document.symmetry()).and_then(|symmetry| {
+                super::edit::EditOutcome::notch(
+                    document.mesh(),
+                    cell,
+                    amount,
+                    options.protect_mask,
+                    &symmetry,
+                )
+            })
+        } else {
+            options.snap_cell = false;
+            options.snap_face_cell = false;
+            Self::edit_result(document, &drag.components, drag.anchor, options, amount)
+        });
     }
     pub(super) fn paint_transform_gizmo(
         &self,

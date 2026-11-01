@@ -242,6 +242,12 @@ To cut a square notch in a **3 × 3 × 3** cube, orbit until you can see the top
 
 The snap works on a right-angle ridge with rectangular quads continuing past both ends of the segment. Dragging partway makes a regular Move. You can finish the notch with a second drag, or turn off **Snap to cell notch** for free shaping.
 
+You can also start from a face. In **Face → Move**, choose **Target → Single** and turn on **Snap to cell notch**. Press a square and drag toward the gold ring to push it inward by one grid cell. Viewed straight on, the ring appears below the press point. A center square makes a recess with four walls. A square at an outside edge opens onto the adjacent side, and a corner square opens onto both adjacent sides.
+
+![Center face pushed one grid cell into a cube, leaving a square recess](../images/modeling-face-cell-notch.png)
+
+Face and edge snapping have separate switches, both off by default. Face snapping follows the rectangular grid to measure the next layer. You can also choose **Axis / amount → Normal** and apply a negative distance that reaches that layer.
+
 ### Extrude a face or flat region
 
 1. Choose **Face → Extrude**.

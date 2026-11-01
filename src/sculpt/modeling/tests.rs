@@ -1593,13 +1593,13 @@ fn modeling_cell_notch_removes_one_cell_and_preserves_the_surrounding_grid() {
     let symmetry = ModelingSymmetry::new(&mesh, &mirror_x()).unwrap();
     let cell = mesh.cell_notch(ridge).unwrap();
     let delta = Vec3(0., -2. / 3., -2. / 3.);
-    assert!((cell.travel - delta).len() < 1e-5);
+    assert!((cell.travel() - delta).len() < 1e-5);
     assert!(cell.reached(delta * 1.2));
     assert!(!cell.reached(delta * 0.75));
     assert!(!cell.reached(Vec3(0., -1., 0.)));
     let mut mirrored = mirror_x();
     mirrored.mirror = [true, true, false];
-    let both = cell
+    let (both, _) = cell
         .apply(
             &mesh,
             true,
@@ -1608,7 +1608,7 @@ fn modeling_cell_notch_removes_one_cell_and_preserves_the_surrounding_grid() {
         .unwrap();
     both.validate_closed().unwrap();
     assert_eq!(both.quads.len(), 58);
-    let cut = cell.apply(&mesh, true, &symmetry).unwrap();
+    let (cut, _) = cell.apply(&mesh, true, &symmetry).unwrap();
     cut.validate_closed().unwrap();
     assert_eq!(cut.vertices.len(), mesh.vertices.len() + 2);
     assert_eq!(cut.quads.len(), 56);
@@ -1644,8 +1644,8 @@ fn modeling_cell_notch_removes_one_cell_and_preserves_the_surrounding_grid() {
         )
         .unwrap();
     let remaining = partial.cell_notch(ridge).unwrap();
-    assert!((remaining.travel - delta * 0.65).len() < 1e-5);
-    let completed = remaining.apply(&partial, true, &symmetry).unwrap();
+    assert!((remaining.travel() - delta * 0.65).len() < 1e-5);
+    let (completed, _) = remaining.apply(&partial, true, &symmetry).unwrap();
     assert_eq!(completed.quads, cut.quads);
     assert!(
         completed
@@ -1691,6 +1691,122 @@ fn modeling_cell_notch_rejects_contact_with_the_far_wall() {
     let symmetry = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
     assert!(
         cell.apply(&mesh, true, &symmetry)
+            .unwrap_err()
+            .contains("occupies this grid cell")
+    );
+}
+
+#[test]
+fn face_cell_notch_preserves_every_square_outside_the_chosen_cell() {
+    let mesh = cube(3);
+    let symmetry = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    let surface = |mesh: &Mesh| {
+        mesh.quads
+            .iter()
+            .map(|q| {
+                let mut points = q.map(|v| {
+                    let Vec3(x, y, z) = mesh.vertices[v];
+                    [x, y, z].map(|p| {
+                        let grid = (p + 1.) * 1.5;
+                        assert!((grid - grid.round()).abs() < 1e-5);
+                        grid.round() as i32
+                    })
+                });
+                points.sort_unstable();
+                points
+            })
+            .collect::<BTreeSet<_>>()
+    };
+    let original = surface(&mesh);
+    for (f, q) in mesh.quads.iter().enumerate() {
+        let [a, b, c, _] = q.map(|v| mesh.vertices[v]);
+        let normal = (b - a).cross(c - a).norm();
+        let Vec3(x, y, z) = (a + c) * 0.5 - normal * (1. / 3.);
+        let voxel = [x, y, z].map(|p| ((p + 1.) * 1.5).floor() as i32);
+        let cell = mesh.face_cell_notch(f).unwrap();
+        let (cut, caps) = cell.apply(&mesh, true, &symmetry).unwrap();
+        cut.validate_closed().unwrap();
+        assert_eq!(cut.quads.len() * 2, cut.triangles.len());
+        for (old, new) in mesh.quads[f].iter().zip(cut.quads[caps[&f]]) {
+            assert!((cut.vertices[new] - mesh.vertices[*old] - cell.travel()).len() < 1e-5);
+        }
+        // Removing a voxel toggles exactly its six boundary squares.
+        let mut expected = original.clone();
+        for axis in 0..3 {
+            for side in [0, 1] {
+                let mut wall = [voxel; 4];
+                for (corner, p) in wall.iter_mut().enumerate() {
+                    p[axis] += side;
+                    p[(axis + 1) % 3] += (corner % 2) as i32;
+                    p[(axis + 2) % 3] += (corner / 2) as i32;
+                }
+                wall.sort_unstable();
+                if !expected.remove(&wall) {
+                    expected.insert(wall);
+                }
+            }
+        }
+        assert_eq!(surface(&cut), expected);
+    }
+}
+
+#[test]
+fn face_cell_notch_uses_grid_depth_and_respects_contacts_masks_and_symmetry() {
+    let mut mesh = cube(3);
+    for v in &mut mesh.vertices {
+        v.2 *= 0.6;
+    }
+    let f = front_center(&mesh);
+    let q = mesh.quads[f];
+    let identity = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    let notch = mesh.face_cell_notch(f).unwrap();
+    assert!((notch.travel() - Vec3(0., 0., -0.4)).len() < 1e-5);
+    let partial_delta = Vec3(0.02, 0., -0.15);
+    let partial = mesh
+        .transform_components(
+            &q,
+            mesh.vertices[q[0]],
+            ComponentTransform::Move(partial_delta),
+            false,
+            &identity,
+        )
+        .unwrap();
+    let finish = partial.face_cell_notch(f).unwrap();
+    assert!((finish.travel() + partial_delta - notch.travel()).len() < 1e-5);
+    let (cut, _) = finish.apply(&partial, true, &identity).unwrap();
+    let (direct, _) = notch.apply(&mesh, true, &identity).unwrap();
+    assert_eq!(cut.quads, direct.quads);
+    assert!(
+        cut.vertices
+            .iter()
+            .zip(&direct.vertices)
+            .all(|(&a, &b)| (a - b).len() < 1e-5)
+    );
+
+    let mut mirror = mirror_x();
+    mirror.mirror = [false, false, true];
+    let symmetry = ModelingSymmetry::new(&mesh, &mirror).unwrap();
+    let (both, caps) = notch.apply(&mesh, true, &symmetry).unwrap();
+    both.validate_closed().unwrap();
+    assert_eq!(caps.len(), 2);
+    assert_eq!(both.quads.len(), mesh.quads.len() + 8);
+    mesh.mask[q[0]] = 1.;
+    assert!(notch.apply(&mesh, true, &identity).is_err());
+    assert!(notch.apply(&mesh, false, &identity).is_ok());
+    mesh.hidden_faces = mesh.triangles.iter().map(|t| t.contains(&q[1])).collect();
+    assert!(notch.apply(&mesh, false, &identity).is_err());
+
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
+    primitive.divisions = [3, 3, 1];
+    let thin = primitive.mesh().unwrap();
+    assert!(
+        thin.face_cell_notch(front_center(&thin))
+            .unwrap()
+            .apply(
+                &thin,
+                true,
+                &ModelingSymmetry::new(&thin, &Default::default()).unwrap()
+            )
             .unwrap_err()
             .contains("occupies this grid cell")
     );

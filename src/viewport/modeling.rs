@@ -222,6 +222,8 @@ pub(crate) struct ModelingOptions {
     pub transform_direction: Vec3,
     #[serde(default)]
     pub snap_cell: bool,
+    #[serde(default)]
+    pub snap_face_cell: bool,
     pub amount: f32,
     pub protect_mask: bool,
     pub individual: bool,
@@ -644,17 +646,16 @@ impl Viewport {
             if let Some(target) = drag
                 .direct
                 .as_ref()
-                .and_then(|d| d.cell_target(drag.anchor))
-                && scene.visible_depth(target)
+                .and_then(|d| d.cell_target(scene, drag.anchor))
             {
-                painter.circle_stroke(scene.project(target), 5., (1.5, highlighted));
+                painter.circle_stroke(target, 5., (1.5, highlighted));
             }
             if let Some(Ok(result)) = &drag.result {
                 let components = if matches!(
                     model.tool,
                     ModelTool::Move | ModelTool::Rotate | ModelTool::Scale | ModelTool::Slide
                 ) {
-                    drag.components.clone()
+                    result.moved_selection(&drag.components)
                 } else if result.retain_caps {
                     ModelingState::cap_selection(document.mesh(), &result.mesh, &drag.components)
                 } else {

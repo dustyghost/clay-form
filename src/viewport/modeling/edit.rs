@@ -5,6 +5,7 @@ pub(super) struct EditOutcome {
     pub mesh: Mesh,
     pub amount: f32,
     pub retain_caps: bool,
+    moved_faces: std::collections::BTreeMap<usize, usize>,
     pub notice: &'static str,
 }
 impl EditOutcome {
@@ -13,8 +14,34 @@ impl EditOutcome {
             mesh,
             amount,
             retain_caps,
+            moved_faces: Default::default(),
             notice: "",
         }
+    }
+    pub(super) fn notch(
+        mesh: &Mesh,
+        cell: &crate::sculpt::CellNotch,
+        amount: f32,
+        protect: bool,
+        symmetry: &ModelingSymmetry,
+    ) -> Result<Self, String> {
+        let (mesh, moved_faces) = cell.apply(mesh, protect, symmetry)?;
+        Ok(Self {
+            mesh,
+            moved_faces,
+            amount: cell.travel().len().copysign(amount),
+            retain_caps: false,
+            notice: "One-cell notch snapped",
+        })
+    }
+    pub(super) fn moved_selection(&self, source: &BTreeSet<Component>) -> BTreeSet<Component> {
+        source
+            .iter()
+            .map(|&c| match c {
+                Component::Face(f) => Component::Face(*self.moved_faces.get(&f).unwrap_or(&f)),
+                _ => c,
+            })
+            .collect()
     }
 }
 pub(super) struct EditDrag {
@@ -222,6 +249,7 @@ impl ModelingState {
                 EditOutcome {
                     mesh: r.mesh,
                     amount: r.distance,
+                    moved_faces: Default::default(),
                     retain_caps: !r.joined && !r.collapsed,
                     notice: if r.partial_contact {
                         "Some regions snapped; others have no compatible contact"
@@ -328,12 +356,7 @@ impl ModelingState {
         if let Some(cell) = Self::move_cell(options, components, mesh, anchor, &symmetry)
             && cell.reached(axis * amount)
         {
-            return Ok(EditOutcome {
-                mesh: cell.apply(mesh, options.protect_mask, &symmetry)?,
-                amount: cell.travel.len().copysign(amount),
-                retain_caps: false,
-                notice: "One-cell notch snapped",
-            });
+            return EditOutcome::notch(mesh, &cell, amount, options.protect_mask, &symmetry);
         }
         let transform = match options.tool {
             ModelTool::Move => ComponentTransform::Move(axis * amount),
@@ -391,11 +414,14 @@ impl ModelingState {
         if result.mesh == *document.mesh() {
             return Ok(());
         }
-        let caps = if result.retain_caps
+        let selection = if options.tool.is_transform() || options.tool == ModelTool::Slide {
+            result.moved_selection(&drag.components)
+        } else if result.retain_caps
             && matches!(
                 options.tool,
                 ModelTool::Inset | ModelTool::Bevel | ModelTool::Extrude
-            ) {
+            )
+        {
             Self::cap_selection(document.mesh(), &result.mesh, &drag.components)
         } else {
             BTreeSet::new()
@@ -418,14 +444,7 @@ impl ModelingState {
                 drag.anchor
             },
         );
-        if matches!(
-            options.tool,
-            ModelTool::Move | ModelTool::Rotate | ModelTool::Scale | ModelTool::Slide
-        ) {
-            self.selected = drag.components;
-        } else {
-            self.selected = caps;
-        }
+        self.selected = selection;
         Ok(())
     }
     pub fn apply_amount(
@@ -444,11 +463,14 @@ impl ModelingState {
         if result.mesh == *document.mesh() {
             return Ok(());
         }
-        let caps = if result.retain_caps
+        let selection = if options.tool.is_transform() || options.tool == ModelTool::Slide {
+            result.moved_selection(&self.selected)
+        } else if result.retain_caps
             && matches!(
                 options.tool,
                 ModelTool::Inset | ModelTool::Bevel | ModelTool::Extrude
-            ) {
+            )
+        {
             Self::cap_selection(document.mesh(), &result.mesh, &self.selected)
         } else {
             BTreeSet::new()
@@ -456,12 +478,7 @@ impl ModelingState {
         let mut options = options;
         options.amount = result.amount;
         document.commit_modeling(result.mesh, options.tool.label(), self.revision)?;
-        if !matches!(
-            options.tool,
-            ModelTool::Move | ModelTool::Rotate | ModelTool::Scale | ModelTool::Slide
-        ) {
-            self.selected = caps;
-        }
+        self.selected = selection;
         self.revision = document.display_revision();
         self.notice = (!result.notice.is_empty()).then_some(result.notice);
         self.last_edit = Some(options);

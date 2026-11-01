@@ -1404,6 +1404,7 @@ fn modeling_transform_presets_preserve_modes_vectors_and_legacy_axes() {
     app.dispatch(Command::Action(Action::ModelTool(ModelTool::Move)), &ctx);
     app.ui.modeling.transform_direction = crate::sculpt::Vec3(0.6, 0.8, 0.);
     app.ui.modeling.snap_cell = true;
+    app.ui.modeling.snap_face_cell = true;
     app.ui.modeling.amount = 0.25;
     let options = app.ui.modeling.options();
     let encoded = serde_json::to_value(options).unwrap();
@@ -1426,10 +1427,12 @@ fn modeling_transform_presets_preserve_modes_vectors_and_legacy_axes() {
     old.as_object_mut().unwrap().remove("interaction");
     old.as_object_mut().unwrap().remove("transform_direction");
     old.as_object_mut().unwrap().remove("snap_cell");
+    old.as_object_mut().unwrap().remove("snap_face_cell");
     let old: crate::viewport::ModelingOptions = serde_json::from_value(old).unwrap();
     old.validate().unwrap();
     assert_eq!(old.interaction, ModelInteraction::Axis);
     assert!(!old.snap_cell);
+    assert!(!old.snap_face_cell);
 }
 
 #[test]
@@ -1922,4 +1925,94 @@ fn modeling_cell_notch_from_middle_top_front_edge() {
             assert_ne!(app.document.mesh().vertices, before.mesh.vertices);
         }
     }
+}
+
+#[test]
+fn modeling_face_cell_notch_pushes_one_square_from_the_viewport() {
+    use crate::sculpt::Vec3;
+    // Front center, top edge, and top corner initially expose one, two, and three faces.
+    for (x, y, expected_quads) in [(0., 0., 58), (0., 2. / 3., 56), (2. / 3., 2. / 3., 54)] {
+        let (mut app, ctx, rect) = setup();
+        assert!(!app.ui.modeling.snap_face_cell);
+        app.ui.modeling.snap_face_cell = true;
+        app.camera.yaw = 0.55;
+        app.camera.pitch = -0.27;
+        app.dispatch(Command::Action(Action::ModelTool(ModelTool::Move)), &ctx);
+        navigation_frame(&mut app, &ctx, vec![]);
+        let (right, up, _) = app.camera.basis();
+        let project = |p: Vec3| {
+            rect.center()
+                + Vec2::new(p.dot(right), -p.dot(up)) * app.camera.scale_at(rect.size(), p)
+        };
+        let start = project(Vec3(x, y, 1.));
+        let target = project(Vec3(x, y, 1. / 3.));
+        let before = app.document.geometry_snapshot();
+        pen_drag(&mut app, &ctx, start, start + (target - start) * 1.15);
+        assert_eq!(
+            app.document.mesh().quads.len(),
+            expected_quads,
+            "face ({x}, {y})"
+        );
+        let selected = app.viewport.modeling.selected_vertices(app.document.mesh());
+        assert_eq!(selected.len(), 4);
+        assert!(
+            selected
+                .iter()
+                .all(|&v| (app.document.mesh().vertices[v].2 - 1. / 3.).abs() < 1e-5)
+        );
+        app.document.mesh().validate_closed().unwrap();
+        app.dispatch(Command::Undo, &ctx);
+        assert_eq!(app.document.geometry_snapshot(), before);
+    }
+}
+
+#[test]
+fn modeling_face_cell_notch_straight_on_preview_and_numeric_apply_agree() {
+    use crate::viewport::{ModelAxis, ModelInteraction};
+    let (mut app, ctx, rect) = setup();
+    app.dispatch(Command::Action(Action::ModelTool(ModelTool::Move)), &ctx);
+    let before = app.document.geometry_snapshot();
+    let history = app.document.history_counts();
+    let start = rect.center();
+    let end = start + Vec2::Y * (rect.size().min_elem() * 0.35 * 0.7);
+    // Opting in for edges alone keeps the existing free face gesture.
+    app.ui.modeling.snap_cell = true;
+    pen_drag(&mut app, &ctx, start, end);
+    assert_eq!(app.document.mesh().quads, before.mesh.quads);
+    assert_ne!(app.document.mesh().vertices, before.mesh.vertices);
+    app.dispatch(Command::Undo, &ctx);
+    app.ui.modeling.snap_face_cell = true;
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+    let preview = app.viewport.modeling.preview().unwrap().clone();
+    assert_eq!(preview.quads.len(), 58);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Escape, true)]);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            primary_event(end, false),
+            slice_key(egui::Key::Escape, false),
+        ],
+    );
+    assert_eq!(app.document.geometry_snapshot(), before);
+
+    app.dispatch(Command::Action(Action::ModelTool(ModelTool::Select)), &ctx);
+    tap(&mut app, &ctx, start);
+    app.dispatch(Command::Action(Action::ModelTool(ModelTool::Move)), &ctx);
+    app.ui.modeling.interaction = ModelInteraction::Axis;
+    app.ui.modeling.axis = ModelAxis::Normal;
+    app.ui.modeling.amount = -0.7;
+    app.dispatch(Command::ModelApply, &ctx);
+    assert_eq!(app.document.mesh(), &preview);
+    assert_eq!(app.document.history_counts().0, history.0 + 1);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    app.dispatch(Command::Redo, &ctx);
+    assert_eq!(app.document.mesh(), &preview);
 }

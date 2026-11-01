@@ -1,7 +1,15 @@
-//! Turn the two quads at a convex grid ridge into the floor and back of one cell.
+//! One-cell cuts from a grid face or convex ridge.
 use super::*;
 
-pub(crate) struct CellNotch {
+mod face;
+use face::FaceNotch;
+
+pub(crate) enum CellNotch {
+    Ridge(RidgeNotch),
+    Face(FaceNotch),
+}
+
+pub(crate) struct RidgeNotch {
     edge: [usize; 2],
     faces: [[usize; 4]; 2],
     outer: [Vec3; 2],
@@ -67,23 +75,48 @@ impl Mesh {
             return None;
         }
         let travel = outer[0] + down + back - position(a);
-        (travel.len() > tolerance).then_some(CellNotch {
+        (travel.len() > tolerance).then_some(CellNotch::Ridge(RidgeNotch {
             edge: [a, b],
             faces: [front, top],
             outer,
             travel,
-        })
+        }))
     }
 }
 
 impl CellNotch {
+    pub(crate) fn travel(&self) -> Vec3 {
+        match self {
+            Self::Ridge(ridge) => ridge.travel,
+            Self::Face(face) => face.travel,
+        }
+    }
+
     /// Snap on approach and on overshoot along the same drag, using local model units.
     pub(crate) fn reached(&self, movement: Vec3) -> bool {
-        let t = (self.travel.dot(movement) / movement.dot(movement).max(1e-20)).clamp(0., 1.);
-        (self.travel - movement * t).len() <= self.travel.len() * 0.08
+        let travel = self.travel();
+        let t = (travel.dot(movement) / movement.dot(movement).max(1e-20)).clamp(0., 1.);
+        (travel - movement * t).len() <= travel.len() * 0.08
     }
 
     pub(crate) fn apply(
+        &self,
+        mesh: &Mesh,
+        protect: bool,
+        symmetry: &ModelingSymmetry,
+    ) -> Result<(Mesh, BTreeMap<usize, usize>), String> {
+        let (out, caps) = match self {
+            Self::Ridge(ridge) => (ridge.apply(mesh, protect, symmetry)?, BTreeMap::new()),
+            Self::Face(face) => face.apply(mesh, protect, symmetry)?,
+        };
+        mesh.check_model_protection(&out, protect)?;
+        manifold(&out)?;
+        symmetry.validate_result(&out)?;
+        Ok((out, caps))
+    }
+}
+impl RidgeNotch {
+    fn apply(
         &self,
         mesh: &Mesh,
         protect: bool,
@@ -96,18 +129,15 @@ impl CellNotch {
             if e == self.edge {
                 continue;
             }
-            let cell = mesh
-                .cell_notch(e)
-                .ok_or("The mirrored edge needs a matching grid cell")?;
+            let Some(CellNotch::Ridge(cell)) = mesh.cell_notch(e) else {
+                return Err("The mirrored edge needs a matching grid cell".into());
+            };
             if e.iter().any(|&v| !touched.insert(v)) {
                 return Err("Overlapping symmetric notches need separate ridge segments".into());
             }
             cell.cut(mesh, &mut out, protect)?;
         }
         out.retain_creases();
-        mesh.check_model_protection(&out, protect)?;
-        manifold(&out)?;
-        symmetry.validate_result(&out)?;
         Ok(out)
     }
 

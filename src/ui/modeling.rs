@@ -15,6 +15,7 @@ pub(crate) struct ModelingControls {
     pub axis: crate::viewport::ModelAxis,
     pub interaction: crate::viewport::ModelInteraction,
     pub snap_cell: bool,
+    pub snap_face_cell: bool,
     pub transform_direction: crate::sculpt::Vec3,
     pub directions: std::collections::BTreeMap<ModelTool, crate::sculpt::Vec3>,
     pub amount: f32,
@@ -57,6 +58,7 @@ impl ModelingControls {
         self.directions.insert(o.tool, o.transform_direction);
         self.interaction = o.interaction;
         self.snap_cell = o.snap_cell;
+        self.snap_face_cell = o.snap_face_cell;
         self.transform_direction = o.transform_direction;
         self.mode = o.mode;
         self.tool = o.tool;
@@ -90,6 +92,7 @@ impl ModelingControls {
             interaction: self.interaction,
             transform_direction: self.transform_direction,
             snap_cell: self.snap_cell,
+            snap_face_cell: self.snap_face_cell,
             amount: self.amount,
             protect_mask: self.protect_mask,
             individual: self.individual,
@@ -337,6 +340,12 @@ impl UiState {
                         design::help(
                             design::checkbox(ui, &mut self.modeling.snap_cell, "Snap to cell notch"),
                             "Drag one ridge segment to the interior corner of a grid cell to expose its floor and walls.",
+                        );
+                    }
+                    if self.modeling.tool == ModelTool::Move && self.modeling.mode == ComponentMode::Face {
+                        design::help(
+                            design::checkbox(ui, &mut self.modeling.snap_face_cell, "Snap to cell notch"),
+                            "Push one grid face inward to the gold ring to cut a one-cell recess. From straight on, drag down.",
                         );
                     }
                     if direct {
