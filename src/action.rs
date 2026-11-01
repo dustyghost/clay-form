@@ -189,6 +189,7 @@ pub(crate) enum Action {
     BrushAdd,
     BrushSubtract,
     BrushIcon,
+    ObjectBrushModels,
     BrushSize,
     BrushInnerRadius,
     BrushStrength,
@@ -221,6 +222,7 @@ impl Action {
         let ctrl = Modifiers::CTRL;
         let none = Modifiers::NONE;
         let (key, modifiers) = match self {
+            Self::ObjectBrushModels => (Key::B, none),
             Self::Save => (Key::S, ctrl),
             Self::SaveAs => (Key::S, ctrl | Modifiers::SHIFT),
             Self::Open => (Key::O, ctrl),
@@ -361,6 +363,7 @@ impl Action {
         Self::StrokeDragDot,
         Self::StrokeStabilisation,
         Self::BrushIcon,
+        Self::ObjectBrushModels,
         Self::BrushSize,
         Self::BrushInnerRadius,
         Self::BrushStrength,
@@ -760,6 +763,7 @@ impl Action {
             Self::StrokeDragDot => "Stroke: Drag Dot",
             Self::StrokeStabilisation => "Toggle stroke stabilisation",
             Self::BrushIcon => "Active brush icon",
+            Self::ObjectBrushModels => "Object brush models",
             Self::BrushSize => "Brush size",
             Self::BrushInnerRadius => "Brush inner radius",
             Self::BrushStrength => "Brush strength",

@@ -122,6 +122,9 @@ fn reusable_models_offscreen_review() {
     assert!(!g.app.document.instance_preview_active());
     g.save("04-path-assembly");
     g.app.dispatch(Command::Instances(C::Remove(1)), &g.ctx);
+    g.panel(Tool::Brush, Dock::Left);
+    g.app
+        .dispatch(Command::Instances(C::CreateBrush("Studs".into())), &g.ctx);
     g.app.dispatch(
         Command::Instances(C::Capture("Square stud".into(), Vec3(0., 0., -0.12), 0, 2)),
         &g.ctx,
@@ -132,7 +135,7 @@ fn reusable_models_offscreen_review() {
     g.app.ui.instances.brush.scale = 0.8;
     g.app.ui.instances.brush.spacing = 0.3;
     g.app
-        .dispatch(Command::Instances(C::UseObjectBrush(None, 1)), &g.ctx);
+        .dispatch(Command::Instances(C::ChooseBrush(1)), &g.ctx);
     let (rect, _) = g.frame(vec![]);
     let before = g.app.document.history_counts().0;
     g.stroke(
@@ -147,7 +150,8 @@ fn reusable_models_offscreen_review() {
     );
     assert!(g.app.document.instance_placements().unwrap().len() > 3);
     g.save("05-object-stroke");
-    g.app.dispatch(Command::Instances(C::StopBrush), &g.ctx);
+    g.app.ui.select_brush(0, &g.app.document);
+    g.frame(vec![]);
     g.app.document.undo();
     assert!(g.app.document.instances().sets.is_empty());
     g.app.document.redo();
@@ -1031,6 +1035,11 @@ impl Guide {
                             .ui
                             .toolbar(ctx, &self.app.document, &self.app.camera),
                     );
+                }
+                if self.app.ui.customization.popup_menu.is_some() {
+                    commands.extend(self.app.ui.custom_surfaces(ctx, &self.app.document));
+                } else {
+                    self.app.ui.customization.popup_blocks_viewport = false;
                 }
                 commands.extend(self.app.ui.brush_panel(
                     ctx,

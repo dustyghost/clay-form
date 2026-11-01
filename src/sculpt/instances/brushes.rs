@@ -40,6 +40,19 @@ impl BrushBundle {
     }
 }
 impl Library {
+    pub(crate) fn new_brush_name(&self) -> String {
+        (1..)
+            .map(|n| {
+                if n == 1 {
+                    "Object brush".to_owned()
+                } else {
+                    format!("Object brush {n}")
+                }
+            })
+            .find(|name| self.brushes.iter().all(|b| b.name != *name))
+            .unwrap()
+    }
+
     pub(crate) fn validate_brushes(&self) -> Result<(), String> {
         if self.brushes.len() > MAX_ASSETS {
             return Err("Projects are limited to 64 object brushes".into());

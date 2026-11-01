@@ -271,7 +271,10 @@ impl App {
         Ok(())
     }
     pub(super) fn save_to(&mut self, path: &str) -> bool {
-        match persistence::save_project(path, &self.document.project()) {
+        match self
+            .remember_object_options()
+            .and_then(|()| persistence::save_project(path, &self.document.project()))
+        {
             Ok(()) => {
                 self.document.mark_saved(path);
                 self.ui.path = path.into();

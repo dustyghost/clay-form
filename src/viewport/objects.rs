@@ -60,7 +60,7 @@ pub(super) fn paint_capture_axes(
     );
 }
 pub(crate) struct ObjectBrush {
-    pub piece: Piece,
+    pub piece: Option<Piece>,
     pub options: BrushOptions,
     stroke: Option<Set>,
     last_pointer: Option<Pos2>,
@@ -71,7 +71,7 @@ impl ObjectBrush {
     pub(crate) fn stroking(&self) -> bool {
         self.stroke.is_some()
     }
-    pub fn new(piece: Piece) -> Self {
+    pub fn new(piece: Option<Piece>) -> Self {
         Self {
             piece,
             options: Default::default(),
@@ -89,7 +89,7 @@ impl ObjectBrush {
         self.last_surface = None;
         self.travelled = 0.;
     }
-    fn placement(&self, center: Vec3, normal: Vec3, direction: Vec3) -> Placement {
+    fn placement(&self, piece: Piece, center: Vec3, normal: Vec3, direction: Vec3) -> Placement {
         let forward = direction - normal * direction.dot(normal);
         let forward = if forward.len() > 1e-5 {
             forward.norm()
@@ -103,7 +103,7 @@ impl ObjectBrush {
         }
         .rotated(normal, self.options.rotation.to_radians());
         Placement {
-            piece: self.piece,
+            piece,
             transform: Transform {
                 basis: None,
                 origin: center + normal * self.options.offset,
@@ -113,7 +113,13 @@ impl ObjectBrush {
             },
         }
     }
-    fn sample(&mut self, point: Pos2, scene: &Scene, document: &Document) -> Result<(), String> {
+    fn sample(
+        &mut self,
+        piece: Piece,
+        point: Pos2,
+        scene: &Scene,
+        document: &Document,
+    ) -> Result<(), String> {
         let Some((center, normal)) = scene.pick_object_target(point, document) else {
             self.last_surface = None;
             self.travelled = 0.;
@@ -128,13 +134,13 @@ impl ObjectBrush {
             while along <= distance && hits.len() < MAX_INSTANCES {
                 let candidate = previous + delta * (along / distance.max(1e-8));
                 if let Some((p, n)) = scene.pick_object_target(scene.project(candidate), document) {
-                    hits.push(self.placement(p, n, delta));
+                    hits.push(self.placement(piece, p, n, delta));
                 }
                 along += self.options.spacing;
             }
             self.travelled = (self.travelled + distance) % self.options.spacing;
         } else {
-            hits.push(self.placement(center, normal, scene.right));
+            hits.push(self.placement(piece, center, normal, scene.right));
         }
         if let Some(Set {
             layout: Layout::Manual(items),
@@ -167,7 +173,9 @@ impl Viewport {
         let Some(mut brush) = self.object_brush.take() else {
             return false;
         };
-        if document.instance_source(brush.piece.source).is_none()
+        if brush
+            .piece
+            .is_some_and(|piece| document.instance_source(piece.source).is_none())
             || options.transform_mode != TransformMode::Sculpt
             || options.modeling.is_some()
             || options.select.is_some()
@@ -218,11 +226,22 @@ impl Viewport {
                 && !navigation::contains(response.rect, p)
                 && ui.ctx().layer_id_at(p) == Some(response.layer_id)
         };
+        let Some(piece) = brush.piece else {
+            self.object_brush = Some(brush);
+            // An empty preset can navigate but has no geometry to stamp.
+            if ui.input(|i| i.pointer.primary_pressed())
+                && response.interact_pointer_pos().is_some_and(permitted)
+            {
+                self.session.gesture = Some(Gesture::Orbit);
+                return false;
+            }
+            return response.hover_pos().is_some_and(permitted);
+        };
         if let Some(point) = response.hover_pos().filter(|p| permitted(*p))
             && let Some((center, normal)) = scene.pick_object_target(point, document)
-            && let Some(source) = document.instance_source(brush.piece.source)
+            && let Some(source) = document.instance_source(piece.source)
         {
-            let placement = brush.placement(center, normal, scene.right);
+            let placement = brush.placement(piece, center, normal, scene.right);
             for tri in source
                 .triangles
                 .iter()
@@ -263,7 +282,7 @@ impl Viewport {
                                 brush.last_surface = None;
                                 brush.last_pointer = Some(pos);
                                 brush.travelled = 0.;
-                                if let Err(error) = brush.sample(pos, scene, document) {
+                                if let Err(error) = brush.sample(piece, pos, scene, document) {
                                     self.status = Some(error);
                                 }
                                 changed = true;
@@ -287,7 +306,7 @@ impl Viewport {
                                 brush.travelled = 0.;
                                 continue;
                             }
-                            if let Err(error) = brush.sample(p, scene, document) {
+                            if let Err(error) = brush.sample(piece, p, scene, document) {
                                 self.status = Some(error);
                                 break;
                             }
@@ -302,7 +321,7 @@ impl Viewport {
                     ..
                 } if brush.stroke.is_some() => {
                     if brush.last_pointer != Some(pos) && permitted(pos) {
-                        if let Err(error) = brush.sample(pos, scene, document) {
+                        if let Err(error) = brush.sample(piece, pos, scene, document) {
                             self.status = Some(error);
                         }
                         changed = true;
@@ -320,7 +339,7 @@ impl Viewport {
             ui.ctx().request_repaint();
         }
         if released && let Some(set) = brush.stroke.take() {
-            let result = document.finish_object_stroke(set.id, brush.piece.source, brush.options);
+            let result = document.finish_object_stroke(set.id, piece.source, brush.options);
             if let Err(error) = result {
                 document.cancel_instance_preview();
                 self.status = Some(error);

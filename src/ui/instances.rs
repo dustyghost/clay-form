@@ -14,9 +14,9 @@ pub(crate) struct Controls {
     pub asset: Option<u64>,
     pub group: Option<u64>,
     pub group_name: String,
-    pub library_open: bool,
     pub capture_frame: Option<u64>,
     pub personal_brushes: Vec<String>,
+    pub saved_brushes_listed: bool,
     pub remove_saved: Option<String>,
     pub bundle_path: String,
     pub name: String,
@@ -41,9 +41,9 @@ impl Default for Controls {
             asset: None,
             group: None,
             group_name: String::new(),
-            library_open: false,
             capture_frame: None,
             personal_brushes: Vec::new(),
+            saved_brushes_listed: false,
             remove_saved: None,
             bundle_path: "kit.objects.json".into(),
             name: String::new(),
@@ -404,28 +404,6 @@ impl UiState {
             }
         }
     }
-    pub(super) fn object_settings(&mut self, ui: &mut egui::Ui) {
-        ui.weak("Click the surface to place a part, drag to repeat, or drag empty space to orbit.");
-        self.instances.size_control(ui);
-        ui.add(
-            egui::DragValue::new(&mut self.instances.brush.spacing)
-                .range(0.001..=1000.)
-                .speed(0.01)
-                .prefix("Repeat spacing "),
-        );
-        ui.add(
-            egui::DragValue::new(&mut self.instances.brush.offset)
-                .speed(0.01)
-                .prefix("Surface offset "),
-        );
-        ui.add(
-            egui::Slider::new(&mut self.instances.brush.rotation, -180.0..=180.).text("Rotation °"),
-        );
-        ui.checkbox(
-            &mut self.instances.brush.independent,
-            "Create independent geometry",
-        );
-    }
 }
 
 fn instance_set(ui: &mut egui::Ui, document: &Document, set: &Set, commands: &mut Vec<Command>) {
@@ -531,6 +509,23 @@ struct Thumbnail {
 }
 
 impl Controls {
+    fn placement_settings(&mut self, ui: &mut egui::Ui) {
+        ui.weak("Click the surface to place a part, drag to repeat, or drag empty space to orbit.");
+        self.size_control(ui);
+        ui.add(
+            egui::DragValue::new(&mut self.brush.spacing)
+                .range(0.001..=1000.)
+                .speed(0.01)
+                .prefix("Repeat spacing "),
+        );
+        ui.add(
+            egui::DragValue::new(&mut self.brush.offset)
+                .speed(0.01)
+                .prefix("Surface offset "),
+        );
+        ui.add(egui::Slider::new(&mut self.brush.rotation, -180.0..=180.).text("Rotation °"));
+        ui.checkbox(&mut self.brush.independent, "Create independent geometry");
+    }
     pub(super) fn selected_cover<'a>(&self, library: &'a Library) -> Option<(&'a str, &'a Asset)> {
         if !self.placing {
             return None;
@@ -585,4 +580,4 @@ impl Controls {
         Some(texture_id)
     }
 }
-pub(super) use brushes::{library_tiles, manager, part_picker};
+pub(super) use brushes::{library_tiles, part_picker, settings};

@@ -435,6 +435,9 @@ impl App {
             && let Some(mut brush) = self.viewport.object_brush.take()
         {
             brush.cancel(&mut self.document);
+            if let Err(error) = self.remember_object_options() {
+                self.ui.status = error;
+            }
         }
         self.viewport.capture_axes = (self.ui.instances.capture_frame
             == Some(ui.ctx().cumulative_frame_nr())
@@ -535,6 +538,10 @@ impl App {
                 },
             },
         );
+        if self.ui.instances.placing && self.viewport.object_brush.is_none() {
+            self.ui.instances.group = None;
+            self.ui.instances.asset = None;
+        }
         self.ui.instances.placing = self.viewport.object_brush.is_some();
         if let Some(set) = self.viewport.path_thickness.updated.take() {
             self.ui.instances.editor = Some(set);

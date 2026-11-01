@@ -180,7 +180,8 @@ impl<'a> EditorPolicy<'a> {
             Action::Redo => document.can_redo(),
             Action::SelectBrush(id) => document.brushes().iter().any(|b| b.identity() == *id),
             Action::NewBrush(name) => {
-                name == "Alpha Drag" || Kind::ALL.iter().any(|k| format!("{k:?}") == *name)
+                matches!(name.as_str(), "Alpha Drag" | "Object")
+                    || Kind::ALL.iter().any(|k| format!("{k:?}") == *name)
             }
             Action::OpenMenu(id) => self.ui.preferences.menus.iter().any(|m| m.id == *id),
 

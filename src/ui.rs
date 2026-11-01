@@ -801,9 +801,6 @@ impl UiState {
                 self.preferences.panels[index].dock = Dock::Hidden;
             }
         }
-        if self.instances.library_open {
-            instances::manager(ctx, &mut self.instances, document, &mut commands);
-        }
         commands
     }
     pub fn status_bar(&self, ctx: &egui::Context) {
@@ -855,7 +852,9 @@ impl UiState {
         commands: &mut Vec<Command>,
     ) {
         if self.instances.placing && tool == Tool::Brush {
-            self.object_settings(ui);
+            ui.add_enabled_ui(!self.mesh_busy, |ui| {
+                instances::settings(ui, &mut self.instances, document, commands);
+            });
             return;
         }
         let focus_before = ui.ctx().memory(|m| m.focused());
@@ -903,13 +902,18 @@ impl UiState {
                 let width = ((ui.available_width() - 6. * (columns - 1) as f32) / columns as f32)
                     .floor()
                     .max(32.);
-                ui.add_enabled_ui(!self.mesh_busy, |ui| {
-                    instances::library_tiles(ui, &mut self.instances, document, commands, width);
-                    if self.instances.placing {
-                        instances::part_picker(ui, &mut self.instances, document, commands, width);
-                        ui.collapsing("Placement settings", |ui| self.object_settings(ui));
+                if self.instances.placing {
+                    let action = Action::ObjectBrushModels;
+                    let mut button = egui::Button::new("Choose model…");
+                    if let Some(shortcut) = self.preferences.shortcut(&action) {
+                        button = button.shortcut_text(shortcut.label());
                     }
-                });
+                    if ui.add(button).clicked() {
+                        commands.push(Command::Action(action.clone()));
+                    }
+                    self.brush_control(ui, &action, "", document, commands);
+                    ui.separator();
+                }
                 // Fixed-size tiles do not need a grid's cached column widths:
                 // those widths lag a sidebar drag and force it back open.
                 ui.push_id("brush_tiles", |ui| {
@@ -933,6 +937,13 @@ impl UiState {
                                 ui.end_row();
                             }
                         }
+                        instances::library_tiles(
+                            ui,
+                            &mut self.instances,
+                            document,
+                            commands,
+                            width,
+                        );
                     });
                 });
                 ui.add_space(4.);

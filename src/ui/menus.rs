@@ -63,7 +63,7 @@ impl UiState {
             label,
             (menu == BuiltinMenu::Symmetry && document.symmetry().enabled)
                 || (menu == BuiltinMenu::Modeling && self.modeling.active),
-            menu == BuiltinMenu::Modeling,
+            matches!(menu, BuiltinMenu::Modeling | BuiltinMenu::Brushes),
             |ui| {
                 ui.set_min_width(280.);
                 self.menu_placement_controls(ui, menu, false);
@@ -227,6 +227,49 @@ impl UiState {
             BuiltinMenu::Modeling => self.modeling_function_menu(ui, document, commands, popup),
             BuiltinMenu::References => self.reference_controls(ui, document, commands),
             BuiltinMenu::Brushes => {
+                let object = Action::NewBrush("Object".into());
+                if ui
+                    .button("Object brush")
+                    .customize(object.clone())
+                    .clicked()
+                {
+                    commands.push(Command::Action(object));
+                    if popup {
+                        ui.close_kind(egui::UiKind::Menu);
+                    }
+                }
+                let saved = ui.collapsing("Saved object brushes", |ui| {
+                    if !self.instances.saved_brushes_listed {
+                        commands.push(Command::Instances(
+                            crate::command::InstanceCommand::ListPersonalBrushes,
+                        ));
+                    }
+                    if self.instances.personal_brushes.is_empty() {
+                        ui.weak("No saved object brushes.");
+                    }
+                    for name in &self.instances.personal_brushes {
+                        if ui.button(name).clicked() {
+                            let command = document
+                                .instances()
+                                .brushes
+                                .iter()
+                                .find(|b| b.name == *name)
+                                .map_or_else(
+                                    || {
+                                        crate::command::InstanceCommand::LoadPersonalBrush(
+                                            name.clone(),
+                                        )
+                                    },
+                                    |b| crate::command::InstanceCommand::ChooseBrush(b.id),
+                                );
+                            commands.push(Command::Instances(command));
+                            if popup {
+                                ui.close_kind(egui::UiKind::Menu);
+                            }
+                        }
+                    }
+                });
+                self.instances.saved_brushes_listed = saved.body_returned.is_some();
                 if ui
                     .button("Alpha Drag")
                     .customize(Action::NewBrush("Alpha Drag".into()))

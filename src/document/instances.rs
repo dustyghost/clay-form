@@ -413,7 +413,11 @@ impl Document {
         self.cancel_instance_preview();
         self.replace_geometry_named(next, "Place independent objects")
     }
-    pub fn import_object_asset(&mut self, mut asset: Asset) -> Result<u64, String> {
+    pub fn import_object_asset(
+        &mut self,
+        mut asset: Asset,
+        brush: Option<u64>,
+    ) -> Result<u64, String> {
         self.cancel_instance_preview();
         asset.id = self
             .instances()
@@ -431,6 +435,15 @@ impl Document {
         }
         let mut library = self.instances().clone();
         library.assets.push(asset);
+        if let Some(brush) = brush {
+            library
+                .brushes
+                .iter_mut()
+                .find(|b| b.id == brush)
+                .ok_or("Object brush no longer exists")?
+                .objects
+                .push(id);
+        }
         let models: Vec<_> = (0..self.model_count())
             .map(|i| (self.instance_model_id(i), self.model(i).unwrap().mesh))
             .collect();

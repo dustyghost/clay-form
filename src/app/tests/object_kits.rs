@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    command::{InstanceCommand as C, PendingAction},
+    command::PendingAction,
     sculpt::{
         Geometry, Mesh, Vec3,
         instances::{Layout, Source},
@@ -27,6 +27,8 @@ fn object_kit_library_and_strokes_offscreen_review() {
     let mut g = Guide::new(&directory, [1440, 1000]);
     g.interactive = true;
     g.panel(Tool::Library, Dock::Right);
+    g.panel(Tool::Brush, Dock::Left);
+    g.app.ui.preferences.menus.clear();
     g.app
         .ui
         .preferences
@@ -54,11 +56,42 @@ fn object_kit_library_and_strokes_offscreen_review() {
     g.app.camera.zoom = 3.;
     g.app.camera.yaw = 0.32;
     g.app.camera.pitch = -0.28;
-    click_guide_label(&mut g, "Manage object brushes…");
-    g.app.ui.instances.group_name = "Ship fittings".into();
+    click_guide_label(&mut g, "Add brush");
+    click_guide_label(&mut g, "Object brush");
+    assert!(
+        g.app
+            .viewport
+            .object_brush
+            .as_ref()
+            .unwrap()
+            .piece
+            .is_none()
+    );
     g.frame(vec![]);
-    g.frame(vec![]);
-    click_guide_label(&mut g, "New brush");
+    let name = g
+        .ctx
+        .read_response(egui::Id::new(("object_brush_name", 1u64)))
+        .unwrap()
+        .rect
+        .center();
+    g.frame(vec![
+        egui::Event::PointerMoved(name),
+        primary_event(name, true),
+        primary_event(name, false),
+    ]);
+    let key = |key, modifiers| egui::Event::Key {
+        key,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers,
+    };
+    g.frame(vec![
+        key(egui::Key::A, egui::Modifiers::COMMAND),
+        egui::Event::Text("MyOB".into()),
+    ]);
+    g.frame(vec![key(egui::Key::Enter, egui::Modifiers::NONE)]);
+    assert_eq!(g.app.document.instances().brushes[0].name, "MyOB");
     assert_eq!(g.app.ui.instances.group, Some(1), "{}", g.app.ui.status);
     click_guide_label(&mut g, "Use base centre");
     g.save("17-object-capture-orientation");
@@ -101,15 +134,23 @@ fn object_kit_library_and_strokes_offscreen_review() {
     assert_eq!(g.app.document.instances().brushes[0].objects, vec![1, 2]);
     assert!(g.app.document.instances().assets[1].pivot.1 < -0.07);
     click_guide_label(&mut g, "Capture a model into this brush");
-    g.app.ui.instances.library_open = false;
+
     let mut geometry = g.app.document.geometry_snapshot();
     geometry.mesh = Mesh::starting_sphere();
     geometry.name = "Practice hull".into();
     g.app.document.replace_geometry(geometry).unwrap();
     g.app.camera = Default::default();
-    click_guide_label(&mut g, "Ship fittings");
+    click_guide_label(&mut g, "Clay");
+    click_guide_label(&mut g, "MyOB");
     assert_eq!(
-        g.app.viewport.object_brush.as_ref().unwrap().piece.source,
+        g.app
+            .viewport
+            .object_brush
+            .as_ref()
+            .unwrap()
+            .piece
+            .unwrap()
+            .source,
         Source::Asset(1)
     );
     g.app.ui.instances.brush.scale = 1.;
@@ -121,9 +162,26 @@ fn object_kit_library_and_strokes_offscreen_review() {
         centre + egui::vec2(150., -45.),
     );
     let first = g.app.document.instances().sets[0].clone();
+    click_guide_label(&mut g, "Choose model…");
+    assert!(g.app.ui.customization.popup_menu.is_some());
+    // Choose from the popup with the library hidden, as on a compact workspace.
+    g.panel(Tool::Library, Dock::Hidden);
+    g.frame(vec![]);
+    g.save("22-object-brush-picker");
     click_guide_label(&mut g, "Sensor dome");
+    assert!(g.app.ui.customization.popup_menu.is_none());
+    g.panel(Tool::Library, Dock::Right);
+    g.frame(vec![]);
+
     assert_eq!(
-        g.app.viewport.object_brush.as_ref().unwrap().piece.source,
+        g.app
+            .viewport
+            .object_brush
+            .as_ref()
+            .unwrap()
+            .piece
+            .unwrap()
+            .source,
         Source::Asset(2)
     );
     g.app.ui.instances.brush.scale = 0.95;
@@ -150,22 +208,23 @@ fn object_kit_library_and_strokes_offscreen_review() {
     g.save("18-ship-fittings-strokes");
     click_guide_label(&mut g, "Clay");
     assert!(g.app.viewport.object_brush.is_none());
-    click_guide_label(&mut g, "Manage object brushes…");
+    click_guide_label(&mut g, "MyOB");
     g.frame(vec![]);
     g.frame(vec![]);
     click_guide_label(&mut g, "Reuse in other projects");
     click_guide_label(&mut g, "Save brush to my library");
-    assert_eq!(g.app.ui.instances.personal_brushes, vec!["Ship fittings"]);
+    assert_eq!(g.app.ui.instances.personal_brushes, vec!["MyOB"]);
     g.save("19-ship-fittings-library");
-    g.app.dispatch(Command::Instances(C::StopBrush), &g.ctx);
+    g.app.ui.select_brush(0, &g.app.document);
+    g.frame(vec![]);
     g.app.document.project().validate().unwrap();
     g.app.execute_pending(PendingAction::New, &g.ctx);
-    click_guide_label(&mut g, "Manage object brushes…");
-    g.frame(vec![]);
-    g.frame(vec![]);
-    click_guide_label(&mut g, "Add to project");
+    click_guide_label(&mut g, "Add brush");
+    click_guide_label(&mut g, "Saved object brushes");
+    click_guide_label(&mut g, "MyOB");
     let library = g.app.document.instances();
-    assert_eq!(library.brushes[0].name, "Ship fittings");
+    assert_eq!(library.brushes.len(), 1);
+    assert_eq!(library.brushes[0].name, "MyOB");
     assert_eq!(library.assets[0].options.spacing, 0.38);
     assert_eq!(library.assets[1].up, 1);
     assert_eq!(library.assets[1].options.spacing, 0.27);

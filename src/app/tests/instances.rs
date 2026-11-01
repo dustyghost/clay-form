@@ -11,6 +11,7 @@ fn setup() -> (App, egui::Context) {
     app.document
         .replace_geometry(Geometry::new(cube.mesh().unwrap()))
         .unwrap();
+    app.dispatch(Command::Instances(C::CreateBrush("Studs".into())), &ctx);
     app.dispatch(
         Command::Instances(C::Capture("Stud".into(), Vec3(0., 0., -1.), 0, 2)),
         &ctx,
@@ -18,7 +19,7 @@ fn setup() -> (App, egui::Context) {
     let mut g = app.document.geometry_snapshot();
     g.mesh = Mesh::starting_sphere();
     app.document.replace_geometry(g).unwrap();
-    app.dispatch(Command::Instances(C::UseObjectBrush(None, 1)), &ctx);
+    app.dispatch(Command::Instances(C::ChooseBrush(1)), &ctx);
     navigation_frame(&mut app, &ctx, vec![]);
     (app, ctx)
 }
@@ -28,18 +29,19 @@ fn object_kit_picks_a_part_per_stroke_and_reuses_personal_brushes_across_project
     let (mut app, ctx) = setup();
     let dir = std::env::temp_dir().join(format!("clay-brush-shelf-{}", std::process::id()));
     app.preferences_path = Some(dir.join("preferences.json"));
-    app.dispatch(Command::Instances(C::StopBrush), &ctx);
+    app.ui.select_brush(0, &app.document);
+    navigation_frame(&mut app, &ctx, vec![]);
     app.dispatch(
-        Command::Instances(C::CreateBrush("Ship / fittings".into())),
+        Command::Instances(C::RenameBrush(1, "Ship / fittings".into())),
         &ctx,
     );
-    app.dispatch(Command::Instances(C::BrushMember(1, 1, true)), &ctx);
+    app.dispatch(Command::Instances(C::ChooseBrush(1)), &ctx);
     app.dispatch(
         Command::Instances(C::Capture("Dome".into(), Vec3(0., -1., 0.), 0, 1)),
         &ctx,
     );
     app.dispatch(Command::Instances(C::ChooseObject(1)), &ctx);
-    app.dispatch(Command::Instances(C::UseObjectBrush(Some(1), 1)), &ctx);
+    app.dispatch(Command::Instances(C::ChooseBrush(1)), &ctx);
     let start = Pos2::new(450., 400.);
     let end = Pos2::new(550., 400.);
     navigation_frame(
@@ -66,7 +68,13 @@ fn object_kit_picks_a_part_per_stroke_and_reuses_personal_brushes_across_project
     );
     app.dispatch(Command::Instances(C::ChooseObject(2)), &ctx);
     assert_eq!(
-        app.viewport.object_brush.as_ref().unwrap().piece.source,
+        app.viewport
+            .object_brush
+            .as_ref()
+            .unwrap()
+            .piece
+            .unwrap()
+            .source,
         Source::Asset(2)
     );
     let next = Pos2::new(500., 350.);
@@ -93,7 +101,8 @@ fn object_kit_picks_a_part_per_stroke_and_reuses_personal_brushes_across_project
     assert_eq!(app.ui.instances.brush.rotation, 0.);
     app.dispatch(Command::Redo, &ctx);
     assert_eq!(app.ui.instances.brush.rotation, 42.);
-    app.dispatch(Command::Instances(C::StopBrush), &ctx);
+    app.ui.select_brush(0, &app.document);
+    navigation_frame(&mut app, &ctx, vec![]);
     app.dispatch(Command::Instances(C::SavePersonalBrush(1)), &ctx);
     assert_eq!(app.ui.instances.personal_brushes, vec!["Ship / fittings"]);
     let mut app = App {
@@ -120,6 +129,61 @@ fn object_kit_picks_a_part_per_stroke_and_reuses_personal_brushes_across_project
     std::fs::remove_dir_all(dir).unwrap();
 }
 #[test]
+fn object_model_picker_shortcut_follows_the_selected_brush() {
+    let (mut app, ctx) = setup();
+    let press_b = |app: &mut App| {
+        let _ = ctx.run(
+            egui::RawInput {
+                events: [true, false]
+                    .into_iter()
+                    .map(|pressed| egui::Event::Key {
+                        key: egui::Key::B,
+                        physical_key: None,
+                        pressed,
+                        repeat: false,
+                        modifiers: egui::Modifiers::NONE,
+                    })
+                    .collect(),
+                ..Default::default()
+            },
+            |ctx| app.shortcuts(ctx),
+        );
+    };
+    press_b(&mut app);
+    let menu = app.ui.customization.popup_menu.unwrap();
+    assert!(app.ui.preferences.menus.iter().any(|m| {
+        m.id == menu
+            && m.items
+                .iter()
+                .any(|item| item.action == Some(Action::ObjectBrushModels))
+    }));
+    press_b(&mut app);
+    assert!(app.ui.customization.popup_menu.is_none());
+    app.dispatch(Command::Action(Action::NewBrush("Object".into())), &ctx);
+    let second = app.ui.instances.group.unwrap();
+    assert_ne!(second, 1);
+    assert!(app.ui.instances.asset.is_none());
+    let before = app.document.geometry_snapshot();
+    let pos = Pos2::new(500., 400.);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(pos), primary_event(pos, true)],
+    );
+    navigation_frame(&mut app, &ctx, vec![primary_event(pos, false)]);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    app.dispatch(
+        Command::Instances(C::Capture("Dome".into(), Vec3::default(), 0, 2)),
+        &ctx,
+    );
+    press_b(&mut app);
+    assert_eq!(app.ui.customization.popup_menu, Some(menu));
+    assert_eq!(app.ui.instances.asset, Some(2));
+    app.dispatch(Command::Instances(C::ChooseObject(1)), &ctx);
+    assert_eq!(app.ui.instances.asset, Some(2));
+}
+
+#[test]
 fn reusable_object_tool_resets_when_changing_projects() {
     let (mut app, ctx) = setup();
     assert!(app.viewport.object_brush.is_some());
@@ -134,7 +198,7 @@ fn reusable_object_tool_yields_to_sculpt_brush_and_transform_selection() {
     app.ui.select_brush(0, &app.document);
     navigation_frame(&mut app, &ctx, vec![]);
     assert!(app.viewport.object_brush.is_none());
-    app.dispatch(Command::Instances(C::UseObjectBrush(None, 1)), &ctx);
+    app.dispatch(Command::Instances(C::ChooseBrush(1)), &ctx);
     app.dispatch(
         Command::TransformMode(crate::viewport::TransformMode::World),
         &ctx,

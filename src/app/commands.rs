@@ -149,20 +149,27 @@ impl App {
             return;
         }
         if let Command::Instances(command) = command {
+            use crate::command::InstanceCommand as C;
+            let open_settings = matches!(
+                command,
+                C::CreateBrush(_) | C::LoadPersonalBrush(_) | C::ImportBrush(_)
+            );
             let preview_command = matches!(
                 &command,
-                crate::command::InstanceCommand::NewArray
-                    | crate::command::InstanceCommand::NewLinkedCopy
-                    | crate::command::InstanceCommand::RepeatArray(_)
-                    | crate::command::InstanceCommand::NewPath
-                    | crate::command::InstanceCommand::Edit(_)
-                    | crate::command::InstanceCommand::Preview(_)
+                C::NewArray
+                    | C::NewLinkedCopy
+                    | C::RepeatArray(_)
+                    | C::NewPath
+                    | C::Edit(_)
+                    | C::Preview(_)
             );
             if let Err(error) = self.dispatch_instances(command) {
                 if preview_command {
                     self.ui.instances.invalid = true;
                 }
                 self.ui.status = error;
+            } else if open_settings {
+                self.execute_action(Action::ShowPanel(crate::preferences::Tool::Brush), ctx);
             }
             return;
         }

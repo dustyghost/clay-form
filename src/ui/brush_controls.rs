@@ -6,6 +6,7 @@ pub(super) fn is_control(action: &Action) -> bool {
     matches!(
         action,
         Action::AppearanceControls
+            | Action::ObjectBrushModels
             | Action::BrushIcon
             | Action::BrushSize
             | Action::BrushInnerRadius
@@ -33,7 +34,10 @@ impl UiState {
         label: &str,
         document: &Document,
     ) -> f32 {
-        if *action == Action::AppearanceControls {
+        if matches!(
+            action,
+            Action::AppearanceControls | Action::ObjectBrushModels
+        ) {
             return ui.available_width().min(540.);
         }
         let (default, extra) = match action {
@@ -81,6 +85,12 @@ impl UiState {
                     ui.horizontal_wrapped(|ui| self.appearance_strip(ui, document, commands));
                 })
                 .response;
+        }
+        if *action == Action::ObjectBrushModels {
+            return instances::part_picker(ui, &mut self.instances, document, commands);
+        }
+        if self.instances.placing && self.instances.asset.is_none() {
+            return ui.weak("Empty object brush");
         }
         if let Some((name, part)) = self.instances.selected_cover(document.instances()) {
             match action {
