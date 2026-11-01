@@ -86,7 +86,12 @@ fn reusable_models_offscreen_review() {
     click_guide_label(&mut g, "Copy 1 (hidden)");
     assert_eq!(g.app.document.selected_instance, Some((1, 0)));
     click_guide_label(&mut g, "Edit selected copy…");
+    // Deformation and array controls can put the copy editor below the fold.
+    // Exercise the real sidebar scroll, then return to the Apply button.
+    reach_sidebar_control(&mut g, "Show this copy");
+    g.save("selected-copy-controls");
     click_guide_label(&mut g, "Show this copy");
+    reach_sidebar_control(&mut g, "Apply instances");
     click_guide_label(&mut g, "Apply instances");
     assert_eq!(g.app.document.instance_placements().unwrap().len(), 12);
     g.save("02-linked-array");
@@ -3553,8 +3558,8 @@ fn material_examples_manual_capture() {
 }
 
 /// Reveal a control through the outer sidebar, including after a previous action
-/// left the artist scrolled to a different part of the painting workspace.
-fn reach_paint_control(g: &mut Guide, label: &str) {
+/// left the artist scrolled to a different part of the workspace.
+fn reach_sidebar_control(g: &mut Guide, label: &str) {
     let viewport_top = g.frame(vec![]).0.top();
     let visible = |g: &Guide| {
         g.text_positions.iter().any(|(text, p)| {
@@ -3589,14 +3594,14 @@ fn reach_paint_control(g: &mut Guide, label: &str) {
             },
         ]);
     }
-    g.save("paint-control-unreachable");
+    g.save("sidebar-control-unreachable");
     panic!(
-        "Paint control {label} must be reachable; captured paint-control-unreachable.png. Visible text: {:?}",
+        "Sidebar control {label} must be reachable; captured sidebar-control-unreachable.png. Visible text: {:?}",
         g.text_positions
     );
 }
 fn click_paint_control(g: &mut Guide, label: &str) {
-    reach_paint_control(g, label);
+    reach_sidebar_control(g, label);
     click_guide_label(g, label);
 }
 
@@ -3699,7 +3704,7 @@ fn material_controls_offscreen_review() {
         .preferences
         .dock_menu(BuiltinMenu::Materials, Dock::Right);
     g.frame(vec![]);
-    reach_paint_control(&mut g, "Drag to resize materials");
+    reach_sidebar_control(&mut g, "Drag to resize materials");
     let handle = |g: &Guide| {
         g.text_positions
             .iter()
@@ -4256,11 +4261,11 @@ fn paint_modes_offscreen_review() {
                 .mode,
             mode
         );
-        reach_paint_control(&mut g, "Flow / second");
+        reach_sidebar_control(&mut g, "Flow / second");
         assert!(g.text_positions.iter().any(|(t, _)| t == "Flow / second"));
         if mode == PaintMode::Spray {
             for label in ["Dot density", "Dot size"] {
-                reach_paint_control(&mut g, label);
+                reach_sidebar_control(&mut g, label);
                 assert!(g.text_positions.iter().any(|(t, _)| t == label));
             }
         }
@@ -4473,7 +4478,7 @@ fn paint_target_scope_inspection_offscreen_review() {
     g.app.dispatch(Command::SelectSubmodel(untextured), &g.ctx);
     g.frame(vec![]);
     assert_eq!(g.app.document.texture_paint, None);
-    reach_paint_control(&mut g, "Vertices");
+    reach_sidebar_control(&mut g, "Vertices");
     assert!(g.text_positions.iter().any(|(text, _)| text == "Vertices"));
     g.save("paint-target-fallback");
     click_guide_label(&mut g, "Restore workspace");
