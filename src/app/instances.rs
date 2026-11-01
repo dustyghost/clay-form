@@ -86,12 +86,13 @@ impl App {
         }
         Ok(())
     }
-    fn start_instance_bake(&mut self, id: u64, fuse: bool) -> Result<(), String> {
-        self.document.cancel_instance_preview();
+    fn start_instance_bake(&mut self, request: BakeRequest) -> Result<(), String> {
+        if self.document.instance_preview_active() {
+            return Err("Apply or cancel the instance preview before baking".into());
+        }
+        self.start_mesh_job(Operation::BakeInstances(request))?;
         self.document.selected_instance = None;
-        self.ui.instances.editor = None;
-        self.viewport.object_brush = None;
-        self.start_mesh_job(Operation::BakeInstances(id, fuse))
+        Ok(())
     }
     pub(super) fn refresh_object_after_history(&mut self) {
         if let Some(id) = self.ui.instances.group {
@@ -207,7 +208,7 @@ impl App {
                 self.ui.status =
                     "Instance preview · adjust the controls, then Apply or Cancel".into();
             }
-            C::Edit(id) => {
+            C::Edit(id) | C::EditCopy(id, _) => {
                 self.ui.instances.array_layer = 0;
                 self.viewport.cancel(&mut self.document);
                 self.viewport.object_brush = None;
@@ -221,6 +222,10 @@ impl App {
                     .ok_or("Instance set no longer exists")?
                     .clone();
                 self.document.begin_instance_preview()?;
+                self.document.selected_instance = match command {
+                    C::EditCopy(_, slot) => Some((id, slot)),
+                    _ => None,
+                };
                 self.ui.instances.editor = Some(set);
                 self.ui.instances.invalid = false;
             }
@@ -353,7 +358,7 @@ impl App {
                 self.activate_object_brush(id)?;
                 self.ui.status = "Multi-object brush imported".into();
             }
-            C::Bake(id, fuse) => self.start_instance_bake(id, fuse)?,
+            C::Bake(request) => self.start_instance_bake(request)?,
             C::ExportAsset(id, path) => {
                 self.remember_object_options()?;
                 let asset = self

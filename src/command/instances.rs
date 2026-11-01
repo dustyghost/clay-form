@@ -1,10 +1,14 @@
-use crate::sculpt::{Vec3, instances::Set};
+use crate::sculpt::{
+    Vec3,
+    instances::{BakeRequest, Set},
+};
 pub(crate) enum InstanceCommand {
     NewArray,
     NewLinkedCopy,
     RepeatArray(u64),
     NewPath,
     Edit(u64),
+    EditCopy(u64, usize),
     Preview(Box<Set>),
     Apply,
     Cancel,
@@ -24,7 +28,7 @@ pub(crate) enum InstanceCommand {
     RemovePersonalBrush(String),
     ExportBrush(u64, String),
     ImportBrush(String),
-    Bake(u64, bool),
+    Bake(BakeRequest),
     ExportAsset(u64, String),
     ImportAsset(String),
     RemoveAsset(u64),

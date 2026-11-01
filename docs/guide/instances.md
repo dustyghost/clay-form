@@ -21,9 +21,9 @@ Each layer has two kinds of transform:
 
 **Repeat this array…** uses a saved array as the live source for a separate array. Leave **Copies** at one to place one linked rack; increase it to repeat the whole rack. You can use the same source array in several patterns. Choose **Edit source array…** beside a linked array to change the pattern they share. Editing its layers, source mesh, or individual copy adjustments updates each use. Each linked array keeps its own placement relative to the source pattern’s origin. Turning off **Show instances** on the source hides that occurrence in the scene; arrays using it still appear. Hiding an individual source copy, in contrast, hides that part in every use. Bake or remove dependent arrays before removing or baking their source.
 
-Inspect the preview and choose **Apply instances**, or **Cancel preview**. Each applied edit is one undo step. Previews never enter project saves or recovery copies. Choose **Edit** beside a set to change its recipe later.
+Inspect the preview and choose **Apply instances**, or **Cancel preview**. Each applied edit is one undo step. Previews never enter project saves or recovery copies. Choose **Edit array…**, **Edit path assembly…** or **Edit stroke…** beside a set to change the whole pattern later.
 
-Click a copy in the viewport or expand **Copies**. **Edit selected copy…** exposes Move, Rotate, Scale and Show this copy. Array copies also have independent X/Y/Z size factors. Adjustments belong to numbered slots and survive recipe changes; reducing and restoring the count restores those slots' adjustments. **Independent** makes a copy an editable submodel unaffected by subsequent source edits. Undo restores its link. Hide a complete set with **Show instances** in its editor.
+To move one copy, click it in the viewport or select its numbered row under **Copies**. Choose **Edit selected copy…**, adjust **Move**, **Rotate**, **Scale** or **Show this copy**, then choose **Apply instances**. The other copies keep their placements. These adjustments belong to numbered slots. Reducing and restoring an array’s count restores the adjustments for those slots. To sculpt the copy itself, choose **Make independent** in its row. Undo restores the link. To hide an entire set, turn off **Show instances** in the whole-set editor.
 
 Source visibility is separate from copy visibility. Bake or remove linked sets before deleting or merging their source. Instances use the source's current mesh, masks, face visibility, attributes, creases and valid UVs/textures. Apply a source's Thickness modifier first if required; inactive subdivision levels are not instanced.
 
@@ -43,7 +43,7 @@ Thickness profiles are stored by percentage distance along the path, including v
 
 Choose **Separate** to keep individual sections, or **Join neighbours** to weld their matching ends into one continuous preview. **Join distance** is the maximum distance between corresponding end vertices; accepted pairs meet at their average position. Ends are detected at the minimum/maximum coordinates along each source's Forward axis. They need compatible planar loops with matching vertex counts and winding. Internal end caps are removed, including the final seam on closed paths. Open-ended tube sections are supported; exposed outer ends retain their original geometry. Gaps beyond the distance limit or incompatible loops produce an error and keep the last valid preview. This does not weld unrelated nearby surfaces.
 
-Joining preserves masks, vertex materials and compatible groups, but removes UVs; the reusable sources keep their original data. All sections must be visible and linked before joining. Choose Separate to edit or detach individual copies. **Bake joined model** creates one editable submodel from the joined preview; **Bake + fuse** remains available for volumetric remeshing of closed pieces. Apply, Cancel and Undo work with either option, and projects retain both choices and their settings. Older recipes default to Rigid/Separate.
+Joining preserves masks, vertex materials and compatible groups. It removes UVs from the joined result. All sections must be visible and linked before joining. Choose **Separate** to edit or detach individual copies. A joined assembly counts as one piece when you use **Bake set…** or **Bake all…**. Older recipes default to Rigid/Separate.
 
 Applied assemblies follow edits to their saved path and sources. Path assemblies use saved world-space paths; surface changes require the usual path reprojection. Bake or remove an assembly before deleting its path.
 
@@ -64,13 +64,23 @@ To put the picker on another menu, right-click **Object brush models** in the li
 
 **Save and reuse kits.** Project files embed the captured objects and their brush memberships. Under **Brush settings → Reuse in other projects**, **Save brush to my library** keeps a separate personal copy available across projects and app restarts. In another project, choose it under **+ Add brush → Saved object brushes**. Use **Update saved brush** to publish edits to your local personal copy. Each project keeps its own snapshot, so updating a library brush leaves existing scenes intact. Export/import a whole brush as a portable `.objects.json` file to move it between machines. Use **Transfer a single part (.object.json)** to share one captured model and its placement settings. Standalone captures from older projects are available under **Include existing parts**.
 
-Removing a part from a brush only changes membership; the captured mesh and existing painted copies stay in the project. Removing a brush also leaves those objects intact. A captured object used by placed copies cannot be deleted until the copies are baked or removed.
+To remove a model from a brush, select its thumbnail and click **Remove model from brush** in **Brush settings**. The captured model stays available under **Include existing parts**. Other brushes and previously placed copies keep using it. Undo restores its membership. If you want the same change in your personal library, choose **Update saved brush**. Removing a whole brush also leaves its captured models and placed copies intact.
 
 Placements use model-space spacing on the active visible surface and respect occlusion, masks and hidden faces. Overlap is allowed. By default, copies share the captured mesh. **Create independent geometry** produces editable submodels; you can also bake linked copies later. Object placement does not automatically fuse copies or deform the underlying surface.
 
 ## Bake, fuse, export and limits
 
-**Bake** creates independent submodels from visible copies, retaining attributes and UVs. **Bake + fuse** unions overlapping closed, fully visible pieces through voxel remeshing at the current mesh resolution. It rebuilds topology and removes UVs; separated pieces stay disconnected. Thin details may need higher resolution. Open surfaces are rejected; use ordinary Bake for those. Both operations preserve reusable sources, are undoable and run through the cancellable mesh worker.
+Choose **Bake set…** beside an array, path assembly or brush stroke, or **Bake all…** to bake every visible instance set together. Choose where the visible copies should go, then click **Bake now**.
+
+| Destination | Result |
+| --- | --- |
+| **One new submodel per copy** | Each copy becomes a separately selectable, sculptable submodel. A joined path assembly produces one submodel. |
+| **One new submodel** | All the baked geometry goes into a single new submodel. |
+| **Merge into selected submodel** | The named submodel keeps its existing surface and gains the baked geometry. Select a visible target first. This applies its thickness and clears its primitive and subdivision levels. Live copies that still use this target as their source update too. |
+
+The two single-submodel destinations offer **Fuse overlapping surfaces**. Leave it off to keep the original faces and compatible UVs, including faces inside overlaps. Turn it on to voxel-remesh intersecting, closed surfaces into a continuous surface at the current mesh resolution. For example, to fuse an array of rivets to a hull, select the hull, choose **Merge into selected submodel**, then enable fusion. Gaps stay disconnected. Fusion requires closed, fully visible meshes, rebuilds topology and removes UVs. Thin details may need a higher resolution.
+
+Baking removes each baked set and its link to the source. Hidden or detached copies in that set are skipped. **Bake all…** leaves entirely hidden sets in the project. If another array still uses a source array you want to bake, include the dependent array in **Bake all…** or bake it first. One **Undo** restores the geometry and instance sets for the entire operation.
 
 Mesh exporters export the active submodel: bake first, then select the result to export. Native `.clay` version 4 preserves recipes, links and captured assets. Versions 1–3 remain readable; earlier app versions cannot read version 4 saves.
 

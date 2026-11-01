@@ -116,6 +116,7 @@ pub(crate) enum Command {
     ResetTransformPivot,
     DuplicateModel,
     DeleteSubmodel,
+    ConfirmDeleteSubmodel(bool),
     MergeDown,
     ExtractMasked,
     ResetView,

@@ -161,7 +161,18 @@ pub(in crate::ui) fn settings(
             )));
         }
     });
-    if c.asset.is_some() {
+    if let Some(part) = d
+        .instances()
+        .assets
+        .iter()
+        .find(|part| Some(part.id) == c.asset)
+    {
+        ui.label(format!("Selected model: {}", part.name));
+        if ui.button("Remove model from brush")
+            .on_hover_text("Remove this model from this brush. Its capture and placed copies stay in the project.")
+            .clicked() {
+            commands.push(Command::Instances(C::BrushMember(brush.id, part.id, false)));
+        }
         c.placement_settings(ui);
     }
     egui::CollapsingHeader::new("Capture a model into this brush")

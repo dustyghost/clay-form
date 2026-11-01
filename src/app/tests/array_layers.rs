@@ -105,4 +105,28 @@ fn layered_array_controls_offscreen_review() {
     assert_eq!(g.app.document.instance_placements().unwrap().len(), 24);
     g.app.dispatch(Command::Redo, &g.ctx);
     assert_eq!(g.app.document.instance_placements().unwrap().len(), 18);
+    let model = g.app.document.model(0).unwrap();
+    let name = model.name.to_owned();
+    let mut metadata = model.metadata.clone();
+    metadata.visible = true;
+    g.app
+        .dispatch(Command::EditSubmodel(0, name.clone(), metadata), &g.ctx);
+    let before = g.app.document.geometry_snapshot();
+    click_guide_label(&mut g, "Bake all…");
+    click_guide_label(&mut g, &format!("Merge into selected submodel: {name}"));
+    g.save("bake-all-destinations");
+    click_guide_label(&mut g, "Bake now");
+    finish_mesh_job(&mut g.app);
+    assert_eq!(g.app.document.model_count(), 1);
+    assert_eq!(
+        g.app.document.mesh().triangles.len(),
+        before.mesh.triangles.len() * 19
+    );
+    assert_eq!(
+        g.app.document.instances().sets.len(),
+        1,
+        "the hidden source array is retained"
+    );
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
 }

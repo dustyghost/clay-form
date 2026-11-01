@@ -154,7 +154,7 @@ impl App {
     }
     fn shortcuts(&mut self, ctx: &egui::Context) {
         if ctx.wants_keyboard_input()
-            || self.ui.primitive_warning.is_some()
+            || self.ui.submodel_confirmation_open()
             || self.ui.pending.is_some()
             || self.ui.file_picker.is_some()
             || self.ui.recovery_open
@@ -298,8 +298,8 @@ impl App {
             self.viewport.cancel(&mut self.document);
             self.viewport.wait_for_release();
         }
-        let (primitive_commands, editor_rect) = self.ui.primitive_confirmation(ui.ctx());
-        for command in primitive_commands {
+        let (confirmation_commands, editor_rect) = self.ui.submodel_confirmation(ui.ctx());
+        for command in confirmation_commands {
             self.dispatch(command, ui.ctx());
         }
         let enabled = !self.ui.customization.popup_blocks_viewport
@@ -309,7 +309,7 @@ impl App {
             && self.ui.alphas.draft.is_none()
             && self.ui.alphas.overwrite.is_none()
             && !self.ui.icon_capture_open()
-            && self.ui.primitive_warning.is_none()
+            && !self.ui.submodel_confirmation_open()
             && self.ui.pending.is_none()
             && self.ui.file_picker.is_none()
             && !self.ui.recovery_open
@@ -458,7 +458,12 @@ impl App {
                 .editor
                 .as_ref()
                 .filter(|_| self.ui.instances.inline_thickness && !self.ui.instances.invalid)
-                .map(|set| set.id),
+                .map(|set| set.id)
+                .filter(|&id| {
+                    self.document
+                        .selected_instance
+                        .is_none_or(|(owner, _)| owner != id)
+                }),
             self.ui.instances.thickness_path_points,
             self.ui.instances.thickness_sections,
         );

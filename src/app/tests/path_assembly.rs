@@ -164,7 +164,9 @@ fn reusable_path_bend_join_offscreen_review() {
     assert_eq!(g.app.document.history_counts().0, before + 1);
     let resolved = g.app.document.instance_placements().unwrap();
     let expected = resolved.meshes[&(1, 0)].clone();
-    click_guide_label(&mut g, "Bake joined model");
+    click_guide_label(&mut g, "Bake set…");
+    click_guide_label(&mut g, "One new submodel");
+    click_guide_label(&mut g, "Bake now");
     finish_mesh_job(&mut g.app);
     assert!(
         g.app.document.instances().sets.is_empty(),

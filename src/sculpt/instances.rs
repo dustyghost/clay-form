@@ -3,6 +3,8 @@
 use super::{Mesh, Vec3, paths::SurfacePath};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, sync::Arc};
+mod bake;
+pub(crate) use bake::{BakeDestination, BakeRequest, BakeScope};
 mod path_output;
 pub use path_output::{GeneratedCopy, JoinMode, ResolvedCopies};
 mod arrays;
@@ -573,100 +575,6 @@ impl super::Geometry {
                 .find(|a| a.id == id)
                 .map(|a| a.mesh.as_ref()),
         }
-    }
-    pub(crate) fn bake_instances(
-        &mut self,
-        id: u64,
-        fuse: bool,
-        cancel: &dyn Fn() -> bool,
-    ) -> Result<(), String> {
-        let set = self
-            .scene
-            .instances
-            .sets
-            .iter()
-            .find(|s| s.id == id)
-            .ok_or("Instance set no longer exists")?
-            .clone();
-        self.scene.instances.ensure_array_unreferenced(id)?;
-        let generated = set.generated(&self.paths, |s| self.instance_source(s), cancel)?;
-        let placements = if let Some(copies) = &generated {
-            copies.iter().map(|c| (c.slot, c.placement)).collect()
-        } else {
-            ArrayResolver::new(&self.scene.instances).placements(&set, &self.paths)?
-        };
-        let mut generated: std::collections::HashMap<_, _> = generated
-            .into_iter()
-            .flatten()
-            .map(|c| (c.slot, c.mesh))
-            .collect();
-        if placements.is_empty() {
-            return Err("No visible copies to bake".into());
-        }
-        if !fuse && self.submodels.len() + 1 + placements.len() > 64 {
-            return Err("Baking these copies would exceed 64 submodels; bake fewer copies or use Bake + fuse".into());
-        }
-        if fuse && self.submodels.len() >= 63 {
-            return Err("Remove a submodel before baking this assembly".into());
-        }
-        let mut meshes = Vec::new();
-        let (mut vertices, mut triangles) = (0usize, 0usize);
-        for (slot, p) in placements {
-            if cancel() {
-                return Err("Operation cancelled".into());
-            }
-            let source = generated
-                .get(&slot)
-                .or_else(|| self.instance_source(p.piece.source))
-                .ok_or("Instance source is missing")?;
-            vertices = vertices.saturating_add(source.vertices.len());
-            triangles = triangles.saturating_add(source.triangles.len());
-            if vertices > MAX_VERTICES || triangles > MAX_TRIANGLES {
-                return Err("Instance bake budget exceeded".into());
-            }
-            let mesh = if let Some(mesh) = generated.remove(&slot) {
-                mesh
-            } else {
-                p.mesh(
-                    self.instance_source(p.piece.source)
-                        .ok_or("Instance source is missing")?,
-                )?
-            };
-            if fuse {
-                let mut edges = std::collections::HashMap::new();
-                for &[a, b, c] in &mesh.triangles {
-                    for (a, b) in [(a, b), (b, c), (c, a)] {
-                        *edges.entry((a.min(b), a.max(b))).or_insert(0usize) += 1;
-                    }
-                }
-                if mesh.has_hidden_faces() || edges.values().any(|&n| n != 2) {
-                    return Err("Fusion requires closed, fully visible pieces; use ordinary Bake for open surfaces".into());
-                }
-            }
-            meshes.push(mesh);
-        }
-        if fuse {
-            let mut combined = meshes.remove(0);
-            combined.uv = Default::default();
-            for mut mesh in meshes {
-                if cancel() {
-                    return Err("Operation cancelled".into());
-                }
-                mesh.uv = Default::default();
-                combined = combined.merged_with(&mesh)?;
-            }
-            let fused = combined.remesh_cancellable(self.settings.resolution, cancel)?;
-            self.import_mesh(fused, &format!("{} fused", set.name))?;
-        } else {
-            for (i, mesh) in meshes.into_iter().enumerate() {
-                if cancel() {
-                    return Err("Operation cancelled".into());
-                }
-                self.import_mesh(mesh, &format!("{} {}", set.name, i + 1))?;
-            }
-        }
-        self.scene.instances.sets.retain(|s| s.id != id);
-        Ok(())
     }
 }
 

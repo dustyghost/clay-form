@@ -409,7 +409,7 @@ impl Document {
     pub fn apply_object_stroke_independent(&mut self, id: u64) -> Result<(), String> {
         let mut next = self.geometry_snapshot();
         next.scene.instances = self.instances().clone();
-        next.bake_instances(id, false, &|| false)?;
+        next.bake_instances(BakeRequest::new(BakeScope::Set(id)), &|| false)?;
         self.cancel_instance_preview();
         self.replace_geometry_named(next, "Place independent objects")
     }
@@ -786,9 +786,15 @@ mod tests {
         d.apply_instance_preview().unwrap();
         let before = d.geometry_snapshot();
         let mut baked = before.clone();
-        assert!(baked.bake_instances(1, false, &|| true).is_err());
+        assert!(
+            baked
+                .bake_instances(BakeRequest::new(BakeScope::Set(1)), &|| true)
+                .is_err()
+        );
         assert_eq!(baked, before);
-        baked.bake_instances(1, false, &|| false).unwrap();
+        baked
+            .bake_instances(BakeRequest::new(BakeScope::Set(1)), &|| false)
+            .unwrap();
         assert_eq!(baked.submodels.len(), 2);
         assert!(baked.scene.instances.sets.is_empty());
         assert_eq!(d.geometry_snapshot(), before);
@@ -809,7 +815,16 @@ mod tests {
         d.apply_instance_preview().unwrap();
         let before = d.geometry_snapshot();
         let mut fused = before.clone();
-        fused.bake_instances(1, true, &|| false).unwrap();
+        fused
+            .bake_instances(
+                BakeRequest {
+                    scope: BakeScope::Set(1),
+                    destination: BakeDestination::New,
+                    fuse: true,
+                },
+                &|| false,
+            )
+            .unwrap();
         let mut edges = std::collections::HashMap::new();
         for &[a, b, c] in &fused.mesh.triangles {
             for (a, b) in [(a, b), (b, c), (c, a)] {
@@ -825,7 +840,17 @@ mod tests {
             .mesh()
             .unwrap();
         let original = open.clone();
-        assert!(open.bake_instances(1, true, &|| false).is_err());
+        assert!(
+            open.bake_instances(
+                BakeRequest {
+                    scope: BakeScope::Set(1),
+                    destination: BakeDestination::New,
+                    fuse: true
+                },
+                &|| false
+            )
+            .is_err()
+        );
         assert_eq!(open, original);
     }
     #[test]
@@ -927,8 +952,15 @@ mod tests {
         assert_eq!(cached, d.instance_placements().unwrap());
         d.cancel_instance_preview();
         let mut geometry = d.geometry_snapshot();
-        assert!(geometry.clone().bake_instances(1, false, &|| true).is_err());
-        geometry.bake_instances(1, false, &|| false).unwrap();
+        assert!(
+            geometry
+                .clone()
+                .bake_instances(BakeRequest::new(BakeScope::Set(1)), &|| true)
+                .is_err()
+        );
+        geometry
+            .bake_instances(BakeRequest::new(BakeScope::Set(1)), &|| false)
+            .unwrap();
         assert_eq!(geometry.mesh, cached.meshes[&(1, 0)].as_ref().clone());
         assert!(geometry.scene.instances.sets.is_empty());
         d.replace_geometry_named(geometry, "Bake instances")

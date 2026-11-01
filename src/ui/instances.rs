@@ -9,6 +9,7 @@ mod thickness;
 
 pub(crate) struct Controls {
     pub editor: Option<Set>,
+    pub bake: Option<BakeRequest>,
     pub array_layer: usize,
     pub invalid: bool,
     pub asset: Option<u64>,
@@ -36,6 +37,7 @@ impl Default for Controls {
     fn default() -> Self {
         Self {
             editor: None,
+            bake: None,
             array_layer: 0,
             invalid: false,
             asset: None,
@@ -181,8 +183,16 @@ impl UiState {
         if let Err(error) = document.instance_placements() {
             ui.colored_label(egui::Color32::LIGHT_RED, error);
         }
-        if self.instances.editor.is_some() && !document.instance_preview_active() {
+        if document.instance_preview_active() {
+            self.instances.bake = None;
+        } else {
             self.instances.editor = None;
+        }
+        if let Some(request) = &mut self.instances.bake {
+            if bake_options(ui, document, request, commands) {
+                self.instances.bake = None;
+            }
+            return;
         }
         if let Some(set) = &mut self.instances.editor {
             let before = set.clone();
@@ -199,116 +209,12 @@ impl UiState {
                     )
                 })
                 .inner;
-            ui.text_edit_singleline(&mut set.name);
-            ui.checkbox(&mut set.visible, "Show instances");
-            match &mut set.layout {
-                Layout::Array(a) => {
-                    arrays::editor(ui, a, &mut self.instances.array_layer, document)
-                }
-                Layout::Path(a) => {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label("Sections");
-                        ui.selectable_value(&mut a.bend, false, "Rigid");
-                        ui.selectable_value(&mut a.bend, true, "Bend along path");
-                    });
-                    if a.bend {
-                        ui.checkbox(&mut a.fit_sections, "Fit section lengths to spacing");
-                        ui.checkbox(
-                            &mut self.instances.inline_thickness,
-                            "Inline thickness handles",
-                        );
-                        let closed = document.path(a.path).is_some_and(|p| p.closed);
-                        egui::CollapsingHeader::new("Thickness along path").show(ui, |ui| {
-                            ui.horizontal_wrapped(|ui| {
-                                ui.checkbox(
-                                    &mut self.instances.thickness_path_points,
-                                    "Path points",
-                                );
-                                ui.checkbox(
-                                    &mut self.instances.thickness_sections,
-                                    "Section centres",
-                                );
-                            });
-                            ui.weak("Gold: ends · Teal: path points · Purple: sections");
-                            thickness::controls(ui, &mut a.thickness, closed);
-                        });
-                        ui.weak("Bending uses source vertices; subdivide along its Forward axis for smooth curves.");
-                    }
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label("Connections");
-                        ui.selectable_value(&mut a.join, JoinMode::Separate, "Separate");
-                        ui.selectable_value(&mut a.join, JoinMode::Weld, "Join neighbours");
-                    });
-                    if a.join == JoinMode::Weld {
-                        ui.add(
-                            egui::DragValue::new(&mut a.join_distance)
-                                .range(0.00001..=1000.)
-                                .speed(0.001)
-                                .prefix("Join distance "),
-                        );
-                        ui.weak("Welds matching planar end loops and removes internal caps. UVs are removed; source models are preserved.");
-                    }
-                    egui::ComboBox::from_id_salt("assembly_path")
-                        .selected_text(
-                            document
-                                .path(a.path)
-                                .map_or("Missing path", |p| p.name.as_str()),
-                        )
-                        .show_ui(ui, |ui| {
-                            for p in document.paths() {
-                                ui.selectable_value(&mut a.path, p.id, &p.name);
-                            }
-                        });
-                    choose_piece(ui, "Middle", &mut a.middle, document);
-                    let closed = document.path(a.path).is_some_and(|p| p.closed);
-                    if closed {
-                        ui.weak("Closed loop: start/end caps are omitted.");
-                    }
-                    ui.add_enabled_ui(!closed, |ui| {
-                        for (label, piece) in [("Start", &mut a.start), ("End", &mut a.end)] {
-                            let mut enabled = piece.is_some();
-                            if ui
-                                .checkbox(&mut enabled, format!("Use {label} piece"))
-                                .changed()
-                            {
-                                *piece = enabled.then_some(a.middle);
-                            }
-                            if let Some(piece) = piece {
-                                choose_piece(ui, label, piece, document);
-                            }
-                        }
-                    });
-                    ui.checkbox(&mut a.fit_count, "Fit count to path length");
-                    if a.fit_count {
-                        ui.add(egui::Slider::new(&mut a.count, 1..=254).text("Middle pieces"));
-                    } else {
-                        ui.add(
-                            egui::DragValue::new(&mut a.spacing)
-                                .range(0.001..=1e5)
-                                .speed(0.05)
-                                .prefix("Spacing "),
-                        );
-                        ui.weak("Fixed spacing leaves any unused length at the end.");
-                    }
-                    ui.add(
-                        egui::DragValue::new(&mut a.scale)
-                            .range(0.001..=1000.)
-                            .speed(0.01)
-                            .prefix("Piece scale "),
-                    );
-                    ui.add(egui::Slider::new(&mut a.twist, -180.0..=180.).text("Twist °"));
-                    ui.weak("Bake makes the preview editable. Bake + fuse remeshes overlapping closed sections.");
-                }
-                Layout::Manual(p) => {
-                    ui.label(format!("{} placed objects", p.len()));
-                }
-            }
-            if let Some((id, slot)) = document
+            if let Some((_, slot)) = document
                 .selected_instance
                 .filter(|(id, _)| *id == set.id && !set.joined())
             {
                 ui.separator();
-                ui.label(format!("Selected copy {}", slot + 1));
+                ui.strong(format!("Editing copy {} of {}", slot + 1, set.name));
                 let mut adjustment = set
                     .adjustments
                     .iter()
@@ -329,12 +235,119 @@ impl UiState {
                 if matches!(set.layout, Layout::Array(_)) {
                     vector(ui, "Scale on X / Y / Z", &mut a.axis_scale);
                 }
-                ui.weak(format!("Set {id}: changes affect this copy only."));
+                ui.weak(
+                    "Apply saves these changes to this copy. Other copies keep their settings.",
+                );
                 if old != adjustment {
                     if let Some(a) = set.adjustments.iter_mut().find(|a| a.slot == slot) {
                         *a = adjustment;
                     } else {
                         set.adjustments.push(adjustment);
+                    }
+                }
+            } else {
+                ui.strong("Editing the whole set");
+                ui.text_edit_singleline(&mut set.name);
+                ui.checkbox(&mut set.visible, "Show instances");
+                match &mut set.layout {
+                    Layout::Array(a) => {
+                        arrays::editor(ui, a, &mut self.instances.array_layer, document)
+                    }
+                    Layout::Path(a) => {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label("Sections");
+                            ui.selectable_value(&mut a.bend, false, "Rigid");
+                            ui.selectable_value(&mut a.bend, true, "Bend along path");
+                        });
+                        if a.bend {
+                            ui.checkbox(&mut a.fit_sections, "Fit section lengths to spacing");
+                            ui.checkbox(
+                                &mut self.instances.inline_thickness,
+                                "Inline thickness handles",
+                            );
+                            let closed = document.path(a.path).is_some_and(|p| p.closed);
+                            egui::CollapsingHeader::new("Thickness along path").show(ui, |ui| {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.checkbox(
+                                        &mut self.instances.thickness_path_points,
+                                        "Path points",
+                                    );
+                                    ui.checkbox(
+                                        &mut self.instances.thickness_sections,
+                                        "Section centres",
+                                    );
+                                });
+                                ui.weak("Gold: ends · Teal: path points · Purple: sections");
+                                thickness::controls(ui, &mut a.thickness, closed);
+                            });
+                            ui.weak("Bending uses source vertices; subdivide along its Forward axis for smooth curves.");
+                        }
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label("Connections");
+                            ui.selectable_value(&mut a.join, JoinMode::Separate, "Separate");
+                            ui.selectable_value(&mut a.join, JoinMode::Weld, "Join neighbours");
+                        });
+                        if a.join == JoinMode::Weld {
+                            ui.add(
+                                egui::DragValue::new(&mut a.join_distance)
+                                    .range(0.00001..=1000.)
+                                    .speed(0.001)
+                                    .prefix("Join distance "),
+                            );
+                            ui.weak("Welds matching planar end loops and removes internal caps. UVs are removed; source models are preserved.");
+                        }
+                        egui::ComboBox::from_id_salt("assembly_path")
+                            .selected_text(
+                                document
+                                    .path(a.path)
+                                    .map_or("Missing path", |p| p.name.as_str()),
+                            )
+                            .show_ui(ui, |ui| {
+                                for p in document.paths() {
+                                    ui.selectable_value(&mut a.path, p.id, &p.name);
+                                }
+                            });
+                        choose_piece(ui, "Middle", &mut a.middle, document);
+                        let closed = document.path(a.path).is_some_and(|p| p.closed);
+                        if closed {
+                            ui.weak("Closed loop: start/end caps are omitted.");
+                        }
+                        ui.add_enabled_ui(!closed, |ui| {
+                            for (label, piece) in [("Start", &mut a.start), ("End", &mut a.end)] {
+                                let mut enabled = piece.is_some();
+                                if ui
+                                    .checkbox(&mut enabled, format!("Use {label} piece"))
+                                    .changed()
+                                {
+                                    *piece = enabled.then_some(a.middle);
+                                }
+                                if let Some(piece) = piece {
+                                    choose_piece(ui, label, piece, document);
+                                }
+                            }
+                        });
+                        ui.checkbox(&mut a.fit_count, "Fit count to path length");
+                        if a.fit_count {
+                            ui.add(egui::Slider::new(&mut a.count, 1..=254).text("Middle pieces"));
+                        } else {
+                            ui.add(
+                                egui::DragValue::new(&mut a.spacing)
+                                    .range(0.001..=1e5)
+                                    .speed(0.05)
+                                    .prefix("Spacing "),
+                            );
+                            ui.weak("Fixed spacing leaves any unused length at the end.");
+                        }
+                        ui.add(
+                            egui::DragValue::new(&mut a.scale)
+                                .range(0.001..=1000.)
+                                .speed(0.01)
+                                .prefix("Piece scale "),
+                        );
+                        ui.add(egui::Slider::new(&mut a.twist, -180.0..=180.).text("Twist °"));
+                    }
+                    Layout::Manual(p) => {
+                        ui.label(format!("{} placed objects", p.len()));
                     }
                 }
             }
@@ -374,9 +387,6 @@ impl UiState {
                     commands.push(Command::Instances(C::NewPath));
                 }
             });
-            for set in &document.instances().sets {
-                ui.push_id(set.id, |ui| instance_set(ui, document, set, commands));
-            }
             if let Some((id, slot)) = document.selected_instance {
                 let joined = document
                     .instances()
@@ -387,7 +397,7 @@ impl UiState {
                     ui.label("Joined assembly selected · edit its path and connection settings");
                 } else {
                     ui.label(format!(
-                        "Selected copy {} · Edit its set to move, rotate or scale",
+                        "Copy {} selected · Edit its position, rotation, scale or visibility",
                         slot + 1
                     ));
                 }
@@ -399,30 +409,115 @@ impl UiState {
                     })
                     .clicked()
                 {
-                    commands.push(Command::Instances(C::Edit(id)));
+                    commands.push(Command::Instances(if joined {
+                        C::Edit(id)
+                    } else {
+                        C::EditCopy(id, slot)
+                    }));
                 }
+            }
+
+            if !document.instances().sets.is_empty() && ui.button("Bake all…").clicked() {
+                self.instances.bake = Some(BakeRequest::new(BakeScope::All));
+            }
+            for set in &document.instances().sets {
+                ui.push_id(set.id, |ui| {
+                    instance_set(ui, document, set, &mut self.instances.bake, commands)
+                });
             }
         }
     }
 }
 
-fn instance_set(ui: &mut egui::Ui, document: &Document, set: &Set, commands: &mut Vec<Command>) {
-    ui.label(&set.name);
+fn bake_options(
+    ui: &mut egui::Ui,
+    document: &Document,
+    request: &mut BakeRequest,
+    commands: &mut Vec<Command>,
+) -> bool {
+    let name = match request.scope {
+        BakeScope::Set(id) => {
+            let Some(set) = document.instances().sets.iter().find(|s| s.id == id) else {
+                return true;
+            };
+            &set.name
+        }
+        BakeScope::All => "all visible instance sets",
+    };
+    ui.strong(format!("Bake {name}"));
+    ui.label(
+        "Visible copies become editable geometry. Each baked set is removed. Undo restores it.",
+    );
+    ui.radio_value(
+        &mut request.destination,
+        BakeDestination::PerCopy,
+        "One new submodel per copy",
+    );
+    ui.radio_value(
+        &mut request.destination,
+        BakeDestination::New,
+        "One new submodel",
+    );
+    let target = document.model(document.active_model_index()).unwrap();
+    ui.radio_value(
+        &mut request.destination,
+        BakeDestination::Current,
+        format!("Merge into selected submodel: {}", target.name),
+    );
+    if request.destination == BakeDestination::PerCopy {
+        request.fuse = false;
+    } else {
+        ui.checkbox(&mut request.fuse, "Fuse overlapping surfaces");
+        if request.fuse {
+            ui.weak("Voxel remeshing joins overlapping closed surfaces. Pieces separated by a gap stay disconnected. Remeshing rebuilds topology and removes UVs.");
+        } else {
+            ui.weak("Combines surfaces in one mesh and keeps compatible UVs. Overlaps keep their interior faces.");
+        }
+        if request.destination == BakeDestination::Current {
+            ui.weak("Includes the selected surface, applies its thickness and resets its primitive and subdivision levels. Other live copies of this submodel follow the merged geometry.");
+        }
+    }
+    let can_bake = request.destination != BakeDestination::Current || target.metadata.visible;
+    if !can_bake {
+        ui.weak("Show the selected submodel before merging into it.");
+    }
+    ui.horizontal(|ui| {
+        if ui
+            .add_enabled(can_bake, egui::Button::new("Bake now"))
+            .clicked()
+        {
+            commands.push(Command::Instances(C::Bake(*request)));
+            return true;
+        }
+        ui.button("Cancel bake").clicked()
+    })
+    .inner
+}
+
+fn instance_set(
+    ui: &mut egui::Ui,
+    document: &Document,
+    set: &Set,
+    bake: &mut Option<BakeRequest>,
+    commands: &mut Vec<Command>,
+) {
+    ui.separator();
+    ui.strong(&set.name);
     ui.horizontal_wrapped(|ui| {
-        if ui.button("Edit").clicked() {
+        let edit_label = match set.layout {
+            Layout::Array(_) => "Edit array…",
+            Layout::Path(_) => "Edit path assembly…",
+            Layout::Manual(_) => "Edit stroke…",
+        };
+        if ui
+            .button(edit_label)
+            .on_hover_text("Preview changes to the whole set. Apply to save them.")
+            .clicked()
+        {
             commands.push(Command::Instances(C::Edit(set.id)));
         }
-        if ui.button(if set.joined() {"Bake joined model"} else {"Bake"})
-            .on_hover_text("Make the current preview editable. Separate sections retain UVs; joined output has no UVs.")
-            .clicked()
-        {
-            commands.push(Command::Instances(C::Bake(set.id, false)));
-        }
-        if ui.button("Bake + fuse")
-            .on_hover_text("Union overlapping closed pieces with voxel remeshing. Rebuilds topology and removes UVs; keeps the reusable source.")
-            .clicked()
-        {
-            commands.push(Command::Instances(C::Bake(set.id, true)));
+        if ui.button("Bake set…").clicked() {
+            *bake = Some(BakeRequest::new(BakeScope::Set(set.id)));
         }
         if ui.small_button("Remove set").clicked() {
             commands.push(Command::Instances(C::Remove(set.id)));
@@ -454,10 +549,11 @@ fn instance_set(ui: &mut egui::Ui, document: &Document, set: &Set, commands: &mu
         });
     }
     if set.joined() {
-        ui.weak("Joined assembly · Bake creates one editable model. Choose Separate to adjust individual copies.");
+        ui.weak("Joined assembly · Baking treats the joined sections as one piece. Choose Separate to adjust individual copies.");
         return;
     }
     egui::CollapsingHeader::new("Copies").show(ui, |ui| {
+        ui.weak("Select a copy to edit its transform or visibility. Make independent creates a submodel you can sculpt.");
         // Hidden copies must remain selectable so their visibility can be restored.
         let mut listed = set.clone();
         for adjustment in &mut listed.adjustments {
@@ -491,7 +587,7 @@ fn instance_set(ui: &mut egui::Ui, document: &Document, set: &Set, commands: &mu
                                 commands.push(Command::Instances(C::Select(set.id, slot)));
                             }
                             if ui
-                                .add_enabled(visible, egui::Button::new("Independent").small())
+                                .add_enabled(visible, egui::Button::new("Make independent").small())
                                 .clicked()
                             {
                                 commands.push(Command::Instances(C::Detach(set.id, slot)));

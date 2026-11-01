@@ -507,7 +507,7 @@ impl Action {
                 "Start a brush stroke near a saved surface path to guide the section you draw. Turn off to sculpt freely near paths."
             }
             Self::DeleteSubmodel => {
-                "Remove the selected submodel, including hidden geometry, masks, levels and modifiers. Undo restores it. Deleting the last model leaves an empty model slot."
+                "Confirm removal of the selected submodel, including hidden geometry, masks, levels and modifiers. Undo restores it. Deleting the last model leaves an empty model slot."
             }
             Self::RelaxMesh => {
                 "Redistribute existing vertices along a fixed surface reference. Masks protect local regions; preview, inspect and apply one undoable edit."

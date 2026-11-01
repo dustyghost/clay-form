@@ -714,7 +714,11 @@ impl Viewport {
                         .iter()
                         .any(|s| s.id == id && s.joined())
                 });
-                self.status = Some(if joined {"Joined path assembly selected · edit its settings or Bake to sculpt"} else {"Instance selected · edit it in Submodels → Instances; Make independent enables sculpting"}.into());
+                self.status = Some(if joined {
+                    "Open Submodels → Instances → Edit selected assembly… to change this assembly."
+                } else {
+                    "Open Submodels → Instances → Edit selected copy… to move this copy. Choose Make independent to sculpt it."
+                }.into());
                 self.wait_for_release();
                 return;
             }

@@ -230,6 +230,15 @@ fn object_kit_library_and_strokes_offscreen_review() {
     assert_eq!(library.assets[1].options.spacing, 0.27);
     assert!(library.sets.is_empty());
     check_primitive_handles(&mut g);
+    g.app.ui.diagnostics_open = false;
+    let prior = g.app.document.instance_placements().unwrap();
+    let captured = g.app.document.instances().assets.len();
+    click_guide_label(&mut g, "Remove model from brush");
+    assert_eq!(g.app.document.instances().brushes[0].objects, vec![2]);
+    assert_eq!(g.app.document.instances().assets.len(), captured);
+    assert_eq!(g.app.document.instance_placements().unwrap(), prior);
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.instances().brushes[0].objects, vec![1, 2]);
     std::fs::remove_dir_all(personal).unwrap();
 }
 

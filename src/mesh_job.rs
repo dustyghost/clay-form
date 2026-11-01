@@ -4,7 +4,7 @@ use crate::{background_job::BackgroundJob, sculpt::ValidatedGeometry};
 
 #[derive(Clone)]
 pub(crate) enum Operation {
-    BakeInstances(u64, bool),
+    BakeInstances(crate::sculpt::instances::BakeRequest),
     UvUnwrap(bool, f32),
     ImportObj(String),
     Edges(crate::sculpt::EdgeEdit),
@@ -49,7 +49,7 @@ impl MeshJob {
         let worker_operation = operation.clone();
         let worker = BackgroundJob::start("clay-mesh-operation", move |cancel| {
             match worker_operation {
-                Operation::BakeInstances(id, fuse) => geometry.bake_instances(id, fuse, cancel)?,
+                Operation::BakeInstances(request) => geometry.bake_instances(request, cancel)?,
                 Operation::UvUnwrap(automatic, padding) => {
                     geometry.mesh.uv = geometry.mesh.unwrap_uv(automatic, padding, &cancel)?;
                 }

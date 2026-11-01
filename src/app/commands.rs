@@ -161,6 +161,7 @@ impl App {
                     | C::RepeatArray(_)
                     | C::NewPath
                     | C::Edit(_)
+                    | C::EditCopy(..)
                     | C::Preview(_)
             );
             if let Err(error) = self.dispatch_instances(command) {
@@ -585,6 +586,7 @@ impl App {
             | Command::GroupVisible(..)
             | Command::SelectSubmodel(..)
             | Command::DeleteSubmodel
+            | Command::ConfirmDeleteSubmodel(_)
             | Command::MergeDown
             | Command::DuplicateModel
             | Command::ExtractMasked) => self.dispatch_scene(command),

@@ -3658,6 +3658,14 @@ fn delete_submodel_action_removes_hidden_reference_clears_targets_and_locks_duri
             .action_enabled(&Action::DeleteSubmodel, &app.document)
     );
     app.dispatch(Command::Action(Action::DeleteSubmodel), &ctx);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert!(app.ui.delete_warning.is_some());
+    app.dispatch(Command::SelectSubmodel(0), &ctx);
+    assert_eq!(app.document.active_model_index(), 1);
+    app.dispatch(Command::ConfirmDeleteSubmodel(false), &ctx);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    app.dispatch(Command::DeleteSubmodel, &ctx);
+    app.dispatch(Command::ConfirmDeleteSubmodel(true), &ctx);
     assert_eq!(app.document.model_count(), 1);
     assert!(app.document.active_visible());
     assert!(app.ui.selected_vertex_group.is_none());
@@ -3685,6 +3693,7 @@ fn delete_submodel_action_removes_hidden_reference_clears_targets_and_locks_duri
     assert_eq!(app.document.geometry_snapshot(), after);
     app.ui.settings_open = false;
     app.dispatch(Command::DeleteSubmodel, &ctx);
+    app.dispatch(Command::ConfirmDeleteSubmodel(true), &ctx);
     assert!(app.document.mesh().vertices.is_empty());
     // The empty slot remains renderable and can host a new primitive.
     navigation_frame(&mut app, &ctx, vec![]);

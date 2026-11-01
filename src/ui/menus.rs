@@ -134,7 +134,7 @@ impl UiState {
             let mut open = true;
             let mut unpin = false;
             let enabled = self.pending.is_none()
-                && self.primitive_warning.is_none()
+                && !self.submodel_confirmation_open()
                 && !self.icon_capture_open()
                 && !self.recovery_open
                 && !self.about_open
