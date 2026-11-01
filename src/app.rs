@@ -13,6 +13,7 @@ use crate::{
 use eframe::egui;
 
 mod actions;
+mod boolean;
 mod commands;
 mod context_menu;
 mod diagnostics;
@@ -39,6 +40,7 @@ pub struct App {
     diagnostic_environment: crate::diagnostics::Environment,
     job_settings: Option<crate::diagnostics::EditSettings>,
     projection: projection::ProjectionState,
+    boolean: boolean::State,
     paths: paths::PathState,
     closing: bool,
     mesh_job: Option<MeshJob>,
@@ -69,6 +71,7 @@ impl Default for App {
             diagnostic_environment: Default::default(),
             job_settings: None,
             projection: Default::default(),
+            boolean: Default::default(),
             paths: Default::default(),
             closing: false,
             mesh_job: None,
@@ -232,6 +235,12 @@ impl App {
 
     pub(crate) fn show_viewport(&mut self, ui: &mut egui::Ui) {
         self.ui.preferences.lighting.install(ui.ctx());
+        self.boolean_preview(ui.ctx());
+        if self.ui.boolean_enabled {
+            self.viewport
+                .boolean_notice
+                .clone_from(&self.ui.boolean_notice);
+        }
         let mask_consumes_escape = self.update_temporary_mask(ui);
         self.ui.viewport_menu.viewport_rect = Some(ui.available_rect_before_wrap());
         if !ui.input(|i| self.ui.preferences.visibility_hold.active(i)) {
@@ -494,6 +503,8 @@ impl App {
                     self.ui.transform_mode
                 },
                 transform_operation: self.ui.transform_operation,
+                boolean_enabled: self.ui.boolean_enabled,
+                cage_axis: self.ui.cage_axis,
                 respect_mask: self.ui.respect_transform_mask,
                 selected,
                 temporary_mask: self.ui.mask_active,

@@ -1497,7 +1497,7 @@ mod scene_cache_tests;
 #[cfg(test)]
 mod tests;
 mod upload;
-pub(super) use display::DisplayMesh;
+pub(crate) use display::DisplayMesh;
 #[cfg(all(test, target_os = "linux"))]
 mod backfaces_test;
 #[cfg(all(test, target_os = "linux"))]

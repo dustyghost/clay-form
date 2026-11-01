@@ -29,8 +29,31 @@ fn is_zero_id(value: &u64) -> bool {
 fn visible_default() -> bool {
     true
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BooleanRole {
+    #[default]
+    Regular,
+    Add,
+    Subtract,
+    Intersect,
+}
+impl BooleanRole {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Regular => "Regular",
+            Self::Add => "Add",
+            Self::Subtract => "Subtract",
+            Self::Intersect => "Intersect",
+        }
+    }
+    fn is_regular(&self) -> bool {
+        *self == Self::Regular
+    }
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ModelMetadata {
+    #[serde(default, skip_serializing_if = "BooleanRole::is_regular")]
+    pub boolean_role: BooleanRole,
     /// Persistent path target identity; zero means no path has bound this model yet.
     #[serde(default, skip_serializing_if = "is_zero_id")]
     pub model_id: u64,
@@ -59,6 +82,7 @@ pub struct ModelMetadata {
 impl Default for ModelMetadata {
     fn default() -> Self {
         Self {
+            boolean_role: BooleanRole::Regular,
             model_id: 0,
             visible: true,
             group: String::new(),
@@ -101,6 +125,9 @@ pub struct SceneSettings {
     pub texture_library: Vec<super::texture::Texture>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub materials: Vec<super::material::layers::Asset>,
+    /// None uses the default voxel count along the longest additive dimension.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub boolean_resolution: Option<u32>,
     pub active_index: usize,
     pub active_metadata: ModelMetadata,
     pub groups: Vec<String>,
@@ -153,6 +180,13 @@ pub struct Project {
 impl Project {
     pub const VERSION: u32 = 4;
     pub fn validate(&self) -> Result<(), String> {
+        if self
+            .scene
+            .boolean_resolution
+            .is_some_and(|r| !(16..=96).contains(&r))
+        {
+            return Err("Invalid Boolean resolution".into());
+        }
         let models: Vec<_> = std::iter::once((self.scene.active_metadata.model_id, &self.mesh))
             .chain(
                 self.submodels

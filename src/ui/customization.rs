@@ -361,6 +361,7 @@ impl UiState {
             | Action::Scale
             | Action::Rotate
             | Action::PlaceLine
+            | Action::DeformationFrame
             | Action::PlacePivot => {
                 self.transform_mode != crate::viewport::TransformMode::Sculpt
                     && Action::from(self.transform_operation) == *action

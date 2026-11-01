@@ -675,6 +675,9 @@ impl App {
             Action::Rotate => Some(Command::TransformOperation(
                 crate::viewport::TransformOperation::Rotate,
             )),
+            Action::DeformationFrame => Some(Command::TransformOperation(
+                crate::viewport::TransformOperation::Cage,
+            )),
             Action::PlacePivot => Some(Command::TransformOperation(
                 crate::viewport::TransformOperation::PlacePivot,
             )),

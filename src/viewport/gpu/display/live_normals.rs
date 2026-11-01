@@ -141,9 +141,18 @@ pub(super) fn full_normals(
     fans: &[[usize; 3]],
     previous: &[(usize, Vec3)],
 ) -> NormalUpdate {
+    normals_at_positions(&mesh.vertices, &mesh.triangles, fans, previous)
+}
+
+pub(super) fn normals_at_positions(
+    positions: &[Vec3],
+    triangles: &[[usize; 3]],
+    fans: &[[usize; 3]],
+    previous: &[(usize, Vec3)],
+) -> NormalUpdate {
     let mut normals = vec![Vec3::default(); previous.len()];
-    for (ids, fans) in mesh.triangles.iter().zip(fans) {
-        let [a, b, c] = ids.map(|i| mesh.vertices[i]);
+    for (ids, fans) in triangles.iter().zip(fans) {
+        let [a, b, c] = ids.map(|i| positions[i]);
         let face = (b - a).cross(c - a);
         for &i in fans {
             normals[i] = normals[i] + face;
@@ -158,7 +167,7 @@ pub(super) fn full_normals(
         #[cfg(test)]
         local: false,
         #[cfg(test)]
-        evaluated_faces: mesh.triangles.len(),
+        evaluated_faces: triangles.len(),
     }
 }
 

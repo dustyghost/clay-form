@@ -32,6 +32,34 @@ fn document(mesh: Mesh) -> Document {
     doc
 }
 
+#[test]
+fn dense_cage_preview_reuses_immutable_surface_buffers() {
+    let doc = document(source());
+    let display = DisplayMesh::new(&doc);
+    let mut positions = doc.mesh().vertices.clone();
+    for p in &mut positions {
+        p.0 += 0.1 * p.1;
+    }
+    let mut scratch = None;
+    let preview = display.cage_preview(&doc, positions, &mut scratch);
+    assert!(scratch.is_none());
+    assert!(Arc::ptr_eq(
+        &display.mesh.triangles,
+        &preview.mesh.triangles
+    ));
+    assert!(Arc::ptr_eq(
+        &display.mesh.materials,
+        &preview.mesh.materials
+    ));
+    assert!(Arc::ptr_eq(
+        &display.shading.triangles,
+        &preview.shading.triangles
+    ));
+    assert!(Arc::ptr_eq(&display.source_faces, &preview.source_faces));
+    assert_ne!(display.mesh.vertices, preview.mesh.vertices);
+    assert_ne!(display.shading.vertices, preview.shading.vertices);
+}
+
 fn dab() -> Dab {
     Dab {
         center: Vec3(-0.2, 0., 0.98),

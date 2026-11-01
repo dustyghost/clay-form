@@ -159,6 +159,7 @@ impl<'a> EditorPolicy<'a> {
                 self.ui.transform_mode != crate::viewport::TransformMode::Sculpt
                     || (document.active_visible() && !document.mesh().vertices.is_empty())
             }
+            Action::DeformationFrame => sculpt && !document.mesh().vertices.is_empty(),
             Action::Move
             | Action::Scale
             | Action::Rotate

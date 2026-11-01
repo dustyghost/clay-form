@@ -164,6 +164,7 @@ pub(crate) enum Action {
     PlaceLine,
     Rotate,
     PlacePivot,
+    DeformationFrame,
     ResetPivot,
     RespectMask,
     PolygroupColors,
@@ -324,6 +325,7 @@ impl Action {
         Self::PlaceLine,
         Self::Rotate,
         Self::PlacePivot,
+        Self::DeformationFrame,
         Self::ResetPivot,
         Self::RespectMask,
         Self::PolygroupColors,
@@ -727,6 +729,7 @@ impl Action {
             Self::Scale => "Scale transform",
             Self::PlaceLine => "Set action line",
             Self::Rotate => "Rotate transform",
+            Self::DeformationFrame => "Deformation frame",
             Self::PlacePivot => "Place transform pivot",
             Self::ResetPivot => "Reset transform pivot",
             Self::RespectMask => "Toggle transform mask protection",
@@ -800,6 +803,7 @@ impl From<crate::viewport::TransformOperation> for Action {
             TransformOperation::Scale => Self::Scale,
             TransformOperation::PlaceLine => Self::PlaceLine,
             TransformOperation::Rotate => Self::Rotate,
+            TransformOperation::Cage => Self::DeformationFrame,
             TransformOperation::PlacePivot => Self::PlacePivot,
         }
     }

@@ -150,6 +150,28 @@ impl Scene {
         );
         scene
     }
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn paint_cached_preview(
+        painter: &egui::Painter,
+        rect: egui::Rect,
+        camera: &Camera,
+        mut renderer: Option<&mut Renderer>,
+        display: Arc<DisplayMesh>,
+        wire: bool,
+        mode: super::WireMode,
+        triangles: bool,
+    ) -> Self {
+        let scene = Self::prepared(rect, camera, display.clone(), renderer.as_deref_mut(), true);
+        scene.paint_geometry(
+            painter,
+            renderer.as_deref(),
+            wire,
+            mode,
+            triangles,
+            Some(display),
+        );
+        scene
+    }
     fn prepared(
         rect: egui::Rect,
         camera: &Camera,

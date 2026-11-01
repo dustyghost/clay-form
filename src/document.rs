@@ -20,6 +20,10 @@ mod primitive;
 pub use path_stroke::{PathStrokeOptions, PathStrokePreview, PathStrokeRequest, PathStrokeSession};
 mod projection;
 pub use projection::ProjectionSource;
+mod boolean;
+#[cfg(test)]
+mod boolean_tests;
+mod cage;
 mod instances;
 mod materials;
 mod paint;

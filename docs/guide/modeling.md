@@ -38,6 +38,16 @@ The active model is clay-colored and inactive models blue-gray unless vertex-gro
 
 Extracted boundaries stay open and use a fresh subdivision stack. The selection threshold defaults to 50%. Add an existing mesh through [OBJ import](files.md#obj-import).
 
+### Cut and combine solids with a Boolean stack
+
+1. Put the parts in the same Submodels group. The **Ungrouped** section also works as a group.
+2. Each submodel row has a role selector. Set the bottom solid to **Add**. Moving upward, use **Add** to fuse a solid, **Subtract** to cut it away, or **Intersect** to keep the volume shared with the accumulated shape. **Regular** keeps a part separate. The eye bypasses a hidden operand.
+3. Toggle **Boolean result** in Submodels or the Display toolbar to see the evaluated group in the main viewport. Change roles directly on any row or use the row arrows to change the order. Moving an Add above a cutter can fill the cut back in. Select a source row and use the transform handles to move the operand. Toggle the result off to see and sculpt the source surfaces.
+4. Choose a **Voxel resolution** from 16 to 96 samples along the longest additive dimension. The result fits cut rims to the source faces. Features narrower than a voxel can disappear. Use a finer grid for thin cuts, or increase the source segment count if the cutter itself is faceted. Coincident solids combine once, and separate solid islands can share one result.
+5. Choose **Bake result** to add the preview as a sculptable submodel and hide its sources. The new mesh uses plain clay. Source operands keep their materials, textures, UVs, groups, creases and subdivision levels. Undo restores the editable stack in one step. To revise a saved bake, hide the baked part and show its source operands again.
+
+The preview evaluates the stored current-level meshes in the selected group. Use closed, consistently wound solids, apply temporary thickness, show individual faces and clear masks first. Bake a linked array or path assembly into submodels to use its copies as operands. Turning the result off cancels evaluation. The project stores the operands, roles, order, visibility and resolution.
+
 ### Delete a submodel
 
 1. Open **Submodels** and select the row you want to remove. Hidden models can be selected from the list too.
@@ -95,6 +105,14 @@ Open **Transform** and select **World axes**.
 | Reset pivot | Return to the model's bounding-box center |
 
 Orbit to expose an axis facing the camera. Edge-on rotation rings accept a straight drag along the projected ring. Drag outside handles to orbit; choose **Done** to sculpt again.
+
+### Deform a model with a frame
+
+Select a sculptable submodel and choose **Submodels → Deformation frame**. Convert a parametric primitive to a sculpting mesh first. Drag a teal corner in the view plane to pull or push the nearby surface. Orbit to pull in a different direction. Overlapping corner handles have short leader lines in face-on views.
+
+Choose **X**, **Y** or **Z** in the transform controls. Drag **B** sideways to bend the model along that axis, or **T** to twist it. Deformation increases toward the positive end of the axis. The viewport shows the signed angle as you drag. Release to commit once, or press **Esc** to discard the preview.
+
+**Respect mask** reduces each vertex’s displacement by its mask weight. Hidden faces and all stored subdivision levels follow the frame. The frame works independently of brush symmetry. Each commit refits the frame to the new bounds. Toggle **Deformation frame** again to hide it. Projects store the resulting geometry, and linked instances follow edits to their source.
 
 ### Example: rotate a cube and keep its recipe
 
@@ -460,7 +478,7 @@ These changes undo together and leave sculpt masks unchanged.
 
 Right-click a modeling button and choose **Add to custom menu / shelf…** or **Assign shortcut…**. Component modes, Select/Extrude/Loop cut, selection modes and patterns, join toggle, loop-count buttons, selection clearing/loop expansion, dissolve, and group actions are available in the action catalog.
 
-Extrude and Loop cut on a custom shelf automatically enter the appropriate modeling mode. Group actions use the name and group currently chosen in the Mesh panel. Arbitrary intersecting-face bridging and general Boolean fusion remain outside the supported topology operations.
+Extrude and Loop cut on a custom shelf automatically enter the appropriate modeling mode. Group actions use the name and group currently chosen in the Mesh panel. For solid fusion, use the ordered Boolean stack in Submodels. Intersecting-face bridging remains outside the component tools.
 
 ## Mesh management
 
@@ -650,7 +668,7 @@ Choose **Submodels → Merge down** to combine the active model with the next on
 
 The active model keeps its name/folder. Masks, groups, visibility, and quads survive. Hidden models contribute hidden faces; duplicate group names receive suffixes.
 
-Merge bakes primitives and thickness modifier, uses current mesh levels, and resets the result's level/topology settings. Fill unfilled Circles first. It combines surfaces **without welding or boolean union**; use voxel remeshing for fusion. Undo restores both models.
+Merge bakes primitives and thickness modifier, uses current mesh levels, and resets the result's level/topology settings. Fill unfilled Circles first. It combines surfaces **without welding or boolean union**. Use an additive Boolean stack or voxel remeshing for fusion. Undo restores both models.
 
 ## Related guides
 

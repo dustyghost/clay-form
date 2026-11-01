@@ -10,7 +10,7 @@ use crate::{
 use eframe::egui::{self, Vec2};
 
 impl UiState {
-    fn transform_operations(&self, ui: &mut egui::Ui, commands: &mut Vec<Command>) {
+    fn transform_operations(&mut self, ui: &mut egui::Ui, commands: &mut Vec<Command>) {
         ui.horizontal_wrapped(|ui| {
             for operation in Operation::ALL
                 .into_iter()
@@ -25,7 +25,7 @@ impl UiState {
                     commands.push(Command::TransformOperation(operation));
                 }
             }
-            if ui
+            if self.transform_operation != Operation::Cage && ui
                 .button("Reset pivot")
                 .on_hover_text(
                     "Return the pivot to the active model's center; preserve Action Line direction",
@@ -36,6 +36,21 @@ impl UiState {
                 commands.push(Command::ResetTransformPivot);
             }
         });
+        if self.transform_operation == Operation::Cage {
+            self.cage_options(ui);
+        }
+        self.transform_mask_control(ui, commands);
+    }
+    fn cage_options(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Bend / twist axis");
+            for axis in crate::sculpt::Axis::ALL {
+                ui.selectable_value(&mut self.cage_axis, axis, format!("{axis:?}"));
+            }
+        });
+        ui.weak("All subdivision levels and hidden faces follow.");
+    }
+    fn transform_mask_control(&self, ui: &mut egui::Ui, commands: &mut Vec<Command>) {
         let mut respect = self.respect_transform_mask;
         if design::checkbox(ui, &mut respect, "Respect mask").customize(Action::RespectMask)
             .on_hover_text("Protect masked vertices; soft masks reduce the rotation angle. Turn off to transform the whole model").changed() {
@@ -49,6 +64,7 @@ impl UiState {
         enabled: bool,
     ) -> (Vec<Command>, Option<egui::Rect>) {
         if self.transform_mode == Mode::Sculpt
+            || (self.boolean_enabled && self.transform_operation == Operation::Cage)
             || self.preferences.menu_placed(BuiltinMenu::Transform)
         {
             return (Vec::new(), None);
@@ -71,6 +87,18 @@ impl UiState {
                             && viewport.height() < 260.;
                         if !compact {
                             self.menu_placement_controls(ui, BuiltinMenu::Transform, false);
+                        }
+                        if self.transform_operation == Operation::Cage {
+                            ui.horizontal(|ui| {
+                                ui.strong("Deformation frame");
+                                if ui.small_button("Done").clicked() {
+                                    commands.push(Command::TransformMode(Mode::Sculpt));
+                                }
+                            });
+                            ui.label("Drag corners to reshape. Drag B to bend or T to twist.");
+                            self.cage_options(ui);
+                            self.transform_mask_control(ui, &mut commands);
+                            return;
                         }
                         if self.transform_operation == Operation::Universal {
                             ui.horizontal_wrapped(|ui| {

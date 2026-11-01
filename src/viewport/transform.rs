@@ -23,26 +23,29 @@ pub(crate) enum TransformOperation {
     PlaceLine,
     Rotate,
     PlacePivot,
+    Cage,
 }
 impl TransformOperation {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Universal,
         Self::PlaceLine,
         Self::Move,
         Self::Scale,
         Self::Rotate,
         Self::PlacePivot,
+        Self::Cage,
     ];
     pub fn available(self, mode: TransformMode) -> bool {
         mode != TransformMode::Sculpt
             && match self {
                 Self::PlaceLine => mode == TransformMode::ActionLine,
-                Self::PlacePivot | Self::Universal => mode == TransformMode::World,
+                Self::Cage | Self::PlacePivot | Self::Universal => mode == TransformMode::World,
                 _ => true,
             }
     }
     pub fn label(self) -> &'static str {
         match self {
+            Self::Cage => "Deformation frame",
             Self::Move => "Move",
             Self::Universal => "Universal",
             Self::Scale => "Scale",
@@ -53,6 +56,9 @@ impl TransformOperation {
     }
     pub fn hint(self) -> &'static str {
         match self {
+            Self::Cage => {
+                "Drag a corner to push or pull. Drag B or T sideways to bend or twist along the chosen axis. Esc cancels a drag."
+            }
             Self::Move => "Drag an axis or the middle handle to move the model",
             Self::Universal => {
                 "Arrows move · squares scale · rings rotate · centre diamond moves only the pivot"
@@ -196,7 +202,7 @@ impl TransformControls {
         if !document.active_visible() || document.mesh().vertices.is_empty() {
             return vec![];
         }
-        if op == TransformOperation::Rotate {
+        if matches!(op, TransformOperation::Cage | TransformOperation::Rotate) {
             return vec![];
         }
         if mode == TransformMode::World {
@@ -299,6 +305,7 @@ impl TransformControls {
                     "MOVE",
                 )],
                 TransformOperation::Rotate
+                | TransformOperation::Cage
                 | TransformOperation::PlacePivot
                 | TransformOperation::Universal => vec![],
                 TransformOperation::Scale => vec![
@@ -520,6 +527,9 @@ impl TransformControls {
         op: TransformOperation,
     ) {
         if !document.active_visible() || document.mesh().vertices.is_empty() {
+            return;
+        }
+        if op == TransformOperation::Cage {
             return;
         }
         let origin = scene.project(self.origin(document, mode));

@@ -304,6 +304,9 @@ impl App {
                 self.document.new_sphere();
                 self.viewport.object_brush = None;
                 self.ui.instances = Default::default();
+                if self.ui.boolean_enabled {
+                    self.toggle_boolean_preview();
+                }
                 self.ui.path = self.document.current_path().into();
                 self.retire_recovery();
                 self.ui.status = "New sphere".into();
@@ -315,6 +318,9 @@ impl App {
                     Ok(()) => {
                         self.viewport.object_brush = None;
                         self.ui.instances = Default::default();
+                        if self.ui.boolean_enabled {
+                            self.toggle_boolean_preview();
+                        }
                         self.ui.path = path.clone();
                         self.retire_recovery();
                         self.ui.selected = 0;

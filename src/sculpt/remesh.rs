@@ -7,6 +7,7 @@ use super::{
     subdivision::{max_triangles, max_vertices},
 };
 use std::collections::HashMap;
+pub(crate) mod boolean;
 mod optimized;
 mod optimized_mesh;
 mod quads;
@@ -112,9 +113,67 @@ impl Mesh {
             return Err("Remesh resolution must be between 16 and 96".into());
         }
         self.validate_closed()?;
+        let grid = Grid::fit(self.vertices.iter(), resolution)?;
+        let step = grid.step;
+        let inside = grid.occupancy(self, cancelled)?;
+        let skin = match algorithm {
+            QuadExtraction::Fast => true,
+            #[cfg(test)]
+            QuadExtraction::Stepped => true,
+            _ => false,
+        };
+        if topology == super::Topology::Quads && skin {
+            let mesh = skin::extract(&grid, &inside, cancelled)?;
+            let mesh = if algorithm == QuadExtraction::Fast {
+                skin::project(mesh, self, step, cancelled)?
+            } else {
+                mesh
+            };
+            return self.finish_quad_remesh(mesh, cancelled);
+        }
+        // Binary occupancy supplies the union's sign, but it cannot locate the
+        // surface between samples. Measure actual distances in a narrow band
+        // so extraction interpolates crossings instead of snapping to midpoints.
+        let field = grid.signed_field(self, &inside, cancelled)?;
+        if topology == super::Topology::Quads {
+            let mut mesh = quads::extract(&grid, &field, cancelled)?;
+            if algorithm == QuadExtraction::Optimized {
+                optimized_mesh::redistribute(&mut mesh, step, cancelled)?
+            }
+            return self.finish_quad_remesh(mesh, cancelled);
+        }
+        let mut mesh = grid.triangles(&inside, &field, cancelled)?;
+        self.transfer_groups_to(&mut mesh);
+        self.transfer_materials_to(&mut mesh, &cancelled)?;
+        mesh.validate_closed()?;
+        Ok(mesh)
+    }
+    fn finish_quad_remesh(
+        &self,
+        mut mesh: Mesh,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Self, String> {
+        self.transfer_groups_to(&mut mesh);
+        // A quad is one editable face even when its render triangles sample
+        // different source groups at a border.
+        for pair in mesh.polygroups.as_chunks_mut::<2>().0 {
+            pair[1] = pair[0];
+        }
+        self.transfer_materials_to(&mut mesh, &cancelled)?;
+        mesh.validate_closed()?;
+        Ok(mesh)
+    }
+}
+struct Grid {
+    dims: [usize; 3],
+    origin: Vec3,
+    step: f32,
+}
+impl Grid {
+    fn fit<'a>(vertices: impl Iterator<Item = &'a Vec3>, resolution: u32) -> Result<Self, String> {
         let mut min = [f32::INFINITY; 3];
         let mut max = [f32::NEG_INFINITY; 3];
-        for v in &self.vertices {
+        for v in vertices {
             for (axis, value) in [v.0, v.1, v.2].into_iter().enumerate() {
                 min[axis] = min[axis].min(value);
                 max[axis] = max[axis].max(value);
@@ -128,15 +187,18 @@ impl Mesh {
         let dims: [usize; 3] =
             std::array::from_fn(|i| ((max[i] - min[i]) / step).ceil() as usize + 5);
         let origin = Vec3(min[0] - step * 2., min[1] - step * 2., min[2] - step * 2.);
-        let grid = Grid { dims, origin, step };
+        Ok(Grid { dims, origin, step })
+    }
+    fn occupancy(&self, mesh: &Mesh, cancelled: &dyn Fn() -> bool) -> Result<Vec<bool>, String> {
+        let Self { dims, origin, step } = *self;
         let mut crossings = vec![Vec::<(f32, i32)>::new(); dims[1] * dims[2]];
         // Rasterize each triangle onto yz scanlines instead of testing every ray
         // against every face. A tiny consistent offset avoids shared-edge hits.
-        for (index, &[a, b, c]) in self.triangles.iter().enumerate() {
+        for (index, &[a, b, c]) in mesh.triangles.iter().enumerate() {
             if index % 2048 == 0 && cancelled() {
                 return Err("Mesh operation cancelled".into());
             }
-            let [a, b, c] = [self.vertices[a], self.vertices[b], self.vertices[c]];
+            let [a, b, c] = [mesh.vertices[a], mesh.vertices[b], mesh.vertices[c]];
             let denominator = (b.1 - a.1) * (c.2 - a.2) - (b.2 - a.2) * (c.1 - a.1);
             if denominator.abs() < step * step * 1e-10 {
                 continue;
@@ -178,35 +240,25 @@ impl Mesh {
                         winding += ray[next].1;
                         next += 1;
                     }
-                    inside[grid.index(x, y, z)] = winding != 0;
+                    inside[self.index(x, y, z)] = winding != 0;
                 }
             }
         }
-        drop(crossings);
-        let skin = match algorithm {
-            QuadExtraction::Fast => true,
-            #[cfg(test)]
-            QuadExtraction::Stepped => true,
-            _ => false,
-        };
-        if topology == super::Topology::Quads && skin {
-            let mesh = skin::extract(&grid, &inside, cancelled)?;
-            let mesh = if algorithm == QuadExtraction::Fast {
-                skin::project(mesh, self, step, cancelled)?
-            } else {
-                mesh
-            };
-            return self.finish_quad_remesh(mesh, cancelled);
-        }
-        // Binary occupancy supplies the union's sign, but it cannot locate the
-        // surface between samples. Measure actual distances in a narrow band
-        // so extraction interpolates crossings instead of snapping to midpoints.
+        Ok(inside)
+    }
+    fn signed_field(
+        &self,
+        mesh: &Mesh,
+        inside: &[bool],
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Vec<f32>, String> {
+        let Self { dims, origin, step } = *self;
         let mut distance = vec![step * 3.; inside.len()];
-        for (index, &triangle) in self.triangles.iter().enumerate() {
+        for (index, &triangle) in mesh.triangles.iter().enumerate() {
             if index % 1024 == 0 && cancelled() {
                 return Err("Mesh operation cancelled".into());
             }
-            let [a, b, c] = triangle.map(|i| self.vertices[i]);
+            let [a, b, c] = triangle.map(|i| mesh.vertices[i]);
             let coordinates = |v: Vec3| [v.0, v.1, v.2];
             let points = [coordinates(a), coordinates(b), coordinates(c)];
             let base = coordinates(origin);
@@ -232,8 +284,8 @@ impl Mesh {
                 }
                 for y in lo[1]..=hi[1] {
                     for x in lo[0]..=hi[0] {
-                        let i = grid.index(x, y, z);
-                        let p = grid.point(i);
+                        let i = self.index(x, y, z);
+                        let p = self.point(i);
                         let d = (closest_triangle(p, a, b, c) - p).len();
                         distance[i] = distance[i].min(d);
                     }
@@ -242,7 +294,7 @@ impl Mesh {
         }
         let field: Vec<f32> = distance
             .into_iter()
-            .zip(&inside)
+            .zip(inside)
             .map(|(d, &inner)| {
                 // Avoid coincident vertices on different grid edges when the input
                 // surface lands exactly on a sample; retain the winding sign.
@@ -250,13 +302,15 @@ impl Mesh {
                 if inner { -d } else { d }
             })
             .collect();
-        if topology == super::Topology::Quads {
-            let mut mesh = quads::extract(&grid, &field, cancelled)?;
-            if algorithm == QuadExtraction::Optimized {
-                optimized_mesh::redistribute(&mut mesh, step, cancelled)?
-            }
-            return self.finish_quad_remesh(mesh, cancelled);
-        }
+        Ok(field)
+    }
+    fn triangles(
+        &self,
+        inside: &[bool],
+        field: &[f32],
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Mesh, String> {
+        let dims = self.dims;
         let mut mesh = Mesh {
             uv: Default::default(),
             creases: Vec::new(),
@@ -285,14 +339,14 @@ impl Mesh {
             for y in 0..dims[1] - 1 {
                 for x in 0..dims[0] - 1 {
                     let corners = [
-                        grid.index(x, y, z),
-                        grid.index(x + 1, y, z),
-                        grid.index(x + 1, y + 1, z),
-                        grid.index(x, y + 1, z),
-                        grid.index(x, y, z + 1),
-                        grid.index(x + 1, y, z + 1),
-                        grid.index(x + 1, y + 1, z + 1),
-                        grid.index(x, y + 1, z + 1),
+                        self.index(x, y, z),
+                        self.index(x + 1, y, z),
+                        self.index(x + 1, y + 1, z),
+                        self.index(x, y + 1, z),
+                        self.index(x, y, z + 1),
+                        self.index(x + 1, y, z + 1),
+                        self.index(x + 1, y + 1, z + 1),
+                        self.index(x, y + 1, z + 1),
                     ];
                     let count = corners.iter().filter(|&&i| inside[i]).count();
                     if count == 0 || count == 8 {
@@ -311,7 +365,7 @@ impl Mesh {
                                 let i = mesh.vertices.len();
                                 let t = field[a] / (field[a] - field[b]);
                                 mesh.vertices
-                                    .push(grid.point(a) + (grid.point(b) - grid.point(a)) * t);
+                                    .push(self.point(a) + (self.point(b) - self.point(a)) * t);
                                 mesh.mask.push(0.);
                                 i
                             })
@@ -340,7 +394,7 @@ impl Mesh {
                         let centroid = |indices: &[usize]| {
                             indices
                                 .iter()
-                                .fold(Vec3::default(), |sum, &i| sum + grid.point(i))
+                                .fold(Vec3::default(), |sum, &i| sum + self.point(i))
                                 * (1. / indices.len() as f32)
                         };
                         let outward = centroid(&outer) - centroid(&inner);
@@ -364,33 +418,8 @@ impl Mesh {
             return Err("No surface found at this resolution; increase resolution".into());
         }
         mesh.smooth_remesh();
-        self.transfer_groups_to(&mut mesh);
-        self.transfer_materials_to(&mut mesh, &cancelled)?;
-        mesh.validate_closed()?;
         Ok(mesh)
     }
-    fn finish_quad_remesh(
-        &self,
-        mut mesh: Mesh,
-        cancelled: &dyn Fn() -> bool,
-    ) -> Result<Self, String> {
-        self.transfer_groups_to(&mut mesh);
-        // A quad is one editable face even when its render triangles sample
-        // different source groups at a border.
-        for pair in mesh.polygroups.as_chunks_mut::<2>().0 {
-            pair[1] = pair[0];
-        }
-        self.transfer_materials_to(&mut mesh, &cancelled)?;
-        mesh.validate_closed()?;
-        Ok(mesh)
-    }
-}
-struct Grid {
-    dims: [usize; 3],
-    origin: Vec3,
-    step: f32,
-}
-impl Grid {
     fn index(&self, x: usize, y: usize, z: usize) -> usize {
         x + self.dims[0] * (y + self.dims[1] * z)
     }
