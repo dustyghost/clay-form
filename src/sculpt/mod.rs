@@ -62,6 +62,7 @@ mod group_tests;
 
 mod visibility;
 
+pub(crate) mod fusion;
 mod merge;
 mod mirror;
 pub use mirror::MirrorOptions;

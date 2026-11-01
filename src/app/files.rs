@@ -286,6 +286,9 @@ impl App {
         }
     }
     pub(super) fn request(&mut self, action: PendingAction, ctx: &egui::Context) {
+        if self.ui.fusion.open {
+            self.cancel_fusion();
+        }
         self.ui.file_picker = None;
         self.cancel_mesh_job();
         self.viewport.cancel(&mut self.document);

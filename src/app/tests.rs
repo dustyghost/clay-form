@@ -3639,6 +3639,7 @@ mod modeling;
 
 mod files;
 
+mod fusion;
 mod projection;
 
 #[test]

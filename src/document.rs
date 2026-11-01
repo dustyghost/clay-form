@@ -11,6 +11,7 @@ mod attributes;
 mod brushes;
 mod diagnostics;
 mod edit;
+mod fusion;
 mod mask;
 mod mesh;
 mod modeling;

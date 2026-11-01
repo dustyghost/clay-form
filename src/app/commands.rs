@@ -647,6 +647,18 @@ impl App {
                 Ok(())
             }
             Command::OpenProjection => self.open_projection(),
+            Command::OpenFusion => self.open_fusion(),
+            Command::DiscoverFusion => self.discover_fusion(),
+            Command::PreviewFusion => self.preview_fusion(),
+            Command::ClearFusion => {
+                self.clear_fusion();
+                Ok(())
+            }
+            Command::ApplyFusion => self.apply_fusion(),
+            Command::CancelFusion => {
+                self.cancel_fusion();
+                Ok(())
+            }
             Command::OpenRelaxation => self.open_relaxation(),
             Command::KeepProjectionReference => {
                 self.viewport.cancel(&mut self.document);
@@ -732,6 +744,9 @@ impl App {
         }
         if let Err(error) = result {
             self.diagnostic_warning("An application command failed; detailed error text withheld to exclude personal paths");
+            if self.ui.fusion.open {
+                self.ui.fusion.notice = error.clone();
+            }
             self.ui.status = error;
         }
     }

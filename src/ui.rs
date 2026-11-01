@@ -23,6 +23,7 @@ mod touch;
 mod viewport_controls;
 pub(crate) use files::{FileEntry, FilePicker};
 mod brush_controls;
+mod fusion;
 mod icons;
 mod masking;
 mod menus;
@@ -33,6 +34,7 @@ mod paint;
 pub(crate) mod paths;
 mod primitive;
 mod projection;
+pub(crate) use fusion::FusionKey;
 pub(crate) use projection::SurfaceReport;
 mod references;
 mod sidebar;
@@ -51,6 +53,7 @@ pub(crate) struct UiState {
     pub transform_mode: crate::viewport::TransformMode,
     pub edges: edges::EdgeControls,
     pub projection: projection::ProjectionControls,
+    pub(crate) fusion: fusion::FusionControls,
     pub paths_active: bool,
     pub paths_history_ready: bool,
     pub paths_history_reason: Option<&'static str>,
@@ -131,6 +134,7 @@ impl Default for UiState {
             transform_mode: crate::viewport::TransformMode::Sculpt,
             edges: Default::default(),
             projection: Default::default(),
+            fusion: Default::default(),
             paths_active: false,
             paths_history_ready: true,
             paths_history_reason: None,
@@ -1473,6 +1477,9 @@ impl UiState {
         });
         ui.separator();
         self.projection_buttons(ui, document, commands);
+        if design::help(ui.add_enabled(!self.mesh_busy, design::button(ui, Glyph::Mesh, "Join meshes…")), "Fuse overlapping solids locally or connect selected holes. Keeps source surfaces and subdivision levels recoverable.").customize(Action::JoinMeshes).clicked() {
+            commands.push(Command::OpenFusion);
+        }
         if ui
             .add_enabled(
                 !self.mesh_busy,

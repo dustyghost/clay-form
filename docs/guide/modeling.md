@@ -17,6 +17,7 @@ Start with [a primitive](#parametric-primitives) for a brush sculpt, or try [a s
 - [Thicken an open surface](#thickness-modifier)
 - [Cut the model](#slice)
 - [Combine submodels](#merge-down)
+- [Join meshes locally](#join-meshes-locally)
 
 ## Submodels
 
@@ -643,6 +644,39 @@ Caps require closed, consistently oriented input. Turn **Cap cuts** off for open
 Cuts follow the [view projection](navigation.md#perspective-view): parallel planes in orthographic, planes converging at the eye in perspective. Changing projection/FOV discards the draft. A perspective path through geometry crossing the eye is rejected; use orthographic and redraw it.
 
 A cut uses the active level and resets that model's subdivision and adaptive/voxel settings. Uncut quads remain; intersections and caps use triangles. Other submodels stay intact. Each completed cut is one undo step; cancellation keeps the original surface.
+
+## Join meshes locally
+
+Open **Mesh → Join meshes…**. Choose two visible sculpt meshes, or choose the same model twice to connect two of its holes. The result becomes a new active **Joined** submodel; Apply hides the sources and retains their original geometry and subdivision levels. Undo restores the whole scene in one step.
+
+### Connect open ends across a gap
+
+1. Choose **Open ends**, then the first and second source models.
+2. Select **First source** and click its highlighted rim, or choose its numbered hole from the list. Repeat for **Second source**. Hole labels refer to the selected sources, so other nearby holes are not automatically substituted.
+3. Choose **Preview join**. Inspect the purple connector in shaded and wireframe views. Orbit to inspect obscured edges; the colored overlays also show through surfaces.
+4. Adjust **Connector segments**, **Alignment offset**, or **Curvature**, then preview again. Choose **Apply join** to keep it, or **Cancel join** / **Escape** to discard it.
+
+![Selected 8- and 12-vertex openings joined across a gap](../validation/local-fusion/02-open-ends-preview.png)
+
+The connector shares the original rim vertices. All source vertices and polygons stay fixed, including unselected holes. Unequal vertex counts use a mixture of triangles and quads; aligned spans use quads. Curvature bends only the new connector toward the adjoining surfaces. It does not smooth the sources. Segment count controls divisions along the gap; the combined spacing of both rims determines intermediate ring resolution. Alignment offset changes the circular correspondence by one vertex on the second rim.
+
+**Modeling → Topology → Bridge boundaries** remains available for the existing equal-count, active-mesh workflow and its symmetry copies.
+
+### Fuse intersecting solids
+
+Choose **Intersections** for two overlapping, closed, outward-facing solids. Preview removes crossing and buried source polygons, extends the cut by **Extra collar rings**, and connects the resulting rims. Purple highlights the newly constructed patch; **Show removed source faces** overlays the deleted source edges in red. Several separate intersections can join together when their rim partners are unambiguous.
+
+![Local intersection patch with untouched source topology in wireframe](../validation/local-fusion/06-intersection-wire.png)
+
+This is a polygon-boundary reconstruction: its outline follows the source tessellation. Increasing collar rings broadens the local cut; it does not guarantee a smoother result. All retained vertices, triangles and quads remain exact. Buried faces are removed even beyond the narrow patch. The tool rejects a connector that folds into another surface; try different collar rings, alignment or source overlap. Always inspect the silhouette before applying.
+
+### Attributes and supported sources
+
+Untouched masks, vertex materials, group weights, creases and compatible face-corner UVs survive. Separate source groups remain separate, with duplicate names renamed. New vertices interpolate materials and group weights from both rims; new faces have no polygroup and are unmapped in UVs. New edges are not creased. Unwrap the connector afterwards. Sources with different texture images must first share an atlas; stale UV mappings must be restored or cleared.
+
+Convert parametric primitives and apply or remove Thickness before joining. Disable symmetry: this tool operates on the explicitly chosen pair. It uses each source's current stored mesh level and gives the joined result a fresh subdivision stack. Higher and lower levels remain on the hidden originals. Path bindings remain attached to those originals; the joined result is an independent sculpt mesh.
+
+Masked or hidden geometry needed by the join must be exposed and unmasked first. Invalid borders, non-manifold surfaces, collapsed faces, crossed connectors, ambiguous intersections and resource-limit failures leave the scene unchanged. Intersection mode requires an actual crossing seam: tangencies, coincident surfaces, containment alone and inward cavity shells are unsupported. It does not route a connector around obstacles. At most 4,096 vertices per rim, 64 connector segments and 16 intersection pairs are supported, subject to the application's mesh and model limits.
 
 ## Merge down
 

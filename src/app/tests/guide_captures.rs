@@ -21,6 +21,112 @@ struct Guide {
 }
 
 #[test]
+#[ignore = "mesh fusion controls and visual review; requires Vulkan"]
+fn local_fusion_controls_offscreen_review() {
+    use crate::sculpt::{Geometry, Primitive, PrimitiveKind, Submodel, Vec3};
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir().join("clay-local-fusion"));
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1200, 900]);
+    g.interactive = true;
+    let (fixture, _) = super::fusion::setup_fusion();
+    g.app.document = fixture.document;
+    g.app.camera.pitch = -0.7;
+    g.app.camera.yaw = 0.45;
+    g.app.camera.zoom = 0.65;
+    g.app.camera.pan = Vec2::new(100., 0.);
+    let before = g.app.document.geometry_snapshot();
+    g.app.dispatch(Command::Action(Action::JoinMeshes), &g.ctx);
+    super::fusion::finish_fusion(&mut g.app);
+    g.save("01-open-ends-before");
+    for (side, index) in [(0, 1), (1, 0)] {
+        if side == 1 {
+            click_guide_label(&mut g, "Second source");
+        }
+        let rect = g.frame(vec![]).0;
+        let mesh = g.app.document.model(side).unwrap().mesh;
+        let loops = crate::sculpt::fusion::boundaries(mesh).unwrap();
+        let (right, up, view) = g.app.camera.basis();
+        let p = loops[index]
+            .vertices
+            .iter()
+            .map(|&i| mesh.vertices[i])
+            .max_by(|a, b| a.dot(view).total_cmp(&b.dot(view)))
+            .unwrap();
+        let point = rect.center()
+            + g.app.camera.pan
+            + Vec2::new(p.dot(right), -p.dot(up)) * g.app.camera.scale_at(rect.size(), p);
+        g.frame(vec![
+            egui::Event::PointerMoved(point),
+            primary_event(point, true),
+        ]);
+        g.frame(vec![primary_event(point, false)]);
+        g.frame(vec![]);
+        assert_eq!(g.app.ui.fusion.selected[side], Some(index));
+    }
+    click_guide_label(&mut g, "Preview join");
+    super::fusion::finish_fusion(&mut g.app);
+    assert!(g.app.ui.fusion.ready, "{}", g.app.ui.fusion.notice);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.save("02-open-ends-preview");
+    g.app.ui.wire = true;
+    g.save("03-open-ends-wire");
+    g.app.ui.wire = false;
+    click_guide_label(&mut g, "Apply join");
+    assert_eq!(g.app.document.model_count(), 3);
+    assert!(!g.app.ui.fusion.open);
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.app.dispatch(Command::Redo, &g.ctx);
+    g.save("04-open-ends-applied");
+
+    let mut a = Primitive::for_kind(PrimitiveKind::UvSphere).mesh().unwrap();
+    let mut b = a.clone();
+    for p in &mut a.vertices {
+        *p = *p + Vec3(-0.3, 0., 0.);
+    }
+    for p in &mut b.vertices {
+        *p = *p + Vec3(0.3, 0.03, 0.02);
+    }
+    let mut geometry = Geometry::new(a);
+    geometry.submodels.push(Submodel {
+        name: "Second sphere".into(),
+        metadata: Default::default(),
+        mesh: b,
+        mesh_settings: Default::default(),
+    });
+    g.app.document.replace_geometry(geometry).unwrap();
+    g.app.camera.pitch = 0.15;
+    g.app.camera.yaw = 0.3;
+    g.app.camera.zoom = 1.;
+    g.app.dispatch(Command::OpenFusion, &g.ctx);
+    super::fusion::finish_fusion(&mut g.app);
+    click_guide_label(&mut g, "Intersections");
+    click_guide_label(&mut g, "Preview join");
+    super::fusion::finish_fusion(&mut g.app);
+    assert!(g.app.ui.fusion.ready, "{}", g.app.ui.fusion.notice);
+    g.save("05-intersection-preview");
+    g.app.ui.wire = true;
+    g.save("06-intersection-wire");
+    click_guide_label(&mut g, "Apply join");
+    g.app.document.mesh().validate_closed().unwrap();
+    assert_eq!(g.app.document.model_count(), 3);
+    g.app.ui.wire = false;
+    g.save("07-intersection-applied");
+    drop(g);
+    let mut g = Guide::new(&directory, [640, 480]);
+    g.interactive = true;
+    let (fixture, _) = super::fusion::setup_fusion();
+    g.app.document = fixture.document;
+    g.app.dispatch(Command::OpenFusion, &g.ctx);
+    super::fusion::finish_fusion(&mut g.app);
+    g.save("08-small-window-controls");
+    click_guide_label(&mut g, "Cancel join");
+    assert!(!g.app.ui.fusion.open);
+}
+
+#[test]
 #[ignore = "manual reset-view capture; requires Vulkan and optionally CLAY_OBJ_REVIEW"]
 fn reset_view_manual_capture() {
     let directory = std::path::PathBuf::from(
@@ -876,6 +982,7 @@ impl Guide {
             .dock = dock;
     }
     fn frame(&mut self, events: Vec<egui::Event>) -> (egui::Rect, Vec<u8>) {
+        self.app.poll_fusion();
         self.time += 0.1;
         let mut rect = egui::Rect::NOTHING;
         let mut commands = Vec::new();
@@ -915,6 +1022,7 @@ impl Guide {
                 commands.extend(self.app.ui.project_file_dialog(ctx));
                 commands.extend(self.app.ui.alpha_popup(ctx));
                 commands.extend(self.app.ui.projection_window(ctx, &self.app.document));
+                commands.extend(self.app.ui.fusion_window(ctx, &self.app.document));
             },
         );
         fn collect_text(shape: &egui::Shape, out: &mut Vec<(String, Pos2)>) {

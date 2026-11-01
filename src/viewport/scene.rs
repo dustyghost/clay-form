@@ -96,7 +96,21 @@ impl Scene {
         mut renderer: Option<&mut Renderer>,
         stroke: Option<&super::stroke::PendingStroke>,
         model_preview: Option<&crate::sculpt::Mesh>,
+        scene_preview: Option<Arc<DisplayMesh>>,
     ) -> Self {
+        if let Some(display) = scene_preview {
+            let preview =
+                Self::prepared(rect, camera, display.clone(), renderer.as_deref_mut(), true);
+            preview.paint_geometry(
+                painter,
+                renderer.as_deref(),
+                wire,
+                mode,
+                show_triangles,
+                Some(display),
+            );
+            return preview;
+        }
         if let Some(mesh) = model_preview {
             let geometry = if let Some(renderer) = renderer.as_mut() {
                 renderer.geometry(document)

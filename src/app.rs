@@ -18,6 +18,7 @@ mod context_menu;
 mod diagnostics;
 mod exports;
 mod files;
+mod fusion;
 mod jobs;
 mod masking;
 pub(crate) mod paths;
@@ -38,6 +39,7 @@ pub struct App {
     diagnostic_environment: crate::diagnostics::Environment,
     job_settings: Option<crate::diagnostics::EditSettings>,
     projection: projection::ProjectionState,
+    fusion: fusion::FusionState,
     paths: paths::PathState,
     closing: bool,
     mesh_job: Option<MeshJob>,
@@ -68,6 +70,7 @@ impl Default for App {
             diagnostic_environment: Default::default(),
             job_settings: None,
             projection: Default::default(),
+            fusion: Default::default(),
             paths: Default::default(),
             closing: false,
             mesh_job: None,
@@ -268,6 +271,9 @@ impl App {
         if self.ui.projection.open && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.cancel_projection();
         }
+        if self.ui.fusion.open && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.cancel_fusion();
+        }
         if let Some(id) = self.viewport.session.guided.used_path.take() {
             self.paths.selected_path = Some(id);
         }
@@ -411,7 +417,18 @@ impl App {
             .preview_mesh
             .clone()
             .or_else(|| self.projection.draft.as_ref().map(|d| d.mesh.clone()));
-        self.viewport.session.projection_mode = self.ui.projection.open;
+        self.viewport.session.projection_mode = self.ui.projection.open || self.ui.fusion.open;
+        self.viewport.set_join_preview(self.fusion.display.clone());
+        self.viewport.session.join_patch = if self.ui.fusion.show_patch {
+            self.fusion.patch.clone()
+        } else {
+            Vec::new()
+        };
+        self.viewport.session.join_removed = if self.ui.fusion.show_removed {
+            self.fusion.removed.clone()
+        } else {
+            Vec::new()
+        };
         self.viewport.session.guided.enabled =
             self.ui.guide_paths && !self.ui.mask_active && !temporary_visibility;
         self.viewport.session.guided.path_starts_only = self.ui.path_starts_only;
@@ -629,6 +646,7 @@ impl eframe::App for App {
             }
         }
         self.poll_projection();
+        self.poll_fusion();
         self.poll_paths();
         let native_pressure = ctx.input(|i| self.tablet.update_native(&i.events));
         self.pressure = native_pressure
@@ -636,6 +654,9 @@ impl eframe::App for App {
             .unwrap_or(1.);
         if ctx.input(|i| i.viewport().close_requested()) && self.ui.projection.open {
             self.cancel_projection();
+        }
+        if ctx.input(|i| i.viewport().close_requested()) && self.ui.fusion.open {
+            self.cancel_fusion();
         }
         if ctx.input(|i| i.viewport().close_requested()) && self.viewport.paths.active {
             let _ = self.dispatch_path(crate::command::PathCommand::Close);
@@ -663,6 +684,9 @@ impl eframe::App for App {
             self.dispatch(command, ctx);
         }
         for command in self.ui.projection_window(ctx, &self.document) {
+            self.dispatch(command, ctx);
+        }
+        for command in self.ui.fusion_window(ctx, &self.document) {
             self.dispatch(command, ctx);
         }
         for command in self.ui.uv_window(
