@@ -426,6 +426,74 @@ fn guided_retopology_keeps_source_and_attributes_and_roundtrips_as_one_edit() {
 }
 
 #[test]
+fn guided_retopology_input_limit_allows_larger_preview_and_apply() {
+    use crate::sculpt::Vec3;
+    // An open strip just above the default budget. Boundary protection keeps
+    // reduction cheap while pairing still produces an editable quad result.
+    let cells = 12_001;
+    let mut mesh = Mesh::default();
+    for x in 0..=cells {
+        mesh.vertices
+            .extend([Vec3(x as f32, 0., 0.), Vec3(x as f32, 1., 0.)]);
+    }
+    for x in 0..cells {
+        let a = 2 * x;
+        mesh.triangles
+            .extend([[a, a + 2, a + 3], [a, a + 3, a + 1]]);
+    }
+    mesh.mask.resize(mesh.vertices.len(), 0.);
+    let triangles = mesh.triangles.len();
+    let mut app = App::default();
+    app.document.replace_geometry(Geometry::new(mesh)).unwrap();
+    app.document.mark_saved("large-retopology-source.clay");
+    let before = app.document.project();
+    let history = app.document.history_counts();
+    let ctx = egui::Context::default();
+    app.dispatch(Command::Action(Action::GuidedRetopology), &ctx);
+    assert!(
+        app.ui.projection.open,
+        "Larger sources can reach the limit control"
+    );
+    app.dispatch(Command::PreviewProjection, &ctx);
+    assert!(!app.ui.projection.busy);
+    assert!(app.projection.draft.is_none());
+    assert!(
+        app.ui.status.contains("Input triangle limit"),
+        "{}",
+        app.ui.status
+    );
+    assert!(app.document.project() == before && !app.document.is_dirty());
+    assert_eq!(app.document.history_counts(), history);
+
+    app.ui.projection.layout.input_triangle_limit = triangles;
+    app.ui.projection.layout.target = cells;
+    app.dispatch(Command::PreviewProjection, &ctx);
+    finish_projection(&mut app);
+    let draft = app
+        .projection
+        .draft
+        .as_ref()
+        .expect("Raised limit permits preview");
+    assert_eq!(draft.mesh.quads.len(), cells);
+    assert_eq!(
+        draft.settings.view_input.as_ref().unwrap()["guided_retopology"]["input_triangle_limit"],
+        triangles
+    );
+    assert!(app.document.project() == before && !app.document.is_dirty());
+    app.dispatch(Command::ApplyProjection, &ctx);
+    assert_eq!(app.document.model_count(), 2);
+    assert_eq!(app.document.mesh().quads.len(), cells);
+    assert_eq!(
+        app.document.model(1).unwrap().mesh.triangles.len(),
+        triangles
+    );
+    app.dispatch(Command::Undo, &ctx);
+    assert!(app.document.project() == before);
+    app.dispatch(Command::OpenRetopology, &ctx);
+    assert_eq!(app.ui.projection.layout.input_triangle_limit, triangles);
+}
+
+#[test]
 fn guided_retopology_rejects_failed_and_stale_previews_without_adding_models() {
     use crate::sculpt::retopology::tests::fixture;
     let (mut mesh, _) = fixture(false);

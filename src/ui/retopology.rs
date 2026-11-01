@@ -14,6 +14,17 @@ impl ProjectionControls {
             &mut self.layout.preserve_sharp,
             "Protect bends of 45° or more",
         );
+        ui.horizontal(|ui| {
+            ui.label("Input triangle limit");
+            design::help(
+                ui.add(
+                    egui::DragValue::new(&mut self.layout.input_triangle_limit)
+                        .range(1..=crate::sculpt::max_triangles())
+                        .speed(1_000),
+                ),
+                "Defaults to 24,000. Raise for larger tests, up to the active mesh capacity. Higher limits may use more time and memory. Kept for this app session.",
+            );
+        });
 
         ui.separator();
         ui.label("Edge direction");
@@ -28,7 +39,7 @@ impl ProjectionControls {
                     ui.selectable_value(&mut self.flow_path, Some(path.id), &path.name);
                 }
             });
-        ui.weak("Save a surface path in Editable paths to steer nearby quad edges.");
+        ui.weak("Select one saved surface path to steer nearby quad edges. Closed paths guide flow but do not guarantee a complete edge loop.");
         ui.add_enabled_ui(self.flow_path.is_some(), |ui| {
             ui.add(egui::Slider::new(&mut self.layout.flow, 0. ..=1.).text("Path strength"));
             ui.checkbox(
@@ -61,7 +72,12 @@ impl UiState {
         window.show(ctx, |ui| {
             let source = document.model(document.active_model_index()).unwrap();
             ui.label(format!("Source · {}", source.name));
+            ui.label(format!("{} source triangles", document.mesh().triangles.len()));
             ui.weak("Experimental quad-dominant layout. Apply adds an editable model and keeps the source below it for detail projection.");
+            let budget = state.layout.require_input_budget(document.mesh());
+            if let Err(error) = &budget {
+                ui.label(error);
+            }
             if state.busy {
                 ui.spinner();
             }
@@ -74,7 +90,10 @@ impl UiState {
             let mut requested = None;
             ui.horizontal_wrapped(|ui| {
                 let preview = design::button(ui, Glyph::Mesh, "Preview layout");
-                if ui.add_enabled(!state.busy, preview).clicked() {
+                if design::help(
+                    ui.add_enabled(!state.busy && budget.is_ok(), preview),
+                    budget.as_ref().err().map(String::as_str).unwrap_or("Compute a private layout preview"),
+                ).clicked() {
                     requested = Some(Command::PreviewProjection);
                 }
                 let apply = design::button(ui, Glyph::Plus, "Apply as new model");
@@ -89,7 +108,7 @@ impl UiState {
             ui.separator();
             let old = (state.layout, state.flow_path);
             egui::ScrollArea::vertical()
-                .max_height((ctx.content_rect().height() - 235.).max(50.))
+                .max_height((ctx.content_rect().height() - 300.).max(50.))
                 .show(ui, |ui| {
                     ui.add_enabled_ui(!state.busy, |ui| state.layout_options(ui, document));
                 });

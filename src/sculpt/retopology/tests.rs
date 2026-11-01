@@ -280,6 +280,41 @@ fn guided_retopology_preserves_open_rims_creases_and_separate_parts() {
 }
 
 #[test]
+fn guided_retopology_worker_enforces_configured_input_limit() {
+    let (mesh, _) = fixture(false);
+    for input_triangle_limit in [
+        0,
+        mesh.triangles.len() - 1,
+        super::super::max_triangles() + 1,
+    ] {
+        let error = mesh
+            .guided_retopology(
+                Options {
+                    input_triangle_limit,
+                    ..Default::default()
+                },
+                None,
+                &|| false,
+            )
+            .err()
+            .unwrap();
+        assert!(
+            error.to_lowercase().contains("input triangle limit"),
+            "{error}"
+        );
+    }
+    mesh.guided_retopology(
+        Options {
+            input_triangle_limit: mesh.triangles.len(),
+            ..Default::default()
+        },
+        None,
+        &|| false,
+    )
+    .unwrap();
+}
+
+#[test]
 fn guided_retopology_mirrors_a_closed_surface_guide_and_rejects_stale_paths() {
     let (mesh, mut path) = fixture(false);
     path.closed = true;

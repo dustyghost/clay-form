@@ -7,7 +7,6 @@ use super::{
 };
 use std::collections::{BTreeMap, HashMap};
 
-const MAX_INPUT: usize = 24_000;
 pub(crate) type GuideCurves = std::sync::Arc<[Vec<PathSample>]>;
 
 pub(crate) struct Layout {
@@ -18,6 +17,7 @@ pub(crate) struct Layout {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Options {
+    pub input_triangle_limit: usize,
     pub target: usize,
     pub flow: f32,
     pub density: f32,
@@ -27,12 +27,31 @@ pub(crate) struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
+            input_triangle_limit: 24_000,
             target: 500,
             flow: 1.,
             density: 1.,
             mirror_path_x: false,
             preserve_sharp: true,
         }
+    }
+}
+impl Options {
+    pub(crate) fn require_input_budget(&self, mesh: &Mesh) -> Result<(), String> {
+        if !(1..=super::max_triangles()).contains(&self.input_triangle_limit) {
+            return Err(format!(
+                "Input triangle limit must be between 1 and {}",
+                super::max_triangles()
+            ));
+        }
+        if mesh.triangles.len() > self.input_triangle_limit {
+            return Err(format!(
+                "Source has {} triangles; raise Input triangle limit above {} to preview it",
+                mesh.triangles.len(),
+                self.input_triangle_limit
+            ));
+        }
+        Ok(())
     }
 }
 fn check(cancel: &dyn Fn() -> bool) -> Result<(), String> {
@@ -125,13 +144,9 @@ impl Surface {
 }
 impl Mesh {
     pub(crate) fn require_retopology_input(&self) -> Result<(), String> {
-        if self.triangles.is_empty()
-            || self.triangles.len() > MAX_INPUT
-            || self.vertices.len() > 3 * MAX_INPUT
+        if self.triangles.is_empty() || self.vertices.len() > self.triangles.len().saturating_mul(3)
         {
-            return Err(format!(
-                "The prototype supports 1–{MAX_INPUT} source triangles with no loose vertices"
-            ));
+            return Err("Retopology needs source triangles with no loose vertices".into());
         }
         if !self.uv.is_empty() {
             return Err("Use a source without UVs or textures for guided retopology".into());
@@ -145,6 +160,7 @@ impl Mesh {
         cancel: &impl Fn() -> bool,
     ) -> Result<Layout, String> {
         check(cancel)?;
+        options.require_input_budget(self)?;
         self.require_retopology_input()?;
         self.validate()?;
         if self.has_hidden_faces() {

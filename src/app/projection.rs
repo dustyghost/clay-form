@@ -182,6 +182,7 @@ impl App {
         self.clear_projection_preview();
         self.viewport.cancel(&mut self.document);
         let options = self.ui.projection.layout;
+        options.require_input_budget(self.document.mesh())?;
         let path = self
             .ui
             .projection
@@ -209,7 +210,7 @@ impl App {
         let view = settings
             .view_input
             .get_or_insert_with(|| serde_json::json!({}));
-        view["guided_retopology"] = serde_json::json!({"target":options.target,"path":self.ui.projection.flow_path,"path_strength":options.flow,"density_strength":options.density,"mirror_path_x":options.mirror_path_x,"preserve_sharp":options.preserve_sharp});
+        view["guided_retopology"] = serde_json::json!({"input_triangle_limit":options.input_triangle_limit,"target":options.target,"path":self.ui.projection.flow_path,"path_strength":options.flow,"density_strength":options.density,"mirror_path_x":options.mirror_path_x,"preserve_sharp":options.preserve_sharp});
         self.projection.worker = Some(Worker {
             job,
             revision: self.document.display_revision(),
