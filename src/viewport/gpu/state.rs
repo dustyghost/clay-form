@@ -20,6 +20,7 @@ pub(super) struct BrushPreview {
 }
 
 pub(super) struct Params {
+    pub(super) flat_shading: bool,
     pub(super) lighting: crate::lighting::Lighting,
     pub(super) background: [u8; 3],
     pub(super) right: Vec3,
@@ -40,6 +41,7 @@ impl Params {
         extent: f32,
     ) -> Self {
         Self {
+            flat_shading: false,
             lighting: Default::default(),
             right,
             up,

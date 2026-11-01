@@ -139,8 +139,13 @@ fn texture_sample(id:u32,uv:vec2f)->vec4f {
 @fragment fn surface_fragment(v: Surface) -> @location(0) vec4f {
  let delta=u.light_position[0].xyz-v.position*u.light_position[0].w;
  let light=delta/max(length(delta),0.000001);
- let shade=0.25+0.75*max(dot(normalize(v.normal)*select(1.,-1.,u.flags.z==1.),light),0.);
- let normal=normalize(v.normal)*select(1.,-1.,u.flags.z==1.);
+ var normal=normalize(v.normal)*select(1.,-1.,u.flags.z==1.);
+ if u.material_info.w==1. {
+  // Screen Y points down. This order faces the eye in both front and back passes.
+  let face=cross(dpdy(v.position),dpdx(v.position));
+  if dot(face,face)>0. { normal=normalize(face); }
+ }
+ let shade=0.25+0.75*max(dot(normal,light),0.);
  let eye=normalize(u.view.xyz-v.position*u.perspective.x);
  let colour_map=texture_sample(v.texture_ids.x,v.uv.xy);let rough_map=texture_sample(v.texture_ids.y,v.uv.xy);let metal_map=texture_sample(v.texture_ids.z,v.uv.xy);
  var linear=surface_lighting(mix(v.color,colour_map.rgb,colour_map.a),clamp(mix(v.material.x,rough_map.r,rough_map.a),0.,1.),clamp(mix(v.material.y,metal_map.r,metal_map.a),0.,1.),channel(v,12u),channel(v,13u),channel(v,18u),channels(v,19u),channel(v,22u),normal,eye,v.position)+channels(v,14u)*channel(v,17u);

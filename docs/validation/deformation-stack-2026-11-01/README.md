@@ -10,6 +10,12 @@ The fixture has a rectangular body, a round boss and a through-bore. Both crops 
 
 The walkthrough also captures the same fixture at 24 and 96 samples. The geometric regression checks for a shared cap and wall vertex near the source rim in every 15-degree sector at 48 samples. Coarse grids can lose thin features. A faceted cutter can still produce a faceted opening.
 
+## Flat shading
+
+The **View → Flat shading** switch shows the triangles along the bore and rim. The two crops use the same cached Boolean result, camera and lights. The viewport toggle test switches on flat shading and then restores the original smooth pixels.
+
+![The same Boolean result with smooth and flat shading](flat-shading-comparison.png)
+
 ## Controls exercised
 
 - Pulled a frame corner, cancelled with Escape, repeated the drag and committed it. Bent and twisted the same starting shape and undid each adjustment. The pointer tests cover orthographic and perspective projections. [Corner pull](01-pull.png) · [Bend](02-bend.png) · [Twist](03-twist.png)

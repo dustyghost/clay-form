@@ -689,6 +689,10 @@ impl App {
                 self.ui.show_polygroups = !self.ui.show_polygroups;
                 None
             }
+            Action::FlatShading => {
+                self.ui.flat_shading = !self.ui.flat_shading;
+                None
+            }
             Action::Backfaces => {
                 self.ui.show_backfaces = !self.ui.show_backfaces;
                 None

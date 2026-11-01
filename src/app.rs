@@ -235,6 +235,7 @@ impl App {
 
     pub(crate) fn show_viewport(&mut self, ui: &mut egui::Ui) {
         self.ui.preferences.lighting.install(ui.ctx());
+        crate::viewport::set_flat_shading(ui.ctx(), self.ui.flat_shading);
         self.boolean_preview(ui.ctx());
         if self.ui.boolean_enabled {
             self.viewport

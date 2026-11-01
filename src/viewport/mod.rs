@@ -46,6 +46,15 @@ pub(crate) use visibility::SelectionTool;
 pub(crate) const AXIS_COLORS: [Color32; 3] = controls::AXES;
 use scene::Scene;
 pub(crate) use transform::{TransformMode, TransformOperation};
+// Keep frame appearance separate from the geometry and picking cache keys.
+pub(crate) fn set_flat_shading(ctx: &egui::Context, flat: bool) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("viewport_flat_shading"), flat));
+}
+fn flat_shading(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp(egui::Id::new("viewport_flat_shading")))
+        .unwrap_or_default()
+}
+
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum Gesture {
     Sculpt,

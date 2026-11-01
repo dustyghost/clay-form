@@ -1,6 +1,103 @@
 use super::*;
 use crate::sculpt::{Geometry, Vec3, cage::Cage};
 #[test]
+#[ignore = "requires Vulkan to compare viewport shading"]
+fn flat_shading_viewport_toggle() {
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir().join("clay-flat-shading"));
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1280, 900]);
+    g.interactive = true;
+    g.app
+        .ui
+        .preferences
+        .dock_menu(BuiltinMenu::View, Dock::Right);
+    g.app
+        .document
+        .replace_geometry(crate::app::tests::deformation_stack::boolean_fixture())
+        .unwrap();
+    g.app.document.set_boolean_resolution(48).unwrap();
+    g.app.camera.zoom = 0.73;
+    g.app.camera.yaw = 0.35;
+    g.app.camera.pitch = 0.22;
+    g.app.camera.pan = egui::vec2(78., 0.);
+    let revision = g.app.document.display_revision();
+    let history = g.app.document.history_counts();
+    assert!(!g.app.ui.flat_shading);
+
+    fn pixels(g: &mut Guide) -> Vec<u8> {
+        // The docked View panel lays out its field-of-view control on the next frame.
+        g.frame(vec![egui::Event::PointerGone]);
+        let (rect, image) = g.frame(vec![]);
+        let mut viewport = Vec::new();
+        for y in rect.top().ceil() as usize..rect.bottom() as usize {
+            let start = (y * g.size[0] as usize + rect.left().ceil() as usize) * 4;
+            viewport.extend_from_slice(&image[start..start + (rect.width().floor() as usize) * 4]);
+        }
+        viewport
+    }
+    fn visibly_different(a: &[u8], b: &[u8]) -> bool {
+        a.iter().zip(b).filter(|(a, b)| a.abs_diff(**b) > 3).count() > 100
+    }
+    g.frame(vec![]);
+    let sources = pixels(&mut g);
+    click_guide_label(&mut g, "Flat shading");
+    assert!(g.app.ui.flat_shading);
+    assert!(visibly_different(&sources, &pixels(&mut g)));
+    g.app.dispatch(Command::Action(Action::FlatShading), &g.ctx);
+    assert_eq!(sources, pixels(&mut g));
+
+    g.app.dispatch(Command::ToggleBooleanResult, &g.ctx);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while g.app.boolean.result().is_none() {
+        g.frame(vec![]);
+        assert!(std::time::Instant::now() < deadline);
+    }
+    let cached = g.app.viewport.boolean_display.clone().unwrap();
+    let smooth = pixels(&mut g);
+    g.save("flat-shading-off");
+    click_guide_label(&mut g, "Flat shading");
+    let flat = pixels(&mut g);
+    g.save("flat-shading-on");
+    assert!(visibly_different(&smooth, &flat));
+    click_guide_label(&mut g, "Flat shading");
+    assert_eq!(smooth, pixels(&mut g));
+    assert!(std::sync::Arc::ptr_eq(
+        &cached,
+        g.app.viewport.boolean_display.as_ref().unwrap()
+    ));
+    assert_eq!(g.app.document.display_revision(), revision);
+    assert_eq!(g.app.document.history_counts(), history);
+
+    // A fully creased reference independently supplies one face normal per triangle.
+    let mut reference = g.app.boolean.result().unwrap().clone();
+    reference.creases = reference.polygon_edges().into_iter().collect();
+    reference.creases.sort_unstable();
+    g.app
+        .viewport
+        .set_boolean_result(&g.app.document, &reference);
+    fn assert_face_lighting(expected: &[u8], actual: &[u8]) {
+        let max_error = expected
+            .iter()
+            .zip(actual)
+            .map(|(a, b)| a.abs_diff(*b))
+            .max()
+            .unwrap();
+        assert!(
+            max_error <= 2,
+            "flat shading differs from face normals by {max_error}"
+        );
+    }
+    assert_face_lighting(&pixels(&mut g), &flat);
+    g.app.camera.perspective = true;
+    let reference_perspective = pixels(&mut g);
+    g.app.viewport.boolean_display = Some(cached);
+    g.app.dispatch(Command::Action(Action::FlatShading), &g.ctx);
+    assert_face_lighting(&reference_perspective, &pixels(&mut g));
+}
+
+#[test]
 #[ignore = "Vulkan interaction and visual review of deformation and Boolean tools"]
 fn deformation_stack_offscreen_review() {
     let directory = std::path::PathBuf::from(

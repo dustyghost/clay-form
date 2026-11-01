@@ -140,6 +140,10 @@ Open **Wire settings** beside **Show wireframe**.
 
 Enable triangle diagonals separately. Primitives use quads where possible; adaptive and voxel remeshing produce triangles.
 
+### Inspect surface shading
+
+Enable **Display → View → Flat shading** to light each visible triangle with its face normal. Use it to inspect facets on a sculpt or a live Boolean result. Switch it off to return to smooth shading. This is a session view setting.
+
 ### Inspect open surfaces
 
 Enable **View → Faint back-facing surfaces** to see the back of an open surface. Set **Back-face opacity**, initially **15%**, to control translucency. Backs behind opaque foreground clay stay hidden. This changes display only, not normals or picking.

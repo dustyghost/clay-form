@@ -709,6 +709,7 @@ fn project_file_offscreen_review() {
             serde_json::from_slice(&std::fs::read(manifest).unwrap()).unwrap();
         let view = &manifest["current_settings"]["view_input"];
         g.app.ui.wire = view["wireframe"].as_bool().unwrap_or(false);
+        g.app.ui.flat_shading = view["flat_shading"].as_bool().unwrap_or(false);
         g.app.ui.show_polygroups = view["show_polygroups"].as_bool().unwrap_or(false);
         let camera = &view["camera"];
         let value = |key: &str| camera[key].as_f64().unwrap() as f32;
@@ -812,6 +813,7 @@ fn smooth_decimate_offscreen_review() {
                 serde_json::from_slice(&std::fs::read(manifest).unwrap()).unwrap();
             let view = &manifest["current_settings"]["view_input"];
             g.app.ui.wire = view["wireframe"].as_bool().unwrap_or(false);
+            g.app.ui.flat_shading = view["flat_shading"].as_bool().unwrap_or(false);
             g.app.ui.show_polygroups = view["show_polygroups"].as_bool().unwrap_or(false);
             let camera = &view["camera"];
             g.app.camera.yaw = camera["yaw"].as_f64().unwrap() as f32;

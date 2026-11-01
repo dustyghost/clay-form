@@ -343,7 +343,6 @@ impl Scene {
         let outlines = &geometry.outlines;
         let active_vertices = geometry.active_vertices;
         let positions = &self.positions;
-        let project = |v| self.project(v);
         painter.rect_filled(
             rect,
             0.,
@@ -365,7 +364,7 @@ impl Scene {
             let faces = &faces;
             let lighting = crate::lighting::Lighting::current(painter.ctx());
             let mut rendered = egui::Mesh::default();
-            for &(i, normal) in geometry.shading.vertices.iter() {
+            let lit_color = |i: usize, normal: Vec3| {
                 let v = mesh.vertices[i];
                 let mask = if i < active_vertices {
                     1. - mesh.mask[i] * 0.75
@@ -387,15 +386,12 @@ impl Scene {
                         lighting.fill,
                     )
                     .map(|c| c * 255.);
-                rendered.colored_vertex(
-                    project(v),
-                    Color32::from_rgb(
-                        (base[0] * mask) as u8,
-                        (base[1] * mask) as u8,
-                        (base[2] * mask) as u8,
-                    ),
-                );
-            }
+                Color32::from_rgb(
+                    (base[0] * mask) as u8,
+                    (base[1] * mask) as u8,
+                    (base[2] * mask) as u8,
+                )
+            };
             use super::WireMode;
             let edge_key = |a: usize, b: usize| if a < b { (a, b) } else { (b, a) };
             let mut hidden = std::collections::HashSet::new();
@@ -516,10 +512,27 @@ impl Scene {
                 }
             };
             if !wire || mode != WireMode::Transparent {
-                for &(i, _) in faces {
-                    rendered
-                        .indices
-                        .extend(geometry.shading.triangles[i].map(|v| v as u32));
+                if super::flat_shading(painter.ctx()) {
+                    for &(i, _) in faces {
+                        let triangle = mesh.triangles[i];
+                        let [a, b, c] = triangle.map(|v| mesh.vertices[v]);
+                        // The visible face list already excludes degenerate triangles.
+                        let cross = (b - a).cross(c - a);
+                        let normal = cross * (1. / cross.len());
+                        for v in triangle {
+                            rendered.indices.push(rendered.vertices.len() as u32);
+                            rendered.colored_vertex(positions[v], lit_color(v, normal));
+                        }
+                    }
+                } else {
+                    for &(v, normal) in geometry.shading.vertices.iter() {
+                        rendered.colored_vertex(positions[v], lit_color(v, normal));
+                    }
+                    for &(i, _) in faces {
+                        rendered
+                            .indices
+                            .extend(geometry.shading.triangles[i].map(|v| v as u32));
+                    }
                 }
                 painter.add(egui::Shape::mesh(rendered));
             }
