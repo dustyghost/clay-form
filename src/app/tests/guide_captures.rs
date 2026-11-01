@@ -4394,7 +4394,9 @@ fn guided_retopology_offscreen_review() {
                 let (_, pixels) = g.frame(vec![]);
                 assert!(
                     pixels
-                        .chunks_exact(4)
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
                         .filter(|p| p[0] > 235 && p[1] > 165 && p[1] < 205 && p[2] < 110)
                         .count()
                         > 100,
