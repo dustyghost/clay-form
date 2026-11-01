@@ -535,6 +535,7 @@ impl App {
                 },
             },
         );
+        self.ui.instances.placing = self.viewport.object_brush.is_some();
         if let Some(set) = self.viewport.path_thickness.updated.take() {
             self.ui.instances.editor = Some(set);
             self.ui.instances.invalid = false;

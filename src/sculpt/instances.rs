@@ -75,11 +75,18 @@ pub struct Asset {
     pub id: u64,
     pub name: String,
     pub mesh: Arc<Mesh>,
+    /// View of the source when captured, used for the brush library thumbnail.
+    #[serde(default = "default_capture_angles")]
+    pub capture_angles: [f32; 3],
     pub pivot: Vec3,
     pub forward: usize,
     pub up: usize,
     #[serde(default)]
     pub options: ObjectOptions,
+}
+
+fn default_capture_angles() -> [f32; 3] {
+    [0.35, -0.25, 0.]
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -496,6 +503,9 @@ impl Library {
             .validate()?;
             a.mesh.validate()?;
             a.options.validate()?;
+            if !a.capture_angles.iter().all(|a| a.is_finite()) {
+                return Err("Invalid object thumbnail orientation".into());
+            }
             if a.mesh.vertices.len() > 100_000 || a.mesh.triangles.len() > 200_000 {
                 return Err("Object brush exceeds 100,000 vertices / 200,000 triangles".into());
             }

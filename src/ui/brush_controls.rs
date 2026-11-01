@@ -38,8 +38,13 @@ impl UiState {
         }
         let (default, extra) = match action {
             Action::BrushIcon => (
-                self.brush_index_for_context(document, ui.ctx())
-                    .map(|i| document.brushes()[i].name.as_str())
+                self.instances
+                    .selected_cover(document.instances())
+                    .map(|(name, _)| name)
+                    .or_else(|| {
+                        self.brush_index_for_context(document, ui.ctx())
+                            .map(|i| document.brushes()[i].name.as_str())
+                    })
                     .unwrap_or("No active brush"),
                 42.,
             ),
@@ -76,6 +81,33 @@ impl UiState {
                     ui.horizontal_wrapped(|ui| self.appearance_strip(ui, document, commands));
                 })
                 .response;
+        }
+        if let Some((name, part)) = self.instances.selected_cover(document.instances()) {
+            match action {
+                Action::BrushIcon => {
+                    return ui
+                        .horizontal(|ui| {
+                            if let Some(texture) = self.instances.object_icon(ui.ctx(), part) {
+                                ui.image((texture, egui::vec2(32., 32.)));
+                            }
+                            ui.label(name);
+                        })
+                        .response;
+                }
+                Action::BrushSize => return self.instances.size_control(ui),
+                _ => {
+                    return ui
+                        .add_enabled(
+                            false,
+                            egui::Label::new(if label.is_empty() {
+                                action.label()
+                            } else {
+                                label
+                            }),
+                        )
+                        .on_disabled_hover_text("Available with sculpt brushes");
+                }
+            }
         }
         let Some(index) = self.brush_index_for_context(document, ui.ctx()) else {
             return ui.weak("No active brush");

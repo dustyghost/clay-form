@@ -79,92 +79,112 @@ fn capture(ui: &mut egui::Ui, c: &mut Controls, d: &Document, commands: &mut Vec
         )));
     }
 }
-pub(super) fn palette(
+/// Named brushes and standalone parts both work in projects created before the library tiles.
+pub(in crate::ui) fn library_tiles(
     ui: &mut egui::Ui,
     c: &mut Controls,
     d: &Document,
     commands: &mut Vec<Command>,
+    width: f32,
 ) {
-    let library = d.instances();
-    if c.group
-        .is_some_and(|id| !library.brushes.iter().any(|b| b.id == id))
-    {
-        c.group = None;
-    }
-    if c.asset
-        .is_some_and(|id| !library.assets.iter().any(|a| a.id == id))
-    {
-        c.asset = None;
-    }
-    ui.strong("Object brushes");
-    ui.horizontal_wrapped(|ui| {
-        if !library.brushes.is_empty() {
-            group_picker(ui, c, library, commands);
+    if ui.button("Manage object brushes…").clicked() {
+        c.library_open = true;
+        if c.placing {
+            commands.push(Command::Instances(C::StopBrush));
         }
-        if ui.button("Manage brushes…").clicked() {
-            c.library_open = true;
-            commands.push(Command::Instances(C::ListPersonalBrushes));
+        commands.push(Command::Instances(C::ListPersonalBrushes));
+    }
+    let library = d.instances();
+    c.thumbnails
+        .retain(|id, _| library.assets.iter().any(|a| a.id == *id));
+    let groups = library.brushes.iter().map(|b| {
+        (
+            Some(b.id),
+            &b.name,
+            b.objects
+                .first()
+                .and_then(|id| library.assets.iter().find(|a| a.id == *id)),
+        )
+    });
+    let standalone = library
+        .assets
+        .iter()
+        .filter(|a| !library.brushes.iter().any(|b| b.objects.contains(&a.id)))
+        .map(|a| (None, &a.name, Some(a)));
+    ui.horizontal_wrapped(|ui| {
+        for (group, name, first) in groups.chain(standalone) {
+            let selected = c.placing
+                && c.group == group
+                && (group.is_some() || c.asset == first.map(|a| a.id));
+            if let Some(part) = first {
+                if design::brush_tile_with_icon(ui, name, selected, width, |ctx| {
+                    c.object_icon(ctx, part)
+                })
+                .clicked()
+                {
+                    commands.push(Command::Instances(C::UseObjectBrush(group, part.id)));
+                }
+            } else if ui
+                .add_sized([width, 82.], egui::Button::new(name))
+                .on_hover_text("Capture the first part")
+                .clicked()
+            {
+                c.library_open = true;
+                if c.placing {
+                    commands.push(Command::Instances(C::StopBrush));
+                }
+                commands.push(Command::Instances(C::ChooseBrush(group)));
+                commands.push(Command::Instances(C::ListPersonalBrushes));
+            }
         }
     });
-    egui::CollapsingHeader::new("Capture object brush").show(ui, |ui| capture(ui, c, d, commands));
-    let group = library.brushes.iter().find(|b| Some(b.id) == c.group);
-    let assets: Vec<_> = if let Some(group) = group {
-        group
-            .objects
-            .iter()
-            .filter_map(|id| library.assets.iter().find(|a| a.id == *id))
-            .collect()
-    } else {
-        library.assets.iter().collect()
+}
+
+pub(in crate::ui) fn part_picker(
+    ui: &mut egui::Ui,
+    c: &mut Controls,
+    d: &Document,
+    commands: &mut Vec<Command>,
+    width: f32,
+) {
+    let Some(group) = d.instances().brushes.iter().find(|b| Some(b.id) == c.group) else {
+        return;
     };
-    if assets.is_empty() {
-        if group.is_some() {
-            ui.weak("Capture an object or add an existing one in Manage brushes.");
-        }
+    if group.objects.len() < 2 {
         return;
     }
+    ui.label("Part to place");
     egui::ScrollArea::vertical()
-        .id_salt("object_brush_palette")
-        .max_height(144.)
-        .show_rows(ui, 42., assets.len(), |ui, rows| {
-            for i in rows {
-                let asset = assets[i];
-                ui.push_id(asset.id, |ui| {
-                    ui.horizontal(|ui| {
-                        let icon = thumbnail(ui, asset, &mut c.thumbnails)
-                            .on_hover_text(format!("Choose {} for the next stroke", asset.name));
-                        let label = ui.selectable_label(c.asset == Some(asset.id), &asset.name);
-                        if icon.clicked() || label.clicked() {
-                            commands.push(Command::Instances(C::ChooseObject(asset.id)));
-                        }
-                        if ui
-                            .small_button("×")
-                            .on_hover_text(if group.is_some() {
-                                "Remove from this brush; keep the captured object"
-                            } else {
-                                "Remove unused captured object"
-                            })
-                            .clicked()
-                        {
-                            let action = group.map_or(C::RemoveAsset(asset.id), |b| {
-                                C::BrushMember(b.id, asset.id, false)
-                            });
-                            commands.push(Command::Instances(action));
-                        }
-                    })
-                });
-            }
+        .id_salt("choose_object_part")
+        .max_height(182.)
+        .show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                for id in &group.objects {
+                    if let Some(part) = d.instances().assets.iter().find(|a| a.id == *id)
+                        && design::brush_tile_with_icon(
+                            ui,
+                            &part.name,
+                            c.asset == Some(*id),
+                            width,
+                            |ctx| c.object_icon(ctx, part),
+                        )
+                        .clicked()
+                    {
+                        commands.push(Command::Instances(C::ChooseObject(*id)));
+                    }
+                }
+            });
         });
 }
 
-pub(super) fn manager(
+pub(in crate::ui) fn manager(
     ctx: &egui::Context,
     c: &mut Controls,
     d: &Document,
     commands: &mut Vec<Command>,
 ) {
     let mut open = true;
-    egui::Window::new("Object brush library")
+    egui::Window::new("Manage object brushes")
         .open(&mut open)
         .default_pos(egui::pos2(18., 82.))
         .default_width(350.)
@@ -192,7 +212,13 @@ fn management_contents(
                 .desired_width(165.)
                 .hint_text("Brush name"),
         );
-        if ui.button("New brush").clicked() {
+        if ui
+            .add_enabled(
+                !c.group_name.trim().is_empty(),
+                egui::Button::new("New brush"),
+            )
+            .clicked()
+        {
             commands.push(Command::Instances(C::CreateBrush(c.group_name.clone())));
         }
         if let Some(id) = c.group
@@ -205,25 +231,37 @@ fn management_contents(
     if let Some(brush) = brush {
         ui.label(format!("{} · {} objects", brush.name, brush.objects.len()));
         egui::CollapsingHeader::new("Capture a model into this brush")
+            .id_salt(("capture_part", brush.id))
+            .default_open(true)
             .show(ui, |ui| capture(ui, c, d, commands));
         if !d.instances().assets.is_empty() {
-            ui.label("Include captured objects");
-            egui::ScrollArea::vertical()
-                .id_salt("object_members")
-                .max_height(130.)
-                .show(ui, |ui| {
-                    for a in &d.instances().assets {
-                        let mut included = brush.objects.contains(&a.id);
-                        if ui
-                            .push_id(a.id, |ui| ui.checkbox(&mut included, &a.name))
-                            .inner
-                            .changed()
-                        {
-                            commands
-                                .push(Command::Instances(C::BrushMember(brush.id, a.id, included)));
+            ui.collapsing("Include existing parts", |ui| {
+                egui::ScrollArea::vertical()
+                    .id_salt("object_members")
+                    .max_height(130.)
+                    .show(ui, |ui| {
+                        for a in &d.instances().assets {
+                            let mut included = brush.objects.contains(&a.id);
+                            if ui
+                                .push_id(a.id, |ui| {
+                                    ui.horizontal(|ui| {
+                                        if let Some(icon) = c.object_icon(ui.ctx(), a) {
+                                            ui.image((icon, egui::Vec2::splat(28.)));
+                                        }
+                                        ui.checkbox(&mut included, &a.name)
+                                    })
+                                    .inner
+                                })
+                                .inner
+                                .changed()
+                            {
+                                commands.push(Command::Instances(C::BrushMember(
+                                    brush.id, a.id, included,
+                                )));
+                            }
                         }
-                    }
-                });
+                    });
+            });
         }
         if ui
             .button("Remove brush from project")
@@ -236,71 +274,76 @@ fn management_contents(
         ui.weak(
             "Name a brush, then capture models into it or choose objects you already captured.",
         );
+        egui::CollapsingHeader::new("Capture a standalone part")
+            .show(ui, |ui| capture(ui, c, d, commands));
     }
     ui.separator();
-    ui.strong("My library · available in every project");
-    ui.horizontal_wrapped(|ui| {
-        if let Some(b) = brush
-            && ui
-                .add_enabled(
-                    !b.objects.is_empty(),
-                    egui::Button::new(if c.personal_brushes.contains(&b.name) {
-                        "Update saved brush"
-                    } else {
-                        "Save brush to my library"
-                    }),
-                )
-                .clicked()
-        {
-            commands.push(Command::Instances(C::SavePersonalBrush(b.id)));
+    ui.collapsing("Reuse in other projects", |ui| {
+        ui.horizontal_wrapped(|ui| {
+            if let Some(b) = brush
+                && ui
+                    .add_enabled(
+                        !b.objects.is_empty(),
+                        egui::Button::new(if c.personal_brushes.contains(&b.name) {
+                            "Update saved brush"
+                        } else {
+                            "Save brush to my library"
+                        }),
+                    )
+                    .clicked()
+            {
+                commands.push(Command::Instances(C::SavePersonalBrush(b.id)));
+            }
+            if ui.button("Refresh library").clicked() {
+                commands.push(Command::Instances(C::ListPersonalBrushes));
+            }
+        });
+        if c.personal_brushes.is_empty() {
+            ui.weak("No personal brushes saved yet.");
         }
-        if ui.button("Refresh library").clicked() {
-            commands.push(Command::Instances(C::ListPersonalBrushes));
+        egui::ScrollArea::vertical()
+            .id_salt("personal_brushes")
+            .max_height(140.)
+            .show(ui, |ui| {
+                for name in &c.personal_brushes {
+                    ui.push_id(name, |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(name);
+                            if let Some(b) = d.instances().brushes.iter().find(|b| b.name == *name)
+                            {
+                                if ui.small_button("Select in project").clicked() {
+                                    commands.push(Command::Instances(C::ChooseBrush(Some(b.id))));
+                                }
+                            } else if ui.small_button("Add to project").clicked() {
+                                commands
+                                    .push(Command::Instances(C::LoadPersonalBrush(name.clone())));
+                            }
+                            if ui
+                                .small_button("Remove…")
+                                .on_hover_text("Remove this saved personal copy")
+                                .clicked()
+                            {
+                                c.remove_saved = Some(name.clone());
+                            }
+                        })
+                    });
+                }
+            });
+        if let Some(name) = c.remove_saved.clone() {
+            ui.label(format!(
+                "Remove {name} from My library? Project copies are kept."
+            ));
+            ui.horizontal(|ui| {
+                if ui.button("Remove saved copy").clicked() {
+                    commands.push(Command::Instances(C::RemovePersonalBrush(name)));
+                }
+                if ui.button("Keep saved copy").clicked() {
+                    c.remove_saved = None;
+                }
+            });
         }
     });
-    if c.personal_brushes.is_empty() {
-        ui.weak("No personal brushes saved yet.");
-    }
-    egui::ScrollArea::vertical()
-        .id_salt("personal_brushes")
-        .max_height(140.)
-        .show(ui, |ui| {
-            for name in &c.personal_brushes {
-                ui.push_id(name, |ui| {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(name);
-                        if let Some(b) = d.instances().brushes.iter().find(|b| b.name == *name) {
-                            if ui.small_button("Select in project").clicked() {
-                                commands.push(Command::Instances(C::ChooseBrush(Some(b.id))));
-                            }
-                        } else if ui.small_button("Add to project").clicked() {
-                            commands.push(Command::Instances(C::LoadPersonalBrush(name.clone())));
-                        }
-                        if ui
-                            .small_button("Remove…")
-                            .on_hover_text("Remove this saved personal copy")
-                            .clicked()
-                        {
-                            c.remove_saved = Some(name.clone());
-                        }
-                    })
-                });
-            }
-        });
-    if let Some(name) = c.remove_saved.clone() {
-        ui.label(format!(
-            "Remove {name} from My library? Project copies are kept."
-        ));
-        ui.horizontal(|ui| {
-            if ui.button("Remove saved copy").clicked() {
-                commands.push(Command::Instances(C::RemovePersonalBrush(name)));
-            }
-            if ui.button("Keep saved copy").clicked() {
-                c.remove_saved = None;
-            }
-        });
-    }
-    egui::CollapsingHeader::new("Import or export a whole brush").show(ui, |ui| {
+    egui::CollapsingHeader::new("Transfer a whole brush (.objects.json)").show(ui, |ui| {
         ui.text_edit_singleline(&mut c.bundle_path);
         ui.horizontal_wrapped(|ui| {
             if ui.button("Import brush file").clicked() {
@@ -320,5 +363,38 @@ fn management_contents(
                 )));
             }
         });
+    });
+    egui::CollapsingHeader::new("Transfer a single part (.object.json)").show(ui, |ui| {
+        ui.label("This file contains one captured model and its placement settings.");
+        ui.text_edit_singleline(&mut c.asset_path);
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("Import part").clicked() {
+                commands.push(Command::Instances(C::ImportAsset(c.asset_path.clone())));
+            }
+            if let Some(id) = c.asset
+                && let Some(part) = d.instances().assets.iter().find(|a| a.id == id)
+                && ui.button(format!("Export {}", part.name)).clicked()
+            {
+                commands.push(Command::Instances(C::ExportAsset(id, c.asset_path.clone())));
+            }
+        });
+    });
+    egui::CollapsingHeader::new("Captured parts in this project").show(ui, |ui| {
+        for part in &d.instances().assets {
+            ui.push_id(part.id, |ui| {
+                ui.horizontal(|ui| {
+                    if ui
+                        .selectable_label(c.asset == Some(part.id), &part.name)
+                        .clicked()
+                    {
+                        commands.push(Command::Instances(C::ChooseBrush(None)));
+                        commands.push(Command::Instances(C::ChooseObject(part.id)));
+                    }
+                    if ui.small_button("Remove unused part").clicked() {
+                        commands.push(Command::Instances(C::RemoveAsset(part.id)));
+                    }
+                })
+            });
+        }
     });
 }

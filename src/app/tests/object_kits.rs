@@ -26,7 +26,15 @@ fn object_kit_library_and_strokes_offscreen_review() {
     let personal = directory.join(format!("test-profile-{}", std::process::id()));
     let mut g = Guide::new(&directory, [1440, 1000]);
     g.interactive = true;
-    g.panel(Tool::Submodels, Dock::Right);
+    g.panel(Tool::Library, Dock::Right);
+    g.app
+        .ui
+        .preferences
+        .panels
+        .iter_mut()
+        .find(|p| p.tool == Tool::Library)
+        .unwrap()
+        .open = true;
     g.app.ui.preferences.right_width = 345.;
     g.app.preferences_path = Some(personal.join("preferences.json"));
     let mut vent = plate(Vec3(0.15, 0.095, 0.02), Vec3::default());
@@ -46,13 +54,12 @@ fn object_kit_library_and_strokes_offscreen_review() {
     g.app.camera.zoom = 3.;
     g.app.camera.yaw = 0.32;
     g.app.camera.pitch = -0.28;
-    click_guide_label(&mut g, "Manage brushes…");
+    click_guide_label(&mut g, "Manage object brushes…");
     g.app.ui.instances.group_name = "Ship fittings".into();
     g.frame(vec![]);
     g.frame(vec![]);
     click_guide_label(&mut g, "New brush");
     assert_eq!(g.app.ui.instances.group, Some(1), "{}", g.app.ui.status);
-    click_guide_label(&mut g, "Capture a model into this brush");
     click_guide_label(&mut g, "Use base centre");
     g.save("17-object-capture-orientation");
     for label in ["Contact", "Forward +X", "Up +Z"] {
@@ -100,10 +107,13 @@ fn object_kit_library_and_strokes_offscreen_review() {
     geometry.name = "Practice hull".into();
     g.app.document.replace_geometry(geometry).unwrap();
     g.app.camera = Default::default();
-    click_guide_label(&mut g, "Hull vent");
+    click_guide_label(&mut g, "Ship fittings");
+    assert_eq!(
+        g.app.viewport.object_brush.as_ref().unwrap().piece.source,
+        Source::Asset(1)
+    );
     g.app.ui.instances.brush.scale = 1.;
     g.app.ui.instances.brush.spacing = 0.38;
-    click_guide_label(&mut g, "Place / brush objects");
     let rect = g.frame(vec![]).0;
     let centre = rect.center();
     g.stroke(
@@ -138,16 +148,19 @@ fn object_kit_library_and_strokes_offscreen_review() {
     g.app.camera.yaw = 0.16;
     g.app.camera.pitch = -0.16;
     g.save("18-ship-fittings-strokes");
-    click_guide_label(&mut g, "Manage brushes…");
+    click_guide_label(&mut g, "Clay");
+    assert!(g.app.viewport.object_brush.is_none());
+    click_guide_label(&mut g, "Manage object brushes…");
     g.frame(vec![]);
     g.frame(vec![]);
+    click_guide_label(&mut g, "Reuse in other projects");
     click_guide_label(&mut g, "Save brush to my library");
     assert_eq!(g.app.ui.instances.personal_brushes, vec!["Ship fittings"]);
     g.save("19-ship-fittings-library");
     g.app.dispatch(Command::Instances(C::StopBrush), &g.ctx);
     g.app.document.project().validate().unwrap();
     g.app.execute_pending(PendingAction::New, &g.ctx);
-    click_guide_label(&mut g, "Manage brushes…");
+    click_guide_label(&mut g, "Manage object brushes…");
     g.frame(vec![]);
     g.frame(vec![]);
     click_guide_label(&mut g, "Add to project");

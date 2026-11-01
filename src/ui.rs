@@ -248,7 +248,7 @@ impl UiState {
         document: &Document,
         ctx: &egui::Context,
     ) -> Option<usize> {
-        if self.selection_brush_active() {
+        if self.instances.placing || self.selection_brush_active() {
             None
         } else {
             self.brush_index_for_context(document, ctx)
@@ -801,6 +801,9 @@ impl UiState {
                 self.preferences.panels[index].dock = Dock::Hidden;
             }
         }
+        if self.instances.library_open {
+            instances::manager(ctx, &mut self.instances, document, &mut commands);
+        }
         commands
     }
     pub fn status_bar(&self, ctx: &egui::Context) {
@@ -851,6 +854,10 @@ impl UiState {
         pressure: f32,
         commands: &mut Vec<Command>,
     ) {
+        if self.instances.placing && tool == Tool::Brush {
+            self.object_settings(ui);
+            return;
+        }
         let focus_before = ui.ctx().memory(|m| m.focused());
         let active = self.brush_index_for_context(document, ui.ctx());
         let fallback = crate::sculpt::Brush::new(if self.selection_brush_active() {
@@ -896,6 +903,13 @@ impl UiState {
                 let width = ((ui.available_width() - 6. * (columns - 1) as f32) / columns as f32)
                     .floor()
                     .max(32.);
+                ui.add_enabled_ui(!self.mesh_busy, |ui| {
+                    instances::library_tiles(ui, &mut self.instances, document, commands, width);
+                    if self.instances.placing {
+                        instances::part_picker(ui, &mut self.instances, document, commands, width);
+                        ui.collapsing("Placement settings", |ui| self.object_settings(ui));
+                    }
+                });
                 // Fixed-size tiles do not need a grid's cached column widths:
                 // those widths lag a sidebar drag and force it back open.
                 ui.push_id("brush_tiles", |ui| {
@@ -922,6 +936,9 @@ impl UiState {
                     });
                 });
                 ui.add_space(4.);
+                if self.instances.placing {
+                    return;
+                }
                 if active.is_none() {
                     ui.weak(if self.selection_brush_active() {
                         "Selection · default Mask preset"

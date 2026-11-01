@@ -131,7 +131,8 @@ fn reusable_models_offscreen_review() {
     g.app.document.replace_geometry(geometry).unwrap();
     g.app.ui.instances.brush.scale = 0.8;
     g.app.ui.instances.brush.spacing = 0.3;
-    g.app.dispatch(Command::Instances(C::StartBrush(1)), &g.ctx);
+    g.app
+        .dispatch(Command::Instances(C::UseObjectBrush(None, 1)), &g.ctx);
     let (rect, _) = g.frame(vec![]);
     let before = g.app.document.history_counts().0;
     g.stroke(

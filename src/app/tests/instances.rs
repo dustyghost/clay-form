@@ -18,7 +18,7 @@ fn setup() -> (App, egui::Context) {
     let mut g = app.document.geometry_snapshot();
     g.mesh = Mesh::starting_sphere();
     app.document.replace_geometry(g).unwrap();
-    app.dispatch(Command::Instances(C::StartBrush(1)), &ctx);
+    app.dispatch(Command::Instances(C::UseObjectBrush(None, 1)), &ctx);
     navigation_frame(&mut app, &ctx, vec![]);
     (app, ctx)
 }
@@ -39,7 +39,7 @@ fn object_kit_picks_a_part_per_stroke_and_reuses_personal_brushes_across_project
         &ctx,
     );
     app.dispatch(Command::Instances(C::ChooseObject(1)), &ctx);
-    app.dispatch(Command::Instances(C::StartBrush(1)), &ctx);
+    app.dispatch(Command::Instances(C::UseObjectBrush(Some(1), 1)), &ctx);
     let start = Pos2::new(450., 400.);
     let end = Pos2::new(550., 400.);
     navigation_frame(
@@ -134,13 +134,36 @@ fn reusable_object_tool_yields_to_sculpt_brush_and_transform_selection() {
     app.ui.select_brush(0, &app.document);
     navigation_frame(&mut app, &ctx, vec![]);
     assert!(app.viewport.object_brush.is_none());
-    app.dispatch(Command::Instances(C::StartBrush(1)), &ctx);
+    app.dispatch(Command::Instances(C::UseObjectBrush(None, 1)), &ctx);
     app.dispatch(
         Command::TransformMode(crate::viewport::TransformMode::World),
         &ctx,
     );
     navigation_frame(&mut app, &ctx, vec![]);
     assert!(app.viewport.object_brush.is_none());
+}
+#[test]
+fn reusable_object_brush_orbits_from_empty_space_then_stamps_the_active_surface() {
+    let (mut app, ctx) = setup();
+    let rect = navigation_frame(&mut app, &ctx, vec![]);
+    let empty = rect.left_top() + egui::vec2(65., 75.);
+    let on_model = rect.center();
+    let history = app.document.history_counts();
+    let yaw = app.camera.yaw;
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(empty), primary_event(empty, true)],
+    );
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(on_model)]);
+    navigation_frame(&mut app, &ctx, vec![primary_event(on_model, false)]);
+    assert_ne!(app.camera.yaw, yaw);
+    assert!(app.document.instances().sets.is_empty());
+    assert_eq!(app.document.history_counts(), history);
+    assert!(app.viewport.object_brush.is_some());
+    navigation_frame(&mut app, &ctx, vec![primary_event(on_model, true)]);
+    navigation_frame(&mut app, &ctx, vec![primary_event(on_model, false)]);
+    assert_eq!(app.document.instance_placements().unwrap().len(), 1);
 }
 #[test]
 fn reusable_objects_real_pointer_stroke_and_cancel_are_one_transaction() {

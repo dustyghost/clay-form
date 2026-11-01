@@ -26,6 +26,7 @@ pub(crate) struct Controls {
     pub asset_path: String,
     pub brush: crate::viewport::objects::BrushOptions,
     pub stop_placing: bool,
+    pub placing: bool,
     pub inline_thickness: bool,
     pub thickness_path_points: bool,
     pub thickness_sections: bool,
@@ -39,7 +40,7 @@ impl Default for Controls {
             invalid: false,
             asset: None,
             group: None,
-            group_name: "New brush".into(),
+            group_name: String::new(),
             library_open: false,
             capture_frame: None,
             personal_brushes: Vec::new(),
@@ -52,6 +53,7 @@ impl Default for Controls {
             asset_path: "object.object.json".into(),
             brush: Default::default(),
             stop_placing: false,
+            placing: false,
             inline_thickness: true,
             thickness_path_points: true,
             thickness_sections: true,
@@ -162,20 +164,13 @@ impl UiState {
         document: &Document,
         commands: &mut Vec<Command>,
     ) {
-        self.instances
-            .thumbnails
-            .retain(|id, _| document.instances().assets.iter().any(|a| a.id == *id));
-
-        egui::CollapsingHeader::new("Instances and object brushes")
+        egui::CollapsingHeader::new("Instances")
             .default_open(true)
             .show(ui, |ui| {
                 ui.add_enabled_ui(!self.mesh_busy, |ui| {
                     self.instance_contents(ui, document, commands);
                 });
             });
-        if self.instances.library_open {
-            brushes::manager(ui.ctx(), &mut self.instances, document, commands);
-        }
     }
     fn instance_contents(
         &mut self,
@@ -379,9 +374,6 @@ impl UiState {
                     commands.push(Command::Instances(C::NewPath));
                 }
             });
-            if !document.instances().assets.is_empty() {
-                self.object_palette(ui, document, commands);
-            }
             for set in &document.instances().sets {
                 ui.push_id(set.id, |ui| instance_set(ui, document, set, commands));
             }
@@ -410,72 +402,29 @@ impl UiState {
                     commands.push(Command::Instances(C::Edit(id)));
                 }
             }
-            if document.instances().assets.is_empty() {
-                self.object_palette(ui, document, commands);
-            }
         }
     }
-    fn object_palette(
-        &mut self,
-        ui: &mut egui::Ui,
-        document: &Document,
-        commands: &mut Vec<Command>,
-    ) {
-        ui.separator();
-        brushes::palette(ui, &mut self.instances, document, commands);
-        if let Some(id) = self.instances.asset {
-            ui.add(
-                egui::DragValue::new(&mut self.instances.brush.scale)
-                    .range(0.001..=1000.)
-                    .speed(0.01)
-                    .prefix("Size "),
-            );
-            ui.add(
-                egui::DragValue::new(&mut self.instances.brush.spacing)
-                    .range(0.001..=1000.)
-                    .speed(0.01)
-                    .prefix("Repeat spacing "),
-            );
-            ui.add(
-                egui::DragValue::new(&mut self.instances.brush.offset)
-                    .speed(0.01)
-                    .prefix("Surface offset "),
-            );
-            ui.add(
-                egui::Slider::new(&mut self.instances.brush.rotation, -180.0..=180.)
-                    .text("Rotation °"),
-            );
-            ui.checkbox(
-                &mut self.instances.brush.independent,
-                "Create independent geometry",
-            );
-            ui.horizontal_wrapped(|ui| {
-                if ui.button("Place / brush objects").clicked() {
-                    commands.push(Command::Instances(C::StartBrush(id)));
-                }
-                if ui.button("Stop placing").clicked() {
-                    commands.push(Command::Instances(C::StopBrush));
-                }
-            });
-        }
-        egui::CollapsingHeader::new("Single object files").show(ui, |ui| {
-            ui.text_edit_singleline(&mut self.instances.asset_path);
-            ui.horizontal(|ui| {
-                if ui.button("Import object").clicked() {
-                    commands.push(Command::Instances(C::ImportAsset(
-                        self.instances.asset_path.clone(),
-                    )));
-                }
-                if let Some(id) = self.instances.asset
-                    && ui.button("Export object").clicked()
-                {
-                    commands.push(Command::Instances(C::ExportAsset(
-                        id,
-                        self.instances.asset_path.clone(),
-                    )));
-                }
-            });
-        });
+    pub(super) fn object_settings(&mut self, ui: &mut egui::Ui) {
+        ui.weak("Click the surface to place a part, drag to repeat, or drag empty space to orbit.");
+        self.instances.size_control(ui);
+        ui.add(
+            egui::DragValue::new(&mut self.instances.brush.spacing)
+                .range(0.001..=1000.)
+                .speed(0.01)
+                .prefix("Repeat spacing "),
+        );
+        ui.add(
+            egui::DragValue::new(&mut self.instances.brush.offset)
+                .speed(0.01)
+                .prefix("Surface offset "),
+        );
+        ui.add(
+            egui::Slider::new(&mut self.instances.brush.rotation, -180.0..=180.).text("Rotation °"),
+        );
+        ui.checkbox(
+            &mut self.instances.brush.independent,
+            "Create independent geometry",
+        );
     }
 }
 
@@ -578,56 +527,62 @@ fn instance_set(ui: &mut egui::Ui, document: &Document, set: &Set, commands: &mu
 
 struct Thumbnail {
     source: std::sync::Arc<crate::sculpt::Mesh>,
-    lines: Vec<[egui::Vec2; 2]>,
+    texture: egui::TextureHandle,
 }
-fn thumbnail_lines(mesh: &crate::sculpt::Mesh) -> Vec<[egui::Vec2; 2]> {
-    if mesh.vertices.is_empty() {
-        return Vec::new();
-    }
-    let mut lo = egui::pos2(f32::INFINITY, f32::INFINITY);
-    let mut hi = egui::pos2(f32::NEG_INFINITY, f32::NEG_INFINITY);
-    for p in &mesh.vertices {
-        let q = egui::pos2(p.0 + p.2 * 0.4, -p.1 - p.2 * 0.25);
-        lo = lo.min(q);
-        hi = hi.max(q);
-    }
-    let scale = 34. / (hi - lo).x.max((hi - lo).y).max(1e-5);
-    let center = lo + (hi - lo) * 0.5;
-    let project = |p: Vec3| (egui::pos2(p.0 + p.2 * 0.4, -p.1 - p.2 * 0.25) - center) * scale;
-    let mut lines = Vec::new();
-    for tri in mesh
-        .triangles
-        .iter()
-        .step_by((mesh.triangles.len() / 100).max(1))
-    {
-        let p = tri.map(|i| project(mesh.vertices[i]));
-        for (a, b) in [(0, 1), (1, 2), (2, 0)] {
-            lines.push([p[a], p[b]]);
+
+impl Controls {
+    pub(super) fn selected_cover<'a>(&self, library: &'a Library) -> Option<(&'a str, &'a Asset)> {
+        if !self.placing {
+            return None;
         }
+        let group = library.brushes.iter().find(|b| Some(b.id) == self.group);
+        let id = group
+            .and_then(|b| b.objects.first().copied())
+            .or(self.asset)?;
+        let asset = library.assets.iter().find(|a| a.id == id)?;
+        Some((
+            group.map_or(asset.name.as_str(), |b| b.name.as_str()),
+            asset,
+        ))
     }
-    lines
-}
-fn thumbnail(
-    ui: &mut egui::Ui,
-    asset: &Asset,
-    cache: &mut std::collections::HashMap<u64, Thumbnail>,
-) -> egui::Response {
-    let cached = cache.entry(asset.id).or_insert_with(|| Thumbnail {
-        source: asset.mesh.clone(),
-        lines: thumbnail_lines(&asset.mesh),
-    });
-    if !std::sync::Arc::ptr_eq(&cached.source, &asset.mesh) {
-        cached.source = asset.mesh.clone();
-        cached.lines = thumbnail_lines(&asset.mesh);
+
+    pub(super) fn size_control(&mut self, ui: &mut egui::Ui) -> egui::Response {
+        ui.add(
+            egui::DragValue::new(&mut self.brush.scale)
+                .range(0.001..=1000.)
+                .speed(0.01)
+                .prefix("Size "),
+        )
     }
-    let (r, response) = ui.allocate_exact_size(egui::vec2(42., 42.), egui::Sense::click());
-    let painter = ui.painter();
-    painter.rect_filled(r, 3., ui.visuals().extreme_bg_color);
-    for line in &cached.lines {
-        painter.line_segment(
-            line.map(|p| r.center() + p),
-            egui::Stroke::new(0.6_f32, egui::Color32::from_rgb(100, 195, 185)),
+
+    pub(super) fn object_icon(
+        &mut self,
+        ctx: &egui::Context,
+        asset: &Asset,
+    ) -> Option<egui::TextureId> {
+        if let Some(cached) = self.thumbnails.get(&asset.id)
+            && std::sync::Arc::ptr_eq(&cached.source, &asset.mesh)
+        {
+            return Some(cached.texture.id());
+        }
+        let [yaw, pitch, roll] = asset.capture_angles;
+        let camera = crate::camera::Camera {
+            yaw,
+            pitch,
+            roll,
+            ..Default::default()
+        };
+        let icon = crate::brush_icon::capture_part(&asset.mesh, &camera).ok()?;
+        let texture = super::icons::texture(ctx, format!("object-icon-{}", asset.id), &icon);
+        let texture_id = texture.id();
+        self.thumbnails.insert(
+            asset.id,
+            Thumbnail {
+                source: asset.mesh.clone(),
+                texture,
+            },
         );
+        Some(texture_id)
     }
-    response
 }
+pub(super) use brushes::{library_tiles, manager, part_picker};

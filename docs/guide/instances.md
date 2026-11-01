@@ -2,7 +2,7 @@
 
 [Documentation home](../../README.md#documentation) · [Editable paths](paths.md) · [Models](modeling.md)
 
-Open **Submodels → Instances and object brushes**. Copies share their source geometry, with separate placements. Sculpting, painting or changing the source updates its linked copies.
+Open **Submodels → Instances** for copies, arrays and path assemblies. To stamp a captured part onto a surface, open the **Brush library**. Copies share their source geometry, with separate placements. Sculpting, painting or changing the source updates its linked copies.
 
 ## Arrays and individual copies
 
@@ -53,14 +53,14 @@ Use **Editable paths → Transform whole path** to move, rotate or uniformly sca
 
 A named object brush holds several captured parts. For example, **Ship fittings** can contain a vent, hatch and sensor dome. Each part keeps its own mesh, contact point, orientation and placement settings.
 
-1. In **Submodels → Instances and object brushes → Manage brushes…**, enter a name and choose **New brush**.
-2. Expand **Capture a model into this brush**, select the source submodel and optionally give the object a name. Set its orientation and contact point, then choose **Capture active model**. Repeat for the other parts. You can also tick existing captured objects to share them between brushes.
-3. Close the library window, select the target submodel, then choose a brush and click the object's thumbnail or name in the Submodels palette. Set **Size**, **Repeat spacing**, **Surface offset** and **Rotation**. Choose **Place / brush objects**.
-4. Hover for a wire preview, click for one copy or drag for a row. Release, then click a different thumbnail to use it on the next stroke without restarting the tool. Each stroke uses one part, is one undo step and keeps the placement settings used for that part. **Escape** cancels an unfinished stroke; **Stop placing** returns to normal tools.
+1. Open **Brush library → Manage object brushes…**, enter a brush name and choose **New brush**.
+2. Under **Capture a model into this brush**, choose the source submodel and set its orientation and contact point. Orbit to the angle you want for the icon and choose **Capture active model**. The first part supplies the brush tile’s icon. Capture more parts to add them to the same brush.
+3. Close the manager, select the target submodel, then click your brush tile in the **Brush library**. Hover over the target for a preview. Click to place one copy, drag across the surface to repeat, or start a drag in empty space to orbit.
+4. For a multi-part brush, click a thumbnail under **Part to place** to switch parts between strokes. Each thumbnail shows that part’s material and capture angle. The highlight marks the part used by your next stroke. Open **Placement settings** below the tile to adjust size, repeat spacing, surface offset and rotation for the chosen part. The **Brush settings** panel also shows these controls. Each stroke is one undo step. **Escape** cancels an unfinished stroke. Select a sculpt brush to resume sculpting.
 
 **Capture orientation.** The gold **Contact** diamond is the source point placed on the target. **Use base centre** sets it to the centre of the object's bounds on its lowest plane along the chosen **Up** axis; use the coordinates for a custom mount or joint. The labelled arrows show the source axes as you orbit. **Up** aligns with the target surface normal; **Forward** follows the stroke projected onto that surface. The first placement uses the view's rightward direction along the surface. Choose different axes for Forward and Up. **Rotation** turns the object about the surface normal, and **Surface offset** lifts it above or sinks it into the target. For a hull vent made in XY, use Up Z and contact on its back. For a floor prop modelled upright along Y, use Up Y and contact at its foot.
 
-**Save and reuse kits.** Project files embed the captured objects and their brush memberships. In **Manage brushes…**, **Save brush to my library** keeps a separate personal copy available across projects and app restarts. In another project, open the library and click **Add to project**. Use **Update saved brush** to publish edits to your local personal copy. Each project keeps its own snapshot, so updating a library brush leaves existing scenes intact. Export/import a whole brush as a portable `.objects.json` file to move it between machines. Legacy `.object.json` files still work under **Single object files**; old captures appear in **All captured objects**.
+**Save and reuse kits.** Project files embed the captured objects and their brush memberships. Under **Manage object brushes… → Reuse in other projects**, **Save brush to my library** keeps a separate personal copy available across projects and app restarts. In another project, open the library and click **Add to project**. Use **Update saved brush** to publish edits to your local personal copy. Each project keeps its own snapshot, so updating a library brush leaves existing scenes intact. Export/import a whole brush as a portable `.objects.json` file to move it between machines. Use **Transfer a single part (.object.json)** to share one captured model and its placement settings. Standalone parts from older projects appear as individual brush tiles.
 
 Removing a part from a brush only changes membership; the captured mesh and existing painted copies stay in the project. Removing a brush also leaves those objects intact. A captured object used by placed copies cannot be deleted until the copies are baked or removed.
 

@@ -22,7 +22,7 @@ pub(super) struct Shot {
     texture: egui::TextureHandle,
     path: String,
 }
-fn texture(ctx: &egui::Context, name: String, icon: &BrushIcon) -> egui::TextureHandle {
+pub(super) fn texture(ctx: &egui::Context, name: String, icon: &BrushIcon) -> egui::TextureHandle {
     ctx.load_texture(
         name,
         egui::ColorImage::from_rgba_unmultiplied([icon.size; 2], &icon.rgba),

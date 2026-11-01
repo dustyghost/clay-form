@@ -184,7 +184,13 @@ impl Viewport {
         let navigation = options.zoom_hold.active(modifiers)
             || options.pan_hold.active(modifiers)
             || self.session.gesture.is_some()
-            || ui.input(|i| i.pointer.secondary_down() || i.pointer.middle_down());
+            || ui.input(|i| {
+                i.pointer.secondary_down()
+                    || i.pointer.middle_down()
+                    || (!i.pointer.primary_down()
+                        && i.smooth_scroll_delta.y != 0.
+                        && !brush.stroking())
+            });
         let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
         if escape || !ui.input(|i| i.focused) {
             brush.cancel(document);
@@ -264,6 +270,11 @@ impl Viewport {
                             }
                             Err(error) => self.status = Some(error),
                         }
+                    } else if scene.pick_model(pos).is_none() && !brush.stroking() {
+                        // Keep ownership of the drag even if the pointer crosses the model.
+                        self.session.gesture = Some(Gesture::Orbit);
+                        self.object_brush = Some(brush);
+                        return false;
                     }
                 }
                 egui::Event::PointerMoved(pos) if brush.stroke.is_some() => {

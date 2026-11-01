@@ -231,7 +231,7 @@ impl Document {
         forward: usize,
         up: usize,
     ) -> Result<u64, String> {
-        self.capture_brush_object(None, name, pivot, forward, up)
+        self.capture_brush_object(None, name, pivot, forward, up, [0.; 3])
     }
     pub fn capture_brush_object(
         &mut self,
@@ -240,6 +240,7 @@ impl Document {
         pivot: Vec3,
         forward: usize,
         up: usize,
+        capture_angles: [f32; 3],
     ) -> Result<u64, String> {
         self.cancel_instance_preview();
         self.end_edit();
@@ -271,6 +272,7 @@ impl Document {
             id,
             name,
             mesh: std::sync::Arc::new(mesh),
+            capture_angles,
             pivot,
             forward,
             up,
@@ -656,10 +658,10 @@ mod tests {
         let ship = d.create_object_brush("Ship parts".into()).unwrap();
         let floor = d.create_object_brush("Floor props".into()).unwrap();
         let a = d
-            .capture_brush_object(Some(ship), "Vent".into(), Vec3(0., 0., -1.), 0, 2)
+            .capture_brush_object(Some(ship), "Vent".into(), Vec3(0., 0., -1.), 0, 2, [0.; 3])
             .unwrap();
         let b = d
-            .capture_brush_object(Some(ship), "Hatch".into(), Vec3(0., -1., 0.), 2, 1)
+            .capture_brush_object(Some(ship), "Hatch".into(), Vec3(0., -1., 0.), 2, 1, [0.; 3])
             .unwrap();
         let options = ObjectOptions {
             scale: 0.4,

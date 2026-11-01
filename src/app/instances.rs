@@ -257,6 +257,7 @@ impl App {
                     pivot,
                     forward,
                     up,
+                    [self.camera.yaw, self.camera.pitch, self.camera.roll],
                 )?;
                 self.pick_object(Some(id))?;
                 self.ui.status = format!("Captured {name} in the project");
@@ -336,14 +337,23 @@ impl App {
                 self.pick_group(Some(id))?;
                 self.ui.status = "Multi-object brush imported".into();
             }
-            C::StartBrush(id) => {
+            C::UseObjectBrush(group, id) => {
+                if let Some(group) = group
+                    && !self
+                        .document
+                        .instances()
+                        .brushes
+                        .iter()
+                        .any(|b| b.id == group && b.objects.contains(&id))
+                {
+                    return Err("Choose a part from this object brush".into());
+                }
+                self.remember_object_options()?;
+                self.pick_group(group)?;
+                self.pick_object(Some(id))?;
                 self.ui.instances.stop_placing = false;
-                self.ui.instances.asset = Some(id);
                 self.viewport.cancel(&mut self.document);
                 self.document.cancel_instance_preview();
-                self.ui.instances.brush.validate()?;
-                self.document
-                    .set_object_options(id, self.ui.instances.brush)?;
                 let asset = self
                     .document
                     .instances()
@@ -364,8 +374,11 @@ impl App {
                 self.ui.modeling.active = false;
                 self.ui.selection_tool = None;
                 self.ui.slice_active = false;
+                self.ui.edges.selecting = false;
+                self.ui.materials.sampling = false;
+                self.ui.arrange_references = false;
                 self.ui.status =
-                    "Object brush · click to place, drag to repeat · Escape cancels the stroke"
+                    "Object brush · drag on the model to place parts or drag empty space to orbit"
                         .into();
             }
             C::StopBrush => {

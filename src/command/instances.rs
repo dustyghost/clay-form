@@ -24,7 +24,7 @@ pub(crate) enum InstanceCommand {
     RemovePersonalBrush(String),
     ExportBrush(u64, String),
     ImportBrush(String),
-    StartBrush(u64),
+    UseObjectBrush(Option<u64>, u64),
     StopBrush,
     Bake(u64, bool),
     ExportAsset(u64, String),

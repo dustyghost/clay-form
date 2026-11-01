@@ -518,6 +518,16 @@ pub(super) fn brush_tile(
     selected: bool,
     width: f32,
 ) -> egui::Response {
+    brush_tile_with_icon(ui, name, selected, width, |_| Some(texture))
+}
+
+pub(super) fn brush_tile_with_icon(
+    ui: &mut egui::Ui,
+    name: &str,
+    selected: bool,
+    width: f32,
+    icon: impl FnOnce(&egui::Context) -> Option<egui::TextureId>,
+) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(egui::vec2(width, 82.), egui::Sense::click());
     response
         .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), name));
@@ -542,12 +552,14 @@ pub(super) fn brush_tile(
             egui::pos2(rect.center().x, rect.top() + 31.),
             Vec2::splat(48.),
         );
-        ui.painter().image(
-            texture,
-            image,
-            egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1., 1.)),
-            Color32::WHITE,
-        );
+        if let Some(texture) = icon(ui.ctx()) {
+            ui.painter().image(
+                texture,
+                image,
+                egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1., 1.)),
+                Color32::WHITE,
+            );
+        }
         let mut job = egui::text::LayoutJob::simple_singleline(
             name.to_owned(),
             egui::FontId::proportional(13.),
