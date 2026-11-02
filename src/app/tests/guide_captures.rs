@@ -4545,3 +4545,94 @@ fn paint_target_scope_inspection_offscreen_review() {
     click_guide_label(&mut g, "Restore workspace");
     assert!(g.app.ui.preferences.paint_workspace_backup.is_none());
 }
+
+#[test]
+#[ignore = "renders and times existing subdivision level controls; requires Vulkan"]
+fn subdivision_level_switch_offscreen_review() {
+    use crate::sculpt::{Geometry, Mesh};
+    let directory = std::path::PathBuf::from(
+        std::env::var("CLAY_GUIDE_PREVIEW").unwrap_or_else(|_| "/tmp/clay-level-switch".into()),
+    );
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1280, 1000]);
+    g.interactive = true;
+    g.panel(Tool::Mesh, Dock::Right);
+    g.app.ui.preferences.right_width = 350.;
+    let mut geometry = Geometry::new(Mesh::starting_sphere());
+    let high_level = if std::env::var_os("CLAY_LEVEL_SWITCH_PROFILE").is_some() {
+        4
+    } else {
+        3
+    };
+    for _ in 1..high_level {
+        geometry.subdivide().unwrap();
+    }
+    g.app.document.replace_geometry(geometry).unwrap();
+    let high = g.app.document.mesh().clone();
+    g.save("level-switch-high-before");
+    let (viewport, before_pixels) = g.frame(vec![egui::Event::PointerGone]);
+    let hits = g.app.viewport.level_cache_hits();
+    let start = std::time::Instant::now();
+    click_guide_label(&mut g, "Lower");
+    let down = start.elapsed();
+    assert_eq!(g.app.document.mesh_settings().level(), high_level - 1);
+    let start = std::time::Instant::now();
+    g.frame(vec![]);
+    let down_frame = start.elapsed();
+    let start = std::time::Instant::now();
+    click_guide_label(&mut g, "Higher");
+    let up = start.elapsed();
+    assert_eq!(g.app.document.mesh_settings().level(), high_level);
+    let start = std::time::Instant::now();
+    g.frame(vec![]);
+    let up_frame = start.elapsed();
+    assert_eq!(g.app.document.mesh(), &high);
+    assert!(
+        g.app.viewport.level_cache_hits() > hits,
+        "returning to the saved high level restores its display"
+    );
+    let (_, after_pixels) = g.frame(vec![egui::Event::PointerGone]);
+    for y in viewport.top().ceil() as usize..viewport.bottom().floor() as usize {
+        let start = (y * g.size[0] as usize + viewport.left().ceil() as usize) * 4;
+        let end = (y * g.size[0] as usize + viewport.right().floor() as usize) * 4;
+        assert!(
+            before_pixels[start..end] == after_pixels[start..end],
+            "cached level pixels match at row {y}"
+        );
+    }
+    let hits = g.app.viewport.level_cache_hits();
+    let start = std::time::Instant::now();
+    click_guide_label(&mut g, "Lower");
+    g.frame(vec![]);
+    let warm_down = start.elapsed();
+    let start = std::time::Instant::now();
+    click_guide_label(&mut g, "Higher");
+    g.frame(vec![]);
+    let warm_up = start.elapsed();
+    assert_eq!(g.app.viewport.level_cache_hits(), hits + 2);
+    assert_eq!(g.app.document.mesh(), &high);
+    eprintln!(
+        "level_switch_ms,vertices={},down_click={:.2},down_frame={:.2},up_click={:.2},up_frame={:.2},warm_down={:.2},warm_up={:.2}",
+        high.vertices.len(),
+        down.as_secs_f64() * 1000.,
+        down_frame.as_secs_f64() * 1000.,
+        up.as_secs_f64() * 1000.,
+        up_frame.as_secs_f64() * 1000.,
+        warm_down.as_secs_f64() * 1000.,
+        warm_up.as_secs_f64() * 1000.
+    );
+    g.save("level-switch-high-after");
+    click_guide_label(&mut g, "Lower");
+    let hits = g.app.viewport.level_cache_hits();
+    g.app.document.mask_region(|p| p.0 < 0., false).unwrap();
+    g.frame(vec![]);
+    click_guide_label(&mut g, "Higher");
+    g.frame(vec![]);
+    assert_eq!(
+        g.app.viewport.level_cache_hits(),
+        hits,
+        "edits invalidate cached level displays"
+    );
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.mesh_settings().level(), high_level - 1);
+}

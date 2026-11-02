@@ -43,7 +43,15 @@ impl Document {
         label: &'static str,
         settings: Option<crate::diagnostics::EditSettings>,
     ) {
-        let mut geometry = geometry.into_geometry();
+        self.commit_geometry(geometry.into_geometry(), label, settings);
+    }
+
+    fn commit_geometry(
+        &mut self,
+        mut geometry: Geometry,
+        label: &'static str,
+        settings: Option<crate::diagnostics::EditSettings>,
+    ) {
         if geometry.scene.active_index == self.geometry.scene.active_index
             && geometry.mesh.uv.is_empty()
             && !self.geometry.mesh.uv.is_empty()
@@ -68,8 +76,16 @@ impl Document {
             return Ok(());
         }
         let mut geometry = self.geometry.clone();
-        geometry.set_level(level)?;
-        self.replace_geometry_named(geometry, "Change subdivision level")
+        let propagated = geometry.select_level(level)?;
+        let level_content_revision = self.level_content_revision;
+        // Level selection keeps the existing topology. select_level validates
+        // attributes changed by detail transfer, and unchanged stored meshes
+        // already belong to this validated document.
+        self.commit_geometry(geometry, "Change subdivision level", None);
+        if !propagated {
+            self.level_content_revision = level_content_revision;
+        }
+        Ok(())
     }
     /// Keep the active surface and the opposite side of the subdivision stack.
     pub fn delete_mesh_levels(&mut self, lower: bool) -> Result<(), String> {

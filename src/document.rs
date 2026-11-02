@@ -61,6 +61,9 @@ pub struct Document {
     geometry: Geometry,
     display_revision: u64,
     geometry_display_revision: u64,
+    // Preserved only for level navigation without attribute changes. Every edit,
+    // including texture-only changes, invalidates saved level displays.
+    level_content_revision: u64,
     brushes: Vec<Brush>,
     history: History,
     diagnostic_context: Option<serde_json::Value>,
@@ -94,6 +97,7 @@ impl Default for Document {
             geometry: Geometry::new(Mesh::starting_sphere()),
             display_revision: 0,
             geometry_display_revision: 0,
+            level_content_revision: 0,
             brushes: Kind::ALL
                 .into_iter()
                 .map(Brush::new)
@@ -132,13 +136,18 @@ impl Document {
     pub(crate) fn geometry_display_revision(&self) -> u64 {
         self.geometry_display_revision
     }
+    pub(crate) fn level_display_key(&self) -> (u64, usize) {
+        (self.level_content_revision, self.mesh_settings().level())
+    }
     fn texture_display_changed(&mut self) {
         self.display_revision = self.display_revision.wrapping_add(1);
+        self.level_content_revision = self.display_revision;
     }
     fn display_changed(&mut self) {
         self.instance_cache.take();
         self.display_revision = self.display_revision.wrapping_add(1);
         self.geometry_display_revision = self.geometry_display_revision.wrapping_add(1);
+        self.level_content_revision = self.display_revision;
     }
     pub fn brushes(&self) -> &[Brush] {
         &self.brushes

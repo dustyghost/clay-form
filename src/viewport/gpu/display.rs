@@ -127,6 +127,54 @@ impl std::ops::Deref for DisplayMesh {
     }
 }
 impl DisplayMesh {
+    /// Retain display buffers for one inactive level without retaining its
+    /// stroke adjacency. The next stroke can rebuild that optional acceleration.
+    pub(super) fn level_snapshot(&self) -> Arc<Self> {
+        let mut geometry = (*self.geometry).clone();
+        geometry.stroke_topology = None;
+        Arc::new(Self {
+            geometry: Arc::new(geometry),
+            ..self.clone()
+        })
+    }
+
+    pub(super) fn level_cache_bytes(&self) -> usize {
+        use std::mem::size_of;
+        let g = &self.geometry;
+        size_of::<Self>()
+            + size_of::<DisplayGeometry>()
+            + g.mesh.vertices.capacity() * size_of::<Vec3>()
+            + g.mesh.triangles.capacity() * size_of::<[usize; 3]>()
+            + g.mesh.quads.capacity() * size_of::<[usize; 4]>()
+            + g.mesh.mask.capacity() * size_of::<f32>()
+            + g.mesh.materials.capacity() * size_of::<Material>()
+            + g.shading.vertices.capacity() * size_of::<(usize, Vec3)>()
+            + g.shading.triangles.capacity() * size_of::<[usize; 3]>()
+            + g.uv_corners.capacity() * size_of::<[[f32; 4]; 3]>()
+            + g.owners.capacity() * size_of::<usize>()
+            + g.source_faces.capacity() * size_of::<usize>()
+            + g.poly_colors.capacity() * size_of::<[u8; 4]>()
+            + g.outlines.capacity() * size_of::<[usize; 2]>()
+            + g.mesh
+                .materials
+                .iter()
+                .map(|m| {
+                    m.links.capacity() * size_of::<crate::sculpt::material::layers::Influence>()
+                })
+                .sum::<usize>()
+            + g.muted_vertices.capacity()
+            + g.edge_colors.capacity() * (size_of::<((usize, usize), eframe::egui::Color32)>() + 16)
+            + self.texture_info.capacity() * size_of::<[u32; 4]>()
+            + self.texture_sources.capacity() * size_of::<TextureSource>()
+            + self.texture_pixels.chunks.capacity() * size_of::<Arc<Vec<[u32; 2]>>>()
+            + self
+                .texture_pixels
+                .chunks
+                .iter()
+                .map(|chunk| chunk.capacity() * size_of::<[u32; 2]>())
+                .sum::<usize>()
+    }
+
     pub(super) fn shares_geometry(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.geometry, &other.geometry)
     }

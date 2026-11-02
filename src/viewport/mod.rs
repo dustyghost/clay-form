@@ -109,6 +109,10 @@ pub(crate) struct ViewportOptions {
 }
 impl Viewport {
     #[cfg(test)]
+    pub(crate) fn level_cache_hits(&self) -> usize {
+        self.renderer.as_ref().map_or(0, |r| r.level_cache_hits())
+    }
+    #[cfg(test)]
     pub(crate) fn stamp_preview_pending(&self) -> bool {
         self.session
             .sculpt
