@@ -209,7 +209,9 @@ impl Renderer {
                     .and_then(|display| display.during_stroke(document));
                 self.live_display = preview.is_some();
                 self.geometry = Some(finished.unwrap_or_else(|| {
-                    Arc::new(preview.unwrap_or_else(|| DisplayMesh::new_cached(document,&mut self.source_shading)))
+                    Arc::new(preview.unwrap_or_else(|| {
+                        DisplayMesh::new_cached(document, &mut self.source_shading)
+                    }))
                 }));
                 self.render_geometry = Some(
                     if (0..document.model_count())
