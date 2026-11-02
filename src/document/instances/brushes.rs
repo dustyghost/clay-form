@@ -17,6 +17,36 @@ fn available_name(brushes: &[BrushGroup], except: Option<u64>, name: &str) -> Re
     Ok(())
 }
 impl Document {
+    pub(crate) fn finish_object_stamp(
+        &mut self,
+        mesh: Mesh,
+        revision: u64,
+        source: Source,
+        options: ObjectOptions,
+    ) -> Result<bool, String> {
+        if revision != self.display_revision() {
+            return Err("The scene changed. Stamp the surface again.".into());
+        }
+        self.require_sculpt_mesh()?;
+        options.validate()?;
+        let Source::Asset(id) = source else {
+            return Err("Choose a captured model to stamp".into());
+        };
+        if mesh == *self.mesh() {
+            return Ok(false);
+        }
+        let mut next = self.geometry_snapshot();
+        next.mesh = mesh;
+        next.scene
+            .instances
+            .assets
+            .iter_mut()
+            .find(|a| a.id == id)
+            .ok_or("Captured model is missing")?
+            .options = options;
+        self.replace_geometry_named(next, "Object stamp")?;
+        Ok(true)
+    }
     /// Store the part's last-used settings with its stroke, in the same undo step.
     pub(crate) fn finish_object_stroke(
         &mut self,

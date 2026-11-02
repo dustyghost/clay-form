@@ -481,3 +481,183 @@ fn reusable_object_spacing_is_independent_of_pointer_event_count() {
         assert!((*a - b).len() < 0.02, "{a:?} {b:?}");
     }
 }
+
+#[test]
+fn instance_edit_move_gizmo_preserves_camera_navigation_source_and_one_undo() {
+    use crate::sculpt::instances::Layout;
+    let (mut app, ctx) = setup();
+    app.dispatch(Command::Instances(C::NewArray), &ctx);
+    let mut set = app.ui.instances.editor.clone().unwrap();
+    if let Layout::Array(a) = &mut set.layout {
+        a.count = 2;
+        a.center = Vec3(-0.45, 0., 0.);
+        a.spacing = Vec3(0.9, 0., 0.);
+    }
+    app.dispatch(Command::Instances(C::Preview(Box::new(set.clone()))), &ctx);
+    app.dispatch(Command::Instances(C::Apply), &ctx);
+    let saved = app.document.project();
+    let before = app.document.instance_placements().unwrap();
+    let history = app.document.history_counts().0;
+    app.dispatch(Command::Instances(C::EditCopy(set.id, 0)), &ctx);
+    let rect = navigation_frame(&mut app, &ctx, vec![]);
+    let handles = ctx
+        .data(|d| d.get_temp::<Vec<(&'static str, Pos2)>>(egui::Id::new("instance_move_handles")))
+        .unwrap();
+    let x = handles.iter().find(|(name, _)| *name == "X").unwrap().1;
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(x), primary_event(x, true)],
+    );
+    let end = x + egui::vec2(38., 0.);
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+    navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+    let moved = app.document.instance_placements().unwrap();
+    assert_ne!(moved[0], before[0]);
+    assert_eq!(moved[1], before[1]);
+    assert!(app.document.project() == saved);
+    let empty = rect.left_top() + egui::vec2(110., 110.);
+    let yaw = app.camera.yaw;
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(empty), primary_event(empty, true)],
+    );
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(empty + egui::vec2(45., 15.))],
+    );
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![primary_event(empty + egui::vec2(45., 15.), false)],
+    );
+    assert_ne!(app.camera.yaw, yaw);
+    let zoom = app.camera.zoom;
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(empty + egui::vec2(47., 17.)),
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Line,
+                delta: egui::vec2(0., 1.),
+                modifiers: Default::default(),
+            },
+        ],
+    );
+    navigation_frame(&mut app, &ctx, vec![]);
+    assert_ne!(
+        app.camera.zoom,
+        zoom,
+        "scroll and pointer {:?}",
+        ctx.input(|i| (i.smooth_scroll_delta, i.pointer.hover_pos()))
+    );
+    assert_eq!(app.document.instance_placements().unwrap(), moved);
+    app.dispatch(Command::Instances(C::Apply), &ctx);
+    assert_eq!(app.document.history_counts().0, history + 1);
+    app.dispatch(Command::Undo, &ctx);
+    assert!(app.document.project() == saved);
+}
+
+#[test]
+fn object_stamp_pointer_preview_alt_undo_and_cancel_keep_scene_consistent() {
+    let (mut app, ctx) = setup();
+    // Replace the captured cube with a cone whose base is the contact plane.
+    let mut geometry = app.document.geometry_snapshot();
+    let asset = &mut geometry.scene.instances.assets[0];
+    asset.mesh = std::sync::Arc::new(Primitive::for_kind(PrimitiveKind::Cone).mesh().unwrap());
+    asset.pivot = Vec3(0., -1., 0.);
+    asset.forward = 0;
+    asset.up = 1;
+    let mut plane = Primitive::for_kind(PrimitiveKind::Plane);
+    plane.divisions = [64, 64, 1];
+    geometry.mesh = plane.mesh().unwrap();
+    app.document.replace_geometry(geometry).unwrap();
+    app.dispatch(Command::Instances(C::ChooseBrush(1)), &ctx);
+    app.ui.instances.brush.stamp = true;
+    app.ui.instances.brush.scale = 0.35;
+    let rect = navigation_frame(&mut app, &ctx, vec![]);
+    let point = rect.center();
+    let saved = app.document.project();
+    let history = app.document.history_counts().0;
+    for invert in [false, true] {
+        let modifiers = egui::Modifiers {
+            alt: invert,
+            ..Default::default()
+        };
+        let press = egui::Event::PointerButton {
+            pos: point,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers,
+        };
+        navigation_frame_with_modifiers(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(point), press],
+            modifiers,
+        );
+        assert!(
+            app.document.project() == saved,
+            "preview stays outside saves"
+        );
+        assert!(
+            app.viewport
+                .object_brush
+                .as_ref()
+                .unwrap()
+                .preview()
+                .is_some(),
+            "{}",
+            app.ui.status
+        );
+        let release = egui::Event::PointerButton {
+            pos: point,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers,
+        };
+        navigation_frame_with_modifiers(&mut app, &ctx, vec![release], modifiers);
+        assert!(app.document.instances().sets.is_empty());
+        assert_eq!(app.document.model_count(), 1);
+        assert_eq!(app.document.history_counts().0, history + 1);
+        let sign = if invert { -1. } else { 1. };
+        assert!(
+            app.document
+                .mesh()
+                .vertices
+                .iter()
+                .any(|p| p.2 * sign > 0.5),
+            "{}",
+            app.ui.status
+        );
+        assert!(
+            app.document
+                .mesh()
+                .vertices
+                .iter()
+                .all(|p| p.2 * sign >= -1e-6)
+        );
+        app.dispatch(Command::Undo, &ctx);
+        assert!(app.document.project() == saved);
+        app.ui.instances.brush.stamp = true;
+        app.ui.instances.brush.scale = 0.35;
+        navigation_frame(&mut app, &ctx, vec![]);
+    }
+    navigation_frame(&mut app, &ctx, vec![primary_event(point, true)]);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::Key {
+            key: egui::Key::Escape,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Default::default(),
+        }],
+    );
+    navigation_frame(&mut app, &ctx, vec![primary_event(point, false)]);
+    assert!(app.document.project() == saved);
+}

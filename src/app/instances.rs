@@ -209,6 +209,11 @@ impl App {
                     "Instance preview · adjust the controls, then Apply or Cancel".into();
             }
             C::Edit(id) | C::EditCopy(id, _) => {
+                self.ui.modeling.active = false;
+                self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
+                self.ui.selection_tool = None;
+                self.ui.slice_active = false;
+                self.ui.edges.selecting = false;
                 self.ui.instances.array_layer = 0;
                 self.viewport.cancel(&mut self.document);
                 self.viewport.object_brush = None;

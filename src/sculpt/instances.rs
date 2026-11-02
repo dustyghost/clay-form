@@ -28,6 +28,8 @@ pub struct ObjectOptions {
     pub offset: f32,
     pub rotation: f32,
     pub independent: bool,
+    #[serde(default)]
+    pub stamp: bool,
 }
 
 impl Default for ObjectOptions {
@@ -38,6 +40,7 @@ impl Default for ObjectOptions {
             offset: 0.,
             rotation: 0.,
             independent: false,
+            stamp: false,
         }
     }
 }

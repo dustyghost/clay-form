@@ -305,3 +305,98 @@ fn check_primitive_handles(g: &mut Guide) {
         "idle primitive controls changed the status while a dialog was open"
     );
 }
+
+#[test]
+#[ignore = "requires Vulkan; verifies object stamps raise and indent an existing sculpt surface"]
+fn object_stamp_controls_offscreen_review() {
+    use crate::command::InstanceCommand as C;
+    let directory = std::path::PathBuf::from(
+        std::env::var("CLAY_GUIDE_PREVIEW").unwrap_or_else(|_| "/tmp/clay-object-stamps".into()),
+    );
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1440, 1000]);
+    g.interactive = true;
+    g.panel(Tool::Brush, Dock::Right);
+    g.app
+        .document
+        .replace_geometry(Geometry::new(
+            Primitive::for_kind(PrimitiveKind::Cone).mesh().unwrap(),
+        ))
+        .unwrap();
+    g.app.dispatch(
+        Command::Instances(C::CreateBrush("Relief shapes".into())),
+        &g.ctx,
+    );
+    g.app.dispatch(
+        Command::Instances(C::Capture("Cone".into(), Vec3(0., -1., 0.), 0, 1)),
+        &g.ctx,
+    );
+    let mut target = g.app.document.geometry_snapshot();
+    let mut plane = Primitive::for_kind(PrimitiveKind::Plane);
+    plane.divisions = [128, 128, 1];
+    target.mesh = plane.mesh().unwrap();
+    target.name = "Relief surface".into();
+    g.app.document.replace_geometry(target).unwrap();
+    g.app
+        .dispatch(Command::Instances(C::ChooseBrush(1)), &g.ctx);
+    g.app.ui.preferences.right_width = 330.;
+    g.app.ui.instances.brush.scale = 0.34;
+    g.app.camera.pitch = -0.38;
+    let (rect, _) = g.frame(vec![]);
+    click_guide_label(&mut g, "Stamp mesh");
+    assert!(g.app.ui.instances.brush.stamp);
+    let before = g.app.document.geometry_snapshot();
+    let left = rect.center() + egui::vec2(-110., 0.);
+    g.frame(vec![
+        egui::Event::PointerMoved(left),
+        primary_event(left, true),
+    ]);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.save("object-stamp-raised-preview");
+    g.frame(vec![primary_event(left, false)]);
+    assert!(
+        g.app.document.mesh().vertices.iter().any(|p| p.2 > 0.5),
+        "{}",
+        g.app.ui.status
+    );
+    let raised = g.app.document.geometry_snapshot();
+    let right = rect.center() + egui::vec2(110., 0.);
+    g.modifiers = egui::Modifiers {
+        alt: true,
+        ..Default::default()
+    };
+    g.frame(vec![
+        egui::Event::PointerMoved(right),
+        egui::Event::PointerButton {
+            pos: right,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: g.modifiers,
+        },
+    ]);
+    g.save("object-stamp-inward-preview");
+    g.frame(vec![
+        egui::Event::PointerButton {
+            pos: right,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: g.modifiers,
+        },
+        egui::Event::PointerGone,
+    ]);
+    g.modifiers = Default::default();
+    assert!(
+        g.app.document.mesh().vertices.iter().any(|p| p.2 < -0.5),
+        "{}",
+        g.app.ui.status
+    );
+    assert!(g.app.document.instances().sets.is_empty());
+    assert_eq!(g.app.document.model_count(), 1);
+    g.save("object-stamps-raised-and-inward");
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), raised);
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    click_guide_label(&mut g, "Create instance");
+    assert!(!g.app.ui.instances.brush.stamp);
+}

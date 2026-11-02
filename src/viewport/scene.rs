@@ -762,6 +762,14 @@ impl Scene {
         point: Pos2,
         document: &Document,
     ) -> Option<(Vec3, Vec3)> {
+        self.pick_object_hit(point, document)
+            .map(|(p, n, _)| (p, n))
+    }
+    pub(super) fn pick_object_hit(
+        &self,
+        point: Pos2,
+        document: &Document,
+    ) -> Option<(Vec3, Vec3, usize)> {
         let (p, n, face) = pick_faces(
             self,
             self.face_candidates(egui::Rect::from_min_max(point, point))
@@ -777,7 +785,7 @@ impl Scene {
         if tri.iter().any(|&i| document.mesh().mask[i] > 0.001) {
             return None;
         }
-        Some((p, n))
+        Some((p, n, source_face))
     }
     /// Sample the underlying surface colour, independent of lighting and group overlays.
     #[cfg(test)]

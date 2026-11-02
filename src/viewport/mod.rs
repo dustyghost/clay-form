@@ -67,6 +67,7 @@ pub(crate) struct Viewport {
     pub(crate) sampled_material: Option<crate::sculpt::Material>,
     pub(crate) session: interaction::InteractionSession,
     pub(crate) paths: paths::PathEditor,
+    pub(crate) copy_move: instances::CopyMove,
     pub(crate) path_thickness: path_thickness::Editor,
     pub(crate) modeling: modeling::ModelingState,
     edge_selection: Vec<[usize; 2]>,
@@ -143,6 +144,7 @@ impl Viewport {
         }
     }
     pub(crate) fn cancel(&mut self, document: &mut Document) {
+        self.copy_move = Default::default();
         self.path_thickness.reset();
         if let Some(brush) = &mut self.object_brush {
             brush.cancel(document);
@@ -286,7 +288,8 @@ impl Viewport {
                 .projection_preview
                 .as_deref()
                 .or_else(|| self.modeling.preview())
-                .or_else(|| self.session.guided.preview()),
+                .or_else(|| self.session.guided.preview())
+                .or_else(|| self.object_brush.as_ref().and_then(|b| b.preview())),
         );
         if let Some(renderer) = &self.renderer {
             renderer.set_backfaces(options.backface_opacity);
@@ -492,18 +495,30 @@ impl Viewport {
             draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
             return;
         }
-        if document.instance_preview_active()
-            && self.object_brush.is_none()
-            && self.session.gesture.is_none()
-            && !options.zoom_hold.active(modifiers)
-            && !options.pan_hold.active(modifiers)
-            && ui.input(|i| i.pointer.primary_down() || i.pointer.primary_released())
-            && response
-                .hover_pos()
-                .is_some_and(|p| !gizmo_rect.contains(p) && !navigation::contains(rect, p))
-        {
+        let edit_instances = document.instance_preview_active() && self.object_brush.is_none();
+        if self.copy_move.show(
+            &scene,
+            &painter,
+            &response,
+            document,
+            options,
+            frame_start,
+            gizmo_rect,
+        ) {
             draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
             return;
+        }
+        // Away from an edit handle the preview owns the surface as well as empty space for navigation.
+        if edit_instances
+            && options.enabled
+            && self.session.gesture.is_none()
+            && frame_start.is_some_and(|p| {
+                rect.contains(p)
+                    && !gizmo_rect.contains(p)
+                    && ui.ctx().layer_id_at(p) == Some(response.layer_id)
+            })
+        {
+            self.session.gesture = Some(Gesture::Orbit);
         }
         if self.update_visibility(
             ui,
@@ -659,7 +674,8 @@ impl Viewport {
             }
             return;
         }
-        if (primary || response.clicked_by(egui::PointerButton::Primary))
+        if !edit_instances
+            && (primary || response.clicked_by(egui::PointerButton::Primary))
             && self.session.gesture.is_none()
             && options.enabled
             && !zoom_held
@@ -817,7 +833,7 @@ impl Viewport {
             self.session.gizmo_start = None;
             self.session.gizmo_snap = None;
         }
-        if previous_gesture == Some(Gesture::Orbit) {
+        if edit_instances || previous_gesture == Some(Gesture::Orbit) {
             draw_gizmo(camera, &painter, gizmo_rect, pointer);
             return;
         }

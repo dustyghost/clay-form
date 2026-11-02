@@ -7,6 +7,14 @@ mod instances;
 mod path_transform;
 mod startup;
 fn navigation_frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) -> egui::Rect {
+    navigation_frame_with_modifiers(app, ctx, events, egui::Modifiers::NONE)
+}
+fn navigation_frame_with_modifiers(
+    app: &mut App,
+    ctx: &egui::Context,
+    events: Vec<egui::Event>,
+    modifiers: egui::Modifiers,
+) -> egui::Rect {
     let mut rect = egui::Rect::NOTHING;
     let _ = ctx.run(
         egui::RawInput {
@@ -15,6 +23,7 @@ fn navigation_frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>
                 Vec2::new(1000., 800.),
             )),
             events,
+            modifiers,
             ..Default::default()
         },
         |ctx| {

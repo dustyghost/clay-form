@@ -142,3 +142,150 @@ pub(super) fn paint(
     painter.rect_filled(badge, 3., Color32::from_rgb(22, 28, 37));
     painter.galley(badge.min + Vec2::new(6., 3.), galley, color);
 }
+
+#[derive(Default)]
+pub(crate) struct CopyMove {
+    drag: Option<MoveDrag>,
+    pub(crate) updated: Option<crate::sculpt::instances::Set>,
+}
+struct MoveDrag {
+    target: (u64, usize),
+    start: Pos2,
+    pivot: Vec3,
+    axis: Option<(Vec3, Vec2)>,
+    before: crate::sculpt::instances::Set,
+}
+impl CopyMove {
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn show(
+        &mut self,
+        scene: &Scene,
+        painter: &egui::Painter,
+        response: &egui::Response,
+        document: &mut Document,
+        options: ViewportOptions,
+        press: Option<Pos2>,
+        gizmo: Rect,
+    ) -> bool {
+        use crate::sculpt::instances::Adjustment;
+        let Some(target @ (id, slot)) = document.selected_instance.filter(|(id, _)| {
+            options.instance_editor == Some(*id) && document.instance_preview_active()
+        }) else {
+            self.drag = None;
+            return false;
+        };
+        let Some(set) = document
+            .instances()
+            .sets
+            .iter()
+            .find(|s| s.id == id && !s.joined())
+        else {
+            self.drag = None;
+            return false;
+        };
+        let Some(pivot) = document.instance_placements().ok().and_then(|resolved| {
+            resolved
+                .iter()
+                .find(|(s, n, _)| (*s, *n) == target)
+                .map(|(_, _, p)| p.transform.origin)
+        }) else {
+            self.drag = None;
+            return false;
+        };
+        let ctx = painter.ctx();
+        if self.drag.as_ref().is_some_and(|d| d.target != target) {
+            self.drag = None;
+        }
+        let origin = scene.project(pivot);
+        let pointer = ctx.input(|i| i.pointer.interact_pos());
+        let mut hit = None;
+        #[cfg(test)]
+        let mut handles = vec![("Move freely", origin)];
+        if scene.visible_depth(pivot) {
+            for (axis, projected, color, label) in transform::world_axes(scene, pivot) {
+                let mut tip = origin + projected.normalized() * 65.;
+                if !navigation::inner(scene.rect).contains(tip) {
+                    tip = origin - projected.normalized() * 65.;
+                }
+                #[cfg(test)]
+                handles.push((label, tip));
+                let hovered = press
+                    .or(pointer)
+                    .is_some_and(|p| p.distance(tip) < controls::HIT_RADIUS);
+                painter.arrow(origin, tip - origin, Stroke::new(2_f32, color));
+                controls::marker(painter, tip, controls::Marker::Circle, color, hovered);
+                controls::label(painter, tip + Vec2::new(6., -16.), label, color);
+                if hovered {
+                    hit = Some(Some((axis, projected)));
+                }
+            }
+            let centre = press
+                .or(pointer)
+                .is_some_and(|p| p.distance(origin) < controls::HIT_RADIUS);
+            controls::marker(
+                painter,
+                origin,
+                controls::Marker::Diamond,
+                COPY_COLOR,
+                centre,
+            );
+            if centre {
+                hit = Some(None);
+            }
+        }
+        #[cfg(test)]
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new("instance_move_handles"), handles));
+        let mods = ctx.input(|i| i.modifiers);
+        if options.enabled
+            && !options.pan_hold.active(mods)
+            && !options.zoom_hold.active(mods)
+            && let Some((pos, axis)) = press.zip(hit)
+            && response.rect.contains(pos)
+            && !gizmo.contains(pos)
+            && !navigation::contains(scene.rect, pos)
+            && ctx.layer_id_at(pos) == Some(response.layer_id)
+        {
+            self.drag = Some(MoveDrag {
+                target,
+                start: pos,
+                pivot,
+                axis,
+                before: set.clone(),
+            });
+        }
+        let Some(drag) = &self.drag else { return false };
+        if !options.enabled || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            let before = drag.before.clone();
+            if document.preview_instance_set(before.clone()).is_ok() {
+                self.updated = Some(before);
+            }
+            self.drag = None;
+            return true;
+        }
+        if let Some(point) = pointer {
+            let delta = drag.axis.map_or_else(
+                || scene.at_depth(point, drag.pivot) - scene.at_depth(drag.start, drag.pivot),
+                |(axis, projected)| {
+                    transform::axis_motion(scene, drag.pivot, axis, projected, drag.start, point)
+                },
+            );
+            let mut candidate = drag.before.clone();
+            if delta != Vec3::default() {
+                let a = if let Some(i) = candidate.adjustments.iter().position(|a| a.slot == slot) {
+                    &mut candidate.adjustments[i]
+                } else {
+                    candidate.adjustments.push(Adjustment::new(slot));
+                    candidate.adjustments.last_mut().unwrap()
+                };
+                a.offset = a.offset + delta;
+            }
+            if candidate != *set && document.preview_instance_set(candidate.clone()).is_ok() {
+                self.updated = Some(candidate);
+            }
+        }
+        if !ctx.input(|i| i.pointer.primary_down()) {
+            self.drag = None;
+        }
+        true
+    }
+}

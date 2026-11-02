@@ -549,7 +549,13 @@ impl App {
             self.ui.instances.asset = None;
         }
         self.ui.instances.placing = self.viewport.object_brush.is_some();
-        if let Some(set) = self.viewport.path_thickness.updated.take() {
+        if let Some(set) = self
+            .viewport
+            .copy_move
+            .updated
+            .take()
+            .or_else(|| self.viewport.path_thickness.updated.take())
+        {
             self.ui.instances.editor = Some(set);
             self.ui.instances.invalid = false;
         }

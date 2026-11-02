@@ -210,7 +210,7 @@ impl UiState {
             };
             ui.colored_label(color, egui::RichText::new(set.target_name(copy)).strong());
             if copy.is_some() {
-                ui.label("Edit placement · Move, rotate, resize or hide the gold-framed copy.");
+                ui.label("Drag a coloured axis to move the copy, or drag its centre handle to move in the view plane. Drag elsewhere to orbit.");
             } else {
                 ui.label(match &set.layout {
                     Layout::Array(_) => "Edit whole array · Change the count, spacing or layout of the blue-framed copies.",
@@ -644,7 +644,20 @@ struct Thumbnail {
 
 impl Controls {
     fn placement_settings(&mut self, ui: &mut egui::Ui) {
-        ui.weak("Click the surface to place a part, drag to repeat, or drag empty space to orbit.");
+        ui.horizontal_wrapped(|ui| {
+            ui.selectable_value(&mut self.brush.stamp, false, "Create instance");
+            ui.selectable_value(&mut self.brush.stamp, true, "Stamp mesh");
+        });
+        if self.brush.stamp {
+            ui.label("Raise the surface to the model shape. Hold Alt to press it inward. Click or drag to stamp.");
+            ui.weak(
+                "Stamp detail depends on the target mesh resolution. Drag empty space to orbit.",
+            );
+        } else {
+            ui.weak(
+                "Click the surface to place a part, drag to repeat, or drag empty space to orbit.",
+            );
+        }
         self.size_control(ui);
         ui.add(
             egui::DragValue::new(&mut self.brush.spacing)
@@ -658,7 +671,9 @@ impl Controls {
                 .prefix("Surface offset "),
         );
         ui.add(egui::Slider::new(&mut self.brush.rotation, -180.0..=180.).text("Rotation °"));
-        ui.checkbox(&mut self.brush.independent, "Create independent geometry");
+        if !self.brush.stamp {
+            ui.checkbox(&mut self.brush.independent, "Create independent geometry");
+        }
     }
     pub(super) fn selected_cover<'a>(&self, library: &'a Library) -> Option<(&'a str, &'a Asset)> {
         if !self.placing {
