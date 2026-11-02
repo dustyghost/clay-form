@@ -103,6 +103,32 @@ impl ObjectBrush {
         self.last_surface = None;
         self.travelled = 0.;
     }
+    fn finish(&mut self, document: &mut Document, source: Source) -> Result<String, String> {
+        self.last_pointer = None;
+        self.last_surface = None;
+        self.travelled = 0.;
+        if let Some(stamp) = self.stamp.take() {
+            return document
+                .finish_object_stamp(stamp.deformation.mesh, stamp.revision, source, self.options)
+                .map(|changed| {
+                    if changed {
+                        "Object stamp applied · Undo restores the surface".into()
+                    } else {
+                        "No target vertices reached the stamp. Increase mesh detail or enlarge the stamp.".into()
+                    }
+                });
+        }
+        let set = self.stroke.take().ok_or("Object stroke is missing")?;
+        let id = set.id;
+        let result = document
+            .preview_instance_set(set)
+            .and_then(|()| document.finish_object_stroke(id, source, self.options));
+        if let Err(error) = result {
+            document.cancel_instance_preview();
+            return Err(error);
+        }
+        Ok("Object stroke applied · Undo removes the entire stroke".into())
+    }
     fn placement(&self, piece: Piece, center: Vec3, normal: Vec3, direction: Vec3) -> Placement {
         let forward = direction - normal * direction.dot(normal);
         let forward = if forward.len() > 1e-5 {
@@ -321,7 +347,7 @@ impl Viewport {
                     button: egui::PointerButton::Primary,
                     pressed: true,
                     ..
-                } if permitted(pos) => {
+                } if permitted(pos) && !brush.stroking() => {
                     if scene.pick_object_target(pos, document).is_some() {
                         if brush.options.stamp {
                             let result = document.require_sculpt_mesh().and_then(|()| {
@@ -415,8 +441,13 @@ impl Viewport {
                         {
                             self.status = Some(error);
                         }
-                        changed = true;
                     }
+                    // Events may span a delayed frame. Finish at the release,
+                    // before any later hover move or subsequent click is read.
+                    self.status = Some(match brush.finish(document, piece.source) {
+                        Ok(notice) | Err(notice) => notice,
+                    });
+                    changed = false;
                     released = true;
                 }
                 _ => {}
@@ -431,34 +462,10 @@ impl Viewport {
             }
             ui.ctx().request_repaint();
         }
-        if released && let Some(stamp) = brush.stamp.take() {
-            let result = document.finish_object_stamp(
-                stamp.deformation.mesh,
-                stamp.revision,
-                piece.source,
-                brush.options,
-            );
-            match result {
-                Ok(true) => self.status = Some("Object stamp applied · Undo restores the surface".into()),
-                Ok(false) => self.status = Some("No target vertices reached the stamp. Increase mesh detail or enlarge the stamp.".into()),
-                Err(error) => self.status = Some(error),
-            }
-            brush.last_pointer = None;
-            brush.last_surface = None;
-            if ui.input(|i| i.pointer.primary_down()) {
-                self.wait_for_release();
-            }
+        if released {
+            ui.ctx().request_repaint();
         }
-        if released && let Some(set) = brush.stroke.take() {
-            let result = document.finish_object_stroke(set.id, piece.source, brush.options);
-            if let Err(error) = result {
-                document.cancel_instance_preview();
-                self.status = Some(error);
-            } else {
-                self.status = Some("Object stroke applied · Undo removes the entire stroke".into());
-            }
-            brush.last_pointer = None;
-            brush.last_surface = None;
+        if released && !brush.stroking() && ui.input(|i| i.pointer.primary_down()) {
             self.wait_for_release();
         }
         let consume = brush.stroking() || response.hover_pos().is_some_and(permitted);

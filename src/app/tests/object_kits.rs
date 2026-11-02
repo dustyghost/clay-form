@@ -16,6 +16,153 @@ fn plate(extent: Vec3, offset: Vec3) -> Mesh {
     }
     mesh
 }
+
+#[test]
+#[ignore = "manual dense object-brush memory review; requires Vulkan; optional CLAY_REVIEW_PROJECT"]
+fn dense_object_brush_memory_review() {
+    use crate::command::InstanceCommand;
+    fn memory(phase: &str) {
+        if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
+            let values: Vec<_> = status
+                .lines()
+                .filter(|line| line.starts_with("VmRSS:") || line.starts_with("VmHWM:"))
+                .collect();
+            eprintln!("object_brush_memory,{phase},{}", values.join(","));
+        }
+    }
+    let directory = std::path::PathBuf::from(
+        std::env::var("CLAY_GUIDE_PREVIEW")
+            .unwrap_or_else(|_| "/tmp/clay-object-brush-memory".into()),
+    );
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1280, 900]);
+    g.interactive = true;
+    memory("initialized");
+    if let Ok(path) = std::env::var("CLAY_REVIEW_PROJECT") {
+        let project = crate::persistence::load_project(&path).unwrap();
+        g.app.document.replace_project(project, &path).unwrap();
+        let source = g
+            .app
+            .document
+            .instances()
+            .assets
+            .iter()
+            .find(|a| a.id == 4)
+            .unwrap_or_else(|| g.app.document.instances().assets.first().unwrap())
+            .id;
+        let brush = g
+            .app
+            .document
+            .instances()
+            .brushes
+            .iter()
+            .find(|b| b.objects.contains(&source))
+            .unwrap()
+            .id;
+        g.app.dispatch(
+            Command::Instances(InstanceCommand::ChooseBrush(brush)),
+            &g.ctx,
+        );
+        g.app.dispatch(
+            Command::Instances(InstanceCommand::ChooseObject(source)),
+            &g.ctx,
+        );
+    } else {
+        let mut geometry = Geometry::new(Mesh::starting_sphere());
+        geometry.subdivide().unwrap();
+        geometry.subdivide().unwrap();
+        g.app.document.replace_geometry(geometry).unwrap();
+        g.app.dispatch(
+            Command::Instances(InstanceCommand::ChooseShipGreebles),
+            &g.ctx,
+        );
+    }
+    g.app.ui.instances.brush.stamp = false;
+    g.app.ui.instances.brush.independent = false;
+    g.app.ui.instances.brush.spacing = 0.05;
+    let (rect, _) = g.frame(vec![]);
+    memory("loaded_level_3");
+    let start_count = g.app.document.instance_placements().unwrap().len();
+    let original = g.app.document.mesh().clone();
+    let point = rect.center() - egui::vec2(40., 0.);
+    g.frame(vec![
+        egui::Event::PointerMoved(point),
+        primary_event(point, true),
+    ]);
+    memory("pressed");
+    g.frame(vec![
+        primary_event(point, false),
+        egui::Event::PointerMoved(point + egui::vec2(120., 0.)),
+        egui::Event::PointerMoved(point + egui::vec2(160., 30.)),
+    ]);
+    g.frame(vec![]);
+    memory("released");
+    assert_eq!(
+        g.app.document.instance_placements().unwrap().len(),
+        start_count + 1
+    );
+    let revision = g.app.document.display_revision();
+    for i in 0..12 {
+        g.frame(vec![egui::Event::PointerMoved(
+            point + egui::vec2(i as f32 * 10., 0.),
+        )]);
+    }
+    memory("hovered_12_frames");
+    assert_eq!(g.app.document.display_revision(), revision);
+    assert_eq!(g.app.document.mesh(), &original);
+    assert_eq!(
+        g.app.document.instance_placements().unwrap().len(),
+        start_count + 1
+    );
+    g.save("dense-object-brush-click");
+    let clicks = 18;
+    let mut events = Vec::new();
+    for i in 0..clicks {
+        let point = point + egui::vec2((i % 6) as f32 * 20., (i / 6) as f32 * 15.);
+        events.extend([
+            egui::Event::PointerMoved(point),
+            primary_event(point, true),
+            primary_event(point, false),
+        ]);
+    }
+    g.frame(events);
+    g.frame(vec![]);
+    memory("18_more_clicks");
+    assert_eq!(
+        g.app.document.instance_placements().unwrap().len(),
+        start_count + 1 + clicks
+    );
+    let point = point + egui::vec2(-30., -45.);
+    g.frame(vec![
+        egui::Event::PointerMoved(point),
+        primary_event(point, true),
+    ]);
+    for i in 1..=12 {
+        g.frame(vec![egui::Event::PointerMoved(
+            point + egui::vec2(i as f32 * 12., 0.),
+        )]);
+        if i % 4 == 0 {
+            memory(&format!("drag_frame_{i}"));
+        }
+    }
+    let end = point + egui::vec2(144., 0.);
+    g.frame(vec![
+        primary_event(end, false),
+        egui::Event::PointerMoved(point),
+    ]);
+    g.frame(vec![]);
+    memory("drag_released");
+    assert!(!g.app.document.instance_preview_active());
+    let revision = g.app.document.display_revision();
+    for i in 0..4 {
+        g.frame(vec![egui::Event::PointerMoved(
+            point + egui::vec2(i as f32 * 20., 0.),
+        )]);
+    }
+    memory("final_hover");
+    assert_eq!(g.app.document.display_revision(), revision);
+    assert_eq!(g.app.document.mesh(), &original);
+}
 #[test]
 #[ignore = "requires Vulkan; creates a personal multi-object brush and paints two different parts"]
 fn object_kit_library_and_strokes_offscreen_review() {

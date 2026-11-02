@@ -229,6 +229,114 @@ fn reusable_object_brush_orbits_from_empty_space_then_stamps_the_active_surface(
     navigation_frame(&mut app, &ctx, vec![primary_event(on_model, false)]);
     assert_eq!(app.document.instance_placements().unwrap().len(), 1);
 }
+
+#[test]
+fn object_brush_release_stops_coalesced_hover_moves_and_preserves_each_click() {
+    for same_frame_press in [false, true] {
+        for independent in [false, true] {
+            let (mut app, ctx) = setup();
+            app.ui.instances.brush.independent = independent;
+            app.ui.instances.brush.spacing = 0.05;
+            let rect = navigation_frame(&mut app, &ctx, vec![]);
+            let point = rect.center() - egui::vec2(25., 0.);
+            let hover = point + egui::vec2(100., 30.);
+            let before = app.document.geometry_snapshot();
+            let history = app.document.history_counts().0;
+            let mut events = vec![egui::Event::PointerMoved(point), primary_event(point, true)];
+            if !same_frame_press {
+                navigation_frame(&mut app, &ctx, std::mem::take(&mut events));
+            }
+            events.extend([
+                primary_event(point, false),
+                egui::Event::PointerMoved(hover),
+                egui::Event::PointerMoved(hover + egui::vec2(20., -10.)),
+            ]);
+            navigation_frame(&mut app, &ctx, events);
+            let copies = if independent {
+                app.document.model_count() - 1
+            } else {
+                app.document.instance_placements().unwrap().len()
+            };
+            assert_eq!(
+                copies, 1,
+                "press batched={same_frame_press}, independent={independent}"
+            );
+            assert!(!app.document.instance_preview_active());
+            assert!(!app.viewport.object_brush.as_ref().unwrap().stroking());
+            assert_eq!(app.document.history_counts().0, history + 1);
+            let applied = app.document.geometry_snapshot();
+            navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(point)]);
+            assert_eq!(app.document.geometry_snapshot(), applied);
+            app.document.undo();
+            assert_eq!(app.document.geometry_snapshot(), before);
+            app.document.redo();
+            assert_eq!(app.document.geometry_snapshot(), applied);
+        }
+    }
+}
+
+#[test]
+fn object_brush_keeps_separate_clicks_in_one_event_batch() {
+    let (mut app, ctx) = setup();
+    let rect = navigation_frame(&mut app, &ctx, vec![]);
+    let first = rect.center() - egui::vec2(40., 0.);
+    let second = rect.center() + egui::vec2(40., 0.);
+    let history = app.document.history_counts().0;
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(first),
+            primary_event(first, true),
+            primary_event(first, false),
+            egui::Event::PointerMoved(second),
+            primary_event(second, true),
+            primary_event(second, false),
+            egui::Event::PointerMoved(rect.center()),
+        ],
+    );
+    assert_eq!(app.document.instances().sets.len(), 2);
+    assert_eq!(app.document.instance_placements().unwrap().len(), 2);
+    assert_eq!(app.document.history_counts().0, history + 2);
+    app.document.undo();
+    assert_eq!(app.document.instance_placements().unwrap().len(), 1);
+    app.document.undo();
+    assert!(app.document.instance_placements().unwrap().is_empty());
+}
+
+#[test]
+fn object_stamp_ignores_hover_moves_after_release_in_the_same_frame() {
+    let mut expected = None;
+    for coalesced_hover in [false, true] {
+        let (mut app, ctx) = setup();
+        app.ui.instances.brush.stamp = true;
+        app.ui.instances.brush.spacing = 0.05;
+        app.ui.instances.brush.scale = 0.35;
+        let rect = navigation_frame(&mut app, &ctx, vec![]);
+        let point = rect.center() - egui::vec2(25., 0.);
+        let hover = point + egui::vec2(100., 30.);
+        let original = app.document.mesh().clone();
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(point), primary_event(point, true)],
+        );
+        let mut events = vec![primary_event(point, false)];
+        if coalesced_hover {
+            events.push(egui::Event::PointerMoved(hover));
+        }
+        navigation_frame(&mut app, &ctx, events);
+        assert_ne!(app.document.mesh(), &original, "{}", app.ui.status);
+        if let Some(expected) = &expected {
+            assert_eq!(app.document.mesh(), expected);
+        } else {
+            expected = Some(app.document.mesh().clone());
+        }
+        let applied = app.document.mesh().clone();
+        navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(hover)]);
+        assert_eq!(app.document.mesh(), &applied);
+    }
+}
 #[test]
 fn reusable_objects_real_pointer_stroke_and_cancel_are_one_transaction() {
     let (mut app, ctx) = setup();
