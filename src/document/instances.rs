@@ -144,6 +144,9 @@ impl Document {
     }
     pub fn preview_instance_set(&mut self, set: Set) -> Result<(), String> {
         self.begin_instance_preview()?;
+        if self.instances().sets.iter().any(|old| old == &set) {
+            return Ok(());
+        }
         let before = self.instances().clone();
         let preview = self.instance_preview.as_mut().unwrap();
         if let Some(old) = preview.library.sets.iter_mut().find(|s| s.id == set.id) {
@@ -187,7 +190,7 @@ impl Document {
             return Ok(());
         };
         if preview.library == self.geometry.scene.instances {
-            self.display_changed();
+            self.display_changed_preserving_geometry();
             return Ok(());
         }
         self.record_edit("Edit instances");
@@ -201,7 +204,9 @@ impl Document {
         }
         self.geometry.scene.instances = preview.library;
         self.dirty = true;
-        self.display_changed();
+        // The preview was already visible, including its effective model IDs.
+        // Committing it changes save/history state, not its display geometry.
+        self.display_changed_preserving_geometry();
         Ok(())
     }
     pub fn remove_instance_set(&mut self, id: u64) -> Result<(), String> {
@@ -558,7 +563,7 @@ mod tests {
         let preview = d.instance_placements().unwrap();
         assert!(!Arc::ptr_eq(&empty, &preview));
         assert!(Arc::ptr_eq(&preview, &d.instance_placements().unwrap()));
-        d.texture_display_changed();
+        d.display_changed_preserving_geometry();
         assert!(Arc::ptr_eq(&preview, &d.instance_placements().unwrap()));
         if let Layout::Array(a) = &mut set.layout {
             a.count = 257;

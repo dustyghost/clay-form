@@ -20,6 +20,8 @@ Use this page to choose a rendering check, export a preview, or measure a slowdo
 
 The renderer splits surface and wireframe buffers at device allocation/binding limits, preserving the existing per-model geometry limits across dense multi-model scenes. It caches positions, normals, masks, materials, triangle indices, and model ownership. Camera changes update shader uniforms. Geometry/mask edits and model visibility/selection changes invalidate the cache; undo, redo, New, Open, and completed topology jobs do the same. Wireframe edge buffers are generated only when wireframe is requested after an edit. Quad diagonals remain optional.
 
+Committing an already visible linked-instance preview retains its display geometry and GPU buffers. It still records Undo and invalidates edit tokens; moving or cancelling a preview and Undo/Redo continue to invalidate geometry. An unchanged preview submitted again on mouse release is a no-op. `gpu_instance_commit_reuses_preview_display_and_preserves_pixels` checks exact framebuffer equality, zero buffer rewrites on commit, and Undo/Redo invalidation.
+
 Unedited subdivision level changes reuse stored meshes without refining them again. The renderer retains one inactive level's display buffers, capped at 192 MiB, so returning to it avoids rebuilding normals and display topology. The first visit to an uncached level still builds its display. Real edits invalidate this cache; coarse edits still propagate to higher levels while preserving their detail. Cached displays omit optional stroke adjacency, which is rebuilt when needed.
 
 An offscreen color/depth framebuffer depth-tests overlapping submodels.

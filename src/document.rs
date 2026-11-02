@@ -139,7 +139,9 @@ impl Document {
     pub(crate) fn level_display_key(&self) -> (u64, usize) {
         (self.level_content_revision, self.mesh_settings().level())
     }
-    fn texture_display_changed(&mut self) {
+    // Invalidate edit tokens and level caches while retaining the current
+    // positions, topology and normals (texture edits or preview commitment).
+    fn display_changed_preserving_geometry(&mut self) {
         self.display_revision = self.display_revision.wrapping_add(1);
         self.level_content_revision = self.display_revision;
     }

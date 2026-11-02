@@ -173,10 +173,10 @@ impl Renderer {
             {
                 self.cached_level = Some(current);
             }
-            let textures_only = self.geometry_revision
+            let geometry_unchanged = self.geometry_revision
                 == Some(document.geometry_display_revision())
                 && !(self.live_display && !document.stroke_active());
-            let updated = textures_only
+            let updated = geometry_unchanged
                 .then(|| self.geometry.as_ref()?.with_texture_updates(document))
                 .flatten();
             if let Some(updated) = updated {

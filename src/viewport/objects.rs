@@ -436,11 +436,11 @@ impl Viewport {
                     pressed: false,
                     ..
                 } if brush.stroking() => {
-                    if brush.last_pointer != Some(pos) && permitted(pos) {
-                        if let Err(error) = brush.sample(piece, pos, scene, document, modifiers.alt)
-                        {
-                            self.status = Some(error);
-                        }
+                    if brush.last_pointer != Some(pos)
+                        && permitted(pos)
+                        && let Err(error) = brush.sample(piece, pos, scene, document, modifiers.alt)
+                    {
+                        self.status = Some(error);
                     }
                     // Events may span a delayed frame. Finish at the release,
                     // before any later hover move or subsequent click is read.
