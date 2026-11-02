@@ -271,6 +271,68 @@ fn grouped_path_regions_follow_curves_axes_group_order_and_closed_seam() {
 }
 
 #[test]
+fn grouped_path_stepped_arrow_keeps_shoulders_and_only_repeats_middle() {
+    let mut mesh: Mesh = serde_json::from_str(include_str!(
+        "../../../../tests/fixtures/grouped-path-arrow.json"
+    ))
+    .unwrap();
+    mesh.creases = vec![[12, 16]]; // The shoulder edge shared by Start and Middle.
+    let mut route = path(false);
+    route.points = [Vec3::default(), Vec3(6., 0., 0.)]
+        .map(|position| PathPoint {
+            position,
+            normal: axis(2),
+        })
+        .to_vec();
+    let groups = PathRegions::named(&mesh);
+    // Also run with the same source pointing down the Y axis.
+    for _ in 0..2 {
+        for count in [1, 8] {
+            let mut set = grouped_set();
+            let Layout::Path(recipe) = &mut set.layout else {
+                unreachable!()
+            };
+            recipe.count = count;
+            recipe.regions = Some(groups.clone());
+            groups.orient_piece(&mesh, &mut recipe.middle);
+            assert_eq!((recipe.middle.forward, recipe.middle.up), (1, 2));
+            let output = set
+                .generated(std::slice::from_ref(&route), |_| Some(&mesh), &|| false)
+                .unwrap()
+                .unwrap();
+            let result = &output[0].mesh;
+            connected_closed(result);
+            assert_eq!(result.creases.len(), 1);
+            // Four exposed shoulder triangles remain at the stem. All other
+            // copies of Middle contribute only their sixteen side faces.
+            assert_eq!(
+                result.polygroups.iter().filter(|&&g| g == 2).count(),
+                4 + 16 * count
+            );
+            for (role, faces, lo, hi) in [(1, 10, 0., 2. / 3.), (3, 14, 6. - 2. / 3., 6.)] {
+                let selected: Vec<_> = result
+                    .triangles
+                    .iter()
+                    .zip(&result.polygroups)
+                    .filter(|(_, g)| **g == role)
+                    .collect();
+                assert_eq!(selected.len(), faces);
+                for (face, _) in selected {
+                    assert!(
+                        face.iter()
+                            .all(|&v| (lo - 1e-5..=hi + 1e-5).contains(&result.vertices[v].0))
+                    );
+                }
+            }
+            assert_eq!(result.quads.len(), mesh.quads.len() + (count - 1) * 8);
+        }
+        for p in &mut mesh.vertices {
+            *p = Vec3(-p.0, -p.1, p.2);
+        }
+    }
+}
+
+#[test]
 fn grouped_path_regions_reject_bad_roles_boundaries_short_paths_and_cancel() {
     let mesh = grouped_bar();
     let set = grouped_set();

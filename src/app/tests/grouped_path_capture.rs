@@ -13,6 +13,13 @@ fn grouped_path_object_controls_offscreen_review() {
     g.panel(Tool::Submodels, Dock::Right);
     g.app.ui.preferences.right_width = 365.;
     crate::app::tests::grouped_path::prepare(&mut g.app);
+    // Custom role names are assigned after opening the editor. The source is
+    // upright, so this path must discover Y even though the initial piece uses X.
+    let mut geometry = g.app.document.geometry_snapshot();
+    for p in &mut geometry.mesh.vertices {
+        *p = crate::sculpt::Vec3(-p.1, p.0, p.2);
+    }
+    g.app.document.replace_geometry(geometry).unwrap();
     g.app
         .document
         .rename_vertex_group(0, "Foot".into())
@@ -36,12 +43,33 @@ fn grouped_path_object_controls_offscreen_review() {
     assert!(!g.app.ui.instances.invalid, "{}", g.app.ui.status);
     let layout = &g.app.ui.instances.editor.as_ref().unwrap().layout;
     assert!(matches!(layout,Layout::Path(a) if a.regions.as_ref().unwrap().middle=="Repeat"));
+    assert!(matches!(layout, Layout::Path(a) if a.middle.forward == 1 && a.middle.up == 2));
+    // Switch Up directly in the editor, then change thickness and apply.
+    g.frame(vec![]);
+    let up = g
+        .text_positions
+        .iter()
+        .find(|(label, _)| label == "Up")
+        .unwrap()
+        .1;
+    let x = g
+        .text_positions
+        .iter()
+        .filter(|(label, pos)| label == "X" && pos.x > up.x && (pos.y - up.y).abs() < 3.)
+        .min_by(|(_, a), (_, b)| a.x.total_cmp(&b.x))
+        .unwrap()
+        .1;
+    g.frame(vec![egui::Event::PointerMoved(x), primary_event(x, true)]);
+    g.frame(vec![primary_event(x, false), egui::Event::PointerGone]);
     assert_eq!(g.app.document.instance_placements().unwrap().len(), 1);
     g.app.dispatch(Command::ResetView, &g.ctx);
     g.save("01-grouped-path-preview");
     super::path_assembly::drag_thickness_handle(&mut g, "End", 0.5);
     g.save("02-grouped-path-taper");
     click_guide_label(&mut g, "Apply instances");
+    assert!(
+        matches!(&g.app.document.instances().sets[0].layout, Layout::Path(a) if a.middle.forward == 1 && a.middle.up == 0)
+    );
     assert_eq!(g.app.document.history_counts().0, history + 1);
     assert_eq!(g.app.document.mesh(), &source);
     crate::persistence::save_project(

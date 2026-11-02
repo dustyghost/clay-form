@@ -207,7 +207,7 @@ impl App {
                 } else {
                     None
                 };
-                let piece = if let Some((_, piece, _)) = linked {
+                let mut piece = if let Some((_, piece, _)) = linked {
                     piece
                 } else {
                     self.document
@@ -223,7 +223,10 @@ impl App {
                         .id;
                     Layout::Path(PathAssembly {
                         regions: matches!(command, C::NewPath).then(|| {
-                            PathRegions::named(self.document.instance_source(piece.source).unwrap())
+                            let mesh = self.document.instance_source(piece.source).unwrap();
+                            let groups = PathRegions::named(mesh);
+                            groups.orient_piece(mesh, &mut piece);
+                            groups
                         }),
                         path,
                         start: None,

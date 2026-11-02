@@ -117,7 +117,13 @@ fn source_name(document: &Document, source: Source) -> Option<&str> {
             .map(|a| a.name.as_str()),
     }
 }
-fn choose_piece(ui: &mut egui::Ui, label: &str, piece: &mut Piece, document: &Document) -> bool {
+fn choose_piece(
+    ui: &mut egui::Ui,
+    label: &str,
+    piece: &mut Piece,
+    document: &Document,
+    inline_axes: bool,
+) -> bool {
     let before = *piece;
     let selected = source_name(document, piece.source).unwrap_or("Missing source");
     egui::ComboBox::from_id_salt(label)
@@ -131,6 +137,7 @@ fn choose_piece(ui: &mut egui::Ui, label: &str, piece: &mut Piece, document: &Do
                         m.name,
                     )
                     .clicked()
+                    && piece.source != Source::Model(document.instance_model_id(i))
                 {
                     let pivot = m
                         .mesh
@@ -154,6 +161,7 @@ fn choose_piece(ui: &mut egui::Ui, label: &str, piece: &mut Piece, document: &Do
                         format!("Brush: {}", a.name),
                     )
                     .clicked()
+                    && piece.source != Source::Asset(a.id)
                 {
                     *piece = Piece {
                         source: Source::Asset(a.id),
@@ -165,9 +173,19 @@ fn choose_piece(ui: &mut egui::Ui, label: &str, piece: &mut Piece, document: &Do
             }
         });
     ui.push_id(label, |ui| {
-        egui::CollapsingHeader::new("Contact point and axes").show(ui, |ui| {
-            vector(ui, "Contact point", &mut piece.pivot);
+        if inline_axes {
             axes(ui, &mut piece.forward, &mut piece.up);
+        }
+        egui::CollapsingHeader::new(if inline_axes {
+            "Contact point"
+        } else {
+            "Contact point and axes"
+        })
+        .show(ui, |ui| {
+            vector(ui, "Contact point", &mut piece.pivot);
+            if !inline_axes {
+                axes(ui, &mut piece.forward, &mut piece.up);
+            }
         });
     });
     before != *piece
@@ -282,7 +300,8 @@ impl UiState {
             } else {
                 ui.label(match &set.layout {
                     Layout::Array(_) => "Edit whole array · Change the count, spacing or layout of the blue-framed copies.",
-                    Layout::Path(_) => "Edit path assembly · Change the route, pieces or how they fit together.",
+                    Layout::Path(a) if a.regions.is_some() => "Grouped path object · Place Start and End once and repeat the Middle group.",
+                    Layout::Path(_) => "Separate pieces · Repeat the whole Middle model along the path.",
                     Layout::Manual(_) => "Edit whole stroke · Rename it or show and hide all its copies together.",
                 });
             }

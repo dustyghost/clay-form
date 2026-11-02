@@ -22,8 +22,9 @@ pub(super) fn controls(
     }
     if a.regions.is_some() {
         let source = a.middle.source;
-        choose_piece(ui, "Source model", &mut a.middle, document);
-        if source != a.middle.source {
+        choose_piece(ui, "Source model", &mut a.middle, document, true);
+        let mut groups_changed = source != a.middle.source;
+        if groups_changed {
             a.regions = Some(
                 document
                     .instance_source(a.middle.source)
@@ -59,16 +60,20 @@ pub(super) fn controls(
                                 )
                                 .clicked()
                             {
+                                groups_changed |= *selected != g.name;
                                 *selected = g.name.clone();
                             }
                         }
                     });
             }
+            if groups_changed {
+                groups.orient_piece(mesh, &mut a.middle);
+            }
             if mesh.vertex_groups.len() < 3 {
                 ui.weak("Cancel the preview and use Selection to vertex group to mark three adjoining face regions on the source.");
             }
         }
-        ui.weak("Forward runs from Start through Middle to End. The source stays welded; the middle repeats and its seams join automatically.");
+        ui.weak("Forward follows Start to End. Up faces away from the path surface. Only Middle repeats.");
         ui.add(egui::Slider::new(&mut a.count, 1..=254).text("Middle repeats"));
         ui.weak("End lengths follow Piece scale. Middle sections fit the remaining path length. Closed paths repeat only Middle.");
         egui::ComboBox::from_id_salt("assembly_path")
@@ -114,7 +119,7 @@ pub(super) fn controls(
                     ui.selectable_value(&mut a.path, p.id, &p.name);
                 }
             });
-        choose_piece(ui, "Middle", &mut a.middle, document);
+        choose_piece(ui, "Middle", &mut a.middle, document, false);
         let closed = document.path(a.path).is_some_and(|p| p.closed);
         if closed {
             ui.weak("Closed loop: start/end caps are omitted.");
@@ -129,7 +134,7 @@ pub(super) fn controls(
                     *piece = enabled.then_some(a.middle);
                 }
                 if let Some(piece) = piece {
-                    choose_piece(ui, label, piece, document);
+                    choose_piece(ui, label, piece, document, false);
                 }
             }
         });
@@ -163,6 +168,12 @@ pub(super) fn controls(
                 .instance_source(a.middle.source)
                 .map_or_else(PathRegions::default, PathRegions::named),
         );
+        if let Some(mesh) = document.instance_source(a.middle.source) {
+            a.regions
+                .as_ref()
+                .unwrap()
+                .orient_piece(mesh, &mut a.middle);
+        }
         a.start = None;
         a.end = None;
         a.bend = true;

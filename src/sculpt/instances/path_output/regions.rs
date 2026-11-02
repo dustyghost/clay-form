@@ -58,12 +58,50 @@ impl PathRegions {
             selected.ok_or_else(|| "Assign every source face to exactly one Start, Middle or End group. Use face selections, with edge loops at the region boundaries".into())
         }).collect()
     }
-    fn bounds(
-        &self,
-        mesh: &Mesh,
-        piece: Piece,
-        faces: &[usize],
-    ) -> Result<[(f32, f32); 3], String> {
+    /// Pick the axis whose two cross-sections actually separate the three regions.
+    /// Only do this when binding groups, so subsequent manual axis edits stick.
+    pub(crate) fn orient_piece(&self, mesh: &Mesh, piece: &mut Piece) {
+        if mesh.vertices.len() > MAX_GENERATED_VERTICES
+            || mesh.triangles.len() > MAX_GENERATED_TRIANGLES
+        {
+            return;
+        }
+        let Ok(faces) = self.faces(mesh) else { return };
+        for forward in 0..3 {
+            let candidate = Piece { forward, ..*piece };
+            if self.bounds(mesh, candidate, &faces).is_err() {
+                continue;
+            }
+            piece.forward = forward;
+            // Captures already have an authored surface normal. For models,
+            // lay the thin dimension against the surface, keeping Up on ties.
+            if !matches!(piece.source, Source::Asset(_)) || piece.up == forward {
+                let extent = |i| {
+                    let dir = axis(i);
+                    let (lo, hi) = mesh
+                        .vertices
+                        .iter()
+                        .map(|p| p.dot(dir))
+                        .fold((f32::INFINITY, f32::NEG_INFINITY), |(lo, hi), v| {
+                            (lo.min(v), hi.max(v))
+                        });
+                    hi - lo
+                };
+                let mut axes = (0..3).filter(|&i| i != forward);
+                let a = axes.next().unwrap();
+                let b = axes.next().unwrap();
+                let (x, y) = (extent(a), extent(b));
+                piece.up = if x < y || (x == y && piece.up == a) {
+                    a
+                } else {
+                    b
+                };
+            }
+            break;
+        }
+    }
+
+    fn bounds(&self, mesh: &Mesh, piece: Piece, faces: &[usize]) -> Result<RegionBounds, String> {
         let mut bounds = [(f32::INFINITY, f32::NEG_INFINITY); 3];
         for (face, &role) in mesh.triangles.iter().zip(faces) {
             for &v in face {
@@ -80,14 +118,26 @@ impl PathRegions {
                 "Each path region needs surface faces and some length along Forward".into(),
             );
         }
+        let reversed = bounds[0].0 > bounds[2].0;
+        if reversed {
+            bounds = bounds.map(|(lo, hi)| (-hi, -lo));
+        }
         let epsilon = ((bounds[2].1 - bounds[0].0).abs() * 1e-5).max(1e-6);
         if (bounds[0].1 - bounds[1].0).abs() > epsilon
             || (bounds[1].1 - bounds[2].0).abs() > epsilon
         {
             return Err("Start, Middle and End must run in that order along Forward, meeting at planar edge loops. Check the Forward axis and group assignments".into());
         }
-        Ok(bounds)
+        Ok(RegionBounds {
+            spans: bounds,
+            reversed,
+        })
     }
+}
+
+struct RegionBounds {
+    spans: [(f32, f32); 3],
+    reversed: bool,
 }
 
 impl PathAssembly {
@@ -100,7 +150,7 @@ impl PathAssembly {
         let groups = self.regions.as_ref().ok_or("No path regions assigned")?;
         let faces = groups.faces(mesh)?;
         let bounds = groups.bounds(mesh, self.middle, &faces)?;
-        Ok(intervals(self, &bounds, length, closed)?
+        Ok(intervals(self, &bounds.spans, length, closed)?
             .into_iter()
             .map(|(_, lo, hi)| (lo + hi) * 0.5)
             .collect())
@@ -140,7 +190,7 @@ fn intervals(
     Ok(spans)
 }
 
-fn extract(mesh: &Mesh, faces: &[usize], role: usize) -> Result<(Mesh, HashSet<usize>), String> {
+fn extract(mesh: &Mesh, faces: &[usize], role: usize) -> Result<(Mesh, Vec<usize>), String> {
     let mut result = Mesh::default();
     let mut indices = vec![usize::MAX; mesh.vertices.len()];
     let mut old_vertices = Vec::new();
@@ -175,7 +225,7 @@ fn extract(mesh: &Mesh, faces: &[usize], role: usize) -> Result<(Mesh, HashSet<u
     }
     mesh.reindex_groups(&mut result, &old_vertices, &old_faces);
     result.validate()?;
-    Ok((result, old_vertices.into_iter().collect()))
+    Ok((result, old_vertices))
 }
 
 pub(super) fn generate<'a>(
@@ -231,12 +281,19 @@ pub(super) fn generate<'a>(
         members.push(vertices);
     }
     for i in 0..2 {
-        if members[i].intersection(&members[i + 1]).count() < 3 {
+        let left: HashSet<_> = members[i].iter().collect();
+        if members[i + 1]
+            .iter()
+            .filter(|v| left.contains(v))
+            .take(3)
+            .count()
+            < 3
+        {
             return Err("The source regions must share welded boundary vertices. Weld the source and assign adjoining face regions".into());
         }
     }
     let frames = Frames::new(path, recipe.twist)?;
-    let spans = intervals(recipe, &bounds, frames.length, path.closed)?;
+    let spans = intervals(recipe, &bounds.spans, frames.length, path.closed)?;
     let vertices: usize = spans.iter().map(|&(r, _, _)| parts[r].vertices.len()).sum();
     let triangles: usize = spans
         .iter()
@@ -249,12 +306,17 @@ pub(super) fn generate<'a>(
     let mut sources = Vec::new();
     for (slot, &(role, start, end)) in spans.iter().enumerate() {
         let mut part = parts[role].clone();
-        let (lo, hi) = bounds[role];
+        let (lo, hi) = bounds.spans[role];
         for (v, p) in part.vertices.iter_mut().enumerate() {
             if v % 1024 == 0 && cancel() {
                 return Err("Operation cancelled".into());
             }
-            let local = recipe.middle.local(*p);
+            let mut local = recipe.middle.local(*p);
+            if bounds.reversed {
+                // Reverse both tangent and side to preserve winding and the authored Up.
+                local.0 = -local.0;
+                local.1 = -local.1;
+            }
             let distance = start + (local.0 - lo) / (hi - lo) * (end - start);
             let frame = frames.at(distance);
             let thickness = recipe.thickness.at(distance / frames.length, path.closed);
@@ -267,9 +329,14 @@ pub(super) fn generate<'a>(
             placement: placements[0].1,
             mesh: part,
         });
-        sources.push(&parts[role]);
+        sources.push(weld::Section {
+            mesh: &parts[role],
+            original_vertices: Some(&members[role]),
+            reversed: bounds.reversed,
+        });
     }
-    let tolerance = ((bounds[2].1 - bounds[0].0) * recipe.scale * 1e-5).clamp(0.00001, 0.01);
+    let tolerance =
+        ((bounds.spans[2].1 - bounds.spans[0].0) * recipe.scale * 1e-5).clamp(0.00001, 0.01);
     let mesh = weld::join_parts(&copies, &sources, path.closed, tolerance, cancel)
         .map_err(|error| format!("Path region boundaries: {error}"))?;
     Ok(vec![GeneratedCopy {

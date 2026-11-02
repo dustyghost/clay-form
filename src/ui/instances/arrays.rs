@@ -10,7 +10,7 @@ pub(super) fn editor(ui: &mut egui::Ui, a: &mut Array, active: &mut usize, docum
             .map_or("Missing array", |s| s.name.as_str());
         ui.label(format!("Linked source: {name}"));
     } else if a.owner.is_none() {
-        choose_piece(ui, "Source", &mut a.piece, document);
+        choose_piece(ui, "Source", &mut a.piece, document, false);
     }
     *active = (*active).min(a.layers.len());
     ui.horizontal_wrapped(|ui| {

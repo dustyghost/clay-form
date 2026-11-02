@@ -36,6 +36,7 @@ struct Station {
     tangent: Vec3,
 }
 struct Cache {
+    piece: Piece,
     regions: Option<PathRegions>,
     source_revision: u64,
     scale: f32,
@@ -52,7 +53,9 @@ impl Cache {
         self.path == *path
             && self.regions == recipe.regions
             && (recipe.regions.is_none()
-                || (self.source_revision == source_revision && self.scale == recipe.scale))
+                || (self.source_revision == source_revision
+                    && self.scale == recipe.scale
+                    && self.piece == recipe.middle))
             && self.count == recipe.count
             && self.spacing == recipe.spacing
             && self.fit_count == recipe.fit_count
@@ -119,6 +122,7 @@ impl Cache {
             stations.push(at(Kind::Section(index), distance));
         }
         Ok(Self {
+            piece: recipe.middle,
             regions: recipe.regions.clone(),
             source_revision: document.source_revision(),
             scale: recipe.scale,
