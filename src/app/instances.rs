@@ -174,8 +174,14 @@ impl App {
                     fuse: false,
                 });
             }
-            C::NewLegacyArray | C::NewLinkedCopy | C::RepeatArray(_) | C::NewPath => {
-                if matches!(command, C::NewPath) && self.document.paths().is_empty() {
+            C::NewLegacyArray
+            | C::NewLinkedCopy
+            | C::RepeatArray(_)
+            | C::NewPath
+            | C::NewPathParts => {
+                if matches!(command, C::NewPath | C::NewPathParts)
+                    && self.document.paths().is_empty()
+                {
                     return Err("Create a path before making a path assembly".into());
                 }
                 self.viewport.cancel(&mut self.document);
@@ -208,7 +214,7 @@ impl App {
                         .instance_piece(self.document.active_model_index())?
                 };
                 self.ui.instances.array_layer = 0;
-                let layout = if matches!(command, C::NewPath) {
+                let layout = if matches!(command, C::NewPath | C::NewPathParts) {
                     let path = self
                         .document
                         .paths()
@@ -216,6 +222,9 @@ impl App {
                         .ok_or("Create a path before making a path assembly")?
                         .id;
                     Layout::Path(PathAssembly {
+                        regions: matches!(command, C::NewPath).then(|| {
+                            PathRegions::named(self.document.instance_source(piece.source).unwrap())
+                        }),
                         path,
                         start: None,
                         middle: piece,
@@ -225,9 +234,13 @@ impl App {
                         fit_count: true,
                         twist: 0.,
                         scale: 1.,
-                        bend: false,
+                        bend: matches!(command, C::NewPath),
                         fit_sections: true,
-                        join: JoinMode::Separate,
+                        join: if matches!(command, C::NewPath) {
+                            JoinMode::Weld
+                        } else {
+                            JoinMode::Separate
+                        },
                         join_distance: default_join_distance(),
                         thickness: Default::default(),
                     })
@@ -247,6 +260,8 @@ impl App {
                 let set = Set {
                     id: self.document.next_instance_set_id()?,
                     name: if matches!(command, C::NewPath) {
+                        "Path object"
+                    } else if matches!(command, C::NewPathParts) {
                         "Path assembly"
                     } else if linked.is_some() {
                         "Linked array"
@@ -262,6 +277,21 @@ impl App {
                 };
                 self.ui.instances.editor = Some(set.clone());
                 self.ui.instances.invalid = false;
+                // Reveal the authoring controls even when the first draft still
+                // needs group assignments. Opening UI does not edit the scene.
+                if matches!(command, C::NewPath | C::NewPathParts)
+                    && let Some(panel) = self
+                        .ui
+                        .preferences
+                        .panels
+                        .iter_mut()
+                        .find(|p| p.tool == crate::preferences::Tool::Submodels)
+                {
+                    panel.open = true;
+                    if panel.dock == crate::preferences::Dock::Hidden {
+                        panel.dock = crate::preferences::Dock::Floating;
+                    }
+                }
                 self.document.preview_instance_set(set)?;
                 self.ui.status =
                     "Instance preview · adjust the controls, then Apply or Cancel".into();

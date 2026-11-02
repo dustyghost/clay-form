@@ -161,23 +161,43 @@ pub(super) fn join<'a>(
     tolerance: f32,
     cancel: &dyn Fn() -> bool,
 ) -> Result<Mesh, String> {
+    let sources = copies
+        .iter()
+        .map(|c| {
+            source(c.placement.piece.source).ok_or_else(|| "Instance source is missing".to_owned())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    join_parts(copies, &sources, closed, tolerance, cancel)
+}
+
+pub(super) fn join_parts(
+    copies: &[GeneratedCopy],
+    sources: &[&Mesh],
+    closed: bool,
+    tolerance: f32,
+    cancel: &dyn Fn() -> bool,
+) -> Result<Mesh, String> {
     let n = copies.len();
     let mut offsets = Vec::with_capacity(n);
     let mut total = 0;
     let mut ends = Vec::with_capacity(n);
-    let mut source_ends = HashMap::<(Source, usize, bool), Arc<End>>::new();
+    let mut source_ends = HashMap::<(usize, usize, bool), Arc<End>>::new();
     for (i, c) in copies.iter().enumerate() {
         if cancel() {
             return Err("Operation cancelled".into());
         }
-        let mesh = source(c.placement.piece.source).ok_or("Instance source is missing")?;
+        let mesh = sources[i];
         if mesh.has_hidden_faces() {
             return Err("Joining requires fully visible sections".into());
         }
         offsets.push(total);
         total += c.mesh.vertices.len();
         let mut end_for = |high| -> Result<Arc<End>, String> {
-            let key = (c.placement.piece.source, c.placement.piece.forward, high);
+            let key = (
+                mesh as *const Mesh as usize,
+                c.placement.piece.forward,
+                high,
+            );
             if let Some(end) = source_ends.get(&key) {
                 return Ok(end.clone());
             }

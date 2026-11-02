@@ -706,7 +706,7 @@ impl Action {
             Self::ConvertPrimitive => "Convert to sculpting mesh",
             Self::DuplicateModel => "Duplicate submodel",
             Self::CreateInstanceArray => "Create submodel array…",
-            Self::CreatePathAssembly => "Create path assembly…",
+            Self::CreatePathAssembly => "Create path object…",
             Self::CaptureObjectBrush => "Capture object brush",
             Self::DeleteSubmodel => "Delete submodel",
             Self::MergeDown => "Merge down",

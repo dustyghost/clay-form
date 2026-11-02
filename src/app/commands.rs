@@ -164,6 +164,7 @@ impl App {
                     | C::NewLinkedCopy
                     | C::RepeatArray(_)
                     | C::NewPath
+                    | C::NewPathParts
                     | C::Edit(_)
                     | C::EditCopy(..)
                     | C::Preview(_)

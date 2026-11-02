@@ -36,6 +36,9 @@ struct Station {
     tangent: Vec3,
 }
 struct Cache {
+    regions: Option<PathRegions>,
+    source_revision: u64,
+    scale: f32,
     path: SurfacePath,
     count: usize,
     spacing: f32,
@@ -45,14 +48,17 @@ struct Cache {
     stations: Vec<Station>,
 }
 impl Cache {
-    fn matches(&self, path: &SurfacePath, recipe: &PathAssembly) -> bool {
+    fn matches(&self, path: &SurfacePath, recipe: &PathAssembly, source_revision: u64) -> bool {
         self.path == *path
+            && self.regions == recipe.regions
+            && (recipe.regions.is_none()
+                || (self.source_revision == source_revision && self.scale == recipe.scale))
             && self.count == recipe.count
             && self.spacing == recipe.spacing
             && self.fit_count == recipe.fit_count
             && self.caps == (recipe.start.is_some(), recipe.end.is_some())
     }
-    fn new(path: &SurfacePath, recipe: &PathAssembly) -> Result<Self, String> {
+    fn new(path: &SurfacePath, recipe: &PathAssembly, document: &Document) -> Result<Self, String> {
         let placements = recipe.placements(path)?;
         let length: f32 = path
             .dense_curve()
@@ -98,14 +104,24 @@ impl Cache {
             }
             stations.push(at(Kind::Path(index), best.1));
         }
-        for (index, distance) in recipe
-            .section_distances(length, path.closed, placements.len())
-            .into_iter()
-            .enumerate()
-        {
+        let centres = if recipe.regions.is_some() {
+            recipe.region_section_centres(
+                document
+                    .instance_source(recipe.middle.source)
+                    .ok_or("Path source is missing")?,
+                length,
+                path.closed,
+            )?
+        } else {
+            recipe.section_distances(length, path.closed, placements.len())
+        };
+        for (index, distance) in centres.into_iter().enumerate() {
             stations.push(at(Kind::Section(index), distance));
         }
         Ok(Self {
+            regions: recipe.regions.clone(),
+            source_revision: document.source_revision(),
+            scale: recipe.scale,
             path: path.clone(),
             count: recipe.count,
             spacing: recipe.spacing,
@@ -198,8 +214,12 @@ impl Editor {
         let Some(path) = document.path(recipe.path) else {
             return false;
         };
-        if self.cache.as_ref().is_none_or(|c| !c.matches(path, recipe)) {
-            match Cache::new(path, recipe) {
+        if self
+            .cache
+            .as_ref()
+            .is_none_or(|c| !c.matches(path, recipe, document.source_revision()))
+        {
+            match Cache::new(path, recipe, document) {
                 Ok(cache) => {
                     self.cache = Some(cache);
                     #[cfg(test)]

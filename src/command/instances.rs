@@ -12,6 +12,7 @@ pub(crate) enum InstanceCommand {
     NewLinkedCopy,
     RepeatArray(u64),
     NewPath,
+    NewPathParts,
     Edit(u64),
     EditCopy(u64, usize),
     Preview(Box<Set>),

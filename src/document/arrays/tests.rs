@@ -44,7 +44,7 @@ fn attached_array_counts_source_once_and_survives_disable_history_and_reopen() {
     assert_eq!(d.instance_placements().unwrap().len(), 1);
     let saved = d.project();
     saved.validate().unwrap();
-    assert_eq!(saved.version, 5);
+    assert_eq!(saved.version, crate::sculpt::Project::VERSION);
     let decoded = serde_json::from_slice(&serde_json::to_vec(&saved).unwrap()).unwrap();
     let mut reopened = cube();
     reopened.replace_project(decoded, "array.clay").unwrap();

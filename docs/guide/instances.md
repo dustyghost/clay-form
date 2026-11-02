@@ -35,9 +35,24 @@ To move one copy, click it in the viewport or select its numbered row under **Co
 
 Source visibility is separate from copy visibility. Bake or remove linked sets before deleting or merging their source. Instances use the source's current mesh, masks, face visibility, attributes, creases and valid UVs/textures. Apply a source's Thickness modifier first if required; inactive subdivision levels are not instanced.
 
-## Assemble pieces along a path
+## Build a path object from one model
 
-Create and save an [editable path](paths.md), leave its editor, then choose **Along path…**. Select a saved path and Middle piece, with optional Start and End pieces. Sources can be submodels or captured object brushes. Closed paths omit caps.
+Keep the source as one welded mesh. Use face selections and **Modeling → Selection to vertex group** to mark three adjoining regions: the beginning, the repeating section, and the end. They can have different lengths and arbitrary group names. Shared boundary vertices stay welded in the source; no separate submodels or internal caps are required. Use edge loops perpendicular to the intended lengthwise axis at the two region boundaries.
+
+1. Create and save an [editable path](paths.md), then leave its editor.
+2. Select the source model and choose **Submodels → Instances → Create path object…**. The same action is available in custom menus.
+3. Assign its **Start**, **Middle** and **End** groups. Groups named Start/Middle/End are recognised automatically. All source faces must belong to exactly one region; vertices on a shared edge can belong to both neighbouring groups.
+4. Under **Contact point and axes**, set **Forward** along the source's length, from Start towards End, and choose a different **Up** axis. Choose the saved route.
+5. Set **Middle repeats** and **Piece scale**. Start and End each appear once at their original scaled lengths; the repeated middle sections stretch lengthwise to fill the remaining route. Closed paths use only the middle sections and join the final seam.
+6. Use **Thickness along path** and its inline controls for tapers or local width changes, then **Apply instances**. The preview is private until Apply; Cancel restores the prior result. Apply and baking each undo as one operation.
+
+The result is one connected, bent path object. Its joining boundaries must be planar loops with matching shapes and topology, especially the two ends of Middle. During recipe previews, invalid assignments or incompatible seams show an explanation and retain the last valid result. Incompatible source-mesh edits show a warning and omit generated copies until the source or assignments are corrected. The path must be longer than the scaled Start and End regions together. Show all source faces and groups before evaluation. Source geometry stays intact; editing it or the saved path updates the generated result. Group roles bind by name, so after renaming a group choose its new name in **Edit path assembly…**. Generated joined geometry has no UVs; the source keeps its UVs.
+
+For a separately sculptable result, use **Bake set…**. Baking removes the live recipe and retains the source model. Keep a saved project for further procedural edits. Native format v6 stores the region assignments; versions 1–5 remain readable, while older applications reject v6 saves.
+
+## Assemble separate pieces along a path (advanced)
+
+Open **Submodels → Instances → Advanced linking → Separate pieces along path…**, or choose **Separate pieces (advanced)** inside the path editor. Create and save an [editable path](paths.md), leave its editor, then open this editor. Select a saved path and Middle piece, with optional Start and End pieces. Sources can be submodels or captured object brushes. Closed paths omit caps.
 
 **Fit count to path length** distributes a chosen number of pieces; fixed spacing leaves leftover length at the end. Piece scale and Twist control size and orientation. Expand **Contact point and axes** to align each source's pivot, forward and up axes. Forward and up must differ.
 
@@ -96,8 +111,8 @@ The two single-submodel destinations offer **Fuse overlapping surfaces**. Leave 
 
 Baking removes each baked set and its link to the source. Hidden or detached copies in that set are skipped. **Bake all…** leaves entirely hidden sets in the project. If another array still uses a source array you want to bake, include the dependent array in **Bake all…** or bake it first. One **Undo** restores the geometry and instance sets for the entire operation.
 
-Mesh exporters export the active submodel: make the array editable first, then select the result to export. Native `.clay` version 5 preserves attached arrays, recipes, links and captured assets. Versions 1–4 remain readable; earlier app versions cannot read version 5 saves.
+Mesh exporters export the active submodel: make the array editable first, then select the result to export. Native `.clay` version 6 preserves attached arrays, recipes, links and captured assets. Versions 1–5 remain readable; earlier app versions cannot read version 6 saves.
 
 Limits: 256 copies per project, with at most eight layers per array and 16 levels of linked arrays. Layer counts multiply: a 16 × 16 pattern produces 256 copies. Scale factors must be positive; overly large, small or flat combinations are rejected before Apply. Other limits: 64 captured assets and 64 named object brushes per project; 100,000 vertices / 200,000 triangles per captured asset; one million captured source vertices in total. Instance display/baking is bounded to one million expanded vertices / two million triangles. A bent or joined assembly is limited to 250,000 expanded vertices / 500,000 triangles, with up to 4,096 boundary vertices per joining end. Generated geometry is cached across unchanged frames; projects store source geometry and recipes. A later source edit exceeding a budget or making joins incompatible produces an Instances-panel warning and omits copies until settings or source detail are corrected. Bake also respects the 64-submodel limit and configured mesh capacity.
 
-Create linked array, Create path assembly and Capture object brush are available through custom menus and configurable shortcuts.
+Create linked array, Create path object and Capture object brush are available through custom menus and configurable shortcuts.

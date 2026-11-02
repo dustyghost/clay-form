@@ -3,6 +3,8 @@
 mod array_layers;
 #[path = "attached_array_capture.rs"]
 mod attached_array_capture;
+#[path = "grouped_path_capture.rs"]
+mod grouped_path_capture;
 #[path = "object_kits.rs"]
 mod object_kits;
 #[path = "path_assembly.rs"]
@@ -172,7 +174,7 @@ fn reusable_models_offscreen_review() {
             0.8,
         )
         .unwrap();
-    g.app.dispatch(Command::Instances(C::NewPath), &g.ctx);
+    g.app.dispatch(Command::Instances(C::NewPathParts), &g.ctx);
     g.save("03-path-preview");
     click_guide_label(&mut g, "Apply instances");
     assert!(!g.app.document.instance_preview_active());

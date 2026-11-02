@@ -1034,6 +1034,7 @@ mod tests {
             visible: true,
             adjustments: Vec::new(),
             layout: Layout::Path(PathAssembly {
+                regions: None,
                 path,
                 start: None,
                 middle: piece,

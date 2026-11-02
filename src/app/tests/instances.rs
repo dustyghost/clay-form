@@ -445,7 +445,7 @@ fn reusable_path_inline_thickness_handles_share_preview_and_preserve_navigation(
         .unwrap();
     let before = app.document.project();
     let history = app.document.history_counts();
-    app.dispatch(Command::Instances(C::NewPath), &ctx);
+    app.dispatch(Command::Instances(C::NewPathParts), &ctx);
     let mut set = app.ui.instances.editor.clone().unwrap();
     let Layout::Path(a) = &mut set.layout else {
         unreachable!()

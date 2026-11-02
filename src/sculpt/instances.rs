@@ -6,7 +6,7 @@ use std::{collections::HashSet, sync::Arc};
 mod bake;
 pub(crate) use bake::{BakeDestination, BakeRequest, BakeScope};
 mod path_output;
-pub use path_output::{GeneratedCopy, JoinMode, ResolvedCopies};
+pub use path_output::{GeneratedCopy, JoinMode, PathRegions, ResolvedCopies};
 mod arrays;
 pub use arrays::{
     Array, ArrayKind, ArrayLayer, ArrayResolver, ArraySpacing, Basis, MAX_ARRAY_LAYERS,
@@ -224,6 +224,8 @@ impl Placement {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PathAssembly {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub regions: Option<PathRegions>,
     pub path: u64,
     pub start: Option<Piece>,
     pub middle: Piece,
@@ -279,6 +281,22 @@ impl PathAssembly {
             .sum();
         if length < 1e-5 {
             return Err("Path is too short for an assembly".into());
+        }
+        if let Some(regions) = &self.regions {
+            regions.validate()?;
+            if self.start.is_some()
+                || self.end.is_some()
+                || !self.bend
+                || !self.fit_sections
+                || !self.fit_count
+                || self.join != JoinMode::Weld
+            {
+                return Err("Grouped path objects use one source model, fitted middle repeats and welded boundaries".into());
+            }
+            return Ok(vec![Placement {
+                piece: self.middle,
+                transform: Transform::default(),
+            }]);
         }
         let samples = path.sample((length / 1024.).max(1e-5))?;
         let mut samples = samples;
@@ -585,7 +603,13 @@ impl Library {
             if missing {
                 return Err("Instance source is missing".into());
             }
-            count += resolver.placements(set, paths)?.len();
+            let placements = resolver.placements(set, paths)?;
+            count += match &set.layout {
+                Layout::Path(a) if a.regions.is_some() => {
+                    a.count + 2 * usize::from(!paths.iter().any(|p| p.id == a.path && p.closed))
+                }
+                _ => placements.len(),
+            };
         }
         if count > MAX_INSTANCES {
             return Err("Projects are limited to 256 instances".into());
@@ -690,6 +714,7 @@ mod tests {
             attached_route: None,
         };
         let a = PathAssembly {
+            regions: None,
             path: 1,
             start: Some(piece()),
             middle: piece(),

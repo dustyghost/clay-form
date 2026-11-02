@@ -68,12 +68,28 @@ impl Document {
             {
                 continue;
             }
-            for (slot, p) in resolver.placements(set, self.paths())? {
-                let source = self
-                    .instance_source(p.piece.source)
+            let generated = set.generated(self.paths(), |s| self.instance_source(s), &|| false)?;
+            let placements = if let Some(copies) = generated {
+                let mut placements = Vec::new();
+                for copy in copies {
+                    placements.push((copy.slot, copy.placement));
+                    result
+                        .meshes
+                        .insert((set.id, copy.slot), std::sync::Arc::new(copy.mesh));
+                }
+                placements
+            } else {
+                resolver.placements(set, self.paths())?
+            };
+            for (slot, p) in placements {
+                let mesh = result
+                    .meshes
+                    .get(&(set.id, slot))
+                    .map(|m| m.as_ref())
+                    .or_else(|| self.instance_source(p.piece.source))
                     .ok_or("Instance source is missing")?;
-                vertices = vertices.saturating_add(source.vertices.len());
-                triangles = triangles.saturating_add(source.triangles.len());
+                vertices = vertices.saturating_add(mesh.vertices.len());
+                triangles = triangles.saturating_add(mesh.triangles.len());
                 if result.len() >= MAX_INSTANCES
                     || vertices > MAX_VERTICES
                     || triangles > MAX_TRIANGLES
@@ -81,17 +97,6 @@ impl Document {
                     return Err("Instance display budget exceeded: reduce counts or source detail (256 copies, 1M vertices / 2M triangles)".into());
                 }
                 result.placements.push((set.id, slot, p));
-            }
-            if let Some(generated) =
-                set.generated(self.paths(), |s| self.instance_source(s), &|| false)?
-            {
-                result.placements.retain(|(id, _, _)| *id != set.id);
-                for copy in generated {
-                    result.placements.push((set.id, copy.slot, copy.placement));
-                    result
-                        .meshes
-                        .insert((set.id, copy.slot), std::sync::Arc::new(copy.mesh));
-                }
             }
         }
         Ok(std::sync::Arc::new(result))
@@ -907,6 +912,7 @@ mod tests {
             visible: true,
             adjustments: Vec::new(),
             layout: Layout::Path(PathAssembly {
+                regions: None,
                 path,
                 start: None,
                 middle: piece,
@@ -1045,6 +1051,7 @@ mod tests {
                 visible: true,
                 adjustments: Vec::new(),
                 layout: Layout::Path(PathAssembly {
+                    regions: None,
                     path: id,
                     start: None,
                     middle: d.instance_piece(0).unwrap(),
@@ -1150,6 +1157,7 @@ mod tests {
             visible: true,
             adjustments: Vec::new(),
             layout: Layout::Path(PathAssembly {
+                regions: None,
                 path: id,
                 start: None,
                 middle: d.instance_piece(0).unwrap(),
@@ -1211,6 +1219,7 @@ mod tests {
             visible: true,
             adjustments: Vec::new(),
             layout: Layout::Path(PathAssembly {
+                regions: None,
                 path: id,
                 start: Some(piece),
                 middle: piece,
