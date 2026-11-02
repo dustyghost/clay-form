@@ -1169,7 +1169,7 @@ impl Viewport {
                     1.
                 };
             let color = if b.subtract ^ options.reverse.active(modifiers) {
-                Color32::from_rgb(255, 140, 100)
+                controls::REVERSED
             } else {
                 Color32::from_rgb(125, 210, 245)
             };

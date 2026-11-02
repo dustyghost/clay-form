@@ -347,6 +347,17 @@ fn object_stamp_controls_offscreen_review() {
     assert!(g.app.ui.instances.brush.stamp);
     let before = g.app.document.geometry_snapshot();
     let left = rect.center() + egui::vec2(-110., 0.);
+    let orange_pixels = |rgba: &[u8]| {
+        rgba.chunks_exact(4)
+            .filter(|p| {
+                (p[0] as i16 - 255).abs() < 8
+                    && (p[1] as i16 - 140).abs() < 8
+                    && (p[2] as i16 - 100).abs() < 8
+            })
+            .count()
+    };
+    let (_, normal) = g.frame(vec![egui::Event::PointerMoved(left)]);
+    let normal_orange = orange_pixels(&normal);
     g.frame(vec![
         egui::Event::PointerMoved(left),
         primary_event(left, true),
@@ -365,6 +376,12 @@ fn object_stamp_controls_offscreen_review() {
         alt: true,
         ..Default::default()
     };
+    let (_, inward) = g.frame(vec![egui::Event::PointerMoved(right)]);
+    assert!(
+        orange_pixels(&inward) > normal_orange + 25,
+        "Alt changes the actual stamp outline to the shared orange"
+    );
+    g.save("object-stamp-alt-orange");
     g.frame(vec![
         egui::Event::PointerMoved(right),
         egui::Event::PointerButton {
@@ -399,4 +416,61 @@ fn object_stamp_controls_offscreen_review() {
     assert_eq!(g.app.document.geometry_snapshot(), before);
     click_guide_label(&mut g, "Create instance");
     assert!(!g.app.ui.instances.brush.stamp);
+}
+
+#[test]
+#[ignore = "requires Vulkan; verifies the built-in object brush tile in a fresh project"]
+fn ship_greebles_default_library_offscreen_review() {
+    let directory = std::path::PathBuf::from(
+        std::env::var("CLAY_GUIDE_PREVIEW").unwrap_or_else(|_| "/tmp/clay-ship-greebles".into()),
+    );
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1440, 1000]);
+    g.interactive = true;
+    g.panel(Tool::Library, Dock::Right);
+    g.app
+        .ui
+        .preferences
+        .panels
+        .iter_mut()
+        .find(|p| p.tool == Tool::Library)
+        .unwrap()
+        .open = true;
+    g.app.ui.preferences.right_width = 340.;
+    let before = g.app.document.geometry_snapshot();
+    g.save("ship-greebles-default-tile");
+    assert_eq!(
+        g.app.document.geometry_snapshot(),
+        before,
+        "displaying a built-in brush keeps the scene intact"
+    );
+    assert!(!g.app.document.is_dirty());
+    click_guide_label(&mut g, "Ship greebles");
+    g.save("ship-greebles-default-selected");
+    assert_eq!(g.app.document.instances().assets.len(), 3);
+    assert_eq!(g.app.document.instances().brushes.len(), 1);
+    assert!(g.app.viewport.object_brush.is_some());
+    assert!(
+        g.app
+            .ui
+            .preferences
+            .panels
+            .iter()
+            .find(|p| p.tool == Tool::Brush)
+            .unwrap()
+            .open
+    );
+    let (_, pixels) = g.frame(vec![]);
+    assert!(!pixels.is_empty());
+    let count = g
+        .text_positions
+        .iter()
+        .filter(|(s, _)| s == "Ship greebles")
+        .count();
+    assert!(count <= 3, "the imported brush replaces the built-in tile");
+    g.app.dispatch(Command::Undo, &g.ctx);
+    g.save("ship-greebles-default-after-undo");
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    click_guide_label(&mut g, "Ship greebles");
+    assert_eq!(g.app.document.instances().assets.len(), 3);
 }

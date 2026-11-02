@@ -85,6 +85,17 @@ pub(in crate::ui) fn library_tiles(
             commands.push(Command::Instances(C::ChooseBrush(brush.id)));
         }
     }
+    if !library.brushes.iter().any(|b| b.name == SHIP_GREEBLES_NAME)
+        && design::brush_tile_with_icon(ui, SHIP_GREEBLES_NAME, false, width, |ctx| {
+            c.ship_greebles_icon(ctx)
+        })
+        .on_hover_text(
+            "Built-in object brush with a hull vent, access hatch and raised service panel.",
+        )
+        .clicked()
+    {
+        commands.push(Command::Instances(C::ChooseShipGreebles));
+    }
 }
 
 pub(in crate::ui) fn part_picker(

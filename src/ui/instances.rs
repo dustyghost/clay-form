@@ -33,6 +33,7 @@ pub(crate) struct Controls {
     pub thickness_path_points: bool,
     pub thickness_sections: bool,
     thumbnails: std::collections::HashMap<u64, Thumbnail>,
+    ship_greebles_thumbnail: Option<Thumbnail>,
 }
 impl Default for Controls {
     fn default() -> Self {
@@ -61,6 +62,7 @@ impl Default for Controls {
             thickness_path_points: true,
             thickness_sections: true,
             thumbnails: Default::default(),
+            ship_greebles_thumbnail: None,
         }
     }
 }
@@ -642,6 +644,22 @@ struct Thumbnail {
     texture: egui::TextureHandle,
 }
 
+impl Thumbnail {
+    fn new(ctx: &egui::Context, asset: &Asset) -> Option<Self> {
+        let [yaw, pitch, roll] = asset.capture_angles;
+        let camera = crate::camera::Camera {
+            yaw,
+            pitch,
+            roll,
+            ..Default::default()
+        };
+        let icon = crate::brush_icon::capture_part(&asset.mesh, &camera).ok()?;
+        Some(Self {
+            source: asset.mesh.clone(),
+            texture: super::icons::texture(ctx, format!("object-icon-{}", asset.id), &icon),
+        })
+    }
+}
 impl Controls {
     fn placement_settings(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
@@ -699,6 +717,14 @@ impl Controls {
         )
     }
 
+    fn ship_greebles_icon(&mut self, ctx: &egui::Context) -> Option<egui::TextureId> {
+        if self.ship_greebles_thumbnail.is_none() {
+            self.ship_greebles_thumbnail = Thumbnail::new(ctx, &ship_greebles().objects[0]);
+        }
+        self.ship_greebles_thumbnail
+            .as_ref()
+            .map(|t| t.texture.id())
+    }
     pub(super) fn object_icon(
         &mut self,
         ctx: &egui::Context,
@@ -709,23 +735,9 @@ impl Controls {
         {
             return Some(cached.texture.id());
         }
-        let [yaw, pitch, roll] = asset.capture_angles;
-        let camera = crate::camera::Camera {
-            yaw,
-            pitch,
-            roll,
-            ..Default::default()
-        };
-        let icon = crate::brush_icon::capture_part(&asset.mesh, &camera).ok()?;
-        let texture = super::icons::texture(ctx, format!("object-icon-{}", asset.id), &icon);
-        let texture_id = texture.id();
-        self.thumbnails.insert(
-            asset.id,
-            Thumbnail {
-                source: asset.mesh.clone(),
-                texture,
-            },
-        );
+        let thumbnail = Thumbnail::new(ctx, asset)?;
+        let texture_id = thumbnail.texture.id();
+        self.thumbnails.insert(asset.id, thumbnail);
         Some(texture_id)
     }
 }

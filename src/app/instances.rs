@@ -310,6 +310,20 @@ impl App {
                 self.pick_group(group)?;
             }
             C::ChooseBrush(group) => self.activate_object_brush(group)?,
+            C::ChooseShipGreebles => {
+                let existing = self
+                    .document
+                    .instances()
+                    .brushes
+                    .iter()
+                    .find(|b| b.name == SHIP_GREEBLES_NAME)
+                    .map(|b| b.id);
+                let id = match existing {
+                    Some(id) => id,
+                    None => self.document.import_object_brush(ship_greebles().clone())?,
+                };
+                self.activate_object_brush(id)?;
+            }
             C::ChooseObject(id) => {
                 if self.ui.instances.group.is_some_and(|g| {
                     !self

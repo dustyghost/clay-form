@@ -51,6 +51,8 @@ Use **Editable paths → Transform whole path** to move, rotate or uniformly sca
 
 ## Capture and brush objects
 
+**Ship greebles** is available in the **Brush library** in every project. Select its tile to use the built-in hull vent, access hatch and raised service panel. Each part has its own thumbnail and a flat contact base for placing instances or stamping relief.
+
 A named object brush holds several captured parts. For example, **Ship fittings** can contain a vent, hatch and sensor dome. Each part keeps its own mesh, contact point, orientation and placement settings.
 
 1. Choose **Brush library → + Add brush → Object brush**. The new brush is selected and **Brush settings** opens. Type a name such as **MyOB** and press Enter.
@@ -66,7 +68,7 @@ To put the picker on another menu, right-click **Object brush models** in the li
 
 To remove a model from a brush, select its thumbnail and click **Remove model from brush** in **Brush settings**. The captured model stays available under **Include existing parts**. Other brushes and previously placed copies keep using it. Undo restores its membership. If you want the same change in your personal library, choose **Update saved brush**. Removing a whole brush also leaves its captured models and placed copies intact.
 
-Choose **Create instance** or **Stamp mesh** in the selected model’s **Brush settings**. **Create instance** places linked copies. **Stamp mesh** raises the existing target surface to the captured model’s shape above its contact point. Hold **Alt** to press that shape inward. A cone creates a pointed bump or indentation. The outline preview follows the selected model and flips inward with Alt.
+Choose **Create instance** or **Stamp mesh** in the selected model’s **Brush settings**. **Create instance** places linked copies. **Stamp mesh** raises the existing target surface to the captured model’s shape above its contact point. Hold **Alt** to press that shape inward. A cone creates a pointed bump or indentation. The outline preview follows the selected model. Holding Alt turns it orange and flips the shape inward.
 
 Click once for one impression, or drag to repeat at **Repeat spacing**. The surface previews the stroke until you release. Escape cancels it and one Undo restores the surface after applying. Masks and hidden faces protect the target. Stamp detail comes from the target’s existing vertices, so subdivide the target or enlarge the stamp for small shapes. Convert a parametric primitive to a sculpting mesh before stamping it.
 

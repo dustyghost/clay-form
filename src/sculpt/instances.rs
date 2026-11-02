@@ -12,6 +12,7 @@ pub use arrays::{Array, ArrayKind, ArrayLayer, ArrayResolver, Basis, MAX_ARRAY_L
 mod brushes;
 mod thickness;
 pub use brushes::{BrushBundle, BrushGroup};
+pub(crate) use brushes::{SHIP_GREEBLES_NAME, ship_greebles};
 pub use thickness::{
     MAX_THICKNESS, MAX_THICKNESS_POINTS, MIN_THICKNESS, Thickness, ThicknessMode, ThicknessPoint,
 };

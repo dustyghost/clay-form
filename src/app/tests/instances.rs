@@ -661,3 +661,46 @@ fn object_stamp_pointer_preview_alt_undo_and_cancel_keep_scene_consistent() {
     navigation_frame(&mut app, &ctx, vec![primary_event(point, false)]);
     assert!(app.document.project() == saved);
 }
+
+#[test]
+fn built_in_ship_greebles_load_without_personal_files_and_reuse_saved_project_copy() {
+    use crate::sculpt::instances::{SHIP_GREEBLES_NAME, ship_greebles};
+    let (mut app, ctx) = setup();
+    let original = app.document.geometry_snapshot();
+    let history = app.document.history_counts().0;
+    app.dispatch(Command::Instances(C::ChooseShipGreebles), &ctx);
+    let id = app.ui.instances.group.unwrap();
+    let brush = app
+        .document
+        .instances()
+        .brushes
+        .iter()
+        .find(|b| b.id == id)
+        .unwrap();
+    assert_eq!(brush.name, SHIP_GREEBLES_NAME);
+    assert_eq!(brush.objects.len(), 3);
+    assert_eq!(
+        app.document.instances().assets.len(),
+        4,
+        "existing captures survive"
+    );
+    assert!(brush.objects.iter().all(|&id| id > 1));
+    for asset in &ship_greebles().objects {
+        asset.mesh.validate_closed().unwrap();
+    }
+    assert_eq!(app.document.history_counts().0, history + 1);
+    let saved = app.document.project();
+    app.dispatch(Command::Instances(C::ChooseShipGreebles), &ctx);
+    assert_eq!(app.ui.instances.group, Some(id));
+    assert!(app.document.project() == saved);
+    app.document
+        .replace_project(
+            serde_json::from_slice(&serde_json::to_vec(&saved).unwrap()).unwrap(),
+            "greebles.clay",
+        )
+        .unwrap();
+    app.dispatch(Command::Instances(C::ChooseShipGreebles), &ctx);
+    assert_eq!(app.document.instances().assets.len(), 4);
+    assert_eq!(app.ui.instances.group, Some(id));
+    assert_eq!(app.document.mesh(), &original.mesh);
+}

@@ -1,5 +1,19 @@
 use super::*;
 
+pub(crate) const SHIP_GREEBLES_NAME: &str = "Ship greebles";
+
+pub(crate) fn ship_greebles() -> &'static BrushBundle {
+    static BRUSH: std::sync::OnceLock<BrushBundle> = std::sync::OnceLock::new();
+    BRUSH.get_or_init(|| {
+        let brush: BrushBundle = serde_json::from_str(include_str!("ship-greebles.objects.json"))
+            .expect("Built-in ship greebles must deserialize");
+        brush
+            .validate()
+            .expect("Built-in ship greebles must be valid");
+        brush
+    })
+}
+
 /// Named choices for an object brush. Meshes remain shared in the asset table.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BrushGroup {

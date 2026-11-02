@@ -286,6 +286,12 @@ impl Viewport {
             && let Some(source) = document.instance_source(piece.source)
         {
             let placement = brush.placement(piece, center, normal, scene.right);
+            let inward = brush.options.stamp && modifiers.alt;
+            let color = if inward {
+                controls::REVERSED
+            } else {
+                Color32::from_rgb(80, 225, 205)
+            };
             for tri in source
                 .triangles
                 .iter()
@@ -293,17 +299,14 @@ impl Viewport {
             {
                 let p = tri.map(|i| {
                     let mut p = placement.point(source.vertices[i]);
-                    if brush.options.stamp && modifiers.alt {
+                    if inward {
                         p = p - normal * (2. * (p - center).dot(normal));
                     }
                     p
                 });
                 for (a, b) in [(0, 1), (1, 2), (2, 0)] {
                     if let Some(line) = scene.clip_segment([p[a], p[b]]) {
-                        painter.line_segment(
-                            line,
-                            egui::Stroke::new(1_f32, Color32::from_rgb(80, 225, 205)),
-                        );
+                        painter.line_segment(line, egui::Stroke::new(1_f32, color));
                     }
                 }
             }

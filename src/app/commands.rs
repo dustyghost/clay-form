@@ -152,7 +152,10 @@ impl App {
             use crate::command::InstanceCommand as C;
             let open_settings = matches!(
                 command,
-                C::CreateBrush(_) | C::LoadPersonalBrush(_) | C::ImportBrush(_)
+                C::CreateBrush(_)
+                    | C::LoadPersonalBrush(_)
+                    | C::ImportBrush(_)
+                    | C::ChooseShipGreebles
             );
             let preview_command = matches!(
                 &command,

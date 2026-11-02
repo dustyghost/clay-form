@@ -21,6 +21,7 @@ pub(crate) enum InstanceCommand {
     RemoveBrush(u64),
     BrushMember(u64, u64, bool),
     ChooseBrush(u64),
+    ChooseShipGreebles,
     ChooseObject(u64),
     SavePersonalBrush(u64),
     ListPersonalBrushes,
