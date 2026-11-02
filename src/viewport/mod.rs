@@ -16,6 +16,7 @@ pub(crate) mod paths;
 mod projection;
 #[cfg(all(test, target_os = "linux"))]
 pub(crate) use gpu::ui_capture::UiCapture;
+mod arrays;
 mod guided;
 mod guides;
 pub(crate) mod instances;
@@ -68,6 +69,11 @@ pub(crate) struct Viewport {
     pub(crate) session: interaction::InteractionSession,
     pub(crate) paths: paths::PathEditor,
     pub(crate) copy_move: instances::CopyMove,
+    pub(crate) array_layer: Option<usize>,
+    pub(crate) array_command: Option<crate::command::InstanceCommand>,
+    pub(crate) array_selected: bool,
+    pub(crate) frame_array: bool,
+    array_controls: arrays::Editor,
     pub(crate) path_thickness: path_thickness::Editor,
     pub(crate) modeling: modeling::ModelingState,
     edge_selection: Vec<[usize; 2]>,
@@ -148,6 +154,7 @@ impl Viewport {
         }
     }
     pub(crate) fn cancel(&mut self, document: &mut Document) {
+        self.array_controls.cancel(document);
         self.copy_move = Default::default();
         self.path_thickness.reset();
         if let Some(brush) = &mut self.object_brush {
@@ -207,6 +214,36 @@ impl Viewport {
         }
         let (response, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
         let rect = response.rect;
+        if std::mem::take(&mut self.frame_array)
+            && let Some(set) = document.attached_array(document.active_model_index())
+            && let Some([min, max]) = document.array_bounds(set.id)
+        {
+            let (right, up, _) = camera.basis();
+            let mut x = [f32::INFINITY, f32::NEG_INFINITY];
+            let mut y = x;
+            for a in [min.0, max.0] {
+                for b in [min.1, max.1] {
+                    for c in [min.2, max.2] {
+                        let p = Vec3(a, b, c);
+                        let u = p.dot(right);
+                        let v = p.dot(up);
+                        x = [x[0].min(u), x[1].max(u)];
+                        y = [y[0].min(v), y[1].max(v)];
+                    }
+                }
+            }
+            let base = rect.width().min(rect.height()) * 0.35;
+            if base > 0. {
+                camera.zoom = (((rect.width() - 100.).max(80.) / (x[1] - x[0]).max(0.001))
+                    .min((rect.height() - 210.).max(80.) / (y[1] - y[0]).max(0.001))
+                    / base)
+                    .clamp(Camera::MIN_ZOOM, 20.);
+                camera.pan = Vec2::new(
+                    -(x[0] + x[1]) * 0.5 * base * camera.zoom,
+                    (y[0] + y[1]) * 0.5 * base * camera.zoom + 40.,
+                );
+            }
+        }
         let gizmo_rect = egui::Rect::from_min_size(
             Pos2::new(rect.right() - 146., rect.top() + 12.),
             Vec2::splat(134.),
@@ -499,7 +536,28 @@ impl Viewport {
             draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
             return;
         }
-        let edit_instances = document.instance_preview_active() && self.object_brush.is_none();
+        let attached = document
+            .attached_array(document.active_model_index())
+            .is_some_and(|s| s.visible)
+            && !document.editing_array_source();
+        let edit_instances = (document.instance_preview_active() && self.object_brush.is_none())
+            || (attached && options.transform_mode == TransformMode::Sculpt);
+        let mut array_controls = std::mem::take(&mut self.array_controls);
+        let array_consumed = array_controls.show(
+            ui,
+            &response,
+            &painter,
+            &scene,
+            document,
+            options,
+            self.array_layer,
+            &mut self.array_command,
+        );
+        self.array_controls = array_controls;
+        if array_consumed {
+            draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
+            return;
+        }
         if self.copy_move.show(
             &scene,
             &painter,
@@ -520,6 +578,11 @@ impl Viewport {
                 rect.contains(p)
                     && !gizmo_rect.contains(p)
                     && ui.ctx().layer_id_at(p) == Some(response.layer_id)
+                    && scene.pick_model(p).is_none_or(|(owner, _, _)| {
+                        document
+                            .display_owner_model(owner)
+                            .is_none_or(|i| i == document.active_model_index())
+                    })
             })
         {
             self.session.gesture = Some(Gesture::Orbit);
@@ -678,7 +741,7 @@ impl Viewport {
             }
             return;
         }
-        if !edit_instances
+        if (!edit_instances || attached)
             && (primary || response.clicked_by(egui::PointerButton::Primary))
             && self.session.gesture.is_none()
             && options.enabled
@@ -690,8 +753,14 @@ impl Viewport {
                 pointer.filter(|p| !gizmo_rect.contains(*p) && !navigation::contains(rect, *p))
             && let Some((owner, _, _)) = scene.pick_model(point)
             && !options.temporary_mask
-            && owner != document.active_model_index()
+            && document.display_owner_model(owner) != Some(document.active_model_index())
         {
+            if let Some(index) = document.display_owner_model(owner) {
+                let _ = document.select_submodel(index);
+                self.array_selected = document.attached_array(index).is_some();
+                self.wait_for_release();
+                return;
+            }
             if document.select_instance_owner(owner) {
                 let joined = document.selected_instance.is_some_and(|(id, _)| {
                     document

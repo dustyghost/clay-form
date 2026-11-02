@@ -117,3 +117,4 @@ jobs:
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-object-stamps" cargo test --locked --lib object_stamp_controls_offscreen_review -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-ship-greebles" cargo test --locked --lib ship_greebles_default_library_offscreen_review -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-array-layers" cargo test --locked --lib layered_array_controls_offscreen_review -- --ignored
+          CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-attached-arrays" cargo test --locked --lib attached_array_controls_offscreen_review -- --ignored

@@ -54,7 +54,9 @@ fn layered_array_controls_offscreen_review() {
     });
     click_guide_label(&mut g, "Cancel preview");
     assert!(g.app.document.instances().sets.is_empty());
-    click_guide_label(&mut g, "New array…");
+    g.app
+        .dispatch(Command::Instances(C::NewLegacyArray), &g.ctx);
+    g.frame(vec![]);
     change(&mut g, |a| {
         a.count = 5;
         a.spacing = Vec3(0.34, 0., 0.);

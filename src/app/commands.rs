@@ -20,7 +20,7 @@ impl App {
         let mut bounds = egui::Rect::NOTHING;
         for index in 0..self.document.model_count() {
             let model = self.document.model(index).unwrap();
-            if !model.metadata.visible {
+            if !model.metadata.visible || !self.document.source_is_displayed(index) {
                 continue;
             }
             let mesh = model.display_mesh(index == self.document.active_model_index());
@@ -74,7 +74,7 @@ impl App {
         let mut radius = 1_f32;
         for index in 0..self.document.model_count() {
             let model = self.document.model(index).unwrap();
-            if model.metadata.visible {
+            if model.metadata.visible && self.document.source_is_displayed(index) {
                 for point in &model
                     .display_mesh(index == self.document.active_model_index())
                     .vertices
@@ -89,7 +89,7 @@ impl App {
         let (mut old_extent, mut new_extent) = (0_f32, 0_f32);
         for index in 0..self.document.model_count() {
             let model = self.document.model(index).unwrap();
-            if !model.metadata.visible {
+            if !model.metadata.visible || !self.document.source_is_displayed(index) {
                 continue;
             }
             let points = model
@@ -160,6 +160,7 @@ impl App {
             let preview_command = matches!(
                 &command,
                 C::NewArray
+                    | C::NewLegacyArray
                     | C::NewLinkedCopy
                     | C::RepeatArray(_)
                     | C::NewPath
@@ -167,6 +168,7 @@ impl App {
                     | C::EditCopy(..)
                     | C::Preview(_)
             );
+            let show_array = matches!(&command, C::NewArray | C::ArrayMode(_));
             if let Err(error) = self.dispatch_instances(command) {
                 if preview_command {
                     self.ui.instances.invalid = true;
@@ -174,6 +176,8 @@ impl App {
                 self.ui.status = error;
             } else if open_settings {
                 self.execute_action(Action::ShowPanel(crate::preferences::Tool::Brush), ctx);
+            } else if show_array {
+                self.execute_action(Action::ShowPanel(crate::preferences::Tool::Submodels), ctx);
             }
             return;
         }

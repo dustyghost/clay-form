@@ -132,6 +132,23 @@ impl App {
     fn finish_parameter_input(&mut self, ctx: &egui::Context) {
         if ctx.input(|i| !i.pointer.any_down() || !i.focused) {
             self.document.end_edit();
+            if self.document.instance_preview_active()
+                && !self.ui.instances.invalid
+                && self
+                    .document
+                    .attached_array(self.document.active_model_index())
+                    .is_some_and(|s| {
+                        self.ui
+                            .instances
+                            .editor
+                            .as_ref()
+                            .is_none_or(|e| e.id == s.id)
+                    })
+                && !ctx.wants_keyboard_input()
+                && let Err(error) = self.document.apply_instance_preview()
+            {
+                self.ui.status = error;
+            }
         }
     }
     fn save_preferences(&mut self) {
@@ -452,6 +469,27 @@ impl App {
         {
             brush.options = self.ui.instances.brush;
         }
+        let attached = self
+            .document
+            .attached_array(self.document.active_model_index())
+            .map(|s| s.id);
+        if attached != self.ui.instances.followed_array {
+            self.ui.instances.followed_array = attached;
+            self.ui.instances.array_edit = attached.is_some();
+            self.ui.instances.array_layer = 0;
+        }
+        let legacy_preview = self.document.instance_preview_active()
+            && self
+                .ui
+                .instances
+                .editor
+                .as_ref()
+                .is_some_and(|s| Some(s.id) != attached);
+        self.viewport.array_layer = (self.ui.instances.array_edit
+            && !legacy_preview
+            && !self.document.editing_array_source()
+            && self.document.selected_instance.is_none())
+        .then_some(self.ui.instances.array_layer);
         self.viewport.path_thickness.configure(
             self.ui
                 .instances
@@ -467,12 +505,20 @@ impl App {
             self.ui.instances.thickness_path_points,
             self.ui.instances.thickness_sections,
         );
+        let instance_editor = if let Some(id) = attached.filter(|_| !legacy_preview) {
+            (self.ui.instances.array_edit
+                || self.document.editing_array_source()
+                || self.document.selected_instance.is_some())
+            .then_some(id)
+        } else {
+            self.ui.instances.editor.as_ref().map(|s| s.id)
+        };
         self.viewport.show(
             ui,
             &mut self.document,
             &mut self.camera,
             ViewportOptions {
-                instance_editor: self.ui.instances.editor.as_ref().map(|s| s.id),
+                instance_editor,
                 edge_select: self.ui.edges.selecting
                     && !temporary_visibility
                     && !self.ui.mask_active,
@@ -549,6 +595,12 @@ impl App {
             self.ui.instances.asset = None;
         }
         self.ui.instances.placing = self.viewport.object_brush.is_some();
+        if std::mem::take(&mut self.viewport.array_selected) {
+            self.ui.instances.array_edit = true;
+        }
+        if let Some(command) = self.viewport.array_command.take() {
+            self.dispatch(Command::Instances(command), ui.ctx());
+        }
         if let Some(set) = self
             .viewport
             .copy_move

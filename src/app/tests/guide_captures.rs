@@ -1,6 +1,8 @@
 //! Purpose-built documentation scenes, rendered with the real app controls.
 #[path = "array_layers.rs"]
 mod array_layers;
+#[path = "attached_array_capture.rs"]
+mod attached_array_capture;
 #[path = "object_kits.rs"]
 mod object_kits;
 #[path = "path_assembly.rs"]
@@ -54,7 +56,8 @@ fn reusable_models_offscreen_review() {
         .document
         .replace_geometry(Geometry::new(mesh))
         .unwrap();
-    g.app.dispatch(Command::Instances(C::NewArray), &g.ctx);
+    g.app
+        .dispatch(Command::Instances(C::NewLegacyArray), &g.ctx);
     let mut set = g.app.ui.instances.editor.clone().unwrap();
     if let Layout::Array(a) = &mut set.layout {
         a.kind = ArrayKind::Radial;

@@ -13,6 +13,30 @@ mod live_normals;
 mod surface;
 use surface::DisplaySurface;
 
+#[derive(Default)]
+pub(super) struct ShadingCache {
+    revision: Option<u64>,
+    data: HashMap<crate::sculpt::instances::Source, Arc<SurfaceShading>>,
+    bytes: usize,
+}
+impl ShadingCache {
+    fn prepare(&mut self, revision: u64) {
+        if self.revision != Some(revision) {
+            self.data.clear();
+            self.bytes = 0;
+            self.revision = Some(revision);
+        }
+    }
+    fn insert(&mut self, key: crate::sculpt::instances::Source, data: Arc<SurfaceShading>) {
+        let bytes = data.vertices.capacity() * std::mem::size_of::<(usize, Vec3)>()
+            + data.triangles.capacity() * std::mem::size_of::<[usize; 3]>();
+        if !self.data.contains_key(&key) && self.bytes + bytes <= 64 * 1024 * 1024 {
+            self.data.insert(key, data);
+            self.bytes += bytes;
+        }
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct DisplayMesh {
     pub(super) geometry: Arc<DisplayGeometry>,
@@ -361,15 +385,24 @@ impl DisplayMesh {
         }))
     }
     pub fn new(document: &Document) -> Self {
-        Self::build(document, false, None)
+        Self::build(document, false, None, None)
+    }
+    pub(super) fn new_cached(document: &Document, cache: &mut ShadingCache) -> Self {
+        cache.prepare(document.source_revision());
+        Self::build(document, false, None, Some(cache))
     }
     pub(super) fn preview(document: &Document) -> Self {
-        Self::build(document, true, None)
+        Self::build(document, true, None, None)
     }
     pub fn with_active_mesh(document: &Document, mesh: &Mesh) -> Self {
-        Self::build(document, true, Some(mesh))
+        Self::build(document, true, Some(mesh), None)
     }
-    fn build(document: &Document, preview: bool, active_mesh: Option<&Mesh>) -> Self {
+    fn build(
+        document: &Document,
+        preview: bool,
+        active_mesh: Option<&Mesh>,
+        mut source_cache: Option<&mut ShadingCache>,
+    ) -> Self {
         let active = document.active_model_index();
         let mut mesh = Mesh {
             uv: Default::default(),
@@ -406,6 +439,9 @@ impl DisplayMesh {
             .chain((0..document.model_count()).filter(|i| *i != active))
             .chain(document.model_count()..document.model_count() + instances.len())
         {
+            if index < document.model_count() && !document.source_is_displayed(index) {
+                continue;
+            }
             let resolved = index
                 .checked_sub(document.model_count())
                 .map(|i| &instances[i]);
@@ -414,6 +450,11 @@ impl DisplayMesh {
                 .checked_sub(document.model_count())
                 .filter(|_| generated.is_none())
                 .map(|i| instances[i].2);
+            if let Some(&(id, _, p)) = resolved
+                && document.array_copy_is_source_duplicate(id, p)
+            {
+                continue;
+            }
             let model = if let Some(mesh) = generated {
                 crate::document::ModelRef {
                     name: "Path assembly",
@@ -504,7 +545,11 @@ impl DisplayMesh {
             );
             mesh.mask.extend_from_slice(&surface.mask);
             muted_vertices.extend(std::iter::repeat_n(
-                index != active && surface.materials.is_empty(),
+                index != active
+                    && !resolved.is_some_and(|&(id, _, _)| {
+                        document.array_owner(id) == Some(active) && !document.editing_array_source()
+                    })
+                    && surface.materials.is_empty(),
                 surface.vertices.len(),
             ));
             if !mesh.materials.is_empty() || !surface.materials.is_empty() {
@@ -552,7 +597,24 @@ impl DisplayMesh {
                 && surface.creases.is_empty()
                 && surface.uv.is_empty();
             let topology = cache_stroke.then(|| SurfaceShadingTopology::new(surface));
-            let surface_shading = if let Some(placement) = placement {
+            let source_key = (shell.is_none()
+                && active_mesh.is_none()
+                && generated.is_none()
+                && topology.is_none()
+                && std::ptr::eq(surface, model.mesh))
+            .then(|| {
+                placement.map(|p| p.piece.source).or_else(|| {
+                    (model.metadata.model_id != 0).then_some(
+                        crate::sculpt::instances::Source::Model(model.metadata.model_id),
+                    )
+                })
+            })
+            .flatten();
+            let retained =
+                source_key.and_then(|key| source_cache.as_ref()?.data.get(&key).cloned());
+            let surface_shading = if let Some(retained) = retained {
+                retained
+            } else if let Some(placement) = placement {
                 shared_shading
                     .entry(placement.piece.source)
                     .or_insert_with(|| Arc::new(surface.surface_shading()))
@@ -574,6 +636,11 @@ impl DisplayMesh {
                 }
                 result
             };
+            if let Some(key) = source_key
+                && let Some(cache) = source_cache.as_mut()
+            {
+                cache.insert(key, surface_shading.clone());
+            }
             let shading_offset = shading.vertices.len();
             let normal_basis = placement.map(|p| (p.normal_basis(), p.transform.basis.is_some()));
             shading
@@ -1008,6 +1075,111 @@ fn span_edge_axis(p: &crate::sculpt::Primitive, a: Vec3, b: Vec3) -> Option<usiz
 mod tests {
     use super::*;
     use crate::sculpt::{Geometry, Primitive, PrimitiveKind};
+    use eframe::egui;
+    #[test]
+    #[ignore = "focused level-3 memory/reuse probe"]
+    fn attached_array_level_three_hover_reuses_geometry_and_source_normals() {
+        use crate::sculpt::instances::{Layout, Source};
+        let mut p = Primitive::for_kind(PrimitiveKind::Cube);
+        p.divisions = [14; 3];
+        let mut g = Geometry::new(p.mesh().unwrap());
+        for _ in 0..3 {
+            g.subdivide().unwrap();
+        }
+        let mut d = Document::default();
+        d.replace_geometry(g).unwrap();
+        d.set_history_retention(crate::history::Retention {
+            edits: 24,
+            memory_mib: 128,
+        })
+        .unwrap();
+        d.create_submodel_array().unwrap();
+        let source = d.mesh().vertices.as_ptr();
+        let key = Source::Model(d.instance_model_id(0));
+        let mut shading = ShadingCache::default();
+        let display = Arc::new(DisplayMesh::new_cached(&d, &mut shading));
+        let normals = shading.data[&key].clone();
+        let placements = d.instance_placements().unwrap();
+        let history = d.history_counts();
+        let mut scenes = crate::viewport::scene::cache::Cache::default();
+        let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1000., 800.));
+        let camera = crate::camera::Camera::default();
+        let first = scenes.get(rect, &camera, display.clone(), false);
+        for _ in 0..90 {
+            let hover = scenes.get(rect, &camera, display.clone(), false);
+            assert!(Arc::ptr_eq(&first.geometry, &hover.geometry));
+            assert!(Arc::ptr_eq(&placements, &d.instance_placements().unwrap()));
+            assert_eq!(d.history_counts(), history);
+        }
+        let mut s = d.attached_array(0).unwrap().clone();
+        if let Layout::Array(a) = &mut s.layout {
+            a.spacing.0 = 1.5;
+        }
+        d.preview_instance_set(s).unwrap();
+        let next = DisplayMesh::new_cached(&d, &mut shading);
+        assert_eq!(d.mesh().vertices.as_ptr(), source);
+        assert!(Arc::ptr_eq(&normals, &shading.data[&key]));
+        assert_eq!(shading.data.len(), 1);
+        assert!(shading.bytes <= 64 * 1024 * 1024);
+        assert_eq!(
+            next.geometry.mesh.triangles.len(),
+            d.mesh().triangles.len() * 2
+        );
+        eprintln!(
+            "level 3: {} source vertices; 90 hover frames reuse display/placements; source shading {} bytes",
+            d.mesh().vertices.len(),
+            shading.bytes
+        );
+    }
+    #[test]
+    fn attached_array_display_counts_source_once_and_retains_only_unchanged_source_shading() {
+        use crate::sculpt::instances::{Layout, Source};
+        let mut document = Document::default();
+        let mut p = Primitive::for_kind(PrimitiveKind::Cube);
+        p.divisions = [1; 3];
+        document
+            .replace_geometry(Geometry::new(p.mesh().unwrap()))
+            .unwrap();
+        let faces = document.mesh().triangles.len();
+        document.create_submodel_array().unwrap();
+        let key = Source::Model(document.instance_model_id(0));
+        let mut cache = ShadingCache::default();
+        let display = DisplayMesh::new_cached(&document, &mut cache);
+        assert_eq!(display.geometry.mesh.triangles.len(), faces * 2);
+        let normals = cache.data[&key].clone();
+        let mut s = document.attached_array(0).unwrap().clone();
+        if let Layout::Array(a) = &mut s.layout {
+            a.spacing.0 = 1.5;
+        }
+        document.preview_instance_set(s).unwrap();
+        let next = DisplayMesh::new_cached(&document, &mut cache);
+        assert_eq!(next.geometry.mesh.triangles.len(), faces * 2);
+        assert!(Arc::ptr_eq(&normals, &cache.data[&key]));
+        document.apply_instance_preview().unwrap();
+        document.set_array_source_mode(true).unwrap();
+        let source = DisplayMesh::new_cached(&document, &mut cache);
+        assert_eq!(source.geometry.mesh.triangles.len(), faces * 2);
+        document
+            .apply_transform(
+                crate::sculpt::Transform {
+                    scale: Vec3(1., 1., 1.2),
+                    ..Default::default()
+                },
+                false,
+            )
+            .unwrap();
+        let _ = DisplayMesh::new_cached(&document, &mut cache);
+        assert!(!Arc::ptr_eq(&normals, &cache.data[&key]));
+        document.end_stroke();
+        document.set_array_source_mode(false).unwrap();
+        let id = document.attached_array(0).unwrap().id;
+        document.remove_instance_set(id).unwrap();
+        let removed = DisplayMesh::new_cached(&document, &mut cache);
+        assert_eq!(removed.geometry.mesh.triangles.len(), faces);
+        document.undo();
+        let restored = DisplayMesh::new_cached(&document, &mut cache);
+        assert_eq!(restored.geometry.mesh.triangles.len(), faces * 2);
+    }
     #[test]
     fn texture_update_reuses_geometry_and_unmodified_atlas_chunks() {
         use crate::sculpt::{

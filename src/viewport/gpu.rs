@@ -49,6 +49,7 @@ pub(super) struct Renderer {
     live_display: bool,
     level_key: Option<(u64, usize)>,
     cached_level: Option<CachedLevel>,
+    source_shading: display::ShadingCache,
     #[cfg(test)]
     level_cache_hits: usize,
     geometry: Option<Arc<DisplayMesh>>,
@@ -67,6 +68,7 @@ impl Renderer {
             live_display: false,
             level_key: None,
             cached_level: None,
+            source_shading: Default::default(),
             #[cfg(test)]
             level_cache_hits: 0,
             geometry: None,
@@ -207,7 +209,7 @@ impl Renderer {
                     .and_then(|display| display.during_stroke(document));
                 self.live_display = preview.is_some();
                 self.geometry = Some(finished.unwrap_or_else(|| {
-                    Arc::new(preview.unwrap_or_else(|| DisplayMesh::new(document)))
+                    Arc::new(preview.unwrap_or_else(|| DisplayMesh::new_cached(document,&mut self.source_shading)))
                 }));
                 self.render_geometry = Some(
                     if (0..document.model_count())

@@ -3,6 +3,11 @@ use crate::sculpt::{
     instances::{BakeRequest, Set},
 };
 pub(crate) enum InstanceCommand {
+    NewLegacyArray,
+    ArrayMode(bool),
+    ArrayDone,
+    FrameArray,
+    MakeArrayEditable(u64),
     NewArray,
     NewLinkedCopy,
     RepeatArray(u64),

@@ -94,6 +94,11 @@ pub(super) struct TransformControls {
     rotation: Option<RotationDrag>,
 }
 fn bounds_center(document: &Document) -> Vec3 {
+    if !document.editing_array_source()
+        && let Some(pivot) = document.array_world_pivot()
+    {
+        return pivot;
+    }
     if document.mesh().vertices.is_empty() {
         return Vec3::default();
     }

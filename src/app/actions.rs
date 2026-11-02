@@ -858,6 +858,10 @@ impl App {
                 self.execute_action(Action::OpenColours, ctx);
                 None
             }
+            Action::ArrayControls => {
+                self.execute_action(Action::ShowPanel(crate::preferences::Tool::Submodels), ctx);
+                None
+            }
             Action::ObjectBrushModels => {
                 if self.ui.instances.placing
                     && !self

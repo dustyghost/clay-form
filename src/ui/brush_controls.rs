@@ -7,6 +7,7 @@ pub(super) fn is_control(action: &Action) -> bool {
         action,
         Action::AppearanceControls
             | Action::ObjectBrushModels
+            | Action::ArrayControls
             | Action::BrushIcon
             | Action::BrushSize
             | Action::BrushInnerRadius
@@ -36,7 +37,7 @@ impl UiState {
     ) -> f32 {
         if matches!(
             action,
-            Action::AppearanceControls | Action::ObjectBrushModels
+            Action::AppearanceControls | Action::ObjectBrushModels | Action::ArrayControls
         ) {
             return ui.available_width().min(540.);
         }
@@ -88,6 +89,9 @@ impl UiState {
         }
         if *action == Action::ObjectBrushModels {
             return instances::part_picker(ui, &mut self.instances, document, commands);
+        }
+        if *action == Action::ArrayControls {
+            return self.array_parameter_controls(ui, document, commands);
         }
         if self.instances.placing && self.instances.asset.is_none() {
             return ui.weak("Empty object brush");

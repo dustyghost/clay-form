@@ -22,6 +22,13 @@ impl Document {
         if !self.active_visible() {
             return Err("Show the active submodel before transforming it".into());
         }
+        if self
+            .attached_array(self.active_model_index())
+            .is_some_and(|s| s.visible)
+            && !self.editing_array_source()
+        {
+            return self.transform_attached_array(transform);
+        }
         self.end_edit();
         let update = if let Some(primitive) = self.primitive() {
             let transformed = primitive.transformed(transform)?;

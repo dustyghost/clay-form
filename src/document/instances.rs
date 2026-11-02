@@ -8,6 +8,7 @@ pub type ResolvedInstances = std::sync::Arc<ResolvedCopies>;
 pub(super) struct Preview {
     pub library: Library,
     pub model_ids: Vec<(usize, u64)>,
+    pub displayed: bool,
 }
 
 impl Document {
@@ -53,9 +54,18 @@ impl Document {
     fn resolve_instance_placements(&self) -> Result<ResolvedInstances, String> {
         let mut result = ResolvedCopies::default();
         let (mut vertices, mut triangles) = (0usize, 0usize);
-        let mut resolver = ArrayResolver::new(self.instances());
+        let mut resolver =
+            ArrayResolver::new(self.instances()).with_sources(|s| self.instance_source(s));
         for set in &self.instances().sets {
             if !set.visible {
+                continue;
+            }
+            if let Layout::Array(a) = &set.layout
+                && let Some(owner) = a.owner
+                && !(0..self.model_count()).any(|i| {
+                    self.instance_model_id(i) == owner && self.model(i).unwrap().metadata.visible
+                })
+            {
                 continue;
             }
             for (slot, p) in resolver.placements(set, self.paths())? {
@@ -129,6 +139,7 @@ impl Document {
         self.instance_preview = Some(Preview {
             library: self.geometry.scene.instances.clone(),
             model_ids,
+            displayed: false,
         });
         Ok(())
     }
@@ -164,7 +175,8 @@ impl Document {
             return Err(error);
         }
         let resolved = self.instance_cache.take();
-        self.display_changed();
+        self.instances_display_changed();
+        self.instance_preview.as_mut().unwrap().displayed = true;
         if let Some(resolved) = resolved {
             let _ = self.instance_cache.set(resolved);
         }
@@ -180,7 +192,7 @@ impl Document {
     }
     pub fn cancel_instance_preview(&mut self) {
         if self.instance_preview.take().is_some() {
-            self.display_changed();
+            self.instances_display_changed();
         }
     }
     pub fn apply_instance_preview(&mut self) -> Result<(), String> {
@@ -206,7 +218,11 @@ impl Document {
         self.dirty = true;
         // The preview was already visible, including its effective model IDs.
         // Committing it changes save/history state, not its display geometry.
-        self.display_changed_preserving_geometry();
+        if preview.displayed {
+            self.display_changed_preserving_geometry();
+        } else {
+            self.instances_display_changed();
+        }
         Ok(())
     }
     pub fn remove_instance_set(&mut self, id: u64) -> Result<(), String> {
@@ -327,6 +343,7 @@ impl Document {
             return Err("Bake the joined assembly to create one editable model, or choose Separate before detaching a section".into());
         }
         let p = ArrayResolver::new(self.instances())
+            .with_sources(|s| self.instance_source(s))
             .placements(&set, self.paths())?
             .into_iter()
             .find(|(i, _)| *i == slot)
@@ -392,6 +409,9 @@ impl Document {
         let id = self.model(index).map_or(0, |m| m.metadata.model_id);
         id != 0
             && self.geometry.scene.instances.sets.iter().any(|set| {
+                if matches!(&set.layout, Layout::Array(a) if a.owner==Some(id)) {
+                    return self.geometry.scene.instances.array_is_repeated(set.id);
+                }
                 let mut probe = set.clone();
                 let mut found = false;
                 probe.sources_mut(|source| found |= *source == Source::Model(id));

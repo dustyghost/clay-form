@@ -116,7 +116,65 @@ impl App {
             return Err("Finish the current object stroke before changing brushes".into());
         }
         match command {
-            C::NewArray | C::NewLinkedCopy | C::RepeatArray(_) | C::NewPath => {
+            C::NewArray => {
+                self.viewport.cancel(&mut self.document);
+                self.viewport.object_brush = None;
+                self.ui.instances.placing = false;
+                self.ui.modeling.active = false;
+                self.ui.selection_tool = None;
+                self.ui.slice_active = false;
+                self.ui.edges.selecting = false;
+                self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
+                let id = self.document.create_submodel_array()?;
+                self.document.set_array_source_mode(false)?;
+                self.ui.instances.editor = self
+                    .document
+                    .instances()
+                    .sets
+                    .iter()
+                    .find(|s| s.id == id)
+                    .cloned();
+                self.ui.instances.array_layer = 0;
+                self.ui.instances.array_edit = true;
+                self.ui.instances.focus_array = true;
+                self.viewport.frame_array = true;
+                self.ui.instances.invalid = false;
+                self.ui.status =
+                    "Array attached · count includes the source · drag handles or edit values"
+                        .into();
+            }
+            C::ArrayMode(source) => {
+                self.ui.instances.focus_array = true;
+                self.viewport.cancel(&mut self.document);
+                self.viewport.object_brush = None;
+                self.ui.instances.placing = false;
+                self.document.set_array_source_mode(source)?;
+                self.ui.instances.array_edit = !source;
+                self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
+                self.ui.instances.editor = self
+                    .document
+                    .attached_array(self.document.active_model_index())
+                    .cloned();
+            }
+            C::ArrayDone => {
+                self.ui.instances.focus_array = true;
+                self.document.set_array_source_mode(false)?;
+                self.ui.instances.array_edit = false;
+                self.document.selected_instance = None;
+            }
+            C::FrameArray => self.viewport.frame_array = true,
+            C::MakeArrayEditable(id) => {
+                self.ui.instances.focus_array = true;
+                if self.document.instance_preview_active() {
+                    self.document.apply_instance_preview()?;
+                }
+                self.ui.instances.bake = Some(BakeRequest {
+                    scope: BakeScope::Set(id),
+                    destination: crate::sculpt::instances::BakeDestination::Current,
+                    fuse: false,
+                });
+            }
+            C::NewLegacyArray | C::NewLinkedCopy | C::RepeatArray(_) | C::NewPath => {
                 if matches!(command, C::NewPath) && self.document.paths().is_empty() {
                     return Err("Create a path before making a path assembly".into());
                 }
@@ -139,7 +197,7 @@ impl App {
                     let Layout::Array(a) = &source.layout else {
                         return Err("Choose an array to repeat".into());
                     };
-                    Some((id, a.piece, a.pivot()))
+                    Some((id, a.piece, a.output_pivot()))
                 } else {
                     None
                 };
@@ -209,12 +267,20 @@ impl App {
                     "Instance preview · adjust the controls, then Apply or Cancel".into();
             }
             C::Edit(id) | C::EditCopy(id, _) => {
+                self.ui.instances.focus_array = true;
+                if let Some(owner) = self.document.array_owner(id)
+                    && owner != self.document.active_model_index()
+                {
+                    self.document.select_submodel(owner)?;
+                }
                 self.ui.modeling.active = false;
                 self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
                 self.ui.selection_tool = None;
                 self.ui.slice_active = false;
                 self.ui.edges.selecting = false;
                 self.ui.instances.array_layer = 0;
+                self.ui.instances.array_edit = true;
+                self.document.set_array_source_mode(false)?;
                 self.viewport.cancel(&mut self.document);
                 self.viewport.object_brush = None;
                 self.document.cancel_instance_preview();

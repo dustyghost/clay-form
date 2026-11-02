@@ -5,6 +5,7 @@ use crate::{
     sculpt::{Vec3, instances::*},
 };
 mod arrays;
+mod attached;
 mod brushes;
 mod thickness;
 
@@ -12,6 +13,9 @@ pub(crate) struct Controls {
     pub editor: Option<Set>,
     pub bake: Option<BakeRequest>,
     pub array_layer: usize,
+    pub array_edit: bool,
+    pub followed_array: Option<u64>,
+    pub focus_array: bool,
     pub invalid: bool,
     pub asset: Option<u64>,
     pub group: Option<u64>,
@@ -41,6 +45,9 @@ impl Default for Controls {
             editor: None,
             bake: None,
             array_layer: 0,
+            array_edit: false,
+            followed_array: None,
+            focus_array: false,
             invalid: false,
             asset: None,
             group: None,
@@ -165,19 +172,60 @@ fn choose_piece(ui: &mut egui::Ui, label: &str, piece: &mut Piece, document: &Do
     before != *piece
 }
 impl UiState {
+    pub(super) fn array_parameter_controls(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &Document,
+        commands: &mut Vec<Command>,
+    ) -> egui::Response {
+        ui.vertical(|ui| {
+            if let Some(mut set) = document
+                .attached_array(document.active_model_index())
+                .cloned()
+            {
+                let before = set.clone();
+                if let Layout::Array(a) = &mut set.layout {
+                    self.instances.array_layer = self.instances.array_layer.min(a.layers.len());
+                    arrays::editor(ui, a, &mut self.instances.array_layer, document);
+                }
+                if set != before {
+                    commands.push(Command::Instances(C::Preview(Box::new(set))));
+                }
+            } else {
+                ui.weak("Select a submodel with an array");
+            }
+        })
+        .response
+    }
     pub(super) fn instance_controls(
         &mut self,
         ui: &mut egui::Ui,
         document: &Document,
         commands: &mut Vec<Command>,
     ) {
-        egui::CollapsingHeader::new("Instances")
-            .default_open(true)
-            .show(ui, |ui| {
-                ui.add_enabled_ui(!self.mesh_busy, |ui| {
-                    self.instance_contents(ui, document, commands);
-                });
+        let response = egui::CollapsingHeader::new(
+            if document
+                .attached_array(document.active_model_index())
+                .is_some()
+            {
+                "Array"
+            } else {
+                "Instances"
+            },
+        )
+        .default_open(true)
+        .show(ui, |ui| {
+            ui.add_enabled_ui(!self.mesh_busy, |ui| {
+                self.instance_contents(ui, document, commands);
             });
+        });
+        if std::mem::take(&mut self.instances.focus_array) {
+            ui.scroll_to_rect_animation(
+                response.header_response.rect,
+                Some(egui::Align::Min),
+                egui::style::ScrollAnimation::none(),
+            );
+        }
     }
     fn instance_contents(
         &mut self,
@@ -185,6 +233,23 @@ impl UiState {
         document: &Document,
         commands: &mut Vec<Command>,
     ) {
+        if let Some(set) = document
+            .attached_array(document.active_model_index())
+            .cloned()
+            .filter(|s| {
+                !(document.instance_preview_active()
+                    && self.instances.editor.as_ref().is_some_and(|e| e.id != s.id))
+            })
+        {
+            if let Some(request) = &mut self.instances.bake {
+                if bake_options(ui, document, request, commands) {
+                    self.instances.bake = None;
+                }
+            } else {
+                attached::controls(ui, &mut self.instances, document, set, commands);
+            }
+            return;
+        }
         if let Err(error) = document.instance_placements() {
             ui.colored_label(egui::Color32::LIGHT_RED, error);
         }
@@ -465,6 +530,11 @@ impl UiState {
                     instance_set(ui, document, set, &mut self.instances.bake, commands)
                 });
             }
+            ui.collapsing("Advanced linking", |ui| {
+                if ui.button("Standalone array…").clicked() {
+                    commands.push(Command::Instances(C::NewLegacyArray));
+                }
+            });
         }
     }
 }
@@ -475,6 +545,7 @@ fn bake_options(
     request: &mut BakeRequest,
     commands: &mut Vec<Command>,
 ) -> bool {
+    let replaces = matches!(request.scope, BakeScope::Set(id) if document.array_owner(id) == Some(document.active_model_index()));
     let name = match request.scope {
         BakeScope::Set(id) => {
             let Some(set) = document.instances().sets.iter().find(|s| s.id == id) else {
@@ -491,18 +562,30 @@ fn bake_options(
     ui.radio_value(
         &mut request.destination,
         BakeDestination::PerCopy,
-        "One new submodel per copy",
+        if replaces {
+            "Separate submodels (keep source)"
+        } else {
+            "One new submodel per copy"
+        },
     );
     ui.radio_value(
         &mut request.destination,
         BakeDestination::New,
-        "One new submodel",
+        if replaces {
+            "One new submodel (keep source)"
+        } else {
+            "One new submodel"
+        },
     );
     let target = document.model(document.active_model_index()).unwrap();
     ui.radio_value(
         &mut request.destination,
         BakeDestination::Current,
-        format!("Merge into selected submodel: {}", target.name),
+        if replaces {
+            format!("Replace array on: {}", target.name)
+        } else {
+            format!("Merge into selected submodel: {}", target.name)
+        },
     );
     if request.destination == BakeDestination::PerCopy {
         request.fuse = false;
@@ -513,7 +596,9 @@ fn bake_options(
         } else {
             ui.weak("Combines surfaces in one mesh and keeps compatible UVs. Overlaps keep their interior faces.");
         }
-        if request.destination == BakeDestination::Current {
+        if request.destination == BakeDestination::Current && replaces {
+            ui.weak("Replaces this submodel with exactly the array result and resets its subdivision levels. Undo restores the source and live array. Other linked uses of this source follow the converted geometry.");
+        } else if request.destination == BakeDestination::Current {
             ui.weak("Includes the selected surface, applies its thickness and resets its primitive and subdivision levels. Other live copies of this submodel follow the merged geometry.");
         }
     }
@@ -600,7 +685,7 @@ fn instance_set(
             adjustment.visible = true;
         }
         if let Ok(placements) =
-            ArrayResolver::new(document.instances()).placements(&listed, document.paths())
+            ArrayResolver::new(document.instances()).with_sources(|s| document.instance_source(s)).placements(&listed, document.paths())
         {
             egui::ScrollArea::vertical()
                 .max_height(160.)

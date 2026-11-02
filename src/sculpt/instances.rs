@@ -8,7 +8,9 @@ pub(crate) use bake::{BakeDestination, BakeRequest, BakeScope};
 mod path_output;
 pub use path_output::{GeneratedCopy, JoinMode, ResolvedCopies};
 mod arrays;
-pub use arrays::{Array, ArrayKind, ArrayLayer, ArrayResolver, Basis, MAX_ARRAY_LAYERS};
+pub use arrays::{
+    Array, ArrayKind, ArrayLayer, ArrayResolver, ArraySpacing, Basis, MAX_ARRAY_LAYERS,
+};
 mod brushes;
 mod thickness;
 pub use brushes::{BrushBundle, BrushGroup};
@@ -156,6 +158,9 @@ impl Default for Transform {
     }
 }
 impl Transform {
+    pub fn is_identity(&self) -> bool {
+        *self == Self::default()
+    }
     pub fn validate(&self) -> Result<(), String> {
         if let Some(b) = self.basis {
             b.scaled(self.scale).validate()?;
@@ -546,8 +551,28 @@ impl Library {
         }
         let mut ids = HashSet::new();
         let mut count = 0;
-        let mut resolver = ArrayResolver::new(self);
+        let mut owners = HashSet::new();
+        let mut resolver = ArrayResolver::new(self).with_sources(|s| match s {
+            Source::Model(id) => models.iter().find(|(i, _)| *i == id).map(|(_, m)| *m),
+            Source::Asset(id) => self
+                .assets
+                .iter()
+                .find(|a| a.id == id)
+                .map(|a| a.mesh.as_ref()),
+        });
         for set in &self.sets {
+            if let Layout::Array(a) = &set.layout
+                && let Some(owner) = a.owner
+            {
+                if owner == 0
+                    || !owners.insert(owner)
+                    || a.piece.source != Source::Model(owner)
+                    || a.source_array.is_some()
+                    || !models.iter().any(|(id, _)| *id == owner)
+                {
+                    return Err("Invalid or duplicate submodel array ownership".into());
+                }
+            }
             if !ids.insert(set.id) {
                 return Err("Duplicate instance set identity".into());
             }

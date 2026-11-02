@@ -40,7 +40,7 @@ impl Geometry {
     ) -> Result<(), String> {
         use BakeDestination::*;
         let library = &self.scene.instances;
-        let mut resolver = ArrayResolver::new(library);
+        let mut resolver = ArrayResolver::new(library).with_sources(|s| self.instance_source(s));
         let mut meshes = Vec::new();
         let mut baked = HashSet::new();
         let mut vertices = 0;
@@ -65,10 +65,18 @@ impl Geometry {
         }
         let mut name = "Baked instances".to_owned();
         for set in &library.sets {
+            let owned_hidden = matches!(&set.layout, Layout::Array(a) if a.owner.is_some_and(|owner| {
+                !set.visible || !std::iter::once(&self.scene.active_metadata).chain(self.submodels.iter().map(|m| &m.metadata)).any(|m| m.model_id == owner && m.visible)
+            }));
             match request.scope {
                 BakeScope::Set(id) if id != set.id => continue,
-                BakeScope::All if !set.visible => continue,
+                BakeScope::All if !set.visible || owned_hidden => continue,
                 _ => {}
+            }
+            if owned_hidden {
+                return Err(
+                    "Show the submodel and enable its array before making it editable".into(),
+                );
             }
             if cancel() {
                 return Err("Operation cancelled".into());
@@ -111,6 +119,9 @@ impl Geometry {
                 ));
             }
         }
+        drop(resolver);
+        let replaces_owner = current && library.sets.iter().any(|s| baked.contains(&s.id)
+            && matches!(&s.layout, Layout::Array(a) if a.owner == Some(self.scene.active_metadata.model_id)));
         let new_models = match request.destination {
             PerCopy => meshes.len(),
             New => 1,
@@ -128,7 +139,7 @@ impl Geometry {
             }
         } else {
             let mut surfaces: Vec<_> = meshes.into_iter().map(|(_, mesh)| mesh).collect();
-            if current && !self.mesh.vertices.is_empty() {
+            if current && !replaces_owner && !self.mesh.vertices.is_empty() {
                 let meta = &self.scene.active_metadata;
                 let surface = if meta.temporary_thickness > 0. {
                     self.mesh.solidify_with_metadata(meta)?

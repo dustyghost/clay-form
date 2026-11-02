@@ -47,7 +47,22 @@ pub(super) fn paint(
     document: &Document,
     editor: Option<u64>,
 ) {
-    let editor = editor.filter(|_| document.instance_preview_active());
+    if document.editing_array_source() {
+        let view = navigation::inner(scene.rect);
+        controls::label(
+            painter,
+            view.min + egui::vec2(12., 24.),
+            &format!(
+                "Editing source · {} · linked array",
+                document.model(document.active_model_index()).unwrap().name
+            ),
+            COPY_COLOR,
+        );
+        brackets(painter, scene.active_bounds, COPY_COLOR);
+        return;
+    }
+    let editor = editor
+        .filter(|id| document.instance_preview_active() || document.array_owner(*id).is_some());
     let selected = document.selected_instance;
     let Some(id) = editor.or_else(|| selected.map(|(id, _)| id)) else {
         return;
@@ -169,7 +184,8 @@ impl CopyMove {
     ) -> bool {
         use crate::sculpt::instances::Adjustment;
         let Some(target @ (id, slot)) = document.selected_instance.filter(|(id, _)| {
-            options.instance_editor == Some(*id) && document.instance_preview_active()
+            options.instance_editor == Some(*id)
+                && (document.instance_preview_active() || document.array_owner(*id).is_some())
         }) else {
             self.drag = None;
             return false;
@@ -179,6 +195,7 @@ impl CopyMove {
             .sets
             .iter()
             .find(|s| s.id == id && !s.joined())
+            .cloned()
         else {
             self.drag = None;
             return false;
@@ -197,7 +214,22 @@ impl CopyMove {
             self.drag = None;
         }
         let origin = scene.project(pivot);
-        let pointer = ctx.input(|i| i.pointer.interact_pos());
+        // A release may share a frame with later hover events. Stop at the
+        // release position instead of letting that hover move the placement.
+        let pointer = ctx.input(|i| {
+            i.events
+                .iter()
+                .find_map(|e| match e {
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed: false,
+                        ..
+                    } => Some(*pos),
+                    _ => None,
+                })
+                .or_else(|| i.pointer.interact_pos())
+        });
         let mut hit = None;
         #[cfg(test)]
         let mut handles = vec![("Move freely", origin)];
@@ -245,16 +277,20 @@ impl CopyMove {
             && !navigation::contains(scene.rect, pos)
             && ctx.layer_id_at(pos) == Some(response.layer_id)
         {
+            let before = set.clone();
+            let _ = document.begin_instance_preview();
             self.drag = Some(MoveDrag {
                 target,
                 start: pos,
                 pivot,
                 axis,
-                before: set.clone(),
+                before,
             });
         }
         let Some(drag) = &self.drag else { return false };
-        if !options.enabled || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+        if (!options.enabled && ctx.input(|i| i.pointer.primary_down()))
+            || ctx.input(|i| !i.focused || i.key_pressed(egui::Key::Escape))
+        {
             let before = drag.before.clone();
             if document.preview_instance_set(before.clone()).is_ok() {
                 self.updated = Some(before);
@@ -279,12 +315,15 @@ impl CopyMove {
                 };
                 a.offset = a.offset + delta;
             }
-            if candidate != *set && document.preview_instance_set(candidate.clone()).is_ok() {
+            if candidate != set && document.preview_instance_set(candidate.clone()).is_ok() {
                 self.updated = Some(candidate);
             }
         }
         if !ctx.input(|i| i.pointer.primary_down()) {
             self.drag = None;
+            if document.array_owner(id).is_some() {
+                let _ = document.apply_instance_preview();
+            }
         }
         true
     }

@@ -151,7 +151,7 @@ pub struct Project {
     pub mesh_settings: MeshSettings,
 }
 impl Project {
-    pub const VERSION: u32 = 4;
+    pub const VERSION: u32 = 5;
     pub fn validate(&self) -> Result<(), String> {
         let models: Vec<_> = std::iter::once((self.scene.active_metadata.model_id, &self.mesh))
             .chain(

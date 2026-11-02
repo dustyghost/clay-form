@@ -20,6 +20,7 @@ mod primitive;
 pub use path_stroke::{PathStrokeOptions, PathStrokePreview, PathStrokeRequest, PathStrokeSession};
 mod projection;
 pub use projection::ProjectionSource;
+mod arrays;
 mod instances;
 mod materials;
 mod paint;
@@ -55,12 +56,14 @@ pub struct Document {
     instance_preview: Option<instances::Preview>,
     instance_cache: std::sync::OnceLock<Result<instances::ResolvedInstances, String>>,
     pub(crate) selected_instance: Option<(u64, usize)>,
+    array_source_edit: Option<u64>,
     alphas: Vec<crate::sculpt::alpha::Asset>,
     stencil: Option<crate::sculpt::alpha::Stencil>,
     references: Vec<crate::reference::ReferenceImage>,
     geometry: Geometry,
     display_revision: u64,
     geometry_display_revision: u64,
+    source_revision: u64,
     // Preserved only for level navigation without attribute changes. Every edit,
     // including texture-only changes, invalidates saved level displays.
     level_content_revision: u64,
@@ -91,12 +94,14 @@ impl Default for Document {
             instance_preview: None,
             instance_cache: Default::default(),
             selected_instance: None,
+            array_source_edit: None,
             alphas: Vec::new(),
             stencil: None,
             references: Vec::new(),
             geometry: Geometry::new(Mesh::starting_sphere()),
             display_revision: 0,
             geometry_display_revision: 0,
+            source_revision: 0,
             level_content_revision: 0,
             brushes: Kind::ALL
                 .into_iter()
@@ -150,6 +155,15 @@ impl Document {
         self.display_revision = self.display_revision.wrapping_add(1);
         self.geometry_display_revision = self.geometry_display_revision.wrapping_add(1);
         self.level_content_revision = self.display_revision;
+        self.source_revision = self.display_revision;
+    }
+    pub(crate) fn source_revision(&self) -> u64 {
+        self.source_revision
+    }
+    fn instances_display_changed(&mut self) {
+        let source_revision = self.source_revision;
+        self.display_changed();
+        self.source_revision = source_revision;
     }
     pub fn brushes(&self) -> &[Brush] {
         &self.brushes
@@ -209,6 +223,7 @@ impl Document {
         self.dirty = false;
     }
     pub fn new_sphere(&mut self) {
+        self.array_source_edit = None;
         self.cancel_instance_preview();
         self.selected_instance = None;
         self.end_edit();
@@ -226,6 +241,7 @@ impl Document {
     /// Validate before changing anything, so an invalid open leaves the current document intact.
     pub fn replace_project(&mut self, project: Project, path: &str) -> Result<(), String> {
         project.validate()?;
+        self.array_source_edit = None;
         self.cancel_instance_preview();
         self.selected_instance = None;
         self.texture_paint = None;

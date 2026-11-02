@@ -381,13 +381,19 @@ fn reusable_objects_real_pointer_stroke_and_cancel_are_one_transaction() {
     assert!(!app.document.instance_preview_active());
 }
 #[test]
-fn reusable_array_preview_blocks_sculpt_and_supports_custom_actions() {
+fn reusable_array_action_attaches_to_source_and_blocks_accidental_sculpting() {
     let mut app = App::default();
     let ctx = egui::Context::default();
     navigation_frame(&mut app, &ctx, vec![]);
     let before = app.document.project();
     app.dispatch(Command::Action(Action::CreateInstanceArray), &ctx);
-    assert!(app.document.instance_preview_active(), "{}", app.ui.status);
+    assert!(
+        app.document.attached_array(0).is_some(),
+        "{}",
+        app.ui.status
+    );
+    assert!(!app.document.instance_preview_active());
+    assert!(app.document.require_sculpt_mesh().is_err());
     let p = Pos2::new(500., 400.);
     navigation_frame(
         &mut app,
@@ -396,7 +402,7 @@ fn reusable_array_preview_blocks_sculpt_and_supports_custom_actions() {
     );
     navigation_frame(&mut app, &ctx, vec![primary_event(p, false)]);
     assert_eq!(app.document.mesh(), &before.mesh);
-    app.dispatch(Command::Instances(C::Apply), &ctx);
+    app.dispatch(Command::Instances(C::ArrayDone), &ctx);
     assert_eq!(app.document.history_counts(), (1, 0));
     let set = app.document.instances().sets[0].clone();
     app.dispatch(Command::Instances(C::Edit(set.id)), &ctx);
@@ -594,7 +600,7 @@ fn reusable_object_spacing_is_independent_of_pointer_event_count() {
 fn instance_edit_move_gizmo_preserves_camera_navigation_source_and_one_undo() {
     use crate::sculpt::instances::Layout;
     let (mut app, ctx) = setup();
-    app.dispatch(Command::Instances(C::NewArray), &ctx);
+    app.dispatch(Command::Instances(C::NewLegacyArray), &ctx);
     let mut set = app.ui.instances.editor.clone().unwrap();
     if let Layout::Array(a) = &mut set.layout {
         a.count = 2;

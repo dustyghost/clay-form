@@ -3,6 +3,7 @@ use crate::viewport::Gesture;
 use eframe::egui::{Pos2, Vec2};
 mod about;
 mod appearance;
+mod attached_arrays;
 mod instances;
 mod path_transform;
 mod startup;
