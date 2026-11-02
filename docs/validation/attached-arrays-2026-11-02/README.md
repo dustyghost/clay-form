@@ -22,6 +22,10 @@ Full formatting, tests, lint and configured GPU checks run in PR CI. The attache
 
 ## Captures
 
+The interaction follow-up reproduces the original arc jump at a 181° drag and the spacing popup disappearing on its next frame. Arc motion now accumulates signed steps, clamps each step at the endpoints, and reverses immediately; an edge-on view uses a stable tangent. The inline bar remains rendered while its popup blocks viewport gestures. Focused checks also select Distance, dismiss with Escape/outside-click, preserve camera/history, and cover Undo and release followed by hover. The GPU workflow opens and selects the real spacing menu.
+
+![Spacing choices remain open over the viewport](01b-spacing-options.png)
+
 ![Attached array and inline controls](01-attached-linear.png)
 
 ![Source editing highlights the original while copies stay linked](04-edit-source.png)

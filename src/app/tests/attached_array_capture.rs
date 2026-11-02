@@ -69,6 +69,39 @@ fn attached_array_controls_offscreen_review() {
     assert_eq!(g.app.document.model_count(), 1);
     assert_eq!(g.app.document.instance_placements().unwrap().len(), 2);
     g.save("01-attached-linear");
+    let spacing_widget = |g: &Guide, name: &str| {
+        g.ctx
+            .data(|d| {
+                d.get_temp::<Vec<(&'static str, egui::Rect)>>(egui::Id::new("array_inline_widgets"))
+            })
+            .unwrap()
+            .into_iter()
+            .find(|(key, _)| *key == name)
+            .unwrap()
+            .1
+            .center()
+    };
+    let point = spacing_widget(&g, "Spacing mode");
+    g.frame(vec![
+        egui::Event::PointerMoved(point),
+        primary_event(point, true),
+    ]);
+    g.frame(vec![primary_event(point, false)]);
+    g.save("01b-spacing-options");
+    assert!(
+        g.ctx
+            .data(|d| d.get_temp::<bool>(egui::Id::new("array_spacing_popup_visible")))
+            .unwrap()
+    );
+    let point = spacing_widget(&g, "Distance option");
+    g.frame(vec![
+        egui::Event::PointerMoved(point),
+        primary_event(point, true),
+    ]);
+    g.frame(vec![primary_event(point, false)]);
+    g.app.finish_parameter_input(&g.ctx);
+    assert_eq!(array(&g).spacing_mode, ArraySpacing::Distance);
+    visible_click(&mut g, "Frame");
     let (_, before) = g.frame(vec![]);
     let spacing = array(&g).spacing.0;
     let history = g.app.document.history_counts().0;

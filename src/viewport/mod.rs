@@ -109,6 +109,8 @@ pub(crate) struct ViewportOptions {
     pub show_guides: bool,
     pub guide_opacity: f32,
     pub enabled: bool,
+    // Inline widgets keep rendering while their popup blocks mesh gestures.
+    pub inline_controls_enabled: bool,
     pub reverse: Hold,
     pub zoom_hold: Hold,
     pub pan_hold: Hold,

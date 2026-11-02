@@ -563,15 +563,13 @@ impl Library {
         for set in &self.sets {
             if let Layout::Array(a) = &set.layout
                 && let Some(owner) = a.owner
-            {
-                if owner == 0
+                && (owner == 0
                     || !owners.insert(owner)
                     || a.piece.source != Source::Model(owner)
                     || a.source_array.is_some()
-                    || !models.iter().any(|(id, _)| *id == owner)
-                {
-                    return Err("Invalid or duplicate submodel array ownership".into());
-                }
+                    || !models.iter().any(|(id, _)| *id == owner))
+            {
+                return Err("Invalid or duplicate submodel array ownership".into());
             }
             if !ids.insert(set.id) {
                 return Err("Duplicate instance set identity".into());

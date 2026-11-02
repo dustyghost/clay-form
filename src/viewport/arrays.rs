@@ -24,7 +24,10 @@ struct Drag {
     center: Pos2,
     u: Vec2,
     v: Vec2,
-    start_angle: f32,
+    last_angle: f32,
+    arc_angle: f32,
+    last_pointer: Pos2,
+    arc_tangent: Option<Vec2>,
 }
 #[derive(Default)]
 pub(super) struct Editor {
@@ -54,8 +57,8 @@ impl Editor {
             document.cancel_instance_preview();
         }
     }
-    fn update(&self, p: Pos2, scene: &Scene, document: &mut Document) -> Result<(), String> {
-        let Some(d) = &self.drag else {
+    fn update(&mut self, p: Pos2, scene: &Scene, document: &mut Document) -> Result<(), String> {
+        let Some(d) = &mut self.drag else {
             return Ok(());
         };
         let mut set = d.before.clone();
@@ -73,11 +76,24 @@ impl Editor {
             }
             Parameter::Radius => layer.radius = (layer.radius + distance).clamp(0.001, 1e5),
             Parameter::Arc => {
-                let now = angle(p, d.center, d.u, d.v);
-                let delta = (now - d.start_angle + std::f32::consts::PI)
-                    .rem_euclid(std::f32::consts::TAU)
-                    - std::f32::consts::PI;
-                layer.angle = (layer.angle + delta.to_degrees()).clamp(0.01, 360.);
+                let step = if let Some(tangent) = d.arc_tangent {
+                    (p - d.last_pointer).dot(tangent)
+                } else if p.distance_sq(d.center) >= 16. {
+                    let now = angle(p, d.center, d.u, d.v);
+                    let step = (now - d.last_angle + std::f32::consts::PI)
+                        .rem_euclid(std::f32::consts::TAU)
+                        - std::f32::consts::PI;
+                    d.last_angle = now;
+                    step
+                } else {
+                    0.
+                };
+                // Accumulate each motion, rather than choosing the shortest
+                // angle from mouse-down. Clamp each step so reversal at either
+                // endpoint responds immediately without unwinding overshoot.
+                d.arc_angle = (d.arc_angle + step.to_degrees()).clamp(0.01, 360.);
+                d.last_pointer = p;
+                layer.angle = d.arc_angle;
             }
             Parameter::Origin => {
                 let world = scene.at_depth(p, output.point(layer.center))
@@ -100,6 +116,9 @@ impl Editor {
         layer_index: Option<usize>,
         command: &mut Option<C>,
     ) -> bool {
+        #[cfg(test)]
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(egui::Id::new("array_spacing_popup_visible"), false));
         let Some(index) = layer_index else {
             self.cancel(document);
             return false;
@@ -115,7 +134,7 @@ impl Editor {
             self.cancel(document);
             return false;
         }
-        if (!options.enabled && self.drag.is_none()) || !ui.input(|i| i.focused) {
+        if !options.inline_controls_enabled || !ui.input(|i| i.focused) {
             self.cancel(document);
             return false;
         }
@@ -198,31 +217,39 @@ impl Editor {
                                         .suffix("°"),
                                 );
                             } else {
-                                egui::ComboBox::from_id_salt("array_spacing_mode")
+                                let combo = egui::ComboBox::from_id_salt("array_spacing_mode")
                                     .selected_text(match layer.spacing_mode {
                                         ArraySpacing::Relative => "Relative",
                                         ArraySpacing::Distance => "Distance",
                                         ArraySpacing::Span => "Fit span",
                                     })
                                     .show_ui(ui, |ui| {
-                                        ui.selectable_value(
-                                            &mut layer.spacing_mode,
-                                            ArraySpacing::Relative,
-                                            "Relative",
-                                        );
-                                        ui.selectable_value(
-                                            &mut layer.spacing_mode,
-                                            ArraySpacing::Distance,
-                                            "Distance",
-                                        );
-                                        if layer.kind == ArrayKind::Linear {
-                                            ui.selectable_value(
+                                        for (mode, label, key) in [
+                                            (ArraySpacing::Relative, "Relative", "Relative option"),
+                                            (ArraySpacing::Distance, "Distance", "Distance option"),
+                                            (ArraySpacing::Span, "Fit span", "Fit span option"),
+                                        ] {
+                                            if mode == ArraySpacing::Span
+                                                && layer.kind != ArrayKind::Linear
+                                            {
+                                                continue;
+                                            }
+                                            let response = ui.selectable_value(
                                                 &mut layer.spacing_mode,
-                                                ArraySpacing::Span,
-                                                "Fit span",
+                                                mode,
+                                                label,
                                             );
+                                            widgets.push((key, response.rect));
                                         }
                                     });
+                                widgets.push(("Spacing mode", combo.response.rect));
+                                #[cfg(test)]
+                                ui.ctx().data_mut(|d| {
+                                    d.insert_temp(
+                                        egui::Id::new("array_spacing_popup_visible"),
+                                        combo.inner.is_some(),
+                                    )
+                                });
                                 let r = ui.add(
                                     egui::DragValue::new(&mut layer.spacing.0)
                                         .speed(0.01)
@@ -419,7 +446,25 @@ impl Editor {
                             center: at,
                             u,
                             v,
-                            start_angle: angle(pos, at, u, v),
+                            last_angle: angle(pos, at, u, v),
+                            arc_angle: layer.angle,
+                            last_pointer: pos,
+                            arc_tangent: {
+                                let major = u.length().max(v.length());
+                                let determinant = (u.x * v.y - u.y * v.x).abs();
+                                (determinant < major * major * 0.15).then(|| {
+                                    let t = layer.angle.to_radians();
+                                    let tangent = -u * t.sin() + v * t.cos();
+                                    let direction = if tangent.length_sq() > 0.01 {
+                                        tangent
+                                    } else if u.length_sq() > v.length_sq() {
+                                        u
+                                    } else {
+                                        v
+                                    };
+                                    direction.normalized() / (major * layer.radius * 0.88).max(32.)
+                                })
+                            },
                         });
                         consumed = true;
                     }

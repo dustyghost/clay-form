@@ -573,6 +573,9 @@ impl App {
                         || (!over_toolbar
                             && !over_editor
                             && !self.ui.pointer_over_pinned_menu(ui.ctx()))),
+                inline_controls_enabled: enabled
+                    && !self.ui.viewport_controls.arranging
+                    && !self.ui.viewport_controls.editor_open,
                 reverse: if self.ui.mask_active {
                     preferences::Hold::Disabled
                 } else {
