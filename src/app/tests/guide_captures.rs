@@ -1787,9 +1787,10 @@ fn edge_workflow_offscreen_review() {
     };
     let directory = std::path::Path::new(&directory);
     std::fs::create_dir_all(directory).unwrap();
-    let mut g = Guide::new(directory, [1200, 1250]);
+    let mut g = Guide::new(directory, [1400, 1600]);
     g.interactive = true;
     g.panel(Tool::Mesh, Dock::Right);
+    g.app.ui.preferences.right_width = 400.;
     g.app
         .document
         .replace_geometry(Geometry::new(

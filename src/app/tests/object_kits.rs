@@ -348,7 +348,9 @@ fn object_stamp_controls_offscreen_review() {
     let before = g.app.document.geometry_snapshot();
     let left = rect.center() + egui::vec2(-110., 0.);
     let orange_pixels = |rgba: &[u8]| {
-        rgba.chunks_exact(4)
+        rgba.as_chunks::<4>()
+            .0
+            .iter()
             .filter(|p| {
                 (p[0] as i16 - 255).abs() < 8
                     && (p[1] as i16 - 140).abs() < 8
