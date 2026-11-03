@@ -1,6 +1,6 @@
 {
-  "Cargo.lock": "4ef0b6e5901c81e7bcdb2677e2472347931ab624c86e7d9fa783ead45c7cd96e",
-  "Cargo.toml": "4939399f4d4297665205d03d62abe8be1b7c247a02d18f88f206dbcb3b459232",
+  "Cargo.lock": "ecd5ea32ea32509558058e2e8a0096a453315e34eb732eca9f4ff0cf90efb389",
+  "Cargo.toml": "e77cd5974d75ea616d8a4d981037c4f04ade22cad46132a6d881231ef6ca5a24",
   "about.toml": "ac5b74aa7f3f3d9182bf9be22c778626008219c018f709458cee9ba846d2ce70",
   "scripts/generate-notices.py": "6c82d4606becb36764cc44ed499e933d1224860281104855d5320afe316ff240",
   "legal/upstream/index.json": "3cfdf556cec2e477881dd09a26efa829da4e44e4033d2cfd97ca6849fe6b05cf",

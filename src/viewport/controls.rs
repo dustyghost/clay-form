@@ -3,6 +3,7 @@ use eframe::egui::{self, Color32, Pos2, Vec2};
 pub(super) const SHAPE: Color32 = Color32::from_rgb(91, 218, 196);
 pub(super) const TOPOLOGY: Color32 = Color32::from_rgb(194, 161, 255);
 pub(super) const ACTION: Color32 = Color32::from_rgb(247, 193, 95);
+pub(super) const REVERSED: Color32 = Color32::from_rgb(255, 140, 100);
 pub(super) const NEUTRAL: Color32 = Color32::from_rgb(223, 230, 239);
 pub(super) const AXES: [Color32; 3] = [
     Color32::from_rgb(245, 113, 127),

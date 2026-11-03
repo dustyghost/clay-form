@@ -382,6 +382,13 @@ impl PrimitiveControls {
                 controls::label(painter, caption_point, &caption, color);
             }
         }
+        painter.text(
+            super::navigation::inner(scene.rect).left_bottom() + Vec2::new(8., -8.),
+            egui::Align2::LEFT_BOTTOM,
+            "Primitive · teal: shape · axis-colored diamonds: spans (drag left / right) · convert to sculpt",
+            egui::FontId::proportional(13.),
+            controls::NEUTRAL,
+        );
     }
 }
 

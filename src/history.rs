@@ -171,6 +171,7 @@ fn geometry_bytes(geometry: &Geometry) -> usize {
         .count()
         * std::mem::size_of::<[crate::sculpt::material::layers::Layer; 3]>();
     std::iter::once(&geometry.mesh)
+        .chain(geometry.scene.instances.assets.iter().map(|a| a.mesh.as_ref()))
         .chain(geometry.settings.lower.iter())
         .chain(geometry.settings.upper.iter())
         .chain(geometry.submodels.iter().flat_map(|model| {
@@ -199,6 +200,9 @@ fn geometry_bytes(geometry: &Geometry) -> usize {
         .sum::<usize>()
         + geometry.scene.texture_library.iter().map(|t| std::mem::size_of::<crate::sculpt::texture::Texture>() + t.name.len() + t.profile.len() + t.exchange.as_ref().map_or(0, |e| e.path.len())).sum::<usize>()
         + path_bytes
+        + geometry.scene.instances.sets.iter().map(|s| std::mem::size_of_val(s) + s.name.len()
+            + s.adjustments.len()*std::mem::size_of::<crate::sculpt::instances::Adjustment>()
+            + match &s.layout {crate::sculpt::instances::Layout::Manual(p)=>p.len()*std::mem::size_of::<crate::sculpt::instances::Placement>(),_=>0}).sum::<usize>()
         + asset_layer_bytes
         + geometry.scene.materials.iter().map(|a|a.name.len()+std::mem::size_of::<crate::sculpt::material::layers::Asset>()).sum::<usize>()
 }

@@ -206,6 +206,7 @@ impl UiState {
         );
         actions.extend(Kind::ALL.iter().map(|k| Action::NewBrush(format!("{k:?}"))));
         actions.push(Action::NewBrush("Alpha Drag".into()));
+        actions.push(Action::NewBrush("Object".into()));
         actions.extend(Tool::ALL.into_iter().map(Action::ShowPanel));
         actions.extend(
             self.preferences

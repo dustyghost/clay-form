@@ -3,6 +3,7 @@ use crate::{action::Action, command::Command, document::Document, sculpt::Kind, 
 
 #[derive(Clone, Copy, PartialEq)]
 enum Intent {
+    Instances,
     Edit,
     Navigate,
     History,
@@ -13,6 +14,7 @@ enum Intent {
     FilePicker,
     Pending,
     Primitive,
+    DeleteConfirmation,
     Alpha,
     Icon,
     CancelJob,
@@ -29,6 +31,14 @@ impl<'a> EditorPolicy<'a> {
     }
     fn available(&self, intent: Intent) -> Result<(), &'static str> {
         let ui = self.ui;
+        if self.document.instance_preview_active()
+            && !matches!(
+                intent,
+                Intent::Instances | Intent::Navigate | Intent::History | Intent::Request
+            )
+        {
+            return Err("Apply or cancel the instance preview first");
+        }
         if ui.file_picker.is_some() && intent != Intent::FilePicker {
             return Err("Finish choosing a file first");
         }
@@ -37,6 +47,9 @@ impl<'a> EditorPolicy<'a> {
         }
         if ui.pending.is_some() && intent != Intent::Pending {
             return Err("Resolve unsaved changes first");
+        }
+        if ui.delete_warning.is_some() && intent != Intent::DeleteConfirmation {
+            return Err("Confirm or cancel submodel deletion first");
         }
         if ui.primitive_warning.is_some() && intent != Intent::Primitive {
             return Err("Confirm or cancel primitive replacement first");
@@ -105,6 +118,9 @@ impl<'a> EditorPolicy<'a> {
     }
     pub fn action(&self, action: &Action) -> Result<(), &'static str> {
         let intent = match action {
+            Action::CreateInstanceArray
+            | Action::CreatePathAssembly
+            | Action::CaptureObjectBrush => Intent::Instances,
             Action::CancelMeshOperation => Intent::CancelJob,
             Action::ResetView | Action::ZoomIn | Action::ZoomOut | Action::Perspective => {
                 Intent::Navigate
@@ -137,6 +153,12 @@ impl<'a> EditorPolicy<'a> {
         let document = self.document;
         let sculpt = document.primitive().is_none() && document.active_visible();
         match action {
+            Action::CreateInstanceArray | Action::CaptureObjectBrush => {
+                !document.mesh().triangles.is_empty()
+            }
+            Action::CreatePathAssembly => {
+                !document.mesh().triangles.is_empty() && !document.paths().is_empty()
+            }
             Action::UniversalTransform => {
                 self.ui.transform_mode != crate::viewport::TransformMode::Sculpt
                     || (document.active_visible() && !document.mesh().vertices.is_empty())
@@ -162,7 +184,8 @@ impl<'a> EditorPolicy<'a> {
             Action::Redo => document.can_redo(),
             Action::SelectBrush(id) => document.brushes().iter().any(|b| b.identity() == *id),
             Action::NewBrush(name) => {
-                name == "Alpha Drag" || Kind::ALL.iter().any(|k| format!("{k:?}") == *name)
+                matches!(name.as_str(), "Alpha Drag" | "Object")
+                    || Kind::ALL.iter().any(|k| format!("{k:?}") == *name)
             }
             Action::OpenMenu(id) => self.ui.preferences.menus.iter().any(|m| m.id == *id),
 
@@ -435,6 +458,7 @@ impl<'a> EditorPolicy<'a> {
         let intent = match command {
             Command::Action(action) => return self.action(action),
             Command::Path(_) => Intent::Path,
+            Command::Instances(_) => Intent::Instances,
             Command::ResetView
             | Command::ZoomIn
             | Command::ZoomOut
@@ -454,6 +478,7 @@ impl<'a> EditorPolicy<'a> {
             | Command::DiscardAndContinue
             | Command::CancelPending
             | Command::BrowseProject(_) => Intent::Pending,
+            Command::ConfirmDeleteSubmodel(_) => Intent::DeleteConfirmation,
             Command::ConfirmPrimitive | Command::CancelPrimitive => Intent::Primitive,
             Command::SaveAlpha(..) | Command::ExportAlpha(..) => Intent::Alpha,
             Command::ExportIconImage(..) => Intent::Icon,

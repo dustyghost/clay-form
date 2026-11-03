@@ -20,7 +20,7 @@ impl App {
         let mut bounds = egui::Rect::NOTHING;
         for index in 0..self.document.model_count() {
             let model = self.document.model(index).unwrap();
-            if !model.metadata.visible {
+            if !model.metadata.visible || !self.document.source_is_displayed(index) {
                 continue;
             }
             let mesh = model.display_mesh(index == self.document.active_model_index());
@@ -41,6 +41,8 @@ impl App {
                 }
             }
         }
+        self.document
+            .visit_instance_points(|p| bounds.extend_with(egui::pos2(p.0, -p.1)));
         if !bounds.is_finite() {
             return;
         }
@@ -72,7 +74,7 @@ impl App {
         let mut radius = 1_f32;
         for index in 0..self.document.model_count() {
             let model = self.document.model(index).unwrap();
-            if model.metadata.visible {
+            if model.metadata.visible && self.document.source_is_displayed(index) {
                 for point in &model
                     .display_mesh(index == self.document.active_model_index())
                     .vertices
@@ -81,11 +83,13 @@ impl App {
                 }
             }
         }
+        self.document
+            .visit_instance_points(|p| radius = radius.max(p.len()));
         self.camera.perspective_radius = radius;
         let (mut old_extent, mut new_extent) = (0_f32, 0_f32);
         for index in 0..self.document.model_count() {
             let model = self.document.model(index).unwrap();
-            if !model.metadata.visible {
+            if !model.metadata.visible || !self.document.source_is_displayed(index) {
                 continue;
             }
             let points = model
@@ -96,6 +100,10 @@ impl App {
             old_extent = old_extent.max(before.projected_extent(points.clone()));
             new_extent = new_extent.max(self.camera.projected_extent(points));
         }
+        self.document.visit_instance_points(|p| {
+            old_extent = old_extent.max(before.projected_extent(std::iter::once(p)));
+            new_extent = new_extent.max(self.camera.projected_extent(std::iter::once(p)));
+        });
         if old_extent > 1e-6 && new_extent > 1e-6 {
             self.camera.set_zoom(before.zoom * old_extent / new_extent);
         }
@@ -138,6 +146,40 @@ impl App {
                 self.ui.status = error;
             }
             self.sync_path_history_state();
+            return;
+        }
+        if let Command::Instances(command) = command {
+            use crate::command::InstanceCommand as C;
+            let open_settings = matches!(
+                command,
+                C::CreateBrush(_)
+                    | C::LoadPersonalBrush(_)
+                    | C::ImportBrush(_)
+                    | C::ChooseShipGreebles
+            );
+            let preview_command = matches!(
+                &command,
+                C::NewArray
+                    | C::NewLegacyArray
+                    | C::NewLinkedCopy
+                    | C::RepeatArray(_)
+                    | C::NewPath
+                    | C::NewPathParts
+                    | C::Edit(_)
+                    | C::EditCopy(..)
+                    | C::Preview(_)
+            );
+            let show_array = matches!(&command, C::NewArray | C::ArrayMode(_));
+            if let Err(error) = self.dispatch_instances(command) {
+                if preview_command {
+                    self.ui.instances.invalid = true;
+                }
+                self.ui.status = error;
+            } else if open_settings {
+                self.execute_action(Action::ShowPanel(crate::preferences::Tool::Brush), ctx);
+            } else if show_array {
+                self.execute_action(Action::ShowPanel(crate::preferences::Tool::Submodels), ctx);
+            }
             return;
         }
         if matches!(command, Command::Undo | Command::Redo)
@@ -265,7 +307,7 @@ impl App {
                 self.ui.modeling.tool = crate::viewport::ModelTool::Select;
                 Ok(())
             }
-            Command::Path(_) => unreachable!(),
+            Command::Path(_) | Command::Instances(_) => unreachable!(),
             command @ (Command::ModelingMode(..)
             | Command::ModelingComponent(..)
             | Command::ClearModelSelection
@@ -415,6 +457,7 @@ impl App {
                 let label = self.document.undo_label();
                 self.document.undo();
                 self.refresh_path_after_history();
+                self.refresh_object_after_history();
                 self.ui.status =
                     label.map_or("Nothing to undo".into(), |label| format!("Undid: {label}"));
                 Ok(())
@@ -428,6 +471,7 @@ impl App {
                 let label = self.document.redo_label();
                 self.document.redo();
                 self.refresh_path_after_history();
+                self.refresh_object_after_history();
                 self.ui.status =
                     label.map_or("Nothing to redo".into(), |label| format!("Redid: {label}"));
                 Ok(())
@@ -505,10 +549,6 @@ impl App {
                 }
             }
             Command::UpdatePrimitive(primitive) => self.document.update_primitive(primitive),
-            Command::EndPrimitiveEdit => {
-                self.document.end_primitive_edit();
-                Ok(())
-            }
             Command::ConvertPrimitive => {
                 self.viewport.cancel(&mut self.document);
                 self.document.convert_primitive().map(|()| {
@@ -554,6 +594,7 @@ impl App {
             | Command::GroupVisible(..)
             | Command::SelectSubmodel(..)
             | Command::DeleteSubmodel
+            | Command::ConfirmDeleteSubmodel(_)
             | Command::MergeDown
             | Command::DuplicateModel
             | Command::ExtractMasked) => self.dispatch_scene(command),

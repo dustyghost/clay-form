@@ -48,6 +48,7 @@ The first build downloads dependencies and takes longer than later builds. When 
 | --- | --- |
 | [Sculpting and brushes](docs/guide/sculpting.md) | Brushes, alphas, symmetry, stroke modes, adaptive sculpting, undo/redo |
 | [Editable 3D paths](docs/guide/paths.md) | Surface and free paths, one-drag rings, live brush guidance, automatic strokes, seam control |
+| [Reusable models and object brushes](docs/guide/instances.md) | Linked arrays, path assemblies, captured objects, placement, baking and fusion |
 | [Models and mesh tools](docs/guide/modeling.md) | Modelling, face extrusion, tunnels, component selection, submodels, primitives, transforms, remeshing and detail projection |
 | [UVs, textures and GIMP](docs/guide/textures.md) | Seam-aware UVs, island editing, image painting and external texture editing |
 | [Paint colours and materials](docs/guide/materials.md) | Vertex painting, material swatches, colour palette/sampler, fill and saving |

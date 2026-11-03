@@ -203,6 +203,8 @@ impl CustomItem {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct CustomMenu {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub object_models_picker: bool,
     pub id: u64,
     pub name: String,
     pub placement: Placement,
@@ -799,8 +801,10 @@ impl Preferences {
                     .iter()
                     .find(|(_, b)| b.as_ref() == Some(&shortcut))
                 {
-                    if matches!(action, Action::OpenMenu(_) | Action::SwapPaintColours)
-                        && matches!(event, egui::Event::Key { repeat: true, .. })
+                    if matches!(
+                        action,
+                        Action::OpenMenu(_) | Action::ObjectBrushModels | Action::SwapPaintColours
+                    ) && matches!(event, egui::Event::Key { repeat: true, .. })
                     {
                         return false;
                     }
@@ -827,6 +831,7 @@ impl Preferences {
             .max(self.next_menu_id);
         self.next_menu_id = id.saturating_add(1);
         self.menus.push(CustomMenu {
+            object_models_picker: false,
             id,
             name: format!("Custom {id}"),
             placement: Placement::Menu,
@@ -838,6 +843,20 @@ impl Preferences {
         });
         id
     }
+    pub(crate) fn object_models_menu(&mut self) -> u64 {
+        if let Some(menu) = self.menus.iter().find(|m| m.object_models_picker) {
+            return menu.id;
+        }
+        let id = self.add_menu();
+        let menu = self.menus.last_mut().unwrap();
+        menu.name = "Choose a model".into();
+        menu.columns = 1;
+        menu.object_models_picker = true;
+        menu.items
+            .push(CustomItem::action(Action::ObjectBrushModels));
+        id
+    }
+
     fn add_brush_controls(&mut self) {
         let id = self.add_menu();
         let menu = self.menus.last_mut().unwrap();

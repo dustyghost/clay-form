@@ -6,6 +6,8 @@ pub(super) fn is_control(action: &Action) -> bool {
     matches!(
         action,
         Action::AppearanceControls
+            | Action::ObjectBrushModels
+            | Action::ArrayControls
             | Action::BrushIcon
             | Action::BrushSize
             | Action::BrushInnerRadius
@@ -33,13 +35,21 @@ impl UiState {
         label: &str,
         document: &Document,
     ) -> f32 {
-        if *action == Action::AppearanceControls {
+        if matches!(
+            action,
+            Action::AppearanceControls | Action::ObjectBrushModels | Action::ArrayControls
+        ) {
             return ui.available_width().min(540.);
         }
         let (default, extra) = match action {
             Action::BrushIcon => (
-                self.brush_index_for_context(document, ui.ctx())
-                    .map(|i| document.brushes()[i].name.as_str())
+                self.instances
+                    .selected_cover(document.instances())
+                    .map(|(name, _)| name)
+                    .or_else(|| {
+                        self.brush_index_for_context(document, ui.ctx())
+                            .map(|i| document.brushes()[i].name.as_str())
+                    })
                     .unwrap_or("No active brush"),
                 42.,
             ),
@@ -76,6 +86,42 @@ impl UiState {
                     ui.horizontal_wrapped(|ui| self.appearance_strip(ui, document, commands));
                 })
                 .response;
+        }
+        if *action == Action::ObjectBrushModels {
+            return instances::part_picker(ui, &mut self.instances, document, commands);
+        }
+        if *action == Action::ArrayControls {
+            return self.array_parameter_controls(ui, document, commands);
+        }
+        if self.instances.placing && self.instances.asset.is_none() {
+            return ui.weak("Empty object brush");
+        }
+        if let Some((name, part)) = self.instances.selected_cover(document.instances()) {
+            match action {
+                Action::BrushIcon => {
+                    return ui
+                        .horizontal(|ui| {
+                            if let Some(texture) = self.instances.object_icon(ui.ctx(), part) {
+                                ui.image((texture, egui::vec2(32., 32.)));
+                            }
+                            ui.label(name);
+                        })
+                        .response;
+                }
+                Action::BrushSize => return self.instances.size_control(ui),
+                _ => {
+                    return ui
+                        .add_enabled(
+                            false,
+                            egui::Label::new(if label.is_empty() {
+                                action.label()
+                            } else {
+                                label
+                            }),
+                        )
+                        .on_disabled_hover_text("Available with sculpt brushes");
+                }
+            }
         }
         let Some(index) = self.brush_index_for_context(document, ui.ctx()) else {
             return ui.weak("No active brush");

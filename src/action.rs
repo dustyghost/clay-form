@@ -136,6 +136,9 @@ pub(crate) enum Action {
     Primitive,
     ConvertPrimitive,
     DuplicateModel,
+    CreateInstanceArray,
+    CreatePathAssembly,
+    CaptureObjectBrush,
     DeleteSubmodel,
     MergeDown,
     ExtractMasked,
@@ -186,6 +189,8 @@ pub(crate) enum Action {
     BrushAdd,
     BrushSubtract,
     BrushIcon,
+    ObjectBrushModels,
+    ArrayControls,
     BrushSize,
     BrushInnerRadius,
     BrushStrength,
@@ -218,6 +223,7 @@ impl Action {
         let ctrl = Modifiers::CTRL;
         let none = Modifiers::NONE;
         let (key, modifiers) = match self {
+            Self::ObjectBrushModels => (Key::B, none),
             Self::Save => (Key::S, ctrl),
             Self::SaveAs => (Key::S, ctrl | Modifiers::SHIFT),
             Self::Open => (Key::O, ctrl),
@@ -294,6 +300,9 @@ impl Action {
         Self::Primitive,
         Self::ConvertPrimitive,
         Self::DuplicateModel,
+        Self::CreateInstanceArray,
+        Self::CreatePathAssembly,
+        Self::CaptureObjectBrush,
         Self::MergeDown,
         Self::ExtractMasked,
         Self::ApplyThickness,
@@ -355,6 +364,8 @@ impl Action {
         Self::StrokeDragDot,
         Self::StrokeStabilisation,
         Self::BrushIcon,
+        Self::ObjectBrushModels,
+        Self::ArrayControls,
         Self::BrushSize,
         Self::BrushInnerRadius,
         Self::BrushStrength,
@@ -498,7 +509,7 @@ impl Action {
                 "Start a brush stroke near a saved surface path to guide the section you draw. Turn off to sculpt freely near paths."
             }
             Self::DeleteSubmodel => {
-                "Remove the selected submodel, including hidden geometry, masks, levels and modifiers. Undo restores it. Deleting the last model leaves an empty model slot."
+                "Confirm removal of the selected submodel, including hidden geometry, masks, levels and modifiers. Undo restores it. Deleting the last model leaves an empty model slot."
             }
             Self::RelaxMesh => {
                 "Redistribute existing vertices along a fixed surface reference. Masks protect local regions; preview, inspect and apply one undoable edit."
@@ -694,6 +705,9 @@ impl Action {
             Self::Primitive => "Create / edit primitive",
             Self::ConvertPrimitive => "Convert to sculpting mesh",
             Self::DuplicateModel => "Duplicate submodel",
+            Self::CreateInstanceArray => "Create submodel array…",
+            Self::CreatePathAssembly => "Create path object…",
+            Self::CaptureObjectBrush => "Capture object brush",
             Self::DeleteSubmodel => "Delete submodel",
             Self::MergeDown => "Merge down",
             Self::ExtractMasked => "Extract masked",
@@ -751,6 +765,8 @@ impl Action {
             Self::StrokeDragDot => "Stroke: Drag Dot",
             Self::StrokeStabilisation => "Toggle stroke stabilisation",
             Self::BrushIcon => "Active brush icon",
+            Self::ObjectBrushModels => "Object brush models",
+            Self::ArrayControls => "Active array controls",
             Self::BrushSize => "Brush size",
             Self::BrushInnerRadius => "Brush inner radius",
             Self::BrushStrength => "Brush strength",

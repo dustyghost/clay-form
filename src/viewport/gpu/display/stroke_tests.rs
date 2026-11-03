@@ -60,6 +60,42 @@ fn assert_visible_data(actual: &DisplayMesh, canonical: &DisplayMesh) {
 }
 
 #[test]
+fn reusable_hidden_instances_preserve_stroke_cache_and_visible_copies_invalidate_it() {
+    use crate::sculpt::instances::{Array, Layout, Set};
+    let mut doc = document(source());
+    let piece = doc.instance_piece(0).unwrap();
+    let mut array = Array::new(piece);
+    array.count = 1;
+    let mut set = Set {
+        id: 1,
+        name: "Hidden copy".into(),
+        visible: false,
+        layout: Layout::Array(array),
+        adjustments: Vec::new(),
+    };
+    doc.preview_instance_set(set.clone()).unwrap();
+    doc.apply_instance_preview().unwrap();
+    let display = DisplayMesh::new(&doc);
+    assert!(doc.apply_dab(&Brush::new(Kind::Standard), dab()));
+    let live = Arc::new(
+        display
+            .during_stroke(&doc)
+            .expect("hidden copies keep fast normals"),
+    );
+    doc.end_stroke();
+    assert!(live.after_stroke(&doc).is_some());
+    set.visible = true;
+    doc.preview_instance_set(set).unwrap();
+    doc.apply_instance_preview().unwrap();
+    assert!(
+        live.after_stroke(&doc).is_none(),
+        "release must include newly visible copies"
+    );
+    doc.begin_stroke();
+    assert!(live.during_stroke(&doc).is_none());
+}
+
+#[test]
 fn hidden_stroke_cache_preserves_filtered_faces_and_boundary_normals() {
     let initial = source();
     let mut doc = document(initial.clone());

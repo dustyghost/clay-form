@@ -5,12 +5,14 @@ pub(crate) mod capacity;
 mod paint_effect;
 pub use paint_effect::{PaintEffect, PaintMode};
 mod clay;
+pub(crate) mod corners;
 mod deformation;
 mod detail;
 mod geometry;
 pub mod material;
 mod math;
 mod mesh;
+pub(crate) mod object_stamp;
 pub use material::{Material, PaintChannels};
 mod overlap;
 mod polish;
@@ -85,6 +87,7 @@ pub mod alpha;
 pub mod texture;
 pub mod uv;
 
+pub mod instances;
 pub mod path_geometry;
 pub mod paths;
 

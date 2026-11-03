@@ -4,6 +4,7 @@ use super::{Mesh, Vec3};
 use serde::{Deserialize, Serialize};
 pub mod closed;
 pub mod ring;
+mod transform;
 
 pub const MAX_PATHS: usize = 128;
 pub const MAX_POINTS: usize = 2048;

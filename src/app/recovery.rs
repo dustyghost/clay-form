@@ -30,7 +30,7 @@ impl App {
             && self.mesh_job.is_none()
             && self.viewport.session.gesture.is_none()
             && self.ui.pending.is_none()
-            && self.ui.primitive_warning.is_none()
+            && !self.ui.submodel_confirmation_open()
             && !self.closing
             && !ctx.input(|i| i.pointer.any_down())
     }
@@ -96,6 +96,8 @@ impl App {
     pub(super) fn restore_recovery(&mut self, entry: Entry) -> Result<(), String> {
         let (project, source) = recovery::load(&entry)?;
         self.document.recover_project(project)?;
+        self.viewport.object_brush = None;
+        self.ui.instances = Default::default();
         if let Some(recovery) = &mut self.recovery {
             recovery.recovered(&entry);
         }

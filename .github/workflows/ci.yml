@@ -109,3 +109,13 @@ jobs:
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-universal" cargo test --locked --lib universal_transform_offscreen_review -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-shared-selection" cargo test --locked --lib shared_selection_offscreen_review -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-mesh-refinement" cargo test --locked --lib mesh_refinement_offscreen_review -- --ignored
+          CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-level-switch" cargo test --locked --lib subdivision_level_switch_offscreen_review -- --ignored
+          CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-reusable-models" cargo test --locked --lib reusable_models_offscreen_review -- --ignored
+          CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-path-join" cargo test --locked --lib reusable_path_bend_join_offscreen_review -- --ignored
+          CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-grouped-path" cargo test --locked --lib grouped_path_object_controls_offscreen_review -- --ignored
+          CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-path-transform" cargo test --locked --lib whole_path_transform_offscreen_review -- --ignored
+          CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-object-kits" cargo test --locked --lib object_kit_library_and_strokes_offscreen_review -- --ignored
+          CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-object-stamps" cargo test --locked --lib object_stamp_controls_offscreen_review -- --ignored
+          CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-ship-greebles" cargo test --locked --lib ship_greebles_default_library_offscreen_review -- --ignored
+          CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-array-layers" cargo test --locked --lib layered_array_controls_offscreen_review -- --ignored
+          CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-attached-arrays" cargo test --locked --lib attached_array_controls_offscreen_review -- --ignored

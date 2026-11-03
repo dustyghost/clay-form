@@ -94,6 +94,8 @@ impl ModelMetadata {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SceneSettings {
+    #[serde(default, skip_serializing_if = "super::instances::Library::is_empty")]
+    pub instances: super::instances::Library,
     /// Images retained independently of model assignments. Live uses take precedence.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub texture_library: Vec<super::texture::Texture>,
@@ -149,10 +151,20 @@ pub struct Project {
     pub mesh_settings: MeshSettings,
 }
 impl Project {
-    pub const VERSION: u32 = 3;
+    pub const VERSION: u32 = 6;
     pub fn validate(&self) -> Result<(), String> {
+        let models: Vec<_> = std::iter::once((self.scene.active_metadata.model_id, &self.mesh))
+            .chain(
+                self.submodels
+                    .iter()
+                    .map(|m| (m.metadata.model_id, &m.mesh)),
+            )
+            .collect();
+        self.scene.instances.validate(&models, &self.paths)?;
         super::texture::validate_library(
-            std::iter::once(&self.mesh).chain(self.submodels.iter().map(|m| &m.mesh)),
+            std::iter::once(&self.mesh)
+                .chain(self.submodels.iter().map(|m| &m.mesh))
+                .chain(self.scene.instances.assets.iter().map(|a| a.mesh.as_ref())),
             &self.scene.texture_library,
         )?;
         super::paths::validate_library(&self.paths)?;

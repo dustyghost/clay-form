@@ -2,6 +2,7 @@
 pub(crate) mod gimp;
 pub mod material_export;
 mod obj;
+pub mod object_brushes;
 pub mod texture;
 pub use obj::load_obj;
 pub(crate) use obj::load_obj_cancellable;
@@ -91,6 +92,45 @@ pub fn load_project(path: &str) -> Result<Project, String> {
 pub fn save_project(path: &str, project: &Project) -> Result<(), String> {
     project.validate()?;
     write_json(path, project)
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ObjectFile {
+    version: u32,
+    asset: crate::sculpt::instances::Asset,
+}
+pub fn save_object_asset(
+    path: &str,
+    asset: &crate::sculpt::instances::Asset,
+) -> Result<(), String> {
+    crate::sculpt::instances::Library {
+        assets: vec![asset.clone()],
+        sets: Vec::new(),
+        brushes: Vec::new(),
+    }
+    .validate(&[], &[])?;
+    write_json(
+        path,
+        &ObjectFile {
+            version: 1,
+            asset: asset.clone(),
+        },
+    )
+}
+pub fn load_object_asset(path: &str) -> Result<crate::sculpt::instances::Asset, String> {
+    if std::fs::metadata(path).map_err(|e| e.to_string())?.len() > 64 * 1024 * 1024 {
+        return Err("Object brush file exceeds 64 MiB".into());
+    }
+    let file: ObjectFile = read_json(path)?;
+    if file.version != 1 {
+        return Err("Unsupported object brush version".into());
+    }
+    crate::sculpt::instances::Library {
+        assets: vec![file.asset.clone()],
+        sets: Vec::new(),
+        brushes: Vec::new(),
+    }
+    .validate(&[], &[])?;
+    Ok(file.asset)
 }
 pub fn load_brush(path: &str) -> Result<Brush, String> {
     let brush: Brush = read_json(path)?;

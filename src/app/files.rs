@@ -271,7 +271,10 @@ impl App {
         Ok(())
     }
     pub(super) fn save_to(&mut self, path: &str) -> bool {
-        match persistence::save_project(path, &self.document.project()) {
+        match self
+            .remember_object_options()
+            .and_then(|()| persistence::save_project(path, &self.document.project()))
+        {
             Ok(()) => {
                 self.document.mark_saved(path);
                 self.ui.path = path.into();
@@ -302,6 +305,8 @@ impl App {
         match action {
             PendingAction::New => {
                 self.document.new_sphere();
+                self.viewport.object_brush = None;
+                self.ui.instances = Default::default();
                 self.ui.path = self.document.current_path().into();
                 self.retire_recovery();
                 self.ui.status = "New sphere".into();
@@ -311,6 +316,8 @@ impl App {
                     .and_then(|project| self.document.replace_project(project, &path));
                 match result {
                     Ok(()) => {
+                        self.viewport.object_brush = None;
+                        self.ui.instances = Default::default();
                         self.ui.path = path.clone();
                         self.retire_recovery();
                         self.ui.selected = 0;
