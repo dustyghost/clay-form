@@ -178,6 +178,64 @@ fn boolean_stack_bore_keeps_a_sharp_rim_at_preview_resolution() {
 }
 
 #[test]
+fn surface_boolean_bore_preview_switch_bake_and_undo() {
+    use crate::sculpt::BooleanMethod::{Surface, Voxel};
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.document.replace_geometry(boolean_fixture()).unwrap();
+    let sources = app.document.geometry_snapshot();
+    assert_eq!(app.document.boolean_method(), Voxel);
+    app.dispatch(Command::ToggleBooleanResult, &ctx);
+    app.boolean_preview(&ctx);
+    app.dispatch(Command::BooleanMethod(Surface), &ctx);
+    assert!(app.bake_boolean_preview().is_err());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while !app.ui.boolean_ready {
+        app.boolean_preview(&ctx);
+        assert!(
+            app.ui.boolean_ready || app.ui.boolean_notice.contains("Updating"),
+            "{}",
+            app.ui.boolean_notice
+        );
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let mesh = app.boolean.result().unwrap().clone();
+    mesh.validate_closed().unwrap();
+    // A clear hole along the cylinder axis, with an inward-facing wall and
+    // all untouched quads on the far end of the body.
+    let axis = Vec3(-0.6, 0., 0.);
+    assert!(!mesh.triangles.iter().any(|t| {
+        let [a, b, c] = t.map(|v| mesh.vertices[v]);
+        let side = |p: Vec3, q: Vec3| (q - p).cross(axis - p).2;
+        [side(a, b), side(b, c), side(c, a)].iter().all(|s| *s > 0.)
+            || [side(a, b), side(b, c), side(c, a)].iter().all(|s| *s < 0.)
+    }));
+    assert!(mesh.triangles.iter().any(|t| {
+        let [a, b, c] = t.map(|v| mesh.vertices[v]);
+        let r = a - axis;
+        (r.0.hypot(r.1) - 0.3).abs() < 0.001
+            && (b - a).cross(c - a).norm().dot(Vec3(r.0, r.1, 0.).norm()) < -0.98
+    }));
+    assert!(
+        mesh.quads
+            .iter()
+            .any(|q| q.iter().all(|&v| mesh.vertices[v].0 > 1.0))
+    );
+    let stack = app.document.geometry_snapshot();
+    let reopened: crate::sculpt::Project =
+        serde_json::from_slice(&serde_json::to_vec(&app.document.project()).unwrap()).unwrap();
+    reopened.validate().unwrap();
+    assert_eq!(reopened.scene.boolean_method, Surface);
+    app.bake_boolean_preview().unwrap();
+    assert_eq!(app.document.mesh(), &mesh);
+    app.document.undo();
+    assert_eq!(app.document.geometry_snapshot(), stack);
+    app.document.undo();
+    assert_eq!(app.document.geometry_snapshot(), sources);
+}
+
+#[test]
 fn boolean_stack_smooth_shading_respects_caps_walls_and_shallow_joins() {
     let mut doc = Document::default();
     doc.replace_geometry(boolean_fixture()).unwrap();

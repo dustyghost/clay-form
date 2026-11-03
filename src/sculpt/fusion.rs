@@ -2,6 +2,7 @@
 use super::uv::{UvMap, edge};
 use super::{Mesh, Vec3, max_triangles, max_vertices};
 use std::collections::{BTreeMap, BTreeSet};
+pub(crate) mod boolean;
 mod intersection;
 mod spatial;
 pub(crate) use intersection::{FusionReport, fuse, join_open_ends};

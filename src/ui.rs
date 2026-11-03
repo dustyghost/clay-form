@@ -1380,15 +1380,42 @@ impl UiState {
         if self.boolean_enabled {
             ui.add_enabled_ui(!self.mesh_busy, |ui| {
                 ui.weak("Stack runs from bottom to top. Choose a role on each row. The eye bypasses an operand.");
-                let mut resolution = document.boolean_resolution();
-                egui::ComboBox::from_label("Voxel resolution").selected_text(resolution.to_string()).show_ui(ui, |ui| {
-                    for r in [16, 24, 32, 48, 64, 96] { ui.selectable_value(&mut resolution, r, r.to_string()); }
-                });
-                if resolution != document.boolean_resolution() { commands.push(Command::BooleanResolution(resolution)); }
-                if ui.add_enabled(self.boolean_ready && document.model_count()<64, egui::Button::new("Bake result")).on_hover_text("Create a plain clay mesh and hide the source operands. Undo restores the stack.").clicked() {
+                use crate::sculpt::BooleanMethod;
+                let mut method = document.boolean_method();
+                egui::ComboBox::from_label("Boolean method")
+                    .selected_text(method.label())
+                    .show_ui(ui, |ui| {
+                        for choice in [BooleanMethod::Voxel, BooleanMethod::Surface] {
+                            ui.selectable_value(&mut method, choice, choice.label());
+                        }
+                    });
+                if method != document.boolean_method() {
+                    commands.push(Command::BooleanMethod(method));
+                }
+                if method == BooleanMethod::Voxel {
+                    let mut resolution = document.boolean_resolution();
+                    egui::ComboBox::from_label("Voxel resolution")
+                        .selected_text(resolution.to_string())
+                        .show_ui(ui, |ui| {
+                            for r in [16, 24, 32, 48, 64, 96] {
+                                ui.selectable_value(&mut resolution, r, r.to_string());
+                            }
+                        });
+                    if resolution != document.boolean_resolution() {
+                        commands.push(Command::BooleanResolution(resolution));
+                    }
+                } else {
+                    ui.weak("Cut the original surfaces at their intersections. Uncut faces keep their detail.");
+                }
+                if ui.add_enabled(self.boolean_ready && document.model_count() < 64, egui::Button::new("Bake result"))
+                    .on_hover_text("Create a sculptable mesh from this preview and hide its operands. Undo restores the stack.")
+                    .clicked()
+                {
                     commands.push(Command::BakeBoolean);
                 }
-                if document.model_count()>=64 {ui.weak("Free a submodel slot to bake (64 maximum).");}
+                if document.model_count() >= 64 {
+                    ui.weak("Free a submodel slot to bake (64 maximum).");
+                }
                 ui.weak(&self.boolean_notice);
                 Self::submodel_rows(ui, document, commands);
             });

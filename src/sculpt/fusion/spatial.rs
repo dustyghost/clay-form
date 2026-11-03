@@ -330,6 +330,9 @@ pub(super) fn validate_connector(
                 hit = true;
             }
         });
+        if hit && first_new == 0 {
+            return Err("The solid contains self-intersecting faces".into());
+        }
         if hit {
             return Err(
                 "The connector intersects a surface; adjust alignment, curvature or the openings"

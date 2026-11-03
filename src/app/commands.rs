@@ -613,6 +613,10 @@ impl App {
                 self.toggle_boolean_preview();
                 Ok(())
             }
+            Command::BooleanMethod(method) => {
+                self.document.set_boolean_method(method);
+                Ok(())
+            }
             Command::BooleanResolution(r) => self.document.set_boolean_resolution(r),
             Command::BakeBoolean => self.bake_boolean_preview(),
             command @ (Command::EditSubmodel(..)

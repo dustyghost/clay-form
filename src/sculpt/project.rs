@@ -30,6 +30,23 @@ fn visible_default() -> bool {
     true
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BooleanMethod {
+    #[default]
+    Voxel,
+    Surface,
+}
+impl BooleanMethod {
+    fn is_voxel(&self) -> bool {
+        *self == Self::Voxel
+    }
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Voxel => "Voxel",
+            Self::Surface => "Preserve surfaces",
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BooleanRole {
     #[default]
     Regular,
@@ -128,6 +145,8 @@ pub struct SceneSettings {
     /// None uses the default voxel count along the longest additive dimension.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub boolean_resolution: Option<u32>,
+    #[serde(default, skip_serializing_if = "BooleanMethod::is_voxel")]
+    pub boolean_method: BooleanMethod,
     pub active_index: usize,
     pub active_metadata: ModelMetadata,
     pub groups: Vec<String>,

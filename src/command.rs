@@ -112,6 +112,7 @@ pub(crate) enum Command {
     ConvertPrimitive,
     ToggleBooleanResult,
     BooleanResolution(u32),
+    BooleanMethod(crate::sculpt::BooleanMethod),
     BakeBoolean,
     SelectSubmodel(usize),
     EditSubmodel(usize, String, crate::sculpt::ModelMetadata),

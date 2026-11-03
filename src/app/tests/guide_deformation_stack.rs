@@ -221,3 +221,89 @@ fn deformation_stack_offscreen_review() {
     g.app.dispatch(Command::Undo, &g.ctx);
     assert_eq!(g.app.document.geometry_snapshot(), before);
 }
+
+#[test]
+#[ignore = "requires Vulkan to click the Boolean method and inspect the preview"]
+fn surface_boolean_method_offscreen_review() {
+    let directory = std::env::var_os("CLAY_GUIDE_PREVIEW")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::env::temp_dir().join("clay-surface-boolean"));
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1280, 900]);
+    g.interactive = true;
+    g.panel(Tool::Submodels, Dock::Right);
+    g.app
+        .document
+        .replace_geometry(crate::app::tests::deformation_stack::boolean_fixture())
+        .unwrap();
+    g.app.camera.zoom = 0.73;
+    g.app.camera.yaw = 0.35;
+    g.app.camera.pitch = 0.22;
+    click_guide_label(&mut g, "Boolean result");
+    click_guide_label(&mut g, "Voxel");
+    click_guide_label(&mut g, "Preserve surfaces");
+    assert_eq!(
+        g.app.document.boolean_method(),
+        crate::sculpt::BooleanMethod::Surface
+    );
+    for (name, role) in [
+        ("01-bore", "Subtract"),
+        ("02-intersection", "Intersect"),
+        ("03-union", "Add"),
+    ] {
+        if role != "Subtract" {
+            let previous = g
+                .app
+                .document
+                .model(0)
+                .unwrap()
+                .metadata
+                .boolean_role
+                .label();
+            click_guide_label(&mut g, previous);
+            // Lower rows also say Add. Select the item painted in the open popup.
+            g.frame(vec![]);
+            let point = g
+                .text_positions
+                .iter()
+                .rev()
+                .find(|(text, _)| text == role)
+                .unwrap()
+                .1;
+            g.frame(vec![
+                egui::Event::PointerMoved(point),
+                primary_event(point, true),
+            ]);
+            g.frame(vec![primary_event(point, false), egui::Event::PointerGone]);
+        }
+        assert_eq!(
+            g.app
+                .document
+                .model(0)
+                .unwrap()
+                .metadata
+                .boolean_role
+                .label(),
+            role
+        );
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            g.frame(vec![]);
+            if g.app.ui.boolean_ready {
+                break;
+            }
+            assert!(
+                g.app.ui.boolean_notice.contains("Updating")
+                    && std::time::Instant::now() < deadline,
+                "{}",
+                g.app.ui.boolean_notice
+            );
+        }
+        g.save(name);
+    }
+    let stack = g.app.document.geometry_snapshot();
+    click_guide_label(&mut g, "Bake result");
+    assert_eq!(g.app.document.model_count(), 4);
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), stack);
+}

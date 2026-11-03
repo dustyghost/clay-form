@@ -1,5 +1,5 @@
 use super::*;
-use crate::sculpt::{BooleanRole, boolean::Operand, max_triangles, max_vertices};
+use crate::sculpt::{BooleanMethod, BooleanRole, boolean::Operand, max_triangles, max_vertices};
 
 impl Document {
     pub(crate) fn boolean_resolution(&self) -> u32 {
@@ -19,6 +19,19 @@ impl Document {
         }
         Ok(())
     }
+    pub(crate) fn boolean_method(&self) -> BooleanMethod {
+        self.geometry.scene.boolean_method
+    }
+    pub(crate) fn set_boolean_method(&mut self, method: BooleanMethod) {
+        if self.boolean_method() != method {
+            self.end_edit();
+            self.end_stroke();
+            self.record_edit("Boolean method");
+            self.geometry.scene.boolean_method = method;
+            self.dirty = true;
+            self.display_changed();
+        }
+    }
     pub(crate) fn boolean_operands(&self) -> Result<Vec<Operand>, String> {
         let group = &self.geometry.scene.active_metadata.group;
         let mut operands = Vec::new();
@@ -36,7 +49,9 @@ impl Document {
                     model.name
                 ));
             }
-            if mesh.has_hidden_faces() || mesh.mask.iter().any(|&w| w > 0.) {
+            if self.boolean_method() == BooleanMethod::Voxel
+                && (mesh.has_hidden_faces() || mesh.mask.iter().any(|&w| w > 0.))
+            {
                 return Err(format!(
                     "Show all faces and clear the mask on {}",
                     model.name
@@ -50,11 +65,15 @@ impl Document {
             operands.push(Operand {
                 role: meta.boolean_role,
                 name: model.name.into(),
-                mesh: Mesh {
-                    vertices: mesh.vertices.clone(),
-                    triangles: mesh.triangles.clone(),
-                    mask: vec![0.; mesh.vertices.len()],
-                    ..Default::default()
+                mesh: if self.boolean_method() == BooleanMethod::Surface {
+                    mesh.clone()
+                } else {
+                    Mesh {
+                        vertices: mesh.vertices.clone(),
+                        triangles: mesh.triangles.clone(),
+                        mask: vec![0.; mesh.vertices.len()],
+                        ..Default::default()
+                    }
                 },
             });
         }

@@ -2,13 +2,14 @@
 use super::*;
 use crate::{
     background_job::BackgroundJob,
-    sculpt::{Mesh, boolean::evaluate},
+    sculpt::{BooleanMethod, Mesh, boolean::evaluate, fusion},
 };
 
 #[derive(Default)]
 pub(super) struct State {
     revision: Option<u64>,
     group: Option<String>,
+    method: BooleanMethod,
     job: Option<BackgroundJob<Mesh>>,
     mesh: Option<Mesh>,
 }
@@ -23,6 +24,9 @@ impl App {
     pub(super) fn toggle_boolean_preview(&mut self) {
         self.viewport.cancel(&mut self.document);
         self.viewport.wait_for_release();
+        if !self.ui.boolean_enabled && self.ui.fusion.open {
+            self.cancel_fusion();
+        }
         self.ui.boolean_enabled = !self.ui.boolean_enabled;
         if !self.ui.boolean_enabled {
             self.clear_boolean_preview();
@@ -48,9 +52,12 @@ impl App {
                 .unwrap()
                 .metadata
                 .group;
-            let switched = self.boolean.group.as_ref() != Some(group);
+            let method = self.document.boolean_method();
+            let switched =
+                self.boolean.group.as_ref() != Some(group) || self.boolean.method != method;
             if switched || self.viewport.boolean_display.is_none() {
                 self.boolean.group = Some(group.clone());
+                self.boolean.method = method;
                 self.viewport
                     .set_boolean_result(&self.document, &Mesh::default());
             }
@@ -85,7 +92,7 @@ impl App {
                         } else if self.ui.boolean_ready {
                             format!("Boolean result · {} triangles", mesh.triangles.len())
                         } else {
-                            "Boolean result · Empty at this resolution".into()
+                            "Boolean result · Empty".into()
                         };
                         self.boolean.mesh = current.then_some(mesh);
                     }
@@ -103,9 +110,11 @@ impl App {
         {
             self.boolean.revision = Some(rev);
             let resolution = self.document.boolean_resolution();
+            let method = self.document.boolean_method();
             match self.document.boolean_operands().and_then(|operands| {
-                BackgroundJob::start("clay-boolean-stack", move |cancel| {
-                    evaluate(&operands, resolution, cancel)
+                BackgroundJob::start("clay-boolean-stack", move |cancel| match method {
+                    BooleanMethod::Voxel => evaluate(&operands, resolution, cancel),
+                    BooleanMethod::Surface => fusion::boolean::evaluate(&operands, cancel),
                 })
             }) {
                 Ok(job) => self.boolean.job = Some(job),
@@ -129,8 +138,14 @@ impl App {
         }
         let mesh = self.boolean.mesh.take().ok_or("Preview the stack first")?;
         self.viewport.cancel(&mut self.document);
-        self.document
-            .bake_boolean(mesh, self.document.display_revision())?;
+        if let Err(reason) = self
+            .document
+            .bake_boolean(mesh, self.document.display_revision())
+        {
+            self.boolean.revision = None;
+            self.ui.boolean_ready = false;
+            return Err(reason);
+        }
         self.ui.boolean_enabled = false;
         self.clear_boolean_preview();
         self.ui.status = "Baked Boolean result. Undo restores the editable stack.".into();

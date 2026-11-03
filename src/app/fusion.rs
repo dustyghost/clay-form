@@ -34,6 +34,9 @@ pub(super) struct FusionState {
 }
 impl App {
     pub(super) fn open_fusion(&mut self) -> Result<(), String> {
+        if self.ui.boolean_enabled {
+            self.toggle_boolean_preview();
+        }
         self.viewport.cancel(&mut self.document);
         let first = self.document.active_model_index();
         let second = self.document.merge_down_target().unwrap_or(first);

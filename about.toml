@@ -15,3 +15,6 @@ ignore-transitive-dependencies = false
 
 [clay-form]
 accepted = ["GPL-3.0-only"]
+
+[boolmesh]
+accepted = ["MPL-2.0"]

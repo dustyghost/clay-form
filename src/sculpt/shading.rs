@@ -65,7 +65,7 @@ impl Mesh {
         });
     }
 
-    fn shading_edges(&self) -> &[[usize; 2]] {
+    pub(super) fn shading_edges(&self) -> &[[usize; 2]] {
         self.shading_seams
             .as_ref()
             .filter(|seams| seams.topology == self.shading_topology_key())
