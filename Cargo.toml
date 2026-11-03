@@ -19,6 +19,7 @@ earcutr = "0.5"
 # eframe disables wgpu defaults; explicitly enable native backends.
 wgpu = { version = "27", default-features = false, features = ["vulkan", "metal", "dx12", "wgsl"] }
 bytemuck = { version = "1", features = ["derive"] }
+boolmesh = { version = "=0.2.2", default-features = false }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # Match eframe's existing locked dependencies; no windowing-stack upgrade.

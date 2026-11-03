@@ -11,6 +11,7 @@ enum Intent {
     PathGuides,
     Path,
     Projection,
+    Fusion,
     FilePicker,
     Pending,
     Primitive,
@@ -70,6 +71,10 @@ impl<'a> EditorPolicy<'a> {
             && !matches!(intent, Intent::Request | Intent::Pending)
         {
             return Err("Close the open dialog before editing");
+        }
+        if ui.fusion.open && !matches!(intent, Intent::Fusion | Intent::Navigate | Intent::Request)
+        {
+            return Err("Apply or cancel the mesh join before editing the scene");
         }
         if ui.projection.open
             && !matches!(
@@ -163,6 +168,7 @@ impl<'a> EditorPolicy<'a> {
                 self.ui.transform_mode != crate::viewport::TransformMode::Sculpt
                     || (document.active_visible() && !document.mesh().vertices.is_empty())
             }
+            Action::DeformationFrame => sculpt && !document.mesh().vertices.is_empty(),
             Action::Move
             | Action::Scale
             | Action::Rotate
@@ -332,6 +338,7 @@ impl<'a> EditorPolicy<'a> {
             Action::ProjectDetails | Action::RelaxMesh => {
                 document.require_projection_target().is_ok()
             }
+            Action::JoinMeshes => document.active_visible() && document.model_count() < 64,
             Action::EditPaths => document.active_visible(),
             Action::StrokeEntirePath => {
                 sculpt
@@ -471,6 +478,11 @@ impl<'a> EditorPolicy<'a> {
             | Command::ClearProjectionPreview
             | Command::ApplyProjection
             | Command::CancelProjection => Intent::Projection,
+            Command::DiscoverFusion
+            | Command::PreviewFusion
+            | Command::ClearFusion
+            | Command::ApplyFusion
+            | Command::CancelFusion => Intent::Fusion,
             Command::NavigateProjectFiles(_)
             | Command::AcceptProjectFile(_)
             | Command::CancelProjectFile => Intent::FilePicker,
@@ -498,6 +510,7 @@ impl<'a> EditorPolicy<'a> {
             Command::ConvertPrimitive => Some(Action::ConvertPrimitive),
             Command::OpenProjection => Some(Action::ProjectDetails),
             Command::OpenRelaxation => Some(Action::RelaxMesh),
+            Command::OpenFusion => Some(Action::JoinMeshes),
             Command::KeepProjectionReference => Some(Action::KeepProjectionReference),
             Command::ApplyThickness => Some(Action::ApplyThickness),
             _ => None,

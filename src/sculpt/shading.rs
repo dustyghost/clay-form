@@ -2,6 +2,28 @@
 use super::{Mesh, Vec3};
 use std::collections::HashMap;
 
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ShadingSeams {
+    topology: u64,
+    edges: Vec<[usize; 2]>,
+}
+
+impl ShadingSeams {
+    pub(crate) fn retained_bytes(&self) -> usize {
+        std::mem::size_of_val(self.edges.as_slice())
+    }
+
+    pub(super) fn validate(&self) -> Result<(), String> {
+        if self.edges.len() > super::max_triangles() * 3
+            || self.edges.iter().any(|[a, b]| a >= b)
+            || self.edges.windows(2).any(|pair| pair[0] >= pair[1])
+        {
+            return Err("Invalid shading seams".into());
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Default)]
 pub(crate) struct SurfaceShading {
     /// Original mesh vertex and its normal in this smoothing fan.
@@ -23,6 +45,33 @@ fn join(parents: &mut [usize], a: usize, b: usize) {
     }
 }
 impl Mesh {
+    // Positions may change during sculpting. Re-indexing must invalidate the seams,
+    // including edits that happen to preserve the old vertex and triangle counts.
+    fn shading_topology_key(&self) -> u64 {
+        self.triangles.iter().flatten().fold(
+            0xcbf29ce484222325 ^ self.vertices.len() as u64,
+            |hash, &index| (hash ^ index as u64).wrapping_mul(0x100000001b3),
+        )
+    }
+
+    pub(super) fn set_shading_seams(&mut self, mut edges: Vec<[usize; 2]>) {
+        edges.sort_unstable();
+        edges.dedup();
+        self.shading_seams = (!edges.is_empty()).then(|| {
+            std::sync::Arc::new(ShadingSeams {
+                topology: self.shading_topology_key(),
+                edges,
+            })
+        });
+    }
+
+    pub(super) fn shading_edges(&self) -> &[[usize; 2]] {
+        self.shading_seams
+            .as_ref()
+            .filter(|seams| seams.topology == self.shading_topology_key())
+            .map_or(&[], |seams| seams.edges.as_slice())
+    }
+
     /// One offset direction per welded vertex, independent of triangle area.
     pub(crate) fn angle_weighted_normals(&self) -> Vec<Vec3> {
         let mut normals = vec![Vec3::default(); self.vertices.len()];
@@ -113,12 +162,14 @@ impl SurfaceShadingTopology {
     }
 
     fn for_each_pair(mesh: &Mesh, mut pair: impl FnMut(usize, usize)) {
+        let shading_edges = mesh.shading_edges();
         let mut edges: HashMap<(usize, usize), (usize, usize, usize)> = HashMap::new();
         for (face, t) in mesh.triangles.iter().enumerate() {
             for (a, b) in [(0, 1), (1, 2), (2, 0)] {
                 let edge = (t[a].min(t[b]), t[a].max(t[b]));
                 if let Some((other, x, _)) = edges.remove(&edge) {
                     if mesh.creases.binary_search(&[edge.0, edge.1]).is_err()
+                        && shading_edges.binary_search(&[edge.0, edge.1]).is_err()
                         && mesh.triangles[other][x] == t[b]
                     {
                         pair(face * 3 + a, other * 3 + x);
@@ -395,6 +446,30 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn shading_seams_follow_deformation_and_expire_after_reindexing() {
+        let mut mesh = Mesh {
+            vertices: vec![
+                Vec3(0., 0., 0.),
+                Vec3(1., 0., 0.),
+                Vec3(0., 1., 0.),
+                Vec3(0., -1., 0.2),
+            ],
+            triangles: vec![[0, 1, 2], [1, 0, 3]],
+            ..Default::default()
+        };
+        assert_eq!(mesh.surface_shading().vertices.len(), 4);
+        mesh.set_shading_seams(vec![[0, 1]]);
+        let topology = SurfaceShadingTopology::new(&mesh);
+        mesh.vertices[3].2 = 0.3;
+        let shaded = mesh.surface_shading();
+        assert_eq!(shaded.vertices.len(), 6);
+        assert_eq!(topology.shade(&mesh).vertices, shaded.vertices);
+        mesh.triangles.swap(0, 1);
+        assert!(mesh.shading_edges().is_empty());
+        assert_eq!(mesh.surface_shading().vertices.len(), 4);
     }
 
     #[test]

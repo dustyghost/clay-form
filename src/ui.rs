@@ -23,6 +23,7 @@ mod touch;
 mod viewport_controls;
 pub(crate) use files::{FileEntry, FilePicker};
 mod brush_controls;
+mod fusion;
 mod icons;
 mod instances;
 mod masking;
@@ -34,6 +35,7 @@ mod paint;
 pub(crate) mod paths;
 mod primitive;
 mod projection;
+pub(crate) use fusion::FusionKey;
 pub(crate) use projection::SurfaceReport;
 mod references;
 mod sidebar;
@@ -54,6 +56,7 @@ pub(crate) struct UiState {
     pub transform_mode: crate::viewport::TransformMode,
     pub edges: edges::EdgeControls,
     pub projection: projection::ProjectionControls,
+    pub(crate) fusion: fusion::FusionControls,
     pub paths_active: bool,
     pub paths_history_ready: bool,
     pub paths_history_reason: Option<&'static str>,
@@ -67,6 +70,10 @@ pub(crate) struct UiState {
     pub slice_path_mode: bool,
     pub slice_options: crate::sculpt::SliceOptions,
     pub transform_operation: crate::viewport::TransformOperation,
+    pub boolean_enabled: bool,
+    pub boolean_ready: bool,
+    pub boolean_notice: String,
+    pub cage_axis: crate::sculpt::Axis,
     pub respect_transform_mask: bool,
     group_name: String,
     pub selected_vertex_group: Option<(usize, usize)>,
@@ -113,6 +120,7 @@ pub(crate) struct UiState {
     pub wire: bool,
     pub wire_mode: crate::viewport::WireMode,
     pub wire_triangles: bool,
+    pub flat_shading: bool,
     pub show_polygroups: bool,
     pub show_backfaces: bool,
     pub backface_opacity: f32,
@@ -136,6 +144,7 @@ impl Default for UiState {
             transform_mode: crate::viewport::TransformMode::Sculpt,
             edges: Default::default(),
             projection: Default::default(),
+            fusion: Default::default(),
             paths_active: false,
             paths_history_ready: true,
             paths_history_reason: None,
@@ -157,6 +166,10 @@ impl Default for UiState {
             slice_path_mode: false,
             slice_options: Default::default(),
             transform_operation: crate::viewport::TransformOperation::Move,
+            boolean_enabled: false,
+            boolean_ready: false,
+            boolean_notice: String::new(),
+            cage_axis: crate::sculpt::Axis::Y,
             respect_transform_mask: true,
             group_name: String::new(),
             selected_vertex_group: None,
@@ -204,6 +217,7 @@ impl Default for UiState {
             wire: false,
             wire_mode: Default::default(),
             wire_triangles: false,
+            flat_shading: false,
             show_polygroups: false,
             show_backfaces: false,
             backface_opacity: 0.15,
@@ -527,6 +541,13 @@ impl UiState {
                 });
                 ui.horizontal_wrapped(|ui| {
                     ui.weak("Display");
+                    let has_operands = (0..document.model_count()).any(|i| {
+                        document.model(i).unwrap().metadata.boolean_role != crate::sculpt::BooleanRole::Regular
+                    });
+                    if (self.boolean_enabled || has_operands) && ui.selectable_label(self.boolean_enabled, "Boolean result")
+                        .on_hover_text("Switch the main viewport between the evaluated stack and its source operands").clicked() {
+                        commands.push(Command::ToggleBooleanResult);
+                    }
                     if ui
                         .add(design::button(ui, Glyph::Wire, "Show wireframe").selected(self.wire))
                         .customize(Action::Wireframe)
@@ -1190,12 +1211,216 @@ impl UiState {
 }
 
 impl UiState {
+    fn submodel_rows(ui: &mut egui::Ui, document: &Document, commands: &mut Vec<Command>) {
+        let groups = std::iter::once(String::new())
+            .chain(document.groups().iter().cloned())
+            .collect::<Vec<_>>();
+        for (section, group) in groups.iter().enumerate() {
+            let indices: Vec<_> = (0..document.model_count())
+                .filter(|&i| document.model(i).unwrap().metadata.group == *group)
+                .collect();
+            if section == 0 && indices.is_empty() {
+                continue;
+            }
+            ui.push_id(("submodel_group", group), |ui| {
+                let title = if group.is_empty() { "Ungrouped" } else { group };
+                egui::CollapsingHeader::new(title)
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        if section > 0 {
+                            ui.horizontal(|ui| {
+                                let all_visible = indices
+                                    .iter()
+                                    .all(|&i| document.model(i).unwrap().metadata.visible);
+                                if visibility_button(ui, all_visible)
+                                    .on_hover_text("Show/hide this group")
+                                    .clicked()
+                                {
+                                    commands
+                                        .push(Command::GroupVisible(group.clone(), !all_visible));
+                                }
+                                let index = section - 1;
+                                if reorder_button(ui, true, index > 0)
+                                    .on_hover_text("Move group up")
+                                    .clicked()
+                                {
+                                    commands.push(Command::ReorderGroup(index, index - 1));
+                                }
+                                if reorder_button(ui, false, index + 1 < document.groups().len())
+                                    .on_hover_text("Move group down")
+                                    .clicked()
+                                {
+                                    commands.push(Command::ReorderGroup(index, index + 1));
+                                }
+                                if ui.small_button("Ungroup").clicked() {
+                                    commands.push(Command::RemoveGroup(group.clone()));
+                                }
+                            });
+                        }
+                        for (position, &index) in indices.iter().enumerate() {
+                            ui.push_id(index, |ui| {
+                                Self::submodel_row(ui, document, &indices, position, commands);
+                            });
+                        }
+                        if indices.is_empty() {
+                            ui.weak("Empty group");
+                        }
+                    });
+            });
+        }
+    }
+    fn submodel_row(
+        ui: &mut egui::Ui,
+        document: &Document,
+        siblings: &[usize],
+        position: usize,
+        commands: &mut Vec<Command>,
+    ) {
+        let index = siblings[position];
+        let model = document.model(index).unwrap();
+        let active = index == document.active_model_index();
+
+        let mut select_clicked = false;
+        let mut frame = egui::Frame::group(ui.style());
+        if active {
+            frame = frame
+                .fill(ui.visuals().selection.bg_fill)
+                .stroke(ui.visuals().selection.stroke);
+        }
+        let row = ui.scope_builder(egui::UiBuilder::new().sense(egui::Sense::click()), |ui| {
+            frame.show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    let eye = visibility_button(ui, model.metadata.visible).on_hover_text(
+                        if model.metadata.visible {
+                            "Hide model"
+                        } else {
+                            "Show model"
+                        },
+                    );
+                    if eye.clicked() {
+                        let mut metadata = model.metadata.clone();
+                        metadata.visible = !metadata.visible;
+                        commands.push(Command::EditSubmodel(index, model.name.into(), metadata));
+                    }
+                    model_thumbnail(ui, model.display_mesh(false), active);
+                    ui.vertical(|ui| {
+                        select_clicked |= ui
+                            .selectable_label(active, model.name)
+                            .on_hover_text("Select this submodel for sculpting or transforms")
+                            .clicked();
+                        ui.horizontal(|ui| {
+                            let up = reorder_button(ui, true, position > 0)
+                                .on_hover_text("Move model up in group");
+                            let down = reorder_button(ui, false, position + 1 < siblings.len())
+                                .on_hover_text("Move model down in group");
+                            if up.clicked() {
+                                commands
+                                    .push(Command::ReorderSubmodel(index, siblings[position - 1]));
+                            }
+                            if down.clicked() {
+                                commands
+                                    .push(Command::ReorderSubmodel(index, siblings[position + 1]));
+                            }
+                            if active {
+                                ui.small("Active");
+                            }
+                        });
+                    });
+                });
+                let mut role = model.metadata.boolean_role;
+                egui::ComboBox::from_id_salt("boolean_role")
+                    .selected_text(role.label())
+                    .width(94.)
+                    .show_ui(ui, |ui| {
+                        use crate::sculpt::BooleanRole::*;
+                        for choice in [Regular, Add, Subtract, Intersect] {
+                            ui.selectable_value(&mut role, choice, choice.label());
+                        }
+                    });
+                if role != model.metadata.boolean_role {
+                    let mut metadata = model.metadata.clone();
+                    metadata.boolean_role = role;
+                    commands.push(Command::EditSubmodel(index, model.name.into(), metadata));
+                }
+            });
+        });
+        if select_clicked || row.response.clicked() {
+            commands.push(Command::SelectSubmodel(index));
+        }
+    }
+
     fn submodel_controls(
         &mut self,
         ui: &mut egui::Ui,
         document: &Document,
         commands: &mut Vec<Command>,
     ) {
+        if ui
+            .selectable_label(
+                !self.boolean_enabled
+                    && self.transform_mode == crate::viewport::TransformMode::World
+                    && self.transform_operation == crate::viewport::TransformOperation::Cage,
+                "Deformation frame",
+            )
+            .customize(Action::DeformationFrame)
+            .clicked()
+        {
+            commands.push(Command::TransformOperation(
+                crate::viewport::TransformOperation::Cage,
+            ));
+        }
+        if ui
+            .selectable_label(self.boolean_enabled, "Boolean result")
+            .on_hover_text("Show the evaluated group in the main viewport")
+            .clicked()
+        {
+            commands.push(Command::ToggleBooleanResult);
+        }
+        if self.boolean_enabled {
+            ui.add_enabled_ui(!self.mesh_busy, |ui| {
+                ui.weak("Stack runs from bottom to top. Choose a role on each row. The eye bypasses an operand.");
+                use crate::sculpt::BooleanMethod;
+                let mut method = document.boolean_method();
+                egui::ComboBox::from_label("Boolean method")
+                    .selected_text(method.label())
+                    .show_ui(ui, |ui| {
+                        for choice in [BooleanMethod::Voxel, BooleanMethod::Surface] {
+                            ui.selectable_value(&mut method, choice, choice.label());
+                        }
+                    });
+                if method != document.boolean_method() {
+                    commands.push(Command::BooleanMethod(method));
+                }
+                if method == BooleanMethod::Voxel {
+                    let mut resolution = document.boolean_resolution();
+                    egui::ComboBox::from_label("Voxel resolution")
+                        .selected_text(resolution.to_string())
+                        .show_ui(ui, |ui| {
+                            for r in [16, 24, 32, 48, 64, 96] {
+                                ui.selectable_value(&mut resolution, r, r.to_string());
+                            }
+                        });
+                    if resolution != document.boolean_resolution() {
+                        commands.push(Command::BooleanResolution(resolution));
+                    }
+                } else {
+                    ui.weak("Cut the original surfaces at their intersections. Uncut faces keep their detail.");
+                }
+                if ui.add_enabled(self.boolean_ready && document.model_count() < 64, egui::Button::new("Bake result"))
+                    .on_hover_text("Create a sculptable mesh from this preview and hide its operands. Undo restores the stack.")
+                    .clicked()
+                {
+                    commands.push(Command::BakeBoolean);
+                }
+                if document.model_count() >= 64 {
+                    ui.weak("Free a submodel slot to bake (64 maximum).");
+                }
+                ui.weak(&self.boolean_notice);
+                Self::submodel_rows(ui, document, commands);
+            });
+            return;
+        }
         self.instance_controls(ui, document, commands);
         ui.separator();
         ui.label("Click a model row to select it. The eye toggles visibility.");
@@ -1232,64 +1457,7 @@ impl UiState {
                 if ui.add(design::button(ui, Glyph::Layers, "+ Group")).clicked() { commands.push(Command::AddGroup(std::mem::take(&mut self.group_name))); }
             });
             ui.separator();
-            let groups = std::iter::once(String::new()).chain(document.groups().iter().cloned()).collect::<Vec<_>>();
-            for (section, group) in groups.iter().enumerate() {
-                let indices: Vec<_> = (0..document.model_count()).filter(|&i| document.model(i).unwrap().metadata.group == *group).collect();
-                if section == 0 && indices.is_empty() { continue; }
-                ui.push_id(("submodel_group", group), |ui| {
-                    egui::CollapsingHeader::new(if group.is_empty() { "Ungrouped" } else { group }).default_open(true).show(ui, |ui| {
-                        if section > 0 {
-                            ui.horizontal(|ui| {
-                                let all_visible = indices.iter().all(|&i|document.model(i).unwrap().metadata.visible);
-                                if visibility_button(ui, all_visible).on_hover_text("Show/hide this group").clicked() { commands.push(Command::GroupVisible(group.clone(), !all_visible)); }
-                                let index = section - 1;
-                                if reorder_button(ui, true, index > 0).on_hover_text("Move group up").clicked() { commands.push(Command::ReorderGroup(index, index-1)); }
-                                if reorder_button(ui, false, index+1 < document.groups().len()).on_hover_text("Move group down").clicked() { commands.push(Command::ReorderGroup(index, index+1)); }
-                                if ui.small_button("Ungroup").clicked() { commands.push(Command::RemoveGroup(group.clone())); }
-                            });
-                        }
-                        for (position, &index) in indices.iter().enumerate() {
-                            let model = document.model(index).unwrap();
-                            ui.push_id(index, |ui| {
-                                let active = index == document.active_model_index();
-                                let mut control_hit = false;
-                                let mut select_clicked = false;
-                                let mut frame = egui::Frame::group(ui.style());
-                                if active {
-                                    frame = frame.fill(ui.visuals().selection.bg_fill).stroke(ui.visuals().selection.stroke);
-                                }
-                                let row = frame.show(ui, |ui| {
-                                    ui.set_min_width(ui.available_width());
-                                    ui.horizontal(|ui| {
-                                        let eye = visibility_button(ui, model.metadata.visible).on_hover_text(if model.metadata.visible { "Hide model" } else { "Show model" });
-                                        control_hit |= eye.contains_pointer();
-                                        if eye.clicked() {
-                                            let mut metadata = model.metadata.clone(); metadata.visible = !metadata.visible;
-                                            commands.push(Command::EditSubmodel(index, model.name.into(), metadata));
-                                        }
-                                        model_thumbnail(ui, model.display_mesh(false), active);
-                                        ui.vertical(|ui| {
-                                            select_clicked |= ui.selectable_label(active, model.name).on_hover_text("Select this submodel for sculpting or transforms").clicked();
-                                            ui.horizontal(|ui| {
-                                                let up = reorder_button(ui, true, position > 0).on_hover_text("Move model up in group");
-                                                let down = reorder_button(ui, false, position+1 < indices.len()).on_hover_text("Move model down in group");
-                                                control_hit |= up.contains_pointer() || down.contains_pointer();
-                                                if up.clicked() { commands.push(Command::ReorderSubmodel(index, indices[position-1])); }
-                                                if down.clicked() { commands.push(Command::ReorderSubmodel(index, indices[position+1])); }
-                                                if active { ui.small("Active"); }
-                                            });
-                                        });
-                                    });
-                                });
-                                if select_clicked || (ui.is_enabled() && row.response.contains_pointer() && !control_hit && ui.input(|i| i.pointer.primary_clicked())) {
-                                    commands.push(Command::SelectSubmodel(index));
-                                }
-                            });
-                        }
-                        if indices.is_empty() { ui.weak("Empty group"); }
-                    });
-                });
-            }
+            Self::submodel_rows(ui, document, commands);
             ui.separator();
             let index = document.active_model_index();
             let model = document.model(index).unwrap();
@@ -1509,6 +1677,9 @@ impl UiState {
         });
         ui.separator();
         self.projection_buttons(ui, document, commands);
+        if design::help(ui.add_enabled(!self.mesh_busy, design::button(ui, Glyph::Mesh, "Join meshes…")), "Fuse overlapping solids locally or connect selected holes. Keeps source surfaces and subdivision levels recoverable.").customize(Action::JoinMeshes).clicked() {
+            commands.push(Command::OpenFusion);
+        }
         if ui
             .add_enabled(
                 !self.mesh_busy,

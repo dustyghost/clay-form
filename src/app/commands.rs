@@ -564,9 +564,31 @@ impl App {
             }
             Command::TransformOperation(operation) => {
                 use crate::viewport::{TransformMode as Mode, TransformOperation as Op};
+                if operation == Op::Cage {
+                    if !self.ui.boolean_enabled
+                        && self.ui.transform_mode == Mode::World
+                        && self.ui.transform_operation == Op::Cage
+                    {
+                        self.activate_transform(Mode::Sculpt);
+                        return;
+                    }
+                    if let Err(e) = self.document.require_sculpt_mesh() {
+                        self.ui.status = e;
+                        return;
+                    }
+                    if !self.document.active_visible() || self.document.mesh().vertices.is_empty() {
+                        self.ui.status = "Select a visible mesh to fit the frame".into();
+                        return;
+                    }
+                    if self.ui.boolean_enabled {
+                        self.toggle_boolean_preview();
+                    }
+                    self.viewport.object_brush = None;
+                    self.document.selected_instance = None;
+                }
                 let mode = match operation {
                     Op::PlaceLine => Mode::ActionLine,
-                    Op::PlacePivot | Op::Universal => Mode::World,
+                    Op::Cage | Op::PlacePivot | Op::Universal => Mode::World,
                     _ if self.ui.transform_mode == Mode::Sculpt => Mode::World,
                     _ => self.ui.transform_mode,
                 };
@@ -587,6 +609,16 @@ impl App {
                 self.ui.respect_transform_mask = respect;
                 Ok(())
             }
+            Command::ToggleBooleanResult => {
+                self.toggle_boolean_preview();
+                Ok(())
+            }
+            Command::BooleanMethod(method) => {
+                self.document.set_boolean_method(method);
+                Ok(())
+            }
+            Command::BooleanResolution(r) => self.document.set_boolean_resolution(r),
+            Command::BakeBoolean => self.bake_boolean_preview(),
             command @ (Command::EditSubmodel(..)
             | Command::ReorderSubmodel(..)
             | Command::AddGroup(..)
@@ -689,6 +721,18 @@ impl App {
                 Ok(())
             }
             Command::OpenProjection => self.open_projection(),
+            Command::OpenFusion => self.open_fusion(),
+            Command::DiscoverFusion => self.discover_fusion(),
+            Command::PreviewFusion => self.preview_fusion(),
+            Command::ClearFusion => {
+                self.clear_fusion();
+                Ok(())
+            }
+            Command::ApplyFusion => self.apply_fusion(),
+            Command::CancelFusion => {
+                self.cancel_fusion();
+                Ok(())
+            }
             Command::OpenRelaxation => self.open_relaxation(),
             Command::KeepProjectionReference => {
                 self.viewport.cancel(&mut self.document);
@@ -774,6 +818,9 @@ impl App {
         }
         if let Err(error) = result {
             self.diagnostic_warning("An application command failed; detailed error text withheld to exclude personal paths");
+            if self.ui.fusion.open {
+                self.ui.fusion.notice = error.clone();
+            }
             self.ui.status = error;
         }
     }

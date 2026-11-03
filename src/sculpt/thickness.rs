@@ -107,6 +107,7 @@ impl Mesh {
         let mut shell = Mesh {
             uv: Default::default(),
             creases: Vec::new(),
+            shading_seams: None,
             materials: self
                 .materials
                 .iter()

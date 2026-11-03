@@ -388,6 +388,7 @@ impl Mesh {
         let mut result = Self {
             uv: Default::default(),
             creases: Vec::new(),
+            shading_seams: None,
             materials: self.materials.clone(),
             vertex_groups: self.vertex_groups.clone(),
             hidden_faces: Vec::new(),
@@ -701,6 +702,7 @@ mod tests {
         Mesh {
             uv: Default::default(),
             creases: Vec::new(),
+            shading_seams: None,
             materials: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),

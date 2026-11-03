@@ -1,6 +1,7 @@
 //! Sculpting data and algorithms, independent of windowing and UI.
 mod adaptive;
 mod brush;
+pub(crate) mod cage;
 pub(crate) mod capacity;
 mod paint_effect;
 pub use paint_effect::{PaintEffect, PaintMode};
@@ -31,7 +32,8 @@ pub use geometry::Geometry;
 pub(crate) use geometry::ValidatedGeometry;
 pub use math::Vec3;
 pub use mesh::{Dab, Mesh};
-pub use project::{ModelMetadata, Project, SceneSettings, Submodel};
+pub use project::{BooleanMethod, BooleanRole, ModelMetadata, Project, SceneSettings, Submodel};
+pub(crate) use remesh::boolean;
 pub use subdivision::MeshSettings;
 pub(crate) use subdivision::{max_triangles, max_vertices};
 mod import;
@@ -57,6 +59,7 @@ mod slice_path;
 pub use slice::{SliceMode, SliceOptions, SlicePlane};
 pub use slice_path::SlicePath;
 mod shading;
+pub use shading::ShadingSeams;
 pub(crate) use shading::{SurfaceShading, SurfaceShadingTopology};
 
 #[cfg(test)]
@@ -64,6 +67,7 @@ mod group_tests;
 
 mod visibility;
 
+pub(crate) mod fusion;
 mod merge;
 mod mirror;
 pub use mirror::MirrorOptions;

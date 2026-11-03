@@ -1,6 +1,9 @@
 //! Converts viewport gestures into camera movement and document sculpt dabs.
+mod boolean;
 mod brush_preview;
+mod cage;
 mod controls;
+
 mod edges;
 mod interaction;
 mod modeling;
@@ -44,7 +47,30 @@ use gizmo::draw_gizmo;
 pub(crate) use visibility::SelectionTool;
 pub(crate) const AXIS_COLORS: [Color32; 3] = controls::AXES;
 use scene::Scene;
+pub(crate) struct JoinRim {
+    pub side: usize,
+    pub index: usize,
+    pub selected: bool,
+    pub pickable: bool,
+    pub points: Vec<Vec3>,
+}
+#[derive(Clone)]
+pub(crate) struct JoinDisplay(std::sync::Arc<gpu::DisplayMesh>);
+impl JoinDisplay {
+    pub(crate) fn new(document: &Document) -> Self {
+        Self(std::sync::Arc::new(gpu::DisplayMesh::new(document)))
+    }
+}
 pub(crate) use transform::{TransformMode, TransformOperation};
+// Keep frame appearance separate from the geometry and picking cache keys.
+pub(crate) fn set_flat_shading(ctx: &egui::Context, flat: bool) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("viewport_flat_shading"), flat));
+}
+fn flat_shading(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp(egui::Id::new("viewport_flat_shading")))
+        .unwrap_or_default()
+}
+
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum Gesture {
     Sculpt,
@@ -62,6 +88,7 @@ pub(crate) struct Viewport {
     pub(crate) object_brush: Option<objects::ObjectBrush>,
     pub(crate) capture_axes: Option<(Vec3, usize, usize)>,
     pub(crate) size_preview: Option<Brush>,
+    cage: cage::Editor,
     last_brush_position: Option<Pos2>,
     pub(crate) sample_colour: bool,
     pub(crate) sampled_colour: Option<[f32; 3]>,
@@ -80,6 +107,9 @@ pub(crate) struct Viewport {
     edge_revision: u64,
     references: references::ReferenceOverlay,
     renderer: Option<gpu::Renderer>,
+    pub(crate) boolean_display: Option<std::sync::Arc<gpu::DisplayMesh>>,
+    pub(crate) boolean_notice: String,
+    pub(crate) boolean_current: bool,
     blocked_until_release: bool,
     pub(crate) status: Option<String>,
     pub(crate) completed_slice: Option<crate::mesh_job::Operation>,
@@ -96,6 +126,8 @@ pub(crate) struct ViewportOptions {
     pub slice_path_mode: bool,
     pub transform_mode: TransformMode,
     pub transform_operation: TransformOperation,
+    pub boolean_enabled: bool,
+    pub cage_axis: crate::sculpt::Axis,
     pub respect_mask: bool,
     pub selected: Option<usize>,
     pub temporary_mask: bool,
@@ -116,6 +148,10 @@ pub(crate) struct ViewportOptions {
     pub pan_hold: Hold,
 }
 impl Viewport {
+    #[cfg(test)]
+    pub(crate) fn cage_previewing(&self) -> bool {
+        self.cage.preview.is_some()
+    }
     #[cfg(test)]
     pub(crate) fn level_cache_hits(&self) -> usize {
         self.renderer.as_ref().map_or(0, |r| r.level_cache_hits())
@@ -148,7 +184,11 @@ impl Viewport {
         state: &eframe::egui_wgpu::RenderState,
     ) -> Result<(), String> {
         self.renderer = Some(gpu::Renderer::new(state)?);
+
         Ok(())
+    }
+    pub(crate) fn set_join_preview(&mut self, preview: Option<JoinDisplay>) {
+        self.session.scene_preview = preview.map(|p| p.0);
     }
     pub(crate) fn destroy_renderer(&self) {
         if let Some(renderer) = &self.renderer {
@@ -156,6 +196,7 @@ impl Viewport {
         }
     }
     pub(crate) fn cancel(&mut self, document: &mut Document) {
+        self.cage = Default::default();
         self.array_controls.cancel(document);
         self.copy_move = Default::default();
         self.path_thickness.reset();
@@ -260,6 +301,12 @@ impl Viewport {
         if let Some(renderer) = &self.renderer {
             renderer.clear_preview();
         }
+        if options.boolean_enabled {
+            self.show_boolean(
+                ui, &response, &painter, document, camera, options, gizmo_rect,
+            );
+            return;
+        }
         let modifiers = ui.input(|i| i.modifiers);
         let mut brush = options.selected.map_or_else(
             || {
@@ -317,30 +364,53 @@ impl Viewport {
             options.enabled && !self.session.projection_mode,
             ui.input(|i| i.key_pressed(egui::Key::Escape)),
         );
-        let scene = Scene::paint_with_stroke(
-            &painter,
-            rect,
-            document,
-            camera,
-            options.wire
-                && !options
-                    .modeling
-                    .is_some_and(|m| m.smooth_preview && !self.modeling.dragging()),
-            options.wire_mode,
-            options.wire_triangles,
-            self.renderer.as_mut(),
-            self.session
-                .sculpt
-                .pending_stroke
-                .as_ref()
-                .filter(|_| previewing),
-            self.session
-                .projection_preview
-                .as_deref()
-                .or_else(|| self.modeling.preview())
-                .or_else(|| self.session.guided.preview())
-                .or_else(|| self.object_brush.as_ref().and_then(|b| b.preview())),
-        );
+        let cage_mode = options.transform_mode == TransformMode::World
+            && options.transform_operation == TransformOperation::Cage;
+        if self.cage.dragging()
+            && (!options.enabled || ui.input(|i| i.key_pressed(egui::Key::Escape)))
+        {
+            self.cage = Default::default();
+            self.wait_for_release();
+        }
+        self.cage.sync(document, cage_mode);
+        let scene = if let Some(display) = &self.cage.preview {
+            Scene::paint_cached_preview(
+                &painter,
+                rect,
+                camera,
+                self.renderer.as_mut(),
+                display.clone(),
+                options.wire,
+                options.wire_mode,
+                options.wire_triangles,
+            )
+        } else {
+            Scene::paint_with_stroke(
+                &painter,
+                rect,
+                document,
+                camera,
+                options.wire
+                    && !options
+                        .modeling
+                        .is_some_and(|m| m.smooth_preview && !self.modeling.dragging()),
+                options.wire_mode,
+                options.wire_triangles,
+                self.renderer.as_mut(),
+                self.session
+                    .sculpt
+                    .pending_stroke
+                    .as_ref()
+                    .filter(|_| previewing),
+                self.session
+                    .projection_preview
+                    .as_deref()
+                    .or_else(|| self.modeling.preview())
+                    .or_else(|| self.session.guided.preview())
+                    .or_else(|| self.object_brush.as_ref().and_then(|b| b.preview())),
+                self.session.scene_preview.clone(),
+            )
+        };
         if let Some(renderer) = &self.renderer {
             renderer.set_backfaces(options.backface_opacity);
             renderer.set_polygroups(options.show_polygroups);
@@ -388,6 +458,64 @@ impl Viewport {
             return;
         }
         if self.session.projection_mode {
+            for (lines, color) in [
+                (&self.session.join_patch, Color32::from_rgb(190, 140, 245)),
+                (&self.session.join_removed, Color32::from_rgb(245, 110, 90)),
+            ] {
+                for &line in lines {
+                    if let Some(points) = scene.clip_segment(line) {
+                        painter.line_segment(points, egui::Stroke::new(1_f32, color));
+                    }
+                }
+            }
+            let mut nearest: Option<(f32, usize, usize)> = None;
+            for rim in &self.session.join_rims {
+                if !rim.pickable && !rim.selected {
+                    continue;
+                }
+                let color = if rim.selected {
+                    Color32::from_rgb(255, 205, 85)
+                } else {
+                    Color32::from_rgb(70, 205, 200)
+                };
+                for i in 0..rim.points.len() {
+                    if let Some([a, b]) =
+                        scene.clip_segment([rim.points[i], rim.points[(i + 1) % rim.points.len()]])
+                    {
+                        painter.line_segment(
+                            [a, b],
+                            egui::Stroke::new(if rim.selected { 3_f32 } else { 1.5_f32 }, color),
+                        );
+                        if rim.pickable
+                            && let Some(p) = response.hover_pos()
+                        {
+                            let d = b - a;
+                            let t = ((p - a).dot(d) / d.length_sq().max(1e-6)).clamp(0., 1.);
+                            let distance = p.distance(a + d * t);
+                            if distance < 12. && nearest.is_none_or(|n| distance < n.0) {
+                                nearest = Some((distance, rim.side, rim.index));
+                            }
+                        }
+                    }
+                }
+                if let Some(&point) = rim.points.first()
+                    && scene.visible_depth(point)
+                {
+                    painter.text(
+                        scene.project(point),
+                        egui::Align2::LEFT_BOTTOM,
+                        format!("{} · hole {}", rim.side + 1, rim.index + 1),
+                        egui::FontId::proportional(13.),
+                        color,
+                    );
+                }
+            }
+            if options.enabled
+                && response.clicked()
+                && let Some((_, side, index)) = nearest
+            {
+                self.session.join_pick = Some((side, index));
+            }
             if options.enabled && response.hovered() {
                 camera.zoom_by(ui.input(|i| i.smooth_scroll_delta.y));
             }
@@ -519,6 +647,33 @@ impl Viewport {
             });
         if frame_press {
             self.session.gesture = Some(Gesture::Orbit);
+        }
+        if cage_mode {
+            match self.cage.show(
+                ui,
+                &response,
+                &painter,
+                &scene,
+                document,
+                options.cage_axis,
+                options.respect_mask,
+                options.enabled
+                    && !self.blocked_until_release
+                    && self.session.gesture.is_none()
+                    && !options.zoom_hold.active(modifiers)
+                    && !options.pan_hold.active(modifiers),
+                gizmo_rect,
+            ) {
+                Ok(false) => {}
+                result => {
+                    if let Err(e) = result {
+                        self.cage = Default::default();
+                        self.status = Some(e);
+                    }
+                    draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
+                    return;
+                }
+            }
         }
         if self.update_objects(
             ui,

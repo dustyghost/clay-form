@@ -3,6 +3,8 @@
 mod array_layers;
 #[path = "attached_array_capture.rs"]
 mod attached_array_capture;
+#[path = "guide_deformation_stack.rs"]
+mod deformation_stack_review;
 #[path = "grouped_path_capture.rs"]
 mod grouped_path_capture;
 #[path = "object_kits.rs"]
@@ -28,6 +30,112 @@ struct Guide {
     modifiers: egui::Modifiers,
     directory: std::path::PathBuf,
     text_positions: Vec<(String, Pos2)>,
+}
+
+#[test]
+#[ignore = "mesh fusion controls and visual review; requires Vulkan"]
+fn local_fusion_controls_offscreen_review() {
+    use crate::sculpt::{Geometry, Primitive, PrimitiveKind, Submodel, Vec3};
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir().join("clay-local-fusion"));
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1200, 900]);
+    g.interactive = true;
+    let (fixture, _) = super::fusion::setup_fusion();
+    g.app.document = fixture.document;
+    g.app.camera.pitch = -0.7;
+    g.app.camera.yaw = 0.45;
+    g.app.camera.zoom = 0.65;
+    g.app.camera.pan = Vec2::new(100., 0.);
+    let before = g.app.document.geometry_snapshot();
+    g.app.dispatch(Command::Action(Action::JoinMeshes), &g.ctx);
+    super::fusion::finish_fusion(&mut g.app);
+    g.save("01-open-ends-before");
+    for (side, index) in [(0, 1), (1, 0)] {
+        if side == 1 {
+            click_guide_label(&mut g, "Second source");
+        }
+        let rect = g.frame(vec![]).0;
+        let mesh = g.app.document.model(side).unwrap().mesh;
+        let loops = crate::sculpt::fusion::boundaries(mesh).unwrap();
+        let (right, up, view) = g.app.camera.basis();
+        let p = loops[index]
+            .vertices
+            .iter()
+            .map(|&i| mesh.vertices[i])
+            .max_by(|a, b| a.dot(view).total_cmp(&b.dot(view)))
+            .unwrap();
+        let point = rect.center()
+            + g.app.camera.pan
+            + Vec2::new(p.dot(right), -p.dot(up)) * g.app.camera.scale_at(rect.size(), p);
+        g.frame(vec![
+            egui::Event::PointerMoved(point),
+            primary_event(point, true),
+        ]);
+        g.frame(vec![primary_event(point, false)]);
+        g.frame(vec![]);
+        assert_eq!(g.app.ui.fusion.selected[side], Some(index));
+    }
+    click_guide_label(&mut g, "Preview join");
+    super::fusion::finish_fusion(&mut g.app);
+    assert!(g.app.ui.fusion.ready, "{}", g.app.ui.fusion.notice);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.save("02-open-ends-preview");
+    g.app.ui.wire = true;
+    g.save("03-open-ends-wire");
+    g.app.ui.wire = false;
+    click_guide_label(&mut g, "Apply join");
+    assert_eq!(g.app.document.model_count(), 3);
+    assert!(!g.app.ui.fusion.open);
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.app.dispatch(Command::Redo, &g.ctx);
+    g.save("04-open-ends-applied");
+
+    let mut a = Primitive::for_kind(PrimitiveKind::UvSphere).mesh().unwrap();
+    let mut b = a.clone();
+    for p in &mut a.vertices {
+        *p = *p + Vec3(-0.3, 0., 0.);
+    }
+    for p in &mut b.vertices {
+        *p = *p + Vec3(0.3, 0.03, 0.02);
+    }
+    let mut geometry = Geometry::new(a);
+    geometry.submodels.push(Submodel {
+        name: "Second sphere".into(),
+        metadata: Default::default(),
+        mesh: b,
+        mesh_settings: Default::default(),
+    });
+    g.app.document.replace_geometry(geometry).unwrap();
+    g.app.camera.pitch = 0.15;
+    g.app.camera.yaw = 0.3;
+    g.app.camera.zoom = 1.;
+    g.app.dispatch(Command::OpenFusion, &g.ctx);
+    super::fusion::finish_fusion(&mut g.app);
+    click_guide_label(&mut g, "Intersections");
+    click_guide_label(&mut g, "Preview join");
+    super::fusion::finish_fusion(&mut g.app);
+    assert!(g.app.ui.fusion.ready, "{}", g.app.ui.fusion.notice);
+    g.save("05-intersection-preview");
+    g.app.ui.wire = true;
+    g.save("06-intersection-wire");
+    click_guide_label(&mut g, "Apply join");
+    g.app.document.mesh().validate_closed().unwrap();
+    assert_eq!(g.app.document.model_count(), 3);
+    g.app.ui.wire = false;
+    g.save("07-intersection-applied");
+    drop(g);
+    let mut g = Guide::new(&directory, [640, 480]);
+    g.interactive = true;
+    let (fixture, _) = super::fusion::setup_fusion();
+    g.app.document = fixture.document;
+    g.app.dispatch(Command::OpenFusion, &g.ctx);
+    super::fusion::finish_fusion(&mut g.app);
+    g.save("08-small-window-controls");
+    click_guide_label(&mut g, "Cancel join");
+    assert!(!g.app.ui.fusion.open);
 }
 
 #[test]
@@ -100,6 +208,7 @@ fn reusable_models_offscreen_review() {
             .iter()
             .any(|(s, _)| s == "Editing · Array #1 · Copy 1 · Hidden")
     );
+    reach_sidebar_control(&mut g, "Show this copy");
     click_guide_label(&mut g, "Show this copy");
     g.save("edit-one-placement");
     assert!(
@@ -108,6 +217,7 @@ fn reusable_models_offscreen_review() {
             .any(|(s, _)| s == "Editing · Array #1 · Copy 1")
     );
     assert!(!g.text_positions.iter().any(|(s, _)| s == "Add layer"));
+    reach_sidebar_control(&mut g, "Apply placement");
     click_guide_label(&mut g, "Apply placement");
     assert_eq!(g.app.document.instance_placements().unwrap().len(), 12);
     g.save("02-linked-array");
@@ -770,6 +880,7 @@ fn project_file_offscreen_review() {
             serde_json::from_slice(&std::fs::read(manifest).unwrap()).unwrap();
         let view = &manifest["current_settings"]["view_input"];
         g.app.ui.wire = view["wireframe"].as_bool().unwrap_or(false);
+        g.app.ui.flat_shading = view["flat_shading"].as_bool().unwrap_or(false);
         g.app.ui.show_polygroups = view["show_polygroups"].as_bool().unwrap_or(false);
         let camera = &view["camera"];
         let value = |key: &str| camera[key].as_f64().unwrap() as f32;
@@ -873,6 +984,7 @@ fn smooth_decimate_offscreen_review() {
                 serde_json::from_slice(&std::fs::read(manifest).unwrap()).unwrap();
             let view = &manifest["current_settings"]["view_input"];
             g.app.ui.wire = view["wireframe"].as_bool().unwrap_or(false);
+            g.app.ui.flat_shading = view["flat_shading"].as_bool().unwrap_or(false);
             g.app.ui.show_polygroups = view["show_polygroups"].as_bool().unwrap_or(false);
             let camera = &view["camera"];
             g.app.camera.yaw = camera["yaw"].as_f64().unwrap() as f32;
@@ -1072,6 +1184,7 @@ impl Guide {
             .dock = dock;
     }
     fn frame(&mut self, events: Vec<egui::Event>) -> (egui::Rect, Vec<u8>) {
+        self.app.poll_fusion();
         self.time += 0.1;
         let mut rect = egui::Rect::NOTHING;
         let mut commands = Vec::new();
@@ -1116,6 +1229,7 @@ impl Guide {
                 commands.extend(self.app.ui.project_file_dialog(ctx));
                 commands.extend(self.app.ui.alpha_popup(ctx));
                 commands.extend(self.app.ui.projection_window(ctx, &self.app.document));
+                commands.extend(self.app.ui.fusion_window(ctx, &self.app.document));
             },
         );
         fn collect_text(shape: &egui::Shape, out: &mut Vec<(String, Pos2)>) {
@@ -3685,8 +3799,8 @@ fn material_examples_manual_capture() {
 }
 
 /// Reveal a control through the outer sidebar, including after a previous action
-/// left the artist scrolled to a different part of the painting workspace.
-fn reach_paint_control(g: &mut Guide, label: &str) {
+/// left the artist scrolled to a different part of the workspace.
+fn reach_sidebar_control(g: &mut Guide, label: &str) {
     let viewport_top = g.frame(vec![]).0.top();
     let visible = |g: &Guide| {
         g.text_positions.iter().any(|(text, p)| {
@@ -3721,14 +3835,14 @@ fn reach_paint_control(g: &mut Guide, label: &str) {
             },
         ]);
     }
-    g.save("paint-control-unreachable");
+    g.save("sidebar-control-unreachable");
     panic!(
-        "Paint control {label} must be reachable; captured paint-control-unreachable.png. Visible text: {:?}",
+        "Sidebar control {label} must be reachable; captured sidebar-control-unreachable.png. Visible text: {:?}",
         g.text_positions
     );
 }
 fn click_paint_control(g: &mut Guide, label: &str) {
-    reach_paint_control(g, label);
+    reach_sidebar_control(g, label);
     click_guide_label(g, label);
 }
 
@@ -3831,7 +3945,7 @@ fn material_controls_offscreen_review() {
         .preferences
         .dock_menu(BuiltinMenu::Materials, Dock::Right);
     g.frame(vec![]);
-    reach_paint_control(&mut g, "Drag to resize materials");
+    reach_sidebar_control(&mut g, "Drag to resize materials");
     let handle = |g: &Guide| {
         g.text_positions
             .iter()
@@ -4388,11 +4502,11 @@ fn paint_modes_offscreen_review() {
                 .mode,
             mode
         );
-        reach_paint_control(&mut g, "Flow / second");
+        reach_sidebar_control(&mut g, "Flow / second");
         assert!(g.text_positions.iter().any(|(t, _)| t == "Flow / second"));
         if mode == PaintMode::Spray {
             for label in ["Dot density", "Dot size"] {
-                reach_paint_control(&mut g, label);
+                reach_sidebar_control(&mut g, label);
                 assert!(g.text_positions.iter().any(|(t, _)| t == label));
             }
         }
@@ -4605,7 +4719,7 @@ fn paint_target_scope_inspection_offscreen_review() {
     g.app.dispatch(Command::SelectSubmodel(untextured), &g.ctx);
     g.frame(vec![]);
     assert_eq!(g.app.document.texture_paint, None);
-    reach_paint_control(&mut g, "Vertices");
+    reach_sidebar_control(&mut g, "Vertices");
     assert!(g.text_positions.iter().any(|(text, _)| text == "Vertices"));
     g.save("paint-target-fallback");
     click_guide_label(&mut g, "Restore workspace");

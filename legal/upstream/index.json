@@ -28,6 +28,18 @@
       "source": "https://opensource.org/license/mit"
     }
   ],
+  "boolmesh@0.2.2|MPL-2.0": [
+    {
+      "file": "ec210696edb4239ecb8a456864a4fa990312d6e1e697b1a78c4cd9dc582e6376.txt",
+      "sha256": "ec210696edb4239ecb8a456864a4fa990312d6e1e697b1a78c4cd9dc582e6376",
+      "source": "crate:boolmesh@0.2.2/src/lib.rs#L1"
+    },
+    {
+      "file": "4b89d4518bd135ab4ee154a7bce722246b57a98c3d7efc1a09409898160c2bd1.txt",
+      "sha256": "4b89d4518bd135ab4ee154a7bce722246b57a98c3d7efc1a09409898160c2bd1",
+      "source": "crate:boolmesh@0.2.2/LICENSE"
+    }
+  ],
   "clipboard-win@5.4.1|BSL-1.0": [
     {
       "file": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566.txt",

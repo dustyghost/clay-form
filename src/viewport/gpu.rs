@@ -253,6 +253,7 @@ impl Renderer {
             geometry.depth_extent,
         );
         params.set_perspective(scene.eye_distance, geometry.depth_extent);
+        params.flat_shading = super::flat_shading(painter.ctx());
         params.lighting = crate::lighting::Lighting::current(painter.ctx());
         params.background = crate::preferences::viewport_background(painter.ctx()).to_array()[..3]
             .try_into()
@@ -1177,7 +1178,7 @@ impl Gpu {
                 preview.inspection.shader_value()
             },
             preview.texture_exposure,
-            0.,
+            f32::from(p.flat_shading),
         ];
         u.right = vector(p.right, 0.);
         u.up = vector(p.up, 0.);
@@ -1592,7 +1593,7 @@ mod scene_cache_tests;
 #[cfg(test)]
 mod tests;
 mod upload;
-pub(super) use display::DisplayMesh;
+pub(crate) use display::DisplayMesh;
 #[cfg(all(test, target_os = "linux"))]
 mod backfaces_test;
 #[cfg(all(test, target_os = "linux"))]

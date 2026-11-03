@@ -11,6 +11,7 @@ mod attributes;
 mod brushes;
 mod diagnostics;
 mod edit;
+mod fusion;
 mod mask;
 mod mesh;
 mod modeling;
@@ -21,6 +22,10 @@ pub use path_stroke::{PathStrokeOptions, PathStrokePreview, PathStrokeRequest, P
 mod projection;
 pub use projection::ProjectionSource;
 mod arrays;
+mod boolean;
+#[cfg(test)]
+mod boolean_tests;
+mod cage;
 mod instances;
 mod materials;
 mod paint;

@@ -70,6 +70,7 @@ struct StrokeSurfaceTopology {
     hidden_faces: Vec<bool>,
     polygroups: Vec<usize>,
     group_visibility: Vec<bool>,
+    shading_seams: Option<Arc<crate::sculpt::ShadingSeams>>,
     shading: SurfaceShadingTopology,
     normal_corners: OnceLock<Option<live_normals::VertexCorners>>,
 }
@@ -78,6 +79,7 @@ impl StrokeSurfaceTopology {
         self.model_id == model_id
             && self.triangles == mesh.triangles
             && self.quads == mesh.quads
+            && self.shading_seams == mesh.shading_seams
             && self.hidden_faces == mesh.hidden_faces
             && self.polygroups == mesh.polygroups
             && self
@@ -385,28 +387,70 @@ impl DisplayMesh {
         }))
     }
     pub fn new(document: &Document) -> Self {
-        Self::build(document, false, None, None)
+        Self::build(document, false, None, None, None)
     }
     pub(super) fn new_cached(document: &Document, cache: &mut ShadingCache) -> Self {
         cache.prepare(document.source_revision());
-        Self::build(document, false, None, Some(cache))
+        Self::build(document, false, None, None, Some(cache))
     }
     pub(super) fn preview(document: &Document) -> Self {
-        Self::build(document, true, None, None)
+        Self::build(document, true, None, None, None)
     }
     pub fn with_active_mesh(document: &Document, mesh: &Mesh) -> Self {
-        Self::build(document, true, Some(mesh), None)
+        Self::build(document, true, Some(mesh), None, None)
+    }
+    /// A cage drag keeps the source revision fixed. Reuse the dense stroke's
+    /// canonical face fans, including hidden faces, for its temporary normals.
+    pub(in crate::viewport) fn cage_preview(
+        &self,
+        document: &Document,
+        positions: Vec<Vec3>,
+        scratch: &mut Option<Mesh>,
+    ) -> Self {
+        if let Some(cached) = &self.stroke_topology {
+            let mut next = self.clone();
+            let geometry = Arc::make_mut(&mut next.geometry);
+            let normals = live_normals::normals_at_positions(
+                &positions,
+                &document.mesh().triangles,
+                &cached.fans,
+                &self.shading.vertices,
+            );
+            geometry.shading.vertices = Arc::new(normals.vertices);
+            geometry.depth_extent = positions.iter().map(|p| p.len()).fold(1_f32, f32::max) + 1.;
+            geometry.mesh.vertices = Arc::new(positions);
+            geometry.temporary_normals = true;
+            return next;
+        }
+        let mesh = scratch.get_or_insert_with(|| document.mesh().clone());
+        mesh.vertices = positions;
+        Self::with_active_mesh(document, mesh)
+    }
+    pub fn with_boolean_result(document: &Document, mesh: &Mesh) -> Self {
+        Self::build(document, true, None, Some(mesh), None)
     }
     fn build(
         document: &Document,
         preview: bool,
         active_mesh: Option<&Mesh>,
+        boolean_result: Option<&Mesh>,
         mut source_cache: Option<&mut ShadingCache>,
     ) -> Self {
         let active = document.active_model_index();
+        let group = &document.model(active).unwrap().metadata.group;
+        let operand = |meta: &crate::sculpt::ModelMetadata| {
+            &meta.group == group && meta.boolean_role != crate::sculpt::BooleanRole::Regular
+        };
+        let result_slot = boolean_result.and_then(|_| {
+            std::iter::once(active)
+                .chain(0..document.model_count())
+                .find(|&i| operand(document.model(i).unwrap().metadata))
+        });
+        let result_owner = super::super::boolean::RESULT_OWNER;
         let mut mesh = Mesh {
             uv: Default::default(),
             creases: Vec::new(),
+            shading_seams: None,
             materials: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
@@ -455,7 +499,15 @@ impl DisplayMesh {
             {
                 continue;
             }
-            let model = if let Some(mesh) = generated {
+            let result_mesh = boolean_result.filter(|_| result_slot == Some(index));
+            let model = if let Some(mesh) = result_mesh {
+                crate::document::ModelRef {
+                    name: "Boolean result",
+                    metadata: &instance_metadata,
+                    settings: &instance_settings,
+                    mesh,
+                }
+            } else if let Some(mesh) = generated {
                 crate::document::ModelRef {
                     name: "Path assembly",
                     metadata: &instance_metadata,
@@ -474,7 +526,7 @@ impl DisplayMesh {
             } else {
                 document.model(index).unwrap()
             };
-            if !model.metadata.visible {
+            if !model.metadata.visible || (boolean_result.is_some() && operand(model.metadata)) {
                 continue;
             }
             let original = if index == active {
@@ -546,6 +598,7 @@ impl DisplayMesh {
             mesh.mask.extend_from_slice(&surface.mask);
             muted_vertices.extend(std::iter::repeat_n(
                 index != active
+                    && result_mesh.is_none()
                     && !resolved.is_some_and(|&(id, _, _)| {
                         document.array_owner(id) == Some(active) && !document.editing_array_source()
                     })
@@ -591,6 +644,7 @@ impl DisplayMesh {
                 && instances.is_empty()
                 && index == active
                 && active_mesh.is_none()
+                && boolean_result.is_none()
                 && surface.vertices.len() >= 20_000
                 && model.metadata.temporary_thickness == 0.
                 && model.settings.primitive.is_none()
@@ -687,7 +741,11 @@ impl DisplayMesh {
                         }
                     }
                 }
-                owners.push(index);
+                owners.push(if result_mesh.is_some() {
+                    result_owner
+                } else {
+                    index
+                });
                 source_faces.push(face);
                 let id = surface.polygroups.get(face).copied().unwrap_or(0);
                 poly_colors.push(if id == 0 {
@@ -707,6 +765,7 @@ impl DisplayMesh {
                         hidden_faces: surface.hidden_faces.clone(),
                         polygroups: surface.polygroups.clone(),
                         group_visibility: surface.vertex_groups.iter().map(|g| g.visible).collect(),
+                        shading_seams: surface.shading_seams.clone(),
                         shading: topology,
                         normal_corners: OnceLock::new(),
                     }),
@@ -761,7 +820,11 @@ impl DisplayMesh {
                 edge_colors: Arc::new(edge_colors),
                 outlines: Arc::new(outlines),
                 active_vertices,
-                active,
+                active: if result_slot == Some(active) {
+                    result_owner
+                } else {
+                    active
+                },
                 depth_extent,
                 stroke_topology,
                 temporary_normals: false,

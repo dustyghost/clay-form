@@ -121,6 +121,24 @@ pub(super) fn extract(
     field: &[f32],
     cancelled: &dyn Fn() -> bool,
 ) -> Result<Mesh, String> {
+    extract_with(
+        grid,
+        field,
+        cancelled,
+        false,
+        |center, _, _| center,
+        |_, _, _| {},
+    )
+}
+
+pub(super) fn extract_with(
+    grid: &Grid,
+    field: &[f32],
+    cancelled: &dyn Fn() -> bool,
+    triangulate: bool,
+    place_vertex: impl Fn(Vec3, &[(usize, usize)], Vec3) -> Vec3,
+    mut record_face: impl FnMut(usize, usize, [usize; 4]),
+) -> Result<Mesh, String> {
     let [nx, ny, nz] = grid.dims;
     let mut cells = vec![usize::MAX; field.len()];
     let mut mesh = Mesh::default();
@@ -161,6 +179,7 @@ pub(super) fn extract(
                         continue;
                     }
                     let mut sum = Vec3::default();
+                    let mut crossings = [(0, 0); 12];
                     let mut count = 0;
                     let id = mesh.vertices.len();
                     for (j, (a, b)) in EDGES.into_iter().enumerate() {
@@ -170,10 +189,11 @@ pub(super) fn extract(
                         let (a, b) = (corners[a], corners[b]);
                         let t = field[a] / (field[a] - field[b]);
                         sum = sum + grid.point(a) + (grid.point(b) - grid.point(a)) * t;
+                        crossings[count] = (a, b);
                         count += 1;
                         ids[j] = id;
                     }
-                    let p = sum * (1. / count as f32);
+                    let p = place_vertex(sum * (1. / count as f32), &crossings[..count], low);
                     mesh.vertices.push(Vec3(
                         p.0.clamp(low.0 + margin, low.0 + grid.step - margin),
                         p.1.clamp(low.1 + margin, low.1 + grid.step - margin),
@@ -234,15 +254,54 @@ pub(super) fn extract(
                     if field[start] >= 0. {
                         q.reverse();
                     }
-                    let [a, b, c, d] = q.map(|i| mesh.vertices[i]);
-                    let n0 = (b - a).cross(c - a);
-                    let n1 = (c - a).cross(d - a);
-                    if n0.len().min(n1.len()) < grid.step * grid.step * 1e-8 || n0.dot(n1) <= 0. {
+                    let alignment = |corners: [usize; 4]| {
+                        let [a, b, c, d] = corners.map(|i| mesh.vertices[i]);
+                        let n0 = (b - a).cross(c - a);
+                        let n1 = (c - a).cross(d - a);
+                        let (l0, l1) = (n0.len(), n1.len());
+                        if l0.min(l1) < grid.step * grid.step * 1e-8 {
+                            return 0.;
+                        }
+                        let dot = n0.dot(n1);
+                        if triangulate { dot / (l0 * l1) } else { dot }
+                    };
+                    let mut score = alignment(q);
+                    // A sliver along a fitted rim can tilt far enough to join the
+                    // cap and wall smoothing fans. Prefer the flatter triangle pair.
+                    if triangulate && score < 0.9999 {
+                        let [a, b, c, d] = q;
+                        let other = [b, c, d, a];
+                        let alternative = alignment(other);
+                        if alternative > score {
+                            q = other;
+                            score = alternative;
+                        }
+                    }
+                    if score > 0. {
+                        if !triangulate {
+                            mesh.quads.push(q);
+                        }
+                        let [a, b, c, d] = q;
+                        mesh.triangles.extend([[a, b, c], [a, c, d]]);
+                    } else if triangulate {
+                        // Each corner lies in a different cell around this lattice
+                        // edge. Its zero crossing gives four consistently wound
+                        // triangles even when neither diagonal spans the face.
+                        let t = field[start] / (field[start] - field[end]);
+                        let p = grid.point(start) + (grid.point(end) - grid.point(start)) * t;
+                        let i = mesh.vertices.len();
+                        if i >= max_vertices() {
+                            return Err("Boolean result exceeds mesh limits".into());
+                        }
+                        mesh.vertices.push(p);
+                        mesh.mask.push(0.);
+                        for k in 0..4 {
+                            mesh.triangles.push([q[k], q[(k + 1) % 4], i]);
+                        }
+                    } else {
                         return Err("Quad remesh would create folded or degenerate faces. Increase Resolution or choose Triangles; the original model is unchanged.".into());
                     }
-                    mesh.quads.push(q);
-                    let [a, b, c, d] = q;
-                    mesh.triangles.extend([[a, b, c], [a, c, d]]);
+                    record_face(start, end, q);
                     if mesh.triangles.len() > max_triangles() {
                         return Err(
                             "Quad remesh exceeds mesh limits; choose a lower resolution".into()
@@ -252,11 +311,13 @@ pub(super) fn extract(
             }
         }
     }
-    if mesh.quads.is_empty() {
+    if mesh.triangles.is_empty() {
         return Err("No surface found at this resolution; increase resolution".into());
     }
-    mesh.require_adaptive_quads()
-        .map_err(|_| AMBIGUOUS.to_string())?;
+    if !triangulate {
+        mesh.require_adaptive_quads()
+            .map_err(|_| AMBIGUOUS.to_string())?;
+    }
     Ok(mesh)
 }
 

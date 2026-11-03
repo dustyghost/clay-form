@@ -401,6 +401,7 @@ impl App {
                 Some(Command::EditEdges(edit))
             }
             Action::ProjectDetails => Some(Command::OpenProjection),
+            Action::JoinMeshes => Some(Command::OpenFusion),
             Action::RelaxMesh => Some(Command::OpenRelaxation),
             Action::KeepProjectionReference => Some(Command::KeepProjectionReference),
             Action::Subdivide => Some(Command::Subdivide),
@@ -698,6 +699,9 @@ impl App {
             Action::Rotate => Some(Command::TransformOperation(
                 crate::viewport::TransformOperation::Rotate,
             )),
+            Action::DeformationFrame => Some(Command::TransformOperation(
+                crate::viewport::TransformOperation::Cage,
+            )),
             Action::PlacePivot => Some(Command::TransformOperation(
                 crate::viewport::TransformOperation::PlacePivot,
             )),
@@ -707,6 +711,10 @@ impl App {
             )),
             Action::PolygroupColors => {
                 self.ui.show_polygroups = !self.ui.show_polygroups;
+                None
+            }
+            Action::FlatShading => {
+                self.ui.flat_shading = !self.ui.flat_shading;
                 None
             }
             Action::Backfaces => {

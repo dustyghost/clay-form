@@ -4,6 +4,7 @@ use eframe::egui::{Pos2, Vec2};
 mod about;
 mod appearance;
 mod attached_arrays;
+mod deformation_stack;
 mod grouped_path;
 mod instances;
 mod path_transform;
@@ -3652,6 +3653,7 @@ mod modeling;
 
 mod files;
 
+mod fusion;
 mod projection;
 
 #[test]

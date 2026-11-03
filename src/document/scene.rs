@@ -428,6 +428,7 @@ impl Document {
                 m.metadata.group.clear();
             }
         }
+        self.display_changed();
         self.dirty = true;
         Ok(())
     }

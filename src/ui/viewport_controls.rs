@@ -475,7 +475,7 @@ fn control_glyph(control: &ViewportControl) -> Glyph {
             Action::Save | Action::SaveAs => Glyph::Save,
             Action::Open => Glyph::Open,
             Action::Export => Glyph::Export,
-            Action::Perspective | Action::Backfaces => Glyph::View,
+            Action::Perspective | Action::Backfaces | Action::FlatShading => Glyph::View,
             Action::Symmetry => Glyph::Symmetry,
             Action::CustomizeWorkspace | Action::KeySettings => Glyph::Settings,
             Action::Subdivide | Action::Remesh => Glyph::Mesh,

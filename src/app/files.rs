@@ -289,6 +289,9 @@ impl App {
         }
     }
     pub(super) fn request(&mut self, action: PendingAction, ctx: &egui::Context) {
+        if self.ui.fusion.open {
+            self.cancel_fusion();
+        }
         self.ui.file_picker = None;
         self.cancel_mesh_job();
         self.viewport.cancel(&mut self.document);
@@ -307,6 +310,9 @@ impl App {
                 self.document.new_sphere();
                 self.viewport.object_brush = None;
                 self.ui.instances = Default::default();
+                if self.ui.boolean_enabled {
+                    self.toggle_boolean_preview();
+                }
                 self.ui.path = self.document.current_path().into();
                 self.retire_recovery();
                 self.ui.status = "New sphere".into();
@@ -318,6 +324,9 @@ impl App {
                     Ok(()) => {
                         self.viewport.object_brush = None;
                         self.ui.instances = Default::default();
+                        if self.ui.boolean_enabled {
+                            self.toggle_boolean_preview();
+                        }
                         self.ui.path = path.clone();
                         self.retire_recovery();
                         self.ui.selected = 0;
