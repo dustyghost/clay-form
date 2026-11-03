@@ -38,6 +38,7 @@ impl Mesh {
             partial_contact: false,
             varying_distance: false,
             rim: Vec::new(),
+            preview: Default::default(),
         })
     }
 

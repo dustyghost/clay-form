@@ -23,26 +23,29 @@ pub(crate) enum TransformOperation {
     PlaceLine,
     Rotate,
     PlacePivot,
+    Cage,
 }
 impl TransformOperation {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Universal,
         Self::PlaceLine,
         Self::Move,
         Self::Scale,
         Self::Rotate,
         Self::PlacePivot,
+        Self::Cage,
     ];
     pub fn available(self, mode: TransformMode) -> bool {
         mode != TransformMode::Sculpt
             && match self {
                 Self::PlaceLine => mode == TransformMode::ActionLine,
-                Self::PlacePivot | Self::Universal => mode == TransformMode::World,
+                Self::Cage | Self::PlacePivot | Self::Universal => mode == TransformMode::World,
                 _ => true,
             }
     }
     pub fn label(self) -> &'static str {
         match self {
+            Self::Cage => "Deformation frame",
             Self::Move => "Move",
             Self::Universal => "Universal",
             Self::Scale => "Scale",
@@ -53,6 +56,9 @@ impl TransformOperation {
     }
     pub fn hint(self) -> &'static str {
         match self {
+            Self::Cage => {
+                "Drag a corner to push or pull. Drag B or T sideways to bend or twist along the chosen axis. Esc cancels a drag."
+            }
             Self::Move => "Drag an axis or the middle handle to move the model",
             Self::Universal => {
                 "Arrows move · squares scale · rings rotate · centre diamond moves only the pivot"
@@ -94,6 +100,11 @@ pub(super) struct TransformControls {
     rotation: Option<RotationDrag>,
 }
 fn bounds_center(document: &Document) -> Vec3 {
+    if !document.editing_array_source()
+        && let Some(pivot) = document.array_world_pivot()
+    {
+        return pivot;
+    }
     if document.mesh().vertices.is_empty() {
         return Vec3::default();
     }
@@ -108,6 +119,43 @@ fn bounds_center(document: &Document) -> Vec3 {
 fn universal_size(scene: &Scene) -> f32 {
     (scene.rect.width().min(scene.rect.height()) * 0.42).clamp(50., 130.)
 }
+/// Project the world axes once for both model and instance placement handles.
+pub(super) fn world_axes(
+    scene: &Scene,
+    pivot: Vec3,
+) -> impl Iterator<Item = (Vec3, Vec2, Color32, &'static str)> + '_ {
+    [
+        (Vec3(1., 0., 0.), controls::AXES[0], "X"),
+        (Vec3(0., 1., 0.), controls::AXES[1], "Y"),
+        (Vec3(0., 0., 1.), controls::AXES[2], "Z"),
+    ]
+    .into_iter()
+    .filter_map(move |(axis, color, label)| {
+        let projected = scene.axis_direction(pivot, axis);
+        (projected.length() > 0.1).then_some((axis, projected, color, label))
+    })
+}
+pub(super) fn axis_motion(
+    scene: &Scene,
+    pivot: Vec3,
+    axis: Vec3,
+    projected: Vec2,
+    start: Pos2,
+    end: Pos2,
+) -> Vec3 {
+    let amount = scene
+        .axis_parameter(end, pivot, axis)
+        .zip(scene.axis_parameter(start, pivot, axis))
+        .map_or_else(
+            || {
+                (end - start).dot(projected)
+                    / (projected.length_sq().max(0.01) * scene.scale_at(pivot))
+            },
+            |(end, start)| end - start,
+        );
+    axis * amount
+}
+
 impl TransformControls {
     pub fn finish_drag(&mut self) {
         self.drag = None;
@@ -196,7 +244,7 @@ impl TransformControls {
         if !document.active_visible() || document.mesh().vertices.is_empty() {
             return vec![];
         }
-        if op == TransformOperation::Rotate {
+        if matches!(op, TransformOperation::Cage | TransformOperation::Rotate) {
             return vec![];
         }
         if mode == TransformMode::World {
@@ -266,20 +314,13 @@ impl TransformControls {
                     "MOVE"
                 },
             )];
-            for (axis, color, label) in [
-                (Vec3(1., 0., 0.), controls::AXES[0], "X"),
-                (Vec3(0., 1., 0.), controls::AXES[1], "Y"),
-                (Vec3(0., 0., 1.), controls::AXES[2], "Z"),
-            ] {
-                let projected = scene.axis_direction(pivot, axis);
-                if projected.length() > 0.1 {
-                    handles.push((
-                        origin + projected * 85.,
-                        Handle::Axis(axis, projected),
-                        color,
-                        label,
-                    ));
-                }
+            for (axis, projected, color, label) in world_axes(scene, pivot) {
+                handles.push((
+                    origin + projected * 85.,
+                    Handle::Axis(axis, projected),
+                    color,
+                    label,
+                ));
             }
             handles
         } else if let Some([a, b]) = self.line {
@@ -299,6 +340,7 @@ impl TransformControls {
                     "MOVE",
                 )],
                 TransformOperation::Rotate
+                | TransformOperation::Cage
                 | TransformOperation::PlacePivot
                 | TransformOperation::Universal => vec![],
                 TransformOperation::Scale => vec![
@@ -477,11 +519,8 @@ impl TransformControls {
                         1. + axis.2 * (factor - 1.),
                     );
                 } else {
-                    let motion = scene
-                        .axis_parameter(pointer, pivot, axis)
-                        .zip(scene.axis_parameter(pointer - delta, pivot, axis))
-                        .map_or(amount / scale, |(end, start)| end - start);
-                    transform.translation = axis * motion;
+                    transform.translation =
+                        axis_motion(scene, pivot, axis, projected, pointer - delta, pointer);
                 }
             }
             Handle::Uniform => {
@@ -520,6 +559,9 @@ impl TransformControls {
         op: TransformOperation,
     ) {
         if !document.active_visible() || document.mesh().vertices.is_empty() {
+            return;
+        }
+        if op == TransformOperation::Cage {
             return;
         }
         let origin = scene.project(self.origin(document, mode));

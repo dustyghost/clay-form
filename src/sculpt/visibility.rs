@@ -85,6 +85,7 @@ impl Mesh {
         let mut result = Self {
             uv: Default::default(),
             creases: Vec::new(),
+            shading_seams: None,
             vertices: Vec::new(),
             triangles: Vec::new(),
             quads: Vec::new(),

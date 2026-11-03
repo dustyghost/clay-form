@@ -137,6 +137,9 @@ pub(crate) enum Action {
     Primitive,
     ConvertPrimitive,
     DuplicateModel,
+    CreateInstanceArray,
+    CreatePathAssembly,
+    CaptureObjectBrush,
     DeleteSubmodel,
     MergeDown,
     ExtractMasked,
@@ -162,10 +165,12 @@ pub(crate) enum Action {
     PlaceLine,
     Rotate,
     PlacePivot,
+    DeformationFrame,
     ResetPivot,
     RespectMask,
     PolygroupColors,
     Backfaces,
+    FlatShading,
     WireVisible,
     WireFront,
     WireTransparent,
@@ -187,6 +192,8 @@ pub(crate) enum Action {
     BrushAdd,
     BrushSubtract,
     BrushIcon,
+    ObjectBrushModels,
+    ArrayControls,
     BrushSize,
     BrushInnerRadius,
     BrushStrength,
@@ -219,6 +226,7 @@ impl Action {
         let ctrl = Modifiers::CTRL;
         let none = Modifiers::NONE;
         let (key, modifiers) = match self {
+            Self::ObjectBrushModels => (Key::B, none),
             Self::Save => (Key::S, ctrl),
             Self::SaveAs => (Key::S, ctrl | Modifiers::SHIFT),
             Self::Open => (Key::O, ctrl),
@@ -296,6 +304,9 @@ impl Action {
         Self::Primitive,
         Self::ConvertPrimitive,
         Self::DuplicateModel,
+        Self::CreateInstanceArray,
+        Self::CreatePathAssembly,
+        Self::CaptureObjectBrush,
         Self::MergeDown,
         Self::ExtractMasked,
         Self::ApplyThickness,
@@ -320,10 +331,12 @@ impl Action {
         Self::PlaceLine,
         Self::Rotate,
         Self::PlacePivot,
+        Self::DeformationFrame,
         Self::ResetPivot,
         Self::RespectMask,
         Self::PolygroupColors,
         Self::Backfaces,
+        Self::FlatShading,
         Self::WireVisible,
         Self::WireFront,
         Self::WireTransparent,
@@ -357,6 +370,8 @@ impl Action {
         Self::StrokeDragDot,
         Self::StrokeStabilisation,
         Self::BrushIcon,
+        Self::ObjectBrushModels,
+        Self::ArrayControls,
         Self::BrushSize,
         Self::BrushInnerRadius,
         Self::BrushStrength,
@@ -400,6 +415,7 @@ impl Action {
         Self::ModelTool(crate::viewport::ModelTool::Inset),
         Self::ModelTool(crate::viewport::ModelTool::Bevel),
         Self::ModelTool(crate::viewport::ModelTool::Fuse),
+        Self::ModelTool(crate::viewport::ModelTool::CutCell),
         Self::ModelTool(crate::viewport::ModelTool::Move),
         Self::ModelTool(crate::viewport::ModelTool::Rotate),
         Self::ModelTool(crate::viewport::ModelTool::Scale),
@@ -500,7 +516,7 @@ impl Action {
                 "Start a brush stroke near a saved surface path to guide the section you draw. Turn off to sculpt freely near paths."
             }
             Self::DeleteSubmodel => {
-                "Remove the selected submodel, including hidden geometry, masks, levels and modifiers. Undo restores it. Deleting the last model leaves an empty model slot."
+                "Confirm removal of the selected submodel, including hidden geometry, masks, levels and modifiers. Undo restores it. Deleting the last model leaves an empty model slot."
             }
             Self::RelaxMesh => {
                 "Redistribute existing vertices along a fixed surface reference. Masks protect local regions; preview, inspect and apply one undoable edit."
@@ -697,6 +713,9 @@ impl Action {
             Self::Primitive => "Create / edit primitive",
             Self::ConvertPrimitive => "Convert to sculpting mesh",
             Self::DuplicateModel => "Duplicate submodel",
+            Self::CreateInstanceArray => "Create submodel array…",
+            Self::CreatePathAssembly => "Create path object…",
+            Self::CaptureObjectBrush => "Capture object brush",
             Self::DeleteSubmodel => "Delete submodel",
             Self::MergeDown => "Merge down",
             Self::ExtractMasked => "Extract masked",
@@ -721,11 +740,13 @@ impl Action {
             Self::Scale => "Scale transform",
             Self::PlaceLine => "Set action line",
             Self::Rotate => "Rotate transform",
+            Self::DeformationFrame => "Deformation frame",
             Self::PlacePivot => "Place transform pivot",
             Self::ResetPivot => "Reset transform pivot",
             Self::RespectMask => "Toggle transform mask protection",
             Self::PolygroupColors => "Toggle vertex group colors",
             Self::Backfaces => "Toggle back-facing surfaces",
+            Self::FlatShading => "Toggle flat shading",
             Self::WireVisible => "Wireframe: visible surface",
             Self::WireFront => "Wireframe: front facing",
             Self::WireTransparent => "Wireframe: transparent",
@@ -754,6 +775,8 @@ impl Action {
             Self::StrokeDragDot => "Stroke: Drag Dot",
             Self::StrokeStabilisation => "Toggle stroke stabilisation",
             Self::BrushIcon => "Active brush icon",
+            Self::ObjectBrushModels => "Object brush models",
+            Self::ArrayControls => "Active array controls",
             Self::BrushSize => "Brush size",
             Self::BrushInnerRadius => "Brush inner radius",
             Self::BrushStrength => "Brush strength",
@@ -794,6 +817,7 @@ impl From<crate::viewport::TransformOperation> for Action {
             TransformOperation::Scale => Self::Scale,
             TransformOperation::PlaceLine => Self::PlaceLine,
             TransformOperation::Rotate => Self::Rotate,
+            TransformOperation::Cage => Self::DeformationFrame,
             TransformOperation::PlacePivot => Self::PlacePivot,
         }
     }

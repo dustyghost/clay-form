@@ -32,6 +32,34 @@ fn document(mesh: Mesh) -> Document {
     doc
 }
 
+#[test]
+fn dense_cage_preview_reuses_immutable_surface_buffers() {
+    let doc = document(source());
+    let display = DisplayMesh::new(&doc);
+    let mut positions = doc.mesh().vertices.clone();
+    for p in &mut positions {
+        p.0 += 0.1 * p.1;
+    }
+    let mut scratch = None;
+    let preview = display.cage_preview(&doc, positions, &mut scratch);
+    assert!(scratch.is_none());
+    assert!(Arc::ptr_eq(
+        &display.mesh.triangles,
+        &preview.mesh.triangles
+    ));
+    assert!(Arc::ptr_eq(
+        &display.mesh.materials,
+        &preview.mesh.materials
+    ));
+    assert!(Arc::ptr_eq(
+        &display.shading.triangles,
+        &preview.shading.triangles
+    ));
+    assert!(Arc::ptr_eq(&display.source_faces, &preview.source_faces));
+    assert_ne!(display.mesh.vertices, preview.mesh.vertices);
+    assert_ne!(display.shading.vertices, preview.shading.vertices);
+}
+
 fn dab() -> Dab {
     Dab {
         center: Vec3(-0.2, 0., 0.98),
@@ -57,6 +85,42 @@ fn assert_visible_data(actual: &DisplayMesh, canonical: &DisplayMesh) {
     assert_eq!(actual.uv_corners, canonical.uv_corners);
     assert_eq!(actual.edge_colors, canonical.edge_colors);
     assert_eq!(actual.outlines, canonical.outlines);
+}
+
+#[test]
+fn reusable_hidden_instances_preserve_stroke_cache_and_visible_copies_invalidate_it() {
+    use crate::sculpt::instances::{Array, Layout, Set};
+    let mut doc = document(source());
+    let piece = doc.instance_piece(0).unwrap();
+    let mut array = Array::new(piece);
+    array.count = 1;
+    let mut set = Set {
+        id: 1,
+        name: "Hidden copy".into(),
+        visible: false,
+        layout: Layout::Array(array),
+        adjustments: Vec::new(),
+    };
+    doc.preview_instance_set(set.clone()).unwrap();
+    doc.apply_instance_preview().unwrap();
+    let display = DisplayMesh::new(&doc);
+    assert!(doc.apply_dab(&Brush::new(Kind::Standard), dab()));
+    let live = Arc::new(
+        display
+            .during_stroke(&doc)
+            .expect("hidden copies keep fast normals"),
+    );
+    doc.end_stroke();
+    assert!(live.after_stroke(&doc).is_some());
+    set.visible = true;
+    doc.preview_instance_set(set).unwrap();
+    doc.apply_instance_preview().unwrap();
+    assert!(
+        live.after_stroke(&doc).is_none(),
+        "release must include newly visible copies"
+    );
+    doc.begin_stroke();
+    assert!(live.during_stroke(&doc).is_none());
 }
 
 #[test]

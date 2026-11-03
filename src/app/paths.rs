@@ -355,7 +355,10 @@ impl App {
                     )?
                 } else {
                     let id = path.id;
-                    self.document.update_path(path)?;
+                    self.document.update_path_with_section_scale(
+                        path,
+                        self.viewport.paths.transform.pending_section_scale,
+                    )?;
                     id
                 };
                 self.viewport
@@ -368,6 +371,7 @@ impl App {
                 let id = self.viewport.paths.draft.as_ref().map(|p| p.id);
                 self.viewport.paths.draft = id.and_then(|id| self.document.path(id).cloned());
                 self.viewport.paths.selected = None;
+                self.viewport.paths.transform.reset();
             }
             PathCommand::Delete => {
                 let id = self
@@ -398,6 +402,28 @@ impl App {
                     .paths
                     .select(self.document.path(id).unwrap().clone());
                 self.ui.status = "Path reattached to the current surface".into();
+            }
+            PathCommand::Detach => {
+                let path = self
+                    .viewport
+                    .paths
+                    .draft
+                    .as_ref()
+                    .ok_or("Select a path first")?;
+                if path.id == 0 {
+                    self.viewport.paths.draft = Some(path.detached());
+                } else {
+                    if self.viewport.paths.dirty(&self.document) {
+                        return Err("Save or discard path edits before detaching it".into());
+                    }
+                    let id = path.id;
+                    self.document.detach_path(id)?;
+                    self.viewport
+                        .paths
+                        .select(self.document.path(id).unwrap().clone());
+                }
+                self.ui.status =
+                    "Free path: move, rotate and scale it independently of the surface".into();
             }
             PathCommand::Preview | PathCommand::StrokeEntirePath => {
                 let auto_apply = matches!(command, PathCommand::StrokeEntirePath);

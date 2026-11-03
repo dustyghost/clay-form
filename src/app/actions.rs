@@ -194,9 +194,10 @@ impl App {
                     self.dispatch(Command::ModelingMode(true), ctx);
                 }
                 self.viewport.cancel(&mut self.document);
-                if let Some(mode) = tool.required_mode()
-                    && self.ui.modeling.mode != mode
-                {
+                if !tool.supports_mode(self.ui.modeling.mode) {
+                    let mode = tool
+                        .required_mode()
+                        .unwrap_or(crate::viewport::ComponentMode::Face);
                     self.dispatch(Command::ModelingComponent(mode), ctx);
                 }
                 self.ui.modeling.set_tool(tool);
@@ -441,6 +442,12 @@ impl App {
                 self.ui.show_symmetry_guides = !self.ui.show_symmetry_guides;
                 None
             }
+            Action::Smaller | Action::Larger if self.ui.instances.placing => {
+                let scale = &mut self.ui.instances.brush.scale;
+                *scale = (*scale * if action == Action::Smaller { 0.9 } else { 1.1 })
+                    .clamp(0.001, 1000.);
+                None
+            }
             Action::Smaller | Action::Larger => {
                 let Some(index) = active_brush else { return };
                 let mut brush = self.document.brushes()[index].clone();
@@ -448,16 +455,32 @@ impl App {
                     .clamp(1., 500.);
                 Some(Command::UpdateBrush(index, brush))
             }
-            Action::PreviousBrush => {
-                let index = (self.ui.selected + self.document.brushes().len() - 1)
-                    % self.document.brushes().len();
-                self.ui.select_brush(index, &self.document);
-                None
-            }
-            Action::NextBrush => {
-                let index = (self.ui.selected + 1) % self.document.brushes().len();
-                self.ui.select_brush(index, &self.document);
-                None
+            Action::PreviousBrush | Action::NextBrush => {
+                let sculpt_count = self.document.brushes().len();
+                let objects = &self.document.instances().brushes;
+                let count = sculpt_count + objects.len();
+                let index = objects
+                    .iter()
+                    .position(|b| {
+                        self.ui.instances.placing && Some(b.id) == self.ui.instances.group
+                    })
+                    .map_or(self.ui.selected, |n| sculpt_count + n);
+                let step = if action == Action::NextBrush {
+                    1
+                } else {
+                    count - 1
+                };
+                let next = (index + step) % count;
+                if next < sculpt_count {
+                    self.ui.select_brush(next, &self.document);
+                    None
+                } else {
+                    Some(Command::Instances(
+                        crate::command::InstanceCommand::ChooseBrush(
+                            objects[next - sculpt_count].id,
+                        ),
+                    ))
+                }
             }
 
             Action::CancelMeshOperation => Some(Command::CancelMeshJob),
@@ -576,6 +599,20 @@ impl App {
             Action::Primitive => Some(Command::RequestPrimitive),
             Action::ConvertPrimitive => Some(Command::ConvertPrimitive),
             Action::DuplicateModel => Some(Command::DuplicateModel),
+            Action::CreateInstanceArray => Some(Command::Instances(
+                crate::command::InstanceCommand::NewArray,
+            )),
+            Action::CreatePathAssembly => {
+                Some(Command::Instances(crate::command::InstanceCommand::NewPath))
+            }
+            Action::CaptureObjectBrush => Some(Command::Instances(
+                crate::command::InstanceCommand::Capture(
+                    self.ui.instances.name.clone(),
+                    self.ui.instances.pivot,
+                    self.ui.instances.forward,
+                    self.ui.instances.up,
+                ),
+            )),
             Action::DeleteSubmodel => Some(Command::DeleteSubmodel),
             Action::MergeDown => Some(Command::MergeDown),
             Action::ExtractMasked => Some(Command::ExtractMasked),
@@ -662,6 +699,9 @@ impl App {
             Action::Rotate => Some(Command::TransformOperation(
                 crate::viewport::TransformOperation::Rotate,
             )),
+            Action::DeformationFrame => Some(Command::TransformOperation(
+                crate::viewport::TransformOperation::Cage,
+            )),
             Action::PlacePivot => Some(Command::TransformOperation(
                 crate::viewport::TransformOperation::PlacePivot,
             )),
@@ -671,6 +711,10 @@ impl App {
             )),
             Action::PolygroupColors => {
                 self.ui.show_polygroups = !self.ui.show_polygroups;
+                None
+            }
+            Action::FlatShading => {
+                self.ui.flat_shading = !self.ui.flat_shading;
                 None
             }
             Action::Backfaces => {
@@ -823,6 +867,23 @@ impl App {
                 self.execute_action(Action::OpenColours, ctx);
                 None
             }
+            Action::ArrayControls => {
+                self.execute_action(Action::ShowPanel(crate::preferences::Tool::Submodels), ctx);
+                None
+            }
+            Action::ObjectBrushModels => {
+                if self.ui.instances.placing
+                    && !self
+                        .viewport
+                        .object_brush
+                        .as_ref()
+                        .is_some_and(|b| b.stroking())
+                {
+                    let menu = self.ui.preferences.object_models_menu();
+                    self.execute_action(Action::OpenMenu(menu), ctx);
+                }
+                None
+            }
             Action::BrushIcon
             | Action::BrushSize
             | Action::BrushInnerRadius
@@ -830,6 +891,12 @@ impl App {
             | Action::StrokeMode => {
                 self.execute_action(Action::ShowPanel(crate::preferences::Tool::Brush), ctx);
                 None
+            }
+            Action::NewBrush(name) if name == "Object" => {
+                let name = self.document.instances().new_brush_name();
+                Some(Command::Instances(
+                    crate::command::InstanceCommand::CreateBrush(name),
+                ))
             }
             Action::NewBrush(name) if name == "Alpha Drag" => Some(Command::AddAlphaDragBrush),
             Action::NewBrush(name) => crate::sculpt::Kind::ALL

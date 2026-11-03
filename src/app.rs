@@ -13,12 +13,14 @@ use crate::{
 use eframe::egui;
 
 mod actions;
+mod boolean;
 mod commands;
 mod context_menu;
 mod diagnostics;
 mod exports;
 mod files;
 mod fusion;
+mod instances;
 mod jobs;
 mod masking;
 pub(crate) mod paths;
@@ -40,6 +42,7 @@ pub struct App {
     job_settings: Option<crate::diagnostics::EditSettings>,
     projection: projection::ProjectionState,
     fusion: fusion::FusionState,
+    boolean: boolean::State,
     paths: paths::PathState,
     closing: bool,
     mesh_job: Option<MeshJob>,
@@ -71,6 +74,7 @@ impl Default for App {
             job_settings: None,
             projection: Default::default(),
             fusion: Default::default(),
+            boolean: Default::default(),
             paths: Default::default(),
             closing: false,
             mesh_job: None,
@@ -86,6 +90,22 @@ impl Default for App {
     }
 }
 impl App {
+    fn reset_touch_for_pen(&mut self, events: &[egui::Event]) {
+        // Discard a finger gesture already in progress when the pen takes over.
+        self.touch = Default::default();
+        if events.iter().any(|event| {
+            matches!(
+                event,
+                egui::Event::PointerButton {
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    ..
+                }
+            )
+        }) {
+            self.viewport.start_pen_contact(&mut self.document);
+        }
+    }
     pub fn with_wgpu(state: &eframe::egui_wgpu::RenderState) -> Result<Self, String> {
         let mut app = Self::new();
         app.viewport.initialize_renderer(state)?;
@@ -134,6 +154,23 @@ impl App {
     fn finish_parameter_input(&mut self, ctx: &egui::Context) {
         if ctx.input(|i| !i.pointer.any_down() || !i.focused) {
             self.document.end_edit();
+            if self.document.instance_preview_active()
+                && !self.ui.instances.invalid
+                && self
+                    .document
+                    .attached_array(self.document.active_model_index())
+                    .is_some_and(|s| {
+                        self.ui
+                            .instances
+                            .editor
+                            .as_ref()
+                            .is_none_or(|e| e.id == s.id)
+                    })
+                && !ctx.wants_keyboard_input()
+                && let Err(error) = self.document.apply_instance_preview()
+            {
+                self.ui.status = error;
+            }
         }
     }
     fn save_preferences(&mut self) {
@@ -156,7 +193,7 @@ impl App {
     }
     fn shortcuts(&mut self, ctx: &egui::Context) {
         if ctx.wants_keyboard_input()
-            || self.ui.primitive_warning.is_some()
+            || self.ui.submodel_confirmation_open()
             || self.ui.pending.is_some()
             || self.ui.file_picker.is_some()
             || self.ui.recovery_open
@@ -234,6 +271,13 @@ impl App {
 
     pub(crate) fn show_viewport(&mut self, ui: &mut egui::Ui) {
         self.ui.preferences.lighting.install(ui.ctx());
+        crate::viewport::set_flat_shading(ui.ctx(), self.ui.flat_shading);
+        self.boolean_preview(ui.ctx());
+        if self.ui.boolean_enabled {
+            self.viewport
+                .boolean_notice
+                .clone_from(&self.ui.boolean_notice);
+        }
         let mask_consumes_escape = self.update_temporary_mask(ui);
         self.ui.viewport_menu.viewport_rect = Some(ui.available_rect_before_wrap());
         if !ui.input(|i| self.ui.preferences.visibility_hold.active(i)) {
@@ -297,14 +341,16 @@ impl App {
             && !ui.ctx().wants_keyboard_input()
             && ui.input(|i| i.key_pressed(egui::Key::Escape))
         {
-            if !self.viewport.modeling.dragging() {
+            if !self.viewport.modeling.dragging()
+                && self.viewport.modeling.fuse_contact_preview().is_none()
+            {
                 self.ui.modeling.active = false;
             }
             self.viewport.cancel(&mut self.document);
             self.viewport.wait_for_release();
         }
-        let (primitive_commands, editor_rect) = self.ui.primitive_confirmation(ui.ctx());
-        for command in primitive_commands {
+        let (confirmation_commands, editor_rect) = self.ui.submodel_confirmation(ui.ctx());
+        for command in confirmation_commands {
             self.dispatch(command, ui.ctx());
         }
         let enabled = !self.ui.customization.popup_blocks_viewport
@@ -314,7 +360,7 @@ impl App {
             && self.ui.alphas.draft.is_none()
             && self.ui.alphas.overwrite.is_none()
             && !self.ui.icon_capture_open()
-            && self.ui.primitive_warning.is_none()
+            && !self.ui.submodel_confirmation_open()
             && self.ui.pending.is_none()
             && self.ui.file_picker.is_none()
             && !self.ui.recovery_open
@@ -447,11 +493,77 @@ impl App {
             .brush_size_preview
             .filter(|(frame, _)| *frame == ui.ctx().cumulative_frame_nr())
             .and_then(|(_, index)| self.document.brushes().get(index).cloned());
+        if std::mem::take(&mut self.ui.instances.stop_placing)
+            && let Some(mut brush) = self.viewport.object_brush.take()
+        {
+            brush.cancel(&mut self.document);
+            if let Err(error) = self.remember_object_options() {
+                self.ui.status = error;
+            }
+        }
+        self.viewport.capture_axes = (self.ui.instances.capture_frame
+            == Some(ui.ctx().cumulative_frame_nr())
+            && self.document.active_visible())
+        .then_some((
+            self.ui.instances.pivot,
+            self.ui.instances.forward,
+            self.ui.instances.up,
+        ));
+        if let Some(brush) = &mut self.viewport.object_brush
+            && !brush.stroking()
+        {
+            brush.options = self.ui.instances.brush;
+        }
+        let attached = self
+            .document
+            .attached_array(self.document.active_model_index())
+            .map(|s| s.id);
+        if attached != self.ui.instances.followed_array {
+            self.ui.instances.followed_array = attached;
+            self.ui.instances.array_edit = attached.is_some();
+            self.ui.instances.array_layer = 0;
+        }
+        let legacy_preview = self.document.instance_preview_active()
+            && self
+                .ui
+                .instances
+                .editor
+                .as_ref()
+                .is_some_and(|s| Some(s.id) != attached);
+        self.viewport.array_layer = (self.ui.instances.array_edit
+            && !legacy_preview
+            && !self.document.editing_array_source()
+            && self.document.selected_instance.is_none())
+        .then_some(self.ui.instances.array_layer);
+        self.viewport.path_thickness.configure(
+            self.ui
+                .instances
+                .editor
+                .as_ref()
+                .filter(|_| self.ui.instances.inline_thickness && !self.ui.instances.invalid)
+                .map(|set| set.id)
+                .filter(|&id| {
+                    self.document
+                        .selected_instance
+                        .is_none_or(|(owner, _)| owner != id)
+                }),
+            self.ui.instances.thickness_path_points,
+            self.ui.instances.thickness_sections,
+        );
+        let instance_editor = if let Some(id) = attached.filter(|_| !legacy_preview) {
+            (self.ui.instances.array_edit
+                || self.document.editing_array_source()
+                || self.document.selected_instance.is_some())
+            .then_some(id)
+        } else {
+            self.ui.instances.editor.as_ref().map(|s| s.id)
+        };
         self.viewport.show(
             ui,
             &mut self.document,
             &mut self.camera,
             ViewportOptions {
+                instance_editor,
                 edge_select: self.ui.edges.selecting
                     && !temporary_visibility
                     && !self.ui.mask_active,
@@ -482,6 +594,8 @@ impl App {
                     self.ui.transform_mode
                 },
                 transform_operation: self.ui.transform_operation,
+                boolean_enabled: self.ui.boolean_enabled,
+                cage_axis: self.ui.cage_axis,
                 respect_mask: self.ui.respect_transform_mask,
                 selected,
                 temporary_mask: self.ui.mask_active,
@@ -506,6 +620,9 @@ impl App {
                         || (!over_toolbar
                             && !over_editor
                             && !self.ui.pointer_over_pinned_menu(ui.ctx()))),
+                inline_controls_enabled: enabled
+                    && !self.ui.viewport_controls.arranging
+                    && !self.ui.viewport_controls.editor_open,
                 reverse: if self.ui.mask_active {
                     preferences::Hold::Disabled
                 } else {
@@ -523,6 +640,27 @@ impl App {
                 },
             },
         );
+        if self.ui.instances.placing && self.viewport.object_brush.is_none() {
+            self.ui.instances.group = None;
+            self.ui.instances.asset = None;
+        }
+        self.ui.instances.placing = self.viewport.object_brush.is_some();
+        if std::mem::take(&mut self.viewport.array_selected) {
+            self.ui.instances.array_edit = true;
+        }
+        if let Some(command) = self.viewport.array_command.take() {
+            self.dispatch(Command::Instances(command), ui.ctx());
+        }
+        if let Some(set) = self
+            .viewport
+            .copy_move
+            .updated
+            .take()
+            .or_else(|| self.viewport.path_thickness.updated.take())
+        {
+            self.ui.instances.editor = Some(set);
+            self.ui.instances.invalid = false;
+        }
         self.ui.materials.sampling = self.viewport.sample_colour;
         let sampled = self.viewport.sampled_material.take().or_else(|| {
             self.viewport.sampled_colour.take().map(|colour| {
@@ -611,6 +749,12 @@ impl App {
     }
 }
 impl eframe::App for App {
+    fn raw_input_hook(&mut self, _: &egui::Context, input: &mut egui::RawInput) {
+        if self.tablet.prepare_input(input) {
+            self.reset_touch_for_pen(&input.events);
+        }
+    }
+
     fn on_exit(&mut self) {
         self.save_preferences();
         if self.closing || !self.document.is_dirty() {

@@ -30,7 +30,7 @@ Open **Submodels**. Click a row or click an inactive surface in Sculpt mode to s
 | Eye | Hide/show a model |
 | Up / down | Reorder models |
 | Duplicate | Copy the active surface, mask, and subdivision levels |
-| Delete submodel | Remove the selected model, including hidden geometry and stored levels; Undo restores it |
+| Delete submodel | Confirm the named model to remove it, including hidden geometry and stored levels. Undo restores it |
 | Extract masked | Copy fully selected faces into a new unmasked model |
 | Group selector | Assign the model to an organizational group |
 | Ungroup | Remove the folder while keeping its models |
@@ -39,10 +39,20 @@ The active model is clay-colored and inactive models blue-gray unless vertex-gro
 
 Extracted boundaries stay open and use a fresh subdivision stack. The selection threshold defaults to 50%. Add an existing mesh through [OBJ import](files.md#obj-import).
 
+### Cut and combine solids with a Boolean stack
+
+1. Put the parts in the same Submodels group. The **Ungrouped** section also works as a group.
+2. Each submodel row has a role selector. Set the bottom solid to **Add**. Moving upward, use **Add** to fuse a solid, **Subtract** to cut it away, or **Intersect** to keep the volume shared with the accumulated shape. **Regular** keeps a part separate. The eye bypasses a hidden operand.
+3. Toggle **Boolean result** in Submodels or the Display toolbar to see the evaluated group in the main viewport. Change roles directly on any row or use the row arrows to change the order. Moving an Add above a cutter can fill the cut back in. Select a source row and use the transform handles to move the operand. Toggle the result off to see and sculpt the source surfaces.
+4. Choose a **Voxel resolution** from 16 to 96 samples along the longest additive dimension. The result fits cut rims to the source faces. Smooth shading keeps fitted rims sharp while the surrounding curved walls shade smoothly. Features narrower than a voxel can disappear. Use a finer grid for thin cuts, or increase the source segment count if the cutter itself is faceted. Coincident solids combine once, and separate solid islands can share one result.
+5. Choose **Bake result** to add the preview as a sculptable submodel and hide its sources. The new mesh uses plain clay. Source operands keep their materials, textures, UVs, groups, creases and subdivision levels. Undo restores the editable stack in one step. To revise a saved bake, hide the baked part and show its source operands again.
+
+The preview evaluates the stored current-level meshes in the selected group. Use closed, consistently wound solids, apply temporary thickness, show individual faces and clear masks first. Bake a linked array or path assembly into submodels to use its copies as operands. Turning the result off cancels evaluation. The project stores the operands, roles, order, visibility and resolution.
+
 ### Delete a submodel
 
 1. Open **Submodels** and select the row you want to remove. Hidden models can be selected from the list too.
-2. Check the **Selected** name above **Delete submodel**, then click that button.
+2. Click **Delete submodel**. Check the model name in the dialog and choose **Confirm delete**, or **Cancel** to keep it.
 3. Use **Undo** if you need to restore it. Save the project to keep the removal after reopening.
 
 Deletion removes the whole model, including masks, subdivision levels, primitive settings and modifiers. The next model in the panel becomes active, or the previous one if you removed the last row. Other models retain their geometry and visibility.
@@ -96,6 +106,14 @@ Open **Transform** and select **World axes**.
 | Reset pivot | Return to the model's bounding-box center |
 
 Orbit to expose an axis facing the camera. Edge-on rotation rings accept a straight drag along the projected ring. Drag outside handles to orbit; choose **Done** to sculpt again.
+
+### Deform a model with a frame
+
+Select a sculptable submodel and choose **Submodels → Deformation frame**. Convert a parametric primitive to a sculpting mesh first. Drag a teal corner in the view plane to pull or push the nearby surface. Orbit to pull in a different direction. Overlapping corner handles have short leader lines in face-on views.
+
+Choose **X**, **Y** or **Z** in the transform controls. Drag **B** sideways to bend the model along that axis, or **T** to twist it. Deformation increases toward the positive end of the axis. The viewport shows the signed angle as you drag. Release to commit once, or press **Esc** to discard the preview.
+
+**Respect mask** reduces each vertex’s displacement by its mask weight. Hidden faces and all stored subdivision levels follow the frame. The frame works independently of brush symmetry. Each commit refits the frame to the new bounds. Toggle **Deformation frame** again to hide it. Projects store the resulting geometry, and linked instances follow edits to their source.
 
 ### Example: rotate a cube and keep its recipe
 
@@ -235,6 +253,19 @@ A free or gizmo drag remembers its direction and amount. **Apply amount** reuses
 
 Transform modes, directions and amounts save in presets; older presets retain Axis / amount behavior. Right-click Free, Gizmo or Axis / amount to add it to a custom menu or shelf, or assign a shortcut.
 
+### Cut a one-cell notch
+
+Choose **Cut one cell** in Face or Edge mode. Press a component to preview the full cut. Release to apply it in one Undo step, or press **Esc** while holding to cancel. For a preselected face or edge, use **Apply to selection**. Symmetry cuts matching cells together.
+
+- **Face.** Press a rectangular grid square. Its floor moves inward by one grid layer. A middle square makes a four-walled recess. At an edge or corner, the recess opens onto the adjacent sides.
+- **Edge.** On a **3 × 3 × 3** cube, press the middle segment of the top-front ridge. The cut exposes a floor, a back wall and two side walls.
+
+![Cut one cell preview with the new floor outlined in gold](../images/modeling-cut-one-cell-preview.png)
+
+![One-cell notch cut from a ridge edge](../images/modeling-cell-notch.png)
+
+**Move** translates the selected components freely. Use **Extrude and fuse** to reach a matching loop or face at a distance.
+
 ### Extrude a face or flat region
 
 1. Choose **Face → Extrude**.
@@ -265,6 +296,10 @@ The highlighted rim stays on the dragged face even as the pen moves across other
 Inset and bevel retain the cap selection for the next operation. New faces inherit their source region's face label; surviving weights and creases are retained.
 
 **Extrude and fuse** pushes selected flat face regions inward. Select nonadjacent faces with **Add** (or Shift); adjacent faces stay together as one region, and separate regions move independently. Each region stops at its first compatible intermediate loop, removes the swept exterior strips and retains the moved cap. Internal edges between selected faces do not create walls. **Join matching faces** separately permits opening a tunnel when the opposite cap has the same face layout. Dragging farther keeps the preview at the first compatible contact; release or **Apply amount** commits the same result in one Undo step.
+
+Drag to preview a fuse, or select faces, enter **Distance**, and click **Preview**. Gold outlines the target face or edge loop. Coral shows the side walls that will be removed. Check the preview before releasing the drag or choosing **Apply amount**. **Esc** dismisses the preview. After changing the distance or join settings, click **Preview** again.
+
+![Fuse preview with the opposite face in gold and the removed side walls in coral](../images/modeling-fuse-contact-preview.png)
 
 **Snap range** is a fraction of the local edge length, independent of sculpt brush size. Compatibility requires aligned corners and complete adjoining side strips; this does not cut arbitrary intersecting surfaces. Before a compatible contact is reached, the tool extrudes freely and reports that no fusion occurred. Unmatched or differently tessellated targets are not fused.
 
@@ -461,7 +496,7 @@ These changes undo together and leave sculpt masks unchanged.
 
 Right-click a modeling button and choose **Add to custom menu / shelf…** or **Assign shortcut…**. Component modes, Select/Extrude/Loop cut, selection modes and patterns, join toggle, loop-count buttons, selection clearing/loop expansion, dissolve, and group actions are available in the action catalog.
 
-Extrude and Loop cut on a custom shelf automatically enter the appropriate modeling mode. Group actions use the name and group currently chosen in the Mesh panel. Arbitrary intersecting-face bridging and general Boolean fusion remain outside the supported topology operations.
+Extrude and Loop cut on a custom shelf automatically enter the appropriate modeling mode. Group actions use the name and group currently chosen in the Mesh panel. For solid fusion, use the ordered Boolean stack in Submodels. Intersecting-face bridging remains outside the component tools.
 
 ## Mesh management
 
@@ -688,7 +723,7 @@ Choose **Submodels → Merge down** to combine the active model with the next on
 
 The active model keeps its name/folder. Masks, groups, visibility, and quads survive. Hidden models contribute hidden faces; duplicate group names receive suffixes.
 
-Merge bakes primitives and thickness modifier, uses current mesh levels, and resets the result's level/topology settings. Fill unfilled Circles first. It combines surfaces **without welding or boolean union**; use voxel remeshing for fusion. Undo restores both models.
+Merge bakes primitives and thickness modifier, uses current mesh levels, and resets the result's level/topology settings. Fill unfilled Circles first. It combines surfaces **without welding or boolean union**. Use an additive Boolean stack or voxel remeshing for fusion. Undo restores both models.
 
 ## Related guides
 

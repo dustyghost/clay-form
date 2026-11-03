@@ -22,6 +22,7 @@ pub(super) struct Scene {
     pub(super) rect: egui::Rect,
     pub(super) active_bounds: egui::Rect,
     positions: Arc<Vec<Pos2>>,
+    instance_bounds: Arc<OnceLock<Vec<OnceLock<egui::Rect>>>>,
     pub(super) geometry: Arc<DisplayMesh>,
     // None borrows all_faces when every displayed vertex belongs to the active model.
     active_faces: Option<Arc<Vec<(usize, f32)>>>,
@@ -164,6 +165,28 @@ impl Scene {
         );
         scene
     }
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn paint_cached_preview(
+        painter: &egui::Painter,
+        rect: egui::Rect,
+        camera: &Camera,
+        mut renderer: Option<&mut Renderer>,
+        display: Arc<DisplayMesh>,
+        wire: bool,
+        mode: super::WireMode,
+        triangles: bool,
+    ) -> Self {
+        let scene = Self::prepared(rect, camera, display.clone(), renderer.as_deref_mut(), true);
+        scene.paint_geometry(
+            painter,
+            renderer.as_deref(),
+            wire,
+            mode,
+            triangles,
+            Some(display),
+        );
+        scene
+    }
     fn prepared(
         rect: egui::Rect,
         camera: &Camera,
@@ -298,6 +321,7 @@ impl Scene {
             scale,
             eye_distance,
             positions: Arc::new(positions),
+            instance_bounds: Arc::default(),
             geometry: geometry.clone(),
             active_faces,
             all_faces: Arc::new(faces),
@@ -309,6 +333,43 @@ impl Scene {
             right,
             up,
         }
+    }
+    // Instance owners follow all submodels and are appended in placement order.
+    pub(super) fn instance_faces(&self, owner: usize) -> &[[usize; 3]] {
+        let owners = &self.geometry.owners;
+        let first = owners.partition_point(|&n| n < owner);
+        let end = owners.partition_point(|&n| n <= owner);
+        &self.geometry.mesh.triangles[first..end]
+    }
+    /// Cache only requested frames. Selecting one copy of a dense array visits just its visible faces.
+    pub(super) fn instance_bounds(&self, owner: usize) -> egui::Rect {
+        let entries = self.instance_bounds.get_or_init(|| {
+            let count = self.geometry.owners.last().map_or(0, |&n| n + 1);
+            (0..count).map(|_| OnceLock::new()).collect()
+        });
+        let Some(entry) = entries.get(owner) else {
+            return egui::Rect::NOTHING;
+        };
+        *entry.get_or_init(|| {
+            let mut rect = egui::Rect::NOTHING;
+            let vertices = &self.geometry.mesh.vertices;
+            for tri in self.instance_faces(owner) {
+                if self.eye_distance == 0. || tri.iter().all(|&i| self.visible_depth(vertices[i])) {
+                    for &i in tri {
+                        rect.extend_with(self.positions[i]);
+                    }
+                } else {
+                    let points = tri.map(|i| vertices[i]);
+                    for (a, b) in [(0, 1), (1, 2), (2, 0)] {
+                        if let Some([a, b]) = self.clip_segment([points[a], points[b]]) {
+                            rect.extend_with(a);
+                            rect.extend_with(b);
+                        }
+                    }
+                }
+            }
+            rect
+        })
     }
     pub(super) fn active_faces(&self) -> &[(usize, f32)] {
         self.active_faces
@@ -335,7 +396,6 @@ impl Scene {
         let outlines = &geometry.outlines;
         let active_vertices = geometry.active_vertices;
         let positions = &self.positions;
-        let project = |v| self.project(v);
         painter.rect_filled(
             rect,
             0.,
@@ -357,7 +417,7 @@ impl Scene {
             let faces = &faces;
             let lighting = crate::lighting::Lighting::current(painter.ctx());
             let mut rendered = egui::Mesh::default();
-            for &(i, normal) in geometry.shading.vertices.iter() {
+            let lit_color = |i: usize, normal: Vec3| {
                 let v = mesh.vertices[i];
                 let mask = if i < active_vertices {
                     1. - mesh.mask[i] * 0.75
@@ -379,15 +439,12 @@ impl Scene {
                         lighting.fill,
                     )
                     .map(|c| c * 255.);
-                rendered.colored_vertex(
-                    project(v),
-                    Color32::from_rgb(
-                        (base[0] * mask) as u8,
-                        (base[1] * mask) as u8,
-                        (base[2] * mask) as u8,
-                    ),
-                );
-            }
+                Color32::from_rgb(
+                    (base[0] * mask) as u8,
+                    (base[1] * mask) as u8,
+                    (base[2] * mask) as u8,
+                )
+            };
             use super::WireMode;
             let edge_key = |a: usize, b: usize| if a < b { (a, b) } else { (b, a) };
             let mut hidden = std::collections::HashSet::new();
@@ -508,10 +565,27 @@ impl Scene {
                 }
             };
             if !wire || mode != WireMode::Transparent {
-                for &(i, _) in faces {
-                    rendered
-                        .indices
-                        .extend(geometry.shading.triangles[i].map(|v| v as u32));
+                if super::flat_shading(painter.ctx()) {
+                    for &(i, _) in faces {
+                        let triangle = mesh.triangles[i];
+                        let [a, b, c] = triangle.map(|v| mesh.vertices[v]);
+                        // The visible face list already excludes degenerate triangles.
+                        let cross = (b - a).cross(c - a);
+                        let normal = cross * (1. / cross.len());
+                        for v in triangle {
+                            rendered.indices.push(rendered.vertices.len() as u32);
+                            rendered.colored_vertex(positions[v], lit_color(v, normal));
+                        }
+                    }
+                } else {
+                    for &(v, normal) in geometry.shading.vertices.iter() {
+                        rendered.colored_vertex(positions[v], lit_color(v, normal));
+                    }
+                    for &(i, _) in faces {
+                        rendered
+                            .indices
+                            .extend(geometry.shading.triangles[i].map(|v| v as u32));
+                    }
                 }
                 painter.add(egui::Shape::mesh(rendered));
             }
@@ -730,6 +804,38 @@ impl Scene {
         let (p, normal, face) = self.pick_surface(point)?;
         Some((self.geometry.owners[face], p, normal))
     }
+    /// Placement targets the active surface through its preview copies, while
+    /// retaining hidden-face filtering and conservative mask protection.
+    pub(super) fn pick_object_target(
+        &self,
+        point: Pos2,
+        document: &Document,
+    ) -> Option<(Vec3, Vec3)> {
+        self.pick_object_hit(point, document)
+            .map(|(p, n, _)| (p, n))
+    }
+    pub(super) fn pick_object_hit(
+        &self,
+        point: Pos2,
+        document: &Document,
+    ) -> Option<(Vec3, Vec3, usize)> {
+        let (p, n, face) = pick_faces(
+            self,
+            self.face_candidates(egui::Rect::from_min_max(point, point))
+                .map(|f| f.0)
+                .filter(|&f| self.geometry.owners[f] < document.model_count()),
+            point,
+        )?;
+        if self.geometry.owners[face] != self.active {
+            return None;
+        }
+        let source_face = self.geometry.source_faces[face];
+        let tri = document.mesh().triangles.get(source_face)?;
+        if tri.iter().any(|&i| document.mesh().mask[i] > 0.001) {
+            return None;
+        }
+        Some((p, n, source_face))
+    }
     /// Sample the underlying surface colour, independent of lighting and group overlays.
     #[cfg(test)]
     pub(super) fn pick_colour(&self, point: Pos2) -> Option<[f32; 3]> {
@@ -889,6 +995,242 @@ fn pick_faces(
 mod tests {
     use super::*;
     use crate::sculpt::{Transform, Vec3};
+    #[test]
+    fn reusable_object_picking_ignores_copies_but_respects_occlusion_masks_and_visibility() {
+        use crate::sculpt::{Geometry, Primitive, PrimitiveKind, Submodel, instances::*};
+        let mut plane = Primitive::for_kind(PrimitiveKind::Plane);
+        plane.divisions = [1; 3];
+        let mut doc = Document::default();
+        doc.replace_geometry(Geometry::new(plane.mesh().unwrap()))
+            .unwrap();
+        let piece = doc.instance_piece(0).unwrap();
+        let mut array = Array::new(piece);
+        array.count = 1;
+        array.center.2 = 4.;
+        doc.preview_instance_set(Set {
+            id: 1,
+            name: "Foreground copy".into(),
+            visible: true,
+            layout: Layout::Array(array),
+            adjustments: Vec::new(),
+        })
+        .unwrap();
+        doc.apply_instance_preview().unwrap();
+        let view = scene(&doc);
+        let point = view.project(Vec3::default());
+        assert_eq!(view.pick_model(point).unwrap().0, 1);
+        assert!(view.pick_object_target(point, &doc).unwrap().0.2.abs() < 1e-5);
+        let mut g = doc.geometry_snapshot();
+        let mut blocker = g.mesh.clone();
+        for p in &mut blocker.vertices {
+            p.2 += 2.;
+        }
+        g.submodels.push(Submodel {
+            name: "Occluder".into(),
+            metadata: Default::default(),
+            mesh: blocker,
+            mesh_settings: Default::default(),
+        });
+        doc.replace_geometry(g.clone()).unwrap();
+        assert!(scene(&doc).pick_object_target(point, &doc).is_none());
+        g.submodels[0].metadata.visible = false;
+        doc.replace_geometry(g.clone()).unwrap();
+        assert!(scene(&doc).pick_object_target(point, &doc).is_some());
+        g.mesh.mask.fill(1.);
+        doc.replace_geometry(g.clone()).unwrap();
+        assert!(scene(&doc).pick_object_target(point, &doc).is_none());
+        g.mesh.mask.fill(0.);
+        g.mesh.hidden_faces = vec![true; g.mesh.triangles.len()];
+        doc.replace_geometry(g).unwrap();
+        assert!(scene(&doc).pick_object_target(point, &doc).is_none());
+    }
+    #[test]
+    fn reusable_path_bent_joined_display_and_picking_use_generated_surface() {
+        use crate::sculpt::{
+            Geometry, Primitive, PrimitiveKind,
+            instances::*,
+            paths::{PathMode, PathPoint},
+        };
+        let mut cube = Primitive::for_kind(PrimitiveKind::Cube);
+        cube.divisions = [8, 1, 1];
+        let mut mesh = cube.mesh().unwrap();
+        for p in &mut mesh.vertices {
+            *p = *p * 0.05;
+        }
+        let mut geometry = Geometry::new(mesh);
+        geometry.scene.active_metadata.visible = false;
+        let mut doc = Document::default();
+        doc.replace_geometry(geometry).unwrap();
+        let path = doc
+            .create_path(
+                "Arc".into(),
+                PathMode::Free,
+                vec![Vec3(-1., 0., 0.), Vec3(0., 0.6, 0.), Vec3(1., 0., 0.)]
+                    .into_iter()
+                    .map(|position| PathPoint {
+                        position,
+                        normal: axis(2),
+                    })
+                    .collect(),
+                false,
+                1.,
+            )
+            .unwrap();
+        let piece = doc.instance_piece(0).unwrap();
+        doc.preview_instance_set(Set {
+            id: 1,
+            name: "Joined arc".into(),
+            visible: true,
+            adjustments: Vec::new(),
+            layout: Layout::Path(PathAssembly {
+                regions: None,
+                path,
+                start: None,
+                middle: piece,
+                end: None,
+                count: 5,
+                spacing: 1.,
+                fit_count: true,
+                twist: 0.,
+                scale: 1.,
+                bend: true,
+                fit_sections: true,
+                join: JoinMode::Weld,
+                join_distance: 0.05,
+                thickness: Default::default(),
+            }),
+        })
+        .unwrap();
+        doc.apply_instance_preview().unwrap();
+        let resolved = doc.instance_placements().unwrap();
+        let generated = &resolved.meshes[&(1, 0)];
+        let view = scene(&doc);
+        assert_eq!(*view.geometry.mesh.vertices, generated.vertices);
+        let face = generated
+            .triangles
+            .iter()
+            .find(|t| t.iter().all(|&i| generated.vertices[i].2 > 0.04))
+            .unwrap();
+        let p = face
+            .iter()
+            .map(|&i| generated.vertices[i])
+            .fold(Vec3::default(), |a, b| a + b)
+            * (1. / 3.);
+        let (owner, hit, _) = view.pick_model(view.project(p)).unwrap();
+        assert_eq!(owner, 1);
+        assert!((hit - p).len() < 1e-4);
+        assert!(doc.select_instance_owner(owner));
+        assert_eq!(doc.selected_instance, Some((1, 0)));
+    }
+    #[test]
+    fn reusable_instances_render_pick_and_share_saved_source() {
+        use crate::sculpt::{Geometry, Primitive, PrimitiveKind, instances::*};
+        let mut doc = Document::default();
+        let mut cube = Primitive::for_kind(PrimitiveKind::Cube);
+        cube.divisions = [3; 3];
+        let mut mesh = cube.mesh().unwrap();
+        for v in &mut mesh.vertices {
+            *v = *v * 0.03;
+        }
+        let source_faces = mesh.triangles.len();
+        doc.replace_geometry(Geometry::new(mesh)).unwrap();
+        let piece = doc.instance_piece(0).unwrap();
+        let mut array = Array::new(piece);
+        array.kind = ArrayKind::Grid;
+        array.count = 128;
+        array.columns = 16;
+        array.spacing = Vec3(0.12, 0.12, 0.);
+        array.center = Vec3(-0.9, -0.42, 0.);
+        doc.preview_instance_set(Set {
+            id: 1,
+            name: "Grid".into(),
+            visible: true,
+            layout: Layout::Array(array),
+            adjustments: Vec::new(),
+        })
+        .unwrap();
+        doc.apply_instance_preview().unwrap();
+        let bytes = serde_json::to_vec(&doc.project()).unwrap().len();
+        let start = std::time::Instant::now();
+        let view = scene(&doc);
+        let prepared = start.elapsed();
+        assert_eq!(view.geometry.mesh.triangles.len(), source_faces * 129);
+        let placement = doc.instance_placements().unwrap().last().unwrap().2;
+        let point = view.project(placement.transform.origin);
+        let start = std::time::Instant::now();
+        let hit = view.pick_model(point).unwrap();
+        let cold = start.elapsed();
+        assert_eq!(hit.0, 128);
+        assert!(doc.select_instance_owner(hit.0));
+        assert_eq!(doc.selected_instance, Some((1, 127)));
+        assert!(view.instance_bounds(hit.0).contains(point));
+        assert!(!view.instance_bounds(hit.0 - 1).contains(point));
+        assert!(doc.project().submodels.is_empty());
+        eprintln!(
+            "128 instances: {source_faces} source triangles, {} display triangles, {bytes} saved bytes, prepare {prepared:?}, cold pick {cold:?}",
+            view.geometry.mesh.triangles.len()
+        );
+        let mut edited = doc.geometry_snapshot();
+        for v in &mut edited.mesh.vertices {
+            v.2 += 0.02;
+        }
+        doc.replace_geometry(edited).unwrap();
+        let updated = scene(&doc);
+        let hit_after = updated.pick_model(point).unwrap();
+        assert!((hit_after.1.2 - hit.1.2 - 0.02).abs() < 1e-4);
+    }
+    #[test]
+    fn layered_array_picking_matches_the_baked_surface_after_nested_xyz_scale() {
+        use crate::sculpt::{Geometry, Primitive, PrimitiveKind, instances::*};
+        let mut doc = Document::default();
+        let mut cube = Primitive::for_kind(PrimitiveKind::Cube);
+        cube.divisions = [1; 3];
+        let mut mesh = cube.mesh().unwrap();
+        for v in &mut mesh.vertices {
+            *v = *v * 0.12;
+        }
+        let mut g = Geometry::new(mesh);
+        g.scene.active_metadata.visible = false;
+        doc.replace_geometry(g).unwrap();
+        let mut a = Array::new(doc.instance_piece(0).unwrap());
+        a.count = 2;
+        a.spacing = Vec3(0.52, 0., 0.);
+        a.rotation = Vec3(20., 16., 10.);
+        a.size = Vec3(0.6, 1.4, 1.);
+        a.center = Vec3(-0.3, -0.28, 0.);
+        let mut l = ArrayLayer::repeat();
+        l.spacing = Vec3(0., 0.55, 0.);
+        l.step_scale = Vec3(1.2, 0.8, 1.5);
+        l.step_rotation = Vec3(-12., 15., 28.);
+        a.layers.push(l);
+        doc.preview_instance_set(Set {
+            id: 1,
+            name: "Nested".into(),
+            visible: true,
+            layout: Layout::Array(a),
+            adjustments: Vec::new(),
+        })
+        .unwrap();
+        doc.apply_instance_preview().unwrap();
+        let last = doc.instance_placements().unwrap()[3].2;
+        let baked = last.mesh(doc.mesh()).unwrap();
+        let view = scene(&doc);
+        assert!(view.geometry.mesh.vertices.ends_with(&baked.vertices));
+        let front = baked
+            .triangles
+            .iter()
+            .map(|t| {
+                t.iter()
+                    .fold(Vec3::default(), |acc, &v| acc + baked.vertices[v])
+                    * (1. / 3.)
+            })
+            .max_by(|a, b| a.dot(view.view).total_cmp(&b.dot(view.view)))
+            .unwrap();
+        let (owner, hit, _) = view.pick_model(view.project(front)).unwrap();
+        assert!((hit - front).len() < 1e-4, "{hit:?} != {front:?}");
+        assert!(doc.select_instance_owner(owner));
+        assert_eq!(doc.selected_instance, Some((1, 3)));
+    }
     fn wire_shapes(
         document: &Document,
         mode: super::super::WireMode,

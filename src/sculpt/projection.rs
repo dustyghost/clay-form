@@ -55,7 +55,7 @@ struct Node {
     component: Option<usize>,
 }
 pub(crate) struct Surface<'a> {
-    mesh: &'a Mesh,
+    mesh: std::borrow::Cow<'a, Mesh>,
     faces: Vec<usize>,
     pub(crate) components: Vec<usize>,
     nodes: Vec<Node>,
@@ -72,6 +72,12 @@ fn root(parents: &mut [usize], mut i: usize) -> usize {
 }
 impl<'a> Surface<'a> {
     pub(crate) fn new(mesh: &'a Mesh, cancel: &impl Fn() -> bool) -> Result<Self, String> {
+        Self::from_mesh(std::borrow::Cow::Borrowed(mesh), cancel)
+    }
+    pub(crate) fn from_mesh(
+        mesh: std::borrow::Cow<'a, Mesh>,
+        cancel: &impl Fn() -> bool,
+    ) -> Result<Self, String> {
         let mut parents: Vec<_> = (0..mesh.vertices.len()).collect();
         for (i, &[a, b, c]) in mesh.triangles.iter().enumerate() {
             if i % 1024 == 0 && cancel() {
@@ -141,7 +147,7 @@ impl<'a> Surface<'a> {
             let axis = (0..3)
                 .max_by(|&a, &b| (max[a] - min[a]).total_cmp(&(max[b] - min[b])))
                 .unwrap();
-            let mesh = self.mesh;
+            let mesh = &self.mesh;
             let center = |i: usize| {
                 mesh.triangles[i]
                     .iter()

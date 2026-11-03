@@ -1,4 +1,16 @@
 //! Purpose-built documentation scenes, rendered with the real app controls.
+#[path = "array_layers.rs"]
+mod array_layers;
+#[path = "attached_array_capture.rs"]
+mod attached_array_capture;
+#[path = "guide_deformation_stack.rs"]
+mod deformation_stack_review;
+#[path = "grouped_path_capture.rs"]
+mod grouped_path_capture;
+#[path = "object_kits.rs"]
+mod object_kits;
+#[path = "path_assembly.rs"]
+mod path_assembly;
 use super::*;
 use crate::{
     preferences::{BuiltinMenu, Dock, Tool},
@@ -124,6 +136,194 @@ fn local_fusion_controls_offscreen_review() {
     g.save("08-small-window-controls");
     click_guide_label(&mut g, "Cancel join");
     assert!(!g.app.ui.fusion.open);
+}
+
+#[test]
+#[ignore = "reusable model control interaction and visual capture; requires Vulkan"]
+fn reusable_models_offscreen_review() {
+    use crate::{
+        command::InstanceCommand as C,
+        sculpt::{
+            Geometry, Vec3,
+            instances::*,
+            paths::{PathMode, PathPoint},
+        },
+    };
+    let directory = std::path::PathBuf::from(
+        std::env::var("CLAY_GUIDE_PREVIEW").unwrap_or_else(|_| "/tmp/clay-reusable-models".into()),
+    );
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1280, 900]);
+    g.interactive = true;
+    g.panel(Tool::Submodels, Dock::Right);
+    let mut cube = Primitive::for_kind(PrimitiveKind::Cube);
+    cube.divisions = [1; 3];
+    let mut mesh = cube.mesh().unwrap();
+    for p in &mut mesh.vertices {
+        *p = *p * 0.12;
+    }
+    g.app
+        .document
+        .replace_geometry(Geometry::new(mesh))
+        .unwrap();
+    g.app
+        .dispatch(Command::Instances(C::NewLegacyArray), &g.ctx);
+    let mut set = g.app.ui.instances.editor.clone().unwrap();
+    if let Layout::Array(a) = &mut set.layout {
+        a.kind = ArrayKind::Radial;
+        a.count = 12;
+        a.radius = 1.15;
+        a.center = Vec3::default();
+    }
+    g.app.ui.instances.editor = Some(set.clone());
+    g.app
+        .dispatch(Command::Instances(C::Preview(Box::new(set))), &g.ctx);
+    g.save("01-array-preview");
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(s, _)| s == "Editing · Array #1 · 12 visible copies")
+    );
+    click_guide_label(&mut g, "Apply instances");
+    assert!(
+        !g.app.document.instance_preview_active(),
+        "{}",
+        g.app.ui.status
+    );
+    assert_eq!(g.app.document.instance_placements().unwrap().len(), 12);
+    let mut hidden = g.app.document.instances().sets[0].clone();
+    let mut adjustment = Adjustment::new(0);
+    adjustment.visible = false;
+    hidden.adjustments.push(adjustment);
+    g.app.document.preview_instance_set(hidden).unwrap();
+    g.app.document.apply_instance_preview().unwrap();
+    assert_eq!(g.app.document.instance_placements().unwrap().len(), 11);
+    click_guide_label(&mut g, "Copies");
+    click_guide_label(&mut g, "Copy 1 (hidden)");
+    assert_eq!(g.app.document.selected_instance, Some((1, 0)));
+    click_guide_label(&mut g, "Edit selected copy…");
+    g.frame(vec![]);
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(s, _)| s == "Editing · Array #1 · Copy 1 · Hidden")
+    );
+    reach_sidebar_control(&mut g, "Show this copy");
+    click_guide_label(&mut g, "Show this copy");
+    g.save("edit-one-placement");
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(s, _)| s == "Editing · Array #1 · Copy 1")
+    );
+    assert!(!g.text_positions.iter().any(|(s, _)| s == "Add layer"));
+    reach_sidebar_control(&mut g, "Apply placement");
+    click_guide_label(&mut g, "Apply placement");
+    assert_eq!(g.app.document.instance_placements().unwrap().len(), 12);
+    g.save("02-linked-array");
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(s, _)| s == "Selected · Array #1 · Copy 1")
+    );
+    click_guide_label(&mut g, "Edit selected copy…");
+    g.frame(vec![]);
+    let before = g.app.document.instance_placements().unwrap();
+    let x = g
+        .text_positions
+        .iter()
+        .find(|(s, _)| s.starts_with("X "))
+        .unwrap()
+        .1;
+    let end = x - Vec2::new(16., 0.);
+    g.frame(vec![egui::Event::PointerMoved(x), primary_event(x, true)]);
+    g.frame(vec![egui::Event::PointerMoved(end)]);
+    g.frame(vec![egui::Event::PointerMoved(end - Vec2::new(6., 0.))]);
+    g.frame(vec![primary_event(end, false)]);
+    let moved = g.app.document.instance_placements().unwrap();
+    assert_ne!(
+        moved[0], before[0],
+        "Move X previews the selected placement"
+    );
+    assert_eq!(moved[1..], before[1..]);
+    click_guide_label(&mut g, "Cancel preview");
+    assert_eq!(g.app.document.instance_placements().unwrap(), before);
+    click_guide_label(&mut g, "Edit array…");
+    g.save("edit-whole-array");
+    assert!(
+        g.text_positions
+            .iter()
+            .any(|(s, _)| s == "Editing · Array #1 · 12 visible copies")
+    );
+    click_guide_label(&mut g, "Cancel preview");
+    g.app.dispatch(Command::Instances(C::Remove(1)), &g.ctx);
+    g.app
+        .document
+        .create_path(
+            "Curved border".into(),
+            PathMode::Free,
+            vec![
+                PathPoint {
+                    position: Vec3(-1.1, -0.5, 0.),
+                    normal: Vec3(0., 0., 1.),
+                },
+                PathPoint {
+                    position: Vec3(-0.3, 0.7, 0.),
+                    normal: Vec3(0., 0., 1.),
+                },
+                PathPoint {
+                    position: Vec3(0.6, 0.6, 0.),
+                    normal: Vec3(0., 0., 1.),
+                },
+                PathPoint {
+                    position: Vec3(1.2, -0.3, 0.),
+                    normal: Vec3(0., 0., 1.),
+                },
+            ],
+            false,
+            0.8,
+        )
+        .unwrap();
+    g.app.dispatch(Command::Instances(C::NewPathParts), &g.ctx);
+    g.save("03-path-preview");
+    click_guide_label(&mut g, "Apply instances");
+    assert!(!g.app.document.instance_preview_active());
+    g.save("04-path-assembly");
+    g.app.dispatch(Command::Instances(C::Remove(1)), &g.ctx);
+    g.panel(Tool::Brush, Dock::Left);
+    g.app
+        .dispatch(Command::Instances(C::CreateBrush("Studs".into())), &g.ctx);
+    g.app.dispatch(
+        Command::Instances(C::Capture("Square stud".into(), Vec3(0., 0., -0.12), 0, 2)),
+        &g.ctx,
+    );
+    let mut geometry = g.app.document.geometry_snapshot();
+    geometry.mesh = crate::sculpt::Mesh::starting_sphere();
+    g.app.document.replace_geometry(geometry).unwrap();
+    g.app.ui.instances.brush.scale = 0.8;
+    g.app.ui.instances.brush.spacing = 0.3;
+    g.app
+        .dispatch(Command::Instances(C::ChooseBrush(1)), &g.ctx);
+    let (rect, _) = g.frame(vec![]);
+    let before = g.app.document.history_counts().0;
+    g.stroke(
+        rect.center() - egui::vec2(150., 0.),
+        rect.center() + egui::vec2(150., 0.),
+    );
+    assert_eq!(
+        g.app.document.history_counts().0,
+        before + 1,
+        "{}",
+        g.app.ui.status
+    );
+    assert!(g.app.document.instance_placements().unwrap().len() > 3);
+    g.save("05-object-stroke");
+    g.app.ui.select_brush(0, &g.app.document);
+    g.frame(vec![]);
+    g.app.document.undo();
+    assert!(g.app.document.instances().sets.is_empty());
+    g.app.document.redo();
+    g.app.document.project().validate().unwrap();
 }
 
 #[test]
@@ -680,6 +880,7 @@ fn project_file_offscreen_review() {
             serde_json::from_slice(&std::fs::read(manifest).unwrap()).unwrap();
         let view = &manifest["current_settings"]["view_input"];
         g.app.ui.wire = view["wireframe"].as_bool().unwrap_or(false);
+        g.app.ui.flat_shading = view["flat_shading"].as_bool().unwrap_or(false);
         g.app.ui.show_polygroups = view["show_polygroups"].as_bool().unwrap_or(false);
         let camera = &view["camera"];
         let value = |key: &str| camera[key].as_f64().unwrap() as f32;
@@ -783,6 +984,7 @@ fn smooth_decimate_offscreen_review() {
                 serde_json::from_slice(&std::fs::read(manifest).unwrap()).unwrap();
             let view = &manifest["current_settings"]["view_input"];
             g.app.ui.wire = view["wireframe"].as_bool().unwrap_or(false);
+            g.app.ui.flat_shading = view["flat_shading"].as_bool().unwrap_or(false);
             g.app.ui.show_polygroups = view["show_polygroups"].as_bool().unwrap_or(false);
             let camera = &view["camera"];
             g.app.camera.yaw = camera["yaw"].as_f64().unwrap() as f32;
@@ -1004,6 +1206,11 @@ impl Guide {
                             .ui
                             .toolbar(ctx, &self.app.document, &self.app.camera),
                     );
+                }
+                if self.app.ui.customization.popup_menu.is_some() {
+                    commands.extend(self.app.ui.custom_surfaces(ctx, &self.app.document));
+                } else {
+                    self.app.ui.customization.popup_blocks_viewport = false;
                 }
                 commands.extend(self.app.ui.brush_panel(
                     ctx,
@@ -1699,9 +1906,10 @@ fn edge_workflow_offscreen_review() {
     };
     let directory = std::path::Path::new(&directory);
     std::fs::create_dir_all(directory).unwrap();
-    let mut g = Guide::new(directory, [1200, 1250]);
+    let mut g = Guide::new(directory, [1400, 1600]);
     g.interactive = true;
     g.panel(Tool::Mesh, Dock::Right);
+    g.app.ui.preferences.right_width = 400.;
     g.app
         .document
         .replace_geometry(Geometry::new(
@@ -2386,6 +2594,67 @@ fn modeling_transform_gizmo_offscreen_review() {
 }
 
 #[test]
+#[ignore = "renders the cell cut and fuse previews; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn modeling_cut_and_fuse_offscreen_review() {
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").unwrap();
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(std::path::Path::new(&directory), [1280, 1000]);
+    g.interactive = true;
+    g.panel(Tool::Mesh, Dock::Right);
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
+    primitive.divisions = [3; 3];
+    let mut mesh = primitive.mesh().unwrap();
+    for v in &mut mesh.vertices {
+        v.2 *= 0.55;
+    }
+    g.app
+        .document
+        .replace_geometry(crate::sculpt::Geometry::new(mesh))
+        .unwrap();
+    g.app.camera.yaw = 0.55;
+    g.app.camera.pitch = -0.35;
+    g.app.camera.zoom = 0.9;
+    click_guide_modeling_checkbox(&mut g);
+    click_guide_label(&mut g, "Cut one cell");
+    let (rect, _) = g.frame(vec![]);
+    let (right, up, _) = g.app.camera.basis();
+    let project = |p: crate::sculpt::Vec3| {
+        rect.center() + Vec2::new(p.dot(right), -p.dot(up)) * g.app.camera.scale_at(rect.size(), p)
+    };
+    let center = project(crate::sculpt::Vec3(0., 0., 0.55));
+    let boundary = project(crate::sculpt::Vec3(2. / 3., 0., 0.55));
+    let before = g.app.document.geometry_snapshot();
+    g.frame(vec![
+        egui::Event::PointerMoved(center),
+        primary_event(center, true),
+    ]);
+    g.save("modeling-cut-one-cell-preview");
+    let cut = g.app.viewport.modeling.preview().unwrap().clone();
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.frame(vec![primary_event(center, false)]);
+    assert_eq!(g.app.document.mesh(), &cut);
+    click_guide_label(&mut g, "Undo");
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    click_guide_label(&mut g, "Select");
+    g.frame(vec![
+        egui::Event::PointerMoved(boundary),
+        primary_event(boundary, true),
+    ]);
+    g.frame(vec![primary_event(boundary, false)]);
+    click_guide_label(&mut g, "Extrude and fuse");
+    g.app.ui.modeling.join = true;
+    g.app.ui.modeling.amount = -1.2;
+    click_guide_label(&mut g, "Preview");
+    g.save("modeling-fuse-contact-preview");
+    let overlay = g.app.viewport.modeling.fuse_contact_preview().unwrap();
+    assert_eq!((overlay.targets.len(), overlay.walls.len()), (1, 3));
+    let preview = g.app.viewport.modeling.preview().unwrap().clone();
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    click_guide_label(&mut g, "Apply amount");
+    assert_eq!(g.app.document.mesh(), &preview);
+}
+
+#[test]
 #[ignore = "renders connected region fusion; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn modeling_region_fuse_offscreen_review() {
     let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
@@ -2510,15 +2779,20 @@ fn delete_submodel_offscreen_review() {
     let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");
     let directory = std::path::Path::new(&directory);
     std::fs::create_dir_all(directory).unwrap();
-    let mut g = Guide::new(directory, [1100, 850]);
+    let mut g = Guide::new(directory, [1320, 960]);
     g.interactive = true;
-    g.panel(Tool::Submodels, Dock::Left);
+    g.panel(Tool::Submodels, Dock::Right);
     g.app.dispatch(Command::KeepProjectionReference, &g.ctx);
     g.app.dispatch(Command::SelectSubmodel(1), &g.ctx);
     let before = g.app.document.geometry_snapshot();
     let counts = g.app.document.history_counts();
     g.save("submodel-delete");
     click_guide_label(&mut g, "Delete submodel");
+    g.save("submodel-delete-confirmation");
+    click_guide_label(&mut g, "Cancel");
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    click_guide_label(&mut g, "Delete submodel");
+    click_guide_label(&mut g, "Confirm delete");
     assert_eq!(g.app.document.model_count(), 1);
     assert_eq!(g.app.document.history_counts().0, counts.0 + 1);
     assert_eq!(g.app.document.undo_label(), Some("Delete submodel"));
@@ -2528,6 +2802,7 @@ fn delete_submodel_offscreen_review() {
     g.app.dispatch(Command::Redo, &g.ctx);
     assert_eq!(g.app.document.geometry_snapshot(), after);
     click_guide_label(&mut g, "Delete submodel");
+    click_guide_label(&mut g, "Confirm delete");
     assert_eq!(g.app.document.model_count(), 1);
     assert!(g.app.document.mesh().vertices.is_empty());
     g.save("submodel-delete-empty");
@@ -3524,8 +3799,8 @@ fn material_examples_manual_capture() {
 }
 
 /// Reveal a control through the outer sidebar, including after a previous action
-/// left the artist scrolled to a different part of the painting workspace.
-fn reach_paint_control(g: &mut Guide, label: &str) {
+/// left the artist scrolled to a different part of the workspace.
+fn reach_sidebar_control(g: &mut Guide, label: &str) {
     let viewport_top = g.frame(vec![]).0.top();
     let visible = |g: &Guide| {
         g.text_positions.iter().any(|(text, p)| {
@@ -3560,14 +3835,14 @@ fn reach_paint_control(g: &mut Guide, label: &str) {
             },
         ]);
     }
-    g.save("paint-control-unreachable");
+    g.save("sidebar-control-unreachable");
     panic!(
-        "Paint control {label} must be reachable; captured paint-control-unreachable.png. Visible text: {:?}",
+        "Sidebar control {label} must be reachable; captured sidebar-control-unreachable.png. Visible text: {:?}",
         g.text_positions
     );
 }
 fn click_paint_control(g: &mut Guide, label: &str) {
-    reach_paint_control(g, label);
+    reach_sidebar_control(g, label);
     click_guide_label(g, label);
 }
 
@@ -3670,7 +3945,7 @@ fn material_controls_offscreen_review() {
         .preferences
         .dock_menu(BuiltinMenu::Materials, Dock::Right);
     g.frame(vec![]);
-    reach_paint_control(&mut g, "Drag to resize materials");
+    reach_sidebar_control(&mut g, "Drag to resize materials");
     let handle = |g: &Guide| {
         g.text_positions
             .iter()
@@ -4227,11 +4502,11 @@ fn paint_modes_offscreen_review() {
                 .mode,
             mode
         );
-        reach_paint_control(&mut g, "Flow / second");
+        reach_sidebar_control(&mut g, "Flow / second");
         assert!(g.text_positions.iter().any(|(t, _)| t == "Flow / second"));
         if mode == PaintMode::Spray {
             for label in ["Dot density", "Dot size"] {
-                reach_paint_control(&mut g, label);
+                reach_sidebar_control(&mut g, label);
                 assert!(g.text_positions.iter().any(|(t, _)| t == label));
             }
         }
@@ -4444,9 +4719,100 @@ fn paint_target_scope_inspection_offscreen_review() {
     g.app.dispatch(Command::SelectSubmodel(untextured), &g.ctx);
     g.frame(vec![]);
     assert_eq!(g.app.document.texture_paint, None);
-    reach_paint_control(&mut g, "Vertices");
+    reach_sidebar_control(&mut g, "Vertices");
     assert!(g.text_positions.iter().any(|(text, _)| text == "Vertices"));
     g.save("paint-target-fallback");
     click_guide_label(&mut g, "Restore workspace");
     assert!(g.app.ui.preferences.paint_workspace_backup.is_none());
+}
+
+#[test]
+#[ignore = "renders and times existing subdivision level controls; requires Vulkan"]
+fn subdivision_level_switch_offscreen_review() {
+    use crate::sculpt::{Geometry, Mesh};
+    let directory = std::path::PathBuf::from(
+        std::env::var("CLAY_GUIDE_PREVIEW").unwrap_or_else(|_| "/tmp/clay-level-switch".into()),
+    );
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1280, 1000]);
+    g.interactive = true;
+    g.panel(Tool::Mesh, Dock::Right);
+    g.app.ui.preferences.right_width = 350.;
+    let mut geometry = Geometry::new(Mesh::starting_sphere());
+    let high_level = if std::env::var_os("CLAY_LEVEL_SWITCH_PROFILE").is_some() {
+        4
+    } else {
+        3
+    };
+    for _ in 1..high_level {
+        geometry.subdivide().unwrap();
+    }
+    g.app.document.replace_geometry(geometry).unwrap();
+    let high = g.app.document.mesh().clone();
+    g.save("level-switch-high-before");
+    let (viewport, before_pixels) = g.frame(vec![egui::Event::PointerGone]);
+    let hits = g.app.viewport.level_cache_hits();
+    let start = std::time::Instant::now();
+    click_guide_label(&mut g, "Lower");
+    let down = start.elapsed();
+    assert_eq!(g.app.document.mesh_settings().level(), high_level - 1);
+    let start = std::time::Instant::now();
+    g.frame(vec![]);
+    let down_frame = start.elapsed();
+    let start = std::time::Instant::now();
+    click_guide_label(&mut g, "Higher");
+    let up = start.elapsed();
+    assert_eq!(g.app.document.mesh_settings().level(), high_level);
+    let start = std::time::Instant::now();
+    g.frame(vec![]);
+    let up_frame = start.elapsed();
+    assert_eq!(g.app.document.mesh(), &high);
+    assert!(
+        g.app.viewport.level_cache_hits() > hits,
+        "returning to the saved high level restores its display"
+    );
+    let (_, after_pixels) = g.frame(vec![egui::Event::PointerGone]);
+    for y in viewport.top().ceil() as usize..viewport.bottom().floor() as usize {
+        let start = (y * g.size[0] as usize + viewport.left().ceil() as usize) * 4;
+        let end = (y * g.size[0] as usize + viewport.right().floor() as usize) * 4;
+        assert!(
+            before_pixels[start..end] == after_pixels[start..end],
+            "cached level pixels match at row {y}"
+        );
+    }
+    let hits = g.app.viewport.level_cache_hits();
+    let start = std::time::Instant::now();
+    click_guide_label(&mut g, "Lower");
+    g.frame(vec![]);
+    let warm_down = start.elapsed();
+    let start = std::time::Instant::now();
+    click_guide_label(&mut g, "Higher");
+    g.frame(vec![]);
+    let warm_up = start.elapsed();
+    assert_eq!(g.app.viewport.level_cache_hits(), hits + 2);
+    assert_eq!(g.app.document.mesh(), &high);
+    eprintln!(
+        "level_switch_ms,vertices={},down_click={:.2},down_frame={:.2},up_click={:.2},up_frame={:.2},warm_down={:.2},warm_up={:.2}",
+        high.vertices.len(),
+        down.as_secs_f64() * 1000.,
+        down_frame.as_secs_f64() * 1000.,
+        up.as_secs_f64() * 1000.,
+        up_frame.as_secs_f64() * 1000.,
+        warm_down.as_secs_f64() * 1000.,
+        warm_up.as_secs_f64() * 1000.
+    );
+    g.save("level-switch-high-after");
+    click_guide_label(&mut g, "Lower");
+    let hits = g.app.viewport.level_cache_hits();
+    g.app.document.mask_region(|p| p.0 < 0., false).unwrap();
+    g.frame(vec![]);
+    click_guide_label(&mut g, "Higher");
+    g.frame(vec![]);
+    assert_eq!(
+        g.app.viewport.level_cache_hits(),
+        hits,
+        "edits invalidate cached level displays"
+    );
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert_eq!(g.app.document.mesh_settings().level(), high_level - 1);
 }

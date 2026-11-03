@@ -18,7 +18,7 @@ impl App {
                 "field_of_view": camera.field_of_view, "perspective_radius": camera.perspective_radius },
             "pressure_at_boundary": self.pressure,
             "modifiers": { "shift": modifiers.shift, "ctrl": modifiers.ctrl, "alt": modifiers.alt, "command": modifiers.command },
-            "wireframe": self.ui.wire, "show_polygroups": self.ui.show_polygroups,
+            "wireframe": self.ui.wire, "flat_shading": self.ui.flat_shading, "show_polygroups": self.ui.show_polygroups,
             "show_backfaces": self.ui.show_backfaces, "backface_opacity": self.ui.backface_opacity,
             "transform_mode": format!("{:?}", self.ui.transform_mode),
             "transform_operation": format!("{:?}", self.ui.transform_operation),

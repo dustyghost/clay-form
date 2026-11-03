@@ -1,5 +1,7 @@
 //! UI intent; execution and file access belong to the application controller.
+mod instances;
 mod path;
+pub(crate) use instances::InstanceCommand;
 pub(crate) use path::PathCommand;
 
 use crate::sculpt::{AdaptiveSettings, Brush, Kind, Symmetry};
@@ -22,6 +24,7 @@ pub(crate) enum AssetKind {
     BrushLibrary,
 }
 pub(crate) enum Command {
+    Instances(InstanceCommand),
     Texture(crate::app::textures::TextureCommand),
     UvUnwrap(bool, f32),
     UvSeams(bool),
@@ -73,6 +76,7 @@ pub(crate) enum Command {
     ModelSelectLoop,
     ModelDissolveLoops,
     ModelApply,
+    ModelPreviewFuse,
     ModelRepeat,
     ModelTopology(crate::sculpt::TopologyEdit),
     ModelBoundary,
@@ -105,8 +109,10 @@ pub(crate) enum Command {
     ConfirmPrimitive,
     CancelPrimitive,
     UpdatePrimitive(crate::sculpt::Primitive),
-    EndPrimitiveEdit,
     ConvertPrimitive,
+    ToggleBooleanResult,
+    BooleanResolution(u32),
+    BakeBoolean,
     SelectSubmodel(usize),
     EditSubmodel(usize, String, crate::sculpt::ModelMetadata),
     ReorderSubmodel(usize, usize),
@@ -120,6 +126,7 @@ pub(crate) enum Command {
     ResetTransformPivot,
     DuplicateModel,
     DeleteSubmodel,
+    ConfirmDeleteSubmodel(bool),
     MergeDown,
     ExtractMasked,
     ResetView,
