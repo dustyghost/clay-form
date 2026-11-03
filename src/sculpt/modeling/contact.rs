@@ -228,7 +228,14 @@ impl Mesh {
                 .collect();
             let mut out = self.empty_topology();
             let walls = self.joined_walls(region.polygons, &sides, region.selected, &mut out)?;
-            if !walls.remove.is_empty() {
+            // A corner from a nearby notch can line up with the moved rim without
+            // belonging to any swept wall. Welding it would pinch the two surfaces.
+            let attached: BTreeSet<_> = walls
+                .remove
+                .iter()
+                .flat_map(|&f| region.polygons[f].vertices.iter().copied())
+                .collect();
+            if mapping.values().all(|v| attached.contains(v)) {
                 return Ok(Some(ContactTarget {
                     caps: BTreeSet::new(),
                     depth,

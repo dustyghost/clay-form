@@ -1215,6 +1215,58 @@ fn modeling_fuse_connected_region_stops_at_intermediate_slab_loop() {
 }
 
 #[test]
+fn modeling_fuse_skips_a_partial_loop_between_notches_to_join_the_opposite_face() {
+    let mut mesh = cube(3);
+    // Two notches beside the selected face leave vertices at the first depth,
+    // while the notch on the opposite side supplies the actual matching cap.
+    for midpoint in [Vec3(1., -1., 0.), Vec3(1., 1., 0.), Vec3(-1., 0., 1.)] {
+        let ridge = mesh
+            .polygon_edges()
+            .into_iter()
+            .find(|&[a, b]| ((mesh.vertices[a] + mesh.vertices[b]) * 0.5 - midpoint).len() < 1e-5)
+            .unwrap();
+        let symmetry = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+        mesh = mesh
+            .cell_notch(ridge)
+            .unwrap()
+            .apply(&mesh, true, &symmetry)
+            .unwrap()
+            .0;
+    }
+    let source = mesh
+        .quads
+        .iter()
+        .position(|q| {
+            let center = q
+                .iter()
+                .fold(Vec3::default(), |sum, &v| sum + mesh.vertices[v])
+                * 0.25;
+            (center - Vec3(1., 0., 2. / 3.)).len() < 1e-5
+        })
+        .unwrap();
+    let symmetry = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    let contact = ExtrudeContact {
+        join: true,
+        loops: true,
+        snap: 0.04,
+    };
+    let halfway = mesh
+        .extrude_symmetric_contact(&[source], -2. / 3., contact, &symmetry)
+        .unwrap();
+    assert!(!halfway.joined && !halfway.collapsed);
+    let fused = mesh
+        .extrude_symmetric_contact(&[source], -2., contact, &symmetry)
+        .unwrap();
+    assert!(fused.joined && !fused.collapsed);
+    assert!((fused.distance + 4. / 3.).abs() < 1e-5);
+    assert_eq!(
+        fused.mesh,
+        mesh.extrude_faces(&[source], -2., true).unwrap().mesh
+    );
+    fused.mesh.validate_closed().unwrap();
+}
+
+#[test]
 fn modeling_fuse_region_caps_join_without_internal_walls() {
     let mesh = slab();
     let faces = [front_at(&mesh, -0.25, -0.25), front_at(&mesh, 0.25, -0.25)];
