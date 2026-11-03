@@ -5,10 +5,20 @@ use crate::{
 };
 const SIZE: usize = 256;
 pub(crate) fn capture(mesh: &Mesh, camera: &Camera) -> Result<BrushIcon, String> {
-    render(mesh, camera, false)
+    render(mesh, camera, IconStyle::Clay)
 }
 
-fn render(mesh: &Mesh, camera: &Camera, wireframe: bool) -> Result<BrushIcon, String> {
+pub(crate) fn capture_part(mesh: &Mesh, camera: &Camera) -> Result<BrushIcon, String> {
+    render(mesh, camera, IconStyle::Material)
+}
+
+enum IconStyle {
+    Clay,
+    Wire,
+    Material,
+}
+
+fn render(mesh: &Mesh, camera: &Camera, style: IconStyle) -> Result<BrushIcon, String> {
     mesh.validate()?;
     if mesh.triangles.is_empty() {
         return Err("The active model has no surface to capture".into());
@@ -42,10 +52,19 @@ fn render(mesh: &Mesh, camera: &Camera, wireframe: bool) -> Result<BrushIcon, St
         .collect();
     let light = (view + up * 0.7 - right * 0.5).norm();
     let shading = mesh.surface_shading();
+    let default_material = crate::sculpt::Material::default();
     let shades: Vec<_> = shading
         .vertices
         .iter()
-        .map(|(_, n)| 0.25 + 0.75 * n.dot(light).max(0.))
+        .map(|(index, normal)| match style {
+            IconStyle::Material => mesh
+                .materials
+                .get(*index)
+                .unwrap_or(&default_material)
+                .studio_color(*normal, view, light)
+                .map(|v| v * 255.),
+            _ => [190., 155., 125.].map(|v| v * (0.25 + 0.75 * normal.dot(light).max(0.))),
+        })
         .collect();
     let mut rgba = [23, 26, 31, 255].repeat(SIZE * SIZE);
     let mut depth = vec![f32::NEG_INFINITY; SIZE * SIZE];
@@ -78,10 +97,7 @@ fn render(mesh: &Mesh, camera: &Camera, wireframe: bool) -> Result<BrushIcon, St
                     continue;
                 }
                 depth[i] = z;
-                let shade = wa * shades[shade_indices[0]]
-                    + wb * shades[shade_indices[1]]
-                    + wc * shades[shade_indices[2]];
-                let wire = if wireframe {
+                let wire = if matches!(style, IconStyle::Wire) {
                     let distance = (wa * altitudes[0])
                         .min(wb * altitudes[1])
                         .min(wc * altitudes[2]);
@@ -89,10 +105,12 @@ fn render(mesh: &Mesh, camera: &Camera, wireframe: bool) -> Result<BrushIcon, St
                 } else {
                     0.
                 };
-                for (channel, base) in [190., 155., 125.].into_iter().enumerate() {
-                    let line = [32., 38., 44.][channel];
+                for (channel, line) in [32., 38., 44.].into_iter().enumerate() {
+                    let shade = wa * shades[shade_indices[0]][channel]
+                        + wb * shades[shade_indices[1]][channel]
+                        + wc * shades[shade_indices[2]][channel];
                     rgba[i * 4 + channel] =
-                        (base * shade * (1. - wire) + line * wire).clamp(0., 255.) as u8;
+                        (shade * (1. - wire) + line * wire).clamp(0., 255.) as u8;
                 }
             }
         }
@@ -125,7 +143,7 @@ pub(crate) fn default_icon(kind: Kind) -> BrushIcon {
             pitch: -0.2,
             ..Default::default()
         };
-        let icon = render(&mesh, &camera, true).expect("valid Decimate icon surface");
+        let icon = render(&mesh, &camera, IconStyle::Wire).expect("valid Decimate icon surface");
         let image = image::RgbaImage::from_raw(SIZE as u32, SIZE as u32, icon.rgba.to_vec())
             .expect("complete icon pixels");
         return BrushIcon {

@@ -19,8 +19,10 @@ pub(crate) mod paths;
 mod projection;
 #[cfg(all(test, target_os = "linux"))]
 pub(crate) use gpu::ui_capture::UiCapture;
+mod arrays;
 mod guided;
 mod guides;
+pub(crate) mod instances;
 mod navigation;
 mod path_follow;
 pub(crate) mod path_thickness;
@@ -79,6 +81,12 @@ pub(crate) struct Viewport {
     pub(crate) sampled_material: Option<crate::sculpt::Material>,
     pub(crate) session: interaction::InteractionSession,
     pub(crate) paths: paths::PathEditor,
+    pub(crate) copy_move: instances::CopyMove,
+    pub(crate) array_layer: Option<usize>,
+    pub(crate) array_command: Option<crate::command::InstanceCommand>,
+    pub(crate) array_selected: bool,
+    pub(crate) frame_array: bool,
+    array_controls: arrays::Editor,
     pub(crate) path_thickness: path_thickness::Editor,
     pub(crate) modeling: modeling::ModelingState,
     edge_selection: Vec<[usize; 2]>,
@@ -94,6 +102,7 @@ pub(crate) struct Viewport {
 }
 #[derive(Clone, Copy)]
 pub(crate) struct ViewportOptions {
+    pub instance_editor: Option<u64>,
     pub edge_select: bool,
     pub modeling: Option<ModelingOptions>,
     pub arrange_references: bool,
@@ -118,6 +127,8 @@ pub(crate) struct ViewportOptions {
     pub show_guides: bool,
     pub guide_opacity: f32,
     pub enabled: bool,
+    // Inline widgets keep rendering while their popup blocks mesh gestures.
+    pub inline_controls_enabled: bool,
     pub reverse: Hold,
     pub zoom_hold: Hold,
     pub pan_hold: Hold,
@@ -126,6 +137,10 @@ impl Viewport {
     #[cfg(test)]
     pub(crate) fn cage_previewing(&self) -> bool {
         self.cage.preview.is_some()
+    }
+    #[cfg(test)]
+    pub(crate) fn level_cache_hits(&self) -> usize {
+        self.renderer.as_ref().map_or(0, |r| r.level_cache_hits())
     }
     #[cfg(test)]
     pub(crate) fn stamp_preview_pending(&self) -> bool {
@@ -165,6 +180,8 @@ impl Viewport {
     }
     pub(crate) fn cancel(&mut self, document: &mut Document) {
         self.cage = Default::default();
+        self.array_controls.cancel(document);
+        self.copy_move = Default::default();
         self.path_thickness.reset();
         if let Some(brush) = &mut self.object_brush {
             brush.cancel(document);
@@ -193,6 +210,13 @@ impl Viewport {
     }
     pub(crate) fn reset_transform_pivot(&mut self, document: &Document, mode: TransformMode) {
         self.session.transform.reset_pivot(document, mode);
+    }
+    pub(crate) fn start_pen_contact(&mut self, document: &mut Document) {
+        // A new pen down follows a synthetic release of the old finger pointer.
+        // The frame ends with the pen down, so the ordinary release guard cannot
+        // see that transition. End the old interaction and allow this fresh one.
+        self.cancel(document);
+        self.blocked_until_release = false;
     }
     pub(crate) fn wait_for_release(&mut self) {
         self.blocked_until_release = true;
@@ -223,6 +247,36 @@ impl Viewport {
         }
         let (response, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
         let rect = response.rect;
+        if std::mem::take(&mut self.frame_array)
+            && let Some(set) = document.attached_array(document.active_model_index())
+            && let Some([min, max]) = document.array_bounds(set.id)
+        {
+            let (right, up, _) = camera.basis();
+            let mut x = [f32::INFINITY, f32::NEG_INFINITY];
+            let mut y = x;
+            for a in [min.0, max.0] {
+                for b in [min.1, max.1] {
+                    for c in [min.2, max.2] {
+                        let p = Vec3(a, b, c);
+                        let u = p.dot(right);
+                        let v = p.dot(up);
+                        x = [x[0].min(u), x[1].max(u)];
+                        y = [y[0].min(v), y[1].max(v)];
+                    }
+                }
+            }
+            let base = rect.width().min(rect.height()) * 0.35;
+            if base > 0. {
+                camera.zoom = (((rect.width() - 100.).max(80.) / (x[1] - x[0]).max(0.001))
+                    .min((rect.height() - 210.).max(80.) / (y[1] - y[0]).max(0.001))
+                    / base)
+                    .clamp(Camera::MIN_ZOOM, 20.);
+                camera.pan = Vec2::new(
+                    -(x[0] + x[1]) * 0.5 * base * camera.zoom,
+                    (y[0] + y[1]) * 0.5 * base * camera.zoom + 40.,
+                );
+            }
+        }
         let gizmo_rect = egui::Rect::from_min_size(
             Pos2::new(rect.right() - 146., rect.top() + 12.),
             Vec2::splat(134.),
@@ -335,50 +389,15 @@ impl Viewport {
                     .projection_preview
                     .as_deref()
                     .or_else(|| self.modeling.preview())
-                    .or_else(|| self.session.guided.preview()),
+                    .or_else(|| self.session.guided.preview())
+                    .or_else(|| self.object_brush.as_ref().and_then(|b| b.preview())),
             )
         };
         if let Some(renderer) = &self.renderer {
             renderer.set_backfaces(options.backface_opacity);
             renderer.set_polygroups(options.show_polygroups);
         }
-        if let Some((set, slot)) = document.selected_instance
-            && let Ok(placements) = document.instance_placements()
-            && let Some((_, _, placement)) = placements
-                .iter()
-                .find(|(id, i, _)| *id == set && *i == slot)
-            && let Some(mesh) = placements
-                .meshes
-                .get(&(set, slot))
-                .map(|m| m.as_ref())
-                .or_else(|| document.instance_source(placement.piece.source))
-        {
-            for (face, tri) in mesh
-                .triangles
-                .iter()
-                .enumerate()
-                .step_by((mesh.triangles.len() / 300).max(1))
-            {
-                if !mesh.face_visible(face) {
-                    continue;
-                }
-                let p = tri.map(|i| {
-                    if placements.meshes.contains_key(&(set, slot)) {
-                        mesh.vertices[i]
-                    } else {
-                        placement.point(mesh.vertices[i])
-                    }
-                });
-                for (a, b) in [(0, 1), (1, 2), (2, 0)] {
-                    if let Some(line) = scene.clip_segment([p[a], p[b]]) {
-                        painter.line_segment(
-                            line,
-                            egui::Stroke::new(1_f32, Color32::from_rgb(75, 225, 200)),
-                        );
-                    }
-                }
-            }
-        }
+        instances::paint(&scene, &painter, document, options.instance_editor);
         if let Some(brush) = &self.size_preview {
             let position = self
                 .last_brush_position
@@ -581,8 +600,18 @@ impl Viewport {
             }
         }
         if self.update_objects(
-            ui, &response, &painter, &scene, document, options, gizmo_rect,
+            ui,
+            &response,
+            &painter,
+            &scene,
+            document,
+            options,
+            gizmo_rect,
+            frame_start,
         ) {
+            self.session
+                .primitive
+                .paint(document, &scene, &painter, response.hover_pos());
             draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
             return;
         }
@@ -595,18 +624,56 @@ impl Viewport {
             draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
             return;
         }
-        if document.instance_preview_active()
-            && self.object_brush.is_none()
-            && self.session.gesture.is_none()
-            && !options.zoom_hold.active(modifiers)
-            && !options.pan_hold.active(modifiers)
-            && ui.input(|i| i.pointer.primary_down() || i.pointer.primary_released())
-            && response
-                .hover_pos()
-                .is_some_and(|p| !gizmo_rect.contains(p) && !navigation::contains(rect, p))
-        {
+        let attached = document
+            .attached_array(document.active_model_index())
+            .is_some_and(|s| s.visible)
+            && !document.editing_array_source();
+        let edit_instances = (document.instance_preview_active() && self.object_brush.is_none())
+            || (attached && options.transform_mode == TransformMode::Sculpt);
+        let mut array_controls = std::mem::take(&mut self.array_controls);
+        let array_consumed = array_controls.show(
+            ui,
+            &response,
+            &painter,
+            &scene,
+            document,
+            options,
+            self.array_layer,
+            &mut self.array_command,
+        );
+        self.array_controls = array_controls;
+        if array_consumed {
             draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
             return;
+        }
+        if self.copy_move.show(
+            &scene,
+            &painter,
+            &response,
+            document,
+            options,
+            frame_start,
+            gizmo_rect,
+        ) {
+            draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());
+            return;
+        }
+        // Away from an edit handle the preview owns the surface as well as empty space for navigation.
+        if edit_instances
+            && options.enabled
+            && self.session.gesture.is_none()
+            && frame_start.is_some_and(|p| {
+                rect.contains(p)
+                    && !gizmo_rect.contains(p)
+                    && ui.ctx().layer_id_at(p) == Some(response.layer_id)
+                    && scene.pick_model(p).is_none_or(|(owner, _, _)| {
+                        document
+                            .display_owner_model(owner)
+                            .is_none_or(|i| i == document.active_model_index())
+                    })
+            })
+        {
+            self.session.gesture = Some(Gesture::Orbit);
         }
         if self.update_visibility(
             ui,
@@ -762,7 +829,8 @@ impl Viewport {
             }
             return;
         }
-        if (primary || response.clicked_by(egui::PointerButton::Primary))
+        if (!edit_instances || attached)
+            && (primary || response.clicked_by(egui::PointerButton::Primary))
             && self.session.gesture.is_none()
             && options.enabled
             && !zoom_held
@@ -773,8 +841,14 @@ impl Viewport {
                 pointer.filter(|p| !gizmo_rect.contains(*p) && !navigation::contains(rect, *p))
             && let Some((owner, _, _)) = scene.pick_model(point)
             && !options.temporary_mask
-            && owner != document.active_model_index()
+            && document.display_owner_model(owner) != Some(document.active_model_index())
         {
+            if let Some(index) = document.display_owner_model(owner) {
+                let _ = document.select_submodel(index);
+                self.array_selected = document.attached_array(index).is_some();
+                self.wait_for_release();
+                return;
+            }
             if document.select_instance_owner(owner) {
                 let joined = document.selected_instance.is_some_and(|(id, _)| {
                     document
@@ -783,7 +857,11 @@ impl Viewport {
                         .iter()
                         .any(|s| s.id == id && s.joined())
                 });
-                self.status = Some(if joined {"Joined path assembly selected · edit its settings or Bake to sculpt"} else {"Instance selected · edit it in Submodels → Instances; Make independent enables sculpting"}.into());
+                self.status = Some(if joined {
+                    "Open Submodels → Instances → Edit selected assembly… to change this assembly."
+                } else {
+                    "Open Submodels → Instances → Edit selected copy… to move this copy. Choose Make independent to sculpt it."
+                }.into());
                 self.wait_for_release();
                 return;
             }
@@ -916,7 +994,7 @@ impl Viewport {
             self.session.gizmo_start = None;
             self.session.gizmo_snap = None;
         }
-        if previous_gesture == Some(Gesture::Orbit) {
+        if edit_instances || previous_gesture == Some(Gesture::Orbit) {
             draw_gizmo(camera, &painter, gizmo_rect, pointer);
             return;
         }
@@ -1025,13 +1103,6 @@ impl Viewport {
                 .primitive
                 .paint(document, &scene, &painter, pointer);
             draw_gizmo(camera, &painter, gizmo_rect, pointer);
-            painter.text(
-                navigation::inner(rect).left_bottom() + Vec2::new(8., -8.),
-                egui::Align2::LEFT_BOTTOM,
-                "Primitive · teal: shape · axis-colored diamonds: spans (drag left / right) · convert to sculpt",
-                egui::FontId::proportional(13.),
-                controls::NEUTRAL,
-            );
             return;
         }
         if stencil.is_some() && matches!(brush.kind, Kind::Grab | Kind::Snake | Kind::Detail) {
@@ -1259,7 +1330,7 @@ impl Viewport {
                     1.
                 };
             let color = if b.subtract ^ options.reverse.active(modifiers) {
-                Color32::from_rgb(255, 140, 100)
+                controls::REVERSED
             } else {
                 Color32::from_rgb(125, 210, 245)
             };

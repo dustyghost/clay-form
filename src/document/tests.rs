@@ -2314,3 +2314,47 @@ mod delete_submodel_tests {
         assert!(d.primitive().is_some());
     }
 }
+
+#[test]
+fn subdivision_level_navigation_preserves_history_detail_and_save_roundtrip() {
+    use crate::sculpt::{Primitive, PrimitiveKind, Vec3};
+    let mut g = Geometry::new(Primitive::for_kind(PrimitiveKind::Cube).mesh().unwrap());
+    g.subdivide().unwrap();
+    g.subdivide().unwrap();
+    let mut d = Document::default();
+    let mut project = d.project();
+    project.mesh = g.mesh;
+    project.mesh_settings = g.settings;
+    d.replace_project(project, "levels.clay").unwrap();
+    let high = d.mesh().clone();
+    let history = d.history_counts();
+    let content = d.level_display_key().0;
+    d.set_mesh_level(1).unwrap();
+    assert_eq!(d.level_display_key(), (content, 1));
+    d.set_mesh_level(3).unwrap();
+    assert_eq!(d.level_display_key(), (content, 3));
+    assert_eq!(d.mesh(), &high);
+    assert_eq!(d.history_counts().0, history.0 + 2);
+    let current = d.geometry_snapshot();
+    d.set_mesh_level(3).unwrap();
+    assert_eq!(d.history_counts().0, history.0 + 2);
+    assert!(d.set_mesh_level(0).is_err());
+    assert_eq!(d.geometry_snapshot(), current);
+    d.undo();
+    assert_eq!(d.mesh_settings().level(), 1);
+    assert_ne!(d.level_display_key().0, content);
+    d.redo();
+    assert_eq!(d.geometry_snapshot(), current);
+    d.project().validate().unwrap();
+    d.set_mesh_level(1).unwrap();
+    let mut extreme = d.geometry_snapshot();
+    extreme.mesh.vertices.fill(Vec3(f32::MAX, 0., 0.));
+    d.replace_geometry(extreme).unwrap();
+    let before = d.geometry_snapshot();
+    let history = d.history_counts();
+    let key = d.level_display_key();
+    assert!(d.set_mesh_level(3).is_err());
+    assert_eq!(d.geometry_snapshot(), before);
+    assert_eq!(d.history_counts(), history);
+    assert_eq!(d.level_display_key(), key);
+}

@@ -66,6 +66,7 @@ fn set(join: JoinMode) -> Set {
         visible: true,
         adjustments: Vec::new(),
         layout: Layout::Path(PathAssembly {
+            regions: None,
             path: 1,
             start: None,
             middle: piece(1),
@@ -110,6 +111,274 @@ fn connected_closed(mesh: &Mesh) -> (usize, usize, usize) {
         "all sections must belong to one surface"
     );
     (mesh.vertices.len(), edges.len(), mesh.triangles.len())
+}
+
+fn grouped_bar() -> Mesh {
+    grouped_regions(bar())
+}
+fn grouped_regions(mut mesh: Mesh) -> Mesh {
+    mesh.vertex_groups = ["Foot", "Repeat", "Tip"]
+        .map(|name| crate::sculpt::VertexGroup {
+            name: name.into(),
+            visible: true,
+            weights: vec![0.; mesh.vertices.len()],
+        })
+        .to_vec();
+    mesh.polygroups = mesh
+        .triangles
+        .iter()
+        .map(|t| {
+            let x = t.iter().map(|&v| mesh.vertices[v].0).sum::<f32>() / 3.;
+            if x < -0.5 {
+                1
+            } else if x < 1. / 3. {
+                2
+            } else {
+                3
+            }
+        })
+        .collect();
+    for (t, &g) in mesh.triangles.iter().zip(&mesh.polygroups) {
+        for &v in t {
+            mesh.vertex_groups[g - 1].weights[v] = 1.;
+        }
+    }
+    mesh
+}
+fn grouped_set() -> Set {
+    let mut set = set(JoinMode::Weld);
+    let Layout::Path(a) = &mut set.layout else {
+        unreachable!()
+    };
+    a.regions = Some(PathRegions {
+        start: "Foot".into(),
+        middle: "Repeat".into(),
+        end: "Tip".into(),
+    });
+    a.count = 4;
+    set
+}
+
+#[test]
+fn grouped_path_regions_keep_source_welded_and_repeat_only_middle() {
+    let mesh = grouped_bar();
+    let before = mesh.clone();
+    let mut path = path(false);
+    path.points = [Vec3::default(), Vec3(12., 0., 0.)]
+        .map(|position| PathPoint {
+            position,
+            normal: axis(2),
+        })
+        .to_vec();
+    let set = grouped_set();
+    let output = set
+        .generated(std::slice::from_ref(&path), |_| Some(&mesh), &|| false)
+        .unwrap()
+        .unwrap();
+    assert_eq!(output.len(), 1);
+    let result = &output[0].mesh;
+    connected_closed(result);
+    assert_eq!(mesh, before);
+    for role in 1..=3 {
+        let expected =
+            mesh.polygroups.iter().filter(|&&g| g == role).count() * if role == 2 { 4 } else { 1 };
+        assert_eq!(
+            result.polygroups.iter().filter(|&&g| g == role).count(),
+            expected
+        );
+    }
+    let x = |role| {
+        result
+            .triangles
+            .iter()
+            .zip(&result.polygroups)
+            .filter(|(_, g)| **g == role)
+            .flat_map(|(t, _)| t.iter().map(|&v| result.vertices[v].0))
+            .fold((f32::INFINITY, f32::NEG_INFINITY), |(lo, hi), x| {
+                (lo.min(x), hi.max(x))
+            })
+    };
+    let (lo, end_start) = x(1);
+    assert!(
+        lo.abs() < 1e-5 && (end_start - 0.5).abs() < 1e-5,
+        "start retains its own unequal length"
+    );
+    let (end_start, hi) = x(3);
+    assert!(
+        (hi - 12.).abs() < 1e-5 && (hi - end_start - 2. / 3.).abs() < 1e-5,
+        "end appears once at the path endpoint"
+    );
+    for (g, group) in result.vertex_groups.iter().enumerate() {
+        for (v, &weight) in group.weights.iter().enumerate() {
+            if weight > 0. {
+                assert!(
+                    result
+                        .triangles
+                        .iter()
+                        .zip(&result.polygroups)
+                        .any(|(t, &label)| label == g + 1 && t.contains(&v)),
+                    "region weights belong only to incident faces of that region"
+                );
+            }
+        }
+    }
+    let recipe = serde_json::to_string(&set).unwrap();
+    assert_eq!(serde_json::from_str::<Set>(&recipe).unwrap(), set);
+}
+
+#[test]
+fn grouped_path_regions_follow_curves_axes_group_order_and_closed_seam() {
+    let mut mesh = grouped_bar();
+    for v in &mut mesh.vertices {
+        *v = Vec3(v.2, v.0, v.1);
+    }
+    mesh.vertex_groups.swap(0, 2);
+    for g in &mut mesh.polygroups {
+        if *g == 1 {
+            *g = 3;
+        } else if *g == 3 {
+            *g = 1;
+        }
+    }
+    let mut set = grouped_set();
+    let Layout::Path(a) = &mut set.layout else {
+        unreachable!()
+    };
+    a.middle.forward = 1;
+    a.middle.up = 0;
+    a.thickness = Thickness {
+        mode: ThicknessMode::Taper,
+        start: 0.7,
+        end: 1.3,
+        ..Default::default()
+    };
+    for closed in [false, true] {
+        let result = set
+            .generated(&[path(closed)], |_| Some(&mesh), &|| false)
+            .unwrap()
+            .unwrap();
+        connected_closed(&result[0].mesh);
+        if closed {
+            assert!(result[0].mesh.polygroups.iter().all(|&g| g == 2));
+        }
+    }
+    mesh.polygroups.clear();
+    let result = set
+        .generated(&[path(false)], |_| Some(&mesh), &|| false)
+        .unwrap()
+        .unwrap();
+    connected_closed(&result[0].mesh);
+}
+
+#[test]
+fn grouped_path_stepped_arrow_keeps_shoulders_and_only_repeats_middle() {
+    let mut mesh: Mesh = serde_json::from_str(include_str!(
+        "../../../../tests/fixtures/grouped-path-arrow.json"
+    ))
+    .unwrap();
+    mesh.creases = vec![[12, 16]]; // The shoulder edge shared by Start and Middle.
+    let mut route = path(false);
+    route.points = [Vec3::default(), Vec3(6., 0., 0.)]
+        .map(|position| PathPoint {
+            position,
+            normal: axis(2),
+        })
+        .to_vec();
+    let groups = PathRegions::named(&mesh);
+    // Also run with the same source pointing down the Y axis.
+    for _ in 0..2 {
+        for count in [1, 8] {
+            let mut set = grouped_set();
+            let Layout::Path(recipe) = &mut set.layout else {
+                unreachable!()
+            };
+            recipe.count = count;
+            recipe.regions = Some(groups.clone());
+            groups.orient_piece(&mesh, &mut recipe.middle);
+            assert_eq!((recipe.middle.forward, recipe.middle.up), (1, 2));
+            let output = set
+                .generated(std::slice::from_ref(&route), |_| Some(&mesh), &|| false)
+                .unwrap()
+                .unwrap();
+            let result = &output[0].mesh;
+            connected_closed(result);
+            assert_eq!(result.creases.len(), 1);
+            // Four exposed shoulder triangles remain at the stem. All other
+            // copies of Middle contribute only their sixteen side faces.
+            assert_eq!(
+                result.polygroups.iter().filter(|&&g| g == 2).count(),
+                4 + 16 * count
+            );
+            for (role, faces, lo, hi) in [(1, 10, 0., 2. / 3.), (3, 14, 6. - 2. / 3., 6.)] {
+                let selected: Vec<_> = result
+                    .triangles
+                    .iter()
+                    .zip(&result.polygroups)
+                    .filter(|(_, g)| **g == role)
+                    .collect();
+                assert_eq!(selected.len(), faces);
+                for (face, _) in selected {
+                    assert!(
+                        face.iter()
+                            .all(|&v| (lo - 1e-5..=hi + 1e-5).contains(&result.vertices[v].0))
+                    );
+                }
+            }
+            assert_eq!(result.quads.len(), mesh.quads.len() + (count - 1) * 8);
+        }
+        for p in &mut mesh.vertices {
+            *p = Vec3(-p.0, -p.1, p.2);
+        }
+    }
+}
+
+#[test]
+fn grouped_path_regions_reject_bad_roles_boundaries_short_paths_and_cancel() {
+    let mesh = grouped_bar();
+    let set = grouped_set();
+    let run =
+        |set: &Set, mesh: &Mesh, p: SurfacePath| set.generated(&[p], |_| Some(mesh), &|| false);
+    let mut missing = set.clone();
+    let Layout::Path(a) = &mut missing.layout else {
+        unreachable!()
+    };
+    a.regions.as_mut().unwrap().end = "Missing".into();
+    assert!(
+        run(&missing, &mesh, path(false))
+            .err()
+            .unwrap()
+            .contains("missing")
+    );
+    let mut hole = mesh.clone();
+    hole.polygroups[0] = 0;
+    assert!(
+        run(&set, &hole, path(false))
+            .err()
+            .unwrap()
+            .contains("every source face")
+    );
+    let mut mismatch = mesh.clone();
+    for v in &mut mismatch.vertices {
+        if v.0 > 0.3 {
+            v.1 *= 1.5;
+        }
+    }
+    assert!(
+        run(&set, &mismatch, path(false))
+            .err()
+            .unwrap()
+            .contains("boundaries")
+    );
+    let mut short = path(false);
+    short.points.truncate(2);
+    short.points[1].position = short.points[0].position + Vec3(0.1, 0., 0.);
+    assert!(run(&set, &mesh, short).err().unwrap().contains("shorter"));
+    assert!(
+        set.generated(&[path(false)], |_| Some(&mesh), &|| true)
+            .err()
+            .unwrap()
+            .contains("cancelled")
+    );
 }
 #[test]
 fn reusable_path_bend_and_join_create_continuous_closed_geometry() {
@@ -501,4 +770,18 @@ fn reusable_path_thickness_validates_profiles_and_interpolation() {
     inline.edit_at(1., 1.5, true).unwrap();
     assert_eq!(inline.at(0., true), inline.at(1., true));
     assert_eq!(inline.at(0., true), 1.5);
+}
+
+#[test]
+fn grouped_path_regions_reject_expansion_before_repeating_dense_source() {
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
+    primitive.divisions = [120, 10, 10];
+    let mesh = grouped_regions(primitive.mesh().unwrap());
+    let mut set = grouped_set();
+    let Layout::Path(a) = &mut set.layout else {
+        unreachable!()
+    };
+    a.count = 254;
+    let result = set.generated(&[path(false)], |_| Some(&mesh), &|| false);
+    assert!(result.err().unwrap().contains("preview exceeds"));
 }

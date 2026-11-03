@@ -15,6 +15,7 @@ impl End {
         mesh: &Mesh,
         piece: Piece,
         high: bool,
+        remove_caps: bool,
         cancel: &dyn Fn() -> bool,
     ) -> Result<Self, String> {
         let piece = Piece {
@@ -35,7 +36,7 @@ impl End {
             if face % 4096 == 0 && cancel() {
                 return Err("Operation cancelled".into());
             }
-            if [a, b, c].iter().all(|&i| on_plane[i]) {
+            if remove_caps && [a, b, c].iter().all(|&i| on_plane[i]) {
                 caps.push(face);
                 continue;
             }
@@ -143,15 +144,20 @@ fn matches(
         used.insert(j);
         result.insert(i, j);
     }
-    if a.edges
-        .iter()
-        .any(|&(x, y)| !b.edges.contains(&(result[&y], result[&x])))
-    {
-        return Err(
-            "Neighbouring end topology or winding is incompatible; use matching end loops".into(),
-        );
-    }
     Ok(result)
+}
+
+/// Adjacent regions of one source share vertex IDs. Only newly repeated
+/// sections need their end caps removed and their loops matched by position.
+pub(super) struct Section<'a> {
+    pub mesh: &'a Mesh,
+    pub original_vertices: Option<&'a [usize]>,
+    pub reversed: bool,
+}
+impl Section<'_> {
+    fn original_seam(&self, neighbour: &Self) -> bool {
+        self.original_vertices.is_some() && !std::ptr::eq(self.mesh, neighbour.mesh)
+    }
 }
 
 pub(super) fn join<'a>(
@@ -161,27 +167,68 @@ pub(super) fn join<'a>(
     tolerance: f32,
     cancel: &dyn Fn() -> bool,
 ) -> Result<Mesh, String> {
+    let sources = copies
+        .iter()
+        .map(|c| {
+            source(c.placement.piece.source)
+                .map(|mesh| Section {
+                    mesh,
+                    original_vertices: None,
+                    reversed: false,
+                })
+                .ok_or_else(|| "Instance source is missing".to_owned())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    join_parts(copies, &sources, closed, tolerance, cancel)
+}
+
+pub(super) fn join_parts(
+    copies: &[GeneratedCopy],
+    sources: &[Section],
+    closed: bool,
+    tolerance: f32,
+    cancel: &dyn Fn() -> bool,
+) -> Result<Mesh, String> {
     let n = copies.len();
     let mut offsets = Vec::with_capacity(n);
     let mut total = 0;
     let mut ends = Vec::with_capacity(n);
-    let mut source_ends = HashMap::<(Source, usize, bool), Arc<End>>::new();
+    let mut source_ends = HashMap::<_, Arc<End>>::new();
     for (i, c) in copies.iter().enumerate() {
         if cancel() {
             return Err("Operation cancelled".into());
         }
-        let mesh = source(c.placement.piece.source).ok_or("Instance source is missing")?;
+        let section = &sources[i];
+        let mesh = section.mesh;
         if mesh.has_hidden_faces() {
             return Err("Joining requires fully visible sections".into());
         }
         offsets.push(total);
         total += c.mesh.vertices.len();
-        let mut end_for = |high| -> Result<Arc<End>, String> {
-            let key = (c.placement.piece.source, c.placement.piece.forward, high);
+        let mut end_for = |outgoing: bool| -> Result<Arc<End>, String> {
+            let neighbour = if outgoing {
+                (i + 1) % n
+            } else {
+                (i + n - 1) % n
+            };
+            let remove_caps = !section.original_seam(&sources[neighbour]);
+            let high = outgoing != section.reversed;
+            let key = (
+                mesh as *const Mesh as usize,
+                c.placement.piece.forward,
+                high,
+                remove_caps,
+            );
             if let Some(end) = source_ends.get(&key) {
                 return Ok(end.clone());
             }
-            let end = Arc::new(End::new(mesh, c.placement.piece, high, cancel)?);
+            let end = Arc::new(End::new(
+                mesh,
+                c.placement.piece,
+                high,
+                remove_caps,
+                cancel,
+            )?);
             source_ends.insert(key, end.clone());
             Ok(end)
         };
@@ -208,25 +255,53 @@ pub(super) fn join<'a>(
         let j = (i + 1) % n;
         let a = ends[i].1.as_ref().unwrap();
         let b = ends[j].0.as_ref().unwrap();
-        let matching = matches(
-            a,
-            b,
-            &copies[i].mesh,
-            &copies[j].mesh,
-            tolerance,
-            &mut work,
-            cancel,
-        )?;
+        let original_seam = sources[i].original_seam(&sources[j]);
+        let matching = if original_seam {
+            let left = sources[i].original_vertices.unwrap();
+            let right = sources[j].original_vertices.unwrap();
+            let by_id: HashMap<_, _> = b.vertices.iter().map(|&v| (right[v], v)).collect();
+            a.vertices
+                .iter()
+                .map(|&v| {
+                    by_id
+                        .get(&left[v])
+                        .map(|&w| (v, w))
+                        .ok_or("Source regions must share a welded edge loop")
+                })
+                .collect::<Result<HashMap<_, _>, _>>()?
+        } else {
+            matches(
+                a,
+                b,
+                &copies[i].mesh,
+                &copies[j].mesh,
+                tolerance,
+                &mut work,
+                cancel,
+            )?
+        };
+        if matching.len() != b.vertices.len()
+            || a.edges
+                .iter()
+                .any(|&(x, y)| !b.edges.contains(&(matching[&y], matching[&x])))
+        {
+            return Err(
+                "Neighbouring end topology or winding is incompatible; use matching end loops"
+                    .into(),
+            );
+        }
         for (&a, &b) in &matching {
             let a = root(&mut parent, offsets[i] + a);
             let b = root(&mut parent, offsets[j] + b);
             parent[b] = a;
         }
-        seams.extend(
-            a.edges
-                .iter()
-                .map(|&(a, b)| (offsets[i] + a, offsets[i] + b)),
-        );
+        if !original_seam {
+            seams.extend(
+                a.edges
+                    .iter()
+                    .map(|&(a, b)| (offsets[i] + a, offsets[i] + b)),
+            );
+        }
     }
     for i in 0..total {
         parent[i] = root(&mut parent, i);
@@ -306,7 +381,7 @@ pub(super) fn join<'a>(
                 .0
                 .iter()
                 .chain(ends[i].1.iter())
-                .any(|e| q.iter().all(|&v| e.on_plane[v]))
+                .any(|e| !e.caps.is_empty() && q.iter().all(|&v| e.on_plane[v]))
             {
                 continue;
             }
@@ -365,8 +440,8 @@ pub(super) fn join<'a>(
             }
         }
     }
-    result.creases.sort_unstable();
-    result.creases.dedup();
+    // Shoulder faces cut away between repeats can also remove their creased edges.
+    result.retain_creases();
     result.canonicalize_polygroups();
     // UVs deliberately remain empty: different section images cannot be combined
     // into one mesh's channel assignments without an atlas operation.

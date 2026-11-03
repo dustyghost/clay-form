@@ -12,13 +12,15 @@ struct AppearanceHarness {
     ctx: egui::Context,
     size: [i32; 2],
     output: egui::FullOutput,
+    #[cfg(target_os = "linux")]
     capture: Option<crate::viewport::UiCapture>,
+    #[cfg(target_os = "linux")]
     pixels: Vec<u8>,
     time: f64,
     alpha: bool,
 }
 impl AppearanceHarness {
-    fn new(size: [i32; 2], capture: bool) -> Self {
+    fn new(size: [i32; 2], _capture: bool) -> Self {
         let mut app = App::default();
         app.document
             .replace_geometry(Geometry::new(
@@ -32,7 +34,9 @@ impl AppearanceHarness {
             ctx,
             size,
             output: Default::default(),
-            capture: capture.then(|| crate::viewport::UiCapture::new(size)),
+            #[cfg(target_os = "linux")]
+            capture: _capture.then(|| crate::viewport::UiCapture::new(size)),
+            #[cfg(target_os = "linux")]
             pixels: vec![],
             time: 0.,
             alpha: false,
@@ -70,6 +74,7 @@ impl AppearanceHarness {
                 egui::CentralPanel::default().show(ctx, |_ui| {});
             },
         );
+        #[cfg(target_os = "linux")]
         if let Some(capture) = &mut self.capture {
             self.pixels = capture.render(&self.ctx, self.output.clone());
         }
@@ -147,7 +152,8 @@ impl AppearanceHarness {
         self.frame(vec![]);
         self.frame(vec![]);
     }
-    fn save(&self, name: &str) {
+    fn save(&self, _name: &str) {
+        #[cfg(target_os = "linux")]
         if let Some(capture) = &self.capture {
             let directory = std::path::PathBuf::from(
                 std::env::var("CLAY_APPEARANCE_REVIEW")
@@ -155,7 +161,7 @@ impl AppearanceHarness {
             );
             std::fs::create_dir_all(&directory).unwrap();
             capture.save(
-                directory.join(format!("{name}-{}x{}.png", self.size[0], self.size[1])),
+                directory.join(format!("{_name}-{}x{}.png", self.size[0], self.size[1])),
                 &self.pixels,
             );
         }
@@ -410,6 +416,7 @@ fn appearance_import_replace_float_and_export_bind_image_identity() {
     std::fs::remove_dir_all(directory).unwrap();
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 #[ignore = "manual appearance workflow captures with actual controls; requires Vulkan"]
 fn appearance_workflow_offscreen_review() {
@@ -567,6 +574,7 @@ fn appearance_colour_pair_controls_and_defaults() {
     }
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 #[ignore = "manual persistent material and colour-pair layout review; requires Vulkan"]
 fn appearance_colour_pair_offscreen_review() {
@@ -721,6 +729,7 @@ fn appearance_default_material_uses_regular_copy_edit_and_reset() {
     default_material_workflow([720, 600], false);
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 #[ignore = "manual regular default material review; requires Vulkan"]
 fn appearance_default_material_offscreen_review() {

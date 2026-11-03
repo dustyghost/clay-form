@@ -53,7 +53,7 @@ fn reusable_path_bend_join_offscreen_review() {
             1.,
         )
         .unwrap();
-    g.app.dispatch(Command::Instances(C::NewPath), &g.ctx);
+    g.app.dispatch(Command::Instances(C::NewPathParts), &g.ctx);
     assert!(
         g.app
             .document
@@ -176,7 +176,9 @@ fn reusable_path_bend_join_offscreen_review() {
     assert_eq!(g.app.document.history_counts().0, before + 1);
     let resolved = g.app.document.instance_placements().unwrap();
     let expected = resolved.meshes[&(1, 0)].clone();
-    click_guide_label(&mut g, "Bake joined model");
+    click_guide_label(&mut g, "Bake set…");
+    click_guide_label(&mut g, "One new submodel");
+    click_guide_label(&mut g, "Bake now");
     finish_mesh_job(&mut g.app);
     assert!(
         g.app.document.instances().sets.is_empty(),
@@ -193,7 +195,7 @@ fn reusable_path_bend_join_offscreen_review() {
     g.app.document.project().validate().unwrap();
 }
 
-fn drag_thickness_handle(g: &mut Guide, label: &str, amount: f32) {
+pub(super) fn drag_thickness_handle(g: &mut Guide, label: &str, amount: f32) {
     g.frame(vec![]);
     let (_, position, axis, t) = g
         .ctx
@@ -277,7 +279,7 @@ fn whole_path_transform_offscreen_review() {
             1.,
         )
         .unwrap();
-    g.app.dispatch(Command::Instances(C::NewPath), &g.ctx);
+    g.app.dispatch(Command::Instances(C::NewPathParts), &g.ctx);
     click_guide_label(&mut g, "Bend along path");
     click_guide_label(&mut g, "Join neighbours");
     click_guide_label(&mut g, "Apply instances");

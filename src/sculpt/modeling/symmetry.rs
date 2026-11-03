@@ -285,6 +285,7 @@ impl Mesh {
             partial_contact: false,
             varying_distance: false,
             rim: Vec::new(),
+            preview: Default::default(),
         };
         // Resolve contacts against the unchanged source. Earlier regions must
         // not create new targets or make a later region pass its original stop.
@@ -383,6 +384,9 @@ impl Mesh {
             result.joined |= next.joined;
             result.collapsed |= next.collapsed;
             result.rim.extend(next.rim);
+            result.preview.targets.extend(next.preview.targets);
+            result.preview.walls.extend(next.preview.walls);
+            result.preview.loop_edges.extend(next.preview.loop_edges);
         }
         result.partial_contact = free_regions > 0 && (result.joined || result.collapsed);
         symmetry.validate_result(&result.mesh)?;

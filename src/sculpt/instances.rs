@@ -3,13 +3,18 @@
 use super::{Mesh, Vec3, paths::SurfacePath};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, sync::Arc};
+mod bake;
+pub(crate) use bake::{BakeDestination, BakeRequest, BakeScope};
 mod path_output;
-pub use path_output::{GeneratedCopy, JoinMode, ResolvedCopies};
+pub use path_output::{GeneratedCopy, JoinMode, PathRegions, ResolvedCopies};
 mod arrays;
-pub use arrays::{Array, ArrayKind, ArrayLayer, ArrayResolver, Basis, MAX_ARRAY_LAYERS};
+pub use arrays::{
+    Array, ArrayKind, ArrayLayer, ArrayResolver, ArraySpacing, Basis, MAX_ARRAY_LAYERS,
+};
 mod brushes;
 mod thickness;
 pub use brushes::{BrushBundle, BrushGroup};
+pub(crate) use brushes::{SHIP_GREEBLES_NAME, ship_greebles};
 pub use thickness::{
     MAX_THICKNESS, MAX_THICKNESS_POINTS, MIN_THICKNESS, Thickness, ThicknessMode, ThicknessPoint,
 };
@@ -26,6 +31,8 @@ pub struct ObjectOptions {
     pub offset: f32,
     pub rotation: f32,
     pub independent: bool,
+    #[serde(default)]
+    pub stamp: bool,
 }
 
 impl Default for ObjectOptions {
@@ -36,6 +43,7 @@ impl Default for ObjectOptions {
             offset: 0.,
             rotation: 0.,
             independent: false,
+            stamp: false,
         }
     }
 }
@@ -75,11 +83,18 @@ pub struct Asset {
     pub id: u64,
     pub name: String,
     pub mesh: Arc<Mesh>,
+    /// View of the source when captured, used for the brush library thumbnail.
+    #[serde(default = "default_capture_angles")]
+    pub capture_angles: [f32; 3],
     pub pivot: Vec3,
     pub forward: usize,
     pub up: usize,
     #[serde(default)]
     pub options: ObjectOptions,
+}
+
+fn default_capture_angles() -> [f32; 3] {
+    [0.35, -0.25, 0.]
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -143,6 +158,9 @@ impl Default for Transform {
     }
 }
 impl Transform {
+    pub fn is_identity(&self) -> bool {
+        *self == Self::default()
+    }
     pub fn validate(&self) -> Result<(), String> {
         if let Some(b) = self.basis {
             b.scaled(self.scale).validate()?;
@@ -206,6 +224,8 @@ impl Placement {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PathAssembly {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub regions: Option<PathRegions>,
     pub path: u64,
     pub start: Option<Piece>,
     pub middle: Piece,
@@ -261,6 +281,22 @@ impl PathAssembly {
             .sum();
         if length < 1e-5 {
             return Err("Path is too short for an assembly".into());
+        }
+        if let Some(regions) = &self.regions {
+            regions.validate()?;
+            if self.start.is_some()
+                || self.end.is_some()
+                || !self.bend
+                || !self.fit_sections
+                || !self.fit_count
+                || self.join != JoinMode::Weld
+            {
+                return Err("Grouped path objects use one source model, fitted middle repeats and welded boundaries".into());
+            }
+            return Ok(vec![Placement {
+                piece: self.middle,
+                transform: Transform::default(),
+            }]);
         }
         let samples = path.sample((length / 1024.).max(1e-5))?;
         let mut samples = samples;
@@ -385,6 +421,15 @@ pub struct Set {
     pub adjustments: Vec<Adjustment>,
 }
 impl Set {
+    /// Include the stable set number because several arrays or strokes can share a name.
+    pub(crate) fn target_name(&self, slot: Option<usize>) -> String {
+        let name = format!("{} #{}", self.name, self.id);
+        match slot {
+            Some(slot) if !self.joined() => format!("{name} · Copy {}", slot + 1),
+            _ => name,
+        }
+    }
+
     pub fn placements(&self, paths: &[SurfacePath]) -> Result<Vec<(usize, Placement)>, String> {
         if let Layout::Array(a) = &self.layout {
             return Ok(arrays::numbered(self.adjust_slots(a.unlinked_slots()?)?));
@@ -496,6 +541,9 @@ impl Library {
             .validate()?;
             a.mesh.validate()?;
             a.options.validate()?;
+            if !a.capture_angles.iter().all(|a| a.is_finite()) {
+                return Err("Invalid object thumbnail orientation".into());
+            }
             if a.mesh.vertices.len() > 100_000 || a.mesh.triangles.len() > 200_000 {
                 return Err("Object brush exceeds 100,000 vertices / 200,000 triangles".into());
             }
@@ -521,8 +569,26 @@ impl Library {
         }
         let mut ids = HashSet::new();
         let mut count = 0;
-        let mut resolver = ArrayResolver::new(self);
+        let mut owners = HashSet::new();
+        let mut resolver = ArrayResolver::new(self).with_sources(|s| match s {
+            Source::Model(id) => models.iter().find(|(i, _)| *i == id).map(|(_, m)| *m),
+            Source::Asset(id) => self
+                .assets
+                .iter()
+                .find(|a| a.id == id)
+                .map(|a| a.mesh.as_ref()),
+        });
         for set in &self.sets {
+            if let Layout::Array(a) = &set.layout
+                && let Some(owner) = a.owner
+                && (owner == 0
+                    || !owners.insert(owner)
+                    || a.piece.source != Source::Model(owner)
+                    || a.source_array.is_some()
+                    || !models.iter().any(|(id, _)| *id == owner))
+            {
+                return Err("Invalid or duplicate submodel array ownership".into());
+            }
             if !ids.insert(set.id) {
                 return Err("Duplicate instance set identity".into());
             }
@@ -537,7 +603,13 @@ impl Library {
             if missing {
                 return Err("Instance source is missing".into());
             }
-            count += resolver.placements(set, paths)?.len();
+            let placements = resolver.placements(set, paths)?;
+            count += match &set.layout {
+                Layout::Path(a) if a.regions.is_some() => {
+                    a.count + 2 * usize::from(!paths.iter().any(|p| p.id == a.path && p.closed))
+                }
+                _ => placements.len(),
+            };
         }
         if count > MAX_INSTANCES {
             return Err("Projects are limited to 256 instances".into());
@@ -563,100 +635,6 @@ impl super::Geometry {
                 .find(|a| a.id == id)
                 .map(|a| a.mesh.as_ref()),
         }
-    }
-    pub(crate) fn bake_instances(
-        &mut self,
-        id: u64,
-        fuse: bool,
-        cancel: &dyn Fn() -> bool,
-    ) -> Result<(), String> {
-        let set = self
-            .scene
-            .instances
-            .sets
-            .iter()
-            .find(|s| s.id == id)
-            .ok_or("Instance set no longer exists")?
-            .clone();
-        self.scene.instances.ensure_array_unreferenced(id)?;
-        let generated = set.generated(&self.paths, |s| self.instance_source(s), cancel)?;
-        let placements = if let Some(copies) = &generated {
-            copies.iter().map(|c| (c.slot, c.placement)).collect()
-        } else {
-            ArrayResolver::new(&self.scene.instances).placements(&set, &self.paths)?
-        };
-        let mut generated: std::collections::HashMap<_, _> = generated
-            .into_iter()
-            .flatten()
-            .map(|c| (c.slot, c.mesh))
-            .collect();
-        if placements.is_empty() {
-            return Err("No visible copies to bake".into());
-        }
-        if !fuse && self.submodels.len() + 1 + placements.len() > 64 {
-            return Err("Baking these copies would exceed 64 submodels; bake fewer copies or use Bake + fuse".into());
-        }
-        if fuse && self.submodels.len() >= 63 {
-            return Err("Remove a submodel before baking this assembly".into());
-        }
-        let mut meshes = Vec::new();
-        let (mut vertices, mut triangles) = (0usize, 0usize);
-        for (slot, p) in placements {
-            if cancel() {
-                return Err("Operation cancelled".into());
-            }
-            let source = generated
-                .get(&slot)
-                .or_else(|| self.instance_source(p.piece.source))
-                .ok_or("Instance source is missing")?;
-            vertices = vertices.saturating_add(source.vertices.len());
-            triangles = triangles.saturating_add(source.triangles.len());
-            if vertices > MAX_VERTICES || triangles > MAX_TRIANGLES {
-                return Err("Instance bake budget exceeded".into());
-            }
-            let mesh = if let Some(mesh) = generated.remove(&slot) {
-                mesh
-            } else {
-                p.mesh(
-                    self.instance_source(p.piece.source)
-                        .ok_or("Instance source is missing")?,
-                )?
-            };
-            if fuse {
-                let mut edges = std::collections::HashMap::new();
-                for &[a, b, c] in &mesh.triangles {
-                    for (a, b) in [(a, b), (b, c), (c, a)] {
-                        *edges.entry((a.min(b), a.max(b))).or_insert(0usize) += 1;
-                    }
-                }
-                if mesh.has_hidden_faces() || edges.values().any(|&n| n != 2) {
-                    return Err("Fusion requires closed, fully visible pieces; use ordinary Bake for open surfaces".into());
-                }
-            }
-            meshes.push(mesh);
-        }
-        if fuse {
-            let mut combined = meshes.remove(0);
-            combined.uv = Default::default();
-            for mut mesh in meshes {
-                if cancel() {
-                    return Err("Operation cancelled".into());
-                }
-                mesh.uv = Default::default();
-                combined = combined.merged_with(&mesh)?;
-            }
-            let fused = combined.remesh_cancellable(self.settings.resolution, cancel)?;
-            self.import_mesh(fused, &format!("{} fused", set.name))?;
-        } else {
-            for (i, mesh) in meshes.into_iter().enumerate() {
-                if cancel() {
-                    return Err("Operation cancelled".into());
-                }
-                self.import_mesh(mesh, &format!("{} {}", set.name, i + 1))?;
-            }
-        }
-        self.scene.instances.sets.retain(|s| s.id != id);
-        Ok(())
     }
 }
 
@@ -736,6 +714,7 @@ mod tests {
             attached_route: None,
         };
         let a = PathAssembly {
+            regions: None,
             path: 1,
             start: Some(piece()),
             middle: piece(),

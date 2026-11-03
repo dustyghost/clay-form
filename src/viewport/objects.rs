@@ -59,29 +59,43 @@ pub(super) fn paint_capture_axes(
         controls::ACTION,
     );
 }
+struct StampPreview {
+    deformation: crate::sculpt::object_stamp::ObjectStamp,
+    revision: u64,
+    count: usize,
+}
 pub(crate) struct ObjectBrush {
-    pub piece: Piece,
+    pub piece: Option<Piece>,
     pub options: BrushOptions,
     stroke: Option<Set>,
+    stamp: Option<StampPreview>,
     last_pointer: Option<Pos2>,
     last_surface: Option<Vec3>,
     travelled: f32,
 }
 impl ObjectBrush {
     pub(crate) fn stroking(&self) -> bool {
-        self.stroke.is_some()
+        self.stroke.is_some() || self.stamp.is_some()
     }
-    pub fn new(piece: Piece) -> Self {
+    pub fn new(piece: Option<Piece>) -> Self {
         Self {
             piece,
             options: Default::default(),
             stroke: None,
+            stamp: None,
             last_pointer: None,
             last_surface: None,
             travelled: 0.,
         }
     }
+    pub fn preview(&self) -> Option<&crate::sculpt::Mesh> {
+        self.stamp
+            .as_ref()
+            .filter(|s| s.deformation.changed)
+            .map(|s| &s.deformation.mesh)
+    }
     pub fn cancel(&mut self, document: &mut Document) {
+        self.stamp = None;
         if self.stroke.take().is_some() {
             document.cancel_instance_preview();
         }
@@ -89,7 +103,33 @@ impl ObjectBrush {
         self.last_surface = None;
         self.travelled = 0.;
     }
-    fn placement(&self, center: Vec3, normal: Vec3, direction: Vec3) -> Placement {
+    fn finish(&mut self, document: &mut Document, source: Source) -> Result<String, String> {
+        self.last_pointer = None;
+        self.last_surface = None;
+        self.travelled = 0.;
+        if let Some(stamp) = self.stamp.take() {
+            return document
+                .finish_object_stamp(stamp.deformation.mesh, stamp.revision, source, self.options)
+                .map(|changed| {
+                    if changed {
+                        "Object stamp applied · Undo restores the surface".into()
+                    } else {
+                        "No target vertices reached the stamp. Increase mesh detail or enlarge the stamp.".into()
+                    }
+                });
+        }
+        let set = self.stroke.take().ok_or("Object stroke is missing")?;
+        let id = set.id;
+        let result = document
+            .preview_instance_set(set)
+            .and_then(|()| document.finish_object_stroke(id, source, self.options));
+        if let Err(error) = result {
+            document.cancel_instance_preview();
+            return Err(error);
+        }
+        Ok("Object stroke applied · Undo removes the entire stroke".into())
+    }
+    fn placement(&self, piece: Piece, center: Vec3, normal: Vec3, direction: Vec3) -> Placement {
         let forward = direction - normal * direction.dot(normal);
         let forward = if forward.len() > 1e-5 {
             forward.norm()
@@ -103,7 +143,7 @@ impl ObjectBrush {
         }
         .rotated(normal, self.options.rotation.to_radians());
         Placement {
-            piece: self.piece,
+            piece,
             transform: Transform {
                 basis: None,
                 origin: center + normal * self.options.offset,
@@ -113,8 +153,15 @@ impl ObjectBrush {
             },
         }
     }
-    fn sample(&mut self, point: Pos2, scene: &Scene, document: &Document) -> Result<(), String> {
-        let Some((center, normal)) = scene.pick_object_target(point, document) else {
+    fn sample(
+        &mut self,
+        piece: Piece,
+        point: Pos2,
+        scene: &Scene,
+        document: &Document,
+        invert: bool,
+    ) -> Result<(), String> {
+        let Some((center, normal, face)) = scene.pick_object_hit(point, document) else {
             self.last_surface = None;
             self.travelled = 0.;
             return Ok(());
@@ -127,14 +174,32 @@ impl ObjectBrush {
             let mut along = self.options.spacing - self.travelled;
             while along <= distance && hits.len() < MAX_INSTANCES {
                 let candidate = previous + delta * (along / distance.max(1e-8));
-                if let Some((p, n)) = scene.pick_object_target(scene.project(candidate), document) {
-                    hits.push(self.placement(p, n, delta));
+                if let Some((p, n, f)) = scene.pick_object_hit(scene.project(candidate), document) {
+                    hits.push((self.placement(piece, p, n, delta), f));
                 }
                 along += self.options.spacing;
             }
             self.travelled = (self.travelled + distance) % self.options.spacing;
         } else {
-            hits.push(self.placement(center, normal, scene.right));
+            hits.push((self.placement(piece, center, normal, scene.right), face));
+        }
+        if let Some(stamp) = &mut self.stamp {
+            if stamp.count + hits.len() > MAX_INSTANCES {
+                return Err("Stroke reached the 256-stamp limit. Release to apply.".into());
+            }
+            for (mut placement, face) in hits {
+                placement.transform.origin =
+                    placement.transform.origin - placement.transform.up * self.options.offset;
+                stamp.deformation.apply(
+                    document.mesh(),
+                    placement,
+                    face,
+                    invert,
+                    self.options.offset,
+                )?;
+                stamp.count += 1;
+            }
+            return Ok(());
         }
         if let Some(Set {
             layout: Layout::Manual(items),
@@ -147,7 +212,7 @@ impl ObjectBrush {
                         .into(),
                 );
             }
-            items.extend(hits);
+            items.extend(hits.into_iter().map(|(p, _)| p));
         }
         Ok(())
     }
@@ -163,11 +228,14 @@ impl Viewport {
         document: &mut Document,
         options: ViewportOptions,
         gizmo: egui::Rect,
+        primary_press: Option<Pos2>,
     ) -> bool {
         let Some(mut brush) = self.object_brush.take() else {
             return false;
         };
-        if document.instance_source(brush.piece.source).is_none()
+        if brush
+            .piece
+            .is_some_and(|piece| document.instance_source(piece.source).is_none())
             || options.transform_mode != TransformMode::Sculpt
             || options.modeling.is_some()
             || options.select.is_some()
@@ -181,10 +249,21 @@ impl Viewport {
             return false;
         }
         let modifiers = ui.input(|i| i.modifiers);
+        let stamp_target = brush.options.stamp
+            && (brush.stroking()
+                || response
+                    .hover_pos()
+                    .is_some_and(|p| scene.pick_object_target(p, document).is_some()));
         let navigation = options.zoom_hold.active(modifiers)
-            || options.pan_hold.active(modifiers)
+            || (options.pan_hold.active(modifiers) && !stamp_target)
             || self.session.gesture.is_some()
-            || ui.input(|i| i.pointer.secondary_down() || i.pointer.middle_down());
+            || ui.input(|i| {
+                i.pointer.secondary_down()
+                    || i.pointer.middle_down()
+                    || (!i.pointer.primary_down()
+                        && i.smooth_scroll_delta.y != 0.
+                        && !brush.stroking())
+            });
         let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
         if escape || !ui.input(|i| i.focused) {
             brush.cancel(document);
@@ -199,8 +278,13 @@ impl Viewport {
             self.object_brush = Some(brush);
             return false;
         }
-        if navigation {
-            if brush.stroke.is_some() {
+        // The initial press owns the entire drag, even when it crosses a handle.
+        let primitive_handle = !brush.stroking()
+            && primary_press
+                .or_else(|| response.hover_pos())
+                .is_some_and(|p| self.session.primitive.can_drag(document, scene, p));
+        if navigation || primitive_handle {
+            if brush.stroking() {
                 brush.cancel(document);
             }
             self.object_brush = Some(brush);
@@ -212,23 +296,43 @@ impl Viewport {
                 && !navigation::contains(response.rect, p)
                 && ui.ctx().layer_id_at(p) == Some(response.layer_id)
         };
+        let Some(piece) = brush.piece else {
+            self.object_brush = Some(brush);
+            // An empty preset can navigate but has no geometry to stamp.
+            if ui.input(|i| i.pointer.primary_pressed())
+                && response.interact_pointer_pos().is_some_and(permitted)
+            {
+                self.session.gesture = Some(Gesture::Orbit);
+                return false;
+            }
+            return response.hover_pos().is_some_and(permitted);
+        };
         if let Some(point) = response.hover_pos().filter(|p| permitted(*p))
             && let Some((center, normal)) = scene.pick_object_target(point, document)
-            && let Some(source) = document.instance_source(brush.piece.source)
+            && let Some(source) = document.instance_source(piece.source)
         {
-            let placement = brush.placement(center, normal, scene.right);
+            let placement = brush.placement(piece, center, normal, scene.right);
+            let inward = brush.options.stamp && modifiers.alt;
+            let color = if inward {
+                controls::REVERSED
+            } else {
+                Color32::from_rgb(80, 225, 205)
+            };
             for tri in source
                 .triangles
                 .iter()
                 .step_by((source.triangles.len() / 180).max(1))
             {
-                let p = tri.map(|i| placement.point(source.vertices[i]));
+                let p = tri.map(|i| {
+                    let mut p = placement.point(source.vertices[i]);
+                    if inward {
+                        p = p - normal * (2. * (p - center).dot(normal));
+                    }
+                    p
+                });
                 for (a, b) in [(0, 1), (1, 2), (2, 0)] {
                     if let Some(line) = scene.clip_segment([p[a], p[b]]) {
-                        painter.line_segment(
-                            line,
-                            egui::Stroke::new(1_f32, Color32::from_rgb(80, 225, 205)),
-                        );
+                        painter.line_segment(line, egui::Stroke::new(1_f32, color));
                     }
                 }
             }
@@ -243,30 +347,70 @@ impl Viewport {
                     button: egui::PointerButton::Primary,
                     pressed: true,
                     ..
-                } if permitted(pos) => {
+                } if permitted(pos) && !brush.stroking() => {
                     if scene.pick_object_target(pos, document).is_some() {
-                        match document.next_instance_set_id() {
-                            Ok(id) => {
-                                brush.stroke = Some(Set {
-                                    id,
-                                    name: "Object stroke".into(),
-                                    visible: true,
-                                    layout: Layout::Manual(Vec::new()),
-                                    adjustments: Vec::new(),
-                                });
-                                brush.last_surface = None;
-                                brush.last_pointer = Some(pos);
-                                brush.travelled = 0.;
-                                if let Err(error) = brush.sample(pos, scene, document) {
-                                    self.status = Some(error);
+                        if brush.options.stamp {
+                            let result = document.require_sculpt_mesh().and_then(|()| {
+                                let source = document
+                                    .instance_source(piece.source)
+                                    .ok_or("Captured object is missing")?;
+                                crate::sculpt::object_stamp::ObjectStamp::new(
+                                    document.mesh(),
+                                    source,
+                                    piece,
+                                )
+                            });
+                            match result {
+                                Ok(deformation) => {
+                                    changed = true;
+                                    brush.stamp = Some(StampPreview {
+                                        deformation,
+                                        revision: document.display_revision(),
+                                        count: 0,
+                                    });
+                                    brush.last_surface = None;
+                                    brush.last_pointer = Some(pos);
+                                    brush.travelled = 0.;
+                                    if let Err(error) =
+                                        brush.sample(piece, pos, scene, document, modifiers.alt)
+                                    {
+                                        self.status = Some(error);
+                                        brush.cancel(document);
+                                    }
                                 }
-                                changed = true;
+                                Err(error) => self.status = Some(error),
                             }
-                            Err(error) => self.status = Some(error),
+                        } else {
+                            match document.next_instance_set_id() {
+                                Ok(id) => {
+                                    brush.stroke = Some(Set {
+                                        id,
+                                        name: "Object stroke".into(),
+                                        visible: true,
+                                        layout: Layout::Manual(Vec::new()),
+                                        adjustments: Vec::new(),
+                                    });
+                                    brush.last_surface = None;
+                                    brush.last_pointer = Some(pos);
+                                    brush.travelled = 0.;
+                                    if let Err(error) =
+                                        brush.sample(piece, pos, scene, document, modifiers.alt)
+                                    {
+                                        self.status = Some(error);
+                                    }
+                                    changed = true;
+                                }
+                                Err(error) => self.status = Some(error),
+                            }
                         }
+                    } else if scene.pick_model(pos).is_none() && !brush.stroking() {
+                        // Keep ownership of the drag even if the pointer crosses the model.
+                        self.session.gesture = Some(Gesture::Orbit);
+                        self.object_brush = Some(brush);
+                        return false;
                     }
                 }
-                egui::Event::PointerMoved(pos) if brush.stroke.is_some() => {
+                egui::Event::PointerMoved(pos) if brush.stroking() => {
                     if let Some(last) = brush.last_pointer.replace(pos) {
                         let steps = (last.distance(pos) / 2.).ceil().clamp(1., 256.) as usize;
                         for i in 1..=steps {
@@ -276,7 +420,9 @@ impl Viewport {
                                 brush.travelled = 0.;
                                 continue;
                             }
-                            if let Err(error) = brush.sample(p, scene, document) {
+                            if let Err(error) =
+                                brush.sample(piece, p, scene, document, modifiers.alt)
+                            {
                                 self.status = Some(error);
                                 break;
                             }
@@ -289,38 +435,40 @@ impl Viewport {
                     button: egui::PointerButton::Primary,
                     pressed: false,
                     ..
-                } if brush.stroke.is_some() => {
-                    if brush.last_pointer != Some(pos) && permitted(pos) {
-                        if let Err(error) = brush.sample(pos, scene, document) {
-                            self.status = Some(error);
-                        }
-                        changed = true;
+                } if brush.stroking() => {
+                    if brush.last_pointer != Some(pos)
+                        && permitted(pos)
+                        && let Err(error) = brush.sample(piece, pos, scene, document, modifiers.alt)
+                    {
+                        self.status = Some(error);
                     }
+                    // Events may span a delayed frame. Finish at the release,
+                    // before any later hover move or subsequent click is read.
+                    self.status = Some(match brush.finish(document, piece.source) {
+                        Ok(notice) | Err(notice) => notice,
+                    });
+                    changed = false;
                     released = true;
                 }
                 _ => {}
             }
         }
-        if changed && let Some(set) = &brush.stroke {
-            if let Err(error) = document.preview_instance_set(set.clone()) {
+        if changed {
+            if let Some(set) = &brush.stroke
+                && let Err(error) = document.preview_instance_set(set.clone())
+            {
                 self.status = Some(error);
                 brush.cancel(document);
             }
             ui.ctx().request_repaint();
         }
-        if released && let Some(set) = brush.stroke.take() {
-            let result = document.finish_object_stroke(set.id, brush.piece.source, brush.options);
-            if let Err(error) = result {
-                document.cancel_instance_preview();
-                self.status = Some(error);
-            } else {
-                self.status = Some("Object stroke applied · Undo removes the entire stroke".into());
-            }
-            brush.last_pointer = None;
-            brush.last_surface = None;
+        if released {
+            ui.ctx().request_repaint();
+        }
+        if released && !brush.stroking() && ui.input(|i| i.pointer.primary_down()) {
             self.wait_for_release();
         }
-        let consume = brush.stroke.is_some() || response.hover_pos().is_some_and(permitted);
+        let consume = brush.stroking() || response.hover_pos().is_some_and(permitted);
         self.object_brush = Some(brush);
         consume
     }

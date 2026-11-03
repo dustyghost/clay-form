@@ -123,6 +123,7 @@ impl ModelingState {
             }),
             rail: None,
             initial_amount: options.amount,
+            preview_options: options,
             moved: false,
             scale: scene.scale_at(pivot),
             components,

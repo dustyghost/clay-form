@@ -14,6 +14,7 @@ enum Intent {
     FilePicker,
     Pending,
     Primitive,
+    DeleteConfirmation,
     Alpha,
     Icon,
     CancelJob,
@@ -46,6 +47,9 @@ impl<'a> EditorPolicy<'a> {
         }
         if ui.pending.is_some() && intent != Intent::Pending {
             return Err("Resolve unsaved changes first");
+        }
+        if ui.delete_warning.is_some() && intent != Intent::DeleteConfirmation {
+            return Err("Confirm or cancel submodel deletion first");
         }
         if ui.primitive_warning.is_some() && intent != Intent::Primitive {
             return Err("Confirm or cancel primitive replacement first");
@@ -181,7 +185,8 @@ impl<'a> EditorPolicy<'a> {
             Action::Redo => document.can_redo(),
             Action::SelectBrush(id) => document.brushes().iter().any(|b| b.identity() == *id),
             Action::NewBrush(name) => {
-                name == "Alpha Drag" || Kind::ALL.iter().any(|k| format!("{k:?}") == *name)
+                matches!(name.as_str(), "Alpha Drag" | "Object")
+                    || Kind::ALL.iter().any(|k| format!("{k:?}") == *name)
             }
             Action::OpenMenu(id) => self.ui.preferences.menus.iter().any(|m| m.id == *id),
 
@@ -474,6 +479,7 @@ impl<'a> EditorPolicy<'a> {
             | Command::DiscardAndContinue
             | Command::CancelPending
             | Command::BrowseProject(_) => Intent::Pending,
+            Command::ConfirmDeleteSubmodel(_) => Intent::DeleteConfirmation,
             Command::ConfirmPrimitive | Command::CancelPrimitive => Intent::Primitive,
             Command::SaveAlpha(..) | Command::ExportAlpha(..) => Intent::Alpha,
             Command::ExportIconImage(..) => Intent::Icon,

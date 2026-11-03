@@ -20,7 +20,7 @@ impl App {
         let mut bounds = egui::Rect::NOTHING;
         for index in 0..self.document.model_count() {
             let model = self.document.model(index).unwrap();
-            if !model.metadata.visible {
+            if !model.metadata.visible || !self.document.source_is_displayed(index) {
                 continue;
             }
             let mesh = model.display_mesh(index == self.document.active_model_index());
@@ -74,7 +74,7 @@ impl App {
         let mut radius = 1_f32;
         for index in 0..self.document.model_count() {
             let model = self.document.model(index).unwrap();
-            if model.metadata.visible {
+            if model.metadata.visible && self.document.source_is_displayed(index) {
                 for point in &model
                     .display_mesh(index == self.document.active_model_index())
                     .vertices
@@ -89,7 +89,7 @@ impl App {
         let (mut old_extent, mut new_extent) = (0_f32, 0_f32);
         for index in 0..self.document.model_count() {
             let model = self.document.model(index).unwrap();
-            if !model.metadata.visible {
+            if !model.metadata.visible || !self.document.source_is_displayed(index) {
                 continue;
             }
             let points = model
@@ -149,20 +149,36 @@ impl App {
             return;
         }
         if let Command::Instances(command) = command {
+            use crate::command::InstanceCommand as C;
+            let open_settings = matches!(
+                command,
+                C::CreateBrush(_)
+                    | C::LoadPersonalBrush(_)
+                    | C::ImportBrush(_)
+                    | C::ChooseShipGreebles
+            );
             let preview_command = matches!(
                 &command,
-                crate::command::InstanceCommand::NewArray
-                    | crate::command::InstanceCommand::NewLinkedCopy
-                    | crate::command::InstanceCommand::RepeatArray(_)
-                    | crate::command::InstanceCommand::NewPath
-                    | crate::command::InstanceCommand::Edit(_)
-                    | crate::command::InstanceCommand::Preview(_)
+                C::NewArray
+                    | C::NewLegacyArray
+                    | C::NewLinkedCopy
+                    | C::RepeatArray(_)
+                    | C::NewPath
+                    | C::NewPathParts
+                    | C::Edit(_)
+                    | C::EditCopy(..)
+                    | C::Preview(_)
             );
+            let show_array = matches!(&command, C::NewArray | C::ArrayMode(_));
             if let Err(error) = self.dispatch_instances(command) {
                 if preview_command {
                     self.ui.instances.invalid = true;
                 }
                 self.ui.status = error;
+            } else if open_settings {
+                self.execute_action(Action::ShowPanel(crate::preferences::Tool::Brush), ctx);
+            } else if show_array {
+                self.execute_action(Action::ShowPanel(crate::preferences::Tool::Submodels), ctx);
             }
             return;
         }
@@ -298,6 +314,7 @@ impl App {
             | Command::ModelBoundary
             | Command::ModelTopology(..)
             | Command::ModelRepeat
+            | Command::ModelPreviewFuse
             | Command::ModelApply
             | Command::ModelDissolveLoops
             | Command::ModelSelectLoop
@@ -533,10 +550,6 @@ impl App {
                 }
             }
             Command::UpdatePrimitive(primitive) => self.document.update_primitive(primitive),
-            Command::EndPrimitiveEdit => {
-                self.document.end_primitive_edit();
-                Ok(())
-            }
             Command::ConvertPrimitive => {
                 self.viewport.cancel(&mut self.document);
                 self.document.convert_primitive().map(|()| {
@@ -610,6 +623,7 @@ impl App {
             | Command::GroupVisible(..)
             | Command::SelectSubmodel(..)
             | Command::DeleteSubmodel
+            | Command::ConfirmDeleteSubmodel(_)
             | Command::MergeDown
             | Command::DuplicateModel
             | Command::ExtractMasked) => self.dispatch_scene(command),

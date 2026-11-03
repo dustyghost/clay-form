@@ -8,6 +8,7 @@ pub type ResolvedInstances = std::sync::Arc<ResolvedCopies>;
 pub(super) struct Preview {
     pub library: Library,
     pub model_ids: Vec<(usize, u64)>,
+    pub displayed: bool,
 }
 
 impl Document {
@@ -53,17 +54,42 @@ impl Document {
     fn resolve_instance_placements(&self) -> Result<ResolvedInstances, String> {
         let mut result = ResolvedCopies::default();
         let (mut vertices, mut triangles) = (0usize, 0usize);
-        let mut resolver = ArrayResolver::new(self.instances());
+        let mut resolver =
+            ArrayResolver::new(self.instances()).with_sources(|s| self.instance_source(s));
         for set in &self.instances().sets {
             if !set.visible {
                 continue;
             }
-            for (slot, p) in resolver.placements(set, self.paths())? {
-                let source = self
-                    .instance_source(p.piece.source)
+            if let Layout::Array(a) = &set.layout
+                && let Some(owner) = a.owner
+                && !(0..self.model_count()).any(|i| {
+                    self.instance_model_id(i) == owner && self.model(i).unwrap().metadata.visible
+                })
+            {
+                continue;
+            }
+            let generated = set.generated(self.paths(), |s| self.instance_source(s), &|| false)?;
+            let placements = if let Some(copies) = generated {
+                let mut placements = Vec::new();
+                for copy in copies {
+                    placements.push((copy.slot, copy.placement));
+                    result
+                        .meshes
+                        .insert((set.id, copy.slot), std::sync::Arc::new(copy.mesh));
+                }
+                placements
+            } else {
+                resolver.placements(set, self.paths())?
+            };
+            for (slot, p) in placements {
+                let mesh = result
+                    .meshes
+                    .get(&(set.id, slot))
+                    .map(|m| m.as_ref())
+                    .or_else(|| self.instance_source(p.piece.source))
                     .ok_or("Instance source is missing")?;
-                vertices = vertices.saturating_add(source.vertices.len());
-                triangles = triangles.saturating_add(source.triangles.len());
+                vertices = vertices.saturating_add(mesh.vertices.len());
+                triangles = triangles.saturating_add(mesh.triangles.len());
                 if result.len() >= MAX_INSTANCES
                     || vertices > MAX_VERTICES
                     || triangles > MAX_TRIANGLES
@@ -71,17 +97,6 @@ impl Document {
                     return Err("Instance display budget exceeded: reduce counts or source detail (256 copies, 1M vertices / 2M triangles)".into());
                 }
                 result.placements.push((set.id, slot, p));
-            }
-            if let Some(generated) =
-                set.generated(self.paths(), |s| self.instance_source(s), &|| false)?
-            {
-                result.placements.retain(|(id, _, _)| *id != set.id);
-                for copy in generated {
-                    result.placements.push((set.id, copy.slot, copy.placement));
-                    result
-                        .meshes
-                        .insert((set.id, copy.slot), std::sync::Arc::new(copy.mesh));
-                }
             }
         }
         Ok(std::sync::Arc::new(result))
@@ -129,6 +144,7 @@ impl Document {
         self.instance_preview = Some(Preview {
             library: self.geometry.scene.instances.clone(),
             model_ids,
+            displayed: false,
         });
         Ok(())
     }
@@ -144,6 +160,9 @@ impl Document {
     }
     pub fn preview_instance_set(&mut self, set: Set) -> Result<(), String> {
         self.begin_instance_preview()?;
+        if self.instances().sets.iter().any(|old| old == &set) {
+            return Ok(());
+        }
         let before = self.instances().clone();
         let preview = self.instance_preview.as_mut().unwrap();
         if let Some(old) = preview.library.sets.iter_mut().find(|s| s.id == set.id) {
@@ -161,7 +180,8 @@ impl Document {
             return Err(error);
         }
         let resolved = self.instance_cache.take();
-        self.display_changed();
+        self.instances_display_changed();
+        self.instance_preview.as_mut().unwrap().displayed = true;
         if let Some(resolved) = resolved {
             let _ = self.instance_cache.set(resolved);
         }
@@ -177,7 +197,7 @@ impl Document {
     }
     pub fn cancel_instance_preview(&mut self) {
         if self.instance_preview.take().is_some() {
-            self.display_changed();
+            self.instances_display_changed();
         }
     }
     pub fn apply_instance_preview(&mut self) -> Result<(), String> {
@@ -187,7 +207,7 @@ impl Document {
             return Ok(());
         };
         if preview.library == self.geometry.scene.instances {
-            self.display_changed();
+            self.display_changed_preserving_geometry();
             return Ok(());
         }
         self.record_edit("Edit instances");
@@ -201,7 +221,13 @@ impl Document {
         }
         self.geometry.scene.instances = preview.library;
         self.dirty = true;
-        self.display_changed();
+        // The preview was already visible, including its effective model IDs.
+        // Committing it changes save/history state, not its display geometry.
+        if preview.displayed {
+            self.display_changed_preserving_geometry();
+        } else {
+            self.instances_display_changed();
+        }
         Ok(())
     }
     pub fn remove_instance_set(&mut self, id: u64) -> Result<(), String> {
@@ -231,7 +257,7 @@ impl Document {
         forward: usize,
         up: usize,
     ) -> Result<u64, String> {
-        self.capture_brush_object(None, name, pivot, forward, up)
+        self.capture_brush_object(None, name, pivot, forward, up, [0.; 3])
     }
     pub fn capture_brush_object(
         &mut self,
@@ -240,6 +266,7 @@ impl Document {
         pivot: Vec3,
         forward: usize,
         up: usize,
+        capture_angles: [f32; 3],
     ) -> Result<u64, String> {
         self.cancel_instance_preview();
         self.end_edit();
@@ -271,6 +298,7 @@ impl Document {
             id,
             name,
             mesh: std::sync::Arc::new(mesh),
+            capture_angles,
             pivot,
             forward,
             up,
@@ -320,6 +348,7 @@ impl Document {
             return Err("Bake the joined assembly to create one editable model, or choose Separate before detaching a section".into());
         }
         let p = ArrayResolver::new(self.instances())
+            .with_sources(|s| self.instance_source(s))
             .placements(&set, self.paths())?
             .into_iter()
             .find(|(i, _)| *i == slot)
@@ -385,6 +414,9 @@ impl Document {
         let id = self.model(index).map_or(0, |m| m.metadata.model_id);
         id != 0
             && self.geometry.scene.instances.sets.iter().any(|set| {
+                if matches!(&set.layout, Layout::Array(a) if a.owner==Some(id)) {
+                    return self.geometry.scene.instances.array_is_repeated(set.id);
+                }
                 let mut probe = set.clone();
                 let mut found = false;
                 probe.sources_mut(|source| found |= *source == Source::Model(id));
@@ -407,11 +439,15 @@ impl Document {
     pub fn apply_object_stroke_independent(&mut self, id: u64) -> Result<(), String> {
         let mut next = self.geometry_snapshot();
         next.scene.instances = self.instances().clone();
-        next.bake_instances(id, false, &|| false)?;
+        next.bake_instances(BakeRequest::new(BakeScope::Set(id)), &|| false)?;
         self.cancel_instance_preview();
         self.replace_geometry_named(next, "Place independent objects")
     }
-    pub fn import_object_asset(&mut self, mut asset: Asset) -> Result<u64, String> {
+    pub fn import_object_asset(
+        &mut self,
+        mut asset: Asset,
+        brush: Option<u64>,
+    ) -> Result<u64, String> {
         self.cancel_instance_preview();
         asset.id = self
             .instances()
@@ -429,6 +465,15 @@ impl Document {
         }
         let mut library = self.instances().clone();
         library.assets.push(asset);
+        if let Some(brush) = brush {
+            library
+                .brushes
+                .iter_mut()
+                .find(|b| b.id == brush)
+                .ok_or("Object brush no longer exists")?
+                .objects
+                .push(id);
+        }
         let models: Vec<_> = (0..self.model_count())
             .map(|i| (self.instance_model_id(i), self.model(i).unwrap().mesh))
             .collect();
@@ -543,7 +588,7 @@ mod tests {
         let preview = d.instance_placements().unwrap();
         assert!(!Arc::ptr_eq(&empty, &preview));
         assert!(Arc::ptr_eq(&preview, &d.instance_placements().unwrap()));
-        d.texture_display_changed();
+        d.display_changed_preserving_geometry();
         assert!(Arc::ptr_eq(&preview, &d.instance_placements().unwrap()));
         if let Layout::Array(a) = &mut set.layout {
             a.count = 257;
@@ -656,10 +701,10 @@ mod tests {
         let ship = d.create_object_brush("Ship parts".into()).unwrap();
         let floor = d.create_object_brush("Floor props".into()).unwrap();
         let a = d
-            .capture_brush_object(Some(ship), "Vent".into(), Vec3(0., 0., -1.), 0, 2)
+            .capture_brush_object(Some(ship), "Vent".into(), Vec3(0., 0., -1.), 0, 2, [0.; 3])
             .unwrap();
         let b = d
-            .capture_brush_object(Some(ship), "Hatch".into(), Vec3(0., -1., 0.), 2, 1)
+            .capture_brush_object(Some(ship), "Hatch".into(), Vec3(0., -1., 0.), 2, 1, [0.; 3])
             .unwrap();
         let options = ObjectOptions {
             scale: 0.4,
@@ -771,9 +816,15 @@ mod tests {
         d.apply_instance_preview().unwrap();
         let before = d.geometry_snapshot();
         let mut baked = before.clone();
-        assert!(baked.bake_instances(1, false, &|| true).is_err());
+        assert!(
+            baked
+                .bake_instances(BakeRequest::new(BakeScope::Set(1)), &|| true)
+                .is_err()
+        );
         assert_eq!(baked, before);
-        baked.bake_instances(1, false, &|| false).unwrap();
+        baked
+            .bake_instances(BakeRequest::new(BakeScope::Set(1)), &|| false)
+            .unwrap();
         assert_eq!(baked.submodels.len(), 2);
         assert!(baked.scene.instances.sets.is_empty());
         assert_eq!(d.geometry_snapshot(), before);
@@ -794,7 +845,16 @@ mod tests {
         d.apply_instance_preview().unwrap();
         let before = d.geometry_snapshot();
         let mut fused = before.clone();
-        fused.bake_instances(1, true, &|| false).unwrap();
+        fused
+            .bake_instances(
+                BakeRequest {
+                    scope: BakeScope::Set(1),
+                    destination: BakeDestination::New,
+                    fuse: true,
+                },
+                &|| false,
+            )
+            .unwrap();
         let mut edges = std::collections::HashMap::new();
         for &[a, b, c] in &fused.mesh.triangles {
             for (a, b) in [(a, b), (b, c), (c, a)] {
@@ -810,7 +870,17 @@ mod tests {
             .mesh()
             .unwrap();
         let original = open.clone();
-        assert!(open.bake_instances(1, true, &|| false).is_err());
+        assert!(
+            open.bake_instances(
+                BakeRequest {
+                    scope: BakeScope::Set(1),
+                    destination: BakeDestination::New,
+                    fuse: true
+                },
+                &|| false
+            )
+            .is_err()
+        );
         assert_eq!(open, original);
     }
     #[test]
@@ -842,6 +912,7 @@ mod tests {
             visible: true,
             adjustments: Vec::new(),
             layout: Layout::Path(PathAssembly {
+                regions: None,
                 path,
                 start: None,
                 middle: piece,
@@ -912,8 +983,15 @@ mod tests {
         assert_eq!(cached, d.instance_placements().unwrap());
         d.cancel_instance_preview();
         let mut geometry = d.geometry_snapshot();
-        assert!(geometry.clone().bake_instances(1, false, &|| true).is_err());
-        geometry.bake_instances(1, false, &|| false).unwrap();
+        assert!(
+            geometry
+                .clone()
+                .bake_instances(BakeRequest::new(BakeScope::Set(1)), &|| true)
+                .is_err()
+        );
+        geometry
+            .bake_instances(BakeRequest::new(BakeScope::Set(1)), &|| false)
+            .unwrap();
         assert_eq!(geometry.mesh, cached.meshes[&(1, 0)].as_ref().clone());
         assert!(geometry.scene.instances.sets.is_empty());
         d.replace_geometry_named(geometry, "Bake instances")
@@ -973,6 +1051,7 @@ mod tests {
                 visible: true,
                 adjustments: Vec::new(),
                 layout: Layout::Path(PathAssembly {
+                    regions: None,
                     path: id,
                     start: None,
                     middle: d.instance_piece(0).unwrap(),
@@ -1078,6 +1157,7 @@ mod tests {
             visible: true,
             adjustments: Vec::new(),
             layout: Layout::Path(PathAssembly {
+                regions: None,
                 path: id,
                 start: None,
                 middle: d.instance_piece(0).unwrap(),
@@ -1139,6 +1219,7 @@ mod tests {
             visible: true,
             adjustments: Vec::new(),
             layout: Layout::Path(PathAssembly {
+                regions: None,
                 path: id,
                 start: Some(piece),
                 middle: piece,

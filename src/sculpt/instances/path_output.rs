@@ -3,9 +3,11 @@
 use super::*;
 use crate::sculpt::paths::PathSample;
 use std::collections::HashMap;
+mod regions;
 #[cfg(test)]
 mod tests;
 mod weld;
+pub use regions::PathRegions;
 
 pub const MAX_GENERATED_VERTICES: usize = 250_000;
 pub const MAX_GENERATED_TRIANGLES: usize = 500_000;
@@ -106,7 +108,7 @@ impl Frames {
 
 impl Set {
     pub fn joined(&self) -> bool {
-        matches!(&self.layout, Layout::Path(a) if a.join == JoinMode::Weld)
+        matches!(&self.layout, Layout::Path(a) if a.regions.is_some() || a.join == JoinMode::Weld)
     }
     pub fn generated<'a>(
         &self,
@@ -117,6 +119,9 @@ impl Set {
         let Layout::Path(recipe) = &self.layout else {
             return Ok(None);
         };
+        if recipe.regions.is_some() {
+            return regions::generate(self, recipe, paths, source, cancel).map(Some);
+        }
         if !recipe.bend && recipe.join == JoinMode::Separate {
             return Ok(None);
         }

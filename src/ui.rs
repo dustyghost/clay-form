@@ -47,6 +47,7 @@ pub(crate) struct UiState {
     icons: icons::Icons,
     pinned_menu_rects: Vec<egui::Rect>,
     pub library_path: String,
+    pub(crate) delete_warning: Option<(u64, String)>,
     pub(crate) primitive_warning: Option<(usize, String)>,
     pub(crate) primitive_controls_requested: bool,
     pub(crate) modeling_primitive: Option<(crate::sculpt::Primitive, u64)>,
@@ -134,6 +135,7 @@ impl Default for UiState {
             pinned_menu_rects: Vec::new(),
             library_path: "brush-library.brushes.json".into(),
             primitive_warning: None,
+            delete_warning: None,
             primitive_controls_requested: false,
             modeling_primitive: None,
             transform_mode: crate::viewport::TransformMode::Sculpt,
@@ -258,7 +260,7 @@ impl UiState {
         document: &Document,
         ctx: &egui::Context,
     ) -> Option<usize> {
-        if self.selection_brush_active() {
+        if self.instances.placing || self.selection_brush_active() {
             None
         } else {
             self.brush_index_for_context(document, ctx)
@@ -868,6 +870,12 @@ impl UiState {
         pressure: f32,
         commands: &mut Vec<Command>,
     ) {
+        if self.instances.placing && tool == Tool::Brush {
+            ui.add_enabled_ui(!self.mesh_busy, |ui| {
+                instances::settings(ui, &mut self.instances, document, commands);
+            });
+            return;
+        }
         let focus_before = ui.ctx().memory(|m| m.focused());
         let active = self.brush_index_for_context(document, ui.ctx());
         let fallback = crate::sculpt::Brush::new(if self.selection_brush_active() {
@@ -913,6 +921,18 @@ impl UiState {
                 let width = ((ui.available_width() - 6. * (columns - 1) as f32) / columns as f32)
                     .floor()
                     .max(32.);
+                if self.instances.placing {
+                    let action = Action::ObjectBrushModels;
+                    let mut button = egui::Button::new("Choose model…");
+                    if let Some(shortcut) = self.preferences.shortcut(&action) {
+                        button = button.shortcut_text(shortcut.label());
+                    }
+                    if ui.add(button).clicked() {
+                        commands.push(Command::Action(action.clone()));
+                    }
+                    self.brush_control(ui, &action, "", document, commands);
+                    ui.separator();
+                }
                 // Fixed-size tiles do not need a grid's cached column widths:
                 // those widths lag a sidebar drag and force it back open.
                 ui.push_id("brush_tiles", |ui| {
@@ -936,9 +956,19 @@ impl UiState {
                                 ui.end_row();
                             }
                         }
+                        instances::library_tiles(
+                            ui,
+                            &mut self.instances,
+                            document,
+                            commands,
+                            width,
+                        );
                     });
                 });
                 ui.add_space(4.);
+                if self.instances.placing {
+                    return;
+                }
                 if active.is_none() {
                     ui.weak(if self.selection_brush_active() {
                         "Selection · default Mask preset"

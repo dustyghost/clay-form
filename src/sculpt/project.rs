@@ -178,7 +178,7 @@ pub struct Project {
     pub mesh_settings: MeshSettings,
 }
 impl Project {
-    pub const VERSION: u32 = 4;
+    pub const VERSION: u32 = 6;
     pub fn validate(&self) -> Result<(), String> {
         if self
             .scene

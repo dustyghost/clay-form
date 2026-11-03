@@ -45,11 +45,12 @@ Whole-path transforms add six ordinary regressions covering move/rotation/unifor
 
 The multi-object brush checks cover shared membership, project save/reopen, atomic brush import with new object IDs, and switching parts between strokes. A stroke retains its chosen part and settings until release. Undo/Redo restores those settings with the placements. Removing a personal-library copy leaves previously imported project objects and placements intact. The focused selection passed nine ordinary tests.
 
-`object_kit_library_and_strokes_offscreen_review` and the existing `reusable_models_offscreen_review` both passed on software Vulkan. The kit walkthrough captures a hull vent and a sensor dome with different mounting axes, paints a row of each without restarting the brush tool, then adds the saved brush to a fresh project and checks both parts. The captures show the labelled contact and orientation guides, the two painted strokes, and the saved brush with its membership visible:
+`object_kit_library_and_strokes_offscreen_review` and the existing `reusable_models_offscreen_review` both passed on software Vulkan. The kit walkthrough captures a hull vent and a sensor dome with different mounting axes, paints a row of each without restarting the brush tool, then adds the saved brush to a fresh project and checks both parts. The captures below were refreshed on 1 November using Intel HD Graphics 620 with Mesa Vulkan. The updated walkthrough creates **MyOB** through **+ Add brush → Object brush**, sets its name and capture orientation in Brush settings, and chooses the second model from the popup with the Brush library hidden. It paints with both models, switches to Clay and back, and loads the saved brush in a fresh project. A keyboard test opens the same custom menu with **B** after changing brushes. A separate pointer test drags from empty space across the model, verifies that only the camera moved, then places one object on the next click.
 
 - [Hull vent capture and orientation](17-object-capture-orientation.png)
-- [Two strokes from the Ship fittings brush](18-ship-fittings-strokes.png)
-- [Ship fittings in the personal brush library](19-ship-fittings-library.png)
+- [Two strokes from MyOB and its model thumbnails](18-ship-fittings-strokes.png)
+- [MyOB in the personal brush library](19-ship-fittings-library.png)
+- [Choose a model over the viewport](22-object-brush-picker.png)
 
 Layered arrays repeat whole patterns, and separately placed arrays can share the same editable source array. Five focused regressions cover independent XYZ transforms, the order of scale and rotation, shading normals on sheared copies, radial repetition about an offset pivot, stable slots for hidden parts, bounds and cycles, legacy array data, source edits, preview cancellation, project round trips, Undo/Redo, bake/detach and picking the displayed surface. The combined local selection passed 36 ordinary tests.
 

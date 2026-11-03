@@ -44,7 +44,7 @@ impl App {
             && !self.ui.layout_open
             && self.ui.file_picker.is_none()
             && self.ui.pending.is_none()
-            && self.ui.primitive_warning.is_none()
+            && !self.ui.submodel_confirmation_open()
             && !self.ui.recovery_open
             && !self.ui.diagnostics_open
             && self.ui.alphas.draft.is_none()

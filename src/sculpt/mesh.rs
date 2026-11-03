@@ -277,13 +277,7 @@ impl Mesh {
             };
             let mut used = std::collections::HashSet::new();
             for &[a, b, c, d] in &self.quads {
-                if [a, b, c, d]
-                    .iter()
-                    .copied()
-                    .collect::<std::collections::HashSet<_>>()
-                    .len()
-                    != 4
-                {
+                if a == b || a == c || a == d || b == c || b == d || c == d {
                     return Err("Invalid quad face".into());
                 }
                 let pair = if faces.contains(&key([a, b, c])) && faces.contains(&key([a, c, d])) {

@@ -1,22 +1,29 @@
 use super::*;
+use crate::viewport::instances::{COPY_COLOR, SET_COLOR};
 use crate::{
     command::InstanceCommand as C,
     sculpt::{Vec3, instances::*},
 };
 mod arrays;
+mod attached;
 mod brushes;
+mod path_editor;
 mod thickness;
 
 pub(crate) struct Controls {
     pub editor: Option<Set>,
+    pub bake: Option<BakeRequest>,
     pub array_layer: usize,
+    pub array_edit: bool,
+    pub followed_array: Option<u64>,
+    pub focus_array: bool,
     pub invalid: bool,
     pub asset: Option<u64>,
     pub group: Option<u64>,
     pub group_name: String,
-    pub library_open: bool,
     pub capture_frame: Option<u64>,
     pub personal_brushes: Vec<String>,
+    pub saved_brushes_listed: bool,
     pub remove_saved: Option<String>,
     pub bundle_path: String,
     pub name: String,
@@ -26,23 +33,29 @@ pub(crate) struct Controls {
     pub asset_path: String,
     pub brush: crate::viewport::objects::BrushOptions,
     pub stop_placing: bool,
+    pub placing: bool,
     pub inline_thickness: bool,
     pub thickness_path_points: bool,
     pub thickness_sections: bool,
     thumbnails: std::collections::HashMap<u64, Thumbnail>,
+    ship_greebles_thumbnail: Option<Thumbnail>,
 }
 impl Default for Controls {
     fn default() -> Self {
         Self {
             editor: None,
+            bake: None,
             array_layer: 0,
+            array_edit: false,
+            followed_array: None,
+            focus_array: false,
             invalid: false,
             asset: None,
             group: None,
-            group_name: "New brush".into(),
-            library_open: false,
+            group_name: String::new(),
             capture_frame: None,
             personal_brushes: Vec::new(),
+            saved_brushes_listed: false,
             remove_saved: None,
             bundle_path: "kit.objects.json".into(),
             name: String::new(),
@@ -52,10 +65,12 @@ impl Default for Controls {
             asset_path: "object.object.json".into(),
             brush: Default::default(),
             stop_placing: false,
+            placing: false,
             inline_thickness: true,
             thickness_path_points: true,
             thickness_sections: true,
             thumbnails: Default::default(),
+            ship_greebles_thumbnail: None,
         }
     }
 }
@@ -89,20 +104,28 @@ fn axes(ui: &mut egui::Ui, forward: &mut usize, up: &mut usize) -> bool {
     });
     before != (*forward, *up)
 }
-fn choose_piece(ui: &mut egui::Ui, label: &str, piece: &mut Piece, document: &Document) -> bool {
-    let before = *piece;
-    let selected = match piece.source {
+fn source_name(document: &Document, source: Source) -> Option<&str> {
+    match source {
         Source::Model(id) => (0..document.model_count())
             .find(|&i| document.instance_model_id(i) == id)
-            .map(|i| document.model(i).unwrap().name.to_owned()),
+            .and_then(|i| document.model(i).map(|m| m.name)),
         Source::Asset(id) => document
             .instances()
             .assets
             .iter()
             .find(|a| a.id == id)
-            .map(|a| a.name.clone()),
+            .map(|a| a.name.as_str()),
     }
-    .unwrap_or_else(|| "Missing source".into());
+}
+fn choose_piece(
+    ui: &mut egui::Ui,
+    label: &str,
+    piece: &mut Piece,
+    document: &Document,
+    inline_axes: bool,
+) -> bool {
+    let before = *piece;
+    let selected = source_name(document, piece.source).unwrap_or("Missing source");
     egui::ComboBox::from_id_salt(label)
         .selected_text(format!("{label}: {selected}"))
         .show_ui(ui, |ui| {
@@ -114,6 +137,7 @@ fn choose_piece(ui: &mut egui::Ui, label: &str, piece: &mut Piece, document: &Do
                         m.name,
                     )
                     .clicked()
+                    && piece.source != Source::Model(document.instance_model_id(i))
                 {
                     let pivot = m
                         .mesh
@@ -137,6 +161,7 @@ fn choose_piece(ui: &mut egui::Ui, label: &str, piece: &mut Piece, document: &Do
                         format!("Brush: {}", a.name),
                     )
                     .clicked()
+                    && piece.source != Source::Asset(a.id)
                 {
                     *piece = Piece {
                         source: Source::Asset(a.id),
@@ -148,33 +173,77 @@ fn choose_piece(ui: &mut egui::Ui, label: &str, piece: &mut Piece, document: &Do
             }
         });
     ui.push_id(label, |ui| {
-        egui::CollapsingHeader::new("Contact point and axes").show(ui, |ui| {
-            vector(ui, "Contact point", &mut piece.pivot);
+        if inline_axes {
             axes(ui, &mut piece.forward, &mut piece.up);
+        }
+        egui::CollapsingHeader::new(if inline_axes {
+            "Contact point"
+        } else {
+            "Contact point and axes"
+        })
+        .show(ui, |ui| {
+            vector(ui, "Contact point", &mut piece.pivot);
+            if !inline_axes {
+                axes(ui, &mut piece.forward, &mut piece.up);
+            }
         });
     });
     before != *piece
 }
 impl UiState {
+    pub(super) fn array_parameter_controls(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &Document,
+        commands: &mut Vec<Command>,
+    ) -> egui::Response {
+        ui.vertical(|ui| {
+            if let Some(mut set) = document
+                .attached_array(document.active_model_index())
+                .cloned()
+            {
+                let before = set.clone();
+                if let Layout::Array(a) = &mut set.layout {
+                    self.instances.array_layer = self.instances.array_layer.min(a.layers.len());
+                    arrays::editor(ui, a, &mut self.instances.array_layer, document);
+                }
+                if set != before {
+                    commands.push(Command::Instances(C::Preview(Box::new(set))));
+                }
+            } else {
+                ui.weak("Select a submodel with an array");
+            }
+        })
+        .response
+    }
     pub(super) fn instance_controls(
         &mut self,
         ui: &mut egui::Ui,
         document: &Document,
         commands: &mut Vec<Command>,
     ) {
-        self.instances
-            .thumbnails
-            .retain(|id, _| document.instances().assets.iter().any(|a| a.id == *id));
-
-        egui::CollapsingHeader::new("Instances and object brushes")
-            .default_open(true)
-            .show(ui, |ui| {
-                ui.add_enabled_ui(!self.mesh_busy, |ui| {
-                    self.instance_contents(ui, document, commands);
-                });
+        let response = egui::CollapsingHeader::new(
+            if document
+                .attached_array(document.active_model_index())
+                .is_some()
+            {
+                "Array"
+            } else {
+                "Instances"
+            },
+        )
+        .default_open(true)
+        .show(ui, |ui| {
+            ui.add_enabled_ui(!self.mesh_busy, |ui| {
+                self.instance_contents(ui, document, commands);
             });
-        if self.instances.library_open {
-            brushes::manager(ui.ctx(), &mut self.instances, document, commands);
+        });
+        if std::mem::take(&mut self.instances.focus_array) {
+            ui.scroll_to_rect_animation(
+                response.header_response.rect,
+                Some(egui::Align::Min),
+                egui::style::ScrollAnimation::none(),
+            );
         }
     }
     fn instance_contents(
@@ -183,137 +252,91 @@ impl UiState {
         document: &Document,
         commands: &mut Vec<Command>,
     ) {
+        if let Some(set) = document
+            .attached_array(document.active_model_index())
+            .cloned()
+            .filter(|s| {
+                !(document.instance_preview_active()
+                    && self.instances.editor.as_ref().is_some_and(|e| e.id != s.id))
+            })
+        {
+            if let Some(request) = &mut self.instances.bake {
+                if bake_options(ui, document, request, commands) {
+                    self.instances.bake = None;
+                }
+            } else {
+                attached::controls(ui, &mut self.instances, document, set, commands);
+            }
+            return;
+        }
         if let Err(error) = document.instance_placements() {
             ui.colored_label(egui::Color32::LIGHT_RED, error);
         }
-        if self.instances.editor.is_some() && !document.instance_preview_active() {
+        if document.instance_preview_active() {
+            self.instances.bake = None;
+        } else {
             self.instances.editor = None;
+        }
+        if let Some(request) = &mut self.instances.bake {
+            if bake_options(ui, document, request, commands) {
+                self.instances.bake = None;
+            }
+            return;
         }
         if let Some(set) = &mut self.instances.editor {
             let before = set.clone();
-            ui.label("Preview · Apply saves one undo step");
+            let copy = document
+                .selected_instance
+                .filter(|(id, _)| *id == set.id && !set.joined())
+                .map(|(_, slot)| slot);
+            let color = if copy.is_some() {
+                COPY_COLOR
+            } else {
+                SET_COLOR
+            };
+            ui.colored_label(color, egui::RichText::new(set.target_name(copy)).strong());
+            if copy.is_some() {
+                ui.label("Drag a coloured axis to move the copy, or drag its centre handle to move in the view plane. Drag elsewhere to orbit.");
+            } else {
+                ui.label(match &set.layout {
+                    Layout::Array(_) => "Edit whole array · Change the count, spacing or layout of the blue-framed copies.",
+                    Layout::Path(a) if a.regions.is_some() => "Grouped path object · Place Start and End once and repeat the Middle group.",
+                    Layout::Path(_) => "Separate pieces · Repeat the whole Middle model along the path.",
+                    Layout::Manual(_) => "Edit whole stroke · Rename it or show and hide all its copies together.",
+                });
+            }
+            if document.instances().array_is_repeated(set.id) {
+                ui.weak("Arrays that repeat this set also inherit these changes.");
+            }
             let (apply, cancel) = ui
                 .horizontal(|ui| {
                     (
                         ui.add_enabled(
                             !self.instances.invalid,
-                            egui::Button::new("Apply instances"),
+                            egui::Button::new(if copy.is_some() {
+                                "Apply placement"
+                            } else {
+                                "Apply instances"
+                            }),
                         )
                         .clicked(),
                         ui.button("Cancel preview").clicked(),
                     )
                 })
                 .inner;
-            ui.text_edit_singleline(&mut set.name);
-            ui.checkbox(&mut set.visible, "Show instances");
-            match &mut set.layout {
-                Layout::Array(a) => {
-                    arrays::editor(ui, a, &mut self.instances.array_layer, document)
-                }
-                Layout::Path(a) => {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label("Sections");
-                        ui.selectable_value(&mut a.bend, false, "Rigid");
-                        ui.selectable_value(&mut a.bend, true, "Bend along path");
-                    });
-                    if a.bend {
-                        ui.checkbox(&mut a.fit_sections, "Fit section lengths to spacing");
-                        ui.checkbox(
-                            &mut self.instances.inline_thickness,
-                            "Inline thickness handles",
-                        );
-                        let closed = document.path(a.path).is_some_and(|p| p.closed);
-                        egui::CollapsingHeader::new("Thickness along path").show(ui, |ui| {
-                            ui.horizontal_wrapped(|ui| {
-                                ui.checkbox(
-                                    &mut self.instances.thickness_path_points,
-                                    "Path points",
-                                );
-                                ui.checkbox(
-                                    &mut self.instances.thickness_sections,
-                                    "Section centres",
-                                );
-                            });
-                            ui.weak("Gold: ends · Teal: path points · Purple: sections");
-                            thickness::controls(ui, &mut a.thickness, closed);
-                        });
-                        ui.weak("Bending uses source vertices; subdivide along its Forward axis for smooth curves.");
-                    }
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label("Connections");
-                        ui.selectable_value(&mut a.join, JoinMode::Separate, "Separate");
-                        ui.selectable_value(&mut a.join, JoinMode::Weld, "Join neighbours");
-                    });
-                    if a.join == JoinMode::Weld {
-                        ui.add(
-                            egui::DragValue::new(&mut a.join_distance)
-                                .range(0.00001..=1000.)
-                                .speed(0.001)
-                                .prefix("Join distance "),
-                        );
-                        ui.weak("Welds matching planar end loops and removes internal caps. UVs are removed; source models are preserved.");
-                    }
-                    egui::ComboBox::from_id_salt("assembly_path")
-                        .selected_text(
-                            document
-                                .path(a.path)
-                                .map_or("Missing path", |p| p.name.as_str()),
-                        )
-                        .show_ui(ui, |ui| {
-                            for p in document.paths() {
-                                ui.selectable_value(&mut a.path, p.id, &p.name);
-                            }
-                        });
-                    choose_piece(ui, "Middle", &mut a.middle, document);
-                    let closed = document.path(a.path).is_some_and(|p| p.closed);
-                    if closed {
-                        ui.weak("Closed loop: start/end caps are omitted.");
-                    }
-                    ui.add_enabled_ui(!closed, |ui| {
-                        for (label, piece) in [("Start", &mut a.start), ("End", &mut a.end)] {
-                            let mut enabled = piece.is_some();
-                            if ui
-                                .checkbox(&mut enabled, format!("Use {label} piece"))
-                                .changed()
-                            {
-                                *piece = enabled.then_some(a.middle);
-                            }
-                            if let Some(piece) = piece {
-                                choose_piece(ui, label, piece, document);
-                            }
-                        }
-                    });
-                    ui.checkbox(&mut a.fit_count, "Fit count to path length");
-                    if a.fit_count {
-                        ui.add(egui::Slider::new(&mut a.count, 1..=254).text("Middle pieces"));
-                    } else {
-                        ui.add(
-                            egui::DragValue::new(&mut a.spacing)
-                                .range(0.001..=1e5)
-                                .speed(0.05)
-                                .prefix("Spacing "),
-                        );
-                        ui.weak("Fixed spacing leaves any unused length at the end.");
-                    }
-                    ui.add(
-                        egui::DragValue::new(&mut a.scale)
-                            .range(0.001..=1000.)
-                            .speed(0.01)
-                            .prefix("Piece scale "),
-                    );
-                    ui.add(egui::Slider::new(&mut a.twist, -180.0..=180.).text("Twist °"));
-                    ui.weak("Bake makes the preview editable. Bake + fuse remeshes overlapping closed sections.");
-                }
-                Layout::Manual(p) => {
-                    ui.label(format!("{} placed objects", p.len()));
-                }
-            }
-            if let Some((id, slot)) = document
-                .selected_instance
-                .filter(|(id, _)| *id == set.id && !set.joined())
-            {
+            if let Some(slot) = copy {
                 ui.separator();
-                ui.label(format!("Selected copy {}", slot + 1));
+                let source = document.instance_placements().ok().and_then(|placements| {
+                    placements
+                        .iter()
+                        .find(|(id, n, _)| (*id, *n) == (set.id, slot))
+                        .map(|(_, _, p)| p.piece.source)
+                });
+                if let Some(name) = source.and_then(|source| source_name(document, source)) {
+                    ui.label(format!("Linked shape · {name}"));
+                } else {
+                    ui.label("Shape stays linked to its source.");
+                }
                 let mut adjustment = set
                     .adjustments
                     .iter()
@@ -323,6 +346,11 @@ impl UiState {
                 let old = adjustment.clone();
                 let a = &mut adjustment;
                 ui.checkbox(&mut a.visible, "Show this copy");
+                if !set.visible {
+                    ui.weak("This whole set is hidden. Enable Show instances in the set editor to see the copy.");
+                } else if !a.visible {
+                    ui.weak("Enable Show this copy to see its placement.");
+                }
                 vector(ui, "Move", &mut a.offset);
                 vector(ui, "Rotate °", &mut a.rotation);
                 ui.add(
@@ -334,12 +362,37 @@ impl UiState {
                 if matches!(set.layout, Layout::Array(_)) {
                     vector(ui, "Scale on X / Y / Z", &mut a.axis_scale);
                 }
-                ui.weak(format!("Set {id}: changes affect this copy only."));
+                ui.weak(
+                    "Drag a value to preview it. Apply placement keeps the edit. To sculpt this copy separately, choose Make independent in the Copies list.",
+                );
                 if old != adjustment {
                     if let Some(a) = set.adjustments.iter_mut().find(|a| a.slot == slot) {
                         *a = adjustment;
                     } else {
                         set.adjustments.push(adjustment);
+                    }
+                }
+            } else {
+                ui.text_edit_singleline(&mut set.name);
+                ui.checkbox(&mut set.visible, "Show instances");
+                match &mut set.layout {
+                    Layout::Array(a) => {
+                        arrays::editor(ui, a, &mut self.instances.array_layer, document)
+                    }
+                    Layout::Path(a) => {
+                        if path_editor::controls(
+                            ui,
+                            a,
+                            document,
+                            &mut self.instances.inline_thickness,
+                            &mut self.instances.thickness_path_points,
+                            &mut self.instances.thickness_sections,
+                        ) {
+                            set.adjustments.clear();
+                        }
+                    }
+                    Layout::Manual(p) => {
+                        ui.label(format!("{} placed objects", p.len()));
                     }
                 }
             }
@@ -371,7 +424,7 @@ impl UiState {
                 if ui
                     .add_enabled(
                         !document.paths().is_empty(),
-                        egui::Button::new("Along path…"),
+                        egui::Button::new("Create path object…"),
                     )
                     .customize(Action::CreatePathAssembly)
                     .clicked()
@@ -379,25 +432,18 @@ impl UiState {
                     commands.push(Command::Instances(C::NewPath));
                 }
             });
-            if !document.instances().assets.is_empty() {
-                self.object_palette(ui, document, commands);
-            }
-            for set in &document.instances().sets {
-                ui.push_id(set.id, |ui| instance_set(ui, document, set, commands));
-            }
-            if let Some((id, slot)) = document.selected_instance {
-                let joined = document
-                    .instances()
-                    .sets
-                    .iter()
-                    .any(|s| s.id == id && s.joined());
+            if let Some((id, slot)) = document.selected_instance
+                && let Some(set) = document.instances().sets.iter().find(|s| s.id == id)
+            {
+                let joined = set.joined();
+                ui.colored_label(
+                    if joined { SET_COLOR } else { COPY_COLOR },
+                    egui::RichText::new(set.target_name(Some(slot))).strong(),
+                );
                 if joined {
-                    ui.label("Joined assembly selected · edit its path and connection settings");
+                    ui.label("Joined assembly selected · edit its path and connections.");
                 } else {
-                    ui.label(format!(
-                        "Selected copy {} · Edit its set to move, rotate or scale",
-                        slot + 1
-                    ));
+                    ui.label("Edit this placement to move, rotate, size or hide the copy.");
                 }
                 if ui
                     .button(if joined {
@@ -407,95 +453,144 @@ impl UiState {
                     })
                     .clicked()
                 {
-                    commands.push(Command::Instances(C::Edit(id)));
+                    commands.push(Command::Instances(if joined {
+                        C::Edit(id)
+                    } else {
+                        C::EditCopy(id, slot)
+                    }));
                 }
             }
-            if document.instances().assets.is_empty() {
-                self.object_palette(ui, document, commands);
+
+            if !document.instances().sets.is_empty() && ui.button("Bake all…").clicked() {
+                self.instances.bake = Some(BakeRequest::new(BakeScope::All));
             }
-        }
-    }
-    fn object_palette(
-        &mut self,
-        ui: &mut egui::Ui,
-        document: &Document,
-        commands: &mut Vec<Command>,
-    ) {
-        ui.separator();
-        brushes::palette(ui, &mut self.instances, document, commands);
-        if let Some(id) = self.instances.asset {
-            ui.add(
-                egui::DragValue::new(&mut self.instances.brush.scale)
-                    .range(0.001..=1000.)
-                    .speed(0.01)
-                    .prefix("Size "),
-            );
-            ui.add(
-                egui::DragValue::new(&mut self.instances.brush.spacing)
-                    .range(0.001..=1000.)
-                    .speed(0.01)
-                    .prefix("Repeat spacing "),
-            );
-            ui.add(
-                egui::DragValue::new(&mut self.instances.brush.offset)
-                    .speed(0.01)
-                    .prefix("Surface offset "),
-            );
-            ui.add(
-                egui::Slider::new(&mut self.instances.brush.rotation, -180.0..=180.)
-                    .text("Rotation °"),
-            );
-            ui.checkbox(
-                &mut self.instances.brush.independent,
-                "Create independent geometry",
-            );
-            ui.horizontal_wrapped(|ui| {
-                if ui.button("Place / brush objects").clicked() {
-                    commands.push(Command::Instances(C::StartBrush(id)));
-                }
-                if ui.button("Stop placing").clicked() {
-                    commands.push(Command::Instances(C::StopBrush));
-                }
-            });
-        }
-        egui::CollapsingHeader::new("Single object files").show(ui, |ui| {
-            ui.text_edit_singleline(&mut self.instances.asset_path);
-            ui.horizontal(|ui| {
-                if ui.button("Import object").clicked() {
-                    commands.push(Command::Instances(C::ImportAsset(
-                        self.instances.asset_path.clone(),
-                    )));
-                }
-                if let Some(id) = self.instances.asset
-                    && ui.button("Export object").clicked()
+            for set in &document.instances().sets {
+                ui.push_id(set.id, |ui| {
+                    instance_set(ui, document, set, &mut self.instances.bake, commands)
+                });
+            }
+            ui.collapsing("Advanced linking", |ui| {
+                if ui
+                    .add_enabled(
+                        !document.paths().is_empty(),
+                        egui::Button::new("Separate pieces along path…"),
+                    )
+                    .clicked()
                 {
-                    commands.push(Command::Instances(C::ExportAsset(
-                        id,
-                        self.instances.asset_path.clone(),
-                    )));
+                    commands.push(Command::Instances(C::NewPathParts));
+                }
+                if ui.button("Standalone array…").clicked() {
+                    commands.push(Command::Instances(C::NewLegacyArray));
                 }
             });
-        });
+        }
     }
 }
 
-fn instance_set(ui: &mut egui::Ui, document: &Document, set: &Set, commands: &mut Vec<Command>) {
-    ui.label(&set.name);
+fn bake_options(
+    ui: &mut egui::Ui,
+    document: &Document,
+    request: &mut BakeRequest,
+    commands: &mut Vec<Command>,
+) -> bool {
+    let replaces = matches!(request.scope, BakeScope::Set(id) if document.array_owner(id) == Some(document.active_model_index()));
+    let name = match request.scope {
+        BakeScope::Set(id) => {
+            let Some(set) = document.instances().sets.iter().find(|s| s.id == id) else {
+                return true;
+            };
+            &set.name
+        }
+        BakeScope::All => "all visible instance sets",
+    };
+    ui.strong(format!("Bake {name}"));
+    ui.label(
+        "Visible copies become editable geometry. Each baked set is removed. Undo restores it.",
+    );
+    ui.radio_value(
+        &mut request.destination,
+        BakeDestination::PerCopy,
+        if replaces {
+            "Separate submodels (keep source)"
+        } else {
+            "One new submodel per copy"
+        },
+    );
+    ui.radio_value(
+        &mut request.destination,
+        BakeDestination::New,
+        if replaces {
+            "One new submodel (keep source)"
+        } else {
+            "One new submodel"
+        },
+    );
+    let target = document.model(document.active_model_index()).unwrap();
+    ui.radio_value(
+        &mut request.destination,
+        BakeDestination::Current,
+        if replaces {
+            format!("Replace array on: {}", target.name)
+        } else {
+            format!("Merge into selected submodel: {}", target.name)
+        },
+    );
+    if request.destination == BakeDestination::PerCopy {
+        request.fuse = false;
+    } else {
+        ui.checkbox(&mut request.fuse, "Fuse overlapping surfaces");
+        if request.fuse {
+            ui.weak("Voxel remeshing joins overlapping closed surfaces. Pieces separated by a gap stay disconnected. Remeshing rebuilds topology and removes UVs.");
+        } else {
+            ui.weak("Combines surfaces in one mesh and keeps compatible UVs. Overlaps keep their interior faces.");
+        }
+        if request.destination == BakeDestination::Current && replaces {
+            ui.weak("Replaces this submodel with exactly the array result and resets its subdivision levels. Undo restores the source and live array. Other linked uses of this source follow the converted geometry.");
+        } else if request.destination == BakeDestination::Current {
+            ui.weak("Includes the selected surface, applies its thickness and resets its primitive and subdivision levels. Other live copies of this submodel follow the merged geometry.");
+        }
+    }
+    let can_bake = request.destination != BakeDestination::Current || target.metadata.visible;
+    if !can_bake {
+        ui.weak("Show the selected submodel before merging into it.");
+    }
+    ui.horizontal(|ui| {
+        if ui
+            .add_enabled(can_bake, egui::Button::new("Bake now"))
+            .clicked()
+        {
+            commands.push(Command::Instances(C::Bake(*request)));
+            return true;
+        }
+        ui.button("Cancel bake").clicked()
+    })
+    .inner
+}
+
+fn instance_set(
+    ui: &mut egui::Ui,
+    document: &Document,
+    set: &Set,
+    bake: &mut Option<BakeRequest>,
+    commands: &mut Vec<Command>,
+) {
+    ui.separator();
+    ui.strong(set.target_name(None));
     ui.horizontal_wrapped(|ui| {
-        if ui.button("Edit").clicked() {
+        let edit_label = match set.layout {
+            Layout::Array(_) => "Edit array…",
+            Layout::Path(_) => "Edit path assembly…",
+            Layout::Manual(_) => "Edit stroke…",
+        };
+        if ui
+            .button(edit_label)
+            .on_hover_text("Preview changes to the whole set. Apply to save them.")
+            .clicked()
+        {
             commands.push(Command::Instances(C::Edit(set.id)));
         }
-        if ui.button(if set.joined() {"Bake joined model"} else {"Bake"})
-            .on_hover_text("Make the current preview editable. Separate sections retain UVs; joined output has no UVs.")
-            .clicked()
-        {
-            commands.push(Command::Instances(C::Bake(set.id, false)));
-        }
-        if ui.button("Bake + fuse")
-            .on_hover_text("Union overlapping closed pieces with voxel remeshing. Rebuilds topology and removes UVs; keeps the reusable source.")
-            .clicked()
-        {
-            commands.push(Command::Instances(C::Bake(set.id, true)));
+        if ui.button("Bake set…").clicked() {
+            *bake = Some(BakeRequest::new(BakeScope::Set(set.id)));
         }
         if ui.small_button("Remove set").clicked() {
             commands.push(Command::Instances(C::Remove(set.id)));
@@ -527,17 +622,18 @@ fn instance_set(ui: &mut egui::Ui, document: &Document, set: &Set, commands: &mu
         });
     }
     if set.joined() {
-        ui.weak("Joined assembly · Bake creates one editable model. Choose Separate to adjust individual copies.");
+        ui.weak("Joined assembly · Baking treats the joined sections as one piece. Choose Separate to adjust individual copies.");
         return;
     }
     egui::CollapsingHeader::new("Copies").show(ui, |ui| {
+        ui.weak("Select a copy to edit its transform or visibility. Make independent creates a submodel you can sculpt.");
         // Hidden copies must remain selectable so their visibility can be restored.
         let mut listed = set.clone();
         for adjustment in &mut listed.adjustments {
             adjustment.visible = true;
         }
         if let Ok(placements) =
-            ArrayResolver::new(document.instances()).placements(&listed, document.paths())
+            ArrayResolver::new(document.instances()).with_sources(|s| document.instance_source(s)).placements(&listed, document.paths())
         {
             egui::ScrollArea::vertical()
                 .max_height(160.)
@@ -564,7 +660,7 @@ fn instance_set(ui: &mut egui::Ui, document: &Document, set: &Set, commands: &mu
                                 commands.push(Command::Instances(C::Select(set.id, slot)));
                             }
                             if ui
-                                .add_enabled(visible, egui::Button::new("Independent").small())
+                                .add_enabled(visible, egui::Button::new("Make independent").small())
                                 .clicked()
                             {
                                 commands.push(Command::Instances(C::Detach(set.id, slot)));
@@ -578,56 +674,104 @@ fn instance_set(ui: &mut egui::Ui, document: &Document, set: &Set, commands: &mu
 
 struct Thumbnail {
     source: std::sync::Arc<crate::sculpt::Mesh>,
-    lines: Vec<[egui::Vec2; 2]>,
+    texture: egui::TextureHandle,
 }
-fn thumbnail_lines(mesh: &crate::sculpt::Mesh) -> Vec<[egui::Vec2; 2]> {
-    if mesh.vertices.is_empty() {
-        return Vec::new();
+
+impl Thumbnail {
+    fn new(ctx: &egui::Context, asset: &Asset) -> Option<Self> {
+        let [yaw, pitch, roll] = asset.capture_angles;
+        let camera = crate::camera::Camera {
+            yaw,
+            pitch,
+            roll,
+            ..Default::default()
+        };
+        let icon = crate::brush_icon::capture_part(&asset.mesh, &camera).ok()?;
+        Some(Self {
+            source: asset.mesh.clone(),
+            texture: super::icons::texture(ctx, format!("object-icon-{}", asset.id), &icon),
+        })
     }
-    let mut lo = egui::pos2(f32::INFINITY, f32::INFINITY);
-    let mut hi = egui::pos2(f32::NEG_INFINITY, f32::NEG_INFINITY);
-    for p in &mesh.vertices {
-        let q = egui::pos2(p.0 + p.2 * 0.4, -p.1 - p.2 * 0.25);
-        lo = lo.min(q);
-        hi = hi.max(q);
-    }
-    let scale = 34. / (hi - lo).x.max((hi - lo).y).max(1e-5);
-    let center = lo + (hi - lo) * 0.5;
-    let project = |p: Vec3| (egui::pos2(p.0 + p.2 * 0.4, -p.1 - p.2 * 0.25) - center) * scale;
-    let mut lines = Vec::new();
-    for tri in mesh
-        .triangles
-        .iter()
-        .step_by((mesh.triangles.len() / 100).max(1))
-    {
-        let p = tri.map(|i| project(mesh.vertices[i]));
-        for (a, b) in [(0, 1), (1, 2), (2, 0)] {
-            lines.push([p[a], p[b]]);
+}
+impl Controls {
+    fn placement_settings(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal_wrapped(|ui| {
+            ui.selectable_value(&mut self.brush.stamp, false, "Create instance");
+            ui.selectable_value(&mut self.brush.stamp, true, "Stamp mesh");
+        });
+        if self.brush.stamp {
+            ui.label("Raise the surface to the model shape. Hold Alt to press it inward. Click or drag to stamp.");
+            ui.weak(
+                "Stamp detail depends on the target mesh resolution. Drag empty space to orbit.",
+            );
+        } else {
+            ui.weak(
+                "Click the surface to place a part, drag to repeat, or drag empty space to orbit.",
+            );
+        }
+        self.size_control(ui);
+        ui.add(
+            egui::DragValue::new(&mut self.brush.spacing)
+                .range(0.001..=1000.)
+                .speed(0.01)
+                .prefix("Repeat spacing "),
+        );
+        ui.add(
+            egui::DragValue::new(&mut self.brush.offset)
+                .speed(0.01)
+                .prefix("Surface offset "),
+        );
+        ui.add(egui::Slider::new(&mut self.brush.rotation, -180.0..=180.).text("Rotation °"));
+        if !self.brush.stamp {
+            ui.checkbox(&mut self.brush.independent, "Create independent geometry");
         }
     }
-    lines
-}
-fn thumbnail(
-    ui: &mut egui::Ui,
-    asset: &Asset,
-    cache: &mut std::collections::HashMap<u64, Thumbnail>,
-) -> egui::Response {
-    let cached = cache.entry(asset.id).or_insert_with(|| Thumbnail {
-        source: asset.mesh.clone(),
-        lines: thumbnail_lines(&asset.mesh),
-    });
-    if !std::sync::Arc::ptr_eq(&cached.source, &asset.mesh) {
-        cached.source = asset.mesh.clone();
-        cached.lines = thumbnail_lines(&asset.mesh);
+    pub(super) fn selected_cover<'a>(&self, library: &'a Library) -> Option<(&'a str, &'a Asset)> {
+        if !self.placing {
+            return None;
+        }
+        let group = library.brushes.iter().find(|b| Some(b.id) == self.group);
+        let id = group
+            .and_then(|b| b.objects.first().copied())
+            .or(self.asset)?;
+        let asset = library.assets.iter().find(|a| a.id == id)?;
+        Some((
+            group.map_or(asset.name.as_str(), |b| b.name.as_str()),
+            asset,
+        ))
     }
-    let (r, response) = ui.allocate_exact_size(egui::vec2(42., 42.), egui::Sense::click());
-    let painter = ui.painter();
-    painter.rect_filled(r, 3., ui.visuals().extreme_bg_color);
-    for line in &cached.lines {
-        painter.line_segment(
-            line.map(|p| r.center() + p),
-            egui::Stroke::new(0.6_f32, egui::Color32::from_rgb(100, 195, 185)),
-        );
+
+    pub(super) fn size_control(&mut self, ui: &mut egui::Ui) -> egui::Response {
+        ui.add(
+            egui::DragValue::new(&mut self.brush.scale)
+                .range(0.001..=1000.)
+                .speed(0.01)
+                .prefix("Size "),
+        )
     }
-    response
+
+    fn ship_greebles_icon(&mut self, ctx: &egui::Context) -> Option<egui::TextureId> {
+        if self.ship_greebles_thumbnail.is_none() {
+            self.ship_greebles_thumbnail = Thumbnail::new(ctx, &ship_greebles().objects[0]);
+        }
+        self.ship_greebles_thumbnail
+            .as_ref()
+            .map(|t| t.texture.id())
+    }
+    pub(super) fn object_icon(
+        &mut self,
+        ctx: &egui::Context,
+        asset: &Asset,
+    ) -> Option<egui::TextureId> {
+        if let Some(cached) = self.thumbnails.get(&asset.id)
+            && std::sync::Arc::ptr_eq(&cached.source, &asset.mesh)
+        {
+            return Some(cached.texture.id());
+        }
+        let thumbnail = Thumbnail::new(ctx, asset)?;
+        let texture_id = thumbnail.texture.id();
+        self.thumbnails.insert(asset.id, thumbnail);
+        Some(texture_id)
+    }
 }
+pub(super) use brushes::{library_tiles, part_picker, settings};

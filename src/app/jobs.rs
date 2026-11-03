@@ -3,14 +3,11 @@ use super::*;
 
 impl App {
     pub(super) fn start_mesh_job(&mut self, operation: Operation) -> Result<(), String> {
-        if matches!(
-            operation,
-            Operation::ImportObj(_) | Operation::BakeInstances(..)
-        ) {
+        if matches!(operation, Operation::ImportObj(_)) {
             if self.document.model_count() >= 64 {
                 return Err("Submodels are limited to 64".into());
             }
-        } else {
+        } else if !matches!(operation, Operation::BakeInstances(_)) {
             self.document.require_sculpt_mesh()?;
         }
         if self.mesh_job.is_some() {
@@ -69,7 +66,10 @@ impl App {
                     ) {
                         self.ui.show_polygroups = true;
                     }
-                    if matches!(operation, Operation::ImportObj(_)) {
+                    if matches!(
+                        operation,
+                        Operation::ImportObj(_) | Operation::BakeInstances(_)
+                    ) {
                         self.ui.selected_vertex_group = None;
                         self.viewport
                             .reset_transform_pivot(&self.document, self.ui.transform_mode);

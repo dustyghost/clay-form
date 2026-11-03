@@ -1424,9 +1424,12 @@ fn modeling_transform_presets_preserve_modes_vectors_and_legacy_axes() {
     let mut old = encoded;
     old.as_object_mut().unwrap().remove("interaction");
     old.as_object_mut().unwrap().remove("transform_direction");
+    old["snap_cell"] = true.into();
+    old["snap_face_cell"] = true.into();
     let old: crate::viewport::ModelingOptions = serde_json::from_value(old).unwrap();
     old.validate().unwrap();
     assert_eq!(old.interaction, ModelInteraction::Axis);
+    assert_eq!(old.tool, ModelTool::Move);
 }
 
 #[test]
@@ -1561,6 +1564,40 @@ fn modeling_region_fuse_preview_numeric_cancel_and_history_agree() {
         app.ui.modeling.amount = -0.8;
         let before = app.document.geometry_snapshot();
         let history = app.document.history_counts();
+        app.dispatch(Command::ModelPreviewFuse, &ctx);
+        navigation_frame(&mut app, &ctx, vec![]);
+        let preview = app.viewport.modeling.preview().unwrap().clone();
+        let overlay = app.viewport.modeling.fuse_contact_preview().unwrap();
+        assert_eq!(overlay.targets.len(), 2);
+        assert!(
+            overlay
+                .targets
+                .iter()
+                .flatten()
+                .all(|p| (p.2 + 0.1).abs() < 1e-5)
+        );
+        assert_eq!(overlay.walls.len(), if separate { 2 } else { 0 });
+        assert!(overlay.loop_edges.is_empty());
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert_eq!(app.document.history_counts(), history);
+        app.ui.modeling.amount = -0.05;
+        navigation_frame(&mut app, &ctx, vec![]);
+        assert!(
+            app.viewport.modeling.preview().is_none(),
+            "old amount must not stay on screen"
+        );
+        app.dispatch(Command::ModelPreviewFuse, &ctx);
+        let free = app.viewport.modeling.fuse_contact_preview().unwrap();
+        assert!(free.targets.is_empty() && free.walls.is_empty() && free.loop_edges.is_empty());
+        navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Escape, true)]);
+        assert!(app.viewport.modeling.preview().is_none());
+        assert!(
+            app.ui.modeling.active,
+            "Esc dismisses the preview without leaving Modeling"
+        );
+        navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Escape, false)]);
+        app.ui.modeling.amount = -0.8;
+        app.dispatch(Command::ModelPreviewFuse, &ctx);
         app.dispatch(Command::ModelApply, &ctx);
         assert_ne!(
             app.document.geometry_snapshot(),
@@ -1568,6 +1605,7 @@ fn modeling_region_fuse_preview_numeric_cancel_and_history_agree() {
             "{}",
             app.ui.status
         );
+        assert_eq!(app.document.mesh(), &preview);
         let expected = app.document.geometry_snapshot();
         assert_eq!(app.document.history_counts().0, history.0 + 1);
         assert!((app.viewport.modeling.requested_amount.unwrap() + 0.2).abs() < 1e-5);
@@ -1586,6 +1624,9 @@ fn modeling_region_fuse_preview_numeric_cancel_and_history_agree() {
                 vec![egui::Event::PointerMoved(start), primary_event(start, true)],
             );
             navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+            let overlay = app.viewport.modeling.fuse_contact_preview().unwrap();
+            assert_eq!(overlay.targets.len(), 2);
+            assert_eq!(overlay.walls.len(), if separate { 2 } else { 0 });
             assert_eq!(app.viewport.modeling.preview().unwrap(), &expected.mesh);
             navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(far)]);
             assert_eq!(app.viewport.modeling.preview().unwrap(), &expected.mesh);
@@ -1842,4 +1883,194 @@ fn modeling_selection_eraser_respects_depth_and_covers_edges_and_points() {
             "brush reaches {mode:?} away from its centre"
         );
     }
+}
+
+#[test]
+fn modeling_cell_notch_from_middle_top_front_edge() {
+    use crate::sculpt::Vec3;
+
+    for perspective in [false, true] {
+        let (mut app, ctx, rect) = setup();
+        app.ui.modeling.tap_repeat = false;
+        app.camera.perspective = perspective;
+        app.camera.yaw = 0.65;
+        app.camera.pitch = -0.38;
+        app.dispatch(Command::ModelingComponent(ComponentMode::Edge), &ctx);
+        app.dispatch(Command::Action(Action::ModelTool(ModelTool::CutCell)), &ctx);
+        navigation_frame(&mut app, &ctx, vec![]);
+        let (right, up, _) = app.camera.basis();
+        let project = |p: Vec3| {
+            rect.center()
+                + Vec2::new(p.dot(right), -p.dot(up)) * app.camera.scale_at(rect.size(), p)
+        };
+        let start = project(Vec3(0., 1., 1.));
+        let target = project(Vec3(0., 1. / 3., 1. / 3.));
+        let end = start + (target - start) * 1.15;
+        let before = app.document.geometry_snapshot();
+        let history = app.document.history_counts();
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+        );
+        navigation_frame(&mut app, &ctx, vec![]);
+        let preview = app
+            .viewport
+            .modeling
+            .preview()
+            .expect("press previews the cut without dragging")
+            .clone();
+        assert_eq!(
+            preview.quads.len(),
+            before.mesh.quads.len() + 2,
+            "two new side walls"
+        );
+        assert_eq!(app.document.geometry_snapshot(), before);
+        navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Escape, true)]);
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![
+                primary_event(end, false),
+                slice_key(egui::Key::Escape, false),
+            ],
+        );
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert_eq!(app.document.history_counts(), history);
+        tap(&mut app, &ctx, start);
+        assert_eq!(app.document.mesh(), &preview);
+        preview.validate_closed().unwrap();
+        assert_eq!(app.document.history_counts().0, history.0 + 1);
+        let moved = app.viewport.modeling.selected_vertices(app.document.mesh());
+        assert_eq!(moved.len(), 2);
+        for v in moved {
+            let p = preview.vertices[v];
+            assert!((p.1 - 1. / 3.).abs() < 1e-5 && (p.2 - 1. / 3.).abs() < 1e-5);
+        }
+        app.dispatch(Command::Undo, &ctx);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        app.dispatch(Command::Redo, &ctx);
+        assert_eq!(app.document.mesh(), &preview);
+        if !perspective {
+            app.dispatch(Command::Undo, &ctx);
+            app.dispatch(Command::Action(Action::ModelTool(ModelTool::Move)), &ctx);
+            pen_drag(&mut app, &ctx, start, end);
+            assert_eq!(app.document.mesh().quads, before.mesh.quads);
+            assert_ne!(app.document.mesh().vertices, before.mesh.vertices);
+        }
+    }
+}
+
+#[test]
+fn modeling_cut_one_cell_requires_a_grid_face_or_ridge_and_leaves_move_separate() {
+    let (mut app, ctx, rect) = setup();
+    app.dispatch(Command::ModelingComponent(ComponentMode::Vertex), &ctx);
+    app.dispatch(Command::Action(Action::ModelTool(ModelTool::CutCell)), &ctx);
+    let options = app.ui.modeling.options();
+    assert_eq!(options.mode, ComponentMode::Face);
+    assert_eq!(options.tool, ModelTool::CutCell);
+    let saved: crate::viewport::ModelingOptions =
+        serde_json::from_value(serde_json::to_value(options).unwrap()).unwrap();
+    assert_eq!(saved, options);
+    assert!(
+        crate::viewport::ModelingOptions {
+            mode: ComponentMode::Vertex,
+            ..saved
+        }
+        .validate()
+        .is_err()
+    );
+
+    let mut mesh = app.document.mesh().clone();
+    mesh.quads.clear();
+    app.document.replace_geometry(Geometry::new(mesh)).unwrap();
+    navigation_frame(&mut app, &ctx, vec![]);
+    let before = app.document.geometry_snapshot();
+    let history = app.document.history_counts();
+    pen_drag(&mut app, &ctx, rect.center(), rect.center() + Vec2::Y * 45.);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert_eq!(app.document.history_counts(), history);
+}
+
+#[test]
+fn modeling_face_cell_notch_pushes_one_square_from_the_viewport() {
+    use crate::sculpt::Vec3;
+    // Front center, top edge, and top corner initially expose one, two, and three faces.
+    for (x, y, expected_quads) in [(0., 0., 58), (0., 2. / 3., 56), (2. / 3., 2. / 3., 54)] {
+        let (mut app, ctx, rect) = setup();
+        app.camera.yaw = 0.55;
+        app.camera.pitch = -0.27;
+        app.dispatch(Command::Action(Action::ModelTool(ModelTool::CutCell)), &ctx);
+        navigation_frame(&mut app, &ctx, vec![]);
+        let (right, up, _) = app.camera.basis();
+        let project = |p: Vec3| {
+            rect.center()
+                + Vec2::new(p.dot(right), -p.dot(up)) * app.camera.scale_at(rect.size(), p)
+        };
+        let start = project(Vec3(x, y, 1.));
+        let before = app.document.geometry_snapshot();
+        tap(&mut app, &ctx, start);
+        assert_eq!(
+            app.document.mesh().quads.len(),
+            expected_quads,
+            "face ({x}, {y})"
+        );
+        let selected = app.viewport.modeling.selected_vertices(app.document.mesh());
+        assert_eq!(selected.len(), 4);
+        assert!(
+            selected
+                .iter()
+                .all(|&v| (app.document.mesh().vertices[v].2 - 1. / 3.).abs() < 1e-5)
+        );
+        app.document.mesh().validate_closed().unwrap();
+        app.dispatch(Command::Undo, &ctx);
+        assert_eq!(app.document.geometry_snapshot(), before);
+    }
+}
+
+#[test]
+fn modeling_face_cell_notch_straight_on_preview_and_apply_to_selection_agree() {
+    let (mut app, ctx, rect) = setup();
+    app.dispatch(Command::Action(Action::ModelTool(ModelTool::Move)), &ctx);
+    let before = app.document.geometry_snapshot();
+    let history = app.document.history_counts();
+    let start = rect.center();
+    let end = start + Vec2::Y * (rect.size().min_elem() * 0.35 * 0.7);
+    // Move never changes topology.
+    pen_drag(&mut app, &ctx, start, end);
+    assert_eq!(app.document.mesh().quads, before.mesh.quads);
+    assert_ne!(app.document.mesh().vertices, before.mesh.vertices);
+    app.dispatch(Command::Undo, &ctx);
+    app.dispatch(Command::Action(Action::ModelTool(ModelTool::CutCell)), &ctx);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    navigation_frame(&mut app, &ctx, vec![]);
+    let preview = app.viewport.modeling.preview().unwrap().clone();
+    assert_eq!(preview.quads.len(), 58);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Escape, true)]);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![
+            primary_event(end, false),
+            slice_key(egui::Key::Escape, false),
+        ],
+    );
+    assert_eq!(app.document.geometry_snapshot(), before);
+
+    app.dispatch(Command::Action(Action::ModelTool(ModelTool::Select)), &ctx);
+    tap(&mut app, &ctx, start);
+    app.dispatch(Command::Action(Action::ModelTool(ModelTool::CutCell)), &ctx);
+
+    app.dispatch(Command::ModelApply, &ctx);
+    assert_eq!(app.document.mesh(), &preview);
+    assert_eq!(app.document.history_counts().0, history.0 + 1);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    app.dispatch(Command::Redo, &ctx);
+    assert_eq!(app.document.mesh(), &preview);
 }
