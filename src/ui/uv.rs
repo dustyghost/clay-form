@@ -1,7 +1,7 @@
 use super::*;
 mod interaction;
 mod library;
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 mod tests;
 #[derive(Default)]
 pub(crate) struct UvControls {

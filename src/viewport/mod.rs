@@ -161,6 +161,13 @@ impl Viewport {
     pub(crate) fn reset_transform_pivot(&mut self, document: &Document, mode: TransformMode) {
         self.session.transform.reset_pivot(document, mode);
     }
+    pub(crate) fn start_pen_contact(&mut self, document: &mut Document) {
+        // A new pen down follows a synthetic release of the old finger pointer.
+        // The frame ends with the pen down, so the ordinary release guard cannot
+        // see that transition. End the old interaction and allow this fresh one.
+        self.cancel(document);
+        self.blocked_until_release = false;
+    }
     pub(crate) fn wait_for_release(&mut self) {
         self.blocked_until_release = true;
     }

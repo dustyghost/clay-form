@@ -20,5 +20,10 @@ earcutr = "0.5"
 wgpu = { version = "27", default-features = false, features = ["vulkan", "metal", "dx12", "wgsl"] }
 bytemuck = { version = "1", features = ["derive"] }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+# Match eframe's existing locked dependencies; no windowing-stack upgrade.
+winit = { version = "0.30.13", default-features = false }
+windows-sys = { version = "0.61.2", features = ["Win32_UI_Input_Pointer", "Win32_UI_WindowsAndMessaging"] }
+
 [dev-dependencies]
 pollster = "0.4"
