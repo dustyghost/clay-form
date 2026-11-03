@@ -746,6 +746,9 @@ fn modeling_fuse_stops_at_intermediate_slab_loop() {
     assert!(result.collapsed);
     assert!(!result.joined);
     assert!((result.distance + 0.5).abs() < 1e-5);
+    assert!(result.preview.targets.is_empty());
+    assert_eq!(result.preview.loop_edges, result.rim);
+    assert!(!result.preview.walls.is_empty());
     manifold(&result.mesh).unwrap();
     assert!(result.mesh.polygons().len() < mesh.polygons().len() + 4);
     assert!(!mesh.extrude_faces(&[f], -0.8, true).unwrap().joined);
@@ -1793,9 +1796,6 @@ fn modeling_cell_notch_removes_one_cell_and_preserves_the_surrounding_grid() {
     let cell = mesh.cell_notch(ridge).unwrap();
     let delta = Vec3(0., -2. / 3., -2. / 3.);
     assert!((cell.travel() - delta).len() < 1e-5);
-    assert!(cell.reached(delta * 1.2));
-    assert!(!cell.reached(delta * 0.75));
-    assert!(!cell.reached(Vec3(0., -1., 0.)));
     let mut mirrored = mirror_x();
     mirrored.mirror = [true, true, false];
     let (both, _) = cell

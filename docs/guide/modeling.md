@@ -236,17 +236,16 @@ Transform modes, directions and amounts save in presets; older presets retain Ax
 
 ### Cut a one-cell notch
 
-To cut a square notch in a **3 × 3 × 3** cube, orbit until you can see the top and front. Choose **Edge → Move**, set **Target → Single**, and turn on **Snap to cell notch**. Press the middle segment of the top-front edge. Drag down and back toward the small gold ring until **One-cell notch snapped** appears, then release. The notch has a floor, a back wall and two side walls. The surrounding squares stay in place.
+Choose **Cut one cell** in Face or Edge mode. Press a component to preview the full cut. Release to apply it in one Undo step, or press **Esc** while holding to cancel. For a preselected face or edge, use **Apply to selection**. Symmetry cuts matching cells together.
 
-![A one-cell notch in the middle of the top-front edge of a 3 × 3 × 3 cube](../images/modeling-cell-notch.png)
+- **Face.** Press a rectangular grid square. Its floor moves inward by one grid layer. A middle square makes a four-walled recess. At an edge or corner, the recess opens onto the adjacent sides.
+- **Edge.** On a **3 × 3 × 3** cube, press the middle segment of the top-front ridge. The cut exposes a floor, a back wall and two side walls.
 
-The snap works on a right-angle ridge with rectangular quads continuing past both ends of the segment. Dragging partway makes a regular Move. You can finish the notch with a second drag, or turn off **Snap to cell notch** for free shaping.
+![Cut one cell preview with the new floor outlined in gold](../images/modeling-cut-one-cell-preview.png)
 
-You can also start from a face. In **Face → Move**, choose **Target → Single** and turn on **Snap to cell notch**. Press a square and drag toward the gold ring to push it inward by one grid cell. Viewed straight on, the ring appears below the press point. A center square makes a recess with four walls. A square at an outside edge opens onto the adjacent side, and a corner square opens onto both adjacent sides.
+![One-cell notch cut from a ridge edge](../images/modeling-cell-notch.png)
 
-![Center face pushed one grid cell into a cube, leaving a square recess](../images/modeling-face-cell-notch.png)
-
-Face and edge snapping have separate switches, both off by default. Face snapping follows the rectangular grid to measure the next layer. You can also choose **Axis / amount → Normal** and apply a negative distance that reaches that layer.
+**Move** translates the selected components freely. Use **Extrude and fuse** to reach a matching loop or face at a distance.
 
 ### Extrude a face or flat region
 
@@ -278,6 +277,10 @@ The highlighted rim stays on the dragged face even as the pen moves across other
 Inset and bevel retain the cap selection for the next operation. New faces inherit their source region's face label; surviving weights and creases are retained.
 
 **Extrude and fuse** pushes selected flat face regions inward. Select nonadjacent faces with **Add** (or Shift); adjacent faces stay together as one region, and separate regions move independently. Each region stops at its first compatible intermediate loop, removes the swept exterior strips and retains the moved cap. Internal edges between selected faces do not create walls. **Join matching faces** separately permits opening a tunnel when the opposite cap has the same face layout. Dragging farther keeps the preview at the first compatible contact; release or **Apply amount** commits the same result in one Undo step.
+
+Drag to preview a fuse, or select faces, enter **Distance**, and click **Preview**. Gold outlines the target face or edge loop. Coral shows the side walls that will be removed. Check the preview before releasing the drag or choosing **Apply amount**. **Esc** dismisses the preview. After changing the distance or join settings, click **Preview** again.
+
+![Fuse preview with the opposite face in gold and the removed side walls in coral](../images/modeling-fuse-contact-preview.png)
 
 **Snap range** is a fraction of the local edge length, independent of sculpt brush size. Compatibility requires aligned corners and complete adjoining side strips; this does not cut arbitrary intersecting surfaces. Before a compatible contact is reached, the tool extrudes freely and reports that no fusion occurred. Unmatched or differently tessellated targets are not fused.
 

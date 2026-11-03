@@ -6,6 +6,7 @@ pub(super) struct EditOutcome {
     pub amount: f32,
     pub retain_caps: bool,
     moved_faces: std::collections::BTreeMap<usize, usize>,
+    pub fuse: crate::sculpt::FusePreview,
     pub notice: &'static str,
 }
 impl EditOutcome {
@@ -15,24 +16,9 @@ impl EditOutcome {
             amount,
             retain_caps,
             moved_faces: Default::default(),
+            fuse: Default::default(),
             notice: "",
         }
-    }
-    pub(super) fn notch(
-        mesh: &Mesh,
-        cell: &crate::sculpt::CellNotch,
-        amount: f32,
-        protect: bool,
-        symmetry: &ModelingSymmetry,
-    ) -> Result<Self, String> {
-        let (mesh, moved_faces) = cell.apply(mesh, protect, symmetry)?;
-        Ok(Self {
-            mesh,
-            moved_faces,
-            amount: cell.travel().len().copysign(amount),
-            retain_caps: false,
-            notice: "One-cell notch snapped",
-        })
     }
     pub(super) fn moved_selection(&self, source: &BTreeSet<Component>) -> BTreeSet<Component> {
         source
@@ -49,6 +35,7 @@ pub(super) struct EditDrag {
     pub direct: Option<super::transform::DirectDrag>,
     pub rail: Option<egui::Vec2>,
     pub initial_amount: f32,
+    pub preview_options: ModelingOptions,
     pub moved: bool,
     pub scale: f32,
     pub components: BTreeSet<Component>,
@@ -62,7 +49,8 @@ impl ModelTool {
         self.construction_kind().is_some()
             || matches!(
                 self,
-                Self::Move
+                Self::CutCell
+                    | Self::Move
                     | Self::Rotate
                     | Self::Scale
                     | Self::Inset
@@ -73,6 +61,48 @@ impl ModelTool {
     }
 }
 impl ModelingState {
+    fn cut_cell(
+        components: &BTreeSet<Component>,
+        mesh: &Mesh,
+        symmetry: &ModelingSymmetry,
+        protect: bool,
+    ) -> Result<EditOutcome, String> {
+        let first = *components
+            .first()
+            .ok_or("Select a grid face or ridge edge")?;
+        let (cell, copies): (_, Vec<Component>) = match first {
+            Component::Face(f) => (
+                mesh.face_cell_notch(f),
+                symmetry
+                    .face_copies(f)
+                    .into_iter()
+                    .map(Component::Face)
+                    .collect(),
+            ),
+            Component::Edge(e) => (
+                mesh.cell_notch(e),
+                symmetry
+                    .edges(&[e])
+                    .into_iter()
+                    .map(Component::Edge)
+                    .collect(),
+            ),
+            Component::Vertex(_) => return Err("Cut one cell needs a face or ridge edge".into()),
+        };
+        if !components.iter().all(|c| copies.contains(c)) {
+            return Err(
+                "Select one grid face or ridge edge. Its symmetry copies can be selected too."
+                    .into(),
+            );
+        }
+        let cell = cell.ok_or("Choose a rectangular grid face or a right-angle ridge edge")?;
+        let (mesh, moved_faces) = cell.apply(mesh, protect, symmetry)?;
+        Ok(EditOutcome {
+            moved_faces,
+            ..EditOutcome::new(mesh, cell.travel().len(), false)
+        })
+    }
+
     pub(super) fn cap_selection(
         source: &Mesh,
         out: &Mesh,
@@ -109,29 +139,47 @@ impl ModelingState {
             if drag.direct.is_some() {
                 return;
             }
-            if let Some(point) = point {
+            let previous_amount = drag.amount;
+            if options.tool == ModelTool::CutCell {
+                drag.amount = options.amount;
+            } else if let Some(point) = point {
                 drag.moved |= point.distance(drag.start) > 3.;
                 if !drag.moved {
-                    return;
-                }
-                let travel = drag.start.y - point.y;
-                drag.amount = match options.tool {
-                    ModelTool::EdgeSplit | ModelTool::EdgeCollapse => {
-                        let rail = drag.rail.unwrap_or(egui::Vec2::ZERO);
-                        let fraction = drag.initial_amount
-                            + (point - drag.start).dot(rail) / rail.length_sq().max(1.);
-                        if options.tool == ModelTool::EdgeSplit {
-                            fraction.clamp(0.001, 0.999)
-                        } else {
-                            fraction.clamp(0., 1.)
-                        }
+                    if options.tool != ModelTool::Fuse {
+                        return;
                     }
-                    ModelTool::PointSplit => drag.initial_amount + travel / drag.scale,
-                    ModelTool::Rotate => travel,
-                    ModelTool::Scale => (travel / 150.).exp(),
-                    _ => travel / drag.scale,
-                };
+                    if !options.tap_repeat {
+                        drag.result = None;
+                        return;
+                    }
+                    drag.amount = options.amount;
+                } else {
+                    let travel = drag.start.y - point.y;
+                    drag.amount = match options.tool {
+                        ModelTool::EdgeSplit | ModelTool::EdgeCollapse => {
+                            let rail = drag.rail.unwrap_or(egui::Vec2::ZERO);
+                            let fraction = drag.initial_amount
+                                + (point - drag.start).dot(rail) / rail.length_sq().max(1.);
+                            if options.tool == ModelTool::EdgeSplit {
+                                fraction.clamp(0.001, 0.999)
+                            } else {
+                                fraction.clamp(0., 1.)
+                            }
+                        }
+                        ModelTool::PointSplit => drag.initial_amount + travel / drag.scale,
+                        ModelTool::Rotate => travel,
+                        ModelTool::Scale => (travel / 150.).exp(),
+                        _ => travel / drag.scale,
+                    };
+                }
             }
+            if drag.result.is_some()
+                && drag.preview_options == options
+                && previous_amount == drag.amount
+            {
+                return;
+            }
+            drag.preview_options = options;
             drag.result = Some(Self::edit_result(
                 document,
                 &drag.components,
@@ -152,6 +200,10 @@ impl ModelingState {
             return Err("Amount must be finite".into());
         }
         let mesh = document.mesh();
+        if options.tool == ModelTool::CutCell {
+            let symmetry = ModelingSymmetry::new(mesh, document.symmetry())?;
+            return Self::cut_cell(components, mesh, &symmetry, options.protect_mask);
+        }
         let polygons = mesh.polygons();
         let vertices: BTreeSet<_> = components
             .iter()
@@ -251,6 +303,7 @@ impl ModelingState {
                     amount: r.distance,
                     moved_faces: Default::default(),
                     retain_caps: !r.joined && !r.collapsed,
+                    fuse: r.preview,
                     notice: if r.partial_contact {
                         "Some regions snapped; others have no compatible contact"
                     } else if r.varying_distance {
@@ -353,11 +406,6 @@ impl ModelingState {
             return Ok(EditOutcome::new(mesh.clone(), amount, false));
         }
         let symmetry = ModelingSymmetry::new(mesh, document.symmetry())?;
-        if let Some(cell) = Self::move_cell(options, components, mesh, anchor, &symmetry)
-            && cell.reached(axis * amount)
-        {
-            return EditOutcome::notch(mesh, &cell, amount, options.protect_mask, &symmetry);
-        }
         let transform = match options.tool {
             ModelTool::Move => ComponentTransform::Move(axis * amount),
             ModelTool::Rotate => ComponentTransform::Rotate(axis, amount.to_radians()),
@@ -397,7 +445,12 @@ impl ModelingState {
                 options.transform_direction = direct.direction;
             }
         }
-        let result = if !drag.moved {
+        let result = if options.tool == ModelTool::CutCell
+            || (options.tool == ModelTool::Fuse && options.tap_repeat && drag.result.is_some())
+        {
+            drag.result
+                .ok_or("Press a component to preview the edit")??
+        } else if !drag.moved {
             if !options.tap_repeat && !options.tool.instant() {
                 return Ok(());
             }
@@ -414,7 +467,9 @@ impl ModelingState {
         if result.mesh == *document.mesh() {
             return Ok(());
         }
-        let selection = if options.tool.is_transform() || options.tool == ModelTool::Slide {
+        let selection = if options.tool.is_transform()
+            || matches!(options.tool, ModelTool::Slide | ModelTool::CutCell)
+        {
             result.moved_selection(&drag.components)
         } else if result.retain_caps
             && matches!(
@@ -447,6 +502,34 @@ impl ModelingState {
         self.selected = selection;
         Ok(())
     }
+    pub fn preview_fuse_amount(
+        &mut self,
+        document: &Document,
+        options: ModelingOptions,
+    ) -> Result<(), String> {
+        if options.tool != ModelTool::Fuse {
+            return Err("Choose Extrude and fuse to preview its distance".into());
+        }
+        self.update_preview(document, None, Some(options), true, false);
+        self.fuse_amount_preview = None;
+        if self.selected.is_empty() {
+            return Err("Select faces to preview the fuse".into());
+        }
+        let result = Self::edit_result(
+            document,
+            &self.selected,
+            Vec3::default(),
+            options,
+            options.amount,
+        )?;
+        self.fuse_amount_preview = Some(FuseAmountPreview {
+            options,
+            selected: self.selected.clone(),
+            result,
+        });
+        Ok(())
+    }
+
     pub fn apply_amount(
         &mut self,
         document: &mut Document,
@@ -463,7 +546,9 @@ impl ModelingState {
         if result.mesh == *document.mesh() {
             return Ok(());
         }
-        let selection = if options.tool.is_transform() || options.tool == ModelTool::Slide {
+        let selection = if options.tool.is_transform()
+            || matches!(options.tool, ModelTool::Slide | ModelTool::CutCell)
+        {
             result.moved_selection(&self.selected)
         } else if result.retain_caps
             && matches!(
@@ -503,7 +588,10 @@ impl Viewport {
         let (Some(component), Some(point)) = (hover, point) else {
             return;
         };
-        let targets = if self.modeling.selected.contains(&component) {
+        self.modeling.fuse_amount_preview = None;
+        let targets = if model.tool == ModelTool::CutCell {
+            Ok(vec![component])
+        } else if self.modeling.selected.contains(&component) {
             Ok(self.modeling.selected.iter().copied().collect::<Vec<_>>())
         } else {
             Self::selection_target(
@@ -543,7 +631,10 @@ impl Viewport {
                     return;
                 }
                 let components = targets.into_iter().collect();
-                let result = (model.tool == ModelTool::PointSplit).then(|| {
+                let preview_on_press =
+                    matches!(model.tool, ModelTool::PointSplit | ModelTool::CutCell)
+                        || (model.tool == ModelTool::Fuse && model.tap_repeat);
+                let result = preview_on_press.then(|| {
                     ModelingState::edit_result(document, &components, anchor, model, model.amount)
                 });
                 self.modeling.edit_drag = Some(EditDrag {
@@ -566,6 +657,7 @@ impl Viewport {
                         None
                     },
                     initial_amount: model.amount,
+                    preview_options: model,
                     moved: false,
                     scale: scene.scale_at(scene.pick(point).map_or(Vec3::default(), |h| h.0)),
                     components,

@@ -314,6 +314,7 @@ impl App {
             | Command::ModelBoundary
             | Command::ModelTopology(..)
             | Command::ModelRepeat
+            | Command::ModelPreviewFuse
             | Command::ModelApply
             | Command::ModelDissolveLoops
             | Command::ModelSelectLoop

@@ -1,6 +1,5 @@
 //! Selection-local direct manipulation. Geometry stays a draft until release.
 use super::*;
-use crate::sculpt::CellNotch;
 use crate::viewport::transform::rotation::{Ring, RotationDrag};
 
 const SIZE: f32 = 85.;
@@ -16,29 +15,7 @@ pub(super) struct DirectDrag {
     pub direction: Vec3,
     pivot: Vec3,
     handle: Handle,
-    cell: Option<CellNotch>,
     rotation: Option<RotationDrag>,
-}
-impl DirectDrag {
-    pub(super) fn cell_target(&self, scene: &Scene, anchor: Vec3) -> Option<Pos2> {
-        let cell = self.cell.as_ref()?;
-        let target = anchor + cell.travel();
-        if !scene.visible_depth(target) {
-            return None;
-        }
-        let start = scene.project(anchor);
-        let projected = scene.project(target);
-        // Straight-on, an inward face push has no screen direction. Offer a down-drag
-        // of one cell at the local zoom, with the ring at that same pen position.
-        if self.handle == Handle::Free
-            && matches!(cell, CellNotch::Face(_))
-            && projected.distance(start) < 12.
-        {
-            Some(start + egui::Vec2::Y * (scene.scale_at(anchor) * cell.travel().len()).max(14.))
-        } else {
-            Some(projected)
-        }
-    }
 }
 fn axes() -> [(Vec3, Color32, &'static str); 3] {
     [
@@ -80,63 +57,6 @@ fn trackball(scene: &Scene, point: Pos2, pivot: Vec3) -> Vec3 {
     (scene.right * p.x - scene.up * p.y + scene.view * z).norm()
 }
 impl ModelingState {
-    /// All selected components must belong to one symmetry orbit.
-    pub(super) fn move_cell(
-        options: ModelingOptions,
-        components: &BTreeSet<Component>,
-        mesh: &Mesh,
-        anchor: Vec3,
-        symmetry: &ModelingSymmetry,
-    ) -> Option<CellNotch> {
-        if options.tool != ModelTool::Move {
-            return None;
-        }
-        let first = *components.first()?;
-        let copies: Vec<Component> = match first {
-            Component::Face(f) if options.mode == ComponentMode::Face && options.snap_face_cell => {
-                symmetry
-                    .face_copies(f)
-                    .into_iter()
-                    .map(Component::Face)
-                    .collect()
-            }
-            Component::Edge(e) if options.mode == ComponentMode::Edge && options.snap_cell => {
-                symmetry
-                    .edges(&[e])
-                    .into_iter()
-                    .map(Component::Edge)
-                    .collect()
-            }
-            _ => return None,
-        };
-        if !components.iter().all(|c| copies.contains(c)) {
-            return None;
-        }
-        let distance = |c: &Component| {
-            let pivot = match *c {
-                Component::Face(f) => {
-                    let Some(q) = mesh.quads.get(f) else {
-                        return f32::INFINITY;
-                    };
-                    q.iter()
-                        .fold(Vec3::default(), |sum, &v| sum + mesh.vertices[v])
-                        * 0.25
-                }
-                Component::Edge([a, b]) => (mesh.vertices[a] + mesh.vertices[b]) * 0.5,
-                _ => return f32::INFINITY,
-            };
-            (pivot - anchor).len()
-        };
-        match *components
-            .iter()
-            .min_by(|a, b| distance(a).total_cmp(&distance(b)))?
-        {
-            Component::Face(f) => mesh.face_cell_notch(f),
-            Component::Edge(e) => mesh.cell_notch(e),
-            _ => None,
-        }
-    }
-
     fn transform_frame(&self, document: &Document) -> Option<(Vec3, Vec3)> {
         let vertices = self.selected_vertices(document.mesh());
         let anchor = self
@@ -195,7 +115,6 @@ impl ModelingState {
                 direction: options.transform_direction,
                 pivot,
                 handle,
-                cell: Self::move_cell(options, &components, document.mesh(), anchor, &symmetry),
                 rotation: if let Handle::Ring(axis) = handle {
                     Some(ring(axis, pivot, Color32::WHITE, "").begin(scene, point))
                 } else {
@@ -204,6 +123,7 @@ impl ModelingState {
             }),
             rail: None,
             initial_amount: options.amount,
+            preview_options: options,
             moved: false,
             scale: scene.scale_at(pivot),
             components,
@@ -240,7 +160,6 @@ impl ModelingState {
         }
         let delta = point - drag.start;
         let pivot = direct.pivot;
-        let mut snapped = None;
         let (direction, amount) = match options.tool {
             ModelTool::Move => {
                 let displacement = match direct.handle {
@@ -265,41 +184,6 @@ impl ModelingState {
                     },
                     _ => scene.at_depth(point, pivot) - scene.at_depth(drag.start, pivot),
                 };
-                let displacement = direct
-                    .cell
-                    .as_ref()
-                    .and_then(|cell| {
-                        if direct.handle != Handle::Free {
-                            if cell.reached(displacement) {
-                                snapped = Some(cell);
-                                return Some(cell.travel());
-                            }
-                            return None;
-                        }
-                        let screen =
-                            direct.cell_target(scene, drag.anchor)? - scene.project(drag.anchor);
-                        if screen.length() < 12. {
-                            return None;
-                        }
-                        let progress = delta.dot(screen) / screen.length_sq();
-                        let radius = (screen.length() * 0.08).clamp(3., 10.);
-                        let fraction =
-                            (screen.dot(delta) / delta.length_sq().max(1.)).clamp(0., 1.);
-                        if (screen - delta * fraction).length() <= radius
-                            || cell.reached(displacement)
-                        {
-                            snapped = Some(cell);
-                            Some(cell.travel())
-                        } else if matches!(cell, CellNotch::Face(_))
-                            && (0. ..1.).contains(&progress)
-                            && (delta - screen * progress).length() <= radius
-                        {
-                            Some(cell.travel() * progress)
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or(displacement);
                 (displacement.norm(), displacement.len())
             }
             ModelTool::Scale => {
@@ -338,23 +222,13 @@ impl ModelingState {
         direct.direction = direction;
         options.transform_direction = direction;
         drag.amount = amount;
-        // The grid plane and depth were measured on press. Use that plan throughout
-        // the gesture, including when the pointer retreats out of snap range.
-        drag.result = Some(if let Some(cell) = snapped {
-            ModelingSymmetry::new(document.mesh(), document.symmetry()).and_then(|symmetry| {
-                super::edit::EditOutcome::notch(
-                    document.mesh(),
-                    cell,
-                    amount,
-                    options.protect_mask,
-                    &symmetry,
-                )
-            })
-        } else {
-            options.snap_cell = false;
-            options.snap_face_cell = false;
-            Self::edit_result(document, &drag.components, drag.anchor, options, amount)
-        });
+        drag.result = Some(Self::edit_result(
+            document,
+            &drag.components,
+            drag.anchor,
+            options,
+            amount,
+        ));
     }
     pub(super) fn paint_transform_gizmo(
         &self,

@@ -74,7 +74,7 @@ mod mirror_tests;
 mod edges;
 pub use edges::{BorderTarget, EdgeEdit};
 mod modeling;
-pub(crate) use modeling::CellNotch;
+pub(crate) use modeling::FusePreview;
 pub use modeling::{
     ComponentBuild, ComponentBuildOptions, ComponentTransform, Construction, ExtrudeContact,
     Extrusion, LoopCut, ModelingSymmetry, TopologyEdit,

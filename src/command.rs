@@ -70,6 +70,7 @@ pub(crate) enum Command {
     ModelSelectLoop,
     ModelDissolveLoops,
     ModelApply,
+    ModelPreviewFuse,
     ModelRepeat,
     ModelTopology(crate::sculpt::TopologyEdit),
     ModelBoundary,

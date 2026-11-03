@@ -409,6 +409,7 @@ impl Action {
         Self::ModelTool(crate::viewport::ModelTool::Inset),
         Self::ModelTool(crate::viewport::ModelTool::Bevel),
         Self::ModelTool(crate::viewport::ModelTool::Fuse),
+        Self::ModelTool(crate::viewport::ModelTool::CutCell),
         Self::ModelTool(crate::viewport::ModelTool::Move),
         Self::ModelTool(crate::viewport::ModelTool::Rotate),
         Self::ModelTool(crate::viewport::ModelTool::Scale),

@@ -14,8 +14,6 @@ pub(crate) struct ModelingControls {
     pub join: bool,
     pub axis: crate::viewport::ModelAxis,
     pub interaction: crate::viewport::ModelInteraction,
-    pub snap_cell: bool,
-    pub snap_face_cell: bool,
     pub transform_direction: crate::sculpt::Vec3,
     pub directions: std::collections::BTreeMap<ModelTool, crate::sculpt::Vec3>,
     pub amount: f32,
@@ -57,8 +55,6 @@ impl ModelingControls {
         self.directions.insert(self.tool, self.transform_direction);
         self.directions.insert(o.tool, o.transform_direction);
         self.interaction = o.interaction;
-        self.snap_cell = o.snap_cell;
-        self.snap_face_cell = o.snap_face_cell;
         self.transform_direction = o.transform_direction;
         self.mode = o.mode;
         self.tool = o.tool;
@@ -91,8 +87,6 @@ impl ModelingControls {
             axis: self.axis,
             interaction: self.interaction,
             transform_direction: self.transform_direction,
-            snap_cell: self.snap_cell,
-            snap_face_cell: self.snap_face_cell,
             amount: self.amount,
             protect_mask: self.protect_mask,
             individual: self.individual,
@@ -227,10 +221,11 @@ impl UiState {
             if self.modeling.mode==ComponentMode::Face { ui.horizontal_wrapped(|ui| { for tool in [ModelTool::Inset,ModelTool::Bevel,ModelTool::Fuse] { if ui.selectable_label(self.modeling.tool==tool,match tool {ModelTool::Move=>"Move",ModelTool::Rotate=>"Rotate",ModelTool::Scale=>"Scale",_=>tool.label()}).customize(Action::ModelTool(tool)).clicked() {commands.push(Command::Action(Action::ModelTool(tool)));} } }); }
             if self.modeling.mode==ComponentMode::Edge && ui.selectable_label(self.modeling.tool==ModelTool::Slide,"Slide loop").customize(Action::ModelTool(ModelTool::Slide)).clicked(){commands.push(Command::Action(Action::ModelTool(ModelTool::Slide)));}
             ui.horizontal_wrapped(|ui| {
-                for tool in [ModelTool::EdgeExtrude,ModelTool::EdgeSplit,ModelTool::EdgeCollapse,ModelTool::PointExtrude,ModelTool::PointSplit,ModelTool::FacePoint,ModelTool::FaceSplit] {
-                    if tool.required_mode()==Some(self.modeling.mode) && ui.selectable_label(self.modeling.tool==tool,tool.label()).customize(Action::ModelTool(tool)).clicked(){commands.push(Command::Action(Action::ModelTool(tool)));}
+                for tool in [ModelTool::CutCell,ModelTool::EdgeExtrude,ModelTool::EdgeSplit,ModelTool::EdgeCollapse,ModelTool::PointExtrude,ModelTool::PointSplit,ModelTool::FacePoint,ModelTool::FaceSplit] {
+                    if tool.supports_mode(self.modeling.mode) && ui.selectable_label(self.modeling.tool==tool,tool.label()).customize(Action::ModelTool(tool)).clicked(){commands.push(Command::Action(Action::ModelTool(tool)));}
                 }
             });
+            if self.modeling.tool != ModelTool::CutCell {
             ui.label("Target");
             ui.horizontal_wrapped(|ui| {
                 for span in SelectionSpan::ALL.into_iter().filter(|s|s.available(self.modeling.mode)) {
@@ -240,6 +235,7 @@ impl UiState {
             if self.modeling.span==SelectionSpan::Flat {
                 ui.add(egui::Slider::new(&mut self.modeling.flat_angle,0. ..=180.).text("Island angle").suffix("°"));
                 ui.weak("Connected faces within this angle of the first face");
+            }
             }
             design::checkbox(ui, &mut self.modeling.protect_mask,"Protect mask").customize(Action::ModelProtectMask);
             ui.weak("Hidden faces are protected · topology edits replace stored levels");
@@ -305,6 +301,13 @@ impl UiState {
                     }
                     if !erase { ui.weak("Replace clears once per stroke · Esc cancels"); }
                 }
+                ModelTool::CutCell => {
+                    ui.weak(if self.modeling.mode == ComponentMode::Face { "Press a rectangular grid face to preview a one-cell recess." } else { "Press a right-angle ridge edge to preview a one-cell notch." });
+                    ui.weak("Release to cut. Esc cancels the preview.");
+                    if ui.add_enabled(self.modeling.count>0, egui::Button::new("Apply to selection")).customize(Action::ModelApply).clicked() {
+                        commands.push(Command::ModelApply);
+                    }
+                }
                 ModelTool::Extrude | ModelTool::Fuse => {
                     if self.modeling.tool==ModelTool::Fuse {
                         ui.label("Snap range (fraction of local edge)");
@@ -313,7 +316,10 @@ impl UiState {
                     }
                     if self.modeling.tool==ModelTool::Extrude {design::checkbox(ui, &mut self.modeling.individual,"Individual faces");}
                     ui.add(egui::DragValue::new(&mut self.modeling.amount).prefix("Distance ").speed(0.01));
-                    if ui.add_enabled(self.modeling.count>0,egui::Button::new("Apply amount")).customize(Action::ModelApply).clicked(){commands.push(Command::ModelApply);}
+                    ui.horizontal_wrapped(|ui| {
+                        if self.modeling.tool == ModelTool::Fuse && ui.add_enabled(self.modeling.count>0, egui::Button::new("Preview")).clicked() { commands.push(Command::ModelPreviewFuse); }
+                        if ui.add_enabled(self.modeling.count>0, egui::Button::new("Apply amount")).customize(Action::ModelApply).clicked(){commands.push(Command::ModelApply);}
+                    });
 
                     design::help(
                         design::checkbox(ui, &mut self.modeling.join, "Join matching faces").customize(Action::ModelJoin),
@@ -321,7 +327,7 @@ impl UiState {
                     );
                     ui.weak("Drag up: out · down: in · release: apply · Esc: cancel");
                     if self.modeling.tool == ModelTool::Fuse {
-                        ui.weak("Adjacent faces stay together; separate regions fuse independently.");
+                        ui.weak("Gold marks the target face or loop. Coral walls will be removed.");
                     } else {
                         ui.weak("Connected regions share walls; Individual faces extrude separately.");
                     }
@@ -336,18 +342,6 @@ impl UiState {
                 ModelTool::Move | ModelTool::Rotate | ModelTool::Scale | ModelTool::Slide => {
                     use crate::viewport::ModelInteraction;
                     let direct = self.modeling.tool.is_transform();
-                    if self.modeling.tool == ModelTool::Move && self.modeling.mode == ComponentMode::Edge {
-                        design::help(
-                            design::checkbox(ui, &mut self.modeling.snap_cell, "Snap to cell notch"),
-                            "Drag one ridge segment to the interior corner of a grid cell to expose its floor and walls.",
-                        );
-                    }
-                    if self.modeling.tool == ModelTool::Move && self.modeling.mode == ComponentMode::Face {
-                        design::help(
-                            design::checkbox(ui, &mut self.modeling.snap_face_cell, "Snap to cell notch"),
-                            "Push one grid face inward to the gold ring to cut a one-cell recess. From straight on, drag down.",
-                        );
-                    }
                     if direct {
                         ui.horizontal_wrapped(|ui| {
                             for mode in [ModelInteraction::Free,ModelInteraction::Gizmo,ModelInteraction::Axis] {

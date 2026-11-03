@@ -2480,6 +2480,67 @@ fn modeling_transform_gizmo_offscreen_review() {
 }
 
 #[test]
+#[ignore = "renders the cell cut and fuse previews; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn modeling_cut_and_fuse_offscreen_review() {
+    let directory = std::env::var("CLAY_GUIDE_PREVIEW").unwrap();
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(std::path::Path::new(&directory), [1280, 1000]);
+    g.interactive = true;
+    g.panel(Tool::Mesh, Dock::Right);
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
+    primitive.divisions = [3; 3];
+    let mut mesh = primitive.mesh().unwrap();
+    for v in &mut mesh.vertices {
+        v.2 *= 0.55;
+    }
+    g.app
+        .document
+        .replace_geometry(crate::sculpt::Geometry::new(mesh))
+        .unwrap();
+    g.app.camera.yaw = 0.55;
+    g.app.camera.pitch = -0.35;
+    g.app.camera.zoom = 0.9;
+    click_guide_modeling_checkbox(&mut g);
+    click_guide_label(&mut g, "Cut one cell");
+    let (rect, _) = g.frame(vec![]);
+    let (right, up, _) = g.app.camera.basis();
+    let project = |p: crate::sculpt::Vec3| {
+        rect.center() + Vec2::new(p.dot(right), -p.dot(up)) * g.app.camera.scale_at(rect.size(), p)
+    };
+    let center = project(crate::sculpt::Vec3(0., 0., 0.55));
+    let boundary = project(crate::sculpt::Vec3(2. / 3., 0., 0.55));
+    let before = g.app.document.geometry_snapshot();
+    g.frame(vec![
+        egui::Event::PointerMoved(center),
+        primary_event(center, true),
+    ]);
+    g.save("modeling-cut-one-cell-preview");
+    let cut = g.app.viewport.modeling.preview().unwrap().clone();
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    g.frame(vec![primary_event(center, false)]);
+    assert_eq!(g.app.document.mesh(), &cut);
+    click_guide_label(&mut g, "Undo");
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    click_guide_label(&mut g, "Select");
+    g.frame(vec![
+        egui::Event::PointerMoved(boundary),
+        primary_event(boundary, true),
+    ]);
+    g.frame(vec![primary_event(boundary, false)]);
+    click_guide_label(&mut g, "Extrude and fuse");
+    g.app.ui.modeling.join = true;
+    g.app.ui.modeling.amount = -1.2;
+    click_guide_label(&mut g, "Preview");
+    g.save("modeling-fuse-contact-preview");
+    let overlay = g.app.viewport.modeling.fuse_contact_preview().unwrap();
+    assert_eq!((overlay.targets.len(), overlay.walls.len()), (1, 3));
+    let preview = g.app.viewport.modeling.preview().unwrap().clone();
+    assert_eq!(g.app.document.geometry_snapshot(), before);
+    click_guide_label(&mut g, "Apply amount");
+    assert_eq!(g.app.document.mesh(), &preview);
+}
+
+#[test]
 #[ignore = "renders connected region fusion; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn modeling_region_fuse_offscreen_review() {
     let directory = std::env::var("CLAY_GUIDE_PREVIEW").expect("Set CLAY_GUIDE_PREVIEW");

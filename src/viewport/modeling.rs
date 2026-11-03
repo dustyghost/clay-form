@@ -27,6 +27,7 @@ pub(crate) enum ModelTool {
     Inset,
     Bevel,
     Fuse,
+    CutCell,
     Slide,
     EdgeExtrude,
     EdgeSplit,
@@ -48,6 +49,7 @@ impl ModelTool {
             Self::Inset => "Inset",
             Self::Bevel => "Bevel boundary",
             Self::Fuse => "Extrude and fuse",
+            Self::CutCell => "Cut one cell",
             Self::Slide => "Slide loop",
             Self::EdgeExtrude => "Extrude edge",
             Self::EdgeSplit => "Split edge",
@@ -88,11 +90,15 @@ impl ModelTool {
             _ => None,
         }
     }
+    pub fn supports_mode(self, mode: ComponentMode) -> bool {
+        self.required_mode().is_none_or(|required| required == mode)
+            && !(self == Self::CutCell && mode == ComponentMode::Vertex)
+    }
     pub fn is_transform(self) -> bool {
         matches!(self, Self::Move | Self::Rotate | Self::Scale)
     }
     pub fn instant(self) -> bool {
-        matches!(self, Self::FacePoint | Self::FaceSplit)
+        matches!(self, Self::FacePoint | Self::FaceSplit | Self::CutCell)
     }
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -220,10 +226,6 @@ pub(crate) struct ModelingOptions {
     pub interaction: ModelInteraction,
     #[serde(default)]
     pub transform_direction: Vec3,
-    #[serde(default)]
-    pub snap_cell: bool,
-    #[serde(default)]
-    pub snap_face_cell: bool,
     pub amount: f32,
     pub protect_mask: bool,
     pub individual: bool,
@@ -253,6 +255,7 @@ pub(crate) struct ModelingState {
     symmetry: Option<(Symmetry, Result<ModelingSymmetry, String>)>,
     drag: Option<ExtrudeDrag>,
     edit_drag: Option<EditDrag>,
+    fuse_amount_preview: Option<FuseAmountPreview>,
     selection_drag: Option<SelectionDrag>,
     loop_preview: Option<LoopPreview>,
     loop_drag: Option<LoopDrag>,
@@ -261,6 +264,11 @@ pub(crate) struct ModelingState {
     pub last_edit: Option<ModelingOptions>,
     pub notice: Option<&'static str>,
     smooth: Option<(u64, Result<Mesh, String>)>,
+}
+struct FuseAmountPreview {
+    options: ModelingOptions,
+    selected: BTreeSet<Component>,
+    result: edit::EditOutcome,
 }
 struct LoopPreview {
     edge: [usize; 2],
@@ -299,6 +307,7 @@ impl ModelingState {
             self.selection_drag = None;
             self.drag = None;
             self.edit_drag = None;
+            self.fuse_amount_preview = None;
             self.loop_drag = None;
             self.loop_preview = None;
             self.revision = document.display_revision();
@@ -315,6 +324,7 @@ impl ModelingState {
         self.smooth = None;
         self.drag = None;
         self.edit_drag = None;
+        self.fuse_amount_preview = None;
         self.loop_drag = None;
         self.loop_preview = None;
     }
@@ -346,6 +356,13 @@ impl ModelingState {
             })
             .collect()
     }
+    pub(crate) fn fuse_contact_preview(&self) -> Option<&crate::sculpt::FusePreview> {
+        self.edit_drag
+            .as_ref()
+            .and_then(|d| d.result.as_ref()?.as_ref().ok())
+            .or_else(|| self.fuse_amount_preview.as_ref().map(|p| &p.result))
+            .map(|r| &r.fuse)
+    }
     pub fn preview_amount(&self) -> Option<f32> {
         self.edit_drag.as_ref().map(|drag| drag.amount)
     }
@@ -356,6 +373,9 @@ impl ModelingState {
                 .as_ref()
                 .and_then(|r| r.as_ref().ok())
                 .map(|r| &r.mesh);
+        }
+        if let Some(preview) = &self.fuse_amount_preview {
+            return Some(&preview.result.mesh);
         }
         if self.drag.is_none() {
             return self.smooth.as_ref().and_then(|(_, r)| r.as_ref().ok());
@@ -416,6 +436,13 @@ impl ModelingState {
             }
         }
         let options = options.unwrap();
+        if self
+            .fuse_amount_preview
+            .as_ref()
+            .is_some_and(|preview| preview.options != options || preview.selected != self.selected)
+        {
+            self.fuse_amount_preview = None;
+        }
         if options.smooth_preview {
             if self
                 .smooth
@@ -581,6 +608,36 @@ impl Viewport {
             }
         }
     }
+    fn paint_fuse_contact(
+        fuse: &crate::sculpt::FusePreview,
+        scene: &Scene,
+        painter: &egui::Painter,
+    ) {
+        let gold = Color32::from_rgb(255, 205, 95);
+        let coral = Color32::from_rgb(255, 105, 90);
+        for (faces, color, width) in [(&fuse.walls, coral, 1.5), (&fuse.targets, gold, 3.)] {
+            for face in faces {
+                if face.iter().all(|&p| scene.visible_depth(p)) {
+                    painter.add(egui::Shape::convex_polygon(
+                        face.iter().map(|&p| scene.project(p)).collect(),
+                        color.gamma_multiply(0.22),
+                        egui::Stroke::NONE,
+                    ));
+                }
+                for (&a, &b) in face.iter().zip(face.iter().cycle().skip(1)) {
+                    if let Some(line) = scene.clip_segment([a, b]) {
+                        painter.line_segment(line, (width, color));
+                    }
+                }
+            }
+        }
+        for &edge in &fuse.loop_edges {
+            if let Some(line) = scene.clip_segment(edge) {
+                painter.line_segment(line, (3., gold));
+            }
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(super) fn update_modeling(
         &mut self,
@@ -643,17 +700,14 @@ impl Viewport {
         let selected = Color32::from_rgb(70, 225, 240);
         let highlighted = Color32::from_rgb(255, 205, 95);
         if let Some(drag) = &self.modeling.edit_drag {
-            if let Some(target) = drag
-                .direct
-                .as_ref()
-                .and_then(|d| d.cell_target(scene, drag.anchor))
-            {
-                painter.circle_stroke(target, 5., (1.5, highlighted));
-            }
             if let Some(Ok(result)) = &drag.result {
                 let components = if matches!(
                     model.tool,
-                    ModelTool::Move | ModelTool::Rotate | ModelTool::Scale | ModelTool::Slide
+                    ModelTool::Move
+                        | ModelTool::Rotate
+                        | ModelTool::Scale
+                        | ModelTool::Slide
+                        | ModelTool::CutCell
                 ) {
                     result.moved_selection(&drag.components)
                 } else if result.retain_caps {
@@ -711,7 +765,9 @@ impl Viewport {
                 .map(|d| Component::Edge(d.edge))
                 .or(hover)
             {
-                let targets = if model.tool != ModelTool::Select
+                let targets = if model.tool == ModelTool::CutCell {
+                    vec![component]
+                } else if model.tool != ModelTool::Select
                     && model.tool != ModelTool::LoopCut
                     && self.modeling.selected.contains(&component)
                 {
@@ -808,6 +864,11 @@ impl Viewport {
                 }
             }
         }
+        if model.tool == ModelTool::Fuse
+            && let Some(contact) = self.modeling.fuse_contact_preview()
+        {
+            Self::paint_fuse_contact(contact, scene, painter);
+        }
         let transform_handle = self
             .modeling
             .paint_transform_gizmo(document, scene, painter, model, eligible);
@@ -820,6 +881,9 @@ impl Viewport {
         let hint = if let Some(drag) = &self.modeling.edit_drag {
             match &drag.result {
                 Some(Err(e)) => format!("{e} · Esc cancels"),
+                Some(Ok(_)) if model.tool == ModelTool::CutCell => {
+                    "Cut one cell · release to cut · Esc cancels".into()
+                }
                 Some(Ok(r)) => format!(
                     "{} {:.3} · {} · release to apply · Esc cancels",
                     model.tool.label(),
@@ -828,6 +892,12 @@ impl Viewport {
                 ),
                 None => format!("{} · drag to preview", model.tool.label()),
             }
+        } else if let Some(preview) = &self.modeling.fuse_amount_preview {
+            let r = &preview.result;
+            format!(
+                "{} · distance {:.3} · Apply amount to commit · Esc cancels",
+                r.notice, r.amount
+            )
         } else if let Some((_, Err(error))) = &self.modeling.smooth {
             error.clone()
         } else if let Some(error) = &symmetry_error {
@@ -873,7 +943,7 @@ impl Viewport {
             )
         };
         painter.text(
-            navigation::inner(response.rect).left_bottom() + Vec2::new(8., -8.),
+            navigation::inner(response.rect).left_bottom() + Vec2::new(8., -44.),
             egui::Align2::LEFT_BOTTOM,
             hint,
             egui::FontId::proportional(13.),
@@ -1116,6 +1186,7 @@ impl Viewport {
                         direct: None,
                         rail: None,
                         initial_amount: model.amount,
+                        preview_options: model,
                         moved: false,
                         scale: drag.scale,
                         components: drag.faces.into_iter().map(Component::Face).collect(),
@@ -1235,8 +1306,7 @@ impl ModelingOptions {
         {
             return Err("Invalid modeling preset settings".into());
         }
-        let mode = self.tool.required_mode();
-        if mode.is_some_and(|mode| mode != self.mode) {
+        if !self.tool.supports_mode(self.mode) {
             return Err("Preset action does not match its component mode".into());
         }
         Ok(())

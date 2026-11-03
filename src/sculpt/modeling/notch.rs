@@ -92,13 +92,6 @@ impl CellNotch {
         }
     }
 
-    /// Snap on approach and on overshoot along the same drag, using local model units.
-    pub(crate) fn reached(&self, movement: Vec3) -> bool {
-        let travel = self.travel();
-        let t = (travel.dot(movement) / movement.dot(movement).max(1e-20)).clamp(0., 1.);
-        (travel - movement * t).len() <= travel.len() * 0.08
-    }
-
     pub(crate) fn apply(
         &self,
         mesh: &Mesh,
