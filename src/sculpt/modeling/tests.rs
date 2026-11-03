@@ -1266,6 +1266,19 @@ fn modeling_fuse_skips_a_partial_loop_between_notches_to_join_the_opposite_face(
     fused.mesh.validate_closed().unwrap();
 }
 
+fn face_at(mesh: &Mesh, center: Vec3) -> usize {
+    mesh.quads
+        .iter()
+        .position(|q| {
+            let midpoint = q
+                .iter()
+                .fold(Vec3::default(), |sum, &v| sum + mesh.vertices[v])
+                * 0.25;
+            (midpoint - center).len() < 1e-5
+        })
+        .unwrap()
+}
+
 #[test]
 fn modeling_fuse_joins_a_cap_bordered_by_touching_tunnels() {
     let mut mesh = cube(3);
@@ -1286,19 +1299,6 @@ fn modeling_fuse_joins_a_cap_bordered_by_touching_tunnels() {
         join: true,
         loops: true,
         snap: 0.04,
-    };
-    let face_at = |mesh: &Mesh, center: Vec3| {
-        mesh.quads
-            .iter()
-            .position(|q| {
-                (q.iter()
-                    .fold(Vec3::default(), |sum, &v| sum + mesh.vertices[v])
-                    * 0.25
-                    - center)
-                    .len()
-                    < 1e-5
-            })
-            .unwrap()
     };
     // Successive tunnels leave separate sheets touching along the inner grid edges.
     for center in [
@@ -1326,6 +1326,66 @@ fn modeling_fuse_joins_a_cap_bordered_by_touching_tunnels() {
         result.mesh.validate_closed().unwrap();
         assert_eq!(result.mesh.quads.len() + 2, mesh.quads.len());
         assert!((volume(&mesh) - volume(&result.mesh) - 8. / 27.).abs() < 1e-5);
+    }
+}
+
+#[test]
+fn modeling_fuse_removes_a_column_between_crossing_tunnels() {
+    let mut mesh = cube(3);
+    let contact = ExtrudeContact {
+        join: true,
+        loops: true,
+        snap: 0.04,
+    };
+    // Cut the four neighboring columns all the way through a three-span cube.
+    let step = 2. / 3.;
+    for (x, z) in [(-step, 0.), (0., step), (step, 0.), (0., -step)] {
+        let face = face_at(&mesh, Vec3(x, -1., z));
+        let cut = mesh.extrude_contact(&[face], -2., contact).unwrap();
+        assert!(cut.joined, "setup tunnel at ({x}, {z})");
+        mesh = cut.mesh;
+    }
+    for (x, z) in [
+        (-step, -step),
+        (0., 0.),
+        (step, step),
+        (-step, step),
+        (step, -step),
+    ] {
+        for y in [-1., 1.] {
+            let face = face_at(&mesh, Vec3(x, y, z));
+            let cut = mesh.extrude_contact(&[face], -2., contact).unwrap();
+            assert!(cut.joined && !cut.collapsed);
+            assert!((cut.distance + 2.).abs() < 1e-5);
+            cut.mesh.validate_closed().unwrap();
+            let points = |m: &Mesh, q: &[usize; 4]| {
+                q.map(|v| {
+                    let Vec3(a, b, c) = m.vertices[v];
+                    [a, b, c].map(|n| (n * 3.).round() as i32)
+                })
+            };
+            let expected: BTreeSet<_> = mesh
+                .quads
+                .iter()
+                .filter(|q| {
+                    !q.iter().all(|&v| {
+                        let p = mesh.vertices[v];
+                        (p.0 - x).abs() <= step * 0.5 + 1e-5 && (p.2 - z).abs() <= step * 0.5 + 1e-5
+                    })
+                })
+                .map(|q| points(&mesh, q))
+                .collect();
+            assert_eq!(expected.len(), mesh.quads.len() - 14);
+            assert_eq!(cut.mesh.quads.len(), expected.len());
+            assert_eq!(
+                cut.mesh
+                    .quads
+                    .iter()
+                    .map(|q| points(&cut.mesh, q))
+                    .collect::<BTreeSet<_>>(),
+                expected
+            );
+        }
     }
 }
 
