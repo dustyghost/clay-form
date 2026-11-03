@@ -33,12 +33,25 @@ impl InspectionMode {
     }
 }
 
+// Keep one inactive display, preferring the most expensive level when jumping
+// past it. Dense/painted scenes beyond this budget use the normal rebuild path.
+const LEVEL_CACHE_BYTES: usize = 192 * 1024 * 1024;
+struct CachedLevel {
+    key: (u64, usize),
+    geometry: Arc<DisplayMesh>,
+    render: Arc<DisplayMesh>,
+}
 pub(super) struct Renderer {
     scene_cache: super::scene::cache::Cache,
     preview_scene_cache: super::scene::cache::Cache,
     revision: Option<u64>,
     geometry_revision: Option<u64>,
     live_display: bool,
+    level_key: Option<(u64, usize)>,
+    cached_level: Option<CachedLevel>,
+    source_shading: display::ShadingCache,
+    #[cfg(test)]
+    level_cache_hits: usize,
     geometry: Option<Arc<DisplayMesh>>,
     render_geometry: Option<Arc<DisplayMesh>>,
     gpu: Arc<Mutex<Gpu>>,
@@ -53,6 +66,11 @@ impl Renderer {
             revision: None,
             geometry_revision: None,
             live_display: false,
+            level_key: None,
+            cached_level: None,
+            source_shading: Default::default(),
+            #[cfg(test)]
+            level_cache_hits: 0,
             geometry: None,
             render_geometry: None,
             gpu: Arc::new(Mutex::new(Gpu::new(
@@ -79,14 +97,88 @@ impl Renderer {
     pub(super) fn clear_scene_preview(&mut self) {
         self.preview_scene_cache.clear();
     }
+    #[cfg(test)]
+    pub(super) fn level_cache_hits(&self) -> usize {
+        self.level_cache_hits
+    }
+
+    fn retain_level(&self) -> Option<CachedLevel> {
+        let key = self.level_key?;
+        if self.live_display {
+            return None;
+        }
+        let geometry = self.geometry.as_ref()?;
+        let render = self.render_geometry.as_ref()?;
+        let shared = Arc::ptr_eq(geometry, render);
+        let bytes = geometry.level_cache_bytes()
+            + if shared {
+                0
+            } else {
+                render.level_cache_bytes()
+            };
+        if bytes > LEVEL_CACHE_BYTES {
+            return None;
+        }
+        let geometry = geometry.level_snapshot();
+        let render = if shared {
+            geometry.clone()
+        } else {
+            render.level_snapshot()
+        };
+        Some(CachedLevel {
+            key,
+            geometry,
+            render,
+        })
+    }
+
     pub fn geometry(&mut self, document: &Document) -> Arc<DisplayMesh> {
         if self.revision != Some(document.display_revision())
             || (self.live_display && !document.stroke_active())
         {
-            let textures_only = self.geometry_revision
+            let key = document.level_display_key();
+            let same_content = self.level_key.is_some_and(|previous| previous.0 == key.0);
+            if !same_content {
+                self.cached_level = None;
+            }
+            let navigating = same_content
+                && self.level_key != Some(key)
+                && !document.stroke_active()
+                && !document.instance_preview_active();
+            if navigating
+                && self
+                    .cached_level
+                    .as_ref()
+                    .is_some_and(|cache| cache.key == key)
+            {
+                #[cfg(test)]
+                {
+                    self.level_cache_hits += 1;
+                }
+                let current = self.retain_level();
+                let cached = self.cached_level.take().unwrap();
+                self.geometry = Some(cached.geometry);
+                self.render_geometry = Some(cached.render);
+                self.cached_level = current;
+                self.live_display = false;
+                self.level_key = Some(key);
+                self.geometry_revision = Some(document.geometry_display_revision());
+                self.revision = Some(document.display_revision());
+                return self.geometry.as_ref().unwrap().clone();
+            }
+            if navigating
+                && self
+                    .cached_level
+                    .as_ref()
+                    .is_none_or(|cache| cache.key.1 < self.level_key.unwrap().1)
+                && let Some(current) = self.retain_level()
+            {
+                self.cached_level = Some(current);
+            }
+            let geometry_unchanged = self.geometry_revision
                 == Some(document.geometry_display_revision())
                 && !(self.live_display && !document.stroke_active());
-            let updated = textures_only
+            let updated = geometry_unchanged
                 .then(|| self.geometry.as_ref()?.with_texture_updates(document))
                 .flatten();
             if let Some(updated) = updated {
@@ -117,7 +209,9 @@ impl Renderer {
                     .and_then(|display| display.during_stroke(document));
                 self.live_display = preview.is_some();
                 self.geometry = Some(finished.unwrap_or_else(|| {
-                    Arc::new(preview.unwrap_or_else(|| DisplayMesh::new(document)))
+                    Arc::new(preview.unwrap_or_else(|| {
+                        DisplayMesh::new_cached(document, &mut self.source_shading)
+                    }))
                 }));
                 self.render_geometry = Some(
                     if (0..document.model_count())
@@ -129,6 +223,7 @@ impl Renderer {
                     },
                 );
             }
+            self.level_key = Some(key);
             self.geometry_revision = Some(document.geometry_display_revision());
             self.revision = Some(document.display_revision());
         }

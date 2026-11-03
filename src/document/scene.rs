@@ -99,12 +99,16 @@ impl Document {
         self.geometry.name = selected.name;
         self.geometry.scene.active_metadata = selected.metadata;
         self.geometry.scene.active_index = active;
+        self.array_source_edit = None;
+        self.selected_instance = None;
         self.geometry.submodels = models;
         self.reconcile_paint_target();
         self.dirty = true;
         self.display_changed();
     }
     pub fn select_submodel(&mut self, index: usize) -> Result<(), String> {
+        self.cancel_instance_preview();
+        self.selected_instance = None;
         self.end_edit();
         if index >= self.model_count() {
             return Err("Submodel no longer exists".into());
@@ -112,6 +116,7 @@ impl Document {
         if index == self.active_model_index() {
             return Ok(());
         }
+        self.array_source_edit = None;
         self.end_edit();
         self.end_stroke();
         self.record_edit("Select submodel");
@@ -138,6 +143,9 @@ impl Document {
     /// empty, ordinary mesh slot because projects always own one active model.
     /// Returns false when that slot is already empty and reset.
     pub fn delete_submodel(&mut self) -> bool {
+        if self.instance_source_in_use(self.active_model_index()) {
+            return false;
+        }
         let active = self.active_model_index();
         let mut models = self.ordered_models();
         let next = if models.len() == 1 {
@@ -168,6 +176,8 @@ impl Document {
         self.end_edit();
         self.end_stroke();
         self.record_edit("Delete submodel");
+        let owner = self.instance_model_id(active);
+        self.geometry.scene.instances.sets.retain(|s|!matches!(&s.layout, crate::sculpt::instances::Layout::Array(a) if a.owner==Some(owner)));
         self.install_models(models, next);
         true
     }
@@ -193,11 +203,9 @@ impl Document {
         } else {
             self.geometry.settings.clone()
         };
-        self.record_edit(if extract {
-            "Extract masked submodel"
-        } else {
-            "Duplicate submodel"
-        });
+        let attached = (!extract)
+            .then(|| self.attached_array(self.active_model_index()).cloned())
+            .flatten();
         let base = if extract { "Extract" } else { "Copy" };
         let mut number = 1;
         let name = loop {
@@ -212,6 +220,25 @@ impl Document {
         let mut metadata = self.geometry.scene.active_metadata.clone();
         metadata.model_id = 0;
         metadata.visible = true;
+        let mut library = self.geometry.scene.instances.clone();
+        if let Some(mut set) = attached {
+            let id = models
+                .iter()
+                .map(|m| m.metadata.model_id)
+                .chain(self.paths().iter().map(|p| p.target))
+                .max()
+                .unwrap_or(0)
+                .checked_add(1)
+                .ok_or("Model identity limit reached")?;
+            metadata.model_id = id;
+            set.id = self.next_instance_set_id()?;
+            set.name = format!("{name} array");
+            if let crate::sculpt::instances::Layout::Array(a) = &mut set.layout {
+                a.owner = Some(id);
+                a.piece.source = crate::sculpt::instances::Source::Model(id);
+            }
+            library.sets.push(set);
+        }
         models.insert(
             index,
             crate::sculpt::Submodel {
@@ -221,6 +248,17 @@ impl Document {
                 mesh_settings: settings,
             },
         );
+        let references: Vec<_> = models
+            .iter()
+            .map(|m| (m.metadata.model_id, &m.mesh))
+            .collect();
+        library.validate_sets(&references, self.paths())?;
+        self.record_edit(if extract {
+            "Extract masked submodel"
+        } else {
+            "Duplicate submodel"
+        });
+        self.geometry.scene.instances = library;
         self.install_models(models, index);
         Ok(())
     }
@@ -245,6 +283,14 @@ impl Document {
             .merge_down_target()
             .ok_or("There is no submodel below the active one")?;
         let active = self.active_model_index();
+        if self.attached_array(active).is_some() || self.attached_array(target).is_some() {
+            return Err("Make the attached arrays editable before merging submodels".into());
+        }
+        if self.instance_source_in_use(active) || self.instance_source_in_use(target) {
+            return Err(
+                "Bake or remove linked instance sets before merging their source models".into(),
+            );
+        }
         let surface = |model: ModelRef<'_>| -> Result<Mesh, String> {
             if model.settings.primitive.is_some() && model.mesh.triangles.is_empty() {
                 return Err("Fill the primitive before merging it into a sculpting mesh".into());

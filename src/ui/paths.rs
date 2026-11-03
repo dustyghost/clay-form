@@ -6,6 +6,7 @@ use crate::{
     sculpt::paths::PathMode,
     viewport::paths::{PathEditor, PathTool, RingAxis, RingMode},
 };
+mod transform;
 
 pub(crate) fn show(
     ctx: &egui::Context,
@@ -80,7 +81,28 @@ pub(crate) fn show(
                         }
                     }
                 });
-            if editor.draft.as_ref().is_some_and(|path|path.id!=0) {
+            if editor.draft.as_ref().is_some_and(|path|path.points.len()>=2) {
+                ui.horizontal_wrapped(|ui| {
+                    ui.selectable_value(&mut editor.tool,PathTool::Whole,"Transform whole path");
+                    if editor.tool==PathTool::Whole && ui.button("Edit points").clicked() { editor.tool=PathTool::Move; }
+                });
+            }
+            if editor.tool==PathTool::Whole {
+                let dirty=editor.dirty(document);
+                if let Some(path)=&mut editor.draft {
+                    if path.mode==PathMode::Surface {
+                        ui.weak("Detach the path to move it freely away from the surface. Its current route is preserved.");
+                        if ui.button("Detach from surface").clicked() { commands.push(Command::Path(PathCommand::Detach)); }
+                    } else {
+                        transform::controls(ui,path,&mut editor.transform,&mut editor.notice);
+                    }
+                    ui.horizontal(|ui| {
+                        if ui.add_enabled(dirty,egui::Button::new("Save path")).clicked() { commands.push(Command::Path(PathCommand::Save)); }
+                        if ui.button("Discard edits").clicked() { commands.push(Command::Path(PathCommand::Discard)); }
+                    });
+                }
+            }
+            if editor.tool!=PathTool::Whole && editor.draft.as_ref().is_some_and(|path|path.id!=0) {
             ui.separator();
             ui.strong("Automatic whole-path stroke");
             egui::ComboBox::from_id_salt("path_brush").selected_text(&document.brushes()[*selected_brush].name)
@@ -137,7 +159,9 @@ pub(crate) fn show(
                         ui.selectable_value(&mut editor.tool,PathTool::Ring,"Ring");
                     });
                 });
-                ui.weak(if editor.tool==PathTool::Ring {
+                ui.weak(if editor.tool==PathTool::Whole {
+                    "Transform the whole draft with its gizmo or numeric controls. Save path commits one undo step; Esc cancels a drag."
+                } else if editor.tool==PathTool::Ring {
                     "One press creates the whole ring. Drag to position it; Esc restores the previous draft."
                 } else if path.mode==PathMode::Surface {
                     "Click or drag on the surface. Right-drag to orbit and continue around the model."
@@ -214,7 +238,7 @@ pub(crate) fn show(
         }
         ui.separator();
         if ui.button("Done").clicked() { commands.push(Command::Path(PathCommand::Close)); }
-        ui.weak("Done discards unsaved edits. Esc cancels an active point, corner or ring drag or brush preview.");
+        ui.weak("Done discards unsaved edits. Esc cancels an active point, corner, ring or transform drag or brush preview.");
     });
     if !open {
         commands.push(Command::Path(PathCommand::Close));
