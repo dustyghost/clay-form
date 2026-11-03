@@ -4,7 +4,9 @@ struct Harness {
     state: UiState,
     document: Document,
     ctx: egui::Context,
+    size: Vec2,
     output: Option<egui::FullOutput>,
+    #[cfg(target_os = "linux")]
     capture: Option<crate::viewport::UiCapture>,
 }
 impl Harness {
@@ -15,7 +17,9 @@ impl Harness {
             state: UiState::default(),
             document: Document::default(),
             ctx,
+            size: Vec2::new(900., 600.),
             output: None,
+            #[cfg(target_os = "linux")]
             capture: None,
         }
     }
@@ -23,14 +27,7 @@ impl Harness {
         design::appearance(&self.ctx, &self.state.preferences.appearance);
         let out = self.ctx.run(
             egui::RawInput {
-                screen_rect: Some(Rect::from_min_size(
-                    Pos2::ZERO,
-                    if self.capture.is_some() {
-                        Vec2::new(480., 330.)
-                    } else {
-                        Vec2::new(900., 600.)
-                    },
-                )),
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, self.size)),
                 events,
                 ..Default::default()
             },
@@ -49,6 +46,7 @@ impl Harness {
                 self.state.settings(ctx, &self.document);
             },
         );
+        #[cfg(target_os = "linux")]
         if let Some(capture) = &mut self.capture {
             let pixels = capture.render(&self.ctx, out.clone());
             capture.save(
@@ -125,10 +123,12 @@ fn mesh_capacity_settings_open_edit_and_reset_without_changing_active_limits() {
     h.click("Reset mesh limits");
     assert_eq!(h.state.preferences.mesh_capacity, MeshCapacity::DEFAULT);
 }
+#[cfg(target_os = "linux")]
 #[test]
 #[ignore = "manual GPU capture of the mesh capacity settings"]
 fn gpu_mesh_capacity_settings_capture() {
     let mut h = Harness::new();
+    h.size = Vec2::new(480., 330.);
     h.capture = Some(crate::viewport::UiCapture::new([480, 330]));
     h.frame(vec![]);
     h.frame(vec![]);
