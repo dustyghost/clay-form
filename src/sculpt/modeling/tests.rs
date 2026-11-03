@@ -1267,6 +1267,93 @@ fn modeling_fuse_skips_a_partial_loop_between_notches_to_join_the_opposite_face(
 }
 
 #[test]
+fn modeling_fuse_joins_a_cap_bordered_by_touching_tunnels() {
+    let mut mesh = cube(3);
+    let midpoint = Vec3(0., 1., 1.);
+    let ridge = mesh
+        .polygon_edges()
+        .into_iter()
+        .find(|&[a, b]| ((mesh.vertices[a] + mesh.vertices[b]) * 0.5 - midpoint).len() < 1e-5)
+        .unwrap();
+    let symmetry = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    mesh = mesh
+        .cell_notch(ridge)
+        .unwrap()
+        .apply(&mesh, true, &symmetry)
+        .unwrap()
+        .0;
+    let contact = ExtrudeContact {
+        join: true,
+        loops: true,
+        snap: 0.04,
+    };
+    let face_at = |mesh: &Mesh, center: Vec3| {
+        mesh.quads
+            .iter()
+            .position(|q| {
+                (q.iter()
+                    .fold(Vec3::default(), |sum, &v| sum + mesh.vertices[v])
+                    * 0.25
+                    - center)
+                    .len()
+                    < 1e-5
+            })
+            .unwrap()
+    };
+    // Successive tunnels leave separate sheets touching along the inner grid edges.
+    for center in [
+        Vec3(2. / 3., 0., 1.),
+        Vec3(-2. / 3., 0., 1.),
+        Vec3(0., -2. / 3., 1.),
+        Vec3(0., 2. / 3., 1. / 3.),
+    ] {
+        let face = face_at(&mesh, center);
+        let result = mesh.extrude_contact(&[face], -2., contact).unwrap();
+        assert!(result.joined, "setup tunnel at {center:?}");
+        mesh = result.mesh;
+    }
+    let volume = |m: &Mesh| {
+        m.triangles
+            .iter()
+            .map(|&[a, b, c]| m.vertices[a].dot(m.vertices[b].cross(m.vertices[c])) / 6.)
+            .sum::<f32>()
+    };
+    for y in [1., 1. / 3.] {
+        let face = face_at(&mesh, Vec3(2. / 3., y, 0.));
+        let result = mesh.extrude_contact(&[face], -0.67, contact).unwrap();
+        assert!(result.joined && !result.collapsed);
+        assert!((result.distance + 2. / 3.).abs() < 1e-5);
+        result.mesh.validate_closed().unwrap();
+        assert_eq!(result.mesh.quads.len() + 2, mesh.quads.len());
+        assert!((volume(&mesh) - volume(&result.mesh) - 8. / 27.).abs() < 1e-5);
+    }
+}
+
+#[test]
+fn modeling_fuse_does_not_choose_between_two_coincident_caps() {
+    let original = cube(3);
+    let mut mesh = original.clone();
+    let front = front_center(&mesh);
+    let back = mesh
+        .quads
+        .iter()
+        .find(|q| {
+            q.iter().all(|&v| {
+                mesh.vertices[v].2 == -1.
+                    && mesh.vertices[v].0.abs() < 0.5
+                    && mesh.vertices[v].1.abs() < 0.5
+            })
+        })
+        .unwrap();
+    let duplicate = (*back).map(|v| mesh.append_blend(&original, &[(v, 1.)], original.vertices[v]));
+    mesh.polygroups.resize(mesh.triangles.len(), 0);
+    mesh.hidden_faces.resize(mesh.triangles.len(), false);
+    mesh.push_polygon(&duplicate, 0, false);
+    let result = mesh.extrude_faces(&[front], -2., true).unwrap();
+    assert!(!result.joined);
+}
+
+#[test]
 fn modeling_fuse_region_caps_join_without_internal_walls() {
     let mesh = slab();
     let faces = [front_at(&mesh, -0.25, -0.25), front_at(&mesh, 0.25, -0.25)];

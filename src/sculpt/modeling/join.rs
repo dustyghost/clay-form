@@ -1,12 +1,14 @@
 //! Cancel the existing side patches swept by a matching-face join. A patch may
 //! contain many depth loops; its boundary must tile the whole swept wall exactly.
 use super::*;
+mod seam;
 
 type Wall = ([usize; 4], usize);
 type Chain = Vec<(f32, usize)>;
 pub(super) struct JoinedWalls {
     pub remove: BTreeSet<usize>,
     pub walls: Vec<(Vec<usize>, usize)>,
+    pub seam: BTreeMap<usize, usize>,
 }
 
 fn segment_parameter(p: Vec3, a: Vec3, b: Vec3, tolerance: f32) -> Option<f32> {
@@ -58,6 +60,7 @@ impl Mesh {
         polygons: &[Polygon],
         sides: &[Wall],
         excluded: &BTreeSet<usize>,
+        cap_join: bool,
         out: &mut Mesh,
     ) -> Result<JoinedWalls, String> {
         let mut incidence = BTreeMap::<_, Vec<usize>>::new();
@@ -71,6 +74,7 @@ impl Mesh {
         let mut result = JoinedWalls {
             remove: BTreeSet::new(),
             walls: Vec::new(),
+            seam: BTreeMap::new(),
         };
         let mut cancelled = BTreeSet::new();
         let mut chains = BTreeMap::<usize, Chain>::new();
@@ -110,6 +114,15 @@ impl Mesh {
                         .any(|&vertex| !inside(self.vertices[vertex]))
             }) {
                 return Err("The adjoining side extends beyond this join; split its boundary before extruding through".into());
+            }
+            if cap_join {
+                pending.extend(
+                    incidence
+                        .get(&edge(wall[2], aa))
+                        .into_iter()
+                        .flatten()
+                        .copied(),
+                );
             }
             while let Some(i) = pending.pop() {
                 if patch.contains(&i) {
@@ -155,7 +168,22 @@ impl Mesh {
                         self.vertices[target],
                         tolerance,
                     ) {
-                        chains.get_mut(&source).unwrap().push((t, vertex));
+                        let endpoint = if t <= 1e-6 {
+                            source
+                        } else if t >= 1. - 1e-6 {
+                            target
+                        } else {
+                            vertex
+                        };
+                        if endpoint != vertex
+                            && result
+                                .seam
+                                .insert(vertex, endpoint)
+                                .is_some_and(|old| old != endpoint)
+                        {
+                            return Err("The adjoining walls disagree on a tunnel corner".into());
+                        }
+                        chains.get_mut(&source).unwrap().push((t, endpoint));
                     }
                 }
                 fixed.insert(source);

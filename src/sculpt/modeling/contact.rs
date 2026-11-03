@@ -16,7 +16,7 @@ pub(super) struct ContactRegion<'a> {
     pub snap: f32,
 }
 
-/// Contact correspondence must be unique; coincident islands are not a Boolean join.
+/// Find vertices at a translated corner, including distinct sheets sharing a position.
 struct Positions<'a> {
     mesh: &'a Mesh,
     tolerance: f32,
@@ -41,6 +41,28 @@ impl<'a> Positions<'a> {
             (p.2 / self.tolerance).floor() as i64,
         )
     }
+    fn candidates(&self, v: usize, region: &ContactRegion<'_>, depth: f32) -> Vec<usize> {
+        let target = self.mesh.vertices[v] + region.direction * depth;
+        let (x, y, z) = self.bucket(target);
+        let mut found = Vec::new();
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                for dz in -1..=1 {
+                    if let Some(indices) = self.bins.get(&(
+                        x.saturating_add(dx),
+                        y.saturating_add(dy),
+                        z.saturating_add(dz),
+                    )) {
+                        found.extend(indices.iter().copied().filter(|w| {
+                            !region.vertices.contains(w)
+                                && (self.mesh.vertices[*w] - target).len() <= self.tolerance
+                        }));
+                    }
+                }
+            }
+        }
+        found
+    }
     fn translated(
         &self,
         vertices: &BTreeSet<usize>,
@@ -50,38 +72,50 @@ impl<'a> Positions<'a> {
         let mut mapping = BTreeMap::new();
         let mut used = BTreeSet::new();
         for &v in vertices {
-            let target = self.mesh.vertices[v] + region.direction * depth;
-            let (x, y, z) = self.bucket(target);
-            let mut found = None;
-            for dx in -1..=1 {
-                for dy in -1..=1 {
-                    for dz in -1..=1 {
-                        if let Some(indices) = self.bins.get(&(
-                            x.saturating_add(dx),
-                            y.saturating_add(dy),
-                            z.saturating_add(dz),
-                        )) {
-                            for &w in indices {
-                                if !region.vertices.contains(&w)
-                                    && (self.mesh.vertices[w] - target).len() <= self.tolerance
-                                {
-                                    if found.is_some() {
-                                        return None;
-                                    }
-                                    found = Some(w);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            let w = found?;
+            let candidates = self.candidates(v, region, depth);
+            let &[w] = candidates.as_slice() else {
+                return None;
+            };
             if !used.insert(w) {
                 return None;
             }
             mapping.insert(v, w);
         }
         Some(mapping)
+    }
+
+    // A cap identifies its own corners by their reversed polygon cycle. A lone
+    // coincident vertex on another sheet is not a second matching polygon.
+    fn matching_face(
+        &self,
+        source: &Polygon,
+        region: &ContactRegion<'_>,
+        depth: f32,
+        incident: &[Vec<(usize, usize)>],
+    ) -> Option<(usize, Vec<usize>)> {
+        let offset = region.direction * depth;
+        let mut found = None;
+        for v in self.candidates(source.vertices[0], region, depth) {
+            for &(f, start) in &incident[v] {
+                let face = &region.polygons[f];
+                let n = face.vertices.len();
+                if n != source.vertices.len() {
+                    continue;
+                }
+                let cycle = (0..n).map(|i| face.vertices[(start + n - i) % n]);
+                if source.vertices.iter().zip(cycle.clone()).all(|(&a, b)| {
+                    !region.vertices.contains(&b)
+                        && (self.mesh.vertices[a] + offset - self.mesh.vertices[b]).len()
+                            <= self.tolerance
+                }) {
+                    if found.is_some() {
+                        return None;
+                    }
+                    found = Some((f, cycle.collect()));
+                }
+            }
+        }
+        found
     }
 }
 impl ContactRegion<'_> {
@@ -135,46 +169,33 @@ impl Mesh {
         size: f32,
     ) -> Option<ContactTarget> {
         let positions = Positions::new(self, (size * 1e-4).max(1e-7));
-        let faces: BTreeMap<_, _> = region
-            .polygons
-            .iter()
-            .enumerate()
-            .map(|(i, p)| {
-                let mut key = p.vertices.clone();
-                key.sort_unstable();
-                (key, i)
-            })
-            .collect();
-        for depth in region.depths(self, size) {
-            let Some(mapping) = positions.translated(region.vertices, region, depth) else {
-                continue;
-            };
-            let mut caps = BTreeSet::new();
-            for &f in region.selected {
-                let cycle: Vec<_> = region.polygons[f]
-                    .vertices
-                    .iter()
-                    .map(|v| mapping[v])
-                    .collect();
-                let mut key = cycle.clone();
-                key.sort_unstable();
-                let Some(&i) = faces.get(&key) else {
-                    break;
-                };
-                let p = &region.polygons[i];
-                if region.selected.contains(&i)
-                    || normal(self, p).dot(region.direction) > -0.9999
-                    || !(0..cycle.len()).any(|shift| {
-                        (0..cycle.len()).all(|k| {
-                            cycle[k] == p.vertices[(shift + cycle.len() - k) % cycle.len()]
-                        })
-                    })
-                {
-                    break;
+        let mut incident = vec![Vec::new(); self.vertices.len()];
+        for (f, p) in region.polygons.iter().enumerate() {
+            if normal(self, p).dot(region.direction) <= -0.9999 && !region.selected.contains(&f) {
+                for (corner, &v) in p.vertices.iter().enumerate() {
+                    incident[v].push((f, corner));
                 }
-                caps.insert(i);
             }
-            if caps.len() == region.selected.len() {
+        }
+        'depths: for depth in region.depths(self, size) {
+            let mut caps = BTreeSet::new();
+            let mut mapping = BTreeMap::new();
+            for &f in region.selected {
+                let source = &region.polygons[f];
+                let Some((cap, cycle)) = positions.matching_face(source, region, depth, &incident)
+                else {
+                    continue 'depths;
+                };
+                if !caps.insert(cap) {
+                    continue 'depths;
+                }
+                for (&v, w) in source.vertices.iter().zip(cycle) {
+                    if mapping.insert(v, w).is_some_and(|old| old != w) {
+                        continue 'depths;
+                    }
+                }
+            }
+            if mapping.values().collect::<BTreeSet<_>>().len() == mapping.len() {
                 return Some(ContactTarget {
                     caps,
                     depth,
@@ -227,7 +248,8 @@ impl Mesh {
                 .map(|&(a, b, g)| ([a, b, mapping[&b], mapping[&a]], g))
                 .collect();
             let mut out = self.empty_topology();
-            let walls = self.joined_walls(region.polygons, &sides, region.selected, &mut out)?;
+            let walls =
+                self.joined_walls(region.polygons, &sides, region.selected, false, &mut out)?;
             // A corner from a nearby notch can line up with the moved rim without
             // belonging to any swept wall. Welding it would pinch the two surfaces.
             let attached: BTreeSet<_> = walls
@@ -235,7 +257,7 @@ impl Mesh {
                 .iter()
                 .flat_map(|&f| region.polygons[f].vertices.iter().copied())
                 .collect();
-            if mapping.values().all(|v| attached.contains(v)) {
+            if walls.seam.is_empty() && mapping.values().all(|v| attached.contains(v)) {
                 return Ok(Some(ContactTarget {
                     caps: BTreeSet::new(),
                     depth,

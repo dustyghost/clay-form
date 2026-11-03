@@ -233,7 +233,7 @@ impl Mesh {
             .collect();
         let joined_walls = if !removed.is_empty() || collapsed {
             let excluded = selected.iter().chain(&removed).copied().collect();
-            Some(self.joined_walls(&polygons, &sides, &excluded, &mut out)?)
+            Some(self.joined_walls(&polygons, &sides, &excluded, !removed.is_empty(), &mut out)?)
         } else {
             None
         };
@@ -257,9 +257,9 @@ impl Mesh {
                 out.push_polygon(&p.vertices, p.group, p.hidden);
             }
         }
-        if let Some(walls) = joined_walls {
-            for (vertices, group) in walls.walls {
-                out.push_polygon(&vertices, group, false);
+        if let Some(walls) = &joined_walls {
+            for (vertices, group) in &walls.walls {
+                out.push_polygon(vertices, *group, false);
             }
         } else {
             for (vertices, group) in sides {
@@ -275,6 +275,11 @@ impl Mesh {
                 .iter()
                 .filter_map(|[a, b]| Some(edge(*mapping.get(a)?, *mapping.get(b)?))),
         );
+        if let Some(walls) = joined_walls
+            && !walls.seam.is_empty()
+        {
+            out.stitch_join_seam(&walls.seam, &polygons)?;
+        }
         out.retain_creases();
         manifold(&out)?;
         // Remove unused interior vertices after region extrusion, including group weights.
