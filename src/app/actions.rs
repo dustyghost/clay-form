@@ -194,9 +194,10 @@ impl App {
                     self.dispatch(Command::ModelingMode(true), ctx);
                 }
                 self.viewport.cancel(&mut self.document);
-                if let Some(mode) = tool.required_mode()
-                    && self.ui.modeling.mode != mode
-                {
+                if !tool.supports_mode(self.ui.modeling.mode) {
+                    let mode = tool
+                        .required_mode()
+                        .unwrap_or(crate::viewport::ComponentMode::Face);
                     self.dispatch(Command::ModelingComponent(mode), ctx);
                 }
                 self.ui.modeling.set_tool(tool);

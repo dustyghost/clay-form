@@ -325,7 +325,9 @@ impl App {
             && !ui.ctx().wants_keyboard_input()
             && ui.input(|i| i.key_pressed(egui::Key::Escape))
         {
-            if !self.viewport.modeling.dragging() {
+            if !self.viewport.modeling.dragging()
+                && self.viewport.modeling.fuse_contact_preview().is_none()
+            {
                 self.ui.modeling.active = false;
             }
             self.viewport.cancel(&mut self.document);

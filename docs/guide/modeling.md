@@ -234,6 +234,19 @@ A free or gizmo drag remembers its direction and amount. **Apply amount** reuses
 
 Transform modes, directions and amounts save in presets; older presets retain Axis / amount behavior. Right-click Free, Gizmo or Axis / amount to add it to a custom menu or shelf, or assign a shortcut.
 
+### Cut a one-cell notch
+
+Choose **Cut one cell** in Face or Edge mode. Press a component to preview the full cut. Release to apply it in one Undo step, or press **Esc** while holding to cancel. For a preselected face or edge, use **Apply to selection**. Symmetry cuts matching cells together.
+
+- **Face.** Press a rectangular grid square. Its floor moves inward by one grid layer. A middle square makes a four-walled recess. At an edge or corner, the recess opens onto the adjacent sides.
+- **Edge.** On a **3 × 3 × 3** cube, press the middle segment of the top-front ridge. The cut exposes a floor, a back wall and two side walls.
+
+![Cut one cell preview with the new floor outlined in gold](../images/modeling-cut-one-cell-preview.png)
+
+![One-cell notch cut from a ridge edge](../images/modeling-cell-notch.png)
+
+**Move** translates the selected components freely. Use **Extrude and fuse** to reach a matching loop or face at a distance.
+
 ### Extrude a face or flat region
 
 1. Choose **Face → Extrude**.
@@ -264,6 +277,10 @@ The highlighted rim stays on the dragged face even as the pen moves across other
 Inset and bevel retain the cap selection for the next operation. New faces inherit their source region's face label; surviving weights and creases are retained.
 
 **Extrude and fuse** pushes selected flat face regions inward. Select nonadjacent faces with **Add** (or Shift); adjacent faces stay together as one region, and separate regions move independently. Each region stops at its first compatible intermediate loop, removes the swept exterior strips and retains the moved cap. Internal edges between selected faces do not create walls. **Join matching faces** separately permits opening a tunnel when the opposite cap has the same face layout. Dragging farther keeps the preview at the first compatible contact; release or **Apply amount** commits the same result in one Undo step.
+
+Drag to preview a fuse, or select faces, enter **Distance**, and click **Preview**. Gold outlines the target face or edge loop. Coral shows the side walls that will be removed. Check the preview before releasing the drag or choosing **Apply amount**. **Esc** dismisses the preview. After changing the distance or join settings, click **Preview** again.
+
+![Fuse preview with the opposite face in gold and the removed side walls in coral](../images/modeling-fuse-contact-preview.png)
 
 **Snap range** is a fraction of the local edge length, independent of sculpt brush size. Compatibility requires aligned corners and complete adjoining side strips; this does not cut arbitrary intersecting surfaces. Before a compatible contact is reached, the tool extrudes freely and reports that no fusion occurred. Unmatched or differently tessellated targets are not fused.
 

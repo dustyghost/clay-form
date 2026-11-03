@@ -79,6 +79,12 @@ impl App {
                         }
                     })
             }
+            Command::ModelPreviewFuse => {
+                self.viewport.cancel(&mut self.document);
+                self.viewport
+                    .modeling
+                    .preview_fuse_amount(&self.document, self.ui.modeling.options())
+            }
             Command::ModelApply => {
                 self.viewport.cancel(&mut self.document);
                 let options = self.ui.modeling.options();

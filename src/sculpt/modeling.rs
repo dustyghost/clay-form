@@ -13,6 +13,7 @@ pub use construction::Construction;
 mod dissolve;
 mod join;
 mod loops;
+mod notch;
 mod selection;
 mod symmetry;
 mod topology;
@@ -28,6 +29,14 @@ pub struct ExtrudeContact {
     pub loops: bool,
     pub snap: f32,
 }
+/// Source-space polygons remain identifiable after a join compacts the mesh.
+#[derive(Default)]
+pub(crate) struct FusePreview {
+    pub targets: Vec<Vec<Vec3>>,
+    pub walls: Vec<Vec<Vec3>>,
+    pub loop_edges: Vec<[Vec3; 2]>,
+}
+
 pub struct Extrusion {
     pub mesh: Mesh,
     pub distance: f32,
@@ -38,6 +47,7 @@ pub struct Extrusion {
     /// Regions moved different distances; `distance` retains the requested amount.
     pub varying_distance: bool,
     pub rim: Vec<[Vec3; 2]>,
+    pub(crate) preview: FusePreview,
 }
 
 fn normal(mesh: &Mesh, polygon: &Polygon) -> Vec3 {
@@ -148,6 +158,7 @@ impl Mesh {
                 partial_contact: false,
                 varying_distance: false,
                 rim: Vec::new(),
+                preview: FusePreview::default(),
             });
         }
         manifold(self)?;
@@ -231,7 +242,7 @@ impl Mesh {
             .collect();
         let joined_walls = if !removed.is_empty() || collapsed {
             let excluded = selected.iter().chain(&removed).copied().collect();
-            Some(self.joined_walls(&polygons, &sides, &excluded, &mut out)?)
+            Some(self.joined_walls(&polygons, &sides, &excluded, !removed.is_empty(), &mut out)?)
         } else {
             None
         };
@@ -255,9 +266,9 @@ impl Mesh {
                 out.push_polygon(&p.vertices, p.group, p.hidden);
             }
         }
-        if let Some(walls) = joined_walls {
-            for (vertices, group) in walls.walls {
-                out.push_polygon(&vertices, group, false);
+        if let Some(walls) = &joined_walls {
+            for (vertices, group) in &walls.walls {
+                out.push_polygon(vertices, *group, false);
             }
         } else {
             for (vertices, group) in sides {
@@ -273,13 +284,35 @@ impl Mesh {
                 .iter()
                 .filter_map(|[a, b]| Some(edge(*mapping.get(a)?, *mapping.get(b)?))),
         );
+        let mut preview = FusePreview::default();
+        if contact.loops
+            && let Some(walls) = &joined_walls
+        {
+            let positions = |&f: &usize| {
+                polygons[f]
+                    .vertices
+                    .iter()
+                    .map(|&v| self.vertices[v])
+                    .collect()
+            };
+            preview.targets = removed.iter().map(positions).collect();
+            preview.walls = walls.remove.iter().map(positions).collect();
+        }
+        if let Some(walls) = joined_walls
+            && !walls.seam.is_empty()
+        {
+            out.stitch_join_seam(&walls.seam, &polygons)?;
+        }
         out.retain_creases();
         manifold(&out)?;
         // Remove unused interior vertices after region extrusion, including group weights.
-        let rim = boundary
+        let rim: Vec<_> = boundary
             .values()
             .map(|&(a, b, _)| [out.vertices[mapping[&a]], out.vertices[mapping[&b]]])
             .collect();
+        if collapsed {
+            preview.loop_edges.clone_from(&rim);
+        }
         out.compact_model_vertices();
         Ok(Extrusion {
             mesh: out,
@@ -289,6 +322,7 @@ impl Mesh {
             partial_contact: false,
             varying_distance: false,
             rim,
+            preview,
         })
     }
 
