@@ -63,7 +63,7 @@ impl UiState {
             label,
             (menu == BuiltinMenu::Symmetry && document.symmetry().enabled)
                 || (menu == BuiltinMenu::Modeling && self.modeling.active),
-            menu == BuiltinMenu::Modeling,
+            matches!(menu, BuiltinMenu::Modeling | BuiltinMenu::Brushes),
             |ui| {
                 ui.set_min_width(280.);
                 self.menu_placement_controls(ui, menu, false);
@@ -134,7 +134,7 @@ impl UiState {
             let mut open = true;
             let mut unpin = false;
             let enabled = self.pending.is_none()
-                && self.primitive_warning.is_none()
+                && !self.submodel_confirmation_open()
                 && !self.icon_capture_open()
                 && !self.recovery_open
                 && !self.about_open
@@ -227,6 +227,49 @@ impl UiState {
             BuiltinMenu::Modeling => self.modeling_function_menu(ui, document, commands, popup),
             BuiltinMenu::References => self.reference_controls(ui, document, commands),
             BuiltinMenu::Brushes => {
+                let object = Action::NewBrush("Object".into());
+                if ui
+                    .button("Object brush")
+                    .customize(object.clone())
+                    .clicked()
+                {
+                    commands.push(Command::Action(object));
+                    if popup {
+                        ui.close_kind(egui::UiKind::Menu);
+                    }
+                }
+                let saved = ui.collapsing("Saved object brushes", |ui| {
+                    if !self.instances.saved_brushes_listed {
+                        commands.push(Command::Instances(
+                            crate::command::InstanceCommand::ListPersonalBrushes,
+                        ));
+                    }
+                    if self.instances.personal_brushes.is_empty() {
+                        ui.weak("No saved object brushes.");
+                    }
+                    for name in &self.instances.personal_brushes {
+                        if ui.button(name).clicked() {
+                            let command = document
+                                .instances()
+                                .brushes
+                                .iter()
+                                .find(|b| b.name == *name)
+                                .map_or_else(
+                                    || {
+                                        crate::command::InstanceCommand::LoadPersonalBrush(
+                                            name.clone(),
+                                        )
+                                    },
+                                    |b| crate::command::InstanceCommand::ChooseBrush(b.id),
+                                );
+                            commands.push(Command::Instances(command));
+                            if popup {
+                                ui.close_kind(egui::UiKind::Menu);
+                            }
+                        }
+                    }
+                });
+                self.instances.saved_brushes_listed = saved.body_returned.is_some();
                 if ui
                     .button("Alpha Drag")
                     .customize(Action::NewBrush("Alpha Drag".into()))
@@ -572,6 +615,11 @@ impl UiState {
                 ui.separator();
                 ui.collapsing("Lighting", |ui| self.preferences.lighting.controls(ui));
                 ui.separator();
+                design::checkbox(ui, &mut self.flat_shading, "Flat shading")
+                    .customize(Action::FlatShading)
+                    .on_hover_text(
+                        "Light each triangle using its face normal. Turn off for smooth shading.",
+                    );
                 design::checkbox(ui, &mut self.show_polygroups, "Show vertex group colors")
                     .customize(Action::PolygroupColors);
                 design::checkbox(ui, &mut self.show_backfaces, "Faint back-facing surfaces").customize(Action::Backfaces).on_hover_text("Show the reverse side of open surfaces translucently. Front-facing surfaces stay solid.");

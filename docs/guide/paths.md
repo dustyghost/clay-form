@@ -4,6 +4,8 @@
 
 Use **Mesh → Editable paths** to draw a reusable guide, edit it while orbiting, and guide your brush as you sculpt on the model. Paths belong to a submodel and save with the project. They are separate from [mesh edge-loop selections](edges.md).
 
+Saved paths also drive [assemblies of reusable models](instances.md#assemble-pieces-along-a-path), with repeating middle pieces and optional start/end caps.
+
 ## Draw and edit a path
 
 1. Select the submodel, open **Mesh → Editable paths**, and choose **New surface path** or **New free path**.
@@ -15,6 +17,16 @@ Use **Mesh → Editable paths** to draw a reusable guide, edit it while orbiting
 A free path can leave the surface and is useful as a spatial guide. Save it, then choose **Attach saved path to surface** before using it as a brush route. Surface paths retain their world-space positions as you move the camera. Rear-facing surface segments appear dim and dashed; orbit until their points face the camera before selecting or moving them.
 
 **Add / draw** keeps dense guides readable by showing only the start, open endpoint, selected point, and the point under the pointer. Choose **Move points** or **Insert point** to show every editable control-point handle. These handles are not brush dabs or mesh vertices.
+
+## Move, rotate and scale the whole path
+
+Choose **Transform whole path** in Editable paths. **Move path** provides a centre handle for movement in the view plane and coloured world-axis handles. **Rotate path** uses the same projected rotation rings as mesh transforms, including an outer ring for rotation around the view. **Scale path** has a square handle for uniform scaling. Choose **Centre**, **Start** or **Origin** as the pivot. Numeric values and **Apply transform to draft** provide precise offsets, rotation angles and scale factors.
+
+The route remains a private draft: **Save path** commits it and updates its linked assemblies in one undo step. **Escape** during a drag restores the previous draft; **Discard edits** restores the saved path. Camera navigation remains available. **Edit points** returns to the ordinary point editor.
+
+**Scale linked sections** is enabled by default. Saving a scaled path also scales the linked assemblies' cross-sections, active fixed spacing, join distance and individual offsets, preserving the assembly's overall proportions and nearby joins. Disable it to resize only the route while keeping section sizes and spacing unchanged. Source meshes stay unchanged. Thickness profiles retain their relative positions along the route.
+
+Surface paths must first use **Detach from surface** for free transforms. Detaching a saved path preserves its current world-space route and is independently undoable. After transforming, **Attach saved path to surface** can reproject it explicitly. Free paths can be edited and transformed while their original target model is hidden.
 
 ## Round individual corners
 

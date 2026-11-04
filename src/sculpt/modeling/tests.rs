@@ -746,6 +746,9 @@ fn modeling_fuse_stops_at_intermediate_slab_loop() {
     assert!(result.collapsed);
     assert!(!result.joined);
     assert!((result.distance + 0.5).abs() < 1e-5);
+    assert!(result.preview.targets.is_empty());
+    assert_eq!(result.preview.loop_edges, result.rim);
+    assert!(!result.preview.walls.is_empty());
     manifold(&result.mesh).unwrap();
     assert!(result.mesh.polygons().len() < mesh.polygons().len() + 4);
     assert!(!mesh.extrude_faces(&[f], -0.8, true).unwrap().joined);
@@ -1215,6 +1218,205 @@ fn modeling_fuse_connected_region_stops_at_intermediate_slab_loop() {
 }
 
 #[test]
+fn modeling_fuse_skips_a_partial_loop_between_notches_to_join_the_opposite_face() {
+    let mut mesh = cube(3);
+    // Two notches beside the selected face leave vertices at the first depth,
+    // while the notch on the opposite side supplies the actual matching cap.
+    for midpoint in [Vec3(1., -1., 0.), Vec3(1., 1., 0.), Vec3(-1., 0., 1.)] {
+        let ridge = mesh
+            .polygon_edges()
+            .into_iter()
+            .find(|&[a, b]| ((mesh.vertices[a] + mesh.vertices[b]) * 0.5 - midpoint).len() < 1e-5)
+            .unwrap();
+        let symmetry = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+        mesh = mesh
+            .cell_notch(ridge)
+            .unwrap()
+            .apply(&mesh, true, &symmetry)
+            .unwrap()
+            .0;
+    }
+    let source = mesh
+        .quads
+        .iter()
+        .position(|q| {
+            let center = q
+                .iter()
+                .fold(Vec3::default(), |sum, &v| sum + mesh.vertices[v])
+                * 0.25;
+            (center - Vec3(1., 0., 2. / 3.)).len() < 1e-5
+        })
+        .unwrap();
+    let symmetry = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    let contact = ExtrudeContact {
+        join: true,
+        loops: true,
+        snap: 0.04,
+    };
+    let halfway = mesh
+        .extrude_symmetric_contact(&[source], -2. / 3., contact, &symmetry)
+        .unwrap();
+    assert!(!halfway.joined && !halfway.collapsed);
+    let fused = mesh
+        .extrude_symmetric_contact(&[source], -2., contact, &symmetry)
+        .unwrap();
+    assert!(fused.joined && !fused.collapsed);
+    assert!((fused.distance + 4. / 3.).abs() < 1e-5);
+    assert_eq!(
+        fused.mesh,
+        mesh.extrude_faces(&[source], -2., true).unwrap().mesh
+    );
+    fused.mesh.validate_closed().unwrap();
+}
+
+fn face_at(mesh: &Mesh, center: Vec3) -> usize {
+    mesh.quads
+        .iter()
+        .position(|q| {
+            let midpoint = q
+                .iter()
+                .fold(Vec3::default(), |sum, &v| sum + mesh.vertices[v])
+                * 0.25;
+            (midpoint - center).len() < 1e-5
+        })
+        .unwrap()
+}
+
+#[test]
+fn modeling_fuse_joins_a_cap_bordered_by_touching_tunnels() {
+    let mut mesh = cube(3);
+    let midpoint = Vec3(0., 1., 1.);
+    let ridge = mesh
+        .polygon_edges()
+        .into_iter()
+        .find(|&[a, b]| ((mesh.vertices[a] + mesh.vertices[b]) * 0.5 - midpoint).len() < 1e-5)
+        .unwrap();
+    let symmetry = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    mesh = mesh
+        .cell_notch(ridge)
+        .unwrap()
+        .apply(&mesh, true, &symmetry)
+        .unwrap()
+        .0;
+    let contact = ExtrudeContact {
+        join: true,
+        loops: true,
+        snap: 0.04,
+    };
+    // Successive tunnels leave separate sheets touching along the inner grid edges.
+    for center in [
+        Vec3(2. / 3., 0., 1.),
+        Vec3(-2. / 3., 0., 1.),
+        Vec3(0., -2. / 3., 1.),
+        Vec3(0., 2. / 3., 1. / 3.),
+    ] {
+        let face = face_at(&mesh, center);
+        let result = mesh.extrude_contact(&[face], -2., contact).unwrap();
+        assert!(result.joined, "setup tunnel at {center:?}");
+        mesh = result.mesh;
+    }
+    let volume = |m: &Mesh| {
+        m.triangles
+            .iter()
+            .map(|&[a, b, c]| m.vertices[a].dot(m.vertices[b].cross(m.vertices[c])) / 6.)
+            .sum::<f32>()
+    };
+    for y in [1., 1. / 3.] {
+        let face = face_at(&mesh, Vec3(2. / 3., y, 0.));
+        let result = mesh.extrude_contact(&[face], -0.67, contact).unwrap();
+        assert!(result.joined && !result.collapsed);
+        assert!((result.distance + 2. / 3.).abs() < 1e-5);
+        result.mesh.validate_closed().unwrap();
+        assert_eq!(result.mesh.quads.len() + 2, mesh.quads.len());
+        assert!((volume(&mesh) - volume(&result.mesh) - 8. / 27.).abs() < 1e-5);
+    }
+}
+
+#[test]
+fn modeling_fuse_removes_a_column_between_crossing_tunnels() {
+    let mut mesh = cube(3);
+    let contact = ExtrudeContact {
+        join: true,
+        loops: true,
+        snap: 0.04,
+    };
+    // Cut the four neighboring columns all the way through a three-span cube.
+    let step = 2. / 3.;
+    for (x, z) in [(-step, 0.), (0., step), (step, 0.), (0., -step)] {
+        let face = face_at(&mesh, Vec3(x, -1., z));
+        let cut = mesh.extrude_contact(&[face], -2., contact).unwrap();
+        assert!(cut.joined, "setup tunnel at ({x}, {z})");
+        mesh = cut.mesh;
+    }
+    for (x, z) in [
+        (-step, -step),
+        (0., 0.),
+        (step, step),
+        (-step, step),
+        (step, -step),
+    ] {
+        for y in [-1., 1.] {
+            let face = face_at(&mesh, Vec3(x, y, z));
+            let cut = mesh.extrude_contact(&[face], -2., contact).unwrap();
+            assert!(cut.joined && !cut.collapsed);
+            assert!((cut.distance + 2.).abs() < 1e-5);
+            cut.mesh.validate_closed().unwrap();
+            let points = |m: &Mesh, q: &[usize; 4]| {
+                q.map(|v| {
+                    let Vec3(a, b, c) = m.vertices[v];
+                    [a, b, c].map(|n| (n * 3.).round() as i32)
+                })
+            };
+            let expected: BTreeSet<_> = mesh
+                .quads
+                .iter()
+                .filter(|q| {
+                    !q.iter().all(|&v| {
+                        let p = mesh.vertices[v];
+                        (p.0 - x).abs() <= step * 0.5 + 1e-5 && (p.2 - z).abs() <= step * 0.5 + 1e-5
+                    })
+                })
+                .map(|q| points(&mesh, q))
+                .collect();
+            assert_eq!(expected.len(), mesh.quads.len() - 14);
+            assert_eq!(cut.mesh.quads.len(), expected.len());
+            assert_eq!(
+                cut.mesh
+                    .quads
+                    .iter()
+                    .map(|q| points(&cut.mesh, q))
+                    .collect::<BTreeSet<_>>(),
+                expected
+            );
+        }
+    }
+}
+
+#[test]
+fn modeling_fuse_does_not_choose_between_two_coincident_caps() {
+    let original = cube(3);
+    let mut mesh = original.clone();
+    let front = front_center(&mesh);
+    let back = mesh
+        .quads
+        .iter()
+        .find(|q| {
+            q.iter().all(|&v| {
+                mesh.vertices[v].2 == -1.
+                    && mesh.vertices[v].0.abs() < 0.5
+                    && mesh.vertices[v].1.abs() < 0.5
+            })
+        })
+        .unwrap();
+    let duplicate = (*back).map(|v| mesh.append_blend(&original, &[(v, 1.)], original.vertices[v]));
+    mesh.polygroups.resize(mesh.triangles.len(), 0);
+    mesh.hidden_faces.resize(mesh.triangles.len(), false);
+    mesh.push_polygon(&duplicate, 0, false);
+    let result = mesh.extrude_faces(&[front], -2., true).unwrap();
+    assert!(!result.joined);
+}
+
+#[test]
 fn modeling_fuse_region_caps_join_without_internal_walls() {
     let mesh = slab();
     let faces = [front_at(&mesh, -0.25, -0.25), front_at(&mesh, 0.25, -0.25)];
@@ -1573,4 +1775,238 @@ fn modeling_double_point_ring_has_eight_exact_radius_vertices_and_repeats() {
             .contains("Radius")
         );
     }
+}
+
+#[test]
+fn modeling_cell_notch_removes_one_cell_and_preserves_the_surrounding_grid() {
+    let mut mesh = cube(3);
+    let ridge = mesh
+        .polygon_edges()
+        .into_iter()
+        .find(|e| {
+            e.iter().all(|&v| {
+                let p = mesh.vertices[v];
+                p.1 == 1. && p.2 == 1. && p.0.abs() < 0.5
+            })
+        })
+        .unwrap();
+    mesh.creases = mesh.polygon_edges();
+    mesh.create_vertex_group("Ridge".into(), 0., true).unwrap();
+    let symmetry = ModelingSymmetry::new(&mesh, &mirror_x()).unwrap();
+    let cell = mesh.cell_notch(ridge).unwrap();
+    let delta = Vec3(0., -2. / 3., -2. / 3.);
+    assert!((cell.travel() - delta).len() < 1e-5);
+    let mut mirrored = mirror_x();
+    mirrored.mirror = [true, true, false];
+    let (both, _) = cell
+        .apply(
+            &mesh,
+            true,
+            &ModelingSymmetry::new(&mesh, &mirrored).unwrap(),
+        )
+        .unwrap();
+    both.validate_closed().unwrap();
+    assert_eq!(both.quads.len(), 58);
+    let (cut, _) = cell.apply(&mesh, true, &symmetry).unwrap();
+    cut.validate_closed().unwrap();
+    assert_eq!(cut.vertices.len(), mesh.vertices.len() + 2);
+    assert_eq!(cut.quads.len(), 56);
+    assert_eq!(cut.triangles.len(), cut.quads.len() * 2);
+    let mut original_quads = 0;
+    for (q, out) in mesh.quads.iter().zip(&cut.quads) {
+        if !ridge.iter().all(|v| q.contains(v)) {
+            assert_eq!(q.map(|i| mesh.vertices[i]), out.map(|i| cut.vertices[i]));
+            original_quads += 1;
+        }
+    }
+    assert_eq!(original_quads, 52);
+    let volume: f32 = cut
+        .triangles
+        .iter()
+        .map(|&[a, b, c]| cut.vertices[a].dot(cut.vertices[b].cross(cut.vertices[c])) / 6.)
+        .sum();
+    assert!((volume - 8. * 26. / 27.).abs() < 1e-5);
+    for &v in &ridge {
+        assert!((cut.vertices[v] - mesh.vertices[v] - delta).len() < 1e-5);
+    }
+    assert!(cut.creases.contains(&ridge));
+    assert!(cut.vertex_groups[0].weights.iter().all(|&w| w == 1.));
+
+    // The same local grid is recoverable if the user releases the edge partway in.
+    let partial = mesh
+        .transform_components(
+            &ridge,
+            Vec3(0., 1., 1.),
+            ComponentTransform::Move(delta * 0.35),
+            true,
+            &symmetry,
+        )
+        .unwrap();
+    let remaining = partial.cell_notch(ridge).unwrap();
+    assert!((remaining.travel() - delta * 0.65).len() < 1e-5);
+    let (completed, _) = remaining.apply(&partial, true, &symmetry).unwrap();
+    assert_eq!(completed.quads, cut.quads);
+    assert!(
+        completed
+            .vertices
+            .iter()
+            .zip(&cut.vertices)
+            .all(|(&a, &b)| (a - b).len() < 1e-5)
+    );
+
+    let affected = mesh
+        .quads
+        .iter()
+        .find(|q| ridge.iter().all(|v| q.contains(v)))
+        .unwrap();
+    let rim = *affected.iter().find(|v| !ridge.contains(v)).unwrap();
+    mesh.mask[rim] = 1.;
+    assert!(cell.apply(&mesh, true, &symmetry).is_err());
+    assert!(cell.apply(&mesh, false, &symmetry).is_ok());
+    mesh.hidden_faces = mesh
+        .triangles
+        .iter()
+        .map(|t| t.iter().all(|v| affected.contains(v)))
+        .collect();
+    assert!(cell.apply(&mesh, false, &symmetry).is_err());
+}
+
+#[test]
+fn modeling_cell_notch_rejects_contact_with_the_far_wall() {
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
+    primitive.divisions = [3, 3, 1];
+    let mesh = primitive.mesh().unwrap();
+    let ridge = mesh
+        .polygon_edges()
+        .into_iter()
+        .find(|e| {
+            e.iter().all(|&v| {
+                let p = mesh.vertices[v];
+                p.0.abs() < 0.5 && p.1 == 1. && p.2 == 1.
+            })
+        })
+        .unwrap();
+    let cell = mesh.cell_notch(ridge).unwrap();
+    let symmetry = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    assert!(
+        cell.apply(&mesh, true, &symmetry)
+            .unwrap_err()
+            .contains("occupies this grid cell")
+    );
+}
+
+#[test]
+fn face_cell_notch_preserves_every_square_outside_the_chosen_cell() {
+    let mesh = cube(3);
+    let symmetry = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    let surface = |mesh: &Mesh| {
+        mesh.quads
+            .iter()
+            .map(|q| {
+                let mut points = q.map(|v| {
+                    let Vec3(x, y, z) = mesh.vertices[v];
+                    [x, y, z].map(|p| {
+                        let grid = (p + 1.) * 1.5;
+                        assert!((grid - grid.round()).abs() < 1e-5);
+                        grid.round() as i32
+                    })
+                });
+                points.sort_unstable();
+                points
+            })
+            .collect::<BTreeSet<_>>()
+    };
+    let original = surface(&mesh);
+    for (f, q) in mesh.quads.iter().enumerate() {
+        let [a, b, c, _] = q.map(|v| mesh.vertices[v]);
+        let normal = (b - a).cross(c - a).norm();
+        let Vec3(x, y, z) = (a + c) * 0.5 - normal * (1. / 3.);
+        let voxel = [x, y, z].map(|p| ((p + 1.) * 1.5).floor() as i32);
+        let cell = mesh.face_cell_notch(f).unwrap();
+        let (cut, caps) = cell.apply(&mesh, true, &symmetry).unwrap();
+        cut.validate_closed().unwrap();
+        assert_eq!(cut.quads.len() * 2, cut.triangles.len());
+        for (old, new) in mesh.quads[f].iter().zip(cut.quads[caps[&f]]) {
+            assert!((cut.vertices[new] - mesh.vertices[*old] - cell.travel()).len() < 1e-5);
+        }
+        // Removing a voxel toggles exactly its six boundary squares.
+        let mut expected = original.clone();
+        for axis in 0..3 {
+            for side in [0, 1] {
+                let mut wall = [voxel; 4];
+                for (corner, p) in wall.iter_mut().enumerate() {
+                    p[axis] += side;
+                    p[(axis + 1) % 3] += (corner % 2) as i32;
+                    p[(axis + 2) % 3] += (corner / 2) as i32;
+                }
+                wall.sort_unstable();
+                if !expected.remove(&wall) {
+                    expected.insert(wall);
+                }
+            }
+        }
+        assert_eq!(surface(&cut), expected);
+    }
+}
+
+#[test]
+fn face_cell_notch_uses_grid_depth_and_respects_contacts_masks_and_symmetry() {
+    let mut mesh = cube(3);
+    for v in &mut mesh.vertices {
+        v.2 *= 0.6;
+    }
+    let f = front_center(&mesh);
+    let q = mesh.quads[f];
+    let identity = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+    let notch = mesh.face_cell_notch(f).unwrap();
+    assert!((notch.travel() - Vec3(0., 0., -0.4)).len() < 1e-5);
+    let partial_delta = Vec3(0.02, 0., -0.15);
+    let partial = mesh
+        .transform_components(
+            &q,
+            mesh.vertices[q[0]],
+            ComponentTransform::Move(partial_delta),
+            false,
+            &identity,
+        )
+        .unwrap();
+    let finish = partial.face_cell_notch(f).unwrap();
+    assert!((finish.travel() + partial_delta - notch.travel()).len() < 1e-5);
+    let (cut, _) = finish.apply(&partial, true, &identity).unwrap();
+    let (direct, _) = notch.apply(&mesh, true, &identity).unwrap();
+    assert_eq!(cut.quads, direct.quads);
+    assert!(
+        cut.vertices
+            .iter()
+            .zip(&direct.vertices)
+            .all(|(&a, &b)| (a - b).len() < 1e-5)
+    );
+
+    let mut mirror = mirror_x();
+    mirror.mirror = [false, false, true];
+    let symmetry = ModelingSymmetry::new(&mesh, &mirror).unwrap();
+    let (both, caps) = notch.apply(&mesh, true, &symmetry).unwrap();
+    both.validate_closed().unwrap();
+    assert_eq!(caps.len(), 2);
+    assert_eq!(both.quads.len(), mesh.quads.len() + 8);
+    mesh.mask[q[0]] = 1.;
+    assert!(notch.apply(&mesh, true, &identity).is_err());
+    assert!(notch.apply(&mesh, false, &identity).is_ok());
+    mesh.hidden_faces = mesh.triangles.iter().map(|t| t.contains(&q[1])).collect();
+    assert!(notch.apply(&mesh, false, &identity).is_err());
+
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Cube);
+    primitive.divisions = [3, 3, 1];
+    let thin = primitive.mesh().unwrap();
+    assert!(
+        thin.face_cell_notch(front_center(&thin))
+            .unwrap()
+            .apply(
+                &thin,
+                true,
+                &ModelingSymmetry::new(&thin, &Default::default()).unwrap()
+            )
+            .unwrap_err()
+            .contains("occupies this grid cell")
+    );
 }

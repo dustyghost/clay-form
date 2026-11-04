@@ -11,6 +11,7 @@ mod attributes;
 mod brushes;
 mod diagnostics;
 mod edit;
+mod fusion;
 mod mask;
 mod mesh;
 mod modeling;
@@ -20,6 +21,12 @@ mod primitive;
 pub use path_stroke::{PathStrokeOptions, PathStrokePreview, PathStrokeRequest, PathStrokeSession};
 mod projection;
 pub use projection::ProjectionSource;
+mod arrays;
+mod boolean;
+#[cfg(test)]
+mod boolean_tests;
+mod cage;
+mod instances;
 mod materials;
 mod paint;
 mod references;
@@ -51,12 +58,20 @@ impl ModelRef<'_> {
     }
 }
 pub struct Document {
+    instance_preview: Option<instances::Preview>,
+    instance_cache: std::sync::OnceLock<Result<instances::ResolvedInstances, String>>,
+    pub(crate) selected_instance: Option<(u64, usize)>,
+    array_source_edit: Option<u64>,
     alphas: Vec<crate::sculpt::alpha::Asset>,
     stencil: Option<crate::sculpt::alpha::Stencil>,
     references: Vec<crate::reference::ReferenceImage>,
     geometry: Geometry,
     display_revision: u64,
     geometry_display_revision: u64,
+    source_revision: u64,
+    // Preserved only for level navigation without attribute changes. Every edit,
+    // including texture-only changes, invalidates saved level displays.
+    level_content_revision: u64,
     brushes: Vec<Brush>,
     history: History,
     diagnostic_context: Option<serde_json::Value>,
@@ -81,12 +96,18 @@ pub struct Document {
 impl Default for Document {
     fn default() -> Self {
         Self {
+            instance_preview: None,
+            instance_cache: Default::default(),
+            selected_instance: None,
+            array_source_edit: None,
             alphas: Vec::new(),
             stencil: None,
             references: Vec::new(),
             geometry: Geometry::new(Mesh::starting_sphere()),
             display_revision: 0,
             geometry_display_revision: 0,
+            source_revision: 0,
+            level_content_revision: 0,
             brushes: Kind::ALL
                 .into_iter()
                 .map(Brush::new)
@@ -125,12 +146,29 @@ impl Document {
     pub(crate) fn geometry_display_revision(&self) -> u64 {
         self.geometry_display_revision
     }
-    fn texture_display_changed(&mut self) {
+    pub(crate) fn level_display_key(&self) -> (u64, usize) {
+        (self.level_content_revision, self.mesh_settings().level())
+    }
+    // Invalidate edit tokens and level caches while retaining the current
+    // positions, topology and normals (texture edits or preview commitment).
+    fn display_changed_preserving_geometry(&mut self) {
         self.display_revision = self.display_revision.wrapping_add(1);
+        self.level_content_revision = self.display_revision;
     }
     fn display_changed(&mut self) {
+        self.instance_cache.take();
         self.display_revision = self.display_revision.wrapping_add(1);
         self.geometry_display_revision = self.geometry_display_revision.wrapping_add(1);
+        self.level_content_revision = self.display_revision;
+        self.source_revision = self.display_revision;
+    }
+    pub(crate) fn source_revision(&self) -> u64 {
+        self.source_revision
+    }
+    fn instances_display_changed(&mut self) {
+        let source_revision = self.source_revision;
+        self.display_changed();
+        self.source_revision = source_revision;
     }
     pub fn brushes(&self) -> &[Brush] {
         &self.brushes
@@ -190,6 +228,9 @@ impl Document {
         self.dirty = false;
     }
     pub fn new_sphere(&mut self) {
+        self.array_source_edit = None;
+        self.cancel_instance_preview();
+        self.selected_instance = None;
         self.end_edit();
         self.texture_paint = None;
         self.references.clear();
@@ -205,6 +246,9 @@ impl Document {
     /// Validate before changing anything, so an invalid open leaves the current document intact.
     pub fn replace_project(&mut self, project: Project, path: &str) -> Result<(), String> {
         project.validate()?;
+        self.array_source_edit = None;
+        self.cancel_instance_preview();
+        self.selected_instance = None;
         self.texture_paint = None;
         self.end_edit();
         self.geometry = Geometry {
@@ -227,6 +271,8 @@ impl Document {
         Ok(())
     }
     pub fn undo(&mut self) {
+        self.cancel_instance_preview();
+        self.selected_instance = None;
         self.end_edit();
         self.end_stroke();
         let previous_ids: Vec<_> = self.materials().iter().map(|a| a.id).collect();
@@ -238,6 +284,8 @@ impl Document {
         }
     }
     pub fn redo(&mut self) {
+        self.cancel_instance_preview();
+        self.selected_instance = None;
         self.end_edit();
         self.end_stroke();
         let previous_ids: Vec<_> = self.materials().iter().map(|a| a.id).collect();

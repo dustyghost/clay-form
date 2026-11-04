@@ -8,6 +8,104 @@ use crate::{
 
 #[cfg(target_os = "linux")]
 #[test]
+#[ignore = "requires Vulkan; verifies instance preview commitment preserves pixels without buffer rebuilds"]
+fn gpu_instance_commit_reuses_preview_display_and_preserves_pixels() {
+    use crate::sculpt::instances::{Layout, Placement, Set, Transform};
+    let headless = Headless::new();
+    let mut renderer = Renderer::new(&headless.state).unwrap();
+    let mut document = Document::default();
+    let mut cube = Primitive::for_kind(PrimitiveKind::Cube);
+    cube.divisions = [1; 3];
+    document
+        .replace_geometry(Geometry::new(cube.mesh().unwrap()))
+        .unwrap();
+    let piece = document.instance_piece(0).unwrap();
+    let set = Set {
+        id: 1,
+        name: "Click".into(),
+        visible: true,
+        layout: Layout::Manual(vec![Placement {
+            piece,
+            transform: Transform {
+                origin: Vec3(1.3, 0., 0.),
+                scale: 0.3,
+                ..Default::default()
+            },
+        }]),
+        adjustments: Vec::new(),
+    };
+    document.preview_instance_set(set.clone()).unwrap();
+    let preview = renderer.geometry(&document);
+    let revision = document.display_revision();
+    let geometry_revision = document.geometry_display_revision();
+    document.preview_instance_set(set).unwrap();
+    assert_eq!(
+        document.display_revision(),
+        revision,
+        "an unchanged release preview is a no-op"
+    );
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(256., 256.));
+    let camera = Camera::default();
+    let (right, up, view) = camera.basis();
+    let params = Params::new(
+        rect,
+        right,
+        up,
+        view,
+        60.,
+        rect.center(),
+        preview.depth_extent,
+    );
+    let before = {
+        let mut gpu = renderer.gpu.lock().unwrap();
+        gpu.upload(&preview);
+        gpu.paint(
+            &params,
+            [256, 256],
+            false,
+            WireMode::Visible,
+            false,
+            &Preview::default(),
+        );
+        gpu.read()
+    };
+    document.apply_instance_preview().unwrap();
+    assert_ne!(
+        document.display_revision(),
+        revision,
+        "committing still invalidates edit tokens"
+    );
+    assert_eq!(document.geometry_display_revision(), geometry_revision);
+    let committed = renderer.geometry(&document);
+    assert!(preview.shares_geometry(&committed));
+    {
+        let mut gpu = renderer.gpu.lock().unwrap();
+        gpu.upload(&committed);
+        assert_eq!(gpu.vertex_pack_count, 0);
+        assert_eq!(gpu.vertex_write_bytes, 0);
+        assert_eq!(gpu.face_write_bytes, [0; 3]);
+        gpu.paint(
+            &params,
+            [256, 256],
+            false,
+            WireMode::Visible,
+            false,
+            &Preview::default(),
+        );
+        assert_eq!(gpu.read(), before);
+    }
+    document.undo();
+    let undone = renderer.geometry(&document);
+    assert!(!committed.shares_geometry(&undone));
+    assert_eq!(undone.mesh.triangles.len(), document.mesh().triangles.len());
+    document.redo();
+    let redone = renderer.geometry(&document);
+    assert_eq!(redone.mesh, committed.mesh);
+    renderer.destroy();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 #[ignore = "requires Vulkan; compare footprint pixels with exhaustive surface picks"]
 fn gpu_footprint_bins_match_exhaustive_overlay_pixels() {
     use crate::sculpt::{Alpha, Brush, Kind, Mesh};

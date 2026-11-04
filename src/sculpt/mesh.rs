@@ -20,6 +20,9 @@ pub struct Mesh {
     /// Persistent hard polygon edges, sorted and unique.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub creases: Vec<[usize; 2]>,
+    /// Source-surface boundaries retained by a fitted Boolean result for lighting.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shading_seams: Option<std::sync::Arc<super::ShadingSeams>>,
     pub vertices: Vec<Vec3>,
     pub triangles: Vec<[usize; 3]>,
     /// Polygon topology; triangles remain the surface used for picking and rendering.
@@ -46,6 +49,7 @@ impl Mesh {
         let mut result = Self {
             uv: Default::default(),
             creases: Vec::new(),
+            shading_seams: None,
             materials: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
@@ -137,6 +141,7 @@ impl Mesh {
         let mut result = Self {
             uv: Default::default(),
             creases: Vec::new(),
+            shading_seams: None,
             materials: Vec::new(),
             vertex_groups: Vec::new(),
             hidden_faces: Vec::new(),
@@ -222,6 +227,9 @@ impl Mesh {
         self.validate_materials()?;
         self.validate_groups()?;
         self.validate_creases()?;
+        if let Some(seams) = &self.shading_seams {
+            seams.validate()?;
+        }
         let capacity = super::capacity::current();
         if self.vertices.len() > capacity.vertices || self.triangles.len() > capacity.triangles {
             return Err(format!(
@@ -269,13 +277,7 @@ impl Mesh {
             };
             let mut used = std::collections::HashSet::new();
             for &[a, b, c, d] in &self.quads {
-                if [a, b, c, d]
-                    .iter()
-                    .copied()
-                    .collect::<std::collections::HashSet<_>>()
-                    .len()
-                    != 4
-                {
+                if a == b || a == c || a == d || b == c || b == d || c == d {
                     return Err("Invalid quad face".into());
                 }
                 let pair = if faces.contains(&key([a, b, c])) && faces.contains(&key([a, c, d])) {

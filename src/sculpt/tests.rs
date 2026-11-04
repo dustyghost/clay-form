@@ -409,6 +409,7 @@ fn detail_carves_sharp_center_raised_shoulders_and_inverts_depth() {
     let mut plane = Mesh {
         uv: Default::default(),
         creases: Vec::new(),
+        shading_seams: None,
         materials: Vec::new(),
         vertex_groups: Vec::new(),
         hidden_faces: Vec::new(),

@@ -494,6 +494,7 @@ mod angle_tests {
             mask: vec![],
             uv: Default::default(),
             creases: vec![],
+            shading_seams: None,
             materials: Vec::new(),
             vertex_groups: vec![],
             polygroups: vec![],

@@ -414,6 +414,7 @@ mod tests {
                 quads: Vec::new(),
                 uv: Default::default(),
                 creases: Vec::new(),
+                shading_seams: None,
                 materials: Vec::new(),
                 vertex_groups: Vec::new(),
                 polygroups: Vec::new(),

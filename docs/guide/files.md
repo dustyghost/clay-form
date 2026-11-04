@@ -144,4 +144,4 @@ Save painted meshes as `.clay` to retain vertex colour, roughness and metallic. 
 
 ## UV and texture exchange
 
-[UVs / Textures](textures.md) retains seam-aware UV coordinates through OBJ import/export and exports texture images as 16-bit PNG. Native `.clay` version 3 saves embed images and retain UVs, channels and external-edit associations. Older version 1 and 2 projects remain readable. External exchange paths are omitted from diagnostic bundles.
+[UVs / Textures](textures.md) retains seam-aware UV coordinates through OBJ import/export and exports texture images as 16-bit PNG. Native `.clay` version 4 saves retain UVs, images and external-edit associations and add [instances and captured objects](instances.md). Versions 1–3 remain readable. Earlier app versions cannot open version 4 saves. External exchange paths are omitted from diagnostic bundles.

@@ -7,7 +7,13 @@ impl Document {
         self.mesh_settings().primitive.as_ref()
     }
     pub fn require_sculpt_mesh(&self) -> Result<(), String> {
-        if self.primitive().is_some() {
+        if self
+            .attached_array(self.active_model_index())
+            .is_some_and(|s| s.visible)
+            && !self.editing_array_source()
+        {
+            Err("Choose Edit source to sculpt this array, or Make editable to convert it".into())
+        } else if self.primitive().is_some() {
             Err("Convert the primitive to a sculpting mesh first".into())
         } else {
             Ok(())

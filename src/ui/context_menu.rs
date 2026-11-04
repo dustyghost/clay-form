@@ -193,7 +193,7 @@ impl UiState {
                 })
                 .collect();
                 entries.extend(SelectionSpan::ALL.into_iter()
-                    .filter(|span| span.available(self.modeling.mode))
+                    .filter(|span| self.modeling.tool != ModelTool::CutCell && span.available(self.modeling.mode))
                     .map(|span| {
                         let action = Action::ModelTarget(span);
                         ViewportMenuEntry {
@@ -211,6 +211,7 @@ impl UiState {
                 ModelTool::Scale,
                 ModelTool::Extrude,
                 ModelTool::Fuse,
+                ModelTool::CutCell,
                 ModelTool::Inset,
                 ModelTool::Bevel,
                 ModelTool::LoopCut,
@@ -225,8 +226,7 @@ impl UiState {
             ]
             .into_iter()
             .filter(|tool| {
-                tool.required_mode()
-                    .is_none_or(|mode| mode == self.modeling.mode)
+                tool.supports_mode(self.modeling.mode)
             })
             .map(|tool| {
                 let action = Action::ModelTool(tool);

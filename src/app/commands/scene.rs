@@ -34,12 +34,34 @@ impl App {
             }
             Command::DeleteSubmodel => {
                 self.viewport.cancel(&mut self.document);
+                if self
+                    .document
+                    .instance_source_in_use(self.document.active_model_index())
+                {
+                    return Err("This model supplies linked instances. Bake or remove its instance sets before deleting the source".into());
+                }
                 let name = self
                     .document
                     .model(self.document.active_model_index())
                     .unwrap()
                     .name
                     .to_owned();
+                self.ui.delete_warning = Some((self.document.display_revision(), name));
+                Ok(())
+            }
+            Command::ConfirmDeleteSubmodel(confirmed) => {
+                let Some((revision, name)) = self.ui.delete_warning.take() else {
+                    return Ok(());
+                };
+                self.viewport.wait_for_release();
+                if !confirmed {
+                    return Ok(());
+                }
+                if revision != self.document.display_revision() {
+                    return Err(
+                        "The submodel changed. Select it and request deletion again.".into(),
+                    );
+                }
                 if self.document.delete_submodel() {
                     self.ui.selected_vertex_group = None;
                     self.ui.projection.source = None;

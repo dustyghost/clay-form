@@ -37,11 +37,28 @@ fn resolution_control(ui: &mut egui::Ui, label: &str, value: &mut u32, min: u32,
     });
 }
 impl UiState {
-    pub(crate) fn primitive_confirmation(
+    pub(crate) fn submodel_confirmation_open(&self) -> bool {
+        self.primitive_warning.is_some() || self.delete_warning.is_some()
+    }
+    pub(crate) fn submodel_confirmation(
         &mut self,
         ctx: &egui::Context,
     ) -> (Vec<Command>, Option<egui::Rect>) {
         let mut commands = Vec::new();
+        if let Some((_, name)) = &self.delete_warning {
+            let response = egui::Modal::new(egui::Id::new("delete_submodel")).show(ctx, |ui| {
+                ui.heading(format!("Delete “{name}”?"));
+                ui.label("This removes its geometry, masks and subdivision levels. Undo restores the submodel.");
+                ui.horizontal(|ui| {
+                    if ui.button("Cancel").clicked() { commands.push(Command::ConfirmDeleteSubmodel(false)); }
+                    if ui.button("Confirm delete").clicked() { commands.push(Command::ConfirmDeleteSubmodel(true)); }
+                });
+            });
+            if response.should_close() && commands.is_empty() {
+                commands.push(Command::ConfirmDeleteSubmodel(false));
+            }
+            return (commands, Some(response.response.rect));
+        }
         if let Some((_, name)) = &self.primitive_warning {
             let response=egui::Modal::new(egui::Id::new("replace_with_primitive")).show(ctx,|ui| {
                 ui.set_max_width(380.);
@@ -140,8 +157,5 @@ impl UiState {
             response.header_response.scroll_to_me(None);
         }
         self.primitive_controls_requested = false;
-        if !ui.input(|i| i.pointer.primary_down()) {
-            commands.push(Command::EndPrimitiveEdit);
-        }
     }
 }

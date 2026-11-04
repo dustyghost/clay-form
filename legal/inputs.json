@@ -1,15 +1,15 @@
 {
-  "Cargo.lock": "4ef0b6e5901c81e7bcdb2677e2472347931ab624c86e7d9fa783ead45c7cd96e",
-  "Cargo.toml": "4939399f4d4297665205d03d62abe8be1b7c247a02d18f88f206dbcb3b459232",
-  "about.toml": "ac5b74aa7f3f3d9182bf9be22c778626008219c018f709458cee9ba846d2ce70",
+  "Cargo.lock": "bf9d46de29ec950e959de59f9a3ceb72e555c366a14eae613b4a2ed9f22e6437",
+  "Cargo.toml": "5b0e4c8b9e48bca77172cd01d9e5330cdf44aabda5b5c0678bd9afabf0259b23",
+  "about.toml": "438979ce4c4b73a143aa00ec2e47a403e6631e03bd3fd306bfe4a2b138565273",
   "scripts/generate-notices.py": "6c82d4606becb36764cc44ed499e933d1224860281104855d5320afe316ff240",
-  "legal/upstream/index.json": "3cfdf556cec2e477881dd09a26efa829da4e44e4033d2cfd97ca6849fe6b05cf",
+  "legal/upstream/index.json": "950ba6cc5503598b5f818137c7a5ba84a3532003734fc01a44092f8eab68e81a",
   "legal/pending-review.json": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
   "legal/additional-notices.json": "f0440110f85fa521a12d19e91bc3ae08557d5174ef71b13f2ed057aa82ac5691",
   "legal/font-metadata.json": "844f3511af96ad977e136ce75c271670bb005e74b908ef3cfe5d1ea394aefa63",
   "legal/notice-supplements.json": "35f889d7701100d22ebbb063b0b45942fbe0751fda301bc8570da5fefc521b4c",
   "legal/review-decisions.json": "3397f00556c43706af47dcceffefd8e0619a10284260fe4dc28a3e98598168de",
   "legal/release-review.json": "3e654494e8d6cb4ba62338a8f173e48083ff79ee780911eeef3d8a9d15371876",
-  "legal/third-party.json": "bce55439008c466078d2cc1ca80a0d143fe458bdf4d63df02266ad7f0ed7b06b",
-  "THIRD-PARTY-NOTICES.html": "573a470b850decdb14a3d5d197f11b86092531628844065a6a5fce499db2b9ec"
+  "legal/third-party.json": "8548af6cb994015a6f15bd02b58338939901ffe1bcf74624e6b0b26dc0f11e24",
+  "THIRD-PARTY-NOTICES.html": "a0d619c016fb4392a6bc1ed2278fa81e343bdd60c1a41ec33cc5ab49003a2494"
 }

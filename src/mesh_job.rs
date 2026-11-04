@@ -4,6 +4,7 @@ use crate::{background_job::BackgroundJob, sculpt::ValidatedGeometry};
 
 #[derive(Clone)]
 pub(crate) enum Operation {
+    BakeInstances(crate::sculpt::instances::BakeRequest),
     UvUnwrap(bool, f32),
     ImportObj(String),
     Edges(crate::sculpt::EdgeEdit),
@@ -16,6 +17,7 @@ pub(crate) enum Operation {
 impl Operation {
     pub fn history_label(&self) -> &'static str {
         match self {
+            Self::BakeInstances(..) => "Bake instances",
             Self::UvUnwrap(..) => "Unwrap UVs",
             Self::Edges(edit) => edit.label(),
             Self::ImportObj(_) => "Import OBJ",
@@ -27,6 +29,7 @@ impl Operation {
     }
     pub fn label(&self) -> &'static str {
         match self {
+            Self::BakeInstances(..) => "Baking instances",
             Self::UvUnwrap(..) => "Unwrapping UVs",
             Self::Edges(_) => "Editing edges",
             Self::ImportObj(_) => "Importing OBJ",
@@ -46,6 +49,7 @@ impl MeshJob {
         let worker_operation = operation.clone();
         let worker = BackgroundJob::start("clay-mesh-operation", move |cancel| {
             match worker_operation {
+                Operation::BakeInstances(request) => geometry.bake_instances(request, cancel)?,
                 Operation::UvUnwrap(automatic, padding) => {
                     geometry.mesh.uv = geometry.mesh.unwrap_uv(automatic, padding, &cancel)?;
                 }
@@ -65,7 +69,7 @@ impl MeshJob {
                     geometry.slice_path(&path, options, &cancel)?
                 }
                 Operation::Slice(plane, options) => geometry.slice(plane, options, &cancel)?,
-                Operation::Subdivide => geometry.subdivide_cancellable(&cancel)?,
+                Operation::Subdivide => return ValidatedGeometry::subdivided(geometry, &cancel),
                 Operation::Remesh => {
                     if !geometry.settings.dynamic {
                         return Err("Switch to dynamic mode first".into());
@@ -90,5 +94,45 @@ impl MeshJob {
     }
     pub fn poll(&mut self) -> Option<Result<ValidatedGeometry, String>> {
         self.worker.poll()
+    }
+}
+
+#[cfg(test)]
+mod subdivision_profile {
+    use super::*;
+    use crate::sculpt::Mesh;
+
+    #[test]
+    #[ignore = "manual bounded subdivision timings; run with --ignored --nocapture"]
+    fn subdivision_worker_profile() {
+        let mut geometry = Geometry::new(Mesh::starting_sphere());
+        println!("input_vertices,output_vertices,worker_ms");
+        for _ in 0..3 {
+            let input = geometry.mesh.vertices.len();
+            let start = std::time::Instant::now();
+            let mut job = MeshJob::start(geometry, Operation::Subdivide).unwrap();
+            geometry = loop {
+                if let Some(result) = job.poll() {
+                    break result.unwrap().into_geometry();
+                }
+                assert!(
+                    start.elapsed().as_secs() < 120,
+                    "subdivision worker exceeded profile deadline"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            };
+            println!(
+                "{input},{},{:.2}",
+                geometry.mesh.vertices.len(),
+                start.elapsed().as_secs_f64() * 1000.
+            );
+        }
+        if let Ok(path) = std::env::var("CLAY_SUBDIVISION_PROFILE") {
+            std::fs::write(
+                path,
+                serde_json::to_vec(&(&geometry.mesh, &geometry.settings)).unwrap(),
+            )
+            .unwrap();
+        }
     }
 }

@@ -29,7 +29,7 @@ fn gpu_backfaces_are_faint_depth_tested_and_do_not_modify_geometry() {
         let original = document.geometry_snapshot();
         let (right, up, view) = Camera::default().basis();
         let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(256.));
-        let params = Params::new(
+        let mut params = Params::new(
             rect,
             right,
             up,
@@ -61,6 +61,14 @@ fn gpu_backfaces_are_faint_depth_tested_and_do_not_modify_geometry() {
         };
         gpu.paint(&params, [256, 256], false, WireMode::Visible, false, &faint);
         let low = sample(&gpu);
+        params.flat_shading = true;
+        gpu.paint(&params, [256, 256], false, WireMode::Visible, false, &faint);
+        assert_eq!(
+            sample(&gpu),
+            low,
+            "flat back-face lighting must face the viewer"
+        );
+        params.flat_shading = false;
         assert!(
             low[0] > 23 && low[0] < 65,
             "back surface is present but faint"

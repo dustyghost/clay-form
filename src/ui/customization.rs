@@ -206,6 +206,7 @@ impl UiState {
         );
         actions.extend(Kind::ALL.iter().map(|k| Action::NewBrush(format!("{k:?}"))));
         actions.push(Action::NewBrush("Alpha Drag".into()));
+        actions.push(Action::NewBrush("Object".into()));
         actions.extend(Tool::ALL.into_iter().map(Action::ShowPanel));
         actions.extend(
             self.preferences
@@ -306,6 +307,7 @@ impl UiState {
             Action::TogglePathOnlyStrokes => self.path_starts_only,
             Action::PolygroupColors => self.show_polygroups,
             Action::Backfaces => self.show_backfaces,
+            Action::FlatShading => self.flat_shading,
             Action::ArrangeReferences => self.arrange_references,
             Action::ShowReferences => self.references_visible,
             Action::WireTriangles => self.wire_triangles,
@@ -361,6 +363,7 @@ impl UiState {
             | Action::Scale
             | Action::Rotate
             | Action::PlaceLine
+            | Action::DeformationFrame
             | Action::PlacePivot => {
                 self.transform_mode != crate::viewport::TransformMode::Sculpt
                     && Action::from(self.transform_operation) == *action

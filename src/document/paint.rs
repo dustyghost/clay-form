@@ -108,7 +108,7 @@ impl Document {
         if changed {
             self.dirty = true;
             if self.texture_paint.is_some() {
-                self.texture_display_changed();
+                self.display_changed_preserving_geometry();
             } else {
                 self.display_changed();
             }
@@ -131,7 +131,7 @@ impl Document {
                 .mesh
                 .pad_texture_cached(channel, before, &mut self.paint_scratch.gutter);
             self.sync_texture_uses();
-            self.texture_display_changed();
+            self.display_changed_preserving_geometry();
         }
         if let Some((_, settings)) = self.paint_stroke.take()
             && let Some(before) = self.stroke_before.take()

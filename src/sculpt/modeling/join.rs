@@ -1,12 +1,28 @@
 //! Cancel the existing side patches swept by a matching-face join. A patch may
 //! contain many depth loops; its boundary must tile the whole swept wall exactly.
 use super::*;
+mod seam;
 
 type Wall = ([usize; 4], usize);
 type Chain = Vec<(f32, usize)>;
 pub(super) struct JoinedWalls {
     pub remove: BTreeSet<usize>,
     pub walls: Vec<(Vec<usize>, usize)>,
+    pub seam: BTreeMap<usize, usize>,
+}
+
+impl JoinedWalls {
+    fn pair_vertices(&mut self, vertex: usize, other: usize) -> Result<(), String> {
+        if vertex != other
+            && self
+                .seam
+                .insert(vertex, other)
+                .is_some_and(|old| old != other)
+        {
+            return Err("The adjoining walls disagree on a tunnel seam vertex".into());
+        }
+        Ok(())
+    }
 }
 
 fn segment_parameter(p: Vec3, a: Vec3, b: Vec3, tolerance: f32) -> Option<f32> {
@@ -58,6 +74,7 @@ impl Mesh {
         polygons: &[Polygon],
         sides: &[Wall],
         excluded: &BTreeSet<usize>,
+        cap_join: bool,
         out: &mut Mesh,
     ) -> Result<JoinedWalls, String> {
         let mut incidence = BTreeMap::<_, Vec<usize>>::new();
@@ -71,6 +88,7 @@ impl Mesh {
         let mut result = JoinedWalls {
             remove: BTreeSet::new(),
             walls: Vec::new(),
+            seam: BTreeMap::new(),
         };
         let mut cancelled = BTreeSet::new();
         let mut chains = BTreeMap::<usize, Chain>::new();
@@ -111,6 +129,15 @@ impl Mesh {
             }) {
                 return Err("The adjoining side extends beyond this join; split its boundary before extruding through".into());
             }
+            if cap_join {
+                pending.extend(
+                    incidence
+                        .get(&edge(wall[2], aa))
+                        .into_iter()
+                        .flatten()
+                        .copied(),
+                );
+            }
             while let Some(i) = pending.pop() {
                 if patch.contains(&i) {
                     continue;
@@ -148,6 +175,7 @@ impl Mesh {
             }
             for source in [wall[0], wall[1]] {
                 let target = destinations[&source];
+                let mut path = vec![(0., source), (1., target)];
                 for vertex in boundary.iter().flat_map(|&(a, b)| [a, b]) {
                     if let Some(t) = segment_parameter(
                         self.vertices[vertex],
@@ -155,9 +183,23 @@ impl Mesh {
                         self.vertices[target],
                         tolerance,
                     ) {
-                        chains.get_mut(&source).unwrap().push((t, vertex));
+                        let point = if t <= 1e-6 {
+                            (0., source)
+                        } else if t >= 1. - 1e-6 {
+                            (1., target)
+                        } else {
+                            (t, vertex)
+                        };
+                        result.pair_vertices(vertex, point.1)?;
+                        path.push(point);
                     }
                 }
+                path.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+                path.dedup_by_key(|p| p.1);
+                if path.windows(2).any(|pair| pair[1].0 - pair[0].0 < 1e-6) {
+                    return Err("The adjoining wall has overlapping boundary vertices".into());
+                }
+                chains.get_mut(&source).unwrap().extend(path);
                 fixed.insert(source);
             }
             cancelled.insert(wall_index);
@@ -166,11 +208,20 @@ impl Mesh {
         // Keep existing boundary vertices, including every depth-loop junction.
         // Free paths adopt the same depths so regular strips stay all-quads.
         for chain in chains.values_mut() {
-            chain.sort_by(|a, b| a.0.total_cmp(&b.0));
-            chain.dedup_by(|a, b| a.1 == b.1);
-            if chain.windows(2).any(|pair| pair[1].0 - pair[0].0 < 1e-6) {
-                return Err("The adjoining wall has overlapping boundary vertices".into());
+            chain.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+            let mut merged: Chain = Vec::with_capacity(chain.len());
+            for (t, vertex) in chain.drain(..) {
+                if let Some(&(depth, other)) = merged.last()
+                    && t - depth < 1e-6
+                {
+                    // Each wall has a unique vertex at this depth. Distinct IDs
+                    // come from opposite cancelled walls along their shared seam.
+                    result.pair_vertices(vertex, other)?;
+                } else {
+                    merged.push((t, vertex));
+                }
             }
+            *chain = merged;
         }
         let mut depths: Vec<_> = chains
             .values()

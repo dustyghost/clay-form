@@ -279,6 +279,7 @@ fn parse(text: &str, cancelled: &impl Fn() -> bool) -> Result<Mesh, String> {
     let mut mesh = Mesh {
         uv: Default::default(),
         creases: Vec::new(),
+        shading_seams: None,
         mask: vec![0.; vertices.len()],
         materials: if has_colors { materials } else { Vec::new() },
         vertex_groups: names

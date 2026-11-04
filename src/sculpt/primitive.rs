@@ -183,6 +183,7 @@ fn empty() -> Mesh {
     Mesh {
         uv: Default::default(),
         creases: Vec::new(),
+        shading_seams: None,
         materials: Vec::new(),
         vertex_groups: Vec::new(),
         hidden_faces: Vec::new(),
