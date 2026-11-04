@@ -26,19 +26,19 @@ repository to the public is a separate maintainer action.
 
 ## Create a draft release
 
-The current testing version is **0.1.0-alpha.2 (Alpha 2)**. Continue with
-`0.1.0-alpha.3`, then `0.1.0-beta.1` when ready for beta testing, and `0.1.0`
-when that development cycle is ready for a stable release. Alpha 1 remains
-available under its original tag. Hyphenated versions
+The current testing version is **0.1.0-alpha.3 (Alpha 3)**. Continue with
+`0.1.0-alpha.4`, then `0.1.0-beta.1` when ready for beta testing, and `0.1.0`
+when that development cycle is ready for a stable release. Earlier alphas remain
+available under their original tags. Hyphenated versions
 are automatically marked as GitHub prereleases, in addition to being drafts.
-Arch uses `pkgver=0.1.0alpha2` and a separate `_upstream_version` for its tag;
+Arch uses `pkgver=0.1.0alpha3` and a separate `_upstream_version` for its tag;
 update both together. macOS uses the numeric `0.1.0` marketing version and CI
 run number as its bundle build counter; About retains the full alpha version.
 
 1. Update Cargo.toml, Cargo.lock and `packaging/arch/PKGBUILD` to a new version.
    Do not reuse a published tag. Regenerate/review notices after metadata changes.
-2. Merge to `main` once CI passes. The preparation PR is stacked on ongoing
-   feature work, which must also be accepted before a release from main.
+2. Merge the preparation PR to `main` once CI passes. Include only accepted
+   feature work in the release.
 3. Run **Actions → Native packages → Run workflow** on `main`, with the exact
    Cargo version. Alternatively push the matching `vX.Y.Z` tag.
 4. Download and verify every draft asset. Replace the release-note checklist
