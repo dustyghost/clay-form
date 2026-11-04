@@ -958,11 +958,6 @@ impl Mesh {
                     continue;
                 }
             }
-            let shared: Vec<_> = incident[a]
-                .iter()
-                .copied()
-                .filter(|&i| self.triangles[i].contains(&b))
-                .collect();
             if !self.polygroups.is_empty() {
                 let a_groups: std::collections::HashSet<_> =
                     incident[a].iter().map(|&i| self.polygroups[i]).collect();
@@ -972,90 +967,13 @@ impl Mesh {
                     continue;
                 }
             }
-            if shared.len() != 2 {
-                continue;
-            }
-            let opposite: Vec<_> = shared
-                .iter()
-                .filter_map(|&i| {
-                    self.triangles[i]
-                        .iter()
-                        .copied()
-                        .find(|&v| v != a && v != b)
-                })
-                .collect();
-            let common: Vec<_> = neighbors[a]
-                .iter()
-                .copied()
-                .filter(|n| neighbors[b].binary_search(n).is_ok())
-                .collect();
-            if common.len() != 2
-                || opposite.len() != 2
-                || opposite[0] == opposite[1]
-                || !common.iter().all(|v| opposite.contains(v))
-            {
-                continue;
-            }
-            let normal = |t: [usize; 3]| {
-                let [x, y, z] = t.map(|i| self.vertices[i]);
-                (y - x).cross(z - x).norm()
-            };
-            if normal(self.triangles[shared[0]]).dot(normal(self.triangles[shared[1]])) < 0.85 {
-                continue;
-            }
-            let position = (self.vertices[a] + self.vertices[b]) * 0.5;
-            let mut local_keys = HashSet::new();
-            let mut safe = true;
-            let mut affected = incident[a].clone();
-            affected.extend(&incident[b]);
-            affected.sort_unstable();
-            affected.dedup();
-            for index in affected {
-                let old = self.triangles[index];
-                if brush.kind == Kind::Decimate
-                    && (position - self.vertices[old[0]]).dot(normal(old)).abs() > threshold * 0.08
-                {
-                    // Local plane-error guard: short edges on a ridge can still
-                    // carry significant shape. This is not a Hausdorff bound.
-                    safe = false;
-                    break;
-                }
-                if old.contains(&a) && old.contains(&b) {
-                    continue;
-                }
-                let new = old.map(|i| if i == b { a } else { i });
-                let mut key = new;
-                key.sort_unstable();
-                if !local_keys.insert(key) {
-                    safe = false;
-                    break;
-                }
-                let [x, y, z] = new.map(|i| if i == a { position } else { self.vertices[i] });
-                let cross = (y - x).cross(z - x);
-                if brush.kind == Kind::Decimate {
-                    let quality = |x: Vec3, y: Vec3, z: Vec3| {
-                        let sum = (y - x).dot(y - x) + (z - y).dot(z - y) + (x - z).dot(x - z);
-                        2. * 3f32.sqrt() * (y - x).cross(z - x).len() / sum.max(1e-20)
-                    };
-                    let [u, v, w] = old.map(|i| self.vertices[i]);
-                    let minimum = (quality(u, v, w) * 0.8).clamp(0.2, 0.35);
-                    if quality(x, y, z) < minimum {
-                        safe = false;
-                        break;
-                    }
-                }
-                if cross.len() < threshold * threshold * 1e-5 || cross.norm().dot(normal(old)) < 0.8
-                {
-                    safe = false;
-                    break;
-                }
-            }
-            if !safe {
-                continue;
-            }
-            if brush.kind == Kind::Decimate
-                && !self.collapse_preserves_folds(a, b, position, &neighbors, &incident)
-            {
+            if !self.safe_edge_collapse(
+                [a, b],
+                &neighbors,
+                &incident,
+                threshold,
+                brush.kind == Kind::Decimate,
+            ) {
                 continue;
             }
             blocked.extend(neighbors[a].iter().copied());
@@ -1073,7 +991,12 @@ impl Mesh {
         if merged.is_empty() {
             return 0;
         }
-        for (&b, &a) in &merged {
+        self.apply_edge_collapses(&merged);
+        merged.len()
+    }
+    /// Callers choose disjoint one-rings and protect boundary and crease endpoints.
+    pub(super) fn apply_edge_collapses(&mut self, merged: &HashMap<usize, usize>) {
+        for (&b, &a) in merged {
             self.vertices[a] = (self.vertices[a] + self.vertices[b]) * 0.5;
             self.mask[a] = (self.mask[a] + self.mask[b]) * 0.5;
             if !self.materials.is_empty() {
@@ -1094,7 +1017,7 @@ impl Mesh {
                 mask.push(self.mask[i]);
             }
         }
-        for (&b, &a) in &merged {
+        for (&b, &a) in merged {
             indices[b] = indices[a];
         }
         let old_faces: Vec<_> = self
@@ -1133,9 +1056,98 @@ impl Mesh {
         for q in &mut self.quads {
             *q = q.map(|v| indices[v]);
         }
+        for crease in &mut self.creases {
+            *crease = crease.map(|v| indices[v]);
+        }
         self.triangles = triangles;
         self.retain_adaptive_quads();
-        merged.len()
+    }
+    pub(super) fn safe_edge_collapse(
+        &self,
+        [a, b]: [usize; 2],
+        neighbors: &[Vec<usize>],
+        incident: &[Vec<usize>],
+        threshold: f32,
+        decimate: bool,
+    ) -> bool {
+        let shared: Vec<_> = incident[a]
+            .iter()
+            .copied()
+            .filter(|&i| self.triangles[i].contains(&b))
+            .collect();
+        if shared.len() != 2 {
+            return false;
+        }
+        let opposite: Vec<_> = shared
+            .iter()
+            .filter_map(|&i| {
+                self.triangles[i]
+                    .iter()
+                    .copied()
+                    .find(|&v| v != a && v != b)
+            })
+            .collect();
+        let common: Vec<_> = neighbors[a]
+            .iter()
+            .copied()
+            .filter(|n| neighbors[b].binary_search(n).is_ok())
+            .collect();
+        if common.len() != 2
+            || opposite.len() != 2
+            || opposite[0] == opposite[1]
+            || !common.iter().all(|v| opposite.contains(v))
+        {
+            return false;
+        }
+        let normal = |t: [usize; 3]| {
+            let [x, y, z] = t.map(|i| self.vertices[i]);
+            (y - x).cross(z - x).norm()
+        };
+        if normal(self.triangles[shared[0]]).dot(normal(self.triangles[shared[1]])) < 0.85 {
+            return false;
+        }
+        let position = (self.vertices[a] + self.vertices[b]) * 0.5;
+        let mut local_keys = HashSet::new();
+        let mut affected = incident[a].clone();
+        affected.extend(&incident[b]);
+        affected.sort_unstable();
+        affected.dedup();
+        for index in affected {
+            let old = self.triangles[index];
+            if decimate
+                && (position - self.vertices[old[0]]).dot(normal(old)).abs() > threshold * 0.08
+            {
+                // Local plane-error guard: short edges on a ridge can still
+                // carry significant shape. This is not a Hausdorff bound.
+                return false;
+            }
+            if old.contains(&a) && old.contains(&b) {
+                continue;
+            }
+            let new = old.map(|i| if i == b { a } else { i });
+            let mut key = new;
+            key.sort_unstable();
+            if !local_keys.insert(key) {
+                return false;
+            }
+            let [x, y, z] = new.map(|i| if i == a { position } else { self.vertices[i] });
+            let cross = (y - x).cross(z - x);
+            if decimate {
+                let quality = |x: Vec3, y: Vec3, z: Vec3| {
+                    let sum = (y - x).dot(y - x) + (z - y).dot(z - y) + (x - z).dot(x - z);
+                    2. * 3f32.sqrt() * (y - x).cross(z - x).len() / sum.max(1e-20)
+                };
+                let [u, v, w] = old.map(|i| self.vertices[i]);
+                let minimum = (quality(u, v, w) * 0.8).clamp(0.2, 0.35);
+                if quality(x, y, z) < minimum {
+                    return false;
+                }
+            }
+            if cross.len() < threshold * threshold * 1e-5 || cross.norm().dot(normal(old)) < 0.8 {
+                return false;
+            }
+        }
+        !decimate || self.collapse_preserves_folds(a, b, position, neighbors, incident)
     }
     fn collapse_preserves_folds(
         &self,
@@ -1182,7 +1194,10 @@ impl Mesh {
         }
         true
     }
-    fn collapse_adjacency(&self, relevant: &[bool]) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
+    pub(super) fn collapse_adjacency(
+        &self,
+        relevant: &[bool],
+    ) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
         let mut neighbors = vec![Vec::new(); self.vertices.len()];
         let mut incident = vec![Vec::new(); self.vertices.len()];
         for (index, &[a, b, c]) in self.triangles.iter().enumerate() {

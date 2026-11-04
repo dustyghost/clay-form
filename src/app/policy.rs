@@ -335,6 +335,7 @@ impl<'a> EditorPolicy<'a> {
             Action::HigherLevel | Action::DeleteHigherLevels => {
                 sculpt && document.mesh_settings().level() < document.mesh_settings().levels()
             }
+            Action::GuidedRetopology => document.require_retopology_target().is_ok(),
             Action::ProjectDetails | Action::RelaxMesh => {
                 document.require_projection_target().is_ok()
             }
@@ -509,6 +510,7 @@ impl<'a> EditorPolicy<'a> {
             Command::SplitHidden => Some(Action::SplitHidden),
             Command::ConvertPrimitive => Some(Action::ConvertPrimitive),
             Command::OpenProjection => Some(Action::ProjectDetails),
+            Command::OpenRetopology => Some(Action::GuidedRetopology),
             Command::OpenRelaxation => Some(Action::RelaxMesh),
             Command::OpenFusion => Some(Action::JoinMeshes),
             Command::KeepProjectionReference => Some(Action::KeepProjectionReference),

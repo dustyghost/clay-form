@@ -2750,7 +2750,7 @@ fn detail_projection_offscreen_review() {
         assert!(std::time::Instant::now() < deadline);
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
-    assert!(g.app.ui.projection.report.as_ref().unwrap().moved() > 0);
+    assert!(g.app.ui.projection.report.as_ref().unwrap().can_apply());
     let preview = g.app.projection.draft.as_ref().unwrap().mesh.clone();
     assert_eq!(g.app.document.geometry_snapshot(), before);
     assert!(!g.app.document.is_dirty());
@@ -3475,7 +3475,7 @@ fn mesh_refinement_offscreen_review() {
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
     assert!(
-        g.app.ui.projection.report.as_ref().unwrap().moved() > 0,
+        g.app.ui.projection.report.as_ref().unwrap().can_apply(),
         "{}",
         g.app.ui.status
     );
@@ -4724,6 +4724,78 @@ fn paint_target_scope_inspection_offscreen_review() {
     g.save("paint-target-fallback");
     click_guide_label(&mut g, "Restore workspace");
     assert!(g.app.ui.preferences.paint_workspace_backup.is_none());
+}
+
+#[test]
+#[ignore = "guided retopology controls and comparison; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn guided_retopology_offscreen_review() {
+    use crate::sculpt::{Geometry, paths::PathMode, retopology::tests::fixture};
+    let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    for (shape, bulb) in [("cylinder", false), ("bulb", true)] {
+        let mut g = Guide::new(&directory, [1200, 800]);
+        g.toolbar = false;
+        g.interactive = true;
+        let (mesh, path) = fixture(bulb);
+        g.app
+            .document
+            .replace_geometry(Geometry::new(mesh))
+            .unwrap();
+        let id = g
+            .app
+            .document
+            .create_path("Diagonal".into(), PathMode::Surface, path.points, false, 0.)
+            .unwrap();
+        let before = g.app.document.project();
+        g.app.camera.pan = Vec2::new(175., 0.);
+        g.app.camera.pitch = 0.22;
+        g.app.camera.zoom = 0.68;
+        g.app.dispatch(Command::OpenRetopology, &g.ctx);
+        g.app.ui.projection.layout.target = 460;
+        assert!(g.app.ui.projection.open, "{}", g.app.ui.status);
+        g.save(&format!("{shape}-controls"));
+        for guided in [false, true] {
+            // Real settings widgets invalidate the previous draft.
+            g.app.dispatch(Command::ClearProjectionPreview, &g.ctx);
+            g.app.ui.projection.flow_path = guided.then_some(id);
+            g.app.ui.projection.layout.density = if guided { 1. } else { 0. };
+            g.frame(vec![]);
+            click_guide_label(&mut g, "Preview layout");
+            assert!(
+                g.app.ui.projection.busy,
+                "Preview click launches a new worker"
+            );
+            super::projection::finish_projection(&mut g.app);
+            assert!(g.app.ui.projection.report.as_ref().unwrap().can_apply());
+            if guided {
+                let crate::ui::SurfaceReport::Retopology { guides, .. } =
+                    g.app.ui.projection.report.as_ref().unwrap()
+                else {
+                    unreachable!()
+                };
+                assert!(!guides.is_empty());
+                let (_, pixels) = g.frame(vec![]);
+                assert!(
+                    pixels
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
+                        .filter(|p| p[0] > 235 && p[1] > 165 && p[1] < 205 && p[2] < 110)
+                        .count()
+                        > 100,
+                    "Visible path overlay"
+                );
+            }
+            g.save(&format!(
+                "{shape}-{}",
+                if guided { "guided" } else { "baseline" }
+            ));
+        }
+        click_guide_label(&mut g, "Apply as new model");
+        assert_eq!(g.app.document.undo_label(), Some("Guided retopology"));
+        g.app.dispatch(Command::Undo, &g.ctx);
+        assert!(g.app.document.project() == before);
+    }
 }
 
 #[test]

@@ -96,6 +96,7 @@ pub mod path_geometry;
 pub mod paths;
 
 mod relaxation;
+pub(crate) mod retopology;
 pub(crate) use relaxation::RelaxationSurface;
 pub use relaxation::{RelaxationOptions, RelaxationReport};
 

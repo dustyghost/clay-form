@@ -15,6 +15,7 @@ pub(crate) struct InteractionSession {
     pub(super) stencil_overlay: stencil::Overlay,
     pub(crate) projection_preview: Option<std::sync::Arc<crate::sculpt::Mesh>>,
     pub(crate) projection_mode: bool,
+    pub(crate) retopology_guides: Option<crate::sculpt::retopology::GuideCurves>,
     pub(super) scene_preview: Option<std::sync::Arc<super::gpu::DisplayMesh>>,
     pub(crate) join_rims: Vec<super::JoinRim>,
     pub(crate) join_pick: Option<(usize, usize)>,

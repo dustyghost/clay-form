@@ -721,6 +721,7 @@ impl App {
                 Ok(())
             }
             Command::OpenProjection => self.open_projection(),
+            Command::OpenRetopology => self.open_retopology(),
             Command::OpenFusion => self.open_fusion(),
             Command::DiscoverFusion => self.discover_fusion(),
             Command::PreviewFusion => self.preview_fusion(),
