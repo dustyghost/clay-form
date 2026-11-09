@@ -1,9 +1,11 @@
 //! Native surface-field reconstruction; attributes are sampled after validation.
 use super::{
-    Mesh, Vec3,
+    Axis, Mesh, Vec3,
     paths::{PathSample, SurfacePath},
 };
+mod bilateral;
 mod density;
+pub(crate) use bilateral::SymmetrySource;
 pub(crate) use density::DensityPaint;
 pub(crate) type GuideCurves = std::sync::Arc<[Vec<PathSample>]>;
 pub(crate) struct Layout {
@@ -20,6 +22,11 @@ pub(crate) struct Options {
     pub adaptive: f32,
     pub mirror_path_x: bool,
     pub preserve_sharp: bool,
+    pub sharp_angle_degrees: f64,
+    pub symmetry_axis: Option<Axis>,
+    pub symmetry_center: Vec3,
+    pub symmetry_source: SymmetrySource,
+    pub symmetry_centreline: bool,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -31,6 +38,11 @@ impl Default for Options {
             adaptive: 0.,
             mirror_path_x: false,
             preserve_sharp: false,
+            sharp_angle_degrees: 45.,
+            symmetry_axis: None,
+            symmetry_center: Vec3::default(),
+            symmetry_source: SymmetrySource::Original,
+            symmetry_centreline: false,
         }
     }
 }
@@ -128,18 +140,22 @@ impl Mesh {
             lo = Vec3(lo.0.min(x), lo.1.min(y), lo.2.min(z));
             hi = Vec3(hi.0.max(x), hi.1.max(y), hi.2.max(z));
         }
-        let radius = (hi - lo).len() * 0.06;
+        // Limit each guide to a local strip so nearby paths and thin limbs do
+        // not compete across broad sections of the model.
+        let radius = (hi - lo).len() * 0.025;
         let mut guides = Vec::new();
-        for path in paths {
+        for path in paths.iter().filter(|_| options.flow > 0.) {
             check(cancel)?;
             if path.mode != super::paths::PathMode::Surface {
                 return Err("Select saved surface paths".into());
             }
-            let mut samples = path.samples_on_mesh_cancelled(self, radius / 4., &cancel)?;
+            let mut samples = path
+                .samples_on_mesh_cancelled(self, radius / 4., &cancel)
+                .map_err(|error| format!("Guide ‘{}’: {error}", path.name))?;
             if path.closed {
                 samples.push(*samples.first().ok_or("Guide has no samples")?);
             }
-            if options.mirror_path_x {
+            if options.mirror_path_x && options.symmetry_axis.is_none() {
                 let mirror = |v: Vec3| Vec3(-v.0, v.1, v.2);
                 guides.push(
                     samples
@@ -154,12 +170,27 @@ impl Mesh {
                         .collect::<Vec<_>>(),
                 );
             }
-            guides.push(samples);
+            if let Some(axis) = options.symmetry_axis
+                && options.symmetry_source != SymmetrySource::Original
+            {
+                let axis = axis.vector();
+                let positive = options.symmetry_source == SymmetrySource::Positive;
+                guides.extend(
+                    samples
+                        .split(|s| {
+                            if positive {
+                                (s.position - options.symmetry_center).dot(axis) < 0.
+                            } else {
+                                (s.position - options.symmetry_center).dot(axis) > 0.
+                            }
+                        })
+                        .filter(|segment| !segment.is_empty())
+                        .map(<[PathSample]>::to_vec),
+                );
+            } else {
+                guides.push(samples);
+            }
         }
-        let source = clay_retopology::Surface {
-            positions: solver_positions(&self.vertices)?,
-            triangles: self.triangles.clone(),
-        };
         let settings = clay_retopology::Options {
             target_quads: options.target,
             detail: self
@@ -169,7 +200,13 @@ impl Mesh {
                 .collect(),
             guides: guides
                 .iter()
-                .flatten()
+                .flat_map(|curve| {
+                    if curve.len() > 1 && curve.first() == curve.last() {
+                        &curve[..curve.len() - 1]
+                    } else {
+                        curve
+                    }
+                })
                 .filter(|_| options.flow > 0.)
                 .map(|s| clay_retopology::Guide {
                     position: native(s.position),
@@ -181,20 +218,87 @@ impl Mesh {
                 .collect(),
             adaptive: options.adaptive.into(),
             preserve_sharp: options.preserve_sharp,
+            sharp_angle_degrees: options.sharp_angle_degrees,
             max_vertices: 150_000,
         };
-        let mut result = clay_retopology::reconstruct_regularized_with_progress(
-            &source, &settings, cancel, progress,
-        )?;
+        let mirrored_reference;
+        let (mut result, reference) = if let Some(symmetry_axis) = options.symmetry_axis {
+            let axis = symmetry_axis.vector();
+            let offset = options.symmetry_center.dot(axis);
+            mirrored_reference = match options.symmetry_source {
+                SymmetrySource::Original => None,
+                side => Some(bilateral::mirrored_reference(
+                    self,
+                    super::MirrorOptions {
+                        axis: symmetry_axis,
+                        source_positive: side == SymmetrySource::Positive,
+                        offset,
+                    },
+                    cancel,
+                )?),
+            };
+            let reference = mirrored_reference.as_ref().unwrap_or(self);
+            let mut result = if options.symmetry_source == SymmetrySource::Original {
+                bilateral::reconstruct(reference, &settings, axis, options, cancel, progress)?
+            } else {
+                bilateral::mirror_layout(
+                    self, reference, &settings, axis, options, cancel, progress,
+                )?
+            };
+            if options.symmetry_centreline && options.symmetry_source == SymmetrySource::Original {
+                bilateral::split_centreline(&mut result, axis, offset, cancel)?;
+            }
+            let reflected: Vec<_> = guides
+                .iter()
+                .map(|curve| {
+                    curve
+                        .iter()
+                        .map(|s| PathSample {
+                            position: bilateral::reflect_point(s.position, axis, offset),
+                            normal: bilateral::reflect(s.normal, axis),
+                            tangent: bilateral::reflect(s.tangent, axis),
+                            binormal: bilateral::reflect(s.binormal, axis) * -1.,
+                            ..*s
+                        })
+                        .collect()
+                })
+                .collect();
+            guides.extend(reflected);
+            (result, reference)
+        } else {
+            let source = clay_retopology::Surface {
+                positions: solver_positions(&self.vertices)?,
+                triangles: self.triangles.clone(),
+            };
+            (
+                clay_retopology::reconstruct_regularized_with_progress(
+                    &source, &settings, cancel, progress,
+                )?,
+                self,
+            )
+        };
         check(cancel)?;
         for point in &mut result.positions {
             *point = native(Vec3(point.x as f32, point.y as f32, point.z as f32));
         }
         let exact_source = clay_retopology::Surface {
-            positions: self.vertices.iter().copied().map(native).collect(),
-            triangles: self.triangles.clone(),
+            positions: reference.vertices.iter().copied().map(native).collect(),
+            triangles: reference.triangles.clone(),
         };
-        clay_retopology::validate_layout(&exact_source, &settings, &mut result, cancel)?;
+        let validation_settings = if options.symmetry_axis.is_some()
+            && options.symmetry_source != SymmetrySource::Original
+        {
+            let mut settings = settings;
+            settings.detail = reference
+                .retopology_detail()
+                .into_iter()
+                .map(|w| f64::from(w * options.density))
+                .collect();
+            settings
+        } else {
+            settings
+        };
+        clay_retopology::validate_layout(&exact_source, &validation_settings, &mut result, cancel)?;
         let mut mesh = Mesh {
             vertices: result
                 .positions
@@ -206,7 +310,7 @@ impl Mesh {
             quads: result.quads,
             ..Default::default()
         };
-        self.transfer_layout_attributes(&mut mesh, cancel)?;
+        reference.transfer_layout_attributes(&mut mesh, cancel)?;
         mesh.validate()?;
         check(cancel)?;
         Ok(Layout {
@@ -215,6 +319,71 @@ impl Mesh {
             guides: guides.into(),
         })
     }
+    pub(crate) fn quad_mirror_available(&self) -> bool {
+        !self.quads.is_empty()
+            && self.triangles.len() == 2 * self.quads.len()
+            && self.uv.is_empty()
+            && self.creases.is_empty()
+            && self.shading_seams.is_none()
+    }
+
+    pub(crate) fn mirror_with_quad_bridge(
+        &self,
+        options: super::MirrorOptions,
+        centreline: bool,
+        cancel: &dyn Fn() -> bool,
+    ) -> Result<Self, String> {
+        if !self.quad_mirror_available() {
+            return Err("Bridge with quads needs an all-quad mesh without UVs or creases".into());
+        }
+        self.validate_closed()?;
+        let reference = bilateral::mirrored_reference(self, options, cancel)?;
+        let sign = if options.source_positive { 1. } else { -1. };
+        let input = clay_retopology::Layout {
+            positions: self.vertices.iter().copied().map(native).collect(),
+            quads: self.quads.clone(),
+            triangles: Vec::new(),
+            diagnostics: Default::default(),
+        };
+        let mut layout = bilateral::bridge_layout(
+            input,
+            &reference,
+            options.axis.vector() * sign,
+            options.offset * sign,
+            self.quads.len(),
+            centreline,
+            cancel,
+        )?;
+        let vertices: Vec<_> = layout
+            .positions
+            .iter()
+            .map(|p| Vec3(p.x as f32, p.y as f32, p.z as f32))
+            .collect();
+        layout.positions = vertices.iter().copied().map(native).collect();
+        clay_retopology::validate_layout(
+            &clay_retopology::Surface {
+                positions: reference.vertices.iter().copied().map(native).collect(),
+                triangles: reference.triangles.clone(),
+            },
+            &clay_retopology::Options {
+                target_quads: self.quads.len(),
+                max_vertices: super::max_vertices(),
+                ..Default::default()
+            },
+            &mut layout,
+            cancel,
+        )?;
+        let mut mesh = Self {
+            vertices,
+            triangles: layout.triangles,
+            quads: layout.quads,
+            ..Default::default()
+        };
+        reference.transfer_layout_attributes(&mut mesh, cancel)?;
+        mesh.validate_closed()?;
+        Ok(mesh)
+    }
+
     fn transfer_layout_attributes(
         &self,
         dest: &mut Mesh,

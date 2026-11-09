@@ -820,6 +820,15 @@ impl App {
                     .iter()
                     .position(|b| b.identity() == id)
                 {
+                    if self.ui.path_brush_active {
+                        if self.viewport.paths.has_unfinished(&self.document) {
+                            self.ui.status =
+                                "Complete or cancel the current path before switching brushes"
+                                    .into();
+                            return;
+                        }
+                        let _ = self.dispatch_path(crate::command::PathCommand::Close);
+                    }
                     self.ui.select_brush(index, &self.document);
                 }
                 None

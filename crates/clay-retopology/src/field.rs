@@ -35,7 +35,17 @@ pub(crate) fn solve(
     cancel: &dyn Fn() -> bool,
     progress: &dyn Fn(crate::Stage),
 ) -> Result<Field> {
-    solve_impl(source, options, false, cancel, progress)
+    solve_impl(source, options, false, false, cancel, progress)
+}
+
+/// Let guides steer orientation while keeping hard boundary and crease anchors.
+pub(crate) fn solve_soft_directions(
+    source: &Surface,
+    options: &Options,
+    cancel: &dyn Fn() -> bool,
+    progress: &dyn Fn(crate::Stage),
+) -> Result<Field> {
+    solve_impl(source, options, true, false, cancel, progress)
 }
 
 /// Controlled offline experiment: guide the orientation solve, then discard
@@ -48,13 +58,14 @@ pub(crate) fn solve_direction_guides(
     cancel: &dyn Fn() -> bool,
     progress: &dyn Fn(crate::Stage),
 ) -> Result<Field> {
-    solve_impl(source, options, true, cancel, progress)
+    solve_impl(source, options, true, true, cancel, progress)
 }
 
 fn solve_impl(
     source: &Surface,
     options: &Options,
     direction_only: bool,
+    audit_without_hard_constraints: bool,
     cancel: &dyn Fn() -> bool,
     progress: &dyn Fn(crate::Stage),
 ) -> Result<Field> {
@@ -68,7 +79,7 @@ fn solve_impl(
     let (normals, areas, neighbours, _) = topology::geometry(&surface);
     let spacing = allocate_spacing(&normals, &areas, &neighbours, &detail, options);
     let constraints = constraints(&surface, &normals, options, cancel)?;
-    if direction_only && constraints.iter().any(|c| c.weight >= 1.) {
+    if audit_without_hard_constraints && constraints.iter().any(|c| c.weight >= 1.) {
         return Err("Direction-only audit excludes hard boundary/sharp constraints".into());
     }
     let mut field = Field {
@@ -167,9 +178,9 @@ fn constraints(
             edges.entry(topology::edge(u, v)).or_default().push(n);
         }
     }
+    let sharp_threshold = o.sharp_threshold();
     for ([a, b], ns) in edges {
-        if ns.len() == 1 || (o.preserve_sharp && ns[0].dot(ns[1]) < std::f64::consts::FRAC_1_SQRT_2)
-        {
+        if ns.len() == 1 || sharp_threshold.is_some_and(|threshold| ns[0].dot(ns[1]) <= threshold) {
             for (i, j) in [(a, b), (b, a)] {
                 out[i] = Constraint {
                     tangent: tangent(s.positions[j] - s.positions[i], normals[i]),

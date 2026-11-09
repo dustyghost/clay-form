@@ -8,7 +8,7 @@ pub(crate) enum Operation {
     UvUnwrap(bool, f32),
     ImportObj(String),
     Edges(crate::sculpt::EdgeEdit),
-    Mirror(crate::sculpt::MirrorOptions),
+    Mirror(crate::sculpt::MirrorOptions, bool, bool),
     SlicePath(crate::sculpt::SlicePath, crate::sculpt::SliceOptions),
     Subdivide,
     Remesh,
@@ -21,7 +21,7 @@ impl Operation {
             Self::UvUnwrap(..) => "Unwrap UVs",
             Self::Edges(edit) => edit.label(),
             Self::ImportObj(_) => "Import OBJ",
-            Self::Mirror(_) => "Mirror one side",
+            Self::Mirror(..) => "Mirror one side",
             Self::Subdivide => "Subdivide mesh",
             Self::Remesh => "Remesh",
             Self::Slice(_, options) | Self::SlicePath(_, options) => options.mode.history_label(),
@@ -33,7 +33,7 @@ impl Operation {
             Self::UvUnwrap(..) => "Unwrapping UVs",
             Self::Edges(_) => "Editing edges",
             Self::ImportObj(_) => "Importing OBJ",
-            Self::Mirror(_) => "Mirroring",
+            Self::Mirror(..) => "Mirroring",
             Self::Subdivide => "Subdividing",
             Self::Remesh => "Remeshing",
             Self::Slice(..) | Self::SlicePath(..) => "Slicing",
@@ -54,8 +54,8 @@ impl MeshJob {
                     geometry.mesh.uv = geometry.mesh.unwrap_uv(automatic, padding, &cancel)?;
                 }
                 Operation::Edges(edit) => geometry.edit_edges(&edit, &cancel)?,
-                Operation::Mirror(options) => {
-                    geometry.mirror(options, &cancel)?;
+                Operation::Mirror(options, quad_bridge, centreline) => {
+                    geometry.mirror_geometry(options, quad_bridge, centreline, &cancel)?;
                 }
                 Operation::ImportObj(path) => {
                     let mesh = crate::persistence::load_obj_cancellable(&path, &cancel)?;

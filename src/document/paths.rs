@@ -31,6 +31,23 @@ impl Document {
         smoothing: f32,
         corner_rounding: Vec<f32>,
     ) -> Result<u64, String> {
+        self.create_path_draft(SurfacePath {
+            id: 0,
+            target: self.active_model_id(),
+            name,
+            mode,
+            points,
+            closed,
+            smoothing,
+            corner_rounding,
+            seam: 0,
+            surface_signature: 0,
+            attached_route: None,
+            offset: 0.,
+            ring_orientation: None,
+        })
+    }
+    pub(crate) fn create_path_draft(&mut self, mut path: SurfacePath) -> Result<u64, String> {
         if self.paths().len() >= paths::MAX_PATHS {
             return Err("Paths are limited to 128 per project".into());
         }
@@ -52,21 +69,12 @@ impl Document {
             .unwrap_or(0)
             .checked_add(1)
             .ok_or("Path identity limit reached")?;
-        let mut path = SurfacePath {
-            id,
-            name,
-            target: next.scene.active_metadata.model_id,
-            mode,
-            points,
-            closed,
-            smoothing,
-            corner_rounding,
-            seam: 0,
-            surface_signature: paths::mesh_signature(self.mesh()),
-            attached_route: None,
-        };
+        path.id = id;
+        path.target = next.scene.active_metadata.model_id;
+        path.surface_signature = paths::mesh_signature(self.mesh());
+        path.attached_route = None;
         path.validate()?;
-        if mode == PathMode::Surface {
+        if path.mode == PathMode::Surface {
             if !self.active_visible() {
                 return Err("Show the target model before creating a surface path".into());
             }

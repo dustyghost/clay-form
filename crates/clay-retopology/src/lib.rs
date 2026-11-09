@@ -48,6 +48,7 @@ pub struct Options {
     pub guides: Vec<Guide>,
     pub adaptive: f64,
     pub preserve_sharp: bool,
+    pub sharp_angle_degrees: f64,
     pub max_vertices: usize,
 }
 impl Default for Options {
@@ -58,8 +59,16 @@ impl Default for Options {
             guides: Vec::new(),
             adaptive: 0.,
             preserve_sharp: true,
+            sharp_angle_degrees: 45.,
             max_vertices: 500_000,
         }
+    }
+}
+
+impl Options {
+    fn sharp_threshold(&self) -> Option<f64> {
+        self.preserve_sharp
+            .then(|| self.sharp_angle_degrees.to_radians().cos())
     }
 }
 
@@ -145,7 +154,18 @@ pub fn reconstruct_with_progress(
     cancel: &dyn Fn() -> bool,
     progress: &dyn Fn(Stage),
 ) -> Result<Layout> {
-    let (field, mut lattice, mut diagnostics) = prepare(source, options, cancel, progress)?;
+    reconstruct_using(source, options, cancel, progress, field::solve)
+}
+
+fn reconstruct_using(
+    source: &Surface,
+    options: &Options,
+    cancel: &dyn Fn() -> bool,
+    progress: &dyn Fn(Stage),
+    solve_field: FieldSolver,
+) -> Result<Layout> {
+    let (field, mut lattice, mut diagnostics) =
+        prepare_using(source, options, cancel, progress, solve_field)?;
     repair(&mut lattice, &mut diagnostics, cancel, progress)?;
     finish(source, field, lattice, diagnostics, cancel, progress)
 }
@@ -175,8 +195,18 @@ pub fn reconstruct_regularized_with_progress(
         detail: prepared.detail,
         ..options.clone()
     };
-    let mut layout =
-        reconstruct_with_progress(&prepared.surface, &working_options, cancel, progress)?;
+    let solver: FieldSolver = if options.guides.iter().any(|guide| guide.strength > 0.) {
+        field::solve_soft_directions
+    } else {
+        field::solve
+    };
+    let mut layout = reconstruct_using(
+        &prepared.surface,
+        &working_options,
+        cancel,
+        progress,
+        solver,
+    )?;
     progress(Stage::OriginalSurfaceValidation);
     validate_layout(source, options, &mut layout, cancel)?;
     Ok(layout)
@@ -205,6 +235,7 @@ pub fn validate_layout(
     Ok(())
 }
 
+#[cfg(feature = "audit")]
 fn prepare(
     source: &Surface,
     options: &Options,
@@ -233,6 +264,9 @@ fn validate_request(source: &Surface, options: &Options, cancel: &dyn Fn() -> bo
     check(cancel)?;
     if source.positions.len() > options.max_vertices {
         return Err("Source exceeds the retopology sample budget".into());
+    }
+    if !(1. ..=180.).contains(&options.sharp_angle_degrees) {
+        return Err("Sharp bend angle must be between 1° and 180°".into());
     }
     if options.target_quads < 4
         || options.target_quads > options.max_vertices

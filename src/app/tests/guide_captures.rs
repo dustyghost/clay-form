@@ -53,6 +53,19 @@ fn native_retopology_whole_sculpt_offscreen_review() {
     if let Ok(target) = std::env::var("CLAY_RETOPO_TARGET") {
         g.app.ui.projection.layout.target = target.parse().unwrap();
     }
+    let symmetry = std::env::var("CLAY_RETOPO_SYMMETRY").ok();
+    let centreline = std::env::var_os("CLAY_RETOPO_CENTRELINE").is_some();
+    g.app.ui.projection.layout.symmetry_centreline = centreline;
+    g.app.ui.projection.layout.symmetry_axis = None;
+    if let Some(side) = symmetry.as_deref() {
+        g.app.ui.projection.layout.symmetry_axis = Some(crate::sculpt::Axis::X);
+        g.app.ui.projection.layout.symmetry_source = match side {
+            "original" => crate::sculpt::retopology::SymmetrySource::Original,
+            "+" => crate::sculpt::retopology::SymmetrySource::Positive,
+            "-" => crate::sculpt::retopology::SymmetrySource::Negative,
+            _ => panic!("Use original, +, or - for CLAY_RETOPO_SYMMETRY"),
+        };
+    }
     eprintln!("App target {}", g.app.ui.projection.layout.target);
     g.save("whole-source");
     click_guide_label(&mut g, "Preview layout");
@@ -85,7 +98,22 @@ fn native_retopology_whole_sculpt_offscreen_review() {
     click_guide_label(&mut g, "Apply as new model");
     assert_eq!(g.app.document.model_count(), before.submodels.len() + 2);
     assert_eq!(g.app.document.model(1).unwrap().mesh, &before.mesh);
-    g.app.document.mesh().validate_closed().unwrap();
+    let mesh = g.app.document.mesh();
+    mesh.validate_closed().unwrap();
+    if symmetry.is_some() {
+        assert_eq!(mesh.triangles.len(), mesh.quads.len() * 2);
+        let offset = before.symmetry.center.0;
+        assert_eq!(
+            mesh.quads.iter().any(|q| {
+                q.iter().any(|&i| mesh.vertices[i].0 > offset)
+                    && q.iter().any(|&i| mesh.vertices[i].0 < offset)
+            }),
+            !centreline
+        );
+        if centreline {
+            assert!(mesh.vertices.iter().any(|v| v.0 == offset));
+        }
+    }
     let after = g.app.document.project();
     crate::persistence::save_project(
         &directory

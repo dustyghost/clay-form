@@ -528,7 +528,11 @@ pub(super) fn solve(
     orientations(&mut levels, cancel)?;
     if direction_only {
         for l in &mut levels {
-            l.constraints.fill(Constraint::default());
+            for constraint in &mut l.constraints {
+                if constraint.weight < 1. {
+                    *constraint = Constraint::default();
+                }
+            }
         }
     }
     progress(Stage::Position);

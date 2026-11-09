@@ -593,7 +593,7 @@ fn freehand_is_available_when_path_only_policy_or_global_guidance_is_off() {
     }
 }
 
-fn ring_setup(mode: crate::viewport::paths::RingMode) -> (App, egui::Context, egui::Rect) {
+fn ring_setup() -> (App, egui::Context, egui::Rect) {
     use crate::sculpt::{Geometry, Primitive, PrimitiveKind};
     let mut app = App::default();
     let mut cylinder = Primitive::for_kind(PrimitiveKind::Cylinder);
@@ -604,7 +604,6 @@ fn ring_setup(mode: crate::viewport::paths::RingMode) -> (App, egui::Context, eg
         .unwrap();
     let ctx = egui::Context::default();
     app.dispatch(Command::Path(PathCommand::NewRing), &ctx);
-    app.viewport.paths.ring_mode = mode;
     let rect = navigation_frame(&mut app, &ctx, vec![]);
     assert!(app.viewport.paths.tool == PathTool::Ring);
     (app, ctx, rect)
@@ -631,58 +630,54 @@ fn assert_complete_cylinder_ring(points: &[PathPoint]) {
     );
 }
 #[test]
-fn one_pen_drag_creates_and_positions_both_complete_ring_modes_without_document_edits() {
-    use crate::viewport::paths::RingMode;
-    for mode in [RingMode::Level, RingMode::Shortest] {
-        let (mut app, ctx, rect) = ring_setup(mode);
-        let before = app.document.geometry_snapshot();
-        let count = app.document.history_counts();
-        let start = guide_screen(rect, 0.25, -0.25);
-        navigation_frame(
-            &mut app,
-            &ctx,
-            vec![egui::Event::PointerMoved(start), primary_event(start, true)],
-        );
-        let first = app.viewport.paths.draft.as_ref().unwrap().clone();
-        assert!(first.closed, "{}", app.ui.status);
-        assert_complete_cylinder_ring(&first.points);
-        assert!(
-            first
-                .points
-                .iter()
-                .all(|p| (p.position.1 + 0.25).abs() < 0.02)
-        );
-        let end = guide_screen(rect, 0.25, 0.5);
-        navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
-        let moved = app.viewport.paths.draft.as_ref().unwrap().clone();
-        assert_complete_cylinder_ring(&moved.points);
-        assert!(
-            moved
-                .points
-                .iter()
-                .all(|p| (p.position.1 - 0.5).abs() < 0.02),
-            "ring drag must reposition the entire loop: {}",
-            app.ui.status
-        );
-        assert_ne!(moved.points, first.points);
-        assert_eq!(app.document.geometry_snapshot(), before);
-        assert_eq!(app.document.history_counts(), count);
-        navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
-        assert_eq!(app.viewport.paths.draft.as_ref(), Some(&moved));
-        assert_eq!(app.document.geometry_snapshot(), before);
-        app.dispatch(Command::Path(PathCommand::SaveAndSculpt), &ctx);
-        assert!(!app.viewport.paths.active, "{}", app.ui.status);
-        assert_eq!(app.document.paths().len(), 1);
-        assert!(app.document.paths()[0].closed);
-        assert_eq!(app.document.history_counts().0, count.0 + 1);
-        app.dispatch(Command::Undo, &ctx);
-        assert_eq!(app.document.geometry_snapshot(), before);
-    }
+fn one_pen_drag_creates_and_positions_a_complete_ring_without_document_edits() {
+    let (mut app, ctx, rect) = ring_setup();
+    let before = app.document.geometry_snapshot();
+    let count = app.document.history_counts();
+    let start = guide_screen(rect, 0.25, -0.25);
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    let first = app.viewport.paths.draft.as_ref().unwrap().clone();
+    assert!(first.closed, "{}", app.ui.status);
+    assert_complete_cylinder_ring(&first.points);
+    assert!(
+        first
+            .points
+            .iter()
+            .all(|p| (p.position.1 + 0.25).abs() < 0.02)
+    );
+    let end = guide_screen(rect, 0.25, 0.5);
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+    let moved = app.viewport.paths.draft.as_ref().unwrap().clone();
+    assert_complete_cylinder_ring(&moved.points);
+    assert!(
+        moved
+            .points
+            .iter()
+            .all(|p| (p.position.1 - 0.5).abs() < 0.02),
+        "ring drag must reposition the entire loop: {}",
+        app.ui.status
+    );
+    assert_ne!(moved.points, first.points);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert_eq!(app.document.history_counts(), count);
+    navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+    assert_eq!(app.viewport.paths.draft.as_ref(), Some(&moved));
+    assert_eq!(app.document.geometry_snapshot(), before);
+    app.dispatch(Command::Path(PathCommand::SaveAndSculpt), &ctx);
+    assert!(!app.viewport.paths.active, "{}", app.ui.status);
+    assert_eq!(app.document.paths().len(), 1);
+    assert!(app.document.paths()[0].closed);
+    assert_eq!(app.document.history_counts().0, count.0 + 1);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.geometry_snapshot(), before);
 }
 #[test]
 fn ring_drag_escape_restores_the_draft_and_failed_motion_keeps_last_valid_preview() {
-    use crate::viewport::paths::RingMode;
-    let (mut app, ctx, rect) = ring_setup(RingMode::Level);
+    let (mut app, ctx, rect) = ring_setup();
     let original = app.viewport.paths.draft.clone();
     let before = app.document.geometry_snapshot();
     let count = app.document.history_counts();
@@ -726,9 +721,11 @@ fn ring_drag_escape_restores_the_draft_and_failed_motion_keeps_last_valid_previe
 #[test]
 #[ignore = "requires a Vulkan adapter (software lavapipe supported)"]
 fn one_drag_ring_authoring_offscreen_preview() {
-    use crate::viewport::paths::RingMode;
-    let (mut app, _, rect) = ring_setup(RingMode::Level);
+    let (mut app, _, rect) = ring_setup();
     let ctx = egui::Context::default();
+    app.dispatch(Command::Path(PathCommand::ActivateBrush), &ctx);
+    app.viewport.paths.brush = Some(crate::viewport::paths::PathBrush::Ring);
+    app.viewport.paths.panel = false;
     let mut capture = crate::viewport::UiCapture::new([1000, 800]);
     app.viewport.initialize_renderer(&capture.state).unwrap();
     app.camera.pan = Vec2::new(180., 0.);
@@ -759,31 +756,30 @@ fn one_drag_ring_authoring_offscreen_preview() {
         }
     };
     render(&mut app, &mut capture, None);
-    for (mode, name) in [(RingMode::Level, "level"), (RingMode::Shortest, "shortest")] {
-        app.viewport.paths.ring_mode = mode;
-        let start = rect.center() + app.camera.pan;
-        navigation_frame(
-            &mut app,
-            &ctx,
-            vec![egui::Event::PointerMoved(start), primary_event(start, true)],
-        );
-        let end = start + Vec2::new(0., -65.);
-        navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
-        assert!(
-            app.viewport.paths.draft.as_ref().unwrap().closed,
-            "{}",
-            app.ui.status
-        );
-        assert_complete_cylinder_ring(&app.viewport.paths.draft.as_ref().unwrap().points);
-        render(&mut app, &mut capture, Some(name));
-        navigation_frame(
-            &mut app,
-            &ctx,
-            vec![primary_event(end, false), egui::Event::PointerGone],
-        );
-        assert_eq!(app.document.geometry_snapshot(), before);
-        assert_eq!(app.document.history_counts(), history);
-    }
+    let start = rect.center() + app.camera.pan;
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+    );
+    let end = start + Vec2::new(0., -65.);
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+    assert!(
+        app.viewport.paths.draft.as_ref().unwrap().closed,
+        "{}",
+        app.ui.status
+    );
+    assert_complete_cylinder_ring(&app.viewport.paths.draft.as_ref().unwrap().points);
+    render(&mut app, &mut capture, Some("level"));
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![primary_event(end, false), egui::Event::PointerGone],
+    );
+    assert_eq!(app.document.mesh(), &before.mesh);
+    assert_eq!(app.document.paths().len(), 1, "{}", app.ui.status);
+    assert_eq!(app.document.history_counts().0, history.0 + 1);
+    render(&mut app, &mut capture, Some("pen-hud"));
     app.viewport.destroy_renderer();
 }
 
@@ -1009,4 +1005,410 @@ fn rounded_path_corners_offscreen_preview() {
     );
     assert_eq!(app.document.geometry_snapshot(), before);
     app.viewport.destroy_renderer();
+}
+
+#[test]
+fn path_explorer_saves_and_starts_another_path_without_losing_the_first() {
+    use crate::sculpt::Vec3;
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.dispatch(Command::Path(PathCommand::Open), &ctx);
+    let draft = app.viewport.paths.draft.as_ref().unwrap();
+    assert_eq!(draft.mode, PathMode::Surface);
+    assert!(draft.points.is_empty());
+    assert!(!app.viewport.paths.dirty(&app.document));
+
+    app.dispatch(Command::Path(PathCommand::New(PathMode::Free)), &ctx);
+    let draft = app.viewport.paths.draft.as_mut().unwrap();
+    draft.points = [0., 0.5]
+        .map(|x| PathPoint {
+            position: Vec3(x, 0., 0.),
+            normal: Vec3(0., 0., 1.),
+        })
+        .to_vec();
+    app.dispatch(Command::Path(PathCommand::SaveAndNext), &ctx);
+    let saved = app.document.paths()[0].id;
+    let draft = app.viewport.paths.draft.as_ref().unwrap();
+    assert_eq!(draft.id, 0);
+    assert_eq!(draft.mode, PathMode::Free);
+    assert!(draft.points.is_empty());
+    assert_eq!(app.document.history_counts(), (1, 0));
+
+    app.dispatch(Command::Path(PathCommand::Select(saved)), &ctx);
+    app.viewport.paths.draft.as_mut().unwrap().name = "Forearm".into();
+    app.dispatch(Command::Path(PathCommand::Save), &ctx);
+    assert_eq!(app.document.path(saved).unwrap().name, "Forearm");
+    app.dispatch(Command::Undo, &ctx);
+    assert_ne!(app.document.path(saved).unwrap().name, "Forearm");
+}
+
+#[test]
+fn path_camera_tools_keep_the_draft_and_history_intact() {
+    use crate::viewport::paths::PathNavigation;
+
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.camera.pan = Vec2::new(180., 0.);
+    app.dispatch(Command::Path(PathCommand::ActivateBrush), &ctx);
+    let rect = navigation_frame(&mut app, &ctx, vec![]);
+    click(&mut app, &ctx, Pos2::new(650., 430.));
+    click(&mut app, &ctx, Pos2::new(720., 390.));
+    let draft = app.viewport.paths.draft.clone().unwrap();
+    assert_eq!(draft.points.len(), 2);
+    let history = app.document.history_counts();
+    for (index, mode) in [
+        PathNavigation::Orbit,
+        PathNavigation::Pan,
+        PathNavigation::Zoom,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let before = (
+            app.camera.yaw,
+            app.camera.pitch,
+            app.camera.pan,
+            app.camera.zoom,
+        );
+        let start = rect.right_top() + Vec2::new(-124. + index as f32 * 46., 166.);
+        let end = start + Vec2::new(25., 30.);
+        // Pen contacts can arrive without a preceding hover frame.
+        navigation_frame(&mut app, &ctx, vec![egui::Event::PointerGone]);
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(start), primary_event(start, true)],
+        );
+        assert_eq!(
+            (
+                app.camera.yaw,
+                app.camera.pitch,
+                app.camera.pan,
+                app.camera.zoom
+            ),
+            before
+        );
+        navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)]);
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![primary_event(end, false), egui::Event::PointerGone],
+        );
+        match mode {
+            PathNavigation::Orbit => {
+                assert_ne!((app.camera.yaw, app.camera.pitch), (before.0, before.1))
+            }
+            PathNavigation::Pan => assert_ne!(app.camera.pan, before.2),
+            PathNavigation::Zoom => assert_ne!(app.camera.zoom, before.3),
+        }
+        assert_eq!(app.viewport.paths.draft.as_ref(), Some(&draft));
+        assert_eq!(app.document.history_counts(), history);
+    }
+
+    // The normal zoom modifier also takes priority over adding a path point.
+    app.viewport.paths.tool = PathTool::Add;
+    let modifiers = egui::Modifiers {
+        ctrl: true,
+        ..Default::default()
+    };
+    let start = Pos2::new(650., 430.);
+    let end = start + Vec2::new(0., -25.);
+    let zoom = app.camera.zoom;
+    navigation_frame_with_modifiers(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(start),
+            egui::Event::PointerButton {
+                pos: start,
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers,
+            },
+        ],
+        modifiers,
+    );
+    navigation_frame_with_modifiers(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(end)],
+        modifiers,
+    );
+    navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+    assert!(app.camera.zoom > zoom);
+    assert_eq!(app.viewport.paths.draft.as_ref(), Some(&draft));
+    assert_eq!(app.document.history_counts(), history);
+}
+
+#[test]
+fn ring_tilt_drag_resections_the_surface_and_can_be_cancelled() {
+    let (mut app, ctx, rect) = ring_setup();
+    let before = app.document.geometry_snapshot();
+    let history = app.document.history_counts();
+    let start = guide_screen(rect, 0.25, -0.1);
+    click(&mut app, &ctx, start);
+    let level = app.viewport.paths.draft.clone().unwrap();
+    assert_complete_cylinder_ring(&level.points);
+
+    let handle = start + Vec2::new(36., -28.);
+    let end = handle + Vec2::new(10., 25.);
+    let drag = |app: &mut App| {
+        navigation_frame(app, &ctx, vec![egui::Event::PointerMoved(handle)]);
+        navigation_frame(app, &ctx, vec![primary_event(handle, true)]);
+        navigation_frame(app, &ctx, vec![egui::Event::PointerMoved(end)]);
+    };
+    drag(&mut app);
+    let tilted = app.viewport.paths.draft.clone().unwrap();
+    assert_ne!(level.points, tilted.points);
+    assert_complete_cylinder_ring(&tilted.points);
+    let (lo, hi) = tilted
+        .points
+        .iter()
+        .map(|p| p.position.1)
+        .fold((f32::INFINITY, f32::NEG_INFINITY), |(lo, hi), y| {
+            (lo.min(y), hi.max(y))
+        });
+    assert!(hi - lo > 0.25, "ring should tilt through the cylinder");
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert_eq!(app.document.history_counts(), history);
+
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::Key {
+            key: egui::Key::Escape,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }],
+    );
+    navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+    assert_eq!(app.viewport.paths.draft.as_ref(), Some(&level));
+    drag(&mut app);
+    navigation_frame(&mut app, &ctx, vec![primary_event(end, false)]);
+    assert_eq!(app.viewport.paths.draft.as_ref(), Some(&tilted));
+    app.dispatch(Command::Path(PathCommand::Save), &ctx);
+    assert!(app.document.paths()[0].closed);
+    assert_eq!(app.document.history_counts().0, history.0 + 1);
+}
+
+#[test]
+fn path_brush_releases_multiple_paths_and_picks_existing_handles() {
+    use crate::viewport::paths::PathBrush;
+
+    let (mut app, ctx, rect) = ring_setup();
+    app.viewport.paths.brush = Some(PathBrush::Ring);
+    let first = guide_screen(rect, 0.25, -0.1);
+    let second = guide_screen(rect, 0.25, 0.5);
+    let history = app.document.history_counts().0;
+    for pos in [first, second] {
+        navigation_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(pos), primary_event(pos, true)],
+        );
+        navigation_frame(&mut app, &ctx, vec![primary_event(pos, false)]);
+    }
+    assert_eq!(app.document.paths().len(), 2, "{}", app.ui.status);
+    assert_eq!(app.document.history_counts().0, history + 2);
+    let first_id = app.document.paths()[0].id;
+    let original = app.document.path(first_id).unwrap().clone();
+
+    navigation_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::PointerMoved(first), primary_event(first, true)],
+    );
+    navigation_frame(&mut app, &ctx, vec![primary_event(first, false)]);
+    assert_eq!(app.viewport.paths.draft.as_ref().unwrap().id, first_id);
+    assert_eq!(app.document.history_counts().0, history + 2);
+
+    assert!(app.viewport.paths.tool == PathTool::Ring);
+    let handle = first + egui::vec2(36., -28.);
+    let moved = handle + egui::vec2(10., 25.);
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(handle)]);
+    navigation_frame(&mut app, &ctx, vec![primary_event(handle, true)]);
+    assert!(app.viewport.paths.gesture_active(), "{}", app.ui.status);
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(moved)]);
+    assert!(app.viewport.paths.dirty(&app.document), "{}", app.ui.status);
+    navigation_frame(&mut app, &ctx, vec![primary_event(moved, false)]);
+    assert!(
+        app.document.path(first_id).unwrap().points != original.points,
+        "{}",
+        app.ui.status
+    );
+    assert_eq!(app.document.history_counts().0, history + 3);
+
+    navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Delete, true)]);
+    assert_eq!(app.viewport.paths.confirm_delete, Some(first_id));
+    assert_eq!(app.document.paths().len(), 2);
+    app.dispatch(Command::Path(PathCommand::Delete(first_id)), &ctx);
+    assert!(app.document.path(first_id).is_none());
+    app.dispatch(Command::Undo, &ctx);
+    assert!(app.document.path(first_id).is_some());
+}
+
+fn path_hud_button(app: &mut App, ctx: &egui::Context, label: &str) -> Pos2 {
+    // Give a newly opened floating control a frame to measure its size.
+    navigation_frame(app, ctx, vec![]);
+    let output = ctx.run(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                Pos2::ZERO,
+                Vec2::new(1000., 800.),
+            )),
+            ..Default::default()
+        },
+        |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| app.show_viewport(ui));
+        },
+    );
+    output
+        .shapes
+        .iter()
+        .find_map(|shape| match &shape.shape {
+            egui::Shape::Text(text) if text.galley.text() == label => {
+                Some(text.pos + text.galley.size() * 0.5)
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("Missing viewport action {label}"))
+}
+
+#[test]
+fn path_brush_selects_a_saved_guide_without_losing_a_draft() {
+    let (mut app, ctx, rect) = ring_setup();
+    app.dispatch(Command::Path(PathCommand::ActivateBrush), &ctx);
+    navigation_frame(&mut app, &ctx, vec![]);
+    let point = |x, y| guide_screen(rect, x, y);
+    click(&mut app, &ctx, point(-0.4, 0.55));
+    click(&mut app, &ctx, point(0.35, 0.55));
+    let complete = path_hud_button(&mut app, &ctx, "Complete");
+    click(&mut app, &ctx, complete);
+    let saved = app.document.paths()[0].id;
+    click(&mut app, &ctx, point(-0.4, -0.5));
+    click(&mut app, &ctx, point(0.35, -0.5));
+    let draft = app.viewport.paths.draft.as_ref().unwrap().clone();
+    assert_eq!(draft.points.len(), 2);
+    click(&mut app, &ctx, point(-0.4, 0.55));
+    assert_eq!(app.viewport.paths.draft.as_ref().unwrap().id, saved);
+    let resume = path_hud_button(&mut app, &ctx, "Resume draft");
+    click(&mut app, &ctx, resume);
+    assert_eq!(app.viewport.paths.draft.as_ref(), Some(&draft));
+}
+
+#[test]
+fn path_brush_can_switch_modes_and_cancels_unfinished_strokes() {
+    use crate::viewport::paths::PathBrush;
+
+    let (mut app, ctx, rect) = ring_setup();
+    let history = app.document.history_counts().0;
+    let stroke = |app: &mut App, y, cancel| {
+        let start = guide_screen(rect, 0.2, y);
+        let end = guide_screen(rect, 0.6, y);
+        navigation_frame(app, &ctx, vec![primary_event(start, true)]);
+        navigation_frame(app, &ctx, vec![egui::Event::PointerMoved(end)]);
+        if cancel {
+            navigation_frame(app, &ctx, vec![slice_key(egui::Key::Escape, true)]);
+        }
+        navigation_frame(app, &ctx, vec![primary_event(end, false)]);
+    };
+
+    app.viewport.paths.brush = Some(PathBrush::Surface);
+    stroke(&mut app, -0.1, false);
+    assert_eq!(app.document.paths().len(), 0);
+    stroke(&mut app, 0.2, true);
+    assert_eq!(app.viewport.paths.draft.as_ref().unwrap().points.len(), 2);
+    click(&mut app, &ctx, guide_screen(rect, -0.15, 0.4));
+    assert_eq!(app.viewport.paths.draft.as_ref().unwrap().points.len(), 3);
+    navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Enter, true)]);
+    assert_eq!(app.document.paths().len(), 1, "{}", app.ui.status);
+    navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Enter, false)]);
+    app.viewport.paths.brush = Some(PathBrush::Free);
+    stroke(&mut app, 0.5, false);
+    navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Enter, true)]);
+
+    assert_eq!(app.document.paths().len(), 2, "{}", app.ui.status);
+    assert_eq!(app.document.paths()[0].mode, PathMode::Surface);
+    assert_eq!(app.document.paths()[1].mode, PathMode::Free);
+    assert_eq!(app.document.history_counts().0, history + 2);
+}
+
+#[test]
+fn path_brush_auto_ring_move_refits_on_a_different_axis() {
+    use crate::sculpt::{Geometry, Primitive, PrimitiveKind, Vec3, paths::RingOrientation};
+    use crate::viewport::paths::PathBrush;
+
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Cylinder);
+    primitive.segments = 48;
+    primitive.divisions[1] = 12;
+    let cylinder = |height, angle| {
+        let mut mesh = primitive.mesh().unwrap();
+        for p in &mut mesh.vertices {
+            *p = Vec3(p.0 * 0.26, p.1 * 0.42, p.2 * 0.26).rotated(Vec3(0., 0., 1.), angle)
+                + Vec3(0., height, 0.);
+        }
+        mesh
+    };
+    let mesh = cylinder(-0.64, 0.)
+        .merged_with(&cylinder(0.64, 0.65))
+        .unwrap();
+    app.document.replace_geometry(Geometry::new(mesh)).unwrap();
+    app.dispatch(Command::Path(PathCommand::ActivateBrush), &ctx);
+    app.viewport.paths.brush = Some(PathBrush::Ring);
+    let rect = navigation_frame(&mut app, &ctx, vec![]);
+    click(&mut app, &ctx, guide_screen(rect, 0.08, -0.64));
+    let original = app.document.paths()[0].clone();
+    assert_eq!(original.ring_orientation, Some(RingOrientation::Auto));
+    let move_button = path_hud_button(&mut app, &ctx, "Move ring");
+    click(&mut app, &ctx, move_button);
+    click(&mut app, &ctx, guide_screen(rect, 0.08, 0.64));
+    assert_eq!(app.document.paths().len(), 1, "{}", app.ui.status);
+    let moved = &app.document.paths()[0];
+    assert!(
+        moved.points[moved.seam].position.1 > 0.5,
+        "{}",
+        app.ui.status
+    );
+    assert_eq!(moved.ring_orientation, Some(RingOrientation::Auto));
+    let normal = |path: &crate::sculpt::paths::SurfacePath| {
+        let origin = path.points[path.seam].position;
+        path.points
+            .iter()
+            .zip(path.points.iter().cycle().skip(1))
+            .fold(Vec3::default(), |sum, (a, b)| {
+                sum + (a.position - origin).cross(b.position - origin)
+            })
+            .norm()
+    };
+    assert!(normal(&original).dot(normal(moved)).abs() < 0.9);
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.paths()[0], original);
+}
+
+#[test]
+fn path_brush_free_point_axis_drag_changes_only_that_coordinate() {
+    use crate::viewport::paths::PathBrush;
+
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    app.dispatch(Command::Path(PathCommand::ActivateBrush), &ctx);
+    app.viewport.paths.brush = Some(PathBrush::Free);
+    let rect = navigation_frame(&mut app, &ctx, vec![]);
+    let end = guide_screen(rect, 0.3, -0.1);
+    click(&mut app, &ctx, guide_screen(rect, -0.3, -0.1));
+    click(&mut app, &ctx, end);
+    navigation_frame(&mut app, &ctx, vec![slice_key(egui::Key::Enter, true)]);
+    let original = app.document.paths()[0].points[1].position;
+    let handle = end + Vec2::new(48., 0.);
+    let moved = handle + Vec2::new(27., 6.);
+    navigation_frame(&mut app, &ctx, vec![primary_event(handle, true)]);
+    navigation_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(moved)]);
+    navigation_frame(&mut app, &ctx, vec![primary_event(moved, false)]);
+    let changed = app.document.paths()[0].points[1].position;
+    assert!(changed.0 > original.0 + 0.05, "{}", app.ui.status);
+    assert_eq!((changed.1, changed.2), (original.1, original.2));
 }

@@ -54,6 +54,7 @@ pub(crate) struct ProjectionControls {
     pub density_radius: f32,
     pub density_brush_strength: f32,
     pub progress: String,
+    pub error: Option<String>,
     pub hide_flow_guide: bool,
     pub relaxation_options: RelaxationOptions,
     pub source: Option<ProjectionSource>,

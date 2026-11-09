@@ -32,6 +32,7 @@ mod mesh_capacity;
 mod mirror;
 mod modeling;
 mod paint;
+mod path_thumbnail;
 pub(crate) mod paths;
 mod primitive;
 mod projection;
@@ -59,6 +60,7 @@ pub(crate) struct UiState {
     pub projection: projection::ProjectionControls,
     pub(crate) fusion: fusion::FusionControls,
     pub paths_active: bool,
+    pub path_brush_active: bool,
     pub paths_history_ready: bool,
     pub paths_history_reason: Option<&'static str>,
     pub paths_preview_active: bool,
@@ -66,6 +68,8 @@ pub(crate) struct UiState {
     pub path_starts_only: bool,
     pub modeling: modeling::ModelingControls,
     pub mirror_axis: Axis,
+    pub mirror_quad_bridge: bool,
+    pub mirror_centreline: bool,
     pub slice_active: bool,
     pub selection_tool: Option<crate::viewport::SelectionTool>,
     pub slice_path_mode: bool,
@@ -147,6 +151,7 @@ impl Default for UiState {
             projection: Default::default(),
             fusion: Default::default(),
             paths_active: false,
+            path_brush_active: false,
             paths_history_ready: true,
             paths_history_reason: None,
             paths_preview_active: false,
@@ -162,6 +167,8 @@ impl Default for UiState {
                 ..Default::default()
             },
             mirror_axis: Axis::X,
+            mirror_quad_bridge: false,
+            mirror_centreline: false,
             slice_active: false,
             selection_tool: None,
             slice_path_mode: false,
@@ -949,17 +956,40 @@ impl UiState {
                                 ui,
                                 id,
                                 &b.name,
-                                self.highlighted_brush_index(document, ui.ctx()) == Some(i),
+                                !self.path_brush_active
+                                    && self.highlighted_brush_index(document, ui.ctx()) == Some(i),
                                 width,
                             )
                             .customize(Action::SelectBrush(b.identity()))
                             .clicked()
                             {
-                                self.select_brush(i, document);
+                                if self.paths_active {
+                                    commands
+                                        .push(Command::Action(Action::SelectBrush(b.identity())));
+                                } else {
+                                    self.select_brush(i, document);
+                                }
                             }
                             if (i + 1) % columns == 0 {
                                 ui.end_row();
                             }
+                        }
+                        if ui
+                            .add_enabled_ui(document.active_visible(), |ui| {
+                                design::brush_tile_with_icon(
+                                    ui,
+                                    "Path Brush",
+                                    self.path_brush_active,
+                                    width,
+                                    |ctx| Some(design::icon(ctx, Glyph::Path)),
+                                )
+                                .on_hover_text("Draw and edit paths in the viewport")
+                                .clicked()
+                            })
+                            .inner
+                        {
+                            commands
+                                .push(Command::Path(crate::command::PathCommand::ActivateBrush));
                         }
                         instances::library_tiles(
                             ui,
@@ -971,7 +1001,7 @@ impl UiState {
                     });
                 });
                 ui.add_space(4.);
-                if self.instances.placing {
+                if self.instances.placing || self.path_brush_active {
                     return;
                 }
                 if active.is_none() {

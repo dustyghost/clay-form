@@ -117,14 +117,16 @@ impl Working {
         for (v, &p) in source.positions.iter().enumerate() {
             w.witnesses[*w.incident[v].first().unwrap()].push(p);
         }
+        let sharp_threshold = options.sharp_threshold();
         for [a, b] in w.edges() {
             let fs = w.edge_faces(a, b);
             if fs.len() == 1
-                || (options.preserve_sharp
-                    && normal(w.points(w.faces[fs[0]].unwrap()))
+                || sharp_threshold.is_some_and(|threshold| {
+                    normal(w.points(w.faces[fs[0]].unwrap()))
                         .normalize()
                         .dot(normal(w.points(w.faces[fs[1]].unwrap())).normalize())
-                        < std::f64::consts::FRAC_1_SQRT_2)
+                        <= threshold
+                })
             {
                 w.locked[a] = true;
                 w.locked[b] = true;
@@ -863,6 +865,15 @@ mod tests {
         }
         let mut o = options();
         o.preserve_sharp = true;
+        let crease = source
+            .positions
+            .iter()
+            .position(|p| p.x == 0.4 && p.y > 0. && p.y < 1.)
+            .unwrap();
+        assert!(Working::new(&source, &o).locked[crease]);
+        o.sharp_angle_degrees = 75.;
+        assert!(!Working::new(&source, &o).locked[crease]);
+        o.sharp_angle_degrees = 45.;
         let result = prepare(&source, &o, 3, &|| false, &|_| {}).unwrap();
         for p in source.positions.iter().filter(|p| p.x == 0.4) {
             assert!(result.surface.positions.contains(p));

@@ -53,6 +53,7 @@ impl App {
         self.ui.projection.report = None;
         self.ui.projection.busy = false;
         self.ui.projection.progress.clear();
+        self.ui.projection.error = None;
     }
     pub(super) fn cancel_projection(&mut self) {
         self.clear_projection_preview();
@@ -139,7 +140,10 @@ impl App {
                         settings: worker.settings.clone(),
                     });
                 }
-                Err(error) => self.ui.status = error,
+                Err(error) => {
+                    self.ui.projection.error = Some(error.clone());
+                    self.ui.status = error;
+                }
             }
         }
     }
@@ -184,6 +188,14 @@ impl App {
     }
     pub(super) fn open_retopology(&mut self) -> Result<(), String> {
         self.document.require_retopology_target()?;
+        if self.viewport.paths.brush.is_some() {
+            if self.viewport.paths.has_unfinished(&self.document) {
+                return Err(
+                    "Complete or cancel the current path before opening Guided retopology".into(),
+                );
+            }
+            self.dispatch_path(crate::command::PathCommand::Close)?;
+        }
         self.viewport.cancel(&mut self.document);
         self.clear_projection_preview();
         let state = &mut self.ui.projection;
@@ -191,11 +203,22 @@ impl App {
         state.open = true;
         // Start large sculpts at a bounded, reviewable budget. The explicit
         // control still permits up to 50,000 quads.
+        let symmetry = self.document.symmetry();
+        let mut enabled_axes = crate::sculpt::Axis::ALL
+            .into_iter()
+            .zip(symmetry.mirror)
+            .filter_map(|(axis, enabled)| enabled.then_some(axis));
+        state.layout.symmetry_axis = enabled_axes
+            .next()
+            .filter(|_| symmetry.enabled && enabled_axes.next().is_none());
+        state.layout.symmetry_center = symmetry.center;
+        state.layout.symmetry_source = crate::sculpt::retopology::SymmetrySource::Original;
         state.layout.target = (self.document.mesh().triangles.len() / 10).clamp(4, 10_000);
         state.flow_paths.retain(|&id| {
-            self.document
-                .path(id)
-                .is_some_and(|p| p.target == self.document.active_model_id())
+            self.document.path(id).is_some_and(|p| {
+                p.target == self.document.active_model_id()
+                    && p.mode == crate::sculpt::paths::PathMode::Surface
+            })
         });
         state.density_paint = None;
         if state.density_radius == 0. {
@@ -246,7 +269,7 @@ impl App {
         let view = settings
             .view_input
             .get_or_insert_with(|| serde_json::json!({}));
-        view["guided_retopology"] = serde_json::json!({"backend":"native_surface_field","input_triangle_limit":options.input_triangle_limit,"target":options.target,"paths":self.ui.projection.flow_paths,"path_strength":options.flow,"density_strength":options.density,"shape_adaptation":options.adaptive,"mirror_path_x":options.mirror_path_x,"preserve_sharp":options.preserve_sharp});
+        view["guided_retopology"] = serde_json::json!({"backend":"native_surface_field","input_triangle_limit":options.input_triangle_limit,"target":options.target,"paths":self.ui.projection.flow_paths,"path_strength":options.flow,"density_strength":options.density,"shape_adaptation":options.adaptive,"mirror_path_x":options.mirror_path_x,"preserve_sharp":options.preserve_sharp,"sharp_angle_degrees":options.sharp_angle_degrees,"symmetry_axis":options.symmetry_axis,"symmetry_center":options.symmetry_center,"symmetry_centreline":options.symmetry_centreline,"symmetry_source":options.symmetry_source});
         self.projection.worker = Some(Worker {
             job,
             progress: Some(progress),

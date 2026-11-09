@@ -2,21 +2,20 @@
 
 [Documentation home](../../README.md#documentation) · [Sculpting and brushes](sculpting.md)
 
-Use **Mesh → Editable paths** to draw a reusable guide, edit it while orbiting, and guide your brush as you sculpt on the model. Paths belong to a submodel and save with the project. They are separate from [mesh edge-loop selections](edges.md).
-
-Saved paths also drive [assemblies of reusable models](instances.md#assemble-pieces-along-a-path), with repeating middle pieces and optional start/end caps.
+Choose **Path Brush** in the **Brush Library** to draw and edit paths in the viewport. Paths belong to a submodel and save with the project. You can use saved paths as sculpt guides or as routes for [assemblies of reusable models](instances.md#assemble-pieces-along-a-path).
 
 ## Draw and edit a path
 
-1. Select the submodel, open **Mesh → Editable paths**, and choose **New surface path** or **New free path**.
-2. Use **Add / draw** and click to place points, or drag to draw a sequence. Surface points attach to the visible target surface. Free points lie on a plane parallel to the current view, through the selected or last point; the first point uses a plane through the origin.
-3. Right-drag to orbit, middle-drag to pan, and use the wheel to zoom. Continue placing points from the new view, including around the back of the model.
-4. Choose **Move points** to select and drag a point, or **Insert point** to add detail between existing points. Use the numeric **X**, **Y**, and **Z** controls for precise positions and adjust **Smoothing** to soften the whole guide, or round individual corners as described below.
-5. Choose **Save & sculpt** to save a surface path and return to sculpting, with path guidance enabled. **Save path** commits the edit while keeping the editor open. Either save is one undo step. **Discard edits** restores the saved path; **Done** closes the editor and discards unsaved edits. **Escape** cancels an active point drag.
+1. Select **Surface** or **Free** in the brush's **Mode** menu. Tap to place points or drag to sketch. Lift the pen between strokes to continue the same path. **Curve** switches between a smooth curve and straight segments.
+2. Drag **Orbit**, **Pan**, or **Zoom** beside the viewport gizmo. During the drag the viewport shows which camera action is active. Release to resume the same draft. Right-drag, middle-drag, and the wheel also navigate.
+3. Tap **Complete** by the draft, **Complete path** in the tool strip, or press **Enter**. This saves the path as one undo step. Tap **Cancel** to discard the draft. Press **Escape** during a drag to cancel that gesture.
+4. Tap an existing guide or a visible handle to edit it. Grab a point to move it. **Insert point** lets you tap the selected guide to add a point. If a draft is already underway, use **Resume draft** after editing the saved guide. Press **Delete** or tap **Delete…** to open the confirmation for the selected path.
 
-A free path can leave the surface and is useful as a spatial guide. Save it, then choose **Attach saved path to surface** before using it as a brush route. Surface paths retain their world-space positions as you move the camera. Rear-facing surface segments appear dim and dashed; orbit until their points face the camera before selecting or moving them.
+**Free** points lie on a view plane through the previous point, or through the origin for a new path. Rotate the view to place points at different depths. A selected point has X, Y and Z coordinate controls and draggable handles for the axes visible from the current view.
 
-**Add / draw** keeps dense guides readable by showing only the start, open endpoint, selected point, and the point under the pointer. Choose **Move points** or **Insert point** to show every editable control-point handle. These handles are not brush dabs or mesh vertices.
+**Surface** points follow the active model. Drag **Offset** to move the route along the surface normals in model units. Positive values lift it off the surface and negative values sink it. The path retains its surface anchors for sculpting and retopology. Assemblies and the displayed route use the offset.
+
+Open **Paths…** or **Mesh → Editable paths** to rename, hide or manage saved guides and access advanced settings. Each saved path has a thumbnail showing its route on the model. Other saved guides appear faintly in the viewport. Use the checkbox beside a path to hide its guide.
 
 ## Move, rotate and scale the whole path
 
@@ -38,16 +37,12 @@ Edits remain a draft until **Save path** or **Save & sculpt**. Press **Escape** 
 
 ## Draw a ring with one pen drag
 
-1. Select **New ring** in Editable paths. Choose the cylinder's lengthwise **Axis**: Y for an upright cylinder, or X/Z for one lying along those axes.
-2. Choose **Level ring** for a flat cross-section, or **Shortest surface route** to let the loop travel along the surface where a shorter route is available.
-3. Touch the side of the model. A complete loop appears with its starting point at the pen. Keep the pen down and slide along the surface to reposition the loop.
-4. Release to keep the draft, then choose **Save & sculpt**. **Escape** during a drag restores the preceding draft.
+1. Choose **Ring** in the Path Brush **Mode** menu. **New ring · Auto** fits a planar section to the local shape. Choose **X**, **Y** or **Z** for a fixed axis.
+2. Touch the side of the model. Drag to position the loop and release to keep it. Tap elsewhere on the model to place another ring.
+3. Tap an existing ring to select it. Drag its start handle, or choose **Move ring** and tap a new location. An Auto ring refits to its new location. A fixed-axis ring keeps its chosen axis.
+4. Drag **Tilt** to set a manual angle. Select **Auto** again to refit it. If a section cannot produce a closed loop, the last valid ring is kept.
 
-Level rings stay perpendicular to the chosen axis. Shortest routes use the mesh edges and the level section to find a shorter loop that winds once around that axis; mesh resolution affects the result. They can rise or fall along an uneven surface. Neither mode jumps between disconnected shells or cuts through a cap. A section that is open, branched, or cannot surround the selected axis reports an error and keeps the last valid draft.
-
-You can also draw a loop point by point with **New surface path**, orbit around the model, then choose **Close loop**. Do not duplicate the first point. Move or insert points to refine either type of loop.
-
-Select a point and choose **Use as seam** to change where traversal starts. **Reverse direction** changes travel direction while preserving the seam's position. **Open loop** breaks the loop at its seam.
+Ring orientation settings save with the project. To give an older closed surface guide these controls, select it and choose **Fit as ring**.
 
 ## Sculpt along a saved guide
 

@@ -14,6 +14,25 @@ pub enum PathMode {
     Surface,
     Free,
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RingOrientation {
+    #[default]
+    Auto,
+    X,
+    Y,
+    Z,
+    Manual,
+}
+impl RingOrientation {
+    pub(crate) fn vector(self) -> Option<Vec3> {
+        match self {
+            Self::Auto | Self::Manual => None,
+            Self::X => Some(Vec3(1., 0., 0.)),
+            Self::Y => Some(Vec3(0., 1., 0.)),
+            Self::Z => Some(Vec3(0., 0., 1.)),
+        }
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PathPoint {
     pub position: Vec3,
@@ -35,6 +54,10 @@ pub struct SurfacePath {
     pub mode: PathMode,
     pub points: Vec<PathPoint>,
     pub smoothing: f32,
+    #[serde(default, skip_serializing_if = "zero_offset")]
+    pub offset: f32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ring_orientation: Option<RingOrientation>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub corner_rounding: Vec<f32>,
     pub closed: bool,
@@ -48,6 +71,9 @@ pub struct SurfacePath {
 pub struct AttachedRoute {
     pub points: Vec<PathPoint>,
     pub shape_signature: u64,
+}
+fn zero_offset(value: &f32) -> bool {
+    *value == 0.
 }
 fn finite(v: Vec3) -> bool {
     v.0.is_finite() && v.1.is_finite() && v.2.is_finite()
@@ -134,6 +160,7 @@ impl SurfacePath {
         }
         if self.points.len() < 3 {
             self.closed = false;
+            self.ring_orientation = None;
             self.seam = 0;
         } else if self.closed {
             self.seam = if index < self.seam {
@@ -207,6 +234,12 @@ impl SurfacePath {
         {
             return Err("Invalid path point count, seam, or smoothing".into());
         }
+        if !self.offset.is_finite()
+            || self.offset.abs() > 1e6
+            || (self.mode != PathMode::Surface && self.offset != 0.)
+        {
+            return Err("Surface offset must be a finite distance on a surface path".into());
+        }
         for point in &self.points {
             if !finite(point.position)
                 || !finite(point.normal)
@@ -243,6 +276,16 @@ impl SurfacePath {
         self.mode == PathMode::Surface && self.surface_signature != mesh_signature(mesh)
     }
     pub fn dense_curve(&self) -> Vec<PathPoint> {
+        let mut points = self.surface_curve();
+        for point in &mut points {
+            point.position = self.display_position(*point);
+        }
+        points
+    }
+    pub(crate) fn display_position(&self, point: PathPoint) -> Vec3 {
+        point.position + point.normal * self.offset
+    }
+    pub(crate) fn surface_curve(&self) -> Vec<PathPoint> {
         if let Some(points) = self.attached_points() {
             return points.to_vec();
         }
@@ -353,7 +396,7 @@ impl SurfacePath {
         self.validate()?;
         // Project the dense curve before measuring arc length. This prevents
         // uneven brush spacing caused by projecting already-spaced chord samples.
-        let curve = self.dense_curve();
+        let curve = self.surface_curve();
         let mut dense = refine_curve(&curve, spacing, cancel)?;
         let attached = self.attached_points().is_some();
         let max_distance = if attached {
@@ -473,7 +516,7 @@ impl SurfacePath {
             points.to_vec()
         } else {
             let length: f32 = self
-                .dense_curve()
+                .surface_curve()
                 .windows(2)
                 .map(|p| (p[1].position - p[0].position).len())
                 .sum();
@@ -880,6 +923,27 @@ pub(crate) fn sample_surface_error(mesh: &Mesh, samples: &[PathSample]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn surface_offset_keeps_anchors_and_is_baked_when_detached() {
+        let mesh = plane();
+        let mut path = path();
+        path.reproject(&mesh, 0.1).unwrap();
+        let route = path.dense_curve();
+        let anchors = path.samples_on_mesh(&mesh, 0.05).unwrap();
+        path.offset = 0.15;
+        let offset = path.dense_curve();
+        assert_eq!(path.samples_on_mesh(&mesh, 0.05).unwrap(), anchors);
+        for (base, lifted) in route.iter().zip(&offset) {
+            assert!((lifted.position - base.position - base.normal * 0.15).len() < 1e-6);
+        }
+        let restored: SurfacePath =
+            serde_json::from_str(&serde_json::to_string(&path).unwrap()).unwrap();
+        assert_eq!(restored, path);
+        let detached = restored.detached();
+        assert_eq!(detached.offset, 0.);
+        assert_eq!(detached.dense_curve(), offset);
+    }
+
     fn path() -> SurfacePath {
         SurfacePath {
             id: 1,
@@ -900,6 +964,8 @@ mod tests {
             closed: false,
             seam: 0,
             surface_signature: 0,
+            offset: 0.,
+            ring_orientation: None,
             attached_route: None,
             corner_rounding: Vec::new(),
         }

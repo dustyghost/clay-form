@@ -323,13 +323,15 @@ impl App {
             | Command::ModelSelectLoop
             | Command::GroupModelSelection(..)) => self.dispatch_modeling(command),
             Command::EditEdges(edit) => self.start_mesh_job(Operation::Edges(edit)),
-            Command::Mirror(axis, source_positive) => {
-                self.start_mesh_job(Operation::Mirror(crate::sculpt::MirrorOptions {
+            Command::Mirror(axis, source_positive) => self.start_mesh_job(Operation::Mirror(
+                crate::sculpt::MirrorOptions {
                     axis,
                     source_positive,
                     offset: self.document.symmetry().center.dot(axis.vector()),
-                }))
-            }
+                },
+                self.ui.mirror_quad_bridge && self.document.mesh().quad_mirror_available(),
+                self.ui.mirror_centreline,
+            )),
             Command::Action(_) => unreachable!(),
             Command::AddReference(file) => self.add_reference(file),
             Command::ArrangeReferences(active) => {

@@ -70,6 +70,8 @@ pub(crate) fn fixture(bulb: bool) -> (Mesh, SurfacePath) {
         corner_rounding: Vec::new(),
         seam: 0,
         surface_signature: mesh_signature(&mesh),
+        offset: 0.,
+        ring_orientation: None,
         attached_route: None,
     };
     (mesh, path)

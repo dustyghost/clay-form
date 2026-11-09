@@ -711,6 +711,8 @@ mod tests {
             smoothing: 0.5,
             corner_rounding: Vec::new(),
             surface_signature: 0,
+            offset: 0.,
+            ring_orientation: None,
             attached_route: None,
         };
         let a = PathAssembly {

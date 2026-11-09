@@ -85,7 +85,64 @@ fn vertex_node(
 /// between nearby shells. Coplanar caps, branches, and open cuts are rejected.
 pub fn section_ring(mesh: &Mesh, hit: PathPoint, axis: Vec3) -> Result<Vec<PathPoint>, String> {
     let (axis, epsilon) = inputs(mesh, hit, axis)?;
+    section_with_normals(mesh, hit, axis, epsilon, &mesh.normals())
+}
+
+/// Find a short planar cross-section through the touched surface. Candidate
+/// axes lie in its tangent plane so the cut crosses the surface at the touch.
+pub(crate) fn auto_section_ring(
+    mesh: &Mesh,
+    hit: PathPoint,
+) -> Result<(Vec3, Vec<PathPoint>), String> {
+    let (normal, epsilon) = inputs(mesh, hit, hit.normal)?;
+    let up = if normal.1.abs() < 0.9 {
+        Vec3(0., 1., 0.)
+    } else {
+        Vec3(1., 0., 0.)
+    };
+    let seed = (up - normal * up.dot(normal)).norm();
     let normals = mesh.normals();
+    let mut best = None;
+    let try_axis = |axis, best: &mut Option<(f32, Vec3, Vec<PathPoint>)>| {
+        let Ok(points) = section_with_normals(mesh, hit, axis, epsilon, &normals) else {
+            return;
+        };
+        let length = points
+            .iter()
+            .zip(points.iter().cycle().skip(1))
+            .map(|(a, b)| (b.position - a.position).len())
+            .sum::<f32>();
+        if best
+            .as_ref()
+            .is_none_or(|(previous, _, _)| length < *previous * 0.9995)
+        {
+            *best = Some((length, axis, points));
+        }
+    };
+    let step = std::f32::consts::PI / 8.;
+    for i in 0..8 {
+        try_axis(seed.rotated(normal, step * i as f32), &mut best);
+    }
+    for step in [step * 0.5, step * 0.25] {
+        if let Some((_, axis, _)) = best.as_ref() {
+            let axis = *axis;
+            try_axis(axis.rotated(normal, -step), &mut best);
+            try_axis(axis.rotated(normal, step), &mut best);
+        }
+    }
+    best.map(|(_, axis, points)| (axis, points)).ok_or_else(|| {
+        "Auto could not find a closed section here; try another touch point or choose an axis"
+            .into()
+    })
+}
+
+fn section_with_normals(
+    mesh: &Mesh,
+    hit: PathPoint,
+    axis: Vec3,
+    epsilon: f32,
+    normals: &[Vec3],
+) -> Result<Vec<PathPoint>, String> {
     let distances: Vec<_> = mesh
         .vertices
         .iter()
@@ -101,6 +158,11 @@ pub fn section_ring(mesh: &Mesh, hit: PathPoint, axis: Vec3) -> Result<Vec<PathP
         }
         if triangle.iter().any(|&v| v >= mesh.vertices.len()) {
             return Err("Invalid target triangle".into());
+        }
+        if triangle.iter().all(|&v| distances[v] > epsilon)
+            || triangle.iter().all(|&v| distances[v] < -epsilon)
+        {
+            continue;
         }
         let zeros = triangle
             .iter()
@@ -705,10 +767,36 @@ mod tests {
             closed: true,
             seam: 0,
             surface_signature: 0,
+            offset: 0.,
+            ring_orientation: None,
             attached_route: None,
             corner_rounding: Vec::new(),
         };
         assert!(path.sample(0.025).is_ok(), "{:?}", path.sample(0.025).err());
+    }
+
+    #[test]
+    fn auto_ring_follows_a_tilted_cylinder_instead_of_a_world_axis() {
+        let mut mesh = cylinder(0., 0.);
+        let rotation = Vec3(0., 0., 1.);
+        let angle = 0.57;
+        let sample = hit(&mesh, 0.13);
+        for vertex in &mut mesh.vertices {
+            *vertex = vertex.rotated(rotation, angle);
+        }
+        let hit = PathPoint {
+            position: sample.position.rotated(rotation, angle),
+            normal: sample.normal.rotated(rotation, angle),
+        };
+        let (axis, ring) = auto_section_ring(&mesh, hit).unwrap();
+        let expected = Vec3(0., 1., 0.).rotated(rotation, angle);
+        assert!(axis.dot(expected).abs() > 0.995, "{axis:?}");
+        assert!(
+            ring.iter()
+                .all(|p| (p.position - hit.position).dot(axis).abs() < 1e-5)
+        );
+        assert!(perimeter(&ring) > 6.);
+        check_loop(&mesh, &ring, hit);
     }
 
     #[test]

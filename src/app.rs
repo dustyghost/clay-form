@@ -684,6 +684,7 @@ impl App {
                 },
             },
         );
+        self.commit_path_gesture(ui.ctx());
         if self.ui.instances.placing && self.viewport.object_brush.is_none() {
             self.ui.instances.group = None;
             self.ui.instances.asset = None;

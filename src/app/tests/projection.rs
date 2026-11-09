@@ -515,3 +515,57 @@ fn guided_retopology_rejects_failed_and_stale_previews_without_adding_models() {
     assert_eq!(app.document.history_counts(), history);
     assert!(app.ui.status.contains("Scene changed"));
 }
+
+#[test]
+fn guided_retopology_inherits_a_single_active_mirror_plane() {
+    use crate::sculpt::{Axis, Mesh, Symmetry, Vec3, retopology::SymmetrySource};
+    let mut app = App::default();
+    app.document
+        .replace_geometry(Geometry::new(Mesh::starting_sphere()))
+        .unwrap();
+    let ctx = egui::Context::default();
+    let center = Vec3(0.2, -0.3, 0.4);
+    app.document
+        .set_symmetry(Symmetry {
+            enabled: true,
+            mirror: [false, false, true],
+            center,
+            ..Default::default()
+        })
+        .unwrap();
+    app.dispatch(Command::OpenRetopology, &ctx);
+    assert_eq!(app.ui.projection.layout.symmetry_axis, Some(Axis::Z));
+    assert_eq!(app.ui.projection.layout.symmetry_center, center);
+    assert_eq!(
+        app.ui.projection.layout.symmetry_source,
+        SymmetrySource::Original
+    );
+    app.dispatch(Command::CancelProjection, &ctx);
+    let mut symmetry = app.document.symmetry().clone();
+    symmetry.mirror[0] = true;
+    app.document.set_symmetry(symmetry).unwrap();
+    app.dispatch(Command::OpenRetopology, &ctx);
+    assert_eq!(app.ui.projection.layout.symmetry_axis, None);
+}
+
+#[test]
+fn guided_retopology_opens_after_path_brush_work_is_complete() {
+    use crate::{command::PathCommand, sculpt::paths::PathPoint, viewport::paths::PathEditor};
+
+    let (mut app, ctx) = setup_projection();
+    app.dispatch(Command::Path(PathCommand::ActivateBrush), &ctx);
+    assert!(app.ui.path_brush_active);
+    let mut draft = PathEditor::new_draft(&app.document, crate::sculpt::paths::PathMode::Free);
+    draft.points.push(PathPoint {
+        position: crate::sculpt::Vec3::default(),
+        normal: crate::sculpt::Vec3(0., 0., 1.),
+    });
+    app.viewport.paths.select(draft.clone());
+    app.dispatch(Command::OpenRetopology, &ctx);
+    assert!(!app.ui.projection.open);
+    assert_eq!(app.viewport.paths.draft.as_ref(), Some(&draft));
+    app.dispatch(Command::Path(PathCommand::Discard), &ctx);
+    app.dispatch(Command::OpenRetopology, &ctx);
+    assert!(app.ui.projection.open, "{}", app.ui.status);
+    assert!(!app.viewport.paths.active);
+}

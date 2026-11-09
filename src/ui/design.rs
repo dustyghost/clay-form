@@ -5,6 +5,7 @@ pub(super) enum Glyph {
     Pan,
     Zoom,
     Orbit,
+    Path,
     Roll,
     Groups,
     New,
@@ -40,6 +41,19 @@ impl Glyph {
     fn lines(self) -> Vec<Vec<[f32; 2]>> {
         use Glyph::*;
         match self {
+            Path => vec![
+                vec![
+                    [3., 18.],
+                    [6., 17.],
+                    [9., 13.],
+                    [12., 8.],
+                    [16., 5.],
+                    [21., 6.],
+                ],
+                circle(3., 18., 1.6),
+                circle(10.5, 10.5, 1.6),
+                circle(21., 6., 1.6),
+            ],
             Pan => vec![
                 vec![[12., 2.], [12., 22.]],
                 vec![[2., 12.], [22., 12.]],
@@ -335,7 +349,7 @@ fn circle(x: f32, y: f32, r: f32) -> Vec<[f32; 2]> {
         })
         .collect()
 }
-fn icon(ctx: &egui::Context, glyph: Glyph) -> egui::TextureId {
+pub(super) fn icon(ctx: &egui::Context, glyph: Glyph) -> egui::TextureId {
     let key = egui::Id::new(format!("action-icon-{glyph:?}"));
     if let Some(texture) = ctx.data(|d| d.get_temp::<egui::TextureHandle>(key)) {
         return texture.id();

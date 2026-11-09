@@ -1,6 +1,6 @@
 //! Session-only controls for the guided layout preview.
 use super::{projection::ProjectionControls, *};
-use crate::sculpt::paths::PathMode;
+use crate::sculpt::{Axis, paths::PathMode, retopology::SymmetrySource};
 
 impl ProjectionControls {
     fn layout_options(&mut self, ui: &mut egui::Ui, document: &Document) {
@@ -10,10 +10,15 @@ impl ProjectionControls {
             ui.add(egui::DragValue::new(&mut self.layout.target).range(range));
         });
         ui.weak("A fresh quad layout follows the surface. Face-group borders may move.");
-        ui.checkbox(
-            &mut self.layout.preserve_sharp,
-            "Protect bends of 45° or more",
-        );
+        ui.horizontal_wrapped(|ui| {
+            ui.checkbox(&mut self.layout.preserve_sharp, "Protect sharp bends");
+            ui.add_enabled(
+                self.layout.preserve_sharp,
+                egui::DragValue::new(&mut self.layout.sharp_angle_degrees)
+                    .range(1. ..=180.)
+                    .suffix("° or more"),
+            );
+        });
         ui.horizontal(|ui| {
             ui.label("Input triangle limit");
             design::help(
@@ -27,6 +32,39 @@ impl ProjectionControls {
         });
 
         ui.separator();
+        ui.label("Layout symmetry (experimental)");
+        ui.horizontal_wrapped(|ui| {
+            ui.selectable_value(&mut self.layout.symmetry_axis, None, "Off");
+            for (axis, label) in [(Axis::X, "X"), (Axis::Y, "Y"), (Axis::Z, "Z")] {
+                ui.selectable_value(&mut self.layout.symmetry_axis, Some(axis), label);
+            }
+        });
+        if let Some(axis) = self.layout.symmetry_axis {
+            ui.label(format!(
+                "Mirror plane: {axis:?} = {:.3}",
+                self.layout.symmetry_center.dot(axis.vector())
+            ));
+            ui.horizontal_wrapped(|ui| {
+                ui.selectable_value(
+                    &mut self.layout.symmetry_source,
+                    SymmetrySource::Original,
+                    "Keep sculpt shape",
+                );
+                ui.selectable_value(
+                    &mut self.layout.symmetry_source,
+                    SymmetrySource::Positive,
+                    "Keep + and mirror",
+                );
+                ui.selectable_value(
+                    &mut self.layout.symmetry_source,
+                    SymmetrySource::Negative,
+                    "Keep − and mirror",
+                );
+            });
+            ui.checkbox(&mut self.layout.symmetry_centreline, "Add centreline");
+            ui.weak("Joins the two halves with quads at the sculpt symmetry plane. Keep sculpt shape requires a nearly symmetric surface. The original sculpt is kept when you apply.");
+        }
+        ui.separator();
         ui.label("Edge direction");
         let paths: Vec<_> = document
             .paths()
@@ -35,21 +73,48 @@ impl ProjectionControls {
             .collect();
         if paths.is_empty() {
             ui.weak("Save surface paths on this model to use as optional guides.");
-        }
-        for path in paths {
-            let mut selected = self.flow_paths.contains(&path.id);
-            if ui.checkbox(&mut selected, &path.name).changed() {
-                if selected {
-                    self.flow_paths.push(path.id);
-                } else {
-                    self.flow_paths.retain(|&id| id != path.id);
-                }
+        } else {
+            let all_selected = paths.iter().all(|path| self.flow_paths.contains(&path.id));
+            if ui
+                .add_enabled(!all_selected, egui::Button::new("Select all"))
+                .clicked()
+            {
+                self.flow_paths = paths.iter().map(|path| path.id).collect();
             }
+            let thumbnail = super::path_thumbnail::active_model(ui, document);
+            egui::ScrollArea::vertical()
+                .id_salt("retopology_paths")
+                .max_height(190.)
+                .show(ui, |ui| {
+                    for path in paths {
+                        ui.push_id(path.id, |ui| {
+                            ui.horizontal(|ui| {
+                                let mut selected = self.flow_paths.contains(&path.id);
+                                let preview_clicked = thumbnail.show(ui, path).clicked();
+                                let changed = ui.checkbox(&mut selected, &path.name).changed();
+                                if preview_clicked {
+                                    selected = !selected;
+                                }
+                                if changed || preview_clicked {
+                                    if selected {
+                                        self.flow_paths.push(path.id);
+                                    } else {
+                                        self.flow_paths.retain(|&id| id != path.id);
+                                    }
+                                }
+                            });
+                        });
+                    }
+                });
         }
         ui.weak("Select any number of paths. Guides steer nearby edges; closed paths do not guarantee complete edge loops.");
         ui.add_enabled_ui(!self.flow_paths.is_empty(), |ui| {
             ui.add(egui::Slider::new(&mut self.layout.flow, 0. ..=1.).text("Path strength"));
-            ui.checkbox(&mut self.layout.mirror_path_x, "Mirror paths across X = 0");
+            if self.layout.symmetry_axis.is_some() {
+                ui.weak("Layout symmetry reflects guides. When mirroring the sculpt, guides on the retained side drive the layout.");
+            } else {
+                ui.checkbox(&mut self.layout.mirror_path_x, "Mirror paths across X = 0");
+            }
         });
 
         ui.separator();
@@ -109,6 +174,16 @@ impl UiState {
             let budget = state.layout.require_input_budget(document.mesh());
             if let Err(error) = &budget {
                 ui.label(error);
+            }
+            if let Some(error) = &state.error {
+                ui.colored_label(ui.visuals().error_fg_color, error);
+                if state.layout.symmetry_axis.is_some()
+                    && error.starts_with("The source differs across this plane.")
+                    && ui.button("Preview with symmetry off").clicked()
+                {
+                    state.layout.symmetry_axis = None;
+                    commands.push(Command::PreviewProjection);
+                }
             }
             if state.busy {
                 ui.spinner();

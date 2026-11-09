@@ -134,6 +134,8 @@ impl<'a> EditorPolicy<'a> {
                 Intent::Navigate
             }
             Action::Undo | Action::Redo => Intent::History,
+            Action::SelectBrush(_) if self.ui.path_brush_active => Intent::Brush,
+            Action::GuidedRetopology if self.ui.path_brush_active => Intent::Path,
             Action::TogglePathGuides | Action::TogglePathOnlyStrokes => Intent::PathGuides,
             _ => Intent::Edit,
         };
@@ -487,6 +489,7 @@ impl<'a> EditorPolicy<'a> {
         let intent = match command {
             Command::Action(action) => return self.action(action),
             Command::Path(_) => Intent::Path,
+            Command::OpenRetopology if self.ui.path_brush_active => Intent::Path,
             Command::Instances(_) => Intent::Instances,
             Command::ResetView
             | Command::ZoomIn
