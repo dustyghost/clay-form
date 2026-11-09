@@ -648,7 +648,12 @@ impl App {
                 .selected_vertex_group
                 .filter(|(m, g)| {
                     *m == self.document.active_model_index()
-                        && *g < self.document.mesh().vertex_groups.len()
+                        && self
+                            .document
+                            .mesh()
+                            .vertex_groups
+                            .get(*g)
+                            .is_some_and(|group| group.purpose.is_selection())
                 })
                 .map(|(_, g)| match action {
                     Action::MaskGroup => Command::MaskVertexGroup(g),

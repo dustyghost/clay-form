@@ -14,12 +14,14 @@ struct Worker {
     job: BackgroundJob<(Mesh, SurfaceReport)>,
     revision: u64,
     settings: crate::diagnostics::EditSettings,
+    progress: Option<Arc<std::sync::Mutex<String>>>,
 }
 #[derive(Default)]
 pub(super) struct ProjectionState {
     worker: Option<Worker>,
     pub draft: Option<ProjectionDraft>,
     pub reference: Option<(u64, Arc<Mesh>)>,
+    pub density_display: Option<(u64, Arc<Mesh>)>,
 }
 impl App {
     pub(super) fn open_projection(&mut self) -> Result<(), String> {
@@ -50,10 +52,13 @@ impl App {
         self.viewport.session.projection_preview = None;
         self.ui.projection.report = None;
         self.ui.projection.busy = false;
+        self.ui.projection.progress.clear();
     }
     pub(super) fn cancel_projection(&mut self) {
         self.clear_projection_preview();
         self.ui.projection.open = false;
+        self.ui.projection.density_paint = None;
+        self.projection.density_display = None;
         self.viewport.wait_for_release();
     }
     pub(super) fn start_projection(&mut self) -> Result<(), String> {
@@ -98,6 +103,7 @@ impl App {
         });
         self.projection.worker = Some(Worker {
             job,
+            progress: None,
             revision: self.document.display_revision(),
             settings,
         });
@@ -106,6 +112,15 @@ impl App {
         Ok(())
     }
     pub(super) fn poll_projection(&mut self) {
+        if let Some(progress) = self
+            .projection
+            .worker
+            .as_ref()
+            .and_then(|w| w.progress.as_ref())
+            && let Ok(label) = progress.lock()
+        {
+            self.ui.projection.progress = label.clone();
+        }
         let result = self.projection.worker.as_mut().and_then(|w| w.job.poll());
         if let Some(result) = result {
             let worker = self.projection.worker.take().unwrap();
@@ -170,11 +185,23 @@ impl App {
     pub(super) fn open_retopology(&mut self) -> Result<(), String> {
         self.document.require_retopology_target()?;
         self.viewport.cancel(&mut self.document);
+        self.clear_projection_preview();
         let state = &mut self.ui.projection;
         state.mode = SurfaceMode::Retopology;
         state.open = true;
-        state.layout.target = (self.document.mesh().triangles.len() / 3).max(1);
-        state.flow_path = None;
+        // Start large sculpts at a bounded, reviewable budget. The explicit
+        // control still permits up to 50,000 quads.
+        state.layout.target = (self.document.mesh().triangles.len() / 10).clamp(4, 10_000);
+        state.flow_paths.retain(|&id| {
+            self.document
+                .path(id)
+                .is_some_and(|p| p.target == self.document.active_model_id())
+        });
+        state.density_paint = None;
+        if state.density_radius == 0. {
+            state.density_radius = 50.;
+            state.density_brush_strength = 0.5;
+        }
         Ok(())
     }
     fn start_retopology(&mut self) -> Result<(), String> {
@@ -183,21 +210,30 @@ impl App {
         self.viewport.cancel(&mut self.document);
         let options = self.ui.projection.layout;
         options.require_input_budget(self.document.mesh())?;
-        let path = self
+        self.ui.projection.density_paint = None;
+        let paths = self
             .ui
             .projection
-            .flow_path
-            .map(|id| {
+            .flow_paths
+            .iter()
+            .map(|&id| {
                 self.document
                     .path(id)
                     .filter(|p| p.target == self.document.active_model_id())
                     .cloned()
                     .ok_or("Select a surface path on the active model")
             })
-            .transpose()?;
+            .collect::<Result<Vec<_>, _>>()?;
         let mesh = self.document.mesh().clone();
+        let progress = Arc::new(std::sync::Mutex::new(String::from("Preparing surface…")));
+        let worker_progress = progress.clone();
         let job = BackgroundJob::start("clay-guided-retopology", move |cancel| {
-            let layout = mesh.guided_retopology(options, path.as_ref(), &cancel)?;
+            let layout =
+                mesh.guided_retopology_with_progress(options, &paths, cancel, &|stage| {
+                    if let Ok(mut label) = worker_progress.lock() {
+                        *label = crate::sculpt::retopology::progress_label(stage);
+                    }
+                })?;
             let report = SurfaceReport::Retopology {
                 quads: layout.mesh.quads.len(),
                 polygons: layout.polygons,
@@ -210,9 +246,10 @@ impl App {
         let view = settings
             .view_input
             .get_or_insert_with(|| serde_json::json!({}));
-        view["guided_retopology"] = serde_json::json!({"input_triangle_limit":options.input_triangle_limit,"target":options.target,"path":self.ui.projection.flow_path,"path_strength":options.flow,"density_strength":options.density,"mirror_path_x":options.mirror_path_x,"preserve_sharp":options.preserve_sharp});
+        view["guided_retopology"] = serde_json::json!({"backend":"native_surface_field","input_triangle_limit":options.input_triangle_limit,"target":options.target,"paths":self.ui.projection.flow_paths,"path_strength":options.flow,"density_strength":options.density,"shape_adaptation":options.adaptive,"mirror_path_x":options.mirror_path_x,"preserve_sharp":options.preserve_sharp});
         self.projection.worker = Some(Worker {
             job,
+            progress: Some(progress),
             revision: self.document.display_revision(),
             settings,
         });
@@ -249,6 +286,7 @@ impl App {
         view["relaxation"] = serde_json::json!({"strength":options.strength,"iterations":options.iterations,"max_deviation":options.max_deviation});
         self.projection.worker = Some(Worker {
             job,
+            progress: None,
             revision,
             settings,
         });

@@ -1,0 +1,715 @@
+{
+  "date": "2026-11-05",
+  "status": "native_automatic_cycle_selection_verified_on_frozen_hand_field_mesh_quality_incomplete",
+  "source_digest_at_record_sha256": "8d0769d93f0f28c3f56235b02f1588102200f6a84400ab3ddcb769a369af61a8",
+  "source_digest_method": "sorted Cargo.toml, Cargo.lock, src/**/*.rs, examples/**/*.rs; each relative path, NUL, bytes, NUL",
+  "run_binary_sha256": "8bac9a9c1ca45f6556018e34f53ed866fecf4b26966c191c94d4faf6ef75eabd",
+  "frozen_input_snapshot_sha256": "8138d18a9c5015a7bd456733a1f168aa3fc8cdca835924e3d5e01d3b32554722",
+  "source_sha256": "0f79026c6e8434e5312edc9d43277fb2135f6080dabc68725dba6c11d55cc9a5",
+  "original_export_sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+  "source_positions_unchanged": true,
+  "target_quads": 1396,
+  "spacing": 0.028820788112391336,
+  "implementation": {
+    "module": "crates/clay-retopology/src/cycles.rs",
+    "scope": "audit feature only; production prepare and UI unchanged",
+    "seed_count": 16,
+    "max_levels_per_seed": 512,
+    "section_spacing": "median requested edge spacing",
+    "world_axis_or_anatomical_filters": false,
+    "geometry": "closed geodesic source-edge contours, planarity, radial normal alignment, nearby coaxial grouping",
+    "grouping": "at least 3 geometric sections; select among zero-holonomy cycles with enough circumference and >= 1 spacing of pole clearance",
+    "ranking": "normal alignment, planarity, field-axis alignment, capped pole clearance, min(integer/geometric circumference ratio, reciprocal)",
+    "field_dependency": "uses the previous hand-specific curvature-direction hints; not end-to-end automatic retopology"
+  },
+  "research": [
+    {
+      "title": "Plumber: a method for a multi-scale decomposition of 3D shapes into tubular primitives and bodies",
+      "url": "https://faculty.cc.gatech.edu/~jarek/papers/Plumber.pdf",
+      "year": 2004,
+      "use": "Motivated tube recognition with cross-sections and regions. The geodesic selector is not an implementation of Plumber."
+    },
+    {
+      "title": "Global Structure Optimization of Quadrilateral Meshes",
+      "url": "https://cgg.unibe.ch/media/papers/bommes_2011_eg1.pdf",
+      "year": 2011,
+      "use": "Continuation of earlier closed-row integer constraints experiment; not a GP-operator implementation."
+    }
+  ],
+  "selection": {
+    "geometric_candidates": 202,
+    "eligible_candidates": 97,
+    "selected_count": 4,
+    "selected": [
+      {
+        "seed": 1207,
+        "level_over_spacing": 6.0,
+        "center": [
+          2.588195089476001,
+          0.3079275281158374,
+          1.4005531237234974
+        ],
+        "axis": [
+          0.13386205558105102,
+          -0.4885944519396472,
+          0.8621811941868203
+        ],
+        "radius_over_spacing": 1.8160654427700644,
+        "perimeter_over_spacing": 13.338454092994692,
+        "normal_alignment": 0.9264726894997917,
+        "planarity": 0.010659112562119493,
+        "axis_alignment": 0.8743994966449978,
+        "rotation": 0,
+        "period": [
+          9,
+          -3
+        ],
+        "along_axis": 0,
+        "clearance_over_spacing": 3.134426308845084,
+        "period_to_projected_length": 0.7716619962101835,
+        "eligible": true
+      },
+      {
+        "seed": 395,
+        "level_over_spacing": 5.0,
+        "center": [
+          2.176599451852451,
+          0.6055291008501013,
+          1.3396648882683324
+        ],
+        "axis": [
+          -0.29945857413279586,
+          0.43069465795477924,
+          0.8513675316733476
+        ],
+        "radius_over_spacing": 2.6574880599617656,
+        "perimeter_over_spacing": 18.737028591627812,
+        "normal_alignment": 0.8574454469837921,
+        "planarity": 0.006690803295421583,
+        "axis_alignment": 0.8119141804320265,
+        "rotation": 0,
+        "period": [
+          -7,
+          -1
+        ],
+        "along_axis": 0,
+        "clearance_over_spacing": 1.3819515565318103,
+        "period_to_projected_length": 0.46013703946953677,
+        "eligible": true
+      },
+      {
+        "seed": 1357,
+        "level_over_spacing": 6.0,
+        "center": [
+          2.4116390613372016,
+          0.4108129699927553,
+          1.4845650953371794
+        ],
+        "axis": [
+          -0.13430639074709094,
+          -0.29763552744681765,
+          0.9451851068473013
+        ],
+        "radius_over_spacing": 2.040272138550031,
+        "perimeter_over_spacing": 14.941506579991465,
+        "normal_alignment": 0.9539002889210949,
+        "planarity": 0.009698610624944135,
+        "axis_alignment": 0.8557875444979975,
+        "rotation": 0,
+        "period": [
+          12,
+          0
+        ],
+        "along_axis": 0,
+        "clearance_over_spacing": 3.4227658977117894,
+        "period_to_projected_length": 0.9384710809573878,
+        "eligible": true
+      },
+      {
+        "seed": 11387,
+        "level_over_spacing": 32.0,
+        "center": [
+          2.662466249205866,
+          0.2705929230561079,
+          1.2000786920703832
+        ],
+        "axis": [
+          -0.47915376453005426,
+          0.5765332028447765,
+          -0.6618316522758797
+        ],
+        "radius_over_spacing": 1.8544355206633985,
+        "perimeter_over_spacing": 13.94628572487921,
+        "normal_alignment": 0.952999805379405,
+        "planarity": 0.009141569431874197,
+        "axis_alignment": 0.8485847926561056,
+        "rotation": 0,
+        "period": [
+          -21,
+          -7
+        ],
+        "along_axis": 0,
+        "clearance_over_spacing": 2.7672102753487318,
+        "period_to_projected_length": 1.77445704869165,
+        "eligible": true
+      }
+    ]
+  },
+  "result": {
+    "quads": 1252,
+    "closed_edge_loops_total": 16,
+    "classified_finger_rings": 13,
+    "ring_distribution": {
+      "central_long": 5,
+      "adjacent_long": 4,
+      "opposite_outer": 3,
+      "short_outer_base": 1
+    },
+    "length_weighted_alignment_error_degrees": 12.084023620692124,
+    "edge_length_fraction_within_10_degrees": 0.5729115869305186,
+    "quality": {
+      "bad_quads": [],
+      "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+      "quads": 1252,
+      "quads_without_outward_diagonal": 0,
+      "result_to_source": {
+        "distance_at_max_ratio": 0.023867712460607305,
+        "max_spacing_ratio": 0.8281422550809954,
+        "point": [
+          2.6187894987325304,
+          0.27229458990525174,
+          1.405882663627789
+        ]
+      },
+      "source_to_result": {
+        "distance_at_max_ratio": 0.028710544787433588,
+        "max_spacing_ratio": 0.9961748677889086,
+        "point": [
+          2.6471364,
+          0.26440257,
+          1.395842
+        ]
+      },
+      "topology": {
+        "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+      },
+      "vertices": 1254
+    }
+  },
+  "checks": {
+    "rust_tests": [
+      "cycles::tests::automatic_cycles_find_tube_and_preserve_selection_under_similarity",
+      "cycles::tests::automatic_cycles_reject_disk_sections_open_fields_and_cancellation"
+    ],
+    "test_result": "2 passed; no broad suite rerun",
+    "clippy": "--features audit --lib --example audit -- -D warnings passed",
+    "invariance": [
+      {
+        "case": "original",
+        "rotation": [
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "scale": 1.0,
+        "translation": [
+          0,
+          0,
+          0
+        ],
+        "selected_count": 4,
+        "same_seeds": true,
+        "same_selected_vertex_sets": true
+      },
+      {
+        "case": "rotated",
+        "rotation": [
+          [
+            0.78281710131176,
+            -0.4206202460741835,
+            -0.45855860529091286
+          ],
+          [
+            0.29735427654842567,
+            0.9002132627648627,
+            -0.31811399805824764
+          ],
+          [
+            0.5466057263807399,
+            0.11267071551531782,
+            0.829775565893001
+          ]
+        ],
+        "scale": 1.0,
+        "translation": [
+          0,
+          0,
+          0
+        ],
+        "selected_count": 4,
+        "same_seeds": true,
+        "same_selected_vertex_sets": true
+      },
+      {
+        "case": "rotated-scaled-translated",
+        "rotation": [
+          [
+            0.78281710131176,
+            -0.4206202460741835,
+            -0.45855860529091286
+          ],
+          [
+            0.29735427654842567,
+            0.9002132627648627,
+            -0.31811399805824764
+          ],
+          [
+            0.5466057263807399,
+            0.11267071551531782,
+            0.829775565893001
+          ]
+        ],
+        "scale": 7.0,
+        "translation": [
+          12,
+          -4,
+          3
+        ],
+        "selected_count": 4,
+        "same_seeds": true,
+        "same_selected_vertex_sets": true
+      }
+    ],
+    "locks_and_obj": {
+      "locked_edges_before_and_after_repair": 163,
+      "all_perpendicular_offsets_zero": true,
+      "accepted_obj_matches_diagnostic_mesh_exactly": true,
+      "all_highlighted_rings_follow_accepted_quad_edges": true,
+      "ring_count": 13,
+      "quality": {
+        "bad_quads": [],
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 1252,
+        "quads_without_outward_diagonal": 0,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.023867712460607305,
+          "max_spacing_ratio": 0.8281422550809954,
+          "point": [
+            2.6187894987325304,
+            0.27229458990525174,
+            1.405882663627789
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.028710544787433588,
+          "max_spacing_ratio": 0.9961748677889086,
+          "point": [
+            2.6471364,
+            0.26440257,
+            1.395842
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 1254
+      }
+    },
+    "full_pipeline_similarity_tested": false
+  },
+  "quad_shape_comparison": {
+    "previous": {
+      "edge_length_ratio_max": 6.285161167484017,
+      "edge_length_ratio_p95": 2.7803752292868005,
+      "worst_faces": [
+        {
+          "face": 581,
+          "center": [
+            2.6496713807841052,
+            0.3203945505605709,
+            1.240370547779573
+          ],
+          "edge_lengths": [
+            0.031645828570415084,
+            0.006872592317012117,
+            0.03138121738131864,
+            0.005035006697065029
+          ],
+          "ratio": 6.285161167484017
+        },
+        {
+          "face": 577,
+          "center": [
+            2.671644812896728,
+            0.3034187320716768,
+            1.2531606399821547
+          ],
+          "edge_lengths": [
+            0.008670009735790669,
+            0.030136568171423,
+            0.005035006697065029,
+            0.029469040616163684
+          ],
+          "ratio": 5.985407763010524
+        },
+        {
+          "face": 576,
+          "center": [
+            2.626128846365675,
+            0.34023583923707906,
+            1.2285321976426251
+          ],
+          "edge_lengths": [
+            0.032658443863114804,
+            0.006872592317012117,
+            0.0363501179843286,
+            0.008832908025878654
+          ],
+          "ratio": 5.28914219083665
+        },
+        {
+          "face": 453,
+          "center": [
+            2.631860850596307,
+            0.3427466025131644,
+            1.2229427927850676
+          ],
+          "edge_lengths": [
+            0.030840392142326454,
+            0.013312647433088921,
+            0.0363501179843286,
+            0.00810741427422964
+          ],
+          "ratio": 4.483564889470578
+        },
+        {
+          "face": 410,
+          "center": [
+            2.714315570581196,
+            0.17601971102629554,
+            1.3001825225667802
+          ],
+          "edge_lengths": [
+            0.011948993832624032,
+            0.052189291497113266,
+            0.027052267859539243,
+            0.03717136866072411
+          ],
+          "ratio": 4.36767247754553
+        }
+      ]
+    },
+    "automatic": {
+      "edge_length_ratio_max": 18.13827122600362,
+      "edge_length_ratio_p95": 2.79206494111684,
+      "worst_faces": [
+        {
+          "face": 1243,
+          "center": [
+            2.715434110353906,
+            0.2722793486247134,
+            1.2512531443814694
+          ],
+          "edge_lengths": [
+            0.0020589704698932886,
+            0.03734616482925659,
+            0.02590633004186479,
+            0.020668073673486293
+          ],
+          "ratio": 18.13827122600362
+        },
+        {
+          "face": 485,
+          "center": [
+            2.6987753432975112,
+            0.2931677890181543,
+            1.238081790058592
+          ],
+          "edge_lengths": [
+            0.0020589704698932886,
+            0.03403328909380452,
+            0.009268866427375127,
+            0.03362754221850879
+          ],
+          "ratio": 16.529274990315127
+        },
+        {
+          "face": 435,
+          "center": [
+            2.7262457946781953,
+            0.17099072298418133,
+            1.3038641128463542
+          ],
+          "edge_lengths": [
+            0.007475861558067229,
+            0.05072088335063955,
+            0.01013814446542517,
+            0.04167502192281883
+          ],
+          "ratio": 6.784620469049011
+        },
+        {
+          "face": 424,
+          "center": [
+            2.69899837414698,
+            0.17530517744407298,
+            1.2713951641021246
+          ],
+          "edge_lengths": [
+            0.0433159379978684,
+            0.007475861558067229,
+            0.04352291241779301,
+            0.011456221326034228
+          ],
+          "ratio": 5.821792188062562
+        },
+        {
+          "face": 484,
+          "center": [
+            2.7142206068907178,
+            0.2730881783188057,
+            1.2594797113446665
+          ],
+          "edge_lengths": [
+            0.007919847915877956,
+            0.031330668267510346,
+            0.012943917956605207,
+            0.03734616482925659
+          ],
+          "ratio": 4.715515402055113
+        }
+      ]
+    }
+  },
+  "controls": [
+    {
+      "label": "previous_hand_specific_three",
+      "quads": 1216,
+      "rings": 10,
+      "max_sampled_error": 0.024000174270904364
+    },
+    {
+      "label": "automatic_three_v2",
+      "quads": 1264,
+      "rings": 10,
+      "max_sampled_error": 0.02869669186285661,
+      "artifact": "../v2/"
+    },
+    {
+      "label": "four_v4_one_sided_period_score",
+      "result": "rejected with 5 inverted cells",
+      "artifact": "../v4/",
+      "diagnosis": {
+        "repaired": false,
+        "remaining_inversions": [
+          {
+            "face": 2725,
+            "area": -1,
+            "center": [
+              2.7416578833333336,
+              0.23333867166666666,
+              1.2975642166666665
+            ],
+            "source_vertices": [
+              3307,
+              15083,
+              3078
+            ]
+          },
+          {
+            "face": 3345,
+            "area": -1,
+            "center": [
+              2.7433502166666663,
+              0.1633559116666667,
+              1.3008319666666666
+            ],
+            "source_vertices": [
+              3421,
+              15095,
+              3210
+            ]
+          },
+          {
+            "face": 30184,
+            "area": -1,
+            "center": [
+              2.74281395,
+              0.16168538166666668,
+              1.2955772166666668
+            ],
+            "source_vertices": [
+              3178,
+              15095,
+              15094
+            ]
+          },
+          {
+            "face": 30186,
+            "area": -1,
+            "center": [
+              2.7406021166666665,
+              0.16014436500000004,
+              1.2979392166666666
+            ],
+            "source_vertices": [
+              15095,
+              3421,
+              15094
+            ]
+          },
+          {
+            "face": 30187,
+            "area": -1,
+            "center": [
+              2.74556205,
+              0.16489692833333333,
+              1.2984699666666668
+            ],
+            "source_vertices": [
+              15095,
+              3178,
+              3210
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "label": "fourth_path_ablation",
+      "change": "Add only the opposite outer finger path to the passing v2 three paths",
+      "quads": 1252,
+      "rings": 13,
+      "max_sampled_error": 0.028710544787433588,
+      "artifact": "../fourth-ablation/"
+    },
+    {
+      "label": "native_balanced_period_score",
+      "change": "Penalize both under- and over-sized circumferential periods; automatically selects same four source cycles as passing ablation",
+      "validated_obj_identical_to_ablation": true
+    }
+  ],
+  "runs": [
+    {
+      "name": "auto-select",
+      "exit": 0,
+      "seconds": 0.8663109579356387,
+      "cumulative_child_max_rss_kib": 28372,
+      "log": "202 geometric sections, 4 selected cycles\n0.812s finished; VmHWM:\t   28372 kB\n"
+    },
+    {
+      "name": "auto-locked-constrain",
+      "exit": 0,
+      "seconds": 0.5739346200134605,
+      "cumulative_child_max_rss_kib": 57712,
+      "log": "0.266s Regularity { defects: 86 }\n0.478s Inversions { flipped: 721 }\n0.520s finished; VmHWM:\t   57712 kB\n"
+    },
+    {
+      "name": "auto-locked-repair",
+      "exit": 0,
+      "seconds": 90.82985809398815,
+      "cumulative_child_max_rss_kib": 57712,
+      "log": "0.159s Repair { radius: 0, flipped: 27 }\n0.174s CoarseRepair { radius: 1, flipped: 27 }\n0.357s CoarseRepair { radius: 2, flipped: 15 }\n0.406s CoarseRepair { radius: 3, flipped: 14 }\n0.409s CoarseRepair { radius: 4, flipped: 14 }\n0.413s CoarseRepair { radius: 1, flipped: 14 }\n0.445s CoarseRepair { radius: 2, flipped: 13 }\n0.535s CoarseRepair { radius: 3, flipped: 13 }\n0.574s CoarseRepair { radius: 4, flipped: 12 }\n0.584s CoarseRepair { radius: 1, flipped: 12 }\n2.592s CoarseRepair { radius: 2, flipped: 11 }\n4.614s CoarseRepair { radius: 3, flipped: 11 }\n6.683s CoarseRepair { radius: 4, flipped: 11 }\n9.660s CoarseRepair { radius: 1, flipped: 11 }\n11.878s CoarseRepair { radius: 2, flipped: 11 }\n16.300s CoarseRepair { radius: 3, flipped: 11 }\n22.320s CoarseRepair { radius: 4, flipped: 11 }\n26.552s CoarseRepair { radius: 1, flipped: 10 }\n29.609s CoarseRepair { radius: 2, flipped: 10 }\n33.631s CoarseRepair { radius: 3, flipped: 10 }\n37.649s CoarseRepair { radius: 4, flipped: 10 }\n41.677s CoarseRepair { radius: 1, flipped: 10 }\n43.779s CoarseRepair { radius: 2, flipped: 9 }\n45.792s CoarseRepair { radius: 3, flipped: 9 }\n47.808s CoarseRepair { radius: 4, flipped: 9 }\n49.840s Repair { radius: 2, flipped: 4 }\n49.846s Repair { radius: 4, flipped: 4 }\n49.858s Repair { radius: 8, flipped: 4 }\n57.876s Repair { radius: 16, flipped: 4 }\n73.949s Repair { radius: 32, flipped: 4 }\n90.139s Repair { radius: 64, flipped: 4 }\n90.822s finished; VmHWM:\t   56820 kB\n"
+    },
+    {
+      "name": "auto-locked-diagnose",
+      "exit": 0,
+      "seconds": 0.6144117610529065,
+      "cumulative_child_max_rss_kib": 57712,
+      "log": "0.599s finished; VmHWM:\t   25240 kB\n"
+    },
+    {
+      "name": "auto-locked-validate",
+      "exit": 0,
+      "seconds": 0.4640119500691071,
+      "cumulative_child_max_rss_kib": 57712,
+      "log": "0.114s Fitting\n0.134s Extraction\n0.156s QuadOptimization\n0.336s SurfaceFit\n1254 vertices, 1252 quads; Diagnostics { input_vertices: 4934, samples: 15443, position_defects_before: 215, position_defects_after: 0, fixed_variables: 567, flipped_before: 38, flipped_after: 0, max_fitting_distance: 0.026741660288453456, max_surface_error: 0.028710544787433588 }\n0.413s finished; VmHWM:\t   25240 kB\n"
+    }
+  ],
+  "verification_runs": [
+    {
+      "name": "invariance",
+      "exit": 0,
+      "seconds": 10.182955718948506,
+      "cumulative_child_max_rss_kib": 280276,
+      "log": "{'case': 'original', 'rotation': [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], 'scale': 1.0, 'translation': [0, 0, 0], 'selected_count': 4, 'same_seeds': True, 'same_selected_vertex_sets': True}\n{'case': 'rotated', 'rotation': [[0.78281710131176, -0.4206202460741835, -0.45855860529091286], [0.29735427654842567, 0.9002132627648627, -0.31811399805824764], [0.5466057263807399, 0.11267071551531782, 0.829775565893001]], 'scale': 1.0, 'translation': [0, 0, 0], 'selected_count': 4, 'same_seeds': True, 'same_selected_vertex_sets': True}\n{'case': 'rotated-scaled-translated', 'rotation': [[0.78281710131176, -0.4206202460741835, -0.45855860529091286], [0.29735427654842567, 0.9002132627648627, -0.31811399805824764], [0.5466057263807399, 0.11267071551531782, 0.829775565893001]], 'scale': 7.0, 'translation': [12, -4, 3], 'selected_count': 4, 'same_seeds': True, 'same_selected_vertex_sets': True}\n"
+    },
+    {
+      "name": "failed-placement-diagnostic",
+      "exit": 1,
+      "seconds": 78.82559263403527,
+      "cumulative_child_max_rss_kib": 280276,
+      "log": "0.202s Repair { radius: 0, flipped: 23 }\n0.222s CoarseRepair { radius: 1, flipped: 23 }\n0.482s CoarseRepair { radius: 2, flipped: 11 }\n0.550s CoarseRepair { radius: 3, flipped: 10 }\n0.554s CoarseRepair { radius: 4, flipped: 10 }\n0.556s CoarseRepair { radius: 1, flipped: 10 }\n0.646s CoarseRepair { radius: 2, flipped: 9 }\n1.198s CoarseRepair { radius: 3, flipped: 9 }\n1.897s CoarseRepair { radius: 4, flipped: 8 }\n3.912s CoarseRepair { radius: 1, flipped: 8 }\n4.499s CoarseRepair { radius: 2, flipped: 7 }\n6.460s CoarseRepair { radius: 3, flipped: 7 }\n9.303s CoarseRepair { radius: 4, flipped: 7 }\n12.187s CoarseRepair { radius: 1, flipped: 7 }\n15.834s CoarseRepair { radius: 2, flipped: 7 }\n22.240s CoarseRepair { radius: 3, flipped: 7 }\n30.268s CoarseRepair { radius: 4, flipped: 7 }\n34.568s CoarseRepair { radius: 1, flipped: 6 }\n39.554s CoarseRepair { radius: 2, flipped: 6 }\n45.573s CoarseRepair { radius: 3, flipped: 6 }\n51.597s CoarseRepair { radius: 4, flipped: 6 }\n55.638s CoarseRepair { radius: 1, flipped: 6 }\n59.732s CoarseRepair { radius: 2, flipped: 5 }\n63.753s CoarseRepair { radius: 3, flipped: 5 }\n67.781s CoarseRepair { radius: 4, flipped: 5 }\n69.829s Repair { radius: 2, flipped: 5 }\n69.836s Repair { radius: 4, flipped: 5 }\n69.851s Repair { radius: 8, flipped: 5 }\n70.866s Repair { radius: 16, flipped: 5 }\n72.837s Repair { radius: 32, flipped: 5 }\n73.414s Repair { radius: 64, flipped: 5 }\n74.856s Repair { radius: 96, flipped: 5 }\nError: \"Retopology could not resolve 5 inverted grid cells within its repair budget\"\n"
+    },
+    {
+      "name": "clippy",
+      "exit": 0,
+      "seconds": 11.027587427990511,
+      "cumulative_child_max_rss_kib": 539672,
+      "log": "    Checking serde_core v1.0.229\n    Checking zmij v1.0.23\n    Checking memchr v2.8.3\n    Checking bit-vec v0.5.1\n    Checking itoa v1.0.18\n    Checking serde_json v1.0.154\n    Checking batsat v0.6.0\n    Checking serde v1.0.229\n    Checking glam v0.32.1\n    Checking clay-retopology v0.1.0 (/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology)\n    Finished `dev` profile [optimized] target(s) in 10.87s\n"
+    }
+  ],
+  "resources": {
+    "cargo_jobs": 1,
+    "shared_lock": "/home/mark/.cache/codex-build.lock",
+    "native_pipeline_memory_max_mib": 500,
+    "test_build_memory_max_mib": 700,
+    "combined_verification_memory_max_mib": 700,
+    "memory_swap_max": 0,
+    "host_available_ram_before_runs_gib": 1.8,
+    "peak_native_pipeline_child_rss_kib": 57712,
+    "verification_wrapper_exit": 143,
+    "verification_wrapper_note": "All child records completed before wrapper returned 143: invariance 0, intentionally rejected repair 1, Clippy 0. No normal wrapper-exit claim."
+  },
+  "limits": [
+    "Shape error worsened vs previous hand-specific loops; not overall quality acceptance.",
+    "Stretched transition remains; two thin short-finger quads have edge ratios 18.14 and 16.53, not caught by current acceptance gates.",
+    "Short finger has only one base ring; field/integer topology and circumference allocation need further work.",
+    "Hand-specific direction hints remain upstream of the automatic selector.",
+    "Selection similarity checked, not full remeshing similarity or invariance to triangulation.",
+    "No whole-character, painted density, cross-platform, UI, persistence or CI validation in this pass.",
+    "Closed input, one component, median spacing and bounded search only.",
+    "No self-intersection or continuous Hausdorff-error certificate."
+  ],
+  "local_artifact_directory": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/hand-auto-cycles/native",
+  "artifact_sha256": {
+    "auto-comparison.png": "7e713de22e6fe8416bffdda91a5040db6dc0628040adbdcae9daab297bb3ea58",
+    "auto-cycle-analysis.json": "4b35888548a2abc3ce81cb9dbceeaf62447aea11fd925bbe8a04aebf52e8eb47",
+    "auto-cycles.json": "fcb1007746f58fa3337f1e2993317eec9cf5805f9d16e37c17a63917d7dee19a",
+    "auto-locked-constrain.log": "29039e6fbd7bdfa679eda1310b8b446c73ed53d0e5215f4f9ea815e04a5f2680",
+    "auto-locked-diagnose.log": "b6f96f98d842e5606223a9b4ecb7c88a4d76a3a33ca6502b2c63298d0b9828e9",
+    "auto-locked-repair.log": "fbe0b1c7ce84ca3904cabaeff469fdf2dd8f1bf6f795d4e2482ddc21f5d59994",
+    "auto-locked-validate.log": "00292d7f51038100407397890ddafa5a1ac64800ff291a95643bf427e332c25e",
+    "auto-locked.audit.json": "69c052678463fb45bb26a357e7451cc67c2f3639b4e9d8caf70c1949b8934a91",
+    "auto-locked.raw.json": "e1232ca5d376205bd3879d843b0568aa953c93c33ade51ef71c7558056c78579",
+    "auto-locked.snapshot.json": "1a2023a8d9fa92a8ff4be4a3cdb5d8ea04972816da06bec9675f9b8c1b0a2e7a",
+    "auto-locked.validated.obj": "73048577b9efcb0f08c50a49ccd69c7329493f25a593912f64269a4ad4bf2797",
+    "auto-select.log": "1b2f393bf168eb4363ec3322155e6a0530849eacf8d465c9fc8a0b3b027a125e",
+    "clippy.log": "46425ad7456e6fe0d3cff4c78c0c79161926d284b4543ff1f39cbc5adc0e7945",
+    "cycle-runs.json": "ccd7bde3be621395ca16902ca2d23d384d17a9600ed7cd47a19cc33db1e12e7d",
+    "failed-placement-diagnostic.log": "4d7af2da384c8e6b2ee1a40e80c822507a331e4d7f705c0b36434243154676e7",
+    "invariance.log": "df3fd15766857850303843373f4385fc7e7da2911336d9a329bc0bf4e3712aa0",
+    "measure-rings.py": "7418f5ac9e3a0e622e4fef06b4c931e6a5ddeb34681e2d1e97209ff3cdffabc1",
+    "measurements.json": "31021946528287cc0f3ae00ed7e69a511102814e2a54d3f7c711da51a506ea4c",
+    "quad-shape-metrics.json": "556150c68b96dc71f4fbc02c9a5586c1775aad761d678c73a2787b1e7f993f6f",
+    "rejected-placement-diagnosis.json": "526a751d33b2980c0c381d1e1301bd45a3d4fb6cc6edc4111fec572d83d7430c",
+    "rejected-placement.attempted.json": "ce0fe347535189be4940af22963f468e9beb68bea9e9b85e9e5e4f31e801a2f3",
+    "render-comparison.py": "a42279771522743f71f4da337a4a6049b4e3c2d238254d3d1ee27d9bf7176e94",
+    "run-native-auto-cycles.py": "1594d0f199f791c55c093218f7ba353cb83d7ec1cca53801ecfc6add568f28c6",
+    "verification-runs.json": "551df14bb92d77eec3a8e38093161a18962e1ed7872b51bf57e2d2d25c51b18f",
+    "verification.json": "c4a5a85b2491d4d94eaaaa23691b01073b6566a7d1a0337d76e42cea838e7a40",
+    "verify-auto-cycles.py": "a89d8ec8442a19b0981cfe39f9e8879da204b42430a7b914d2d5f02220f653a6"
+  }
+}

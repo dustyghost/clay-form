@@ -9,7 +9,7 @@ repository = "https://github.com/dustyghost/clay-form"
 [dependencies]
 eframe = { version = "0.33.3", default-features = false, features = ["wgpu", "x11", "wayland", "default_fonts"] }
 serde = { version = "1", features = ["derive", "rc"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["float_roundtrip"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "exr"] }
 libc = "0.2"
 moxcms = "0.8.1"
@@ -20,6 +20,7 @@ earcutr = "0.5"
 wgpu = { version = "27", default-features = false, features = ["vulkan", "metal", "dx12", "wgsl"] }
 bytemuck = { version = "1", features = ["derive"] }
 boolmesh = { version = "=0.2.2", default-features = false }
+clay-retopology = { path = "crates/clay-retopology" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # Match eframe's existing locked dependencies; no windowing-stack upgrade.
@@ -28,3 +29,24 @@ windows-sys = { version = "0.61.2", features = ["Win32_UI_Input_Pointer", "Win32
 
 [dev-dependencies]
 pollster = "0.4"
+
+# Keep the CPU solver usable in focused app tests and development previews.
+[profile.dev.package.clay-retopology]
+opt-level = 3
+[profile.test.package.clay-retopology]
+opt-level = 3
+
+# SAT repair has wall-clock budgets. Optimize its non-generic dependencies too,
+# so development previews do not time out on patches that release can solve.
+[profile.dev.package.batsat]
+opt-level = 3
+[profile.test.package.batsat]
+opt-level = 3
+[profile.dev.package."bit-vec:0.5.1"]
+opt-level = 3
+[profile.test.package."bit-vec:0.5.1"]
+opt-level = 3
+[profile.dev.package.glam]
+opt-level = 3
+[profile.test.package.glam]
+opt-level = 3

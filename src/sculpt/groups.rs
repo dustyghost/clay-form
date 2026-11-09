@@ -9,15 +9,41 @@ fn is_visible(value: &bool) -> bool {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct VertexGroup {
+    /// Internal scalar channels reuse the topology-safe weight transport but
+    /// are independent of user selections and never assigned to faces.
+    #[serde(default, skip_serializing_if = "GroupPurpose::is_selection")]
+    pub purpose: GroupPurpose,
     #[serde(default = "visible_default", skip_serializing_if = "is_visible")]
     pub visible: bool,
     pub name: String,
     pub weights: Vec<f32>,
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GroupPurpose {
+    #[default]
+    Selection,
+    RetopologyMore,
+    RetopologyLess,
+}
+impl GroupPurpose {
+    pub fn is_selection(&self) -> bool {
+        *self == Self::Selection
+    }
+}
 pub fn mask_selected(value: f32, threshold: f32) -> bool {
     value > 0. && value >= threshold
 }
 impl Mesh {
+    pub(crate) fn require_selection_group(&self, index: usize) -> Result<(), String> {
+        let group = self
+            .vertex_groups
+            .get(index)
+            .ok_or("Vertex group no longer exists")?;
+        if !group.purpose.is_selection() {
+            return Err("Density paint is edited in Guided retopology".into());
+        }
+        Ok(())
+    }
     pub fn face_visible(&self, face: usize) -> bool {
         let id = self.polygroups.get(face).copied().unwrap_or(0);
         !self.hidden_faces.get(face).copied().unwrap_or(false)
@@ -64,11 +90,10 @@ impl Mesh {
                 return Err("Invalid vertex group".into());
             }
         }
-        if self
-            .polygroups
-            .iter()
-            .any(|&id| id > self.vertex_groups.len())
-        {
+        if self.polygroups.iter().any(|&id| {
+            id > self.vertex_groups.len()
+                || (id > 0 && !self.vertex_groups[id - 1].purpose.is_selection())
+        }) {
             return Err("Invalid vertex group face reference".into());
         }
         Ok(())
@@ -154,6 +179,7 @@ impl Mesh {
             .collect();
         let index = self.vertex_groups.len();
         self.vertex_groups.push(VertexGroup {
+            purpose: GroupPurpose::Selection,
             visible: true,
             name,
             weights,
@@ -218,6 +244,7 @@ impl Mesh {
         threshold: f32,
         remove: bool,
     ) -> Result<(), String> {
+        self.require_selection_group(index)?;
         let group = self
             .vertex_groups
             .get_mut(index)
@@ -247,7 +274,7 @@ impl Mesh {
             }
         }
         for (g, group) in self.vertex_groups.iter_mut().enumerate() {
-            if (remove && g != index) || (!remove && g == index) {
+            if !group.purpose.is_selection() || (remove && g != index) || (!remove && g == index) {
                 continue;
             }
             // Older assignments could leave weights beyond the visible region.
@@ -268,6 +295,7 @@ impl Mesh {
         }
     }
     pub fn mask_from_group(&mut self, index: usize) -> Result<(), String> {
+        self.require_selection_group(index)?;
         self.mask = self
             .vertex_groups
             .get(index)
@@ -277,9 +305,7 @@ impl Mesh {
         Ok(())
     }
     pub fn remove_vertex_group(&mut self, index: usize) -> Result<(), String> {
-        if index >= self.vertex_groups.len() {
-            return Err("Vertex group no longer exists".into());
-        }
+        self.require_selection_group(index)?;
         self.vertex_groups.remove(index);
         for id in &mut self.polygroups {
             if *id == index + 1 {
@@ -292,6 +318,7 @@ impl Mesh {
         Ok(())
     }
     pub fn rename_vertex_group(&mut self, index: usize, name: String) -> Result<(), String> {
+        self.require_selection_group(index)?;
         let name = name.trim().to_string();
         if name.is_empty()
             || name.len() > 128
@@ -392,6 +419,7 @@ impl Mesh {
             .vertex_groups
             .iter()
             .map(|g| VertexGroup {
+                purpose: g.purpose,
                 visible: g.visible,
                 name: g.name.clone(),
                 weights: old_vertices.iter().map(|&i| g.weights[i]).collect(),

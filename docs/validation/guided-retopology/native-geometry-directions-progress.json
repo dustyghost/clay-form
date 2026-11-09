@@ -1,0 +1,4662 @@
+{
+  "date": "2026-11-05",
+  "status": "geometry_only_hints_and_paths_pass_hand_and_torus_full_character_repair_incomplete",
+  "current_source_digest_sha256": "881e9c6419182f94f53fd1f0e4654a318be306e91f42c52d3eeca334f281b50e",
+  "source_digest_method": "sorted Cargo.toml, Cargo.lock, src/**/*.rs and examples/**/*.rs; relative path + NUL + bytes + NUL per file",
+  "current_audit_binary_sha256": "93205432f944817591ef42fe1a85e72210546f6528ed779cb67a5e05c0420748",
+  "binary_provenance_note": "Hand and torus pipeline runs preceded the final rebuild that only scales the estimator work cap and adds budget metadata/guard coverage. The final binary produced the body retry and similarity checks. Its original hand hints exactly match those used by the accepted hand. No old hand-run binary hash was captured.",
+  "original_export_sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+  "hand_source_sha256": "0f79026c6e8434e5312edc9d43277fb2135f6080dabc68725dba6c11d55cc9a5",
+  "torus_source_sha256": "d2a2cf0c7c17b5647bc49c88fe6cca5eb150b9b349b6e6a65fbf334d57b21ff9",
+  "source_geometry_unchanged": true,
+  "method": {
+    "anatomical_labels_or_coordinate_regions": false,
+    "modules": [
+      "crates/clay-retopology/src/curvature.rs",
+      "crates/clay-retopology/src/cycles.rs"
+    ],
+    "scope": "audit only; no app integration",
+    "curvature": "area-weighted least-squares symmetric normal derivative in connected geodesic neighbourhoods; tensor eigenvector with least absolute curvature",
+    "scales": {
+      "h": "sqrt(area / target_quads)",
+      "neighbourhood_radius_over_h": 3,
+      "guide_influence_radius_over_h": 2.25,
+      "intrinsic_thinning_distance_over_h": 1,
+      "cycle_level_step_over_h": 0.5
+    },
+    "confidence_threshold": 0.65,
+    "max_relative_fit_residual": 0.65,
+    "minimum_dimensionless_large_curvature": 0.2,
+    "thinning": "score-ordered geodesic suppression; confidence rounded to 1e-6 for numerical tie stability, then vertex ID",
+    "unconstrained_regions": "flat, isotropic, ill-conditioned, low-signal or poor-fit neighbourhoods",
+    "work_budget": "clamp(vertex_count * 8192, 40_000_000, 400_000_000) edge visits; cancellation checked every 4096 visits",
+    "cycle_budget": "16 seeds, 512*h physical distance guard, at most 1024 half-spacing levels per seed"
+  },
+  "research": [
+    {
+      "title": "Estimating Curvatures and Their Derivatives on Triangle Meshes",
+      "author": "Szymon Rusinkiewicz",
+      "year": 2004,
+      "url": "https://pixl.cs.princeton.edu/gfx/pubs/Rusinkiewicz_2004_ECA/index.php",
+      "use": "Normal derivative and neighbourhood-scale background. New code extends the existing neighbourhood least-squares experiment; it is not a port of the per-face tensor algorithm."
+    }
+  ],
+  "hand": {
+    "target_quads": 1396,
+    "hint_candidates": 2673,
+    "hints": 349,
+    "hint_spacing": 0.028820788112391194,
+    "hint_neighbourhood_radius": 0.08646236433717358,
+    "hint_visited_edges": 4610262,
+    "hint_work_budget_edges": 40000000,
+    "cycles": 4,
+    "selected_cycles": [
+      {
+        "seed": 1207,
+        "level_over_spacing": 6.0,
+        "center": [
+          2.588195089476001,
+          0.3079275281158374,
+          1.4005531237234974
+        ],
+        "axis": [
+          0.13386205558105096,
+          -0.4885944519396472,
+          0.8621811941868203
+        ],
+        "radius_over_spacing": 1.815560270494645,
+        "perimeter_over_spacing": 13.338454092994692,
+        "normal_alignment": 0.9268912219445643,
+        "planarity": 0.010668686848480196,
+        "axis_alignment": 0.8749388383521486,
+        "rotation": 0,
+        "period": [
+          11,
+          -1
+        ],
+        "along_axis": 0,
+        "clearance_over_spacing": 3.134426308845084,
+        "period_to_projected_length": 0.9425610551129938,
+        "eligible": true
+      },
+      {
+        "seed": 395,
+        "level_over_spacing": 4.5,
+        "center": [
+          2.169988144415938,
+          0.6032324844690093,
+          1.353248094655926
+        ],
+        "axis": [
+          -0.27915454491253106,
+          0.4641430601956851,
+          0.8406211749217731
+        ],
+        "radius_over_spacing": 2.5795905686600977,
+        "perimeter_over_spacing": 18.166147048615105,
+        "normal_alignment": 0.8474226816231577,
+        "planarity": 0.005993192606831256,
+        "axis_alignment": 0.7855921209528169,
+        "rotation": 0,
+        "period": [
+          3,
+          -15
+        ],
+        "along_axis": 1,
+        "clearance_over_spacing": 1.2611956658584549,
+        "period_to_projected_length": 1.0510692114413407,
+        "eligible": true
+      },
+      {
+        "seed": 1357,
+        "level_over_spacing": 6.0,
+        "center": [
+          2.4098511946026284,
+          0.413331421286841,
+          1.4850854737815133
+        ],
+        "axis": [
+          -0.13496704972869572,
+          -0.29193417097731406,
+          0.9468676440259853
+        ],
+        "radius_over_spacing": 2.044031420125265,
+        "perimeter_over_spacing": 15.078479198760862,
+        "normal_alignment": 0.9499910140796638,
+        "planarity": 0.009900269311993767,
+        "axis_alignment": 0.8439359130536114,
+        "rotation": 0,
+        "period": [
+          12,
+          0
+        ],
+        "along_axis": 0,
+        "clearance_over_spacing": 3.4227658977117894,
+        "period_to_projected_length": 0.9430055233568346,
+        "eligible": true
+      },
+      {
+        "seed": 11388,
+        "level_over_spacing": 33.0,
+        "center": [
+          2.6796610778797283,
+          0.253991363661993,
+          1.216060025483385
+        ],
+        "axis": [
+          -0.5030514456843088,
+          0.5652649953957832,
+          -0.6537696291318005
+        ],
+        "radius_over_spacing": 1.7578573704735487,
+        "perimeter_over_spacing": 12.387198262964134,
+        "normal_alignment": 0.9595330208258833,
+        "planarity": 0.009161045586722387,
+        "axis_alignment": 0.9083944210519419,
+        "rotation": 0,
+        "period": [
+          -16,
+          -2
+        ],
+        "along_axis": 0,
+        "clearance_over_spacing": 3.438211213303234,
+        "period_to_projected_length": 1.421911070852275,
+        "eligible": true
+      }
+    ],
+    "metrics": {
+      "quads": 1225,
+      "vertices": 1227,
+      "closed_edge_loops_total": 18,
+      "simple_closed_edge_loops": 18,
+      "closed_loops": [
+        {
+          "vertices": [
+            143,
+            153,
+            155,
+            156,
+            285,
+            377,
+            462,
+            441,
+            440,
+            429,
+            358,
+            359,
+            341,
+            260,
+            252,
+            247,
+            234,
+            236
+          ],
+          "center": [
+            2.7000408441201915,
+            0.2290673044537636,
+            1.2484916761729608
+          ]
+        },
+        {
+          "vertices": [
+            146,
+            158,
+            154,
+            182,
+            284,
+            371,
+            370,
+            438,
+            439,
+            430,
+            362,
+            361,
+            340,
+            261,
+            256,
+            246,
+            235,
+            231
+          ],
+          "center": [
+            2.687078091137218,
+            0.24489034238761556,
+            1.2288346759114879
+          ]
+        },
+        {
+          "vertices": [
+            147,
+            148,
+            159,
+            157,
+            183,
+            283,
+            372,
+            373,
+            434,
+            442,
+            425,
+            351,
+            350,
+            339,
+            253,
+            255,
+            242,
+            232
+          ],
+          "center": [
+            2.672810785911327,
+            0.2610568420336727,
+            1.2107438616249313
+          ]
+        },
+        {
+          "vertices": [
+            149,
+            151,
+            229,
+            243,
+            268,
+            336,
+            337,
+            354,
+            355,
+            424,
+            448,
+            435,
+            436,
+            368,
+            287,
+            166,
+            163,
+            161
+          ],
+          "center": [
+            2.6364357748441423,
+            0.2937963689750335,
+            1.1841297932479127
+          ]
+        },
+        {
+          "vertices": [
+            160,
+            162,
+            184,
+            288,
+            369,
+            437,
+            433,
+            446,
+            426,
+            349,
+            352,
+            342,
+            338,
+            254,
+            228,
+            227,
+            233,
+            171
+          ],
+          "center": [
+            2.6557744354545885,
+            0.2774775012882196,
+            1.195790838499195
+          ]
+        },
+        {
+          "vertices": [
+            452,
+            453,
+            519,
+            593,
+            609,
+            625,
+            694,
+            636,
+            476,
+            460
+          ],
+          "center": [
+            2.5432099454350765,
+            0.3565823366000811,
+            1.3219688947525046
+          ]
+        },
+        {
+          "vertices": [
+            454,
+            455,
+            520,
+            595,
+            626,
+            624,
+            695,
+            631,
+            474,
+            458
+          ],
+          "center": [
+            2.5580629215703468,
+            0.3421723486290836,
+            1.3453905229578627
+          ]
+        },
+        {
+          "vertices": [
+            459,
+            466,
+            531,
+            530,
+            599,
+            627,
+            628,
+            693,
+            632,
+            475
+          ],
+          "center": [
+            2.5715103214256407,
+            0.3269193696274756,
+            1.3687116515522624
+          ]
+        },
+        {
+          "vertices": [
+            465,
+            538,
+            523,
+            522,
+            596,
+            619,
+            620,
+            692,
+            650,
+            547
+          ],
+          "center": [
+            2.5832761076275013,
+            0.3114488611302451,
+            1.3924039814487288
+          ]
+        },
+        {
+          "vertices": [
+            521,
+            529,
+            537,
+            536,
+            548,
+            633,
+            688,
+            689,
+            618,
+            598
+          ],
+          "center": [
+            2.59282300956645,
+            0.29610843515977114,
+            1.4167767423413513
+          ]
+        },
+        {
+          "vertices": [
+            524,
+            526,
+            612,
+            611,
+            615,
+            691,
+            635,
+            550,
+            540,
+            541
+          ],
+          "center": [
+            2.60971572050027,
+            0.26574179713033497,
+            1.4654268012502665
+          ]
+        },
+        {
+          "vertices": [
+            527,
+            528,
+            542,
+            539,
+            549,
+            634,
+            690,
+            617,
+            616,
+            597
+          ],
+          "center": [
+            2.6016142426977824,
+            0.28058334060352197,
+            1.441067451792497
+          ]
+        },
+        {
+          "vertices": [
+            700,
+            701,
+            709,
+            710,
+            741,
+            803,
+            843,
+            828,
+            827,
+            820,
+            776,
+            770
+          ],
+          "center": [
+            2.4057658676708873,
+            0.4291665108327207,
+            1.4555977634779127
+          ]
+        },
+        {
+          "vertices": [
+            706,
+            712,
+            720,
+            723,
+            777,
+            779,
+            818,
+            810,
+            811,
+            842,
+            838,
+            736
+          ],
+          "center": [
+            2.4074662649636713,
+            0.3987202965521747,
+            1.507594231698145
+          ]
+        },
+        {
+          "vertices": [
+            707,
+            708,
+            737,
+            805,
+            804,
+            830,
+            826,
+            819,
+            778,
+            772,
+            771,
+            722
+          ],
+          "center": [
+            2.4071793887757402,
+            0.4142737029495735,
+            1.4817709718551895
+          ]
+        },
+        {
+          "vertices": [
+            713,
+            718,
+            721,
+            719,
+            783,
+            785,
+            801,
+            798,
+            808,
+            806,
+            807,
+            734
+          ],
+          "center": [
+            2.4072786215439863,
+            0.3830955653481098,
+            1.53331214361833
+          ]
+        },
+        {
+          "vertices": [
+            715,
+            717,
+            735,
+            802,
+            809,
+            797,
+            799,
+            800,
+            780,
+            784,
+            724,
+            725
+          ],
+          "center": [
+            2.4067383028581855,
+            0.3673995717024754,
+            1.558717368588395
+          ]
+        },
+        {
+          "vertices": [
+            831,
+            832,
+            1020,
+            1015,
+            1011,
+            1005,
+            1006,
+            1027,
+            1026,
+            1040,
+            949,
+            939,
+            933,
+            934,
+            941,
+            945,
+            854,
+            837
+          ],
+          "center": [
+            2.161712200444668,
+            0.6053234586669854,
+            1.350232354818118
+          ]
+        }
+      ],
+      "edge_ratio_max": 5.441170395837473,
+      "edge_ratio_p95": 1.9454376203331365,
+      "quality": {
+        "bad_quads": [],
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 1225,
+        "quads_without_outward_diagonal": 0,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.011630597686984625,
+          "max_spacing_ratio": 0.4035489120432524,
+          "point": [
+            2.512255710754828,
+            0.4089361608208568,
+            1.3557284210726537
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.01881288697119445,
+          "max_spacing_ratio": 0.6527540779881017,
+          "point": [
+            2.40133650407497,
+            0.25540821532037244,
+            0.7986634959250299
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 1227
+      }
+    },
+    "runs": [
+      {
+        "name": "estimate",
+        "exit": 0,
+        "seconds": 0.36425179592333734,
+        "cumulative_child_max_rss_kib": 12952,
+        "log": "2673 geometric candidates, 349 hints\n0.349s finished; VmHWM:\t   10404 kB\n"
+      },
+      {
+        "name": "capture",
+        "exit": 0,
+        "seconds": 2.767044021980837,
+        "cumulative_child_max_rss_kib": 54764,
+        "log": "0.030s Sampling\n0.059s Hierarchy { samples: 14115 }\n0.131s Hierarchy { samples: 6219 }\n0.136s Hierarchy { samples: 2694 }\n0.138s Hierarchy { samples: 1185 }\n0.139s Hierarchy { samples: 512 }\n0.139s Hierarchy { samples: 223 }\n0.139s Hierarchy { samples: 99 }\n0.139s Hierarchy { samples: 44 }\n0.139s Hierarchy { samples: 20 }\n0.139s Hierarchy { samples: 8 }\n0.139s Hierarchy { samples: 4 }\n0.139s Hierarchy { samples: 2 }\n0.139s Hierarchy { samples: 1 }\n0.139s Orientation\n0.315s Position\n1.711s Regularity { defects: 190 }\n2.701s Subdivision { long_edges: 389, fixed_variables: 537 }\n2.717s Inversions { flipped: 495 }\n2.757s finished; VmHWM:\t   54764 kB\n"
+      },
+      {
+        "name": "select",
+        "exit": 0,
+        "seconds": 0.7649821419036016,
+        "cumulative_child_max_rss_kib": 54764,
+        "log": "407 geometric sections, 4 selected cycles\n0.715s finished; VmHWM:\t   28000 kB\n"
+      },
+      {
+        "name": "constrain",
+        "exit": 0,
+        "seconds": 0.3144700120901689,
+        "cumulative_child_max_rss_kib": 55620,
+        "log": "0.118s Regularity { defects: 54 }\n0.249s Inversions { flipped: 545 }\n0.289s finished; VmHWM:\t   55620 kB\n"
+      },
+      {
+        "name": "repair",
+        "exit": 0,
+        "seconds": 33.4044863228919,
+        "cumulative_child_max_rss_kib": 55620,
+        "log": "0.135s Repair { radius: 0, flipped: 6 }\n0.152s CoarseRepair { radius: 1, flipped: 6 }\n0.153s CoarseRepair { radius: 2, flipped: 6 }\n0.158s CoarseRepair { radius: 3, flipped: 5 }\n0.169s CoarseRepair { radius: 4, flipped: 3 }\n0.170s CoarseRepair { radius: 1, flipped: 3 }\n0.196s CoarseRepair { radius: 2, flipped: 3 }\n0.694s CoarseRepair { radius: 3, flipped: 3 }\n3.339s CoarseRepair { radius: 4, flipped: 3 }\n7.028s CoarseRepair { radius: 1, flipped: 3 }\n7.430s CoarseRepair { radius: 2, flipped: 3 }\n8.959s CoarseRepair { radius: 3, flipped: 3 }\n13.136s CoarseRepair { radius: 4, flipped: 3 }\n17.646s CoarseRepair { radius: 1, flipped: 3 }\n18.034s CoarseRepair { radius: 2, flipped: 2 }\n21.307s CoarseRepair { radius: 3, flipped: 2 }\n24.420s CoarseRepair { radius: 4, flipped: 1 }\n26.426s CoarseRepair { radius: 1, flipped: 1 }\n27.226s CoarseRepair { radius: 2, flipped: 1 }\n29.229s CoarseRepair { radius: 3, flipped: 1 }\n31.235s CoarseRepair { radius: 4, flipped: 1 }\n33.247s CoarseRepair { radius: 1, flipped: 1 }\n33.396s finished; VmHWM:\t   50492 kB\n"
+      },
+      {
+        "name": "diagnose",
+        "exit": 0,
+        "seconds": 0.8151849108980969,
+        "cumulative_child_max_rss_kib": 55620,
+        "log": "0.807s finished; VmHWM:\t   23912 kB\n"
+      },
+      {
+        "name": "validate",
+        "exit": 0,
+        "seconds": 0.5143427170114592,
+        "cumulative_child_max_rss_kib": 55620,
+        "log": "0.141s Fitting\n0.166s Extraction\n0.196s QuadOptimization\n0.420s SurfaceFit\n1227 vertices, 1225 quads; Diagnostics { input_vertices: 4934, samples: 14599, position_defects_before: 190, position_defects_after: 0, fixed_variables: 484, flipped_before: 47, flipped_after: 0, max_fitting_distance: 0.017920554360411296, max_surface_error: 0.01881288697119445 }\n0.509s finished; VmHWM:\t   23888 kB\n"
+      }
+    ],
+    "artifact_directory": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/geometry-directions/hand-native",
+    "sha256": {
+      "auto-comparison.png": "ba1b0fbc17c13c87b1383e0233b796f229beaf2a659f1d7e5de57484b60d19ba",
+      "capture.log": "64910917cdbdd2b1546b87db0c7c48aa2fc4401c5f3d975a003511704caa7450",
+      "constrain.log": "ead5a0baa6248c8ba4a8f17b26cfb35101db0e89eb51bf55d4be841789d3a25e",
+      "constrained.raw.json": "8ac71497a1f69f416d7c35cbc9b29de00dd3fc57068803dff905670ee3bd6d5f",
+      "cycle-analysis.json": "fcb69d674b5e64747de836ee102204f6940f4ab37b2ab7f724690aa2f23c638a",
+      "cycles.json": "d36be3f89464ca68e838753dd6b2fd225bad3fa8c6dbd83fd7af945400d579d0",
+      "diagnose.log": "5ffabc3c163ca4da558d5c868ea448c31d667317fd7e6ff8adf58693fcae858a",
+      "direction.raw.json": "e0219b4b239212fdfe29a166b0efdaac2fe36ec281b59e9f0cd294f9128a34a0",
+      "directions.json": "9e4af52ab363dde9f8f5d54861c7dc1c194aae054c1bbd3e8c5439c8d3efe235",
+      "estimate.log": "d609069bdca0bf3a0b07796028d470887a84f9c66be2fc66ea9c67071212675a",
+      "guides.json": "61b5f16ba3932cdb7b5300a3e98ddf4bc7e03c1f06e1c5cfa63d288b376e80cb",
+      "layout-metrics.json": "999610b2cd782907a7a15844019e3783866083ff15941287ccb8f27340d54e76",
+      "legacy-ring-metrics.json": "510d1e2a682b3ae12621011f78c19489f337e5ed81e1d2bab6054bbafb88e210",
+      "render-comparison.py": "524a2fe486c9a1939612a3a43c9f8a16bd2ef1d8c68acea587180c0ac6380f2e",
+      "repair.log": "a420563034c6dbf5a477386c7ba5599032cc85713b4baee6488520458c8b6b31",
+      "repaired.json": "533b2d1d8548ee4468e82bc981085b2a3571648e12197e1e2d569a76f430d0d5",
+      "result.audit.json": "c2be85b593b5f7170e08667384b20ebf3054370809360e05e82f872194f998e0",
+      "result.validated.obj": "6d2321f750a613ebd805d969e9668ca3acf6f1f0c6463065d8ccdd34c9ed0fe7",
+      "runs.json": "4cde22bf5560bc5a1a77e957330f2b50e941dea574be23d7caf2f65260bfe6ec",
+      "select.log": "342bb9076ce502aac1cec2255ef45ba3f8438642d6abdc3ccab9806c02dda0ae",
+      "validate.log": "7345ae9bcd8e9d1821d37ac4d73d034746c46d4a28bf7442a32b9bd62ef8c069"
+    }
+  },
+  "torus": {
+    "target_quads": 700,
+    "hint_candidates": 1536,
+    "hints": 352,
+    "hint_spacing": 0.31800108817448985,
+    "hint_neighbourhood_radius": 0.9540032645234695,
+    "hint_visited_edges": 479808,
+    "hint_work_budget_edges": 40000000,
+    "cycles": 1,
+    "selected_cycles": [
+      {
+        "seed": 1916,
+        "level_over_spacing": 12.5,
+        "center": [
+          -0.5130273047152082,
+          2.9646250303802124,
+          -0.001734230158296889
+        ],
+        "axis": [
+          0.989154498248176,
+          0.12480359624033432,
+          -0.07744314663595966
+        ],
+        "radius_over_spacing": 1.884176899145901,
+        "perimeter_over_spacing": 13.291115526348287,
+        "normal_alignment": 0.9982051993120414,
+        "planarity": 0.010929157433587192,
+        "axis_alignment": 0.8888166431417684,
+        "rotation": 0,
+        "period": [
+          -12,
+          -1
+        ],
+        "along_axis": 0,
+        "clearance_over_spacing": 100.0,
+        "period_to_projected_length": 1.015798658487788,
+        "eligible": true
+      }
+    ],
+    "metrics": {
+      "quads": 756,
+      "vertices": 756,
+      "closed_edge_loops_total": 75,
+      "simple_closed_edge_loops": 75,
+      "closed_loops": [
+        {
+          "vertices": [
+            0,
+            2,
+            23,
+            21,
+            19,
+            17,
+            15,
+            13,
+            11,
+            9,
+            6,
+            4
+          ],
+          "center": [
+            2.95477633851767,
+            0.3341699279259154,
+            -0.008784142337853969
+          ]
+        },
+        {
+          "vertices": [
+            0,
+            3,
+            745,
+            733,
+            721,
+            709,
+            696,
+            678,
+            666,
+            652,
+            639,
+            630,
+            617,
+            602,
+            588,
+            580,
+            568,
+            555,
+            544,
+            534,
+            522,
+            509,
+            497,
+            484,
+            487,
+            473,
+            459,
+            444,
+            435,
+            419,
+            406,
+            394,
+            381,
+            371,
+            358,
+            343,
+            329,
+            320,
+            323,
+            309,
+            295,
+            281,
+            265,
+            240,
+            233,
+            219,
+            209,
+            196,
+            189,
+            176,
+            164,
+            152,
+            143,
+            131,
+            118,
+            106,
+            94,
+            83,
+            69,
+            70,
+            46,
+            37,
+            25
+          ],
+          "center": [
+            -0.017370371936734894,
+            -0.0034231133778687968,
+            0.2999262656778976
+          ]
+        },
+        {
+          "vertices": [
+            1,
+            2,
+            26,
+            38,
+            45,
+            58,
+            71,
+            84,
+            95,
+            107,
+            119,
+            132,
+            144,
+            153,
+            163,
+            175,
+            188,
+            197,
+            210,
+            220,
+            249,
+            250,
+            264,
+            282,
+            294,
+            308,
+            321,
+            322,
+            330,
+            344,
+            357,
+            372,
+            382,
+            395,
+            407,
+            418,
+            434,
+            443,
+            458,
+            472,
+            485,
+            486,
+            498,
+            510,
+            521,
+            533,
+            543,
+            554,
+            569,
+            581,
+            589,
+            603,
+            618,
+            631,
+            640,
+            653,
+            665,
+            695,
+            708,
+            720,
+            722,
+            734,
+            746
+          ],
+          "center": [
+            -0.03521044725704132,
+            -0.03015287384384508,
+            -0.004623467876998801
+          ]
+        },
+        {
+          "vertices": [
+            1,
+            3,
+            5,
+            7,
+            748,
+            12,
+            14,
+            16,
+            18,
+            20,
+            22,
+            24
+          ],
+          "center": [
+            2.9736416742202816,
+            0.030946943563460044,
+            -0.008709914731527848
+          ]
+        },
+        {
+          "vertices": [
+            4,
+            5,
+            747,
+            735,
+            723,
+            697,
+            687,
+            679,
+            667,
+            654,
+            641,
+            632,
+            619,
+            604,
+            590,
+            582,
+            570,
+            556,
+            545,
+            535,
+            523,
+            511,
+            499,
+            500,
+            488,
+            460,
+            447,
+            445,
+            436,
+            420,
+            408,
+            396,
+            383,
+            373,
+            359,
+            345,
+            331,
+            324,
+            310,
+            296,
+            283,
+            266,
+            251,
+            239,
+            234,
+            221,
+            211,
+            198,
+            190,
+            177,
+            165,
+            154,
+            145,
+            133,
+            120,
+            108,
+            96,
+            85,
+            72,
+            59,
+            47,
+            39,
+            27
+          ],
+          "center": [
+            -0.0005351755340961392,
+            0.01775954457797662,
+            0.5180802804581146
+          ]
+        },
+        {
+          "vertices": [
+            6,
+            7,
+            736,
+            724,
+            710,
+            698,
+            688,
+            680,
+            668,
+            655,
+            642,
+            633,
+            620,
+            605,
+            591,
+            583,
+            571,
+            557,
+            546,
+            536,
+            537,
+            524,
+            512,
+            501,
+            489,
+            461,
+            448,
+            446,
+            437,
+            421,
+            409,
+            397,
+            384,
+            374,
+            360,
+            346,
+            332,
+            311,
+            298,
+            297,
+            284,
+            267,
+            252,
+            241,
+            235,
+            222,
+            212,
+            199,
+            191,
+            178,
+            166,
+            155,
+            146,
+            134,
+            121,
+            109,
+            97,
+            86,
+            73,
+            60,
+            48,
+            40,
+            28
+          ],
+          "center": [
+            0.010339560246569573,
+            0.026854184907739796,
+            0.5908567940687941
+          ]
+        },
+        {
+          "vertices": [
+            8,
+            9,
+            748,
+            737,
+            725,
+            711,
+            699,
+            700,
+            681,
+            669,
+            656,
+            643,
+            644,
+            621,
+            606,
+            592,
+            593,
+            572,
+            558,
+            559,
+            547,
+            538,
+            525,
+            513,
+            502,
+            474,
+            462,
+            463,
+            449,
+            422,
+            423,
+            410,
+            398,
+            385,
+            386,
+            347,
+            348,
+            333,
+            312,
+            313,
+            299,
+            285,
+            274,
+            253,
+            254,
+            236,
+            223,
+            224,
+            200,
+            201,
+            179,
+            167,
+            156,
+            147,
+            135,
+            122,
+            110,
+            98,
+            87,
+            74,
+            61,
+            49,
+            41
+          ],
+          "center": [
+            0.009824079923763865,
+            0.023630863037427233,
+            0.5051697971643082
+          ]
+        },
+        {
+          "vertices": [
+            8,
+            10,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            26,
+            25,
+            27,
+            28
+          ],
+          "center": [
+            2.9068530800892294,
+            0.634222897949759,
+            -0.008159071278693066
+          ]
+        },
+        {
+          "vertices": [
+            10,
+            11,
+            12,
+            738,
+            726,
+            712,
+            713,
+            701,
+            682,
+            670,
+            657,
+            645,
+            646,
+            622,
+            607,
+            608,
+            594,
+            573,
+            560,
+            561,
+            548,
+            539,
+            526,
+            514,
+            503,
+            475,
+            476,
+            464,
+            450,
+            424,
+            425,
+            411,
+            399,
+            387,
+            361,
+            362,
+            349,
+            334,
+            325,
+            314,
+            300,
+            286,
+            276,
+            256,
+            255,
+            242,
+            226,
+            225,
+            213,
+            202,
+            180,
+            168,
+            169,
+            148,
+            136,
+            123,
+            111,
+            99,
+            100,
+            75,
+            62,
+            50,
+            29
+          ],
+          "center": [
+            -0.0007380433826879501,
+            0.009245699861177027,
+            0.28551021430276374
+          ]
+        },
+        {
+          "vertices": [
+            13,
+            14,
+            749,
+            739,
+            727,
+            714,
+            702,
+            689,
+            671,
+            658,
+            659,
+            647,
+            623,
+            624,
+            609,
+            595,
+            574,
+            575,
+            562,
+            549,
+            550,
+            527,
+            515,
+            504,
+            490,
+            477,
+            465,
+            451,
+            426,
+            427,
+            412,
+            400,
+            388,
+            375,
+            363,
+            350,
+            335,
+            336,
+            315,
+            301,
+            287,
+            275,
+            268,
+            257,
+            243,
+            237,
+            227,
+            214,
+            203,
+            182,
+            181,
+            170,
+            157,
+            137,
+            124,
+            112,
+            113,
+            88,
+            76,
+            63,
+            51,
+            30,
+            31
+          ],
+          "center": [
+            -0.015467114464971368,
+            -0.013710033120975861,
+            -0.011686665177287987
+          ]
+        },
+        {
+          "vertices": [
+            15,
+            16,
+            750,
+            740,
+            728,
+            715,
+            703,
+            690,
+            672,
+            673,
+            660,
+            648,
+            634,
+            625,
+            610,
+            596,
+            584,
+            576,
+            563,
+            564,
+            551,
+            528,
+            516,
+            491,
+            478,
+            466,
+            453,
+            438,
+            428,
+            429,
+            413,
+            401,
+            390,
+            376,
+            364,
+            365,
+            755,
+            337,
+            316,
+            302,
+            288,
+            277,
+            269,
+            258,
+            244,
+            245,
+            228,
+            215,
+            204,
+            192,
+            183,
+            171,
+            158,
+            138,
+            125,
+            126,
+            101,
+            89,
+            77,
+            64,
+            52,
+            53,
+            32
+          ],
+          "center": [
+            -0.03061835238244691,
+            -0.038380585709112305,
+            -0.30309567621996686
+          ]
+        },
+        {
+          "vertices": [
+            17,
+            18,
+            751,
+            741,
+            729,
+            716,
+            704,
+            691,
+            683,
+            674,
+            661,
+            649,
+            635,
+            626,
+            611,
+            597,
+            598,
+            577,
+            578,
+            565,
+            529,
+            517,
+            505,
+            492,
+            479,
+            467,
+            452,
+            454,
+            439,
+            430,
+            414,
+            402,
+            389,
+            377,
+            366,
+            367,
+            351,
+            338,
+            317,
+            303,
+            289,
+            290,
+            270,
+            259,
+            260,
+            246,
+            229,
+            216,
+            205,
+            193,
+            184,
+            172,
+            159,
+            139,
+            127,
+            114,
+            102,
+            90,
+            78,
+            65,
+            55,
+            54,
+            33
+          ],
+          "center": [
+            -0.046019379321822484,
+            -0.05928542352417109,
+            -0.5111558050710625
+          ]
+        },
+        {
+          "vertices": [
+            19,
+            20,
+            752,
+            742,
+            730,
+            717,
+            705,
+            692,
+            684,
+            675,
+            662,
+            650,
+            636,
+            627,
+            612,
+            613,
+            599,
+            585,
+            566,
+            541,
+            530,
+            518,
+            506,
+            493,
+            480,
+            468,
+            469,
+            455,
+            440,
+            431,
+            415,
+            403,
+            391,
+            378,
+            368,
+            354,
+            352,
+            339,
+            326,
+            304,
+            305,
+            291,
+            278,
+            271,
+            261,
+            247,
+            230,
+            217,
+            206,
+            194,
+            185,
+            160,
+            149,
+            140,
+            128,
+            115,
+            103,
+            91,
+            79,
+            66,
+            67,
+            42,
+            34
+          ],
+          "center": [
+            -0.05665916408285642,
+            -0.07097672939675002,
+            -0.5890561821601084
+          ]
+        },
+        {
+          "vertices": [
+            21,
+            22,
+            753,
+            743,
+            731,
+            718,
+            706,
+            693,
+            685,
+            676,
+            663,
+            651,
+            637,
+            628,
+            614,
+            600,
+            586,
+            579,
+            552,
+            540,
+            531,
+            519,
+            507,
+            494,
+            481,
+            482,
+            470,
+            456,
+            441,
+            432,
+            416,
+            404,
+            392,
+            379,
+            369,
+            355,
+            353,
+            340,
+            327,
+            318,
+            306,
+            292,
+            279,
+            272,
+            262,
+            248,
+            231,
+            218,
+            207,
+            186,
+            173,
+            161,
+            150,
+            141,
+            129,
+            116,
+            104,
+            92,
+            80,
+            81,
+            57,
+            43,
+            35
+          ],
+          "center": [
+            -0.05906149099943629,
+            -0.06929118551334347,
+            -0.5185797252641858
+          ]
+        },
+        {
+          "vertices": [
+            23,
+            24,
+            754,
+            744,
+            732,
+            719,
+            707,
+            694,
+            686,
+            677,
+            664,
+            638,
+            629,
+            616,
+            615,
+            601,
+            587,
+            567,
+            553,
+            542,
+            532,
+            520,
+            508,
+            495,
+            496,
+            483,
+            471,
+            457,
+            442,
+            433,
+            417,
+            405,
+            393,
+            380,
+            370,
+            356,
+            342,
+            341,
+            328,
+            319,
+            307,
+            293,
+            280,
+            273,
+            263,
+            238,
+            232,
+            208,
+            195,
+            187,
+            174,
+            162,
+            151,
+            142,
+            130,
+            117,
+            105,
+            93,
+            82,
+            68,
+            56,
+            44,
+            36
+          ],
+          "center": [
+            -0.05064849525870761,
+            -0.054270701466811094,
+            -0.306320595789441
+          ]
+        },
+        {
+          "vertices": [
+            29,
+            30,
+            53,
+            54,
+            42,
+            43,
+            44,
+            38,
+            37,
+            39,
+            40,
+            41
+          ],
+          "center": [
+            2.8284744701260496,
+            0.927307056567546,
+            -0.007335997673740235
+          ]
+        },
+        {
+          "vertices": [
+            45,
+            46,
+            47,
+            48,
+            49,
+            50,
+            51,
+            52,
+            55,
+            67,
+            57,
+            56
+          ],
+          "center": [
+            2.7230028529532304,
+            1.2110989772673815,
+            -0.008157812147159327
+          ]
+        },
+        {
+          "vertices": [
+            58,
+            68,
+            81,
+            66,
+            65,
+            64,
+            63,
+            62,
+            61,
+            60,
+            59,
+            70
+          ],
+          "center": [
+            2.589556471671282,
+            1.4821868649783578,
+            -0.012112778989541184
+          ]
+        },
+        {
+          "vertices": [
+            69,
+            71,
+            82,
+            80,
+            79,
+            78,
+            77,
+            76,
+            75,
+            74,
+            73,
+            72
+          ],
+          "center": [
+            2.4278098290649264,
+            1.736926516591798,
+            -0.013156653605631457
+          ]
+        },
+        {
+          "vertices": [
+            83,
+            84,
+            93,
+            92,
+            91,
+            90,
+            89,
+            88,
+            100,
+            87,
+            86,
+            85
+          ],
+          "center": [
+            2.240492772457434,
+            1.973276977761401,
+            -0.016187330488461365
+          ]
+        },
+        {
+          "vertices": [
+            94,
+            95,
+            105,
+            104,
+            103,
+            102,
+            101,
+            113,
+            99,
+            98,
+            97,
+            96
+          ],
+          "center": [
+            2.034240921881455,
+            2.1931123895374998,
+            -0.01601092038311588
+          ]
+        },
+        {
+          "vertices": [
+            106,
+            107,
+            117,
+            116,
+            115,
+            114,
+            126,
+            112,
+            111,
+            110,
+            109,
+            108
+          ],
+          "center": [
+            1.8062094399158273,
+            2.3898902469800207,
+            -0.012361526278676531
+          ]
+        },
+        {
+          "vertices": [
+            118,
+            119,
+            130,
+            129,
+            128,
+            127,
+            125,
+            124,
+            123,
+            122,
+            121,
+            120
+          ],
+          "center": [
+            1.5587672954709844,
+            2.5617725471763895,
+            -0.0067492054050586475
+          ]
+        },
+        {
+          "vertices": [
+            131,
+            132,
+            142,
+            141,
+            140,
+            139,
+            138,
+            137,
+            136,
+            135,
+            134,
+            133
+          ],
+          "center": [
+            1.2950145650422047,
+            2.708058558983543,
+            -0.0030898890368071656
+          ]
+        },
+        {
+          "vertices": [
+            143,
+            144,
+            151,
+            150,
+            149,
+            159,
+            158,
+            157,
+            148,
+            147,
+            146,
+            145
+          ],
+          "center": [
+            1.0168291879201552,
+            2.8253432830065415,
+            -0.0018399996193412989
+          ]
+        },
+        {
+          "vertices": [
+            152,
+            153,
+            162,
+            161,
+            160,
+            172,
+            171,
+            170,
+            169,
+            156,
+            155,
+            154
+          ],
+          "center": [
+            0.7280334157220244,
+            2.914146229387754,
+            -0.0023559693211683643
+          ]
+        },
+        {
+          "vertices": [
+            163,
+            164,
+            165,
+            166,
+            167,
+            168,
+            181,
+            183,
+            184,
+            185,
+            173,
+            174
+          ],
+          "center": [
+            0.43121454194381,
+            2.972232892833524,
+            -0.001795798505466465
+          ]
+        },
+        {
+          "vertices": [
+            175,
+            176,
+            177,
+            178,
+            179,
+            180,
+            182,
+            192,
+            193,
+            194,
+            186,
+            187
+          ],
+          "center": [
+            0.12971400118570311,
+            3.0007361495796716,
+            5.158499713101006e-05
+          ]
+        },
+        {
+          "vertices": [
+            188,
+            189,
+            190,
+            191,
+            201,
+            202,
+            203,
+            204,
+            205,
+            206,
+            207,
+            195
+          ],
+          "center": [
+            -0.17335560913188516,
+            2.997013162101714,
+            8.47153505740041e-05
+          ]
+        },
+        {
+          "vertices": [
+            196,
+            197,
+            208,
+            218,
+            217,
+            216,
+            215,
+            214,
+            213,
+            200,
+            199,
+            198
+          ],
+          "center": [
+            -0.474494242810795,
+            2.9610715090377693,
+            -0.002060498865954172
+          ]
+        },
+        {
+          "vertices": [
+            209,
+            210,
+            232,
+            231,
+            230,
+            229,
+            228,
+            227,
+            225,
+            224,
+            212,
+            211
+          ],
+          "center": [
+            -0.7704858351230945,
+            2.8958238258733737,
+            -0.0026427517035760915
+          ]
+        },
+        {
+          "vertices": [
+            219,
+            220,
+            238,
+            248,
+            247,
+            246,
+            245,
+            237,
+            226,
+            223,
+            222,
+            221
+          ],
+          "center": [
+            -1.0574289627601001,
+            2.7999159635543722,
+            -0.000635938646988223
+          ]
+        },
+        {
+          "vertices": [
+            233,
+            234,
+            235,
+            236,
+            242,
+            243,
+            244,
+            260,
+            261,
+            262,
+            263,
+            249
+          ],
+          "center": [
+            -1.3325590623323897,
+            2.6746608307952147,
+            0.0015394146728867641
+          ]
+        },
+        {
+          "vertices": [
+            239,
+            240,
+            250,
+            273,
+            272,
+            271,
+            259,
+            258,
+            257,
+            255,
+            254,
+            241
+          ],
+          "center": [
+            -1.5943169923876088,
+            2.523161985109384,
+            0.0029289015966179714
+          ]
+        },
+        {
+          "vertices": [
+            251,
+            252,
+            253,
+            256,
+            268,
+            269,
+            270,
+            278,
+            279,
+            280,
+            264,
+            265
+          ],
+          "center": [
+            -1.8407539469684824,
+            2.348211268597694,
+            0.005936099958995988
+          ]
+        },
+        {
+          "vertices": [
+            266,
+            267,
+            274,
+            276,
+            275,
+            277,
+            290,
+            291,
+            292,
+            293,
+            282,
+            281
+          ],
+          "center": [
+            -2.0662277501371853,
+            2.1474580968913606,
+            0.005812437306671746
+          ]
+        },
+        {
+          "vertices": [
+            283,
+            284,
+            285,
+            286,
+            287,
+            288,
+            289,
+            305,
+            306,
+            307,
+            294,
+            295
+          ],
+          "center": [
+            -2.2698800217190387,
+            1.9258719734709961,
+            0.00605871396718043
+          ]
+        },
+        {
+          "vertices": [
+            296,
+            297,
+            299,
+            300,
+            301,
+            302,
+            303,
+            304,
+            318,
+            319,
+            308,
+            309
+          ],
+          "center": [
+            -2.452647607006322,
+            1.6876665365763541,
+            0.0019448313729220328
+          ]
+        },
+        {
+          "vertices": [
+            298,
+            310,
+            323,
+            321,
+            328,
+            327,
+            326,
+            317,
+            316,
+            315,
+            314,
+            313
+          ],
+          "center": [
+            -2.611519972928503,
+            1.434486887585811,
+            -0.005022893220972589
+          ]
+        },
+        {
+          "vertices": [
+            311,
+            312,
+            325,
+            336,
+            337,
+            338,
+            339,
+            340,
+            341,
+            322,
+            320,
+            324
+          ],
+          "center": [
+            -2.744508172943276,
+            1.1686014534995641,
+            -0.010474020889083467
+          ]
+        },
+        {
+          "vertices": [
+            329,
+            330,
+            342,
+            353,
+            352,
+            351,
+            755,
+            335,
+            334,
+            333,
+            332,
+            331
+          ],
+          "center": [
+            -2.8498966471642526,
+            0.8919293278442346,
+            -0.013694042540588118
+          ]
+        },
+        {
+          "vertices": [
+            343,
+            344,
+            356,
+            355,
+            354,
+            367,
+            365,
+            350,
+            349,
+            348,
+            346,
+            345
+          ],
+          "center": [
+            -2.9304148642244594,
+            0.6078776483216707,
+            -0.015181245585487465
+          ]
+        },
+        {
+          "vertices": [
+            347,
+            360,
+            359,
+            358,
+            357,
+            370,
+            369,
+            368,
+            366,
+            364,
+            363,
+            362
+          ],
+          "center": [
+            -2.981179059703526,
+            0.31818492458549136,
+            -0.014955959478868927
+          ]
+        },
+        {
+          "vertices": [
+            361,
+            375,
+            376,
+            377,
+            378,
+            379,
+            380,
+            372,
+            371,
+            373,
+            374,
+            386
+          ],
+          "center": [
+            -2.9999338685575903,
+            0.02593928764877448,
+            -0.01324339023557289
+          ]
+        },
+        {
+          "vertices": [
+            381,
+            382,
+            393,
+            392,
+            391,
+            389,
+            390,
+            388,
+            387,
+            385,
+            384,
+            383
+          ],
+          "center": [
+            -2.9911755904334902,
+            -0.2657378999776057,
+            -0.008204434411410283
+          ]
+        },
+        {
+          "vertices": [
+            394,
+            395,
+            405,
+            404,
+            403,
+            402,
+            401,
+            400,
+            399,
+            398,
+            397,
+            396
+          ],
+          "center": [
+            -2.951067728474637,
+            -0.5538452194176521,
+            -0.004740008958072425
+          ]
+        },
+        {
+          "vertices": [
+            406,
+            407,
+            417,
+            416,
+            415,
+            414,
+            413,
+            412,
+            411,
+            410,
+            409,
+            408
+          ],
+          "center": [
+            -2.881165334120464,
+            -0.8355252188289999,
+            -0.0018023570999883588
+          ]
+        },
+        {
+          "vertices": [
+            418,
+            419,
+            420,
+            421,
+            423,
+            425,
+            427,
+            429,
+            430,
+            431,
+            432,
+            433
+          ],
+          "center": [
+            -2.7831744000526584,
+            -1.1086795696641014,
+            -0.0024028193631321997
+          ]
+        },
+        {
+          "vertices": [
+            422,
+            424,
+            426,
+            428,
+            439,
+            440,
+            441,
+            442,
+            434,
+            435,
+            436,
+            437
+          ],
+          "center": [
+            -2.660182675454196,
+            -1.3717379558318072,
+            -0.005035737000789998
+          ]
+        },
+        {
+          "vertices": [
+            438,
+            451,
+            450,
+            449,
+            446,
+            445,
+            444,
+            443,
+            457,
+            456,
+            455,
+            454
+          ],
+          "center": [
+            -2.5138886910655125,
+            -1.6232267451298197,
+            -0.006788467692681817
+          ]
+        },
+        {
+          "vertices": [
+            447,
+            448,
+            463,
+            464,
+            465,
+            453,
+            452,
+            469,
+            470,
+            471,
+            458,
+            459
+          ],
+          "center": [
+            -2.3468459275804765,
+            -1.8612440417697176,
+            -0.008465389509939622
+          ]
+        },
+        {
+          "vertices": [
+            460,
+            461,
+            462,
+            476,
+            477,
+            466,
+            467,
+            468,
+            482,
+            483,
+            472,
+            473
+          ],
+          "center": [
+            -2.1584179956787573,
+            -2.0826413227059164,
+            -0.007544842703802061
+          ]
+        },
+        {
+          "vertices": [
+            474,
+            475,
+            490,
+            478,
+            479,
+            480,
+            481,
+            496,
+            485,
+            487,
+            488,
+            489
+          ],
+          "center": [
+            -1.9472624061252704,
+            -2.2829500156958535,
+            -0.005002939576004519
+          ]
+        },
+        {
+          "vertices": [
+            484,
+            486,
+            495,
+            494,
+            493,
+            492,
+            491,
+            504,
+            503,
+            502,
+            501,
+            500
+          ],
+          "center": [
+            -1.7147148106073875,
+            -2.4594164087670904,
+            -0.004693334709875267
+          ]
+        },
+        {
+          "vertices": [
+            497,
+            498,
+            508,
+            507,
+            506,
+            505,
+            516,
+            515,
+            514,
+            513,
+            512,
+            499
+          ],
+          "center": [
+            -1.4655661640982238,
+            -2.6127219390723897,
+            -0.004776635525358755
+          ]
+        },
+        {
+          "vertices": [
+            509,
+            510,
+            520,
+            519,
+            518,
+            517,
+            528,
+            527,
+            526,
+            525,
+            524,
+            511
+          ],
+          "center": [
+            -1.2028528472301396,
+            -2.7427504792339037,
+            -0.0035831441663210944
+          ]
+        },
+        {
+          "vertices": [
+            521,
+            522,
+            523,
+            537,
+            538,
+            539,
+            550,
+            551,
+            529,
+            530,
+            531,
+            532
+          ],
+          "center": [
+            -0.9279244688846208,
+            -2.8460990910248634,
+            -0.003128692257581196
+          ]
+        },
+        {
+          "vertices": [
+            533,
+            534,
+            535,
+            536,
+            547,
+            548,
+            549,
+            564,
+            565,
+            541,
+            540,
+            542
+          ],
+          "center": [
+            -0.64321673550794,
+            -2.920756548651705,
+            -0.0011818234602303385
+          ]
+        },
+        {
+          "vertices": [
+            543,
+            544,
+            545,
+            546,
+            559,
+            561,
+            562,
+            563,
+            578,
+            566,
+            552,
+            553
+          ],
+          "center": [
+            -0.3526517770544604,
+            -2.9703006160331005,
+            -0.0005640921052288047
+          ]
+        },
+        {
+          "vertices": [
+            554,
+            555,
+            556,
+            557,
+            558,
+            560,
+            575,
+            576,
+            577,
+            585,
+            579,
+            567
+          ],
+          "center": [
+            -0.058265956091507774,
+            -2.990404768275104,
+            -0.0015672442743704107
+          ]
+        },
+        {
+          "vertices": [
+            568,
+            569,
+            587,
+            586,
+            599,
+            598,
+            584,
+            574,
+            573,
+            572,
+            571,
+            570
+          ],
+          "center": [
+            0.23682917466970513,
+            -2.981197919890222,
+            -0.003268099982474589
+          ]
+        },
+        {
+          "vertices": [
+            580,
+            581,
+            601,
+            600,
+            613,
+            597,
+            596,
+            595,
+            594,
+            593,
+            583,
+            582
+          ],
+          "center": [
+            0.5300822033073415,
+            -2.9431984051491042,
+            -0.003501617771036162
+          ]
+        },
+        {
+          "vertices": [
+            588,
+            589,
+            615,
+            614,
+            612,
+            611,
+            610,
+            609,
+            608,
+            592,
+            591,
+            590
+          ],
+          "center": [
+            0.818446991135121,
+            -2.8754202193001928,
+            -0.001367054240303212
+          ]
+        },
+        {
+          "vertices": [
+            602,
+            603,
+            616,
+            628,
+            627,
+            626,
+            625,
+            624,
+            607,
+            606,
+            605,
+            604
+          ],
+          "center": [
+            1.1000520435371686,
+            -2.7817689767117035,
+            0.0033022116287310284
+          ]
+        },
+        {
+          "vertices": [
+            617,
+            618,
+            629,
+            637,
+            636,
+            635,
+            634,
+            623,
+            622,
+            621,
+            620,
+            619
+          ],
+          "center": [
+            1.3714520180008751,
+            -2.6606104195524263,
+            0.006556255012979117
+          ]
+        },
+        {
+          "vertices": [
+            630,
+            631,
+            638,
+            651,
+            650,
+            649,
+            648,
+            647,
+            646,
+            644,
+            633,
+            632
+          ],
+          "center": [
+            1.630405660251862,
+            -2.5143487701573086,
+            0.009277400457316025
+          ]
+        },
+        {
+          "vertices": [
+            639,
+            640,
+            664,
+            663,
+            662,
+            661,
+            660,
+            659,
+            645,
+            643,
+            642,
+            641
+          ],
+          "center": [
+            1.8736630860569468,
+            -2.342938666426142,
+            0.015133946640923296
+          ]
+        },
+        {
+          "vertices": [
+            652,
+            653,
+            677,
+            676,
+            675,
+            674,
+            673,
+            658,
+            657,
+            656,
+            655,
+            654
+          ],
+          "center": [
+            2.096438163173565,
+            -2.1451269604786862,
+            0.015448594916704415
+          ]
+        },
+        {
+          "vertices": [
+            665,
+            666,
+            667,
+            668,
+            669,
+            670,
+            671,
+            672,
+            683,
+            684,
+            685,
+            686
+          ],
+          "center": [
+            2.2982598144482878,
+            -1.9251018256537016,
+            0.010847488013269775
+          ]
+        },
+        {
+          "vertices": [
+            678,
+            679,
+            680,
+            681,
+            682,
+            689,
+            690,
+            691,
+            692,
+            693,
+            694,
+            695
+          ],
+          "center": [
+            2.4781674473106565,
+            -1.6856401017704694,
+            0.004078062196339177
+          ]
+        },
+        {
+          "vertices": [
+            687,
+            688,
+            700,
+            701,
+            702,
+            703,
+            704,
+            705,
+            706,
+            707,
+            708,
+            696
+          ],
+          "center": [
+            2.634059172147816,
+            -1.4285021637564401,
+            -0.005308625601081556
+          ]
+        },
+        {
+          "vertices": [
+            697,
+            698,
+            699,
+            713,
+            714,
+            715,
+            716,
+            717,
+            718,
+            719,
+            720,
+            709
+          ],
+          "center": [
+            2.759616261300577,
+            -1.154056235192107,
+            -0.008638721438264428
+          ]
+        },
+        {
+          "vertices": [
+            710,
+            711,
+            712,
+            727,
+            728,
+            729,
+            730,
+            731,
+            732,
+            722,
+            721,
+            723
+          ],
+          "center": [
+            2.855492410594264,
+            -0.867412285087898,
+            -0.010738775266239458
+          ]
+        },
+        {
+          "vertices": [
+            724,
+            725,
+            726,
+            739,
+            740,
+            741,
+            742,
+            743,
+            744,
+            734,
+            733,
+            735
+          ],
+          "center": [
+            2.924235991684889,
+            -0.5730549243239403,
+            -0.00972035768661829
+          ]
+        },
+        {
+          "vertices": [
+            736,
+            737,
+            738,
+            749,
+            750,
+            751,
+            752,
+            753,
+            754,
+            746,
+            745,
+            747
+          ],
+          "center": [
+            2.9622817576919522,
+            -0.27238928428929193,
+            -0.008375213226761788
+          ]
+        }
+      ],
+      "edge_ratio_max": 1.3752586656714427,
+      "edge_ratio_p95": 1.3301144286879683,
+      "quality": {
+        "bad_quads": [],
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 756,
+        "quads_without_outward_diagonal": 0,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.030822246215844586,
+          "max_spacing_ratio": 0.09692497089485576,
+          "point": [
+            1.966744939946112,
+            2.976781129176332,
+            -0.0014963340866172015
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.033844237569680226,
+          "max_spacing_ratio": 0.10642805584083392,
+          "point": [
+            2.782837632105853,
+            2.2838158229891237,
+            0.0
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 0, boundaries: 0 }"
+        },
+        "vertices": 756
+      }
+    },
+    "runs": [
+      {
+        "name": "estimate",
+        "exit": 0,
+        "seconds": 0.0644049410475418,
+        "cumulative_child_max_rss_kib": 55620,
+        "log": "1536 geometric candidates, 352 hints\n0.040s finished; VmHWM:\t    6220 kB\n"
+      },
+      {
+        "name": "capture",
+        "exit": 0,
+        "seconds": 0.9664054570021108,
+        "cumulative_child_max_rss_kib": 55620,
+        "log": "0.010s Sampling\n0.016s Hierarchy { samples: 5760 }\n0.054s Hierarchy { samples: 2441 }\n0.056s Hierarchy { samples: 1125 }\n0.057s Hierarchy { samples: 502 }\n0.057s Hierarchy { samples: 179 }\n0.057s Hierarchy { samples: 76 }\n0.057s Hierarchy { samples: 36 }\n0.057s Hierarchy { samples: 17 }\n0.057s Hierarchy { samples: 8 }\n0.057s Hierarchy { samples: 3 }\n0.057s Hierarchy { samples: 1 }\n0.057s Orientation\n0.128s Position\n0.776s Regularity { defects: 62 }\n0.914s Subdivision { long_edges: 156, fixed_variables: 0 }\n0.923s Inversions { flipped: 35 }\n0.944s finished; VmHWM:\t   24608 kB\n"
+      },
+      {
+        "name": "select",
+        "exit": 0,
+        "seconds": 0.3153338039992377,
+        "cumulative_child_max_rss_kib": 55620,
+        "log": "1222 geometric sections, 1 selected cycles\n0.269s finished; VmHWM:\t   14304 kB\n"
+      },
+      {
+        "name": "constrain",
+        "exit": 0,
+        "seconds": 0.16411185404285789,
+        "cumulative_child_max_rss_kib": 55620,
+        "log": "0.062s Regularity { defects: 10 }\n0.094s Inversions { flipped: 81 }\n0.115s finished; VmHWM:\t   24908 kB\n"
+      },
+      {
+        "name": "repair",
+        "exit": 0,
+        "seconds": 0.16551288403570652,
+        "cumulative_child_max_rss_kib": 55620,
+        "log": "0.095s Repair { radius: 0, flipped: 0 }\n0.127s finished; VmHWM:\t   13064 kB\n"
+      },
+      {
+        "name": "diagnose",
+        "exit": 0,
+        "seconds": 0.36554815189447254,
+        "cumulative_child_max_rss_kib": 55620,
+        "log": "0.348s finished; VmHWM:\t   11944 kB\n"
+      },
+      {
+        "name": "validate",
+        "exit": 0,
+        "seconds": 0.26432501792442054,
+        "cumulative_child_max_rss_kib": 55620,
+        "log": "0.064s Fitting\n0.079s Extraction\n0.088s QuadOptimization\n0.203s SurfaceFit\n756 vertices, 756 quads; Diagnostics { input_vertices: 1536, samples: 5951, position_defects_before: 62, position_defects_after: 0, fixed_variables: 0, flipped_before: 12, flipped_after: 0, max_fitting_distance: 0.01630215548028015, max_surface_error: 0.033844237569680226 }\n0.241s finished; VmHWM:\t   11852 kB\n"
+      }
+    ],
+    "artifact_directory": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/geometry-directions/torus-native",
+    "sha256": {
+      "capture.log": "ae247f77b51a7f504379d78fab0e7d2b6e67173e66577bb736fe201f75b1fca3",
+      "constrain.log": "00a2f7c0bf700655ec237ba4622663482239fd33256a9b1a58bad392bf8c44ed",
+      "constrained.raw.json": "69f85c8297a5ba4a5f31719a6d2a0125a3b3ba81977ee6e0994365330bd94da1",
+      "cycle-analysis.json": "e930776d1a888ac321eb0ab33a211ae46dc77e3b05f2c7a1661797b8387b5e3a",
+      "cycles.json": "2c9d344213fef286de6fdd480a0b5f37e6a0eef35fb266c336e566e85a2c8118",
+      "diagnose.log": "3625ebc7c083634b3c36eaf25b4d14990512ee6014eb18a1e1c15689f850a493",
+      "direction.raw.json": "d21ff0a3f401ccf3483c27333925386a5dedb92650365af53106aa15fb3f7c93",
+      "directions.json": "2cd1d7ebb14211c7591d0f53e19829e8d0ea8d26c74d54359643a818b86c61f5",
+      "estimate.log": "e523e85b11d98329ca7d49d100223dbb7fddf2f622f81e5c7c4b7269dea7645f",
+      "guides.json": "5a431f8eff9bc52570ecc5f2af33c9702c7ba039706ce847661f0a668e90b76f",
+      "layout-metrics.json": "69121842facc366c0743cefe68156a7faa7e325db792361d78c9660029066143",
+      "render-comparison.py": "cfedd215f08d74747f8960263d835dd9b76bb1ef19abb2e0df6211813d8bf4cd",
+      "repair.log": "4d23687f2d5d901f78de5ef17498d212563bde889e57b26b5c240c18662640b3",
+      "repaired.json": "b66adb3b487c2c7d267e24e3e8af1d710179ed54e285b980a78838d7f539915b",
+      "result.audit.json": "bd7206e0b8e628c6ea5c74f64b33bd6e434616012ed25e5403e0add68421c58a",
+      "result.validated.obj": "0a8db9d412bd5175ae946cbc24eb924945be14c0ada39858ccc8cd929d7b4c40",
+      "runs.json": "b104e93ec56dc1383258cf312825671ff1605425f9930e66e3d634110d326d36",
+      "select.log": "96cc1e9f45b2492979ac9e4afc03af4554735fefb6ebe67d4fbfb775e1c0a413",
+      "torus-comparison.png": "ef4fd09d992df33245e3517a43852c454990c67b9e2e681c6fffc30d96a99942",
+      "validate.log": "924ccbafa8a4f3f5587fbd6e5f4be3eb691b6aacb0d8ac5025732ecb31964e45"
+    }
+  },
+  "full_character": {
+    "target_quads": 10000,
+    "hint_candidates": 19538,
+    "hints": 2901,
+    "hint_spacing": 0.05762159740626389,
+    "hint_neighbourhood_radius": 0.17286479221879167,
+    "hint_visited_edges": 122329668,
+    "hint_work_budget_edges": 400000000,
+    "cycles": 5,
+    "selected_cycles": [
+      {
+        "seed": 483,
+        "level_over_spacing": 29.5,
+        "center": [
+          -1.7042878816759648,
+          0.30862757256319673,
+          0.21632854631512669
+        ],
+        "axis": [
+          -0.7194802320943702,
+          -0.0720837347071051,
+          0.6907619928861944
+        ],
+        "radius_over_spacing": 5.144603027998375,
+        "perimeter_over_spacing": 36.31923777973301,
+        "normal_alignment": 0.9690724734031331,
+        "planarity": 0.004816971302056656,
+        "axis_alignment": 0.8769809413902832,
+        "rotation": 0,
+        "period": [
+          29,
+          -1
+        ],
+        "along_axis": 0,
+        "clearance_over_spacing": 10.320204894097964,
+        "period_to_projected_length": 0.9104814815024369,
+        "eligible": true
+      },
+      {
+        "seed": 13669,
+        "level_over_spacing": 27.0,
+        "center": [
+          1.8605850975801657,
+          0.34274827840573446,
+          0.3641304209726909
+        ],
+        "axis": [
+          0.5873004732677236,
+          -0.12442583636767304,
+          0.7997476885516537
+        ],
+        "radius_over_spacing": 5.071711079700921,
+        "perimeter_over_spacing": 38.25437614947867,
+        "normal_alignment": 0.9516617315014193,
+        "planarity": 0.002860683233777601,
+        "axis_alignment": 0.8520918611188629,
+        "rotation": 0,
+        "period": [
+          -36,
+          -12
+        ],
+        "along_axis": 0,
+        "clearance_over_spacing": 12.916677730636094,
+        "period_to_projected_length": 1.1044217726515222,
+        "eligible": true
+      },
+      {
+        "seed": 65969,
+        "level_over_spacing": 63.0,
+        "center": [
+          -2.4190382408215294,
+          0.407989193611935,
+          1.4973957586275326
+        ],
+        "axis": [
+          0.6165392380649325,
+          0.07293299869682336,
+          -0.7839388660012985
+        ],
+        "radius_over_spacing": 1.17373608497839,
+        "perimeter_over_spacing": 9.278565667223798,
+        "normal_alignment": 0.8063498106015871,
+        "planarity": 0.03102236746739282,
+        "axis_alignment": 0.7216029648571062,
+        "rotation": 0,
+        "period": [
+          -4,
+          10
+        ],
+        "along_axis": 1,
+        "clearance_over_spacing": 1.0159520650586897,
+        "period_to_projected_length": 1.4935537112656412,
+        "eligible": true
+      },
+      {
+        "seed": 70356,
+        "level_over_spacing": 32.5,
+        "center": [
+          2.405150860624425,
+          0.4213360850123015,
+          1.471199218080663
+        ],
+        "axis": [
+          0.20042736860780525,
+          0.3607992522188515,
+          -0.9108527704910759
+        ],
+        "radius_over_spacing": 1.0346649042862048,
+        "perimeter_over_spacing": 7.706759344385587,
+        "normal_alignment": 0.951570176328197,
+        "planarity": 0.013164980287984155,
+        "axis_alignment": 0.8371922427681141,
+        "rotation": 0,
+        "period": [
+          1,
+          -5
+        ],
+        "along_axis": 1,
+        "clearance_over_spacing": 2.0437889445404,
+        "period_to_projected_length": 0.7749488016899685,
+        "eligible": true
+      },
+      {
+        "seed": 2982,
+        "level_over_spacing": 57.5,
+        "center": [
+          2.6850567596859287,
+          0.24702114100857117,
+          1.2271610666689492
+        ],
+        "axis": [
+          -0.4795406430611077,
+          0.34573925017166685,
+          -0.8065389900948823
+        ],
+        "radius_over_spacing": 0.8684263248504261,
+        "perimeter_over_spacing": 6.3770455601980665,
+        "normal_alignment": 0.9389207224155489,
+        "planarity": 0.008581554060756905,
+        "axis_alignment": 0.85621872000299,
+        "rotation": 0,
+        "period": [
+          0,
+          -4
+        ],
+        "along_axis": 1,
+        "clearance_over_spacing": 1.5555623237751846,
+        "period_to_projected_length": 0.7325811720188116,
+        "eligible": true
+      }
+    ],
+    "metrics": null,
+    "runs": [
+      {
+        "name": "estimate",
+        "exit": 0,
+        "seconds": 11.475732894963585,
+        "cumulative_child_max_rss_kib": 272100,
+        "log": "19538 geometric candidates, 2901 hints\n11.446s finished; VmHWM:\t   82736 kB\n"
+      },
+      {
+        "name": "capture",
+        "exit": 0,
+        "seconds": 74.62097833899315,
+        "cumulative_child_max_rss_kib": 301356,
+        "log": "0.252s Sampling\n0.376s Hierarchy { samples: 81636 }\n0.782s Hierarchy { samples: 36021 }\n0.824s Hierarchy { samples: 16238 }\n0.839s Hierarchy { samples: 7274 }\n0.847s Hierarchy { samples: 3260 }\n0.849s Hierarchy { samples: 1458 }\n0.850s Hierarchy { samples: 649 }\n0.850s Hierarchy { samples: 290 }\n0.851s Hierarchy { samples: 128 }\n0.851s Hierarchy { samples: 58 }\n0.851s Hierarchy { samples: 24 }\n0.851s Hierarchy { samples: 11 }\n0.851s Hierarchy { samples: 5 }\n0.851s Hierarchy { samples: 2 }\n0.851s Hierarchy { samples: 1 }\n0.851s Orientation\n2.001s Position\n10.634s Regularity { defects: 1009 }\n74.159s Subdivision { long_edges: 4216, fixed_variables: 3762 }\n74.277s Inversions { flipped: 4930 }\n74.560s finished; VmHWM:\t  301356 kB\n"
+      },
+      {
+        "name": "select",
+        "exit": 0,
+        "seconds": 12.881206401973031,
+        "cumulative_child_max_rss_kib": 301356,
+        "log": "783 geometric sections, 5 selected cycles\n12.853s finished; VmHWM:\t  155416 kB\n"
+      },
+      {
+        "name": "constrain",
+        "exit": 0,
+        "seconds": 3.3179314780281857,
+        "cumulative_child_max_rss_kib": 329620,
+        "log": "0.764s Regularity { defects: 126 }\n2.877s Inversions { flipped: 5610 }\n3.260s finished; VmHWM:\t  329620 kB\n"
+      },
+      {
+        "name": "repair",
+        "exit": "timeout",
+        "seconds": 180.01571741700172,
+        "cumulative_child_max_rss_kib": 329620,
+        "log": "1.013s Repair { radius: 0, flipped: 136 }\n1.139s CoarseRepair { radius: 1, flipped: 136 }\n8.319s CoarseRepair { radius: 2, flipped: 122 }\n12.929s CoarseRepair { radius: 3, flipped: 122 }\n17.208s CoarseRepair { radius: 4, flipped: 121 }\n22.090s CoarseRepair { radius: 1, flipped: 121 }\n28.546s CoarseRepair { radius: 2, flipped: 120 }\n34.605s CoarseRepair { radius: 3, flipped: 120 }\n42.241s CoarseRepair { radius: 4, flipped: 120 }\n52.083s CoarseRepair { radius: 1, flipped: 120 }\n63.314s CoarseRepair { radius: 2, flipped: 115 }\n76.433s CoarseRepair { radius: 3, flipped: 115 }\n90.506s CoarseRepair { radius: 4, flipped: 115 }\n101.353s CoarseRepair { radius: 1, flipped: 113 }\n115.568s CoarseRepair { radius: 2, flipped: 113 }\n128.011s CoarseRepair { radius: 3, flipped: 112 }\n139.594s CoarseRepair { radius: 4, flipped: 112 }\n151.586s CoarseRepair { radius: 1, flipped: 112 }\n163.889s CoarseRepair { radius: 2, flipped: 112 }\n176.243s CoarseRepair { radius: 3, flipped: 112 }\n"
+      }
+    ],
+    "artifact_directory": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/geometry-directions/body-10000-sized-budget",
+    "sha256": {
+      "capture.log": "ce18f47b40b2cab92ae7dc50335c1de480c546be3a025b1eba0b49b89be7548e",
+      "constrain.log": "90889ff8e3015d1f94af6d32f6397c327a46f844772ffebd3de6fc4fd4c02736",
+      "constrained.raw.json": "3f110236d85dfc28cc882070ed5705b44c2de1342e433e1b0a2d49304ea3becf",
+      "cycle-analysis.json": "e7fb6b73e5dcdb2bd11d43879e4895d079beb4730193a664a3b8fddd04f7a76d",
+      "cycles.json": "8c1194b6ed79c96522f43e3d5ba3095abb21f1c30c24a61205cea9a3e5222931",
+      "direction.raw.json": "4af762d414e66f7939a46ec60b6cc7f929edaec16a4ab45a5c93671a6dc83090",
+      "directions.json": "3db847fbaa6779c76e13d5aeb8551b803ff32e202f280448db62b07f4d55dcc0",
+      "estimate.log": "369ed4d2d8b24ea2f4ee4fb936fe32e511647eac9df3814378a2c2dc7d1e9fdc",
+      "guides.json": "4e487735a975e7bb5dc9f688d8578e3a8ba110efc2c045ea116e34c7f57fc038",
+      "repair.log": "905ada2b577845197123a1580234bf15c38f1fa57a0f866cf059e7d89db67b72",
+      "runs.json": "c300706866d8c40851a60dedd1a057b104f9909115cabc9dba9c195c2d57abfb",
+      "select.log": "74311341bd504918e3fc39d25aa5dedfd17f5bb282ff12a84ca8156179a709bc"
+    },
+    "status": "incomplete_repair_external_timeout",
+    "final_coarse_log_inversions": 112,
+    "accepted_mesh_produced": false
+  },
+  "controls": {
+    "previous_hand_specific_hints": {
+      "quads": 1252,
+      "vertices": 1254,
+      "closed_edge_loops_total": 16,
+      "simple_closed_edge_loops": 16,
+      "closed_loops": [
+        {
+          "vertices": [
+            172,
+            196,
+            200,
+            189,
+            188,
+            211,
+            1245,
+            435,
+            430,
+            561,
+            512,
+            1242,
+            525,
+            515,
+            513,
+            505,
+            535,
+            401,
+            410,
+            391,
+            390,
+            295,
+            293,
+            286,
+            270,
+            269
+          ],
+          "center": [
+            2.6796224428696016,
+            0.25636313107653796,
+            1.222463896867016
+          ]
+        },
+        {
+          "vertices": [
+            174,
+            175,
+            197,
+            185,
+            187,
+            210,
+            319,
+            436,
+            560,
+            511,
+            508,
+            510,
+            526,
+            534,
+            522,
+            506,
+            399,
+            400,
+            385,
+            383,
+            382,
+            375,
+            304,
+            298,
+            283,
+            271
+          ],
+          "center": [
+            2.661299174495394,
+            0.2742384318236457,
+            1.204496269818042
+          ]
+        },
+        {
+          "vertices": [
+            178,
+            198,
+            1231,
+            186,
+            183,
+            213,
+            318,
+            426,
+            564,
+            559,
+            563,
+            509,
+            527,
+            523,
+            524,
+            507,
+            405,
+            413,
+            384,
+            378,
+            377,
+            376,
+            303,
+            284,
+            267,
+            278
+          ],
+          "center": [
+            2.6401285118206888,
+            0.29238033907122785,
+            1.1904612934500205
+          ]
+        },
+        {
+          "vertices": [
+            552,
+            569,
+            633,
+            658,
+            583,
+            585
+          ],
+          "center": [
+            2.5776557010665857,
+            0.32611265617312296,
+            1.378990014503601
+          ]
+        },
+        {
+          "vertices": [
+            565,
+            566,
+            712,
+            706,
+            644,
+            581
+          ],
+          "center": [
+            2.591875410128487,
+            0.30954281256029365,
+            1.41306594828738
+          ]
+        },
+        {
+          "vertices": [
+            570,
+            572,
+            691,
+            705,
+            713,
+            643
+          ],
+          "center": [
+            2.6006588967436794,
+            0.2880711050843491,
+            1.444595523436848
+          ]
+        },
+        {
+          "vertices": [
+            571,
+            631,
+            704,
+            715,
+            649,
+            641
+          ],
+          "center": [
+            2.6108132509781723,
+            0.26733505774853256,
+            1.4735860538547094
+          ]
+        },
+        {
+          "vertices": [
+            764,
+            766,
+            769,
+            796,
+            880,
+            917,
+            997,
+            899,
+            897,
+            837,
+            838,
+            849
+          ],
+          "center": [
+            2.3976228702470346,
+            0.44823211422231757,
+            1.4295593853588233
+          ]
+        },
+        {
+          "vertices": [
+            765,
+            778,
+            832,
+            841,
+            840,
+            904,
+            903,
+            1003,
+            919,
+            879,
+            878,
+            793
+          ],
+          "center": [
+            2.4012093263969168,
+            0.4338512541279358,
+            1.4559309295350689
+          ]
+        },
+        {
+          "vertices": [
+            771,
+            772,
+            794,
+            881,
+            918,
+            1002,
+            902,
+            905,
+            839,
+            831,
+            830,
+            776
+          ],
+          "center": [
+            2.4029817350120353,
+            0.4183577830331722,
+            1.4822907260707547
+          ]
+        },
+        {
+          "vertices": [
+            773,
+            777,
+            842,
+            844,
+            845,
+            895,
+            906,
+            1001,
+            884,
+            885,
+            795,
+            792
+          ],
+          "center": [
+            2.4038365806864697,
+            0.4024313513243105,
+            1.5083607557325651
+          ]
+        },
+        {
+          "vertices": [
+            779,
+            780,
+            790,
+            874,
+            875,
+            882,
+            868,
+            869,
+            870,
+            846,
+            847,
+            852
+          ],
+          "center": [
+            2.4057715085547655,
+            0.3717098797704899,
+            1.5603747254744986
+          ]
+        },
+        {
+          "vertices": [
+            782,
+            783,
+            851,
+            843,
+            984,
+            872,
+            871,
+            886,
+            883,
+            877,
+            876,
+            791
+          ],
+          "center": [
+            2.4045941596616474,
+            0.3867904910288876,
+            1.5344835928008393
+          ]
+        },
+        {
+          "vertices": [
+            912,
+            913,
+            1062,
+            1064,
+            1016,
+            1019
+          ],
+          "center": [
+            2.160542070334271,
+            0.5811634873588442,
+            1.3925231399220752
+          ]
+        },
+        {
+          "vertices": [
+            930,
+            931,
+            934,
+            1012,
+            1010,
+            1018
+          ],
+          "center": [
+            2.151829588135671,
+            0.5680390361159112,
+            1.415901505524607
+          ]
+        },
+        {
+          "vertices": [
+            932,
+            933,
+            937,
+            1011,
+            1014,
+            1063
+          ],
+          "center": [
+            2.1440654274504545,
+            0.5612306240132093,
+            1.4296716856720275
+          ]
+        }
+      ],
+      "edge_ratio_max": 18.13827122600362,
+      "edge_ratio_p95": 2.7920649411168394,
+      "quality": {
+        "bad_quads": [],
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 1252,
+        "quads_without_outward_diagonal": 0,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.023867712460607305,
+          "max_spacing_ratio": 0.8281422550809954,
+          "point": [
+            2.6187894987325304,
+            0.27229458990525174,
+            1.405882663627789
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.028710544787433588,
+          "max_spacing_ratio": 0.9961748677889086,
+          "point": [
+            2.6471364,
+            0.26440257,
+            1.395842
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 1254
+      }
+    },
+    "geometry_only_coarser_cycle_sampling": {
+      "quads": 1227,
+      "closed_edge_loops_total": 17,
+      "classified_finger_rings": 15,
+      "finger_rings": [
+        {
+          "vertices": [
+            143,
+            153,
+            155,
+            156,
+            285,
+            377,
+            462,
+            441,
+            440,
+            429,
+            358,
+            359,
+            341,
+            260,
+            252,
+            247,
+            234,
+            236
+          ],
+          "center": [
+            2.700030809838489,
+            0.2290813300227525,
+            1.2484908553499556
+          ],
+          "perimeter": 0.30321160506491585,
+          "axis_alignment": 0.9877826938911336,
+          "planarity_ratio": 0.0017358062731998936
+        },
+        {
+          "vertices": [
+            146,
+            158,
+            154,
+            182,
+            284,
+            371,
+            370,
+            438,
+            439,
+            430,
+            362,
+            361,
+            340,
+            261,
+            256,
+            246,
+            235,
+            231
+          ],
+          "center": [
+            2.687063318398388,
+            0.24490848028539963,
+            1.228835816691202
+          ],
+          "perimeter": 0.3151454566079456,
+          "axis_alignment": 0.9866395665628406,
+          "planarity_ratio": 0.0010704053339525381
+        },
+        {
+          "vertices": [
+            147,
+            148,
+            159,
+            157,
+            183,
+            283,
+            372,
+            373,
+            434,
+            442,
+            425,
+            351,
+            350,
+            339,
+            253,
+            255,
+            242,
+            232
+          ],
+          "center": [
+            2.67278842599029,
+            0.2610823476859608,
+            1.210751901056235
+          ],
+          "perimeter": 0.3271594875391927,
+          "axis_alignment": 0.9917287513267807,
+          "planarity_ratio": 0.0009226926613399799
+        },
+        {
+          "vertices": [
+            452,
+            453,
+            519,
+            593,
+            609,
+            625,
+            694,
+            636,
+            476,
+            460
+          ],
+          "center": [
+            2.543151302174687,
+            0.35664761218646746,
+            1.3218339764180693
+          ],
+          "perimeter": 0.3776754739144596,
+          "axis_alignment": 0.9886225071609921,
+          "planarity_ratio": 0.001532729222190817
+        },
+        {
+          "vertices": [
+            454,
+            455,
+            520,
+            595,
+            626,
+            624,
+            695,
+            631,
+            474,
+            458
+          ],
+          "center": [
+            2.5580105738252845,
+            0.342235642565924,
+            1.345280134479782
+          ],
+          "perimeter": 0.35815047891827695,
+          "axis_alignment": 0.9939687618572426,
+          "planarity_ratio": 0.000754280237748693
+        },
+        {
+          "vertices": [
+            459,
+            466,
+            531,
+            530,
+            599,
+            627,
+            628,
+            693,
+            632,
+            475
+          ],
+          "center": [
+            2.5714673133289407,
+            0.3269756988898854,
+            1.3686180533497847
+          ],
+          "perimeter": 0.3428653634184929,
+          "axis_alignment": 0.9964243571048558,
+          "planarity_ratio": 0.0006391433647283794
+        },
+        {
+          "vertices": [
+            465,
+            538,
+            523,
+            522,
+            596,
+            619,
+            620,
+            692,
+            650,
+            547
+          ],
+          "center": [
+            2.583245238803608,
+            0.311498564665931,
+            1.3923257434137997
+          ],
+          "perimeter": 0.33243019454359485,
+          "axis_alignment": 0.9969098754385527,
+          "planarity_ratio": 0.0008467928746137781
+        },
+        {
+          "vertices": [
+            521,
+            529,
+            537,
+            536,
+            548,
+            633,
+            688,
+            689,
+            618,
+            598
+          ],
+          "center": [
+            2.592799125393709,
+            0.296148591063149,
+            1.4167128283252608
+          ],
+          "perimeter": 0.32273989745146375,
+          "axis_alignment": 0.9977364716224756,
+          "planarity_ratio": 0.001435002670113428
+        },
+        {
+          "vertices": [
+            524,
+            526,
+            612,
+            611,
+            615,
+            691,
+            635,
+            550,
+            540,
+            541
+          ],
+          "center": [
+            2.6097034684557743,
+            0.26576357403608936,
+            1.4653930806612312
+          ],
+          "perimeter": 0.2936209317736988,
+          "axis_alignment": 0.9769243523157425,
+          "planarity_ratio": 0.010420128001310005
+        },
+        {
+          "vertices": [
+            527,
+            528,
+            542,
+            539,
+            549,
+            634,
+            690,
+            617,
+            616,
+            597
+          ],
+          "center": [
+            2.6015962290920234,
+            0.2806139154810057,
+            1.4410187872705895
+          ],
+          "perimeter": 0.3094288110771945,
+          "axis_alignment": 0.9937193232570405,
+          "planarity_ratio": 0.0027241931387571834
+        },
+        {
+          "vertices": [
+            700,
+            701,
+            709,
+            710,
+            741,
+            803,
+            839,
+            828,
+            827,
+            820,
+            776,
+            770
+          ],
+          "center": [
+            2.4053522168784403,
+            0.4305489757449153,
+            1.4533681530542368
+          ],
+          "perimeter": 0.3779580124702868,
+          "axis_alignment": 0.9910124516065761,
+          "planarity_ratio": 0.0007089958073033188
+        },
+        {
+          "vertices": [
+            706,
+            712,
+            720,
+            723,
+            777,
+            779,
+            818,
+            810,
+            811,
+            838,
+            834,
+            736
+          ],
+          "center": [
+            2.4073044496746134,
+            0.399727451679138,
+            1.5062038227430687
+          ],
+          "perimeter": 0.3531311002733523,
+          "axis_alignment": 0.996921553402829,
+          "planarity_ratio": 7.885224131795693e-05
+        },
+        {
+          "vertices": [
+            707,
+            708,
+            737,
+            805,
+            804,
+            830,
+            826,
+            819,
+            778,
+            772,
+            771,
+            722
+          ],
+          "center": [
+            2.4068714928102692,
+            0.41543566409248806,
+            1.4799536081734181
+          ],
+          "perimeter": 0.3633775793093313,
+          "axis_alignment": 0.9939927094369968,
+          "planarity_ratio": 0.00017647557069008852
+        },
+        {
+          "vertices": [
+            713,
+            718,
+            721,
+            719,
+            783,
+            785,
+            801,
+            798,
+            808,
+            806,
+            807,
+            734
+          ],
+          "center": [
+            2.4071753784297982,
+            0.3838762002450131,
+            1.5323314537813493
+          ],
+          "perimeter": 0.34215938560360526,
+          "axis_alignment": 0.9970101474297289,
+          "planarity_ratio": 7.899229249803985e-05
+        },
+        {
+          "vertices": [
+            715,
+            717,
+            735,
+            802,
+            809,
+            797,
+            799,
+            800,
+            780,
+            784,
+            724,
+            725
+          ],
+          "center": [
+            2.4066637518820344,
+            0.36796275903648573,
+            1.558148649757941
+          ],
+          "perimeter": 0.3239876038463324,
+          "axis_alignment": 0.9318639979086639,
+          "planarity_ratio": 0.0006275943702486746
+        }
+      ],
+      "measured_finger_edges": 1195,
+      "length_weighted_alignment_error_degrees": 10.124213869850632,
+      "edge_length_fraction_within_10_degrees": 0.6511155583409497,
+      "surface_fit_error": null,
+      "edge_ratio_max": 5.391197172162583,
+      "edge_ratio_p95": 1.917156579925611,
+      "worst_ratio_center": [
+        2.259084996719724,
+        0.5243223555604631,
+        1.3410501144142217
+      ],
+      "quality": {
+        "bad_quads": [],
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 1227,
+        "quads_without_outward_diagonal": 0,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.011662366200964693,
+          "max_spacing_ratio": 0.4046511898108201,
+          "point": [
+            2.512031244879067,
+            0.4090530288787573,
+            1.3555541996551765
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.01882460099842337,
+          "max_spacing_ratio": 0.6531605216697679,
+          "point": [
+            2.40133650407497,
+            0.25540821532037244,
+            0.7986634959250299
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 1229
+      }
+    },
+    "half_spacing_python_control": {
+      "quads": 1225,
+      "closed_edge_loops_total": 18,
+      "classified_finger_rings": 15,
+      "finger_rings": [
+        {
+          "vertices": [
+            143,
+            153,
+            155,
+            156,
+            285,
+            377,
+            462,
+            441,
+            440,
+            429,
+            358,
+            359,
+            341,
+            260,
+            252,
+            247,
+            234,
+            236
+          ],
+          "center": [
+            2.7000408441201915,
+            0.22906730445376355,
+            1.248491676172961
+          ],
+          "perimeter": 0.30319309360955377,
+          "axis_alignment": 0.9878708344591343,
+          "planarity_ratio": 0.001734048610950899
+        },
+        {
+          "vertices": [
+            146,
+            158,
+            154,
+            182,
+            284,
+            371,
+            370,
+            438,
+            439,
+            430,
+            362,
+            361,
+            340,
+            261,
+            256,
+            246,
+            235,
+            231
+          ],
+          "center": [
+            2.687078091137218,
+            0.24489034238761556,
+            1.2288346759114879
+          ],
+          "perimeter": 0.3151321657883561,
+          "axis_alignment": 0.9867582314976023,
+          "planarity_ratio": 0.001068954372676902
+        },
+        {
+          "vertices": [
+            147,
+            148,
+            159,
+            157,
+            183,
+            283,
+            372,
+            373,
+            434,
+            442,
+            425,
+            351,
+            350,
+            339,
+            253,
+            255,
+            242,
+            232
+          ],
+          "center": [
+            2.6728107859113273,
+            0.2610568420336727,
+            1.2107438616249313
+          ],
+          "perimeter": 0.3271144455757179,
+          "axis_alignment": 0.9918580972111732,
+          "planarity_ratio": 0.0009194148492444667
+        },
+        {
+          "vertices": [
+            452,
+            453,
+            519,
+            593,
+            609,
+            625,
+            694,
+            636,
+            476,
+            460
+          ],
+          "center": [
+            2.543209945435076,
+            0.35658233660008104,
+            1.3219688947525046
+          ],
+          "perimeter": 0.3775595882391852,
+          "axis_alignment": 0.9884327930435338,
+          "planarity_ratio": 0.0014785152685505118
+        },
+        {
+          "vertices": [
+            454,
+            455,
+            520,
+            595,
+            626,
+            624,
+            695,
+            631,
+            474,
+            458
+          ],
+          "center": [
+            2.558062921570347,
+            0.34217234862908363,
+            1.3453905229578627
+          ],
+          "perimeter": 0.35806819160387093,
+          "axis_alignment": 0.9938915471502063,
+          "planarity_ratio": 0.0007413389227713776
+        },
+        {
+          "vertices": [
+            459,
+            466,
+            531,
+            530,
+            599,
+            627,
+            628,
+            693,
+            632,
+            475
+          ],
+          "center": [
+            2.5715103214256403,
+            0.32691936962747564,
+            1.3687116515522622
+          ],
+          "perimeter": 0.3428185288088486,
+          "axis_alignment": 0.9963981039240266,
+          "planarity_ratio": 0.0006349679709166765
+        },
+        {
+          "vertices": [
+            465,
+            538,
+            523,
+            522,
+            596,
+            619,
+            620,
+            692,
+            650,
+            547
+          ],
+          "center": [
+            2.5832761076275013,
+            0.311448861130245,
+            1.3924039814487288
+          ],
+          "perimeter": 0.33239150213805124,
+          "axis_alignment": 0.9968994181130488,
+          "planarity_ratio": 0.0008436001100628429
+        },
+        {
+          "vertices": [
+            521,
+            529,
+            537,
+            536,
+            548,
+            633,
+            688,
+            689,
+            618,
+            598
+          ],
+          "center": [
+            2.59282300956645,
+            0.29610843515977114,
+            1.416776742341351
+          ],
+          "perimeter": 0.3227154918330003,
+          "axis_alignment": 0.9977282967604703,
+          "planarity_ratio": 0.001435775219538948
+        },
+        {
+          "vertices": [
+            524,
+            526,
+            612,
+            611,
+            615,
+            691,
+            635,
+            550,
+            540,
+            541
+          ],
+          "center": [
+            2.6097157205002706,
+            0.26574179713033497,
+            1.4654268012502665
+          ],
+          "perimeter": 0.2935907428319488,
+          "axis_alignment": 0.9769147881066227,
+          "planarity_ratio": 0.010419007391458056
+        },
+        {
+          "vertices": [
+            527,
+            528,
+            542,
+            539,
+            549,
+            634,
+            690,
+            617,
+            616,
+            597
+          ],
+          "center": [
+            2.6016142426977824,
+            0.28058334060352197,
+            1.4410674517924975
+          ],
+          "perimeter": 0.3094003395809945,
+          "axis_alignment": 0.9937089463890431,
+          "planarity_ratio": 0.002729276386517695
+        },
+        {
+          "vertices": [
+            700,
+            701,
+            709,
+            710,
+            741,
+            803,
+            843,
+            828,
+            827,
+            820,
+            776,
+            770
+          ],
+          "center": [
+            2.4057658676708877,
+            0.4291665108327207,
+            1.455597763477913
+          ],
+          "perimeter": 0.37642996287897035,
+          "axis_alignment": 0.9908723669739651,
+          "planarity_ratio": 0.0007056839638372087
+        },
+        {
+          "vertices": [
+            706,
+            712,
+            720,
+            723,
+            777,
+            779,
+            818,
+            810,
+            811,
+            842,
+            838,
+            736
+          ],
+          "center": [
+            2.4074662649636713,
+            0.3987202965521747,
+            1.5075942316981452
+          ],
+          "perimeter": 0.3526542031756183,
+          "axis_alignment": 0.9970717300671669,
+          "planarity_ratio": 7.391590828698405e-05
+        },
+        {
+          "vertices": [
+            707,
+            708,
+            737,
+            805,
+            804,
+            830,
+            826,
+            819,
+            778,
+            772,
+            771,
+            722
+          ],
+          "center": [
+            2.407179388775741,
+            0.41427370294957355,
+            1.4817709718551895
+          ],
+          "perimeter": 0.36232080130470923,
+          "axis_alignment": 0.9942146107988711,
+          "planarity_ratio": 0.00016879921917309728
+        },
+        {
+          "vertices": [
+            713,
+            718,
+            721,
+            719,
+            783,
+            785,
+            801,
+            798,
+            808,
+            806,
+            807,
+            734
+          ],
+          "center": [
+            2.4072786215439863,
+            0.3830955653481098,
+            1.53331214361833
+          ],
+          "perimeter": 0.34152540324692654,
+          "axis_alignment": 0.9971056564086709,
+          "planarity_ratio": 6.289126475381289e-05
+        },
+        {
+          "vertices": [
+            715,
+            717,
+            735,
+            802,
+            809,
+            797,
+            799,
+            800,
+            780,
+            784,
+            724,
+            725
+          ],
+          "center": [
+            2.4067383028581855,
+            0.3673995717024754,
+            1.558717368588395
+          ],
+          "perimeter": 0.3231127511647524,
+          "axis_alignment": 0.9317185445391353,
+          "planarity_ratio": 0.0005999951450708618
+        }
+      ],
+      "measured_finger_edges": 1202,
+      "length_weighted_alignment_error_degrees": 10.308838194281352,
+      "edge_length_fraction_within_10_degrees": 0.6439201488628924,
+      "surface_fit_error": null,
+      "edge_ratio_max": 5.441170395837472,
+      "edge_ratio_p95": 1.9454376203331365,
+      "quality": {
+        "bad_quads": [],
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 1225,
+        "quads_without_outward_diagonal": 0,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.011630597686984625,
+          "max_spacing_ratio": 0.4035489120432524,
+          "point": [
+            2.512255710754828,
+            0.4089361608208568,
+            1.3557284210726537
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.01881288697119445,
+          "max_spacing_ratio": 0.6527540779881017,
+          "point": [
+            2.40133650407497,
+            0.25540821532037244,
+            0.7986634959250299
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 1227
+      }
+    },
+    "native_hand_obj_identical_to_half_spacing_prototype": true,
+    "body_fixed_work_cap_rejection": [
+      {
+        "name": "estimate",
+        "exit": 1,
+        "seconds": 4.070184156997129,
+        "cumulative_child_max_rss_kib": 82532,
+        "log": "Error: \"Curvature hints exceed their neighbourhood work budget\"\n"
+      }
+    ]
+  },
+  "checks": {
+    "focused_rust_tests": [
+      "curvature::tests::geometry_hints_follow_non_anatomical_torus_and_are_similarity_invariant",
+      "curvature::tests::geometry_hints_leave_flat_and_isotropic_regions_automatic",
+      "cycles::tests::automatic_cycles_find_tube_and_preserve_selection_under_similarity",
+      "cycles::tests::automatic_cycles_reject_disk_sections_open_fields_and_cancellation"
+    ],
+    "focused_rust_result": "all four passed in their focused runs; no broad suite rerun",
+    "clippy": "audit lib/example, -D warnings passed",
+    "generic_loop_self_test": "open cylindrical grid: 10 cycles; toroidal grid: 28 cycles; all paths follow actual edges",
+    "hint_similarity": [
+      {
+        "case": "original",
+        "rotation": [
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "scale": 1.0,
+        "translation": [
+          0,
+          0,
+          0
+        ],
+        "hint_count": 349,
+        "same_vertex_ids": true,
+        "minimum_direction_abs_cosine": 0.9999999999999998,
+        "maximum_scaled_radius_error": 0.0
+      },
+      {
+        "case": "rotated",
+        "rotation": [
+          [
+            0.78281710131176,
+            -0.4206202460741835,
+            -0.45855860529091286
+          ],
+          [
+            0.29735427654842567,
+            0.9002132627648627,
+            -0.31811399805824764
+          ],
+          [
+            0.5466057263807399,
+            0.11267071551531782,
+            0.829775565893001
+          ]
+        ],
+        "scale": 1.0,
+        "translation": [
+          0,
+          0,
+          0
+        ],
+        "hint_count": 349,
+        "same_vertex_ids": true,
+        "minimum_direction_abs_cosine": 0.9999999999999998,
+        "maximum_scaled_radius_error": 1.3877787807814457e-17
+      },
+      {
+        "case": "rotated-scaled-translated",
+        "rotation": [
+          [
+            0.78281710131176,
+            -0.4206202460741835,
+            -0.45855860529091286
+          ],
+          [
+            0.29735427654842567,
+            0.9002132627648627,
+            -0.31811399805824764
+          ],
+          [
+            0.5466057263807399,
+            0.11267071551531782,
+            0.829775565893001
+          ]
+        ],
+        "scale": 7.0,
+        "translation": [
+          12,
+          -4,
+          3
+        ],
+        "hint_count": 349,
+        "same_vertex_ids": true,
+        "minimum_direction_abs_cosine": 0.9999999999999998,
+        "maximum_scaled_radius_error": 8.326672684688674e-16
+      }
+    ],
+    "cycle_similarity": [
+      {
+        "case": "original",
+        "rotation": [
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "scale": 1.0,
+        "translation": [
+          0,
+          0,
+          0
+        ],
+        "selected_count": 4,
+        "same_seeds": true,
+        "same_selected_vertex_sets": true
+      },
+      {
+        "case": "rotated",
+        "rotation": [
+          [
+            0.78281710131176,
+            -0.4206202460741835,
+            -0.45855860529091286
+          ],
+          [
+            0.29735427654842567,
+            0.9002132627648627,
+            -0.31811399805824764
+          ],
+          [
+            0.5466057263807399,
+            0.11267071551531782,
+            0.829775565893001
+          ]
+        ],
+        "scale": 1.0,
+        "translation": [
+          0,
+          0,
+          0
+        ],
+        "selected_count": 4,
+        "same_seeds": true,
+        "same_selected_vertex_sets": true
+      },
+      {
+        "case": "rotated-scaled-translated",
+        "rotation": [
+          [
+            0.78281710131176,
+            -0.4206202460741835,
+            -0.45855860529091286
+          ],
+          [
+            0.29735427654842567,
+            0.9002132627648627,
+            -0.31811399805824764
+          ],
+          [
+            0.5466057263807399,
+            0.11267071551531782,
+            0.829775565893001
+          ]
+        ],
+        "scale": 7.0,
+        "translation": [
+          12,
+          -4,
+          3
+        ],
+        "selected_count": 4,
+        "same_seeds": true,
+        "same_selected_vertex_sets": true
+      }
+    ],
+    "original_hints_identical_after_budget_only_rebuild": true,
+    "accepted_output_checks": {
+      "hand-native": {
+        "accepted_obj_matches_audit_exactly": true,
+        "all_closed_loops_on_accepted_quad_edges": true,
+        "perpendicular_locks_preserved": 144,
+        "loops": 18
+      },
+      "torus-native": {
+        "accepted_obj_matches_audit_exactly": true,
+        "all_closed_loops_on_accepted_quad_edges": true,
+        "perpendicular_locks_preserved": 38,
+        "loops": 75
+      }
+    }
+  },
+  "metric_note": "All-loop counts are geometry-independent strict valence-four opposite-edge traces. Legacy classifier retained unchanged: 15 aligned hand rings; 2 further actual cycles extend below its coordinate cutoff, 1 actual outer-region cycle is oblique. Do not call all 18 anatomically aligned rings.",
+  "resources": {
+    "cargo_jobs": 1,
+    "shared_lock": "/home/mark/.cache/codex-build.lock",
+    "native_process_scope_memory_max_mib": 500,
+    "build_test_scope_memory_max_mib": 700,
+    "memory_swap_max": 0,
+    "host_available_ram_range_gib": [
+      1.4,
+      1.9
+    ],
+    "per_pipeline_command_timeout_seconds": 180,
+    "whole_character_peak_process_rss_kib_from_log": 329620
+  },
+  "limits": [
+    "Whole-character repair timed out; no accepted whole-character output.",
+    "Pole placement and junction distortion remain; worst hand edge-length ratio is still 5.44.",
+    "Tilted loop on the opposite outer hand region remains, despite better sampled shape accuracy.",
+    "Geometry hint generation uses uniform output spacing, not painted/adaptive spacing.",
+    "Direction-only control still excludes hard boundary/sharp constraints; current accepted examples are closed.",
+    "Existing guide application uses Euclidean support and normal compatibility; nearby same-facing sheets may interact.",
+    "Rotation/scale checks cover hint and path selection, not full remeshing.",
+    "No triangulation-independence certificate; finite samples do not prove Hausdorff distance or absence of self-intersection.",
+    "Only hand and torus accepted here; no broad suite, CI, platform or UI/persistence/paint integration validation."
+  ],
+  "local_artifact_directory": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/geometry-directions"
+}

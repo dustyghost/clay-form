@@ -1,0 +1,100 @@
+{
+  "date": "2026-11-04",
+  "status": "experimental_not_integrated",
+  "source_digest_sha256": "b94b1071e5918865412a24ae6c13bfa6814fc0ef8fa72721c003536106cb04d5",
+  "source_digest_method": "Sorted relative paths followed by NUL, file bytes, NUL; Cargo.toml, Cargo.lock, src/*.rs and examples/*.rs.",
+  "upstream_commit": "810b7a0967c35b0dc85b4464e3835e26a756c967",
+  "biped_source_sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+  "configuration": {
+    "preserve_sharp": false,
+    "adaptive": 0,
+    "guides": [],
+    "detail": [],
+    "max_vertices": 150000,
+    "process_memory_mib": 500,
+    "process_swap_mib": 0,
+    "compiler_jobs": 1,
+    "profile": "dev opt-level 2",
+    "stage_timeout_seconds": 180
+  },
+  "comparisons": {
+    "fixed_positions": {
+      "samples": 67764,
+      "max_difference": 2.6333150153430725e-10,
+      "rms_difference": 5.0454014085997246e-11
+    },
+    "edge_graph": {
+      "levels": 12,
+      "byte_identical": true,
+      "quarter_turns_normalized": true
+    },
+    "coarse_flip_repair": {
+      "byte_identical": true,
+      "inversions_before": 1308,
+      "inversions_after": 18
+    },
+    "dynamic_positions": {
+      "vertices": 4579,
+      "reference_variant": "upstream with axis.normalized() changed to axis.normalize()",
+      "max_difference": 1.0370438985212623e-10,
+      "rms_difference": 4.209870803793139e-11
+    }
+  },
+  "biped_runs": [
+    {
+      "target_quads": 5000,
+      "result": "rejected",
+      "integer_inversions_after": 0,
+      "topology_before_dynamic_fit": "passed",
+      "capture": {
+        "wall_seconds": 23.154,
+        "max_rss_kib": 248024
+      },
+      "repair_and_fit_replay": {
+        "wall_seconds": 52.864,
+        "cpu_seconds": 51.136,
+        "max_rss_kib": 189764,
+        "exit_code": 1,
+        "timed_out": false
+      },
+      "error": "Error: \"Retopology lost source shape at DVec3(-2.7564163, 0.20239541, 1.2744359): error 0.09120, local grid spacing 0.08149\"",
+      "output_written": false,
+      "snapshot_sha256": "b79d74f237101d9817a4107935d6373c00c350dfe2d295191761072a1ad4f54f"
+    },
+    {
+      "target_quads": 10000,
+      "result": "rejected",
+      "integer_inversions_after": 0,
+      "topology_before_dynamic_fit": "passed",
+      "capture": {
+        "wall_seconds": 83.881,
+        "max_rss_kib": 300624
+      },
+      "repair_and_fit_replay": {
+        "wall_seconds": 22.023,
+        "cpu_seconds": 21.634,
+        "max_rss_kib": 167188,
+        "exit_code": 1,
+        "timed_out": false
+      },
+      "error": "Error: \"Retopology quad 4560 has no outward render diagonal near DVec3(0.5004909242390042, -0.856397731316745, -0.12017957722856891)\"",
+      "output_written": false,
+      "snapshot_sha256": "c8beee3387271c3c16ec2a9ab3d4888e967c74285761eb16d7b4fea71e6f03d7"
+    }
+  ],
+  "checks": {
+    "focused_tests_passed": 27,
+    "clippy_all_features_all_targets": "passed with warnings denied",
+    "rustfmt": "passed",
+    "app_build": "not run; backend not integrated",
+    "remote_ci": "not run for these working-tree changes"
+  },
+  "notes": [
+    "The stage comparisons share captured intermediate inputs. They do not establish equivalence of the complete field/flow/SAT pipeline.",
+    "The dynamic-stage reference input comes from the earlier corrected lattice and cleanup case; it is not the final coarse-SAT candidate.",
+    "Capture and replay are separate runs and include snapshot I/O. Do not interpret their sum as an independently timed uninterrupted run.",
+    "Both final character candidates reach continuous fitting with zero integer inversions but fail the existing shape or outward-triangulation gates.",
+    "No geometric acceptance tolerance was increased. No rejected biped OBJ was written.",
+    "Guide selection, independent signed painting, persistence and app integration remain pending."
+  ]
+}

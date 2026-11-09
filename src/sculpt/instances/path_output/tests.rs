@@ -119,6 +119,7 @@ fn grouped_bar() -> Mesh {
 fn grouped_regions(mut mesh: Mesh) -> Mesh {
     mesh.vertex_groups = ["Foot", "Repeat", "Tip"]
         .map(|name| crate::sculpt::VertexGroup {
+            purpose: crate::sculpt::GroupPurpose::Selection,
             name: name.into(),
             visible: true,
             weights: vec![0.; mesh.vertices.len()],

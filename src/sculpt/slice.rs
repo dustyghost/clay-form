@@ -370,6 +370,7 @@ impl Mesh {
             }
         }
         self.vertex_groups.push(VertexGroup {
+            purpose: crate::sculpt::GroupPurpose::Selection,
             visible: true,
             name: self.unique_group_name(base),
             weights,

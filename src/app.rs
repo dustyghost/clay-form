@@ -458,10 +458,44 @@ impl App {
             self.dispatch(Command::Action(action), ui.ctx());
         }
         self.capture_diagnostic_context(ui.ctx());
+        let density_paint = (self.ui.projection.open
+            && self.ui.projection.mode == crate::ui::SurfaceMode::Retopology
+            && !self.ui.projection.busy)
+            .then_some(self.ui.projection.density_paint)
+            .flatten();
+        self.viewport.session.density_paint = density_paint.map(|mode| {
+            (
+                mode,
+                self.ui.projection.density_radius,
+                self.ui.projection.density_brush_strength,
+            )
+        });
+        if density_paint.is_some() {
+            let revision = self.document.display_revision();
+            if self
+                .projection
+                .density_display
+                .as_ref()
+                .is_none_or(|(r, _)| *r != revision)
+            {
+                self.projection.density_display = Some((
+                    revision,
+                    std::sync::Arc::new(self.document.mesh().density_overlay()),
+                ));
+            }
+        } else {
+            self.projection.density_display = None;
+        }
         self.viewport.session.projection_preview = self
             .paths
             .preview_mesh
             .clone()
+            .or_else(|| {
+                self.projection
+                    .density_display
+                    .as_ref()
+                    .map(|(_, mesh)| mesh.clone())
+            })
             .or_else(|| self.projection.draft.as_ref().map(|d| d.mesh.clone()));
         self.viewport.session.projection_mode = self.ui.projection.open || self.ui.fusion.open;
         let layout_preview = self.ui.projection.open
@@ -611,10 +645,10 @@ impl App {
                 temporary_mask: self.ui.mask_active,
                 mask_erase: self.ui.preferences.mask_preset.erase ^ ui.input(|i| i.modifiers.alt),
                 pressure: self.pressure,
-                wire: self.ui.wire || layout_preview,
+                wire: self.ui.wire || (layout_preview && density_paint.is_none()),
                 wire_mode: self.ui.wire_mode,
                 wire_triangles: self.ui.wire_triangles && !layout_preview,
-                show_polygroups: self.ui.show_polygroups,
+                show_polygroups: self.ui.show_polygroups && density_paint.is_none(),
                 backface_opacity: if self.ui.show_backfaces {
                     self.ui.backface_opacity
                 } else {

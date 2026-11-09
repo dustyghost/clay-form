@@ -1,0 +1,3982 @@
+{
+  "date": "2026-11-05",
+  "status": "coarse_scalar_encoding_retained_fine_scalar_trial_reverted_full_character_unaccepted",
+  "current_source_digest_sha256": "a81e6fd35e2016f10660c35a0fbda5ab9feab93cc699b385e0c6ad384e786262",
+  "source_digest_method": "sorted Cargo.toml, Cargo.lock, src/**/*.rs and examples/**/*.rs; relative path + NUL + bytes + NUL per file",
+  "current_audit_binary_sha256": "a286f60a5af9012f1545ab311afe82cb188913b53fc84f5fb0fda9b4a4670baa",
+  "binary_provenance": "Each run records its executable digest. The final executable is rebuilt from the recorded current source. Earlier per-run executable hashes identify the same retained algorithms before audit wrapper/test-only edits. Hand/torus accepted runs used the retained coarse-scalar/fine-table algorithms. The separately recorded fine-scalar experiment was reverted.",
+  "upstream": {
+    "commit": "810b7a0967c35b0dc85b4464e3835e26a756c967",
+    "builder_file": "src/localsat.cpp",
+    "source_verified_against_pin": true,
+    "bundled_solver_tree_unmodified": true,
+    "solver": "MapleCOMSPS_LRB simp executable built from pinned tree",
+    "solver_sha256": "1fa2598e853fd5e0d508e590889ad590bf1138d07c2ce72ae67d81937aacf765",
+    "cnf_sha256": "7b2c2e5b35db8a05ed7586dfec5183ae3fee09dd3dfdf926b7a8ff7da64fcef7",
+    "cnf_variables": 3414,
+    "cnf_clauses": 27482,
+    "reference_generator": "scripts/retopology/make-sat-reference.py",
+    "runtime_dependency_added": false
+  },
+  "research": {
+    "paper": "https://stanford.edu/~jingweih/papers/quadriflow/quadriflow.pdf",
+    "section": "3.4",
+    "notes": "Scalar coordinate encoding, growing mutable regions and residual inversions near orientation singularities. This motivates inspecting the field at the junction; it does not establish a singularity-placement cause for this fixture."
+  },
+  "changes": {
+    "retained": [
+      "Scalar-coordinate SAT for coarse repair, using the existing Rust Batsat engine.",
+      "Fixed axes and correlated edge domains retained; decoded assignments independently checked for domain membership, closure and nonnegative area.",
+      "Audit export/replay of frozen local problems and exact upstream DIMACS engine comparison.",
+      "Audit fixed-unit assumption conflict explanation."
+    ],
+    "unchanged": [
+      "Shape input and frozen fields",
+      "Target spacing and guide locks",
+      "Coarse patch selection and hierarchy traversal",
+      "Fine-level table encoding",
+      "Final mesh validation gates"
+    ],
+    "rejected": "Applying the scalar encoding to fine repair completed with 80 inversions, whereas the retained table fallback completed with 64. That change was reverted."
+  },
+  "frozen_patch": {
+    "path": "crates/clay-retopology/tests/data/repair-junction-fixed.json",
+    "sha256": "12521179170f3b56d6e17444ade690936bddd7e8555d51d825a6d1d3f74d729c",
+    "faces": 356,
+    "edges": 569,
+    "flexible_edges": 496,
+    "fixed_edges": 73,
+    "inversions": 64,
+    "depth": 5,
+    "radius": 1,
+    "anatomical_rules": false
+  },
+  "comparison": {
+    "process_runs": [
+      {
+        "label": "native-table-2000",
+        "command": [
+          "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+          "solve-repair-patch",
+          "/home/mark/Documents/ChatGPT/Clay From/retopology-review/junction-patch/depth5-radius1/patch-010-64-folds.json",
+          "/home/mark/Documents/ChatGPT/Clay From/retopology-review/junction-patch/native-table-2000.json",
+          "2000"
+        ],
+        "seconds": 2.067036584019661,
+        "exit": 0,
+        "cumulative_maxrss_kib": 18808
+      },
+      {
+        "label": "native-table-8000",
+        "command": [
+          "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+          "solve-repair-patch",
+          "/home/mark/Documents/ChatGPT/Clay From/retopology-review/junction-patch/depth5-radius1/patch-010-64-folds.json",
+          "/home/mark/Documents/ChatGPT/Clay From/retopology-review/junction-patch/native-table-8000.json",
+          "8000"
+        ],
+        "seconds": 8.022548631997779,
+        "exit": 0,
+        "cumulative_maxrss_kib": 30772
+      },
+      {
+        "label": "upstream-scalar-8000",
+        "command": [
+          "/tmp/clay-qf-audit-minisat",
+          "/home/mark/Documents/ChatGPT/Clay From/retopology-review/junction-patch/upstream.cnf",
+          "/home/mark/Documents/ChatGPT/Clay From/retopology-review/junction-patch/upstream-scalar-8000.solution"
+        ],
+        "seconds": 0.0643131339456886,
+        "exit": 20,
+        "cumulative_maxrss_kib": 30772
+      }
+    ],
+    "native_table_2000": {
+      "solution": null,
+      "stats": {
+        "callback_checks": 99839,
+        "domain_values": 2436,
+        "encoding_seconds": 0.003814212,
+        "outcome": "search_time_limit",
+        "propagation_seconds": 0.000237445,
+        "search_seconds": 2.000041382,
+        "total_seconds": 2.004096346,
+        "tuples": 5331
+      }
+    },
+    "native_table_8000": {
+      "solution": null,
+      "stats": {
+        "callback_checks": 240065,
+        "domain_values": 2436,
+        "encoding_seconds": 0.004259181,
+        "outcome": "search_time_limit",
+        "propagation_seconds": 0.000324488,
+        "search_seconds": 8.000114646,
+        "total_seconds": 8.004702907,
+        "tuples": 5331
+      }
+    },
+    "same_upstream_cnf_in_rust": {
+      "callback_checks": 106133,
+      "encoding_seconds": 0.007667667,
+      "outcome": "unsat",
+      "seconds": 0.223102181,
+      "solution": null
+    },
+    "native_scalar_initial_pair_only_domains": {
+      "solution": null,
+      "stats": {
+        "boolean_variables": 3414,
+        "callback_checks": 150694,
+        "clauses": 27920,
+        "domain_values": 4464,
+        "encoding_seconds": 0.003824814,
+        "outcome": "search_unsatisfiable",
+        "propagation_seconds": 0.0,
+        "search_seconds": 1.03713268,
+        "total_seconds": 1.040958434,
+        "tuples": 0
+      }
+    },
+    "native_scalar_retained": {
+      "solution": null,
+      "stats": {
+        "boolean_variables": 3414,
+        "callback_checks": 159344,
+        "clauses": 27482,
+        "domain_values": 4464,
+        "encoding_seconds": 0.00678281,
+        "outcome": "search_unsatisfiable",
+        "propagation_seconds": 0.0,
+        "search_seconds": 1.4088356690000001,
+        "total_seconds": 1.415619459,
+        "tuples": 0
+      }
+    },
+    "timing_note": "Single controlled runs. Wall times, search-only times and parse/encoding-inclusive times are labeled separately; no general benchmark claim."
+  },
+  "boundary_controls": {
+    "original_radii_2_3_4": [
+      {
+        "radius": 2,
+        "patch": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/junction-patch/depth5-radius2/patch-010-64-folds.json",
+        "faces": 465,
+        "inversions": 64,
+        "exit": 20,
+        "seconds": 0.11377012694720179
+      },
+      {
+        "radius": 3,
+        "patch": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/junction-patch/depth5-radius3/patch-009-64-folds.json",
+        "faces": 576,
+        "inversions": 64,
+        "exit": 20,
+        "seconds": 0.11398873396683484
+      },
+      {
+        "radius": 4,
+        "patch": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/junction-patch/depth5-radius4/patch-008-64-folds.json",
+        "faces": 739,
+        "inversions": 64,
+        "exit": 20,
+        "seconds": 0.16386329603847116
+      }
+    ],
+    "wide_controls": [
+      {
+        "radius": 8,
+        "patch": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/junction-patch/depth5-radius8/patch-001-85-folds.json",
+        "faces": 3301,
+        "inversions": 85,
+        "exit": "timeout",
+        "seconds": 8.009754362050444
+      },
+      {
+        "radius": 16,
+        "patch": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/junction-patch/depth5-radius16/patch-001-14-folds.json",
+        "faces": 1866,
+        "inversions": 14,
+        "exit": 20,
+        "seconds": 0.06398236006498337
+      }
+    ],
+    "wide_control_caution": "Radius 8 merges the 64- and 21-inversion regions and times out. At radius 16 the junction exceeds the export guard; the exported 14-fold patch is not the junction. Its UNSAT outcome is excluded from junction conclusions.",
+    "grow_only_junction": [
+      {
+        "growth_steps": 1,
+        "faces": 415,
+        "flexible_edges": 560,
+        "fixed_edges": 106,
+        "inversions": 64,
+        "exit": 20,
+        "seconds": 0.06421446101740003
+      },
+      {
+        "growth_steps": 2,
+        "faces": 477,
+        "flexible_edges": 657,
+        "fixed_edges": 108,
+        "inversions": 64,
+        "exit": 20,
+        "seconds": 0.06376272498164326
+      },
+      {
+        "growth_steps": 4,
+        "faces": 631,
+        "flexible_edges": 868,
+        "fixed_edges": 135,
+        "inversions": 64,
+        "exit": 20,
+        "seconds": 0.11403779091779143
+      },
+      {
+        "growth_steps": 8,
+        "faces": 1010,
+        "flexible_edges": 1421,
+        "fixed_edges": 166,
+        "inversions": 64,
+        "exit": 20,
+        "seconds": 0.2639492469606921
+      },
+      {
+        "growth_steps": 16,
+        "faces": 2087,
+        "flexible_edges": 2980,
+        "fixed_edges": 263,
+        "inversions": 64,
+        "exit": 20,
+        "seconds": 2.7671618149615824
+      }
+    ],
+    "fixed_unit_core": {
+      "callback_checks": 124625,
+      "encoding_seconds": 0.016573371,
+      "fixed_units": 146,
+      "outcome": "unsat",
+      "seconds": 0.308507797,
+      "solution": null,
+      "unsat_core_units": [
+        -3,
+        -9,
+        -44,
+        -48,
+        -49,
+        -122,
+        -211,
+        -297,
+        -386,
+        -479,
+        -548,
+        -551,
+        -599,
+        -651,
+        -686,
+        -803,
+        -842,
+        -846,
+        -1045,
+        -1094,
+        -1172,
+        -1175,
+        -1460,
+        -1463,
+        -1526,
+        -1529,
+        -1538,
+        -1778,
+        -1781,
+        -1812,
+        -1831,
+        -1849,
+        -1853,
+        -1869,
+        -1871,
+        -1880,
+        -1884,
+        -1946,
+        -1950,
+        -1959,
+        -1975,
+        -2005,
+        -2036,
+        -2045,
+        -2070,
+        -2091,
+        -2093,
+        -2096,
+        -2098,
+        -2113,
+        -2117,
+        -2150,
+        -2153,
+        -2163,
+        -2181,
+        -2186,
+        -2216,
+        -2220,
+        -2239,
+        -2243,
+        -2252,
+        -2255,
+        -2265,
+        -2267,
+        -2295,
+        -2298,
+        -2301,
+        -2302,
+        -2333,
+        -2417,
+        -2612,
+        -2615,
+        -2702,
+        -2706,
+        -2714,
+        -2759,
+        -2762,
+        -2786,
+        -2789,
+        -2825,
+        -3110,
+        -3113,
+        -3140,
+        -3143,
+        -3146,
+        -3149,
+        -3182,
+        -3215,
+        -3251,
+        -3257,
+        -3368,
+        -3371,
+        -3386,
+        -3389
+      ]
+    },
+    "core_is_minimal": false,
+    "independent_replay": [
+      {
+        "case": "core-only",
+        "exit": 20,
+        "seconds": 0.06383640097919852
+      },
+      {
+        "case": "free-boundary",
+        "exit": 10,
+        "seconds": 0.06381341291125864
+      }
+    ],
+    "free_boundary_assignment": {
+      "candidate_only": true,
+      "inversions": 0,
+      "zero_area_faces": 277,
+      "positive_area_faces": 79,
+      "regularity_defects": 0,
+      "original_fixed_edges_changed": 17,
+      "changed_local_edge_ids": [
+        8,
+        20,
+        35,
+        49,
+        64,
+        140,
+        195,
+        243,
+        254,
+        305,
+        308,
+        313,
+        326,
+        340,
+        349,
+        518,
+        542
+      ],
+      "note": "Independent integer geometry verification of the upstream free-boundary model. Not applicable to the full mesh: changed cut-edge values would need a compatible solve outside the patch."
+    },
+    "interpretation": "The frozen fixed-boundary patch is infeasible. Removing fixed boundary values allows a geometrically verified integer assignment that changes 17 fixed edges. It is not a valid whole-mesh replacement and does not establish whole-model or orientation-field infeasibility."
+  },
+  "mesh_controls": {
+    "hand_previous": {
+      "quads": 1225,
+      "vertices": 1227,
+      "closed_edge_loops_total": 18,
+      "simple_closed_edge_loops": 18,
+      "edge_ratio_max": 5.441170395837473,
+      "edge_ratio_p95": 1.9454376203331365,
+      "quality": {
+        "bad_quads": [],
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 1225,
+        "quads_without_outward_diagonal": 0,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.011630597686984625,
+          "max_spacing_ratio": 0.4035489120432524,
+          "point": [
+            2.512255710754828,
+            0.4089361608208568,
+            1.3557284210726537
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.01881288697119445,
+          "max_spacing_ratio": 0.6527540779881017,
+          "point": [
+            2.40133650407497,
+            0.25540821532037244,
+            0.7986634959250299
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 1227
+      }
+    },
+    "hand_retained": {
+      "quads": 1202,
+      "vertices": 1204,
+      "closed_edge_loops_total": 17,
+      "simple_closed_edge_loops": 17,
+      "edge_ratio_max": 4.5832737756689275,
+      "edge_ratio_p95": 1.9673701194290416,
+      "quality": {
+        "bad_quads": [],
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 1202,
+        "quads_without_outward_diagonal": 0,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.010973224840901177,
+          "max_spacing_ratio": 0.3807399297378444,
+          "point": [
+            2.4897989723803446,
+            0.4542499690991775,
+            1.3542740436187124
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.01900834220484546,
+          "max_spacing_ratio": 0.6595358229177963,
+          "point": [
+            2.40133650407497,
+            0.25540821532037244,
+            0.7986634959250299
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 1204
+      }
+    },
+    "matched_hand_retained_quality": {
+      "bad_quads": [
+        {
+          "center": [
+            2.61432111878426,
+            0.32246271193840964,
+            1.1654523324678618
+          ],
+          "diagonals": [
+            {
+              "degenerate": false,
+              "normal_dots": [
+                -0.4154074386734923,
+                -0.18070200873832618
+              ],
+              "perimeter_collision": false
+            },
+            {
+              "degenerate": false,
+              "normal_dots": [
+                0.03676481800020667,
+                -0.6697136132188863
+              ],
+              "perimeter_collision": false
+            }
+          ],
+          "quad": 56
+        },
+        {
+          "center": [
+            2.2513888420068398,
+            0.44679859870140864,
+            1.306604332110497
+          ],
+          "diagonals": [
+            {
+              "degenerate": false,
+              "normal_dots": [
+                -0.9999064118635836,
+                -0.999663516473299
+              ],
+              "perimeter_collision": false
+            },
+            {
+              "degenerate": false,
+              "normal_dots": [
+                -0.9991692796127588,
+                0.9966729465694395
+              ],
+              "perimeter_collision": false
+            }
+          ],
+          "quad": 87
+        },
+        {
+          "center": [
+            2.5655200480945517,
+            0.3334912948446894,
+            1.3501376882449136
+          ],
+          "diagonals": [
+            {
+              "degenerate": false,
+              "normal_dots": [
+                0.09436896766435722,
+                -0.005814093109212173
+              ],
+              "perimeter_collision": false
+            },
+            {
+              "degenerate": false,
+              "normal_dots": [
+                -0.18534545683912917,
+                -0.14019242740207657
+              ],
+              "perimeter_collision": false
+            }
+          ],
+          "quad": 112
+        },
+        {
+          "center": [
+            2.5757002959086575,
+            0.3144455421877358,
+            1.4032392413619499
+          ],
+          "diagonals": [
+            {
+              "degenerate": false,
+              "normal_dots": [
+                0.89950047376682,
+                -0.1245293997444257
+              ],
+              "perimeter_collision": false
+            },
+            {
+              "degenerate": false,
+              "normal_dots": [
+                0.03823204231238773,
+                -0.5227319799992793
+              ],
+              "perimeter_collision": false
+            }
+          ],
+          "quad": 114
+        },
+        {
+          "center": [
+            2.442158500405594,
+            0.43547054444696137,
+            1.4228532854331535
+          ],
+          "diagonals": [
+            {
+              "degenerate": false,
+              "normal_dots": [
+                -0.6653109329563183,
+                -0.8262602938323709
+              ],
+              "perimeter_collision": false
+            },
+            {
+              "degenerate": false,
+              "normal_dots": [
+                -0.6514791365220601,
+                -0.7656008637850582
+              ],
+              "perimeter_collision": false
+            }
+          ],
+          "quad": 141
+        },
+        {
+          "center": [
+            2.430980754676426,
+            0.40105776335120974,
+            1.4851626260139619
+          ],
+          "diagonals": [
+            {
+              "degenerate": false,
+              "normal_dots": [
+                -0.36740491391513513,
+                -0.27723143399070077
+              ],
+              "perimeter_collision": false
+            },
+            {
+              "degenerate": false,
+              "normal_dots": [
+                -0.599540376693574,
+                -0.745399573484074
+              ],
+              "perimeter_collision": false
+            }
+          ],
+          "quad": 142
+        },
+        {
+          "center": [
+            2.4211293481185,
+            0.3631822329908112,
+            1.5446214629367259
+          ],
+          "diagonals": [
+            {
+              "degenerate": false,
+              "normal_dots": [
+                -0.3496924898650591,
+                0.21290119588372353
+              ],
+              "perimeter_collision": false
+            },
+            {
+              "degenerate": false,
+              "normal_dots": [
+                -0.3662571307836633,
+                -0.4161466390974421
+              ],
+              "perimeter_collision": false
+            }
+          ],
+          "quad": 144
+        },
+        {
+          "center": [
+            2.238178140231332,
+            0.4973725679699803,
+            1.3221330439898153
+          ],
+          "diagonals": [
+            {
+              "degenerate": false,
+              "normal_dots": [
+                0.9881917745452974,
+                -0.06996039909115082
+              ],
+              "perimeter_collision": false
+            },
+            {
+              "degenerate": false,
+              "normal_dots": [
+                0.9947090965932288,
+                -0.9697474784877111
+              ],
+              "perimeter_collision": false
+            }
+          ],
+          "quad": 193
+        },
+        {
+          "center": [
+            2.4360071376511776,
+            0.4650693013068033,
+            1.3835430597255411
+          ],
+          "diagonals": [
+            {
+              "degenerate": false,
+              "normal_dots": [
+                0.4592162965995693,
+                -0.5875076060615465
+              ],
+              "perimeter_collision": false
+            },
+            {
+              "degenerate": false,
+              "normal_dots": [
+                0.9964296288532821,
+                -0.4374113141072479
+              ],
+              "perimeter_collision": false
+            }
+          ],
+          "quad": 263
+        }
+      ],
+      "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+      "quads": 264,
+      "quads_without_outward_diagonal": 9,
+      "result_to_source": {
+        "distance_at_max_ratio": 0.052914541505671014,
+        "max_spacing_ratio": 0.9179926187188687,
+        "point": [
+          2.393804118883862,
+          0.4560648613487073,
+          1.3626523261014583
+        ]
+      },
+      "source_to_result": {
+        "distance_at_max_ratio": 0.1948720926201095,
+        "max_spacing_ratio": 3.3807557909273,
+        "point": [
+          2.7423495,
+          0.17204106000000002,
+          1.24568155
+        ]
+      },
+      "topology": {
+        "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+      },
+      "vertices": 266
+    },
+    "matched_hand_retained_validation": {
+      "diagnose-candidate": {
+        "exit": 0,
+        "seconds": 0.364394253003411
+      },
+      "resume": {
+        "exit": 1,
+        "seconds": 0.2646489990875125
+      }
+    },
+    "accepted_checks": {
+      "hand-native": {
+        "locks_preserved": 144,
+        "accepted_obj_exactly_matches_candidate": true
+      },
+      "torus-native": {
+        "locks_preserved": 38,
+        "accepted_obj_exactly_matches_candidate": true
+      }
+    },
+    "torus_positions_and_quads_identical_to_previous": true,
+    "runs": {
+      "scalar-hand-native": {
+        "exit": 0,
+        "seconds": 1.8160021969815716,
+        "source": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/geometry-directions/hand-native/constrained.raw.json",
+        "input_sha256": "8ac71497a1f69f416d7c35cbc9b29de00dd3fc57068803dff905670ee3bd6d5f",
+        "audit_binary_sha256": "18976337bbde66e8ee7fe46ba6f3c7f51c1cc059228e70fbc45c2fac5a84bc8c",
+        "budget_seconds": 90.0,
+        "resume": [],
+        "peak_child_rss_kib": 30532
+      },
+      "scalar-torus-native": {
+        "exit": 0,
+        "seconds": 0.11394811701029539,
+        "source": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/geometry-directions/torus-native/constrained.raw.json",
+        "input_sha256": "69f85c8297a5ba4a5f31719a6d2a0125a3b3ba81977ee6e0994365330bd94da1",
+        "audit_binary_sha256": "18976337bbde66e8ee7fe46ba6f3c7f51c1cc059228e70fbc45c2fac5a84bc8c",
+        "budget_seconds": 20.0,
+        "resume": [],
+        "peak_child_rss_kib": 16656
+      },
+      "scalar-body": {
+        "exit": 1,
+        "seconds": 181.2487525420729,
+        "source": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/geometry-directions/body-10000-sized-budget/constrained.raw.json",
+        "input_sha256": "3f110236d85dfc28cc882070ed5705b44c2de1342e433e1b0a2d49304ea3becf",
+        "audit_binary_sha256": "18976337bbde66e8ee7fe46ba6f3c7f51c1cc059228e70fbc45c2fac5a84bc8c",
+        "budget_seconds": 180.0,
+        "resume": [],
+        "peak_child_rss_kib": 228040
+      },
+      "scalar-hand-matched": {
+        "exit": 0,
+        "seconds": 28.398379920050502,
+        "source": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/repair-diagnostics/hand-349/constrained.raw.json",
+        "input_sha256": "aa6116202a605e5a1aa7e4283a274f74350a22853d42c59a28c72ef054ee737a",
+        "audit_binary_sha256": "9fcf0474f1863f141d9cd4fd53b9930da428eb2cd655aac09b0cd666c3c82a33",
+        "budget_seconds": 60.0,
+        "resume": [],
+        "peak_child_rss_kib": 61916
+      },
+      "scalar-body-fine": {
+        "exit": 1,
+        "seconds": 144.54527115798555,
+        "source": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/geometry-directions/body-10000-sized-budget/constrained.raw.json",
+        "input_sha256": "3f110236d85dfc28cc882070ed5705b44c2de1342e433e1b0a2d49304ea3becf",
+        "audit_binary_sha256": "9fcf0474f1863f141d9cd4fd53b9930da428eb2cd655aac09b0cd666c3c82a33",
+        "budget_seconds": 150.0,
+        "resume": [
+          "/home/mark/Documents/ChatGPT/Clay From/retopology-review/junction-patch/scalar-body/checkpoint.json"
+        ],
+        "peak_child_rss_kib": 242556
+      },
+      "retained-body-fine": {
+        "exit": 1,
+        "seconds": 242.81772082298994,
+        "source": "retopology-review/geometry-directions/body-10000-sized-budget/constrained.raw.json",
+        "input_sha256": "3f110236d85dfc28cc882070ed5705b44c2de1342e433e1b0a2d49304ea3becf",
+        "audit_binary_sha256": "ebb5a404709850915fc7f4add1aaf232107a4a31a06ee0f82460ba8b1a86e920",
+        "budget_seconds": 300.0,
+        "resume": [
+          "retopology-review/junction-patch/scalar-body/checkpoint.json"
+        ],
+        "peak_child_rss_kib": 242784
+      },
+      "retained-hand-matched": {
+        "exit": 0,
+        "seconds": 19.037669975077733,
+        "source": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/repair-diagnostics/hand-349/constrained.raw.json",
+        "input_sha256": "aa6116202a605e5a1aa7e4283a274f74350a22853d42c59a28c72ef054ee737a",
+        "audit_binary_sha256": "a286f60a5af9012f1545ab311afe82cb188913b53fc84f5fb0fda9b4a4670baa",
+        "budget_seconds": 60.0,
+        "resume": [],
+        "peak_child_rss_kib": 60376
+      }
+    },
+    "completion": {
+      "scalar-hand-native": {
+        "deadline_reached": false,
+        "error": null,
+        "input_fingerprint": "61fd9aa863ac5006",
+        "lattice_inversions": 0,
+        "repaired": true,
+        "resume_input": "Use the original frozen input plus checkpoint.json; attempted.json is not a coarse-stage resume checkpoint.",
+        "seconds": 1.608358035,
+        "stage": "complete"
+      },
+      "scalar-torus-native": {
+        "deadline_reached": false,
+        "error": null,
+        "input_fingerprint": "f495ccf9c20adf7f",
+        "lattice_inversions": 0,
+        "repaired": true,
+        "resume_input": "Use the original frozen input plus checkpoint.json; attempted.json is not a coarse-stage resume checkpoint.",
+        "seconds": 0.010028708,
+        "stage": "complete"
+      },
+      "scalar-body": {
+        "deadline_reached": true,
+        "error": "Retopology cancelled",
+        "input_fingerprint": "0e0963ae3b47503f",
+        "lattice_inversions": 64,
+        "repaired": false,
+        "resume_input": "Use the original frozen input plus checkpoint.json; attempted.json is not a coarse-stage resume checkpoint.",
+        "seconds": 180.021808784,
+        "stage": "fine_repair"
+      },
+      "scalar-hand-matched": {
+        "deadline_reached": false,
+        "error": null,
+        "input_fingerprint": "d1a407ced3c43b53",
+        "lattice_inversions": 0,
+        "repaired": true,
+        "resume_input": "Use the original frozen input plus checkpoint.json; attempted.json is not a coarse-stage resume checkpoint.",
+        "seconds": 28.241594056,
+        "stage": "complete"
+      },
+      "scalar-body-fine": {
+        "deadline_reached": false,
+        "error": "Retopology could not resolve 80 inverted grid cells within its repair budget",
+        "input_fingerprint": "0e0963ae3b47503f",
+        "lattice_inversions": 80,
+        "repaired": false,
+        "resume_input": "Use the original frozen input plus checkpoint.json; attempted.json is not a coarse-stage resume checkpoint.",
+        "seconds": 143.108697262,
+        "stage": "fine_repair"
+      },
+      "retained-body-fine": {
+        "deadline_reached": false,
+        "error": "Retopology could not resolve 64 inverted grid cells within its repair budget",
+        "input_fingerprint": "0e0963ae3b47503f",
+        "lattice_inversions": 64,
+        "repaired": false,
+        "resume_input": "Use the original frozen input plus checkpoint.json; attempted.json is not a coarse-stage resume checkpoint.",
+        "seconds": 241.318660447,
+        "stage": "fine_repair"
+      },
+      "retained-hand-matched": {
+        "deadline_reached": false,
+        "error": null,
+        "input_fingerprint": "d1a407ced3c43b53",
+        "lattice_inversions": 0,
+        "repaired": true,
+        "resume_input": "Use the original frozen input plus checkpoint.json; attempted.json is not a coarse-stage resume checkpoint.",
+        "seconds": 18.902093715,
+        "stage": "complete"
+      }
+    },
+    "retained_body_summary": {
+      "trace_directory": "retopology-review/junction-patch/retained-body-fine",
+      "spacing": 0.05762159740626388,
+      "cluster_distance": 0.11524319481252776,
+      "note": "Representative field-triangle centers, not exact coarse-cell footprints. Euclidean clusters are for inspection only. SAT times exclude interrupted attempts and surrounding repair work; UNSAT refers to a fixed local problem.",
+      "completion": {
+        "deadline_reached": false,
+        "error": "Retopology could not resolve 64 inverted grid cells within its repair budget",
+        "input_fingerprint": "0e0963ae3b47503f",
+        "lattice_inversions": 64,
+        "repaired": false,
+        "resume_input": "Use the original frozen input plus checkpoint.json; attempted.json is not a coarse-stage resume checkpoint.",
+        "seconds": 241.318660447,
+        "stage": "fine_repair"
+      },
+      "stages": [
+        {
+          "stage": "input",
+          "seconds": 0.01856233,
+          "inversions": 5610,
+          "clusters": null
+        },
+        {
+          "stage": "after_greedy",
+          "seconds": 0.372870567,
+          "inversions": 136,
+          "clusters": [
+            {
+              "count": 62,
+              "center": [
+                -0.0617898958663506,
+                -0.9687930275084006,
+                0.33516724373487905
+              ],
+              "min": [
+                -0.1748908471875,
+                -1.018082774375,
+                0.28056835354166665
+              ],
+              "max": [
+                0.09718820283333333,
+                -0.9174818475,
+                0.46133231916666667
+              ]
+            },
+            {
+              "count": 12,
+              "center": [
+                -0.022653703968923616,
+                2.1032560788194443,
+                0.07263782490711805
+              ],
+              "min": [
+                -0.030543499895833336,
+                2.0946952854166665,
+                0.06549276802083331
+              ],
+              "max": [
+                -0.015787217839583333,
+                2.1100534583333332,
+                0.08084620784374999
+              ]
+            },
+            {
+              "count": 10,
+              "center": [
+                0.7597868075,
+                -2.2662646175,
+                0.37686765749999995
+              ],
+              "min": [
+                0.7142153975,
+                -2.30432815,
+                0.34760189499999994
+              ],
+              "max": [
+                0.8697838616666668,
+                -2.176410616666667,
+                0.3834971125
+              ]
+            },
+            {
+              "count": 8,
+              "center": [
+                0.3836660838541667,
+                -1.2949185609375,
+                0.3409285255729167
+              ],
+              "min": [
+                0.34838266999999995,
+                -1.3441518916666666,
+                0.32039585
+              ],
+              "max": [
+                0.4105976983333333,
+                -1.2250794166666668,
+                0.3558431902083334
+              ]
+            },
+            {
+              "count": 7,
+              "center": [
+                -2.4560930910714283,
+                0.3637556082142857,
+                1.4913159904761903
+              ],
+              "min": [
+                -2.483747633333333,
+                0.33671541833333335,
+                1.3506591333333333
+              ],
+              "max": [
+                -2.4373504250000004,
+                0.4601509033333333,
+                1.576316075
+              ]
+            },
+            {
+              "count": 5,
+              "center": [
+                2.73673808,
+                0.21773061066666669,
+                1.3226011733333334
+              ],
+              "min": [
+                2.7156865499999996,
+                0.20200258166666665,
+                1.307258
+              ],
+              "max": [
+                2.7555428,
+                0.23919053666666668,
+                1.3330151499999998
+              ]
+            },
+            {
+              "count": 4,
+              "center": [
+                -1.1286690864583333,
+                -2.131463076041667,
+                1.0902449583333333
+              ],
+              "min": [
+                -1.1291185291666663,
+                -2.150033383333333,
+                1.0861131666666666
+              ],
+              "max": [
+                -1.1281370833333333,
+                -2.098911779166667,
+                1.0972851666666668
+              ]
+            },
+            {
+              "count": 3,
+              "center": [
+                2.6014431277777774,
+                0.3423663805555555,
+                1.2313302499999998
+              ],
+              "min": [
+                2.5814200666666665,
+                0.32446736000000004,
+                1.2270705
+              ],
+              "max": [
+                2.612668483333333,
+                0.3724706583333333,
+                1.2338991
+              ]
+            },
+            {
+              "count": 3,
+              "center": [
+                2.4519707777777775,
+                0.4405893733333333,
+                1.3495720444444446
+              ],
+              "min": [
+                2.4334274,
+                0.4030294933333334,
+                1.335873066666667
+              ],
+              "max": [
+                2.464544033333333,
+                0.4933706566666667,
+                1.3667693333333333
+              ]
+            },
+            {
+              "count": 2,
+              "center": [
+                -2.570817266666667,
+                0.3277107716666666,
+                1.2096395333333334
+              ],
+              "min": [
+                -2.610934666666667,
+                0.32254416999999996,
+                1.1860637333333333
+              ],
+              "max": [
+                -2.5306998666666667,
+                0.3328773733333333,
+                1.2332153333333336
+              ]
+            },
+            {
+              "count": 2,
+              "center": [
+                -0.9126257497916667,
+                -2.317715139583333,
+                0.345628485
+              ],
+              "min": [
+                -0.9138763570833334,
+                -2.3181361916666665,
+                0.34526502666666664
+              ],
+              "max": [
+                -0.9113751425,
+                -2.3172940875,
+                0.34599194333333333
+              ]
+            },
+            {
+              "count": 2,
+              "center": [
+                0.5101247279166667,
+                -1.0207864624999998,
+                0.10313796049999999
+              ],
+              "min": [
+                0.5033144283333334,
+                -1.0224149999999999,
+                0.10199143449999999
+              ],
+              "max": [
+                0.5169350275000001,
+                -1.019157925,
+                0.1042844865
+              ]
+            },
+            {
+              "count": 2,
+              "center": [
+                -0.14328431725000002,
+                -0.9833211074999999,
+                0.14352708358333333
+              ],
+              "min": [
+                -0.14435960025000003,
+                -0.9833423006249999,
+                0.14352326920833333
+              ],
+              "max": [
+                -0.14220903425,
+                -0.983299914375,
+                0.14353089795833332
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                -2.646849833333333,
+                0.22956477666666666,
+                1.4761858000000003
+              ],
+              "min": [
+                -2.646849833333333,
+                0.22956477666666666,
+                1.4761858000000003
+              ],
+              "max": [
+                -2.646849833333333,
+                0.22956477666666666,
+                1.4761858000000003
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                2.548243633333333,
+                0.2890327733333333,
+                1.1248653666666666
+              ],
+              "min": [
+                2.548243633333333,
+                0.2890327733333333,
+                1.1248653666666666
+              ],
+              "max": [
+                2.548243633333333,
+                0.2890327733333333,
+                1.1248653666666666
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                2.6451344666666667,
+                0.2596368233333333,
+                1.4855674
+              ],
+              "min": [
+                2.6451344666666667,
+                0.2596368233333333,
+                1.4855674
+              ],
+              "max": [
+                2.6451344666666667,
+                0.2596368233333333,
+                1.4855674
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                2.3676591333333334,
+                0.35050096999999997,
+                1.5810985000000002
+              ],
+              "min": [
+                2.3676591333333334,
+                0.35050096999999997,
+                1.5810985000000002
+              ],
+              "max": [
+                2.3676591333333334,
+                0.35050096999999997,
+                1.5810985000000002
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                1.0875252666666666,
+                -2.3228353,
+                0.5143437000000001
+              ],
+              "min": [
+                1.0875252666666666,
+                -2.3228353,
+                0.5143437000000001
+              ],
+              "max": [
+                1.0875252666666666,
+                -2.3228353,
+                0.5143437000000001
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                -0.6900029041666667,
+                -2.2761594916666668,
+                1.1603025916666667
+              ],
+              "min": [
+                -0.6900029041666667,
+                -2.2761594916666668,
+                1.1603025916666667
+              ],
+              "max": [
+                -0.6900029041666667,
+                -2.2761594916666668,
+                1.1603025916666667
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                -0.6249624866666667,
+                0.7455567166666667,
+                -0.34414185333333336
+              ],
+              "min": [
+                -0.6249624866666667,
+                0.7455567166666667,
+                -0.34414185333333336
+              ],
+              "max": [
+                -0.6249624866666667,
+                0.7455567166666667,
+                -0.34414185333333336
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                -0.6261767333333333,
+                0.7234099666666666,
+                0.35063113
+              ],
+              "min": [
+                -0.6261767333333333,
+                0.7234099666666666,
+                0.35063113
+              ],
+              "max": [
+                -0.6261767333333333,
+                0.7234099666666666,
+                0.35063113
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                -0.3567131666666667,
+                1.8561321666666666,
+                -0.8212851433333332
+              ],
+              "min": [
+                -0.3567131666666667,
+                1.8561321666666666,
+                -0.8212851433333332
+              ],
+              "max": [
+                -0.3567131666666667,
+                1.8561321666666666,
+                -0.8212851433333332
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                -0.24840587416666668,
+                2.1140920333333333,
+                -0.02144722791666667
+              ],
+              "min": [
+                -0.24840587416666668,
+                2.1140920333333333,
+                -0.02144722791666667
+              ],
+              "max": [
+                -0.24840587416666668,
+                2.1140920333333333,
+                -0.02144722791666667
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                0.03021648,
+                1.5099988333333334,
+                0.2578531566666667
+              ],
+              "min": [
+                0.03021648,
+                1.5099988333333334,
+                0.2578531566666667
+              ],
+              "max": [
+                0.03021648,
+                1.5099988333333334,
+                0.2578531566666667
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                0.16607363,
+                1.8337430666666668,
+                0.15875856666666666
+              ],
+              "min": [
+                0.16607363,
+                1.8337430666666668,
+                0.15875856666666666
+              ],
+              "max": [
+                0.16607363,
+                1.8337430666666668,
+                0.15875856666666666
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                0.61811725,
+                0.7717301233333332,
+                -0.32168168333333336
+              ],
+              "min": [
+                0.61811725,
+                0.7717301233333332,
+                -0.32168168333333336
+              ],
+              "max": [
+                0.61811725,
+                0.7717301233333332,
+                -0.32168168333333336
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                -1.0108381916666669,
+                -0.016222832716666667,
+                -0.07082049516666665
+              ],
+              "min": [
+                -1.0108381916666669,
+                -0.016222832716666667,
+                -0.07082049516666665
+              ],
+              "max": [
+                -1.0108381916666669,
+                -0.016222832716666667,
+                -0.07082049516666665
+              ]
+            }
+          ]
+        },
+        {
+          "stage": "after_coarse_sat",
+          "seconds": 0.547198831,
+          "inversions": 82,
+          "clusters": [
+            {
+              "count": 62,
+              "center": [
+                -0.0617898958663506,
+                -0.9687930275084006,
+                0.33516724373487905
+              ],
+              "min": [
+                -0.1748908471875,
+                -1.018082774375,
+                0.28056835354166665
+              ],
+              "max": [
+                0.09718820283333333,
+                -0.9174818475,
+                0.46133231916666667
+              ]
+            },
+            {
+              "count": 12,
+              "center": [
+                -0.022653703968923616,
+                2.1032560788194443,
+                0.07263782490711805
+              ],
+              "min": [
+                -0.030543499895833336,
+                2.0946952854166665,
+                0.06549276802083331
+              ],
+              "max": [
+                -0.015787217839583333,
+                2.1100534583333332,
+                0.08084620784374999
+              ]
+            },
+            {
+              "count": 4,
+              "center": [
+                -1.1286690864583333,
+                -2.131463076041667,
+                1.0902449583333333
+              ],
+              "min": [
+                -1.1291185291666663,
+                -2.150033383333333,
+                1.0861131666666666
+              ],
+              "max": [
+                -1.1281370833333333,
+                -2.098911779166667,
+                1.0972851666666668
+              ]
+            },
+            {
+              "count": 2,
+              "center": [
+                -0.14328431725000002,
+                -0.9833211074999999,
+                0.14352708358333333
+              ],
+              "min": [
+                -0.14435960025000003,
+                -0.9833423006249999,
+                0.14352326920833333
+              ],
+              "max": [
+                -0.14220903425,
+                -0.983299914375,
+                0.14353089795833332
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                -0.3567131666666667,
+                1.8561321666666666,
+                -0.8212851433333332
+              ],
+              "min": [
+                -0.3567131666666667,
+                1.8561321666666666,
+                -0.8212851433333332
+              ],
+              "max": [
+                -0.3567131666666667,
+                1.8561321666666666,
+                -0.8212851433333332
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                -0.24840587416666668,
+                2.1140920333333333,
+                -0.02144722791666667
+              ],
+              "min": [
+                -0.24840587416666668,
+                2.1140920333333333,
+                -0.02144722791666667
+              ],
+              "max": [
+                -0.24840587416666668,
+                2.1140920333333333,
+                -0.02144722791666667
+              ]
+            }
+          ]
+        },
+        {
+          "stage": "stopped",
+          "seconds": 241.318499721,
+          "inversions": 64,
+          "clusters": [
+            {
+              "count": 62,
+              "center": [
+                -0.0617898958663506,
+                -0.9687930275084006,
+                0.33516724373487905
+              ],
+              "min": [
+                -0.1748908471875,
+                -1.018082774375,
+                0.28056835354166665
+              ],
+              "max": [
+                0.09718820283333333,
+                -0.9174818475,
+                0.46133231916666667
+              ]
+            },
+            {
+              "count": 2,
+              "center": [
+                -0.14328431725000002,
+                -0.9833211074999999,
+                0.14352708358333333
+              ],
+              "min": [
+                -0.14435960025000003,
+                -0.9833423006249999,
+                0.14352326920833333
+              ],
+              "max": [
+                -0.14220903425,
+                -0.983299914375,
+                0.14353089795833332
+              ]
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "depth": 0,
+          "edges": 276093,
+          "event": "checkpoint",
+          "faces": 184062,
+          "next_radius": 5,
+          "seconds": 0.530517393,
+          "inversions": 82
+        }
+      ],
+      "outcomes": {},
+      "interrupted_patch": null,
+      "skipped_patches": [],
+      "largest_inversion_patches": []
+    },
+    "coarse_body_summary": {
+      "trace_directory": "retopology-review/junction-patch/scalar-body",
+      "spacing": 0.05762159740626388,
+      "cluster_distance": 0.11524319481252776,
+      "note": "Representative field-triangle centers, not exact coarse-cell footprints. Euclidean clusters are for inspection only. SAT times exclude interrupted attempts and surrounding repair work; UNSAT refers to a fixed local problem.",
+      "completion": {
+        "deadline_reached": true,
+        "error": "Retopology cancelled",
+        "input_fingerprint": "0e0963ae3b47503f",
+        "lattice_inversions": 64,
+        "repaired": false,
+        "resume_input": "Use the original frozen input plus checkpoint.json; attempted.json is not a coarse-stage resume checkpoint.",
+        "seconds": 180.021808784,
+        "stage": "fine_repair"
+      },
+      "stages": [
+        {
+          "stage": "input",
+          "seconds": 0.018019848,
+          "inversions": 5610,
+          "clusters": null
+        },
+        {
+          "stage": "after_greedy",
+          "seconds": 0.352730729,
+          "inversions": 136,
+          "clusters": [
+            {
+              "count": 62,
+              "center": [
+                -0.0617898958663506,
+                -0.9687930275084006,
+                0.33516724373487905
+              ],
+              "min": [
+                -0.1748908471875,
+                -1.018082774375,
+                0.28056835354166665
+              ],
+              "max": [
+                0.09718820283333333,
+                -0.9174818475,
+                0.46133231916666667
+              ]
+            },
+            {
+              "count": 12,
+              "center": [
+                -0.022653703968923616,
+                2.1032560788194443,
+                0.07263782490711805
+              ],
+              "min": [
+                -0.030543499895833336,
+                2.0946952854166665,
+                0.06549276802083331
+              ],
+              "max": [
+                -0.015787217839583333,
+                2.1100534583333332,
+                0.08084620784374999
+              ]
+            },
+            {
+              "count": 10,
+              "center": [
+                0.7597868075,
+                -2.2662646175,
+                0.37686765749999995
+              ],
+              "min": [
+                0.7142153975,
+                -2.30432815,
+                0.34760189499999994
+              ],
+              "max": [
+                0.8697838616666668,
+                -2.176410616666667,
+                0.3834971125
+              ]
+            },
+            {
+              "count": 8,
+              "center": [
+                0.3836660838541667,
+                -1.2949185609375,
+                0.3409285255729167
+              ],
+              "min": [
+                0.34838266999999995,
+                -1.3441518916666666,
+                0.32039585
+              ],
+              "max": [
+                0.4105976983333333,
+                -1.2250794166666668,
+                0.3558431902083334
+              ]
+            },
+            {
+              "count": 7,
+              "center": [
+                -2.4560930910714283,
+                0.3637556082142857,
+                1.4913159904761903
+              ],
+              "min": [
+                -2.483747633333333,
+                0.33671541833333335,
+                1.3506591333333333
+              ],
+              "max": [
+                -2.4373504250000004,
+                0.4601509033333333,
+                1.576316075
+              ]
+            },
+            {
+              "count": 5,
+              "center": [
+                2.73673808,
+                0.21773061066666669,
+                1.3226011733333334
+              ],
+              "min": [
+                2.7156865499999996,
+                0.20200258166666665,
+                1.307258
+              ],
+              "max": [
+                2.7555428,
+                0.23919053666666668,
+                1.3330151499999998
+              ]
+            },
+            {
+              "count": 4,
+              "center": [
+                -1.1286690864583333,
+                -2.131463076041667,
+                1.0902449583333333
+              ],
+              "min": [
+                -1.1291185291666663,
+                -2.150033383333333,
+                1.0861131666666666
+              ],
+              "max": [
+                -1.1281370833333333,
+                -2.098911779166667,
+                1.0972851666666668
+              ]
+            },
+            {
+              "count": 3,
+              "center": [
+                2.6014431277777774,
+                0.3423663805555555,
+                1.2313302499999998
+              ],
+              "min": [
+                2.5814200666666665,
+                0.32446736000000004,
+                1.2270705
+              ],
+              "max": [
+                2.612668483333333,
+                0.3724706583333333,
+                1.2338991
+              ]
+            },
+            {
+              "count": 3,
+              "center": [
+                2.4519707777777775,
+                0.4405893733333333,
+                1.3495720444444446
+              ],
+              "min": [
+                2.4334274,
+                0.4030294933333334,
+                1.335873066666667
+              ],
+              "max": [
+                2.464544033333333,
+                0.4933706566666667,
+                1.3667693333333333
+              ]
+            },
+            {
+              "count": 2,
+              "center": [
+                -2.570817266666667,
+                0.3277107716666666,
+                1.2096395333333334
+              ],
+              "min": [
+                -2.610934666666667,
+                0.32254416999999996,
+                1.1860637333333333
+              ],
+              "max": [
+                -2.5306998666666667,
+                0.3328773733333333,
+                1.2332153333333336
+              ]
+            },
+            {
+              "count": 2,
+              "center": [
+                -0.9126257497916667,
+                -2.317715139583333,
+                0.345628485
+              ],
+              "min": [
+                -0.9138763570833334,
+                -2.3181361916666665,
+                0.34526502666666664
+              ],
+              "max": [
+                -0.9113751425,
+                -2.3172940875,
+                0.34599194333333333
+              ]
+            },
+            {
+              "count": 2,
+              "center": [
+                0.5101247279166667,
+                -1.0207864624999998,
+                0.10313796049999999
+              ],
+              "min": [
+                0.5033144283333334,
+                -1.0224149999999999,
+                0.10199143449999999
+              ],
+              "max": [
+                0.5169350275000001,
+                -1.019157925,
+                0.1042844865
+              ]
+            },
+            {
+              "count": 2,
+              "center": [
+                -0.14328431725000002,
+                -0.9833211074999999,
+                0.14352708358333333
+              ],
+              "min": [
+                -0.14435960025000003,
+                -0.9833423006249999,
+                0.14352326920833333
+              ],
+              "max": [
+                -0.14220903425,
+                -0.983299914375,
+                0.14353089795833332
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                -2.646849833333333,
+                0.22956477666666666,
+                1.4761858000000003
+              ],
+              "min": [
+                -2.646849833333333,
+                0.22956477666666666,
+                1.4761858000000003
+              ],
+              "max": [
+                -2.646849833333333,
+                0.22956477666666666,
+                1.4761858000000003
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                2.548243633333333,
+                0.2890327733333333,
+                1.1248653666666666
+              ],
+              "min": [
+                2.548243633333333,
+                0.2890327733333333,
+                1.1248653666666666
+              ],
+              "max": [
+                2.548243633333333,
+                0.2890327733333333,
+                1.1248653666666666
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                2.6451344666666667,
+                0.2596368233333333,
+                1.4855674
+              ],
+              "min": [
+                2.6451344666666667,
+                0.2596368233333333,
+                1.4855674
+              ],
+              "max": [
+                2.6451344666666667,
+                0.2596368233333333,
+                1.4855674
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                2.3676591333333334,
+                0.35050096999999997,
+                1.5810985000000002
+              ],
+              "min": [
+                2.3676591333333334,
+                0.35050096999999997,
+                1.5810985000000002
+              ],
+              "max": [
+                2.3676591333333334,
+                0.35050096999999997,
+                1.5810985000000002
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                1.0875252666666666,
+                -2.3228353,
+                0.5143437000000001
+              ],
+              "min": [
+                1.0875252666666666,
+                -2.3228353,
+                0.5143437000000001
+              ],
+              "max": [
+                1.0875252666666666,
+                -2.3228353,
+                0.5143437000000001
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                -0.6900029041666667,
+                -2.2761594916666668,
+                1.1603025916666667
+              ],
+              "min": [
+                -0.6900029041666667,
+                -2.2761594916666668,
+                1.1603025916666667
+              ],
+              "max": [
+                -0.6900029041666667,
+                -2.2761594916666668,
+                1.1603025916666667
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                -0.6249624866666667,
+                0.7455567166666667,
+                -0.34414185333333336
+              ],
+              "min": [
+                -0.6249624866666667,
+                0.7455567166666667,
+                -0.34414185333333336
+              ],
+              "max": [
+                -0.6249624866666667,
+                0.7455567166666667,
+                -0.34414185333333336
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                -0.6261767333333333,
+                0.7234099666666666,
+                0.35063113
+              ],
+              "min": [
+                -0.6261767333333333,
+                0.7234099666666666,
+                0.35063113
+              ],
+              "max": [
+                -0.6261767333333333,
+                0.7234099666666666,
+                0.35063113
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                -0.3567131666666667,
+                1.8561321666666666,
+                -0.8212851433333332
+              ],
+              "min": [
+                -0.3567131666666667,
+                1.8561321666666666,
+                -0.8212851433333332
+              ],
+              "max": [
+                -0.3567131666666667,
+                1.8561321666666666,
+                -0.8212851433333332
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                -0.24840587416666668,
+                2.1140920333333333,
+                -0.02144722791666667
+              ],
+              "min": [
+                -0.24840587416666668,
+                2.1140920333333333,
+                -0.02144722791666667
+              ],
+              "max": [
+                -0.24840587416666668,
+                2.1140920333333333,
+                -0.02144722791666667
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                0.03021648,
+                1.5099988333333334,
+                0.2578531566666667
+              ],
+              "min": [
+                0.03021648,
+                1.5099988333333334,
+                0.2578531566666667
+              ],
+              "max": [
+                0.03021648,
+                1.5099988333333334,
+                0.2578531566666667
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                0.16607363,
+                1.8337430666666668,
+                0.15875856666666666
+              ],
+              "min": [
+                0.16607363,
+                1.8337430666666668,
+                0.15875856666666666
+              ],
+              "max": [
+                0.16607363,
+                1.8337430666666668,
+                0.15875856666666666
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                0.61811725,
+                0.7717301233333332,
+                -0.32168168333333336
+              ],
+              "min": [
+                0.61811725,
+                0.7717301233333332,
+                -0.32168168333333336
+              ],
+              "max": [
+                0.61811725,
+                0.7717301233333332,
+                -0.32168168333333336
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                -1.0108381916666669,
+                -0.016222832716666667,
+                -0.07082049516666665
+              ],
+              "min": [
+                -1.0108381916666669,
+                -0.016222832716666667,
+                -0.07082049516666665
+              ],
+              "max": [
+                -1.0108381916666669,
+                -0.016222832716666667,
+                -0.07082049516666665
+              ]
+            }
+          ]
+        },
+        {
+          "stage": "after_coarse_sat",
+          "seconds": 66.302547112,
+          "inversions": 82,
+          "clusters": [
+            {
+              "count": 62,
+              "center": [
+                -0.0617898958663506,
+                -0.9687930275084006,
+                0.33516724373487905
+              ],
+              "min": [
+                -0.1748908471875,
+                -1.018082774375,
+                0.28056835354166665
+              ],
+              "max": [
+                0.09718820283333333,
+                -0.9174818475,
+                0.46133231916666667
+              ]
+            },
+            {
+              "count": 12,
+              "center": [
+                -0.022653703968923616,
+                2.1032560788194443,
+                0.07263782490711805
+              ],
+              "min": [
+                -0.030543499895833336,
+                2.0946952854166665,
+                0.06549276802083331
+              ],
+              "max": [
+                -0.015787217839583333,
+                2.1100534583333332,
+                0.08084620784374999
+              ]
+            },
+            {
+              "count": 4,
+              "center": [
+                -1.1286690864583333,
+                -2.131463076041667,
+                1.0902449583333333
+              ],
+              "min": [
+                -1.1291185291666663,
+                -2.150033383333333,
+                1.0861131666666666
+              ],
+              "max": [
+                -1.1281370833333333,
+                -2.098911779166667,
+                1.0972851666666668
+              ]
+            },
+            {
+              "count": 2,
+              "center": [
+                -0.14328431725000002,
+                -0.9833211074999999,
+                0.14352708358333333
+              ],
+              "min": [
+                -0.14435960025000003,
+                -0.9833423006249999,
+                0.14352326920833333
+              ],
+              "max": [
+                -0.14220903425,
+                -0.983299914375,
+                0.14353089795833332
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                -0.3567131666666667,
+                1.8561321666666666,
+                -0.8212851433333332
+              ],
+              "min": [
+                -0.3567131666666667,
+                1.8561321666666666,
+                -0.8212851433333332
+              ],
+              "max": [
+                -0.3567131666666667,
+                1.8561321666666666,
+                -0.8212851433333332
+              ]
+            },
+            {
+              "count": 1,
+              "center": [
+                -0.24840587416666668,
+                2.1140920333333333,
+                -0.02144722791666667
+              ],
+              "min": [
+                -0.24840587416666668,
+                2.1140920333333333,
+                -0.02144722791666667
+              ],
+              "max": [
+                -0.24840587416666668,
+                2.1140920333333333,
+                -0.02144722791666667
+              ]
+            }
+          ]
+        },
+        {
+          "stage": "stopped",
+          "seconds": 180.021595614,
+          "inversions": 64,
+          "clusters": [
+            {
+              "count": 62,
+              "center": [
+                -0.0617898958663506,
+                -0.9687930275084006,
+                0.33516724373487905
+              ],
+              "min": [
+                -0.1748908471875,
+                -1.018082774375,
+                0.28056835354166665
+              ],
+              "max": [
+                0.09718820283333333,
+                -0.9174818475,
+                0.46133231916666667
+              ]
+            },
+            {
+              "count": 2,
+              "center": [
+                -0.14328431725000002,
+                -0.9833211074999999,
+                0.14352708358333333
+              ],
+              "min": [
+                -0.14435960025000003,
+                -0.9833423006249999,
+                0.14352326920833333
+              ],
+              "max": [
+                -0.14220903425,
+                -0.983299914375,
+                0.14353089795833332
+              ]
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "depth": 5,
+          "edges": 32288,
+          "event": "checkpoint",
+          "faces": 21413,
+          "next_radius": 1,
+          "seconds": 0.456560264,
+          "inversions": 136
+        },
+        {
+          "depth": 5,
+          "edges": 32288,
+          "event": "checkpoint",
+          "faces": 21413,
+          "next_radius": 2,
+          "seconds": 3.13903294,
+          "inversions": 92
+        },
+        {
+          "depth": 5,
+          "edges": 32288,
+          "event": "checkpoint",
+          "faces": 21413,
+          "next_radius": 3,
+          "seconds": 5.181999369,
+          "inversions": 92
+        },
+        {
+          "depth": 5,
+          "edges": 32288,
+          "event": "checkpoint",
+          "faces": 21413,
+          "next_radius": 4,
+          "seconds": 5.976542559,
+          "inversions": 91
+        },
+        {
+          "depth": 5,
+          "edges": 32288,
+          "event": "checkpoint",
+          "faces": 21413,
+          "next_radius": 5,
+          "seconds": 8.146843781,
+          "inversions": 91
+        },
+        {
+          "depth": 4,
+          "edges": 43924,
+          "event": "checkpoint",
+          "faces": 29143,
+          "next_radius": 1,
+          "seconds": 8.157298895,
+          "inversions": 91
+        },
+        {
+          "depth": 4,
+          "edges": 43924,
+          "event": "checkpoint",
+          "faces": 29143,
+          "next_radius": 2,
+          "seconds": 9.887543455,
+          "inversions": 90
+        },
+        {
+          "depth": 4,
+          "edges": 43924,
+          "event": "checkpoint",
+          "faces": 29143,
+          "next_radius": 3,
+          "seconds": 10.657812496,
+          "inversions": 90
+        },
+        {
+          "depth": 4,
+          "edges": 43924,
+          "event": "checkpoint",
+          "faces": 29143,
+          "next_radius": 4,
+          "seconds": 11.742236187,
+          "inversions": 90
+        },
+        {
+          "depth": 4,
+          "edges": 43924,
+          "event": "checkpoint",
+          "faces": 29143,
+          "next_radius": 5,
+          "seconds": 12.954070043,
+          "inversions": 90
+        },
+        {
+          "depth": 3,
+          "edges": 67941,
+          "event": "checkpoint",
+          "faces": 45252,
+          "next_radius": 1,
+          "seconds": 12.973035728,
+          "inversions": 90
+        },
+        {
+          "depth": 3,
+          "edges": 67941,
+          "event": "checkpoint",
+          "faces": 45252,
+          "next_radius": 2,
+          "seconds": 14.078601449,
+          "inversions": 85
+        },
+        {
+          "depth": 3,
+          "edges": 67941,
+          "event": "checkpoint",
+          "faces": 45252,
+          "next_radius": 3,
+          "seconds": 14.928208409,
+          "inversions": 85
+        },
+        {
+          "depth": 3,
+          "edges": 67941,
+          "event": "checkpoint",
+          "faces": 45252,
+          "next_radius": 4,
+          "seconds": 15.984098243,
+          "inversions": 85
+        },
+        {
+          "depth": 3,
+          "edges": 67941,
+          "event": "checkpoint",
+          "faces": 45252,
+          "next_radius": 5,
+          "seconds": 18.226608458,
+          "inversions": 85
+        },
+        {
+          "depth": 2,
+          "edges": 109080,
+          "event": "checkpoint",
+          "faces": 72720,
+          "next_radius": 1,
+          "seconds": 18.253892528,
+          "inversions": 85
+        },
+        {
+          "depth": 2,
+          "edges": 109080,
+          "event": "checkpoint",
+          "faces": 72720,
+          "next_radius": 2,
+          "seconds": 20.773143236,
+          "inversions": 84
+        },
+        {
+          "depth": 2,
+          "edges": 109080,
+          "event": "checkpoint",
+          "faces": 72720,
+          "next_radius": 3,
+          "seconds": 23.725274735,
+          "inversions": 83
+        },
+        {
+          "depth": 2,
+          "edges": 109080,
+          "event": "checkpoint",
+          "faces": 72720,
+          "next_radius": 4,
+          "seconds": 27.349825431,
+          "inversions": 83
+        },
+        {
+          "depth": 2,
+          "edges": 109080,
+          "event": "checkpoint",
+          "faces": 72720,
+          "next_radius": 5,
+          "seconds": 32.286549553,
+          "inversions": 83
+        },
+        {
+          "depth": 1,
+          "edges": 172152,
+          "event": "checkpoint",
+          "faces": 114768,
+          "next_radius": 1,
+          "seconds": 32.328405183,
+          "inversions": 83
+        },
+        {
+          "depth": 1,
+          "edges": 172152,
+          "event": "checkpoint",
+          "faces": 114768,
+          "next_radius": 2,
+          "seconds": 36.009943289,
+          "inversions": 82
+        },
+        {
+          "depth": 1,
+          "edges": 172152,
+          "event": "checkpoint",
+          "faces": 114768,
+          "next_radius": 3,
+          "seconds": 41.387376914,
+          "inversions": 82
+        },
+        {
+          "depth": 1,
+          "edges": 172152,
+          "event": "checkpoint",
+          "faces": 114768,
+          "next_radius": 4,
+          "seconds": 45.797597938,
+          "inversions": 82
+        },
+        {
+          "depth": 1,
+          "edges": 172152,
+          "event": "checkpoint",
+          "faces": 114768,
+          "next_radius": 5,
+          "seconds": 48.951729564,
+          "inversions": 82
+        },
+        {
+          "depth": 0,
+          "edges": 276093,
+          "event": "checkpoint",
+          "faces": 184062,
+          "next_radius": 1,
+          "seconds": 49.022608579,
+          "inversions": 82
+        },
+        {
+          "depth": 0,
+          "edges": 276093,
+          "event": "checkpoint",
+          "faces": 184062,
+          "next_radius": 2,
+          "seconds": 54.779388623,
+          "inversions": 82
+        },
+        {
+          "depth": 0,
+          "edges": 276093,
+          "event": "checkpoint",
+          "faces": 184062,
+          "next_radius": 3,
+          "seconds": 59.519173312,
+          "inversions": 82
+        },
+        {
+          "depth": 0,
+          "edges": 276093,
+          "event": "checkpoint",
+          "faces": 184062,
+          "next_radius": 4,
+          "seconds": 63.527898648,
+          "inversions": 82
+        },
+        {
+          "depth": 0,
+          "edges": 276093,
+          "event": "checkpoint",
+          "faces": 184062,
+          "next_radius": 5,
+          "seconds": 66.286361621,
+          "inversions": 82
+        }
+      ],
+      "outcomes": {
+        "search_unsatisfiable": {
+          "count": 110,
+          "total_seconds": 13.787254702999997,
+          "propagation_seconds": 0.0,
+          "encoding_seconds": 0.25493387200000006,
+          "search_seconds": 13.532257167000001
+        },
+        "search_solved": {
+          "count": 14,
+          "total_seconds": 1.617452618,
+          "propagation_seconds": 0.0,
+          "encoding_seconds": 0.027775333999999995,
+          "search_seconds": 1.5892227650000001
+        },
+        "encoding_unsatisfiable": {
+          "count": 12,
+          "total_seconds": 0.014697943999999998,
+          "propagation_seconds": 0.0,
+          "encoding_seconds": 0.014697202999999999,
+          "search_seconds": 0.0
+        },
+        "search_time_limit": {
+          "count": 9,
+          "total_seconds": 18.038407970999998,
+          "propagation_seconds": 0.0,
+          "encoding_seconds": 0.037855295,
+          "search_seconds": 18.000543484
+        },
+        "search_check_limit": {
+          "count": 39,
+          "total_seconds": 31.06126942400001,
+          "propagation_seconds": 0.0,
+          "encoding_seconds": 0.8533497299999997,
+          "search_seconds": 30.207879277000004
+        }
+      },
+      "interrupted_patch": null,
+      "skipped_patches": [],
+      "largest_inversion_patches": [
+        {
+          "depth": 5,
+          "faces": 356,
+          "fixed_boundary_edges": 73,
+          "flexible_edges": 496,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 1,
+          "sat": {
+            "boolean_variables": 3414,
+            "callback_checks": 159344,
+            "clauses": 27482,
+            "domain_values": 4464,
+            "encoding_seconds": 0.004113198,
+            "outcome": "search_unsatisfiable",
+            "propagation_seconds": 0.0,
+            "search_seconds": 1.41809567,
+            "total_seconds": 1.422210371,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 5,
+          "faces": 465,
+          "fixed_boundary_edges": 84,
+          "flexible_edges": 654,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 2,
+          "sat": {
+            "boolean_variables": 4428,
+            "callback_checks": 231016,
+            "clauses": 35832,
+            "domain_values": 5886,
+            "encoding_seconds": 0.005329614,
+            "outcome": "search_time_limit",
+            "propagation_seconds": 0.0,
+            "search_seconds": 2.000231299,
+            "total_seconds": 2.005562323,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 5,
+          "faces": 576,
+          "fixed_boundary_edges": 95,
+          "flexible_edges": 814,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 3,
+          "sat": {
+            "boolean_variables": 5454,
+            "callback_checks": 185919,
+            "clauses": 44326,
+            "domain_values": 7326,
+            "encoding_seconds": 0.004825642,
+            "outcome": "search_unsatisfiable",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.719716423,
+            "total_seconds": 0.724542892,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 5,
+          "faces": 739,
+          "fixed_boundary_edges": 111,
+          "flexible_edges": 1049,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 4,
+          "sat": {
+            "boolean_variables": 6960,
+            "callback_checks": 425596,
+            "clauses": 56798,
+            "domain_values": 9441,
+            "encoding_seconds": 0.007467262,
+            "outcome": "search_time_limit",
+            "propagation_seconds": 0.0,
+            "search_seconds": 2.00002452,
+            "total_seconds": 2.007492674,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 4,
+          "faces": 526,
+          "fixed_boundary_edges": 93,
+          "flexible_edges": 739,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 1,
+          "sat": {
+            "boolean_variables": 4992,
+            "callback_checks": 303992,
+            "clauses": 40506,
+            "domain_values": 6651,
+            "encoding_seconds": 0.004477504,
+            "outcome": "search_unsatisfiable",
+            "propagation_seconds": 0.0,
+            "search_seconds": 1.678506084,
+            "total_seconds": 1.682984437,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 4,
+          "faces": 686,
+          "fixed_boundary_edges": 101,
+          "flexible_edges": 972,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 2,
+          "sat": {
+            "boolean_variables": 6438,
+            "callback_checks": 263948,
+            "clauses": 52690,
+            "domain_values": 8748,
+            "encoding_seconds": 0.005434722,
+            "outcome": "search_unsatisfiable",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.683646166,
+            "total_seconds": 0.689081804,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 4,
+          "faces": 839,
+          "fixed_boundary_edges": 119,
+          "flexible_edges": 1192,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 3,
+          "sat": {
+            "boolean_variables": 7866,
+            "callback_checks": 439866,
+            "clauses": 64422,
+            "domain_values": 10728,
+            "encoding_seconds": 0.007093661,
+            "outcome": "search_unsatisfiable",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.913463901,
+            "total_seconds": 0.920558274,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 4,
+          "faces": 1065,
+          "fixed_boundary_edges": 139,
+          "flexible_edges": 1517,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 4,
+          "sat": {
+            "boolean_variables": 9936,
+            "callback_checks": 500002,
+            "clauses": 81686,
+            "domain_values": 13653,
+            "encoding_seconds": 0.008969734,
+            "outcome": "search_check_limit",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.623929091,
+            "total_seconds": 0.632900153,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 3,
+          "faces": 867,
+          "fixed_boundary_edges": 137,
+          "flexible_edges": 1221,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 1,
+          "sat": {
+            "boolean_variables": 8148,
+            "callback_checks": 500002,
+            "clauses": 66626,
+            "domain_values": 10989,
+            "encoding_seconds": 0.012979532,
+            "outcome": "search_check_limit",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.954699162,
+            "total_seconds": 0.967679685,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 3,
+          "faces": 1132,
+          "fixed_boundary_edges": 155,
+          "flexible_edges": 1605,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 2,
+          "sat": {
+            "boolean_variables": 10560,
+            "callback_checks": 500002,
+            "clauses": 86838,
+            "domain_values": 14445,
+            "encoding_seconds": 0.010335733,
+            "outcome": "search_check_limit",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.689782282,
+            "total_seconds": 0.7001189,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 3,
+          "faces": 1376,
+          "fixed_boundary_edges": 171,
+          "flexible_edges": 1962,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 3,
+          "sat": {
+            "boolean_variables": 12798,
+            "callback_checks": 500002,
+            "clauses": 105470,
+            "domain_values": 17658,
+            "encoding_seconds": 0.011390389,
+            "outcome": "search_check_limit",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.646387433,
+            "total_seconds": 0.657778947,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 3,
+          "faces": 1748,
+          "fixed_boundary_edges": 196,
+          "flexible_edges": 2502,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 4,
+          "sat": {
+            "boolean_variables": 16188,
+            "callback_checks": 500002,
+            "clauses": 133848,
+            "domain_values": 22518,
+            "encoding_seconds": 0.014833975,
+            "outcome": "search_check_limit",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.59597523,
+            "total_seconds": 0.610810127,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 2,
+          "faces": 1448,
+          "fixed_boundary_edges": 189,
+          "flexible_edges": 2066,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 1,
+          "sat": {
+            "boolean_variables": 13530,
+            "callback_checks": 500002,
+            "clauses": 111090,
+            "domain_values": 18594,
+            "encoding_seconds": 0.016862593,
+            "outcome": "search_check_limit",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.682869697,
+            "total_seconds": 0.699733383,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 2,
+          "faces": 1888,
+          "fixed_boundary_edges": 206,
+          "flexible_edges": 2716,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 2,
+          "sat": {
+            "boolean_variables": 17532,
+            "callback_checks": 500002,
+            "clauses": 144620,
+            "domain_values": 24444,
+            "encoding_seconds": 0.016856379,
+            "outcome": "search_check_limit",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.677992424,
+            "total_seconds": 0.694850173,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 2,
+          "faces": 2294,
+          "fixed_boundary_edges": 225,
+          "flexible_edges": 3316,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 3,
+          "sat": {
+            "boolean_variables": 21246,
+            "callback_checks": 500002,
+            "clauses": 175594,
+            "domain_values": 29844,
+            "encoding_seconds": 0.02091009,
+            "outcome": "search_check_limit",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.614326925,
+            "total_seconds": 0.635238179,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 2,
+          "faces": 2914,
+          "fixed_boundary_edges": 247,
+          "flexible_edges": 4226,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 4,
+          "sat": {
+            "boolean_variables": 26838,
+            "callback_checks": 500002,
+            "clauses": 222774,
+            "domain_values": 38034,
+            "encoding_seconds": 0.031726021,
+            "outcome": "search_check_limit",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.496184212,
+            "total_seconds": 0.527911476,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 1,
+          "faces": 2343,
+          "fixed_boundary_edges": 253,
+          "flexible_edges": 3386,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 1,
+          "sat": {
+            "boolean_variables": 21834,
+            "callback_checks": 500002,
+            "clauses": 179570,
+            "domain_values": 30474,
+            "encoding_seconds": 0.02351397,
+            "outcome": "search_check_limit",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.656136825,
+            "total_seconds": 0.679651622,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 1,
+          "faces": 3054,
+          "fixed_boundary_edges": 277,
+          "flexible_edges": 4438,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 2,
+          "sat": {
+            "boolean_variables": 28290,
+            "callback_checks": 500002,
+            "clauses": 233730,
+            "domain_values": 39942,
+            "encoding_seconds": 0.030322484,
+            "outcome": "search_check_limit",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.493365326,
+            "total_seconds": 0.523688903,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 1,
+          "faces": 3708,
+          "fixed_boundary_edges": 303,
+          "flexible_edges": 5407,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 3,
+          "sat": {
+            "boolean_variables": 34260,
+            "callback_checks": 500002,
+            "clauses": 283598,
+            "domain_values": 48663,
+            "encoding_seconds": 0.034831888,
+            "outcome": "search_check_limit",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.509820205,
+            "total_seconds": 0.544653203,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 1,
+          "faces": 4692,
+          "fixed_boundary_edges": 340,
+          "flexible_edges": 6860,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 4,
+          "sat": {
+            "boolean_variables": 43200,
+            "callback_checks": 500002,
+            "clauses": 358568,
+            "domain_values": 61740,
+            "encoding_seconds": 0.042315101,
+            "outcome": "search_check_limit",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.386249234,
+            "total_seconds": 0.428565497,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 0,
+          "faces": 3777,
+          "fixed_boundary_edges": 358,
+          "flexible_edges": 5486,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 1,
+          "sat": {
+            "boolean_variables": 35064,
+            "callback_checks": 500002,
+            "clauses": 289196,
+            "domain_values": 49374,
+            "encoding_seconds": 0.070097262,
+            "outcome": "search_check_limit",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.561946296,
+            "total_seconds": 0.632044872,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 0,
+          "faces": 4914,
+          "fixed_boundary_edges": 390,
+          "flexible_edges": 7172,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 2,
+          "sat": {
+            "boolean_variables": 45372,
+            "callback_checks": 500002,
+            "clauses": 375772,
+            "domain_values": 64548,
+            "encoding_seconds": 0.044256093,
+            "outcome": "search_check_limit",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.443282233,
+            "total_seconds": 0.487539367,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 0,
+          "faces": 5966,
+          "fixed_boundary_edges": 417,
+          "flexible_edges": 8739,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 3,
+          "sat": {
+            "boolean_variables": 54936,
+            "callback_checks": 500002,
+            "clauses": 455906,
+            "domain_values": 78651,
+            "encoding_seconds": 0.05501954,
+            "outcome": "search_check_limit",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.53685358,
+            "total_seconds": 0.591874196,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        },
+        {
+          "depth": 0,
+          "faces": 7539,
+          "fixed_boundary_edges": 474,
+          "flexible_edges": 11062,
+          "locked_coordinates": 0,
+          "phase": "finish",
+          "radius": 4,
+          "sat": {
+            "boolean_variables": 69216,
+            "callback_checks": 500002,
+            "clauses": 575732,
+            "domain_values": 99558,
+            "encoding_seconds": 0.068862649,
+            "outcome": "search_check_limit",
+            "propagation_seconds": 0.0,
+            "search_seconds": 0.440249967,
+            "total_seconds": 0.50911362,
+            "tuples": 0
+          },
+          "inversions_before": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          },
+          "inversions_after": {
+            "count": 64,
+            "center": [
+              -0.06433659653458965,
+              -0.969247030008138,
+              0.3291784887301432
+            ],
+            "min": [
+              -0.1748908471875,
+              -1.018082774375,
+              0.14352326920833333
+            ],
+            "max": [
+              0.09718820283333333,
+              -0.9174818475,
+              0.46133231916666667
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "checks": {
+    "passed": [
+      "scalar_grid_matches_exhaustive_domains_frames_and_repeated_edges (96 cases)",
+      "frozen_junction_fixed_boundary_is_infeasible",
+      "scalar_grid_obeys_cancellation_and_size_limits",
+      "repair_checkpoint_resume_matches_uninterrupted_and_rejects_wrong_graph",
+      "audit_cnf_core_identifies_required_fixed_units",
+      "asymmetric_curved_surface_reconstruction_preserves_the_sculpt",
+      "open_surface_reconstruction_preserves_its_boundary"
+    ],
+    "clippy": "audit library/example and non-audit library pass with warnings denied",
+    "visual": "accepted hand comparison inspected; OBJ geometry identical to candidate diagnostics",
+    "broad_suite_or_app_build": false
+  },
+  "resources": {
+    "shared_lock": "/home/mark/.cache/codex-build.lock",
+    "compiler_jobs": 1,
+    "build_memory_mib": 700,
+    "native_memory_mib": 500,
+    "swap_limit": 0,
+    "max_native_rss_kib": 242784
+  },
+  "limits": [
+    "Full character remains unaccepted.",
+    "Coarse target hand remains rejected in the exact retained implementation (264 quads, nine bad diagonals); the fine-scalar trial also did not fix it.",
+    "SAT infeasibility is local with fixed frames, boundaries and domains, not a proof against the global retopology problem.",
+    "Native scalar clause order/search/budgets differ from pinned upstream; semantic equivalence is tested, solver decisions need not match.",
+    "Retained fine fallback still has expensive searches; completed-pass checkpoints do not preserve partial fine-stage progress.",
+    "No self-intersection certificate, app integration, adaptive paint, multi-path UI or platform validation."
+  ],
+  "local_artifacts": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/junction-patch"
+}

@@ -1,0 +1,10 @@
+{
+  "upstream_commit": "810b7a0967c35b0dc85b4464e3835e26a756c967",
+  "variant": "Unmodified pinned directed-edge adjacency and field optimization; common fine normals/areas/geometry",
+  "files": {
+    "crates/clay-retopology/tests/data/field-asymmetric.input": "1180740a3a5a599af4531b58f40dab6a9e8f5bf36db1d57cbb6a61f8a417d2df",
+    "crates/clay-retopology/tests/data/field-asymmetric-fan.expected": "0d7efd3dd5d5160c333894289d975ab9c7bed30bf359b23ec7cec18796120e20",
+    "../retopology-review/integer-comparison-20261106/fan-field-reference.cpp": "c1b603bfe18632340b907aafe8997e3a8c92955736d439331539481c04f83f84",
+    "../retopology-review/integer-comparison-20261106/fan-field-reference": "bc57cf4e10a2ec02343014ca6117e8ac7e41240d9abd3fbb8d968dde41a159e5"
+  }
+}

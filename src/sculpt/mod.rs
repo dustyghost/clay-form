@@ -50,7 +50,7 @@ pub use primitive::{Primitive, PrimitiveKind};
 mod thickness;
 
 mod groups;
-pub use groups::{VertexGroup, mask_selected};
+pub use groups::{GroupPurpose, VertexGroup, mask_selected};
 
 mod group_transfer;
 

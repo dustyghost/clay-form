@@ -1,0 +1,608 @@
+{
+  "date": "2026-11-06",
+  "source": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5.clay",
+  "source_sha256": "4420db8defa35d8e14e06b1b81a3ea24f03d50be0faa296723781370febb5c7c",
+  "source_triangles": 104162,
+  "target_quads": 10000,
+  "guides": "none",
+  "density": "uniform",
+  "native_profile": "release, opt-level=3, debug symbols off",
+  "threads": "native serial; Blender -t 1",
+  "memory_limit_mib": 700,
+  "preparation": "Shared five-pass Rust preparation, timed separately; excluded from all solver timings below.",
+  "native_sha256": "8d131a8745c0c5eaba3aaff447fe4c8e4a6785b9818b81682094d5e21c166467",
+  "blender_script_sha256": "09341cf3d33aa334db28ede832a397957d2de7386680a0cbc33238319006ce80",
+  "runs": [
+    {
+      "solver": "rust",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/release/examples/compare",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/retopology-timing-20261106/1-rust/candidate.obj",
+        "10000"
+      ],
+      "exit": 1,
+      "process_wall_seconds": 17.93771205795929,
+      "process_user_cpu_seconds": 17.69049,
+      "process_system_cpu_seconds": 0.08250199999999999,
+      "solver_seconds": 17.805,
+      "stage_events": [
+        {
+          "seconds": 0.139,
+          "stage": "Sampling"
+        },
+        {
+          "seconds": 0.19,
+          "stage": "Hierarchy { samples: 52130 }"
+        },
+        {
+          "seconds": 0.444,
+          "stage": "Hierarchy { samples: 27969 }"
+        },
+        {
+          "seconds": 0.478,
+          "stage": "Hierarchy { samples: 15131 }"
+        },
+        {
+          "seconds": 0.494,
+          "stage": "Hierarchy { samples: 8179 }"
+        },
+        {
+          "seconds": 0.502,
+          "stage": "Hierarchy { samples: 4442 }"
+        },
+        {
+          "seconds": 0.505,
+          "stage": "Hierarchy { samples: 2404 }"
+        },
+        {
+          "seconds": 0.507,
+          "stage": "Hierarchy { samples: 1302 }"
+        },
+        {
+          "seconds": 0.508,
+          "stage": "Hierarchy { samples: 711 }"
+        },
+        {
+          "seconds": 0.509,
+          "stage": "Hierarchy { samples: 385 }"
+        },
+        {
+          "seconds": 0.509,
+          "stage": "Hierarchy { samples: 210 }"
+        },
+        {
+          "seconds": 0.509,
+          "stage": "Hierarchy { samples: 116 }"
+        },
+        {
+          "seconds": 0.509,
+          "stage": "Hierarchy { samples: 61 }"
+        },
+        {
+          "seconds": 0.509,
+          "stage": "Hierarchy { samples: 34 }"
+        },
+        {
+          "seconds": 0.509,
+          "stage": "Hierarchy { samples: 18 }"
+        },
+        {
+          "seconds": 0.51,
+          "stage": "Hierarchy { samples: 9 }"
+        },
+        {
+          "seconds": 0.51,
+          "stage": "Hierarchy { samples: 5 }"
+        },
+        {
+          "seconds": 0.51,
+          "stage": "Hierarchy { samples: 3 }"
+        },
+        {
+          "seconds": 0.51,
+          "stage": "Hierarchy { samples: 2 }"
+        },
+        {
+          "seconds": 0.51,
+          "stage": "Hierarchy { samples: 1 }"
+        },
+        {
+          "seconds": 0.518,
+          "stage": "Orientation"
+        },
+        {
+          "seconds": 0.795,
+          "stage": "Position"
+        },
+        {
+          "seconds": 1.775,
+          "stage": "Regularity { defects: 467 }"
+        },
+        {
+          "seconds": 11.943,
+          "stage": "Subdivision { long_edges: 1517, fixed_variables: 2282 }"
+        },
+        {
+          "seconds": 12.002,
+          "stage": "Inversions { flipped: 1326 }"
+        },
+        {
+          "seconds": 12.093,
+          "stage": "Repair { radius: 0, flipped: 14 }"
+        },
+        {
+          "seconds": 12.151,
+          "stage": "CoarseRepair { radius: 1, flipped: 14 }"
+        },
+        {
+          "seconds": 12.168,
+          "stage": "CoarseRepair { radius: 2, flipped: 13 }"
+        },
+        {
+          "seconds": 12.196,
+          "stage": "CoarseRepair { radius: 3, flipped: 12 }"
+        },
+        {
+          "seconds": 12.247,
+          "stage": "CoarseRepair { radius: 4, flipped: 12 }"
+        },
+        {
+          "seconds": 12.331,
+          "stage": "CoarseRepair { radius: 1, flipped: 12 }"
+        },
+        {
+          "seconds": 12.35,
+          "stage": "CoarseRepair { radius: 2, flipped: 11 }"
+        },
+        {
+          "seconds": 12.398,
+          "stage": "CoarseRepair { radius: 3, flipped: 11 }"
+        },
+        {
+          "seconds": 12.459,
+          "stage": "CoarseRepair { radius: 4, flipped: 11 }"
+        },
+        {
+          "seconds": 12.557,
+          "stage": "CoarseRepair { radius: 1, flipped: 11 }"
+        },
+        {
+          "seconds": 12.617,
+          "stage": "CoarseRepair { radius: 2, flipped: 4 }"
+        },
+        {
+          "seconds": 12.645,
+          "stage": "CoarseRepair { radius: 3, flipped: 2 }"
+        },
+        {
+          "seconds": 12.667,
+          "stage": "CoarseRepair { radius: 4, flipped: 2 }"
+        },
+        {
+          "seconds": 12.708,
+          "stage": "CoarseRepair { radius: 1, flipped: 2 }"
+        },
+        {
+          "seconds": 12.72,
+          "stage": "CoarseRepair { radius: 2, flipped: 2 }"
+        },
+        {
+          "seconds": 12.748,
+          "stage": "CoarseRepair { radius: 3, flipped: 2 }"
+        },
+        {
+          "seconds": 12.894,
+          "stage": "CoarseRepair { radius: 4, flipped: 2 }"
+        },
+        {
+          "seconds": 13.227,
+          "stage": "CoarseRepair { radius: 1, flipped: 1 }"
+        },
+        {
+          "seconds": 13.27,
+          "stage": "Fitting"
+        },
+        {
+          "seconds": 13.508,
+          "stage": "Extraction"
+        },
+        {
+          "seconds": 13.601,
+          "stage": "QuadOptimization"
+        },
+        {
+          "seconds": 15.917,
+          "stage": "SurfaceFit"
+        }
+      ],
+      "error": "\"Retopology lost source shape at DVec3(-2.7467325369746267, 0.1875043888511479, 1.330641060697294): error 0.05913, local grid spacing 0.05759\"",
+      "peak_rss_kib": 179936,
+      "stage_durations_seconds": {
+        "input_checks_fields_and_integer_seeding": 1.775,
+        "integer_correction": 10.168,
+        "integer_subdivision": 0.05900000000000105,
+        "integer_inversion_repair": 1.267999999999999,
+        "initial_fitting_and_extraction": 0.3310000000000013,
+        "quad_optimization": 2.315999999999999,
+        "final_surface_fit_and_shape_rejection": 1.888
+      }
+    },
+    {
+      "solver": "cpp",
+      "command": [
+        "/usr/bin/blender",
+        "--background",
+        "--factory-startup",
+        "-t",
+        "1",
+        "--python",
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/scripts/compare-retopology-blender.py",
+        "--",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/retopology-timing-20261106/2-cpp",
+        "10000"
+      ],
+      "exit": 0,
+      "process_wall_seconds": 11.133011137018912,
+      "process_user_cpu_seconds": 9.738499000000001,
+      "process_system_cpu_seconds": 0.479935,
+      "solver_seconds": 8.458126156008802,
+      "peak_rss_kib": 632968,
+      "blender_statistics": {
+        "source_sha256": "4420db8defa35d8e14e06b1b81a3ea24f03d50be0faa296723781370febb5c7c",
+        "blender_version": "5.2.3 LTS",
+        "blender_build_hash": "e13b728c6880",
+        "source": {
+          "vertices": 52083,
+          "triangles": 104162
+        },
+        "refinement": "none",
+        "settings": {
+          "use_mesh_symmetry": false,
+          "use_preserve_sharp": false,
+          "use_preserve_boundary": true,
+          "preserve_attributes": false,
+          "smooth_normals": false,
+          "mode": "FACES",
+          "target_faces": 10000,
+          "seed": 0
+        },
+        "elapsed_seconds": 8.458126156008802,
+        "max_rss_kib": 632968,
+        "vertices": 9870,
+        "polygons": 9868,
+        "face_sizes": {
+          "4": 9868
+        },
+        "belly_vertices": 154,
+        "components": 1,
+        "euler": 2,
+        "inconsistent_or_open_edges": 0,
+        "edge_incidence": {
+          "2": 19736
+        },
+        "vertex_valence": {
+          "4": 9744,
+          "3": 67,
+          "5": 59
+        }
+      },
+      "output_sha256": "07f6cffcd1ed11510ee786f4c80b8a772ce5e584f8cd55ba64e94ebcb7f321da",
+      "same_output_as_prior_measured_control": true
+    },
+    {
+      "solver": "cpp",
+      "command": [
+        "/usr/bin/blender",
+        "--background",
+        "--factory-startup",
+        "-t",
+        "1",
+        "--python",
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/scripts/compare-retopology-blender.py",
+        "--",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/retopology-timing-20261106/3-cpp",
+        "10000"
+      ],
+      "exit": 0,
+      "process_wall_seconds": 10.576991760986857,
+      "process_user_cpu_seconds": 9.869816,
+      "process_system_cpu_seconds": 0.42036300000000004,
+      "solver_seconds": 8.555834781029262,
+      "peak_rss_kib": 636888,
+      "blender_statistics": {
+        "source_sha256": "4420db8defa35d8e14e06b1b81a3ea24f03d50be0faa296723781370febb5c7c",
+        "blender_version": "5.2.3 LTS",
+        "blender_build_hash": "e13b728c6880",
+        "source": {
+          "vertices": 52083,
+          "triangles": 104162
+        },
+        "refinement": "none",
+        "settings": {
+          "use_mesh_symmetry": false,
+          "use_preserve_sharp": false,
+          "use_preserve_boundary": true,
+          "preserve_attributes": false,
+          "smooth_normals": false,
+          "mode": "FACES",
+          "target_faces": 10000,
+          "seed": 0
+        },
+        "elapsed_seconds": 8.555834781029262,
+        "max_rss_kib": 636888,
+        "vertices": 9870,
+        "polygons": 9868,
+        "face_sizes": {
+          "4": 9868
+        },
+        "belly_vertices": 154,
+        "components": 1,
+        "euler": 2,
+        "inconsistent_or_open_edges": 0,
+        "edge_incidence": {
+          "2": 19736
+        },
+        "vertex_valence": {
+          "4": 9744,
+          "3": 67,
+          "5": 59
+        }
+      },
+      "output_sha256": "07f6cffcd1ed11510ee786f4c80b8a772ce5e584f8cd55ba64e94ebcb7f321da",
+      "same_output_as_prior_measured_control": true
+    },
+    {
+      "solver": "rust",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/release/examples/compare",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/retopology-timing-20261106/4-rust/candidate.obj",
+        "10000"
+      ],
+      "exit": 1,
+      "process_wall_seconds": 17.987611368997023,
+      "process_user_cpu_seconds": 17.718015,
+      "process_system_cpu_seconds": 0.12177800000000005,
+      "solver_seconds": 17.845,
+      "stage_events": [
+        {
+          "seconds": 0.136,
+          "stage": "Sampling"
+        },
+        {
+          "seconds": 0.184,
+          "stage": "Hierarchy { samples: 52130 }"
+        },
+        {
+          "seconds": 0.465,
+          "stage": "Hierarchy { samples: 27969 }"
+        },
+        {
+          "seconds": 0.498,
+          "stage": "Hierarchy { samples: 15131 }"
+        },
+        {
+          "seconds": 0.514,
+          "stage": "Hierarchy { samples: 8179 }"
+        },
+        {
+          "seconds": 0.521,
+          "stage": "Hierarchy { samples: 4442 }"
+        },
+        {
+          "seconds": 0.525,
+          "stage": "Hierarchy { samples: 2404 }"
+        },
+        {
+          "seconds": 0.527,
+          "stage": "Hierarchy { samples: 1302 }"
+        },
+        {
+          "seconds": 0.529,
+          "stage": "Hierarchy { samples: 711 }"
+        },
+        {
+          "seconds": 0.529,
+          "stage": "Hierarchy { samples: 385 }"
+        },
+        {
+          "seconds": 0.53,
+          "stage": "Hierarchy { samples: 210 }"
+        },
+        {
+          "seconds": 0.53,
+          "stage": "Hierarchy { samples: 116 }"
+        },
+        {
+          "seconds": 0.53,
+          "stage": "Hierarchy { samples: 61 }"
+        },
+        {
+          "seconds": 0.53,
+          "stage": "Hierarchy { samples: 34 }"
+        },
+        {
+          "seconds": 0.531,
+          "stage": "Hierarchy { samples: 18 }"
+        },
+        {
+          "seconds": 0.531,
+          "stage": "Hierarchy { samples: 9 }"
+        },
+        {
+          "seconds": 0.531,
+          "stage": "Hierarchy { samples: 5 }"
+        },
+        {
+          "seconds": 0.531,
+          "stage": "Hierarchy { samples: 3 }"
+        },
+        {
+          "seconds": 0.531,
+          "stage": "Hierarchy { samples: 2 }"
+        },
+        {
+          "seconds": 0.531,
+          "stage": "Hierarchy { samples: 1 }"
+        },
+        {
+          "seconds": 0.54,
+          "stage": "Orientation"
+        },
+        {
+          "seconds": 0.829,
+          "stage": "Position"
+        },
+        {
+          "seconds": 1.799,
+          "stage": "Regularity { defects: 467 }"
+        },
+        {
+          "seconds": 12.005,
+          "stage": "Subdivision { long_edges: 1517, fixed_variables: 2282 }"
+        },
+        {
+          "seconds": 12.066,
+          "stage": "Inversions { flipped: 1326 }"
+        },
+        {
+          "seconds": 12.153,
+          "stage": "Repair { radius: 0, flipped: 14 }"
+        },
+        {
+          "seconds": 12.211,
+          "stage": "CoarseRepair { radius: 1, flipped: 14 }"
+        },
+        {
+          "seconds": 12.229,
+          "stage": "CoarseRepair { radius: 2, flipped: 13 }"
+        },
+        {
+          "seconds": 12.258,
+          "stage": "CoarseRepair { radius: 3, flipped: 12 }"
+        },
+        {
+          "seconds": 12.313,
+          "stage": "CoarseRepair { radius: 4, flipped: 12 }"
+        },
+        {
+          "seconds": 12.403,
+          "stage": "CoarseRepair { radius: 1, flipped: 12 }"
+        },
+        {
+          "seconds": 12.433,
+          "stage": "CoarseRepair { radius: 2, flipped: 11 }"
+        },
+        {
+          "seconds": 12.493,
+          "stage": "CoarseRepair { radius: 3, flipped: 11 }"
+        },
+        {
+          "seconds": 12.553,
+          "stage": "CoarseRepair { radius: 4, flipped: 11 }"
+        },
+        {
+          "seconds": 12.654,
+          "stage": "CoarseRepair { radius: 1, flipped: 11 }"
+        },
+        {
+          "seconds": 12.717,
+          "stage": "CoarseRepair { radius: 2, flipped: 4 }"
+        },
+        {
+          "seconds": 12.746,
+          "stage": "CoarseRepair { radius: 3, flipped: 2 }"
+        },
+        {
+          "seconds": 12.768,
+          "stage": "CoarseRepair { radius: 4, flipped: 2 }"
+        },
+        {
+          "seconds": 12.808,
+          "stage": "CoarseRepair { radius: 1, flipped: 2 }"
+        },
+        {
+          "seconds": 12.819,
+          "stage": "CoarseRepair { radius: 2, flipped: 2 }"
+        },
+        {
+          "seconds": 12.848,
+          "stage": "CoarseRepair { radius: 3, flipped: 2 }"
+        },
+        {
+          "seconds": 12.991,
+          "stage": "CoarseRepair { radius: 4, flipped: 2 }"
+        },
+        {
+          "seconds": 13.305,
+          "stage": "CoarseRepair { radius: 1, flipped: 1 }"
+        },
+        {
+          "seconds": 13.35,
+          "stage": "Fitting"
+        },
+        {
+          "seconds": 13.589,
+          "stage": "Extraction"
+        },
+        {
+          "seconds": 13.684,
+          "stage": "QuadOptimization"
+        },
+        {
+          "seconds": 16.017,
+          "stage": "SurfaceFit"
+        }
+      ],
+      "error": "\"Retopology lost source shape at DVec3(-2.7467325369746267, 0.1875043888511479, 1.330641060697294): error 0.05913, local grid spacing 0.05759\"",
+      "peak_rss_kib": 180132,
+      "stage_durations_seconds": {
+        "input_checks_fields_and_integer_seeding": 1.799,
+        "integer_correction": 10.206000000000001,
+        "integer_subdivision": 0.06099999999999994,
+        "integer_inversion_repair": 1.283999999999999,
+        "initial_fitting_and_extraction": 0.33399999999999963,
+        "quad_optimization": 2.333,
+        "final_surface_fit_and_shape_rejection": 1.8279999999999994
+      }
+    }
+  ],
+  "memory_pressure_before": "some avg10=0.00 avg60=0.00 avg300=0.00 total=1500531885\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1118894038\n",
+  "median_solver_seconds": {
+    "rust": 17.825,
+    "cpp": 8.506980468519032
+  },
+  "median_process_seconds": {
+    "rust": 17.962661713478155,
+    "cpp": 10.855001449002884
+  },
+  "memory_pressure_after": "some avg10=0.00 avg60=0.00 avg300=0.00 total=1500548121\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1118909591\n",
+  "median_native_stage_seconds": {
+    "input_checks_fields_and_integer_seeding": 1.787,
+    "integer_correction": 10.187000000000001,
+    "integer_subdivision": 0.0600000000000005,
+    "integer_inversion_repair": 1.275999999999999,
+    "initial_fitting_and_extraction": 0.33250000000000046,
+    "quad_optimization": 2.3244999999999996,
+    "final_surface_fit_and_shape_rejection": 1.8579999999999997
+  },
+  "solver_time_ratio_native_over_cpp": 2.0953380657171214,
+  "separately_measured_preparation_seconds": 15.957892952952534,
+  "sum_of_preparation_and_solver_medians": {
+    "rust": 33.78289295295254,
+    "cpp": 24.464873421471566
+  },
+  "limitations": [
+    "Same prepared input and global settings, not identical algorithms or acceptance work.",
+    "Native timed call includes final surface fitting and shape checks; it rejects finger coverage in both runs.",
+    "Blender operator returns an output in both runs. Both output OBJ hashes equal the previous measured control, which has one outward-orientation failure under the native checker.",
+    "Integer correction differs from original C++; current ratio is not a Rust-versus-C++ language benchmark.",
+    "Process timings include different harness startup/export work and must not be compared as solver timings.",
+    "Preparation-plus-solver sums are sums of separately measured medians, not a fused application run.",
+    "Two interleaved runs each on one character; guides, paint and adaptive sizing disabled."
+  ],
+  "quality_reference": "../native-resampling-20261106/blender-guarded-5/original.quality.json"
+}

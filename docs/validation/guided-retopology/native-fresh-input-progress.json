@@ -1,0 +1,977 @@
+{
+  "date": "2026-11-05",
+  "status": "reference_improved_native_still_rejected",
+  "target_quads": 10000,
+  "common_original_spacing": 0.05762159740626388,
+  "inputs": {
+    "original": {
+      "path": "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+      "sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f"
+    },
+    "even": {
+      "path": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/fresh-start-20261105/proxy-tight/even.clay",
+      "sha256": "af9addac8fed67fa02268a8bc78ab7c7579316783888c7ec399a9fb24f534520"
+    }
+  },
+  "audit_sha256": "4a55b032f0c9fd0d849022b16a6a3a11655200baa9eea0b47a80e62269f9800d",
+  "artifact_directory": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/fresh-start-20261105",
+  "preconditioning": {
+    "source": "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+    "source_sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+    "pymeshlab": "2025.7.post1",
+    "target_quads": 10000,
+    "original_spacing": 0.057621597406263846,
+    "parameters": {
+      "iterations": 5,
+      "adaptive": false,
+      "selectedonly": false,
+      "featuredeg": 180.0,
+      "checksurfdist": true,
+      "splitflag": true,
+      "collapseflag": true,
+      "swapflag": true,
+      "smoothflag": true,
+      "reprojectflag": true
+    },
+    "edge_target": 0.028810798703131923,
+    "max_local_surface_distance": 0.0005762159740626384,
+    "before": {
+      "vertices": 52601,
+      "triangles": 105198,
+      "area": 33.202484876495525,
+      "euler": 2,
+      "boundary_edges": 0,
+      "edges_over_two_faces": 0,
+      "zero_area_faces": 0,
+      "triangle_quality_p05_p50_p95": [
+        0.5989379213789988,
+        0.9020781652693356,
+        0.9922148942229577
+      ],
+      "edge_length_p05_p50_p95": [
+        0.007717276098353259,
+        0.01744693214234078,
+        0.06671074694066642
+      ],
+      "longest_shortest_edge_ratio_p50_p95_max": [
+        1.4374298319435086,
+        2.308344806747882,
+        46.73571560788847
+      ]
+    },
+    "after": {
+      "vertices": 52141,
+      "triangles": 104278,
+      "area": 33.18020211757272,
+      "euler": 2,
+      "boundary_edges": 0,
+      "edges_over_two_faces": 0,
+      "zero_area_faces": 0,
+      "triangle_quality_p05_p50_p95": [
+        0.7600885456501427,
+        0.9348290326828608,
+        0.9955017816398216
+      ],
+      "edge_length_p05_p50_p95": [
+        0.01605739884723891,
+        0.027936569171084346,
+        0.03631471320325208
+      ],
+      "longest_shortest_edge_ratio_p50_p95_max": [
+        1.3520095656959872,
+        1.8416388533177945,
+        7.896425689530717
+      ]
+    },
+    "original_topology": {
+      "boundary_edges": 0,
+      "connected_components_number": 1,
+      "edges_number": 157797,
+      "faces_number": 105198,
+      "genus": 0,
+      "incident_faces_on_non_two_manifold_edges": 0,
+      "incident_faces_on_non_two_manifold_vertices": 0,
+      "is_mesh_two_manifold": true,
+      "non_two_manifold_edges": 0,
+      "non_two_manifold_vertices": 0,
+      "number_holes": 0,
+      "unreferenced_vertices": 0,
+      "vertices_number": 52601
+    },
+    "working_topology": {
+      "boundary_edges": 0,
+      "connected_components_number": 1,
+      "edges_number": 156417,
+      "faces_number": 104278,
+      "genus": 0,
+      "incident_faces_on_non_two_manifold_edges": 0,
+      "incident_faces_on_non_two_manifold_vertices": 0,
+      "is_mesh_two_manifold": true,
+      "non_two_manifold_edges": 0,
+      "non_two_manifold_vertices": 0,
+      "number_holes": 0,
+      "unreferenced_vertices": 0,
+      "vertices_number": 52141
+    },
+    "sampled_distances": {
+      "original_vertices_to_working": {
+        "RMS": 0.00030199289903976023,
+        "diag_mesh_0": 7.738009452819824,
+        "diag_mesh_1": 7.737988216679437,
+        "max": 0.00785042718052864,
+        "mean": 0.00020334357395768166,
+        "min": 0.0,
+        "n_samples": 52601
+      },
+      "working_vertices_to_original": {
+        "RMS": 9.788846766274159e-17,
+        "diag_mesh_0": 7.737987995147705,
+        "diag_mesh_1": 7.738009313201842,
+        "max": 8.881784197001252e-16,
+        "mean": 4.3699710224437587e-17,
+        "min": 0.0,
+        "n_samples": 52141
+      },
+      "original_centroids_to_working": {
+        "RMS": 0.00018137809820473194,
+        "diag_mesh_0": 7.734225749969482,
+        "diag_mesh_1": 7.737988216679437,
+        "max": 0.006151231937110424,
+        "mean": 0.00012179851182736456,
+        "min": 0.0,
+        "n_samples": 105198
+      },
+      "working_centroids_to_original": {
+        "RMS": 0.0001692988007562235,
+        "diag_mesh_0": 7.734260559082031,
+        "diag_mesh_1": 7.738009313201842,
+        "max": 0.001502276980318129,
+        "mean": 0.0001043871816364117,
+        "min": 0.0,
+        "n_samples": 104278
+      }
+    },
+    "elapsed_seconds": 28.504338041995652,
+    "peak_rss_kib": 232424,
+    "note": "Vertex and face-centroid samples in both directions; not a continuous Hausdorff or self-intersection certificate."
+  },
+  "rejected_preconditioning": [
+    {
+      "name": "proxy",
+      "record": {
+        "source": "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+        "source_sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+        "pymeshlab": "2025.7.post1",
+        "target_quads": 10000,
+        "original_spacing": 0.057621597406263846,
+        "parameters": {
+          "iterations": 5,
+          "adaptive": false,
+          "selectedonly": false,
+          "featuredeg": 180.0,
+          "checksurfdist": true,
+          "splitflag": true,
+          "collapseflag": true,
+          "swapflag": true,
+          "smoothflag": true,
+          "reprojectflag": true
+        },
+        "edge_target": 0.028810798703131923,
+        "max_local_surface_distance": 0.0028810798703131925,
+        "before": {
+          "vertices": 52601,
+          "triangles": 105198,
+          "area": 33.202484876495525,
+          "euler": 2,
+          "boundary_edges": 0,
+          "edges_over_two_faces": 0,
+          "zero_area_faces": 0,
+          "triangle_quality_p05_p50_p95": [
+            0.5989379213789988,
+            0.9020781652693356,
+            0.9922148942229577
+          ],
+          "edge_length_p05_p50_p95": [
+            0.007717276098353259,
+            0.01744693214234078,
+            0.06671074694066642
+          ],
+          "longest_shortest_edge_ratio_p50_p95_max": [
+            1.4374298319435086,
+            2.308344806747882,
+            46.73571560788847
+          ]
+        },
+        "after": {
+          "vertices": 45781,
+          "triangles": 91558,
+          "area": 33.13440321206218,
+          "euler": 2,
+          "boundary_edges": 0,
+          "edges_over_two_faces": 0,
+          "zero_area_faces": 0,
+          "triangle_quality_p05_p50_p95": [
+            0.8489672547039231,
+            0.9591740370875261,
+            0.9972906636854346
+          ],
+          "edge_length_p05_p50_p95": [
+            0.022862028358456226,
+            0.029531886962300087,
+            0.03619132576760317
+          ],
+          "longest_shortest_edge_ratio_p50_p95_max": [
+            1.26885320682849,
+            1.6032008812534129,
+            7.66489481537178
+          ]
+        },
+        "original_topology": {
+          "boundary_edges": 0,
+          "connected_components_number": 1,
+          "edges_number": 157797,
+          "faces_number": 105198,
+          "genus": 0,
+          "incident_faces_on_non_two_manifold_edges": 0,
+          "incident_faces_on_non_two_manifold_vertices": 0,
+          "is_mesh_two_manifold": true,
+          "non_two_manifold_edges": 0,
+          "non_two_manifold_vertices": 0,
+          "number_holes": 0,
+          "unreferenced_vertices": 0,
+          "vertices_number": 52601
+        },
+        "working_topology": {
+          "boundary_edges": 0,
+          "connected_components_number": 1,
+          "edges_number": 137337,
+          "faces_number": 91558,
+          "genus": 0,
+          "incident_faces_on_non_two_manifold_edges": 0,
+          "incident_faces_on_non_two_manifold_vertices": 0,
+          "is_mesh_two_manifold": true,
+          "non_two_manifold_edges": 0,
+          "non_two_manifold_vertices": 0,
+          "number_holes": 0,
+          "unreferenced_vertices": 0,
+          "vertices_number": 45781
+        },
+        "sampled_distances": {
+          "original_vertices_to_working": {
+            "RMS": 0.0007872374262660742,
+            "diag_mesh_0": 7.738009452819824,
+            "diag_mesh_1": 7.737125565644745,
+            "max": 0.008828584104776382,
+            "mean": 0.000512094353325665,
+            "min": 0.0,
+            "n_samples": 52601
+          },
+          "working_vertices_to_original": {
+            "RMS": 1.207631019466013e-16,
+            "diag_mesh_0": 7.737125396728516,
+            "diag_mesh_1": 7.738009313201842,
+            "max": 1.1102230246251565e-15,
+            "mean": 6.747065425900261e-17,
+            "min": 0.0,
+            "n_samples": 45781
+          },
+          "original_centroids_to_working": {
+            "RMS": 0.0005955861415714025,
+            "diag_mesh_0": 7.734225749969482,
+            "diag_mesh_1": 7.737125565644745,
+            "max": 0.008335096761584282,
+            "mean": 0.00035670207580551505,
+            "min": 0.0,
+            "n_samples": 105198
+          },
+          "working_centroids_to_original": {
+            "RMS": 0.00041363382479175925,
+            "diag_mesh_0": 7.730844497680664,
+            "diag_mesh_1": 7.738009313201842,
+            "max": 0.004104997031390667,
+            "mean": 0.00021469993225764483,
+            "min": 0.0,
+            "n_samples": 91558
+          }
+        },
+        "elapsed_seconds": 12.493470898014493,
+        "peak_rss_kib": 232736,
+        "note": "Vertex and face-centroid samples in both directions; not a continuous Hausdorff or self-intersection certificate."
+      },
+      "reason": "Maximum sampled two-way distance exceeded 0.15h; no working mesh exported."
+    },
+    {
+      "name": "proxy-fine",
+      "record": {
+        "source": "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+        "source_sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+        "pymeshlab": "2025.7.post1",
+        "target_quads": 10000,
+        "original_spacing": 0.057621597406263846,
+        "parameters": {
+          "iterations": 5,
+          "adaptive": false,
+          "selectedonly": false,
+          "featuredeg": 180.0,
+          "checksurfdist": true,
+          "splitflag": true,
+          "collapseflag": true,
+          "swapflag": true,
+          "smoothflag": true,
+          "reprojectflag": true
+        },
+        "edge_target": 0.02304863896250554,
+        "max_local_surface_distance": 0.0028810798703131925,
+        "before": {
+          "vertices": 52601,
+          "triangles": 105198,
+          "area": 33.202484876495525,
+          "euler": 2,
+          "boundary_edges": 0,
+          "edges_over_two_faces": 0,
+          "zero_area_faces": 0,
+          "triangle_quality_p05_p50_p95": [
+            0.5989379213789988,
+            0.9020781652693356,
+            0.9922148942229577
+          ],
+          "edge_length_p05_p50_p95": [
+            0.007717276098353259,
+            0.01744693214234078,
+            0.06671074694066642
+          ],
+          "longest_shortest_edge_ratio_p50_p95_max": [
+            1.4374298319435086,
+            2.308344806747882,
+            46.73571560788847
+          ]
+        },
+        "after": {
+          "vertices": 70397,
+          "triangles": 140790,
+          "area": 33.13821631872625,
+          "euler": 2,
+          "boundary_edges": 0,
+          "edges_over_two_faces": 0,
+          "zero_area_faces": 0,
+          "triangle_quality_p05_p50_p95": [
+            0.8531925918972325,
+            0.9669755366036354,
+            0.9976752684866339
+          ],
+          "edge_length_p05_p50_p95": [
+            0.018107693362970547,
+            0.023843258230851906,
+            0.02865161737415165
+          ],
+          "longest_shortest_edge_ratio_p50_p95_max": [
+            1.2387870946840884,
+            1.601554198157147,
+            8.577197682658621
+          ]
+        },
+        "original_topology": {
+          "boundary_edges": 0,
+          "connected_components_number": 1,
+          "edges_number": 157797,
+          "faces_number": 105198,
+          "genus": 0,
+          "incident_faces_on_non_two_manifold_edges": 0,
+          "incident_faces_on_non_two_manifold_vertices": 0,
+          "is_mesh_two_manifold": true,
+          "non_two_manifold_edges": 0,
+          "non_two_manifold_vertices": 0,
+          "number_holes": 0,
+          "unreferenced_vertices": 0,
+          "vertices_number": 52601
+        },
+        "working_topology": {
+          "boundary_edges": 0,
+          "connected_components_number": 1,
+          "edges_number": 211185,
+          "faces_number": 140790,
+          "genus": 0,
+          "incident_faces_on_non_two_manifold_edges": 0,
+          "incident_faces_on_non_two_manifold_vertices": 0,
+          "is_mesh_two_manifold": true,
+          "non_two_manifold_edges": 0,
+          "non_two_manifold_vertices": 0,
+          "number_holes": 0,
+          "unreferenced_vertices": 0,
+          "vertices_number": 70397
+        },
+        "sampled_distances": {
+          "original_vertices_to_working": {
+            "RMS": 0.0006526393699459732,
+            "diag_mesh_0": 7.738009452819824,
+            "diag_mesh_1": 7.737312873345754,
+            "max": 0.009031465277075768,
+            "mean": 0.0004010983102489263,
+            "min": 0.0,
+            "n_samples": 52601
+          },
+          "working_vertices_to_original": {
+            "RMS": 1.2319220715086942e-16,
+            "diag_mesh_0": 7.7373127937316895,
+            "diag_mesh_1": 7.738009313201842,
+            "max": 8.881784197001252e-16,
+            "mean": 6.959765325123166e-17,
+            "min": 0.0,
+            "n_samples": 70397
+          },
+          "original_centroids_to_working": {
+            "RMS": 0.0004552185127977282,
+            "diag_mesh_0": 7.734225749969482,
+            "diag_mesh_1": 7.737312873345754,
+            "max": 0.0067171067930758,
+            "mean": 0.00024467924959026277,
+            "min": 0.0,
+            "n_samples": 105198
+          },
+          "working_centroids_to_original": {
+            "RMS": 0.0003251642338000238,
+            "diag_mesh_0": 7.731373310089111,
+            "diag_mesh_1": 7.738009313201842,
+            "max": 0.003289594314992428,
+            "mean": 0.00017501716502010822,
+            "min": 0.0,
+            "n_samples": 140790
+          }
+        },
+        "elapsed_seconds": 15.449036165024154,
+        "peak_rss_kib": 251048,
+        "note": "Vertex and face-centroid samples in both directions; not a continuous Hausdorff or self-intersection certificate."
+      },
+      "reason": "Maximum sampled two-way distance exceeded 0.15h; no working mesh exported."
+    }
+  ],
+  "runs": [
+    {
+      "name": "native-original-capture",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+        "capture-raw",
+        "../pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+        "10000"
+      ],
+      "exit": 0,
+      "timed_out": false,
+      "seconds": 71.58577649400104,
+      "limit_seconds": 150,
+      "cumulative_child_peak_rss_kib": 269284
+    },
+    {
+      "name": "native-original-repair",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+        "repair-trace",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-original-repair",
+        "60"
+      ],
+      "exit": 0,
+      "timed_out": false,
+      "seconds": 2.917420930112712,
+      "limit_seconds": 75,
+      "cumulative_child_peak_rss_kib": 269284
+    },
+    {
+      "name": "native-original-resume",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+        "resume",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-original-repair/attempted.json",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-original.accepted.obj"
+      ],
+      "exit": 1,
+      "timed_out": false,
+      "seconds": 8.374608971993439,
+      "limit_seconds": 40,
+      "cumulative_child_peak_rss_kib": 269284
+    },
+    {
+      "name": "native-original-candidate",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+        "diagnose-candidate",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-original-repair/attempted.json",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-original.audit.json"
+      ],
+      "exit": 0,
+      "timed_out": false,
+      "seconds": 9.326564921066165,
+      "limit_seconds": 40,
+      "cumulative_child_peak_rss_kib": 269284
+    },
+    {
+      "name": "native-original-measure-original",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+        "diagnose-obj",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-original.candidate.obj",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-original.quality.json"
+      ],
+      "exit": 0,
+      "timed_out": false,
+      "seconds": 1.7668042649747804,
+      "limit_seconds": 40,
+      "cumulative_child_peak_rss_kib": 269284
+    },
+    {
+      "name": "native-original-layout",
+      "command": [
+        "/usr/bin/python3",
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/scripts/retopology/measure-layout.py",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-original.mesh.json",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-original.layout.json"
+      ],
+      "exit": 0,
+      "timed_out": false,
+      "seconds": 0.36440645798575133,
+      "limit_seconds": 30,
+      "cumulative_child_peak_rss_kib": 269284
+    },
+    {
+      "name": "native-even-capture",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+        "capture-raw",
+        "../retopology-review/fresh-start-20261105/proxy-tight/even.clay",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-even.raw.json",
+        "10000"
+      ],
+      "exit": 0,
+      "timed_out": false,
+      "seconds": 24.292617809027433,
+      "limit_seconds": 150,
+      "cumulative_child_peak_rss_kib": 269284
+    },
+    {
+      "name": "native-even-repair",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+        "repair-trace",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-even.raw.json",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-even-repair",
+        "60"
+      ],
+      "exit": 1,
+      "timed_out": false,
+      "seconds": 34.21091240597889,
+      "limit_seconds": 75,
+      "cumulative_child_peak_rss_kib": 269284
+    },
+    {
+      "name": "upstream-original",
+      "command": [
+        "/usr/bin/blender",
+        "--background",
+        "--factory-startup",
+        "-t",
+        "1",
+        "--python",
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/scripts/compare-retopology-blender.py",
+        "--",
+        "../pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+        "../retopology-review/fresh-start-20261105/comparison-v2/upstream-original",
+        "10000"
+      ],
+      "exit": 0,
+      "timed_out": false,
+      "seconds": 12.72871177608613,
+      "limit_seconds": 120,
+      "cumulative_child_peak_rss_kib": 664968
+    },
+    {
+      "name": "upstream-original-measure-original",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+        "diagnose-obj",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+        "../retopology-review/fresh-start-20261105/comparison-v2/upstream-original/quadriflow-10000-original.obj",
+        "../retopology-review/fresh-start-20261105/comparison-v2/upstream-original.quality.json"
+      ],
+      "exit": 0,
+      "timed_out": false,
+      "seconds": 1.5667697750031948,
+      "limit_seconds": 40,
+      "cumulative_child_peak_rss_kib": 664968
+    },
+    {
+      "name": "upstream-original-validate-original",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+        "validate-obj",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+        "../retopology-review/fresh-start-20261105/comparison-v2/upstream-original/quadriflow-10000-original.obj"
+      ],
+      "exit": 1,
+      "timed_out": false,
+      "seconds": 0.8648659730097279,
+      "limit_seconds": 40,
+      "cumulative_child_peak_rss_kib": 664968
+    },
+    {
+      "name": "upstream-original-layout",
+      "command": [
+        "/usr/bin/python3",
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/scripts/retopology/measure-layout.py",
+        "../retopology-review/fresh-start-20261105/comparison-v2/upstream-original.mesh.json",
+        "../retopology-review/fresh-start-20261105/comparison-v2/upstream-original.layout.json"
+      ],
+      "exit": 0,
+      "timed_out": false,
+      "seconds": 0.3142112229252234,
+      "limit_seconds": 30,
+      "cumulative_child_peak_rss_kib": 664968
+    },
+    {
+      "name": "upstream-even",
+      "command": [
+        "/usr/bin/blender",
+        "--background",
+        "--factory-startup",
+        "-t",
+        "1",
+        "--python",
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/scripts/compare-retopology-blender.py",
+        "--",
+        "../retopology-review/fresh-start-20261105/proxy-tight/even.clay",
+        "../retopology-review/fresh-start-20261105/comparison-v2/upstream-even",
+        "10000"
+      ],
+      "exit": 0,
+      "timed_out": false,
+      "seconds": 11.328160132979974,
+      "limit_seconds": 120,
+      "cumulative_child_peak_rss_kib": 664968
+    },
+    {
+      "name": "upstream-even-measure-original",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+        "diagnose-obj",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+        "../retopology-review/fresh-start-20261105/comparison-v2/upstream-even/quadriflow-10000-original.obj",
+        "../retopology-review/fresh-start-20261105/comparison-v2/upstream-even.quality.json"
+      ],
+      "exit": 0,
+      "timed_out": false,
+      "seconds": 1.515737920999527,
+      "limit_seconds": 40,
+      "cumulative_child_peak_rss_kib": 664968
+    },
+    {
+      "name": "upstream-even-validate-original",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+        "validate-obj",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+        "../retopology-review/fresh-start-20261105/comparison-v2/upstream-even/quadriflow-10000-original.obj"
+      ],
+      "exit": 1,
+      "timed_out": false,
+      "seconds": 0.8648703100625426,
+      "limit_seconds": 40,
+      "cumulative_child_peak_rss_kib": 664968
+    },
+    {
+      "name": "upstream-even-layout",
+      "command": [
+        "/usr/bin/python3",
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/scripts/retopology/measure-layout.py",
+        "../retopology-review/fresh-start-20261105/comparison-v2/upstream-even.mesh.json",
+        "../retopology-review/fresh-start-20261105/comparison-v2/upstream-even.layout.json"
+      ],
+      "exit": 0,
+      "timed_out": false,
+      "seconds": 0.31431290600448847,
+      "limit_seconds": 30,
+      "cumulative_child_peak_rss_kib": 664968
+    },
+    {
+      "name": "native-original-validate-original",
+      "command": [
+        "crates/clay-retopology/target/debug/examples/audit",
+        "validate-obj",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+        "../retopology-review/fresh-start-20261105/comparison-v2/native-original.candidate.obj"
+      ],
+      "exit": 1,
+      "timed_out": false,
+      "seconds": 0.8170342539669946,
+      "max_rss_kib": 88844,
+      "note": "Post-batch explicit validation; original input was already rejected by resume."
+    }
+  ],
+  "results": {
+    "native-original": {
+      "status": "geometry_rejected",
+      "repair": {
+        "deadline_reached": false,
+        "error": null,
+        "input_fingerprint": "2df07430c5e9976c",
+        "lattice_inversions": 0,
+        "repaired": true,
+        "resume_input": "Use the original frozen input plus checkpoint.json; attempted.json is not a coarse-stage resume checkpoint.",
+        "schedule": "depth_outer",
+        "seconds": 1.74208074,
+        "stage": "complete"
+      },
+      "fit_error": "Retopology quad 5245 has no outward render diagonal near DVec3(0.1616050297771013, -0.9709726901234925, -0.16963376261178328)",
+      "quality_against_original": {
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 10594,
+        "quads_without_outward_diagonal": 56,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.04820540202393936,
+          "max_spacing_ratio": 0.8365856587429367,
+          "point": [
+            0.5261391764302936,
+            -0.788070528957537,
+            -0.0913928809902598
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.12297465531829926,
+          "max_spacing_ratio": 2.1341764347708203,
+          "point": [
+            2.627202,
+            0.22590216,
+            1.5086046
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 10596
+      },
+      "passed_original_checks": false,
+      "passed_own_source_checks": false,
+      "layout": {
+        "quads": 10594,
+        "vertices": 10596,
+        "closed_edge_loops_total": 21,
+        "simple_closed_edge_loops": 21,
+        "edge_ratio_max": 36.30196431231182,
+        "edge_ratio_p95": 1.6112114759571325
+      },
+      "mesh_sha256": "d286501b8b5388cc96baa1a067884f55c20e2202c9f9472798a59352b008fd31"
+    },
+    "native-even": {
+      "status": "repair_failed",
+      "repair": {
+        "deadline_reached": false,
+        "error": "Retopology could not resolve 1 inverted grid cells within its repair budget",
+        "input_fingerprint": "466e95201a4881a6",
+        "lattice_inversions": 1,
+        "repaired": false,
+        "resume_input": "Use the original frozen input plus checkpoint.json; attempted.json is not a coarse-stage resume checkpoint.",
+        "schedule": "depth_outer",
+        "seconds": 33.429044673,
+        "stage": "fine_repair"
+      }
+    },
+    "upstream-original": {
+      "status": "geometry_rejected",
+      "quality_against_original": {
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 9639,
+        "quads_without_outward_diagonal": 9,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.07365530676942084,
+          "max_spacing_ratio": 1.2782586753038243,
+          "point": [
+            -0.0026029403999999986,
+            1.8423139666666666,
+            0.26347982866666664
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.0918156702343729,
+          "max_spacing_ratio": 1.5934245902108966,
+          "point": [
+            -0.052281335,
+            1.8679875,
+            0.33764336
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 9641
+      },
+      "layout": {
+        "quads": 9639,
+        "vertices": 9641,
+        "closed_edge_loops_total": 6,
+        "simple_closed_edge_loops": 6,
+        "edge_ratio_max": 5.7372101072458355,
+        "edge_ratio_p95": 1.4783194548598295
+      },
+      "mesh_sha256": "c14e57a507c220637bc88a931fc3ef30785c700432fc5acac77fa81a60b0ba05"
+    },
+    "upstream-even": {
+      "status": "geometry_rejected",
+      "quality_against_original": {
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 9192,
+        "quads_without_outward_diagonal": 1,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.031070837450322804,
+          "max_spacing_ratio": 0.5392220772925902,
+          "point": [
+            -2.1351007633333334,
+            0.5744092463333333,
+            1.38944602
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.04313751025287892,
+          "max_spacing_ratio": 0.7486344043664043,
+          "point": [
+            -2.744804,
+            0.17592932,
+            1.3243556
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 9194
+      },
+      "layout": {
+        "quads": 9192,
+        "vertices": 9194,
+        "closed_edge_loops_total": 14,
+        "simple_closed_edge_loops": 14,
+        "edge_ratio_max": 3.7274870032526395,
+        "edge_ratio_p95": 1.6525948455967794
+      },
+      "mesh_sha256": "622e9719f7ae733e8a9160c5725a326daabdcebb69b94fa410885d3a1a56feb7"
+    }
+  },
+  "references": {
+    "upstream-original": {
+      "source_sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+      "blender_version": "5.2.3 LTS",
+      "blender_build_hash": "e13b728c6880",
+      "source": {
+        "vertices": 52601,
+        "triangles": 105198
+      },
+      "refinement": "none",
+      "settings": {
+        "use_mesh_symmetry": false,
+        "use_preserve_sharp": false,
+        "use_preserve_boundary": true,
+        "preserve_attributes": false,
+        "smooth_normals": false,
+        "mode": "FACES",
+        "target_faces": 10000,
+        "seed": 0
+      },
+      "elapsed_seconds": 9.3025272450177,
+      "max_rss_kib": 664968,
+      "vertices": 9641,
+      "polygons": 9639,
+      "face_sizes": {
+        "4": 9639
+      },
+      "belly_vertices": 161,
+      "components": 1,
+      "euler": 2,
+      "inconsistent_or_open_edges": 0,
+      "edge_incidence": {
+        "2": 19278
+      },
+      "vertex_valence": {
+        "4": 9513,
+        "3": 68,
+        "5": 60
+      }
+    },
+    "upstream-even": {
+      "source_sha256": "af9addac8fed67fa02268a8bc78ab7c7579316783888c7ec399a9fb24f534520",
+      "blender_version": "5.2.3 LTS",
+      "blender_build_hash": "e13b728c6880",
+      "source": {
+        "vertices": 52141,
+        "triangles": 104278
+      },
+      "refinement": "none",
+      "settings": {
+        "use_mesh_symmetry": false,
+        "use_preserve_sharp": false,
+        "use_preserve_boundary": true,
+        "preserve_attributes": false,
+        "smooth_normals": false,
+        "mode": "FACES",
+        "target_faces": 10000,
+        "seed": 0
+      },
+      "elapsed_seconds": 9.212626460008323,
+      "max_rss_kib": 648004,
+      "vertices": 9194,
+      "polygons": 9192,
+      "face_sizes": {
+        "4": 9192
+      },
+      "belly_vertices": 146,
+      "components": 1,
+      "euler": 2,
+      "inconsistent_or_open_edges": 0,
+      "edge_incidence": {
+        "2": 18384
+      },
+      "vertex_valence": {
+        "4": 9086,
+        "5": 50,
+        "3": 58
+      }
+    }
+  },
+  "scope": {
+    "native_algorithm_changed": false,
+    "app_backend_changed": false,
+    "all_outputs_accepted": false,
+    "self_intersections": "not_tested",
+    "sampling": "Outputs use vertices/centroids/edge midpoint diagnostics; proxy uses vertices and face centroids. No continuous geometric bounds.",
+    "native_failed_projection": "Use complete pre-projection coordinates; do not compare partially projected coordinates.",
+    "limitation": "One model, one reference seed, differing actual output counts, approximate input surface preservation."
+  },
+  "resources": {
+    "comparison_memory_mib": 700,
+    "preconditioning_and_render_memory_mib": 500,
+    "swap_allowed": false,
+    "threads": 1,
+    "lock": "/home/mark/.cache/codex-build.lock"
+  },
+  "tool_wheel_sha256": "951fe5aeb3e92632f3db3a1a6525279b41e5d7191c6b9011429dbb0b67f2f0d3 pymeshlab-2025.7.post1-cp314-cp314-manylinux_2_35_x86_64.whl",
+  "source_sha256": {
+    "scripts/retopology/prepare-even-surface.py": "5ed57276f0ded1a8ca884dfb2e3d6c3255832dd3b503ec385ae438376a0ab3c0",
+    "scripts/retopology/compare-fresh-inputs.py": "a4d3285124bb2bcec605cb486404918b323f75684b5d0b6e1fc76e3e3015ac31",
+    "scripts/retopology/render-patch-rebuild.py": "115cc372d0fbc2ceac744b9966543b0b4defd9725b553efdbab9d18746c98520",
+    "scripts/compare-retopology-blender.py": "09341cf3d33aa334db28ede832a397957d2de7386680a0cbc33238319006ce80"
+  },
+  "images": [
+    {
+      "file": "native-fresh-input-comparison.png",
+      "sha256": "bdb71e8d2b4879df6b82541a3b1d4ab6cda2f1f40b7c02ebd08502b0270e3439"
+    },
+    {
+      "file": "native-fresh-input-hand.png",
+      "sha256": "d9a4f45b2fde9135ec0a7eae6358aa2989c6923269e10a3295958c0fa24c2612"
+    },
+    {
+      "file": "native-fresh-input-underarm.png",
+      "sha256": "5e3cfb2bfa1b604734aeacaece761b940917e39dea223fcf8651e9fc60548bad"
+    },
+    {
+      "file": "native-fresh-input-shape.png",
+      "sha256": "96fde7049fa4f6c9ef460111b7ce6a9f0c71a87b5a53f42c16c8b6e32e454073"
+    }
+  ]
+}

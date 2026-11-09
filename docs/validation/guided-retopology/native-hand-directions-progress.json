@@ -1,0 +1,517 @@
+{
+  "date": "2026-11-05",
+  "status": "direction_control_improves_long_finger_loops_partial_result",
+  "source_digest_at_record_sha256": "3620fdf3277847f8ccc37d07d008d332b82aa2841d308a7bf3b0fe1c669b0f8c",
+  "run_binary_sha256": "d8ef01c88b7729505a024a47c703079b6b3fe69edeed8b35b6571cf12ebefdf4",
+  "source_unchanged": true,
+  "source_sha256": "0f79026c6e8434e5312edc9d43277fb2135f6080dabc68725dba6c11d55cc9a5",
+  "source": "Same capped wrist-cut hand as native-hand-isolation-progress.json; original scale. No source movement, density paint or budget increase within each comparison.",
+  "experiment": {
+    "hint_count": 492,
+    "method": "Area-weighted local symmetric normal-derivative fit in connected geodesic neighborhoods; use least absolute curvature direction where anisotropy is strong. Sparse voxel thinning. Explicit finger-region restriction; existing guides also softly influence position phase.",
+    "geodesic_fit_radius": 0.085,
+    "guide_radius": 0.065,
+    "thinning_cell": 0.03,
+    "region": "z > 1.15 and x + z >= 3.36",
+    "direction_only_control": "Same guided orientation hierarchy as full guide mode. Clear all soft guide constraints at every level before the position phase; reject experiments with hard boundary/sharp constraints. Default solver behavior unchanged.",
+    "note": "Curvature directions are estimated from geometry; selection of the finger region is specific to this fixture. There is no automatic tube segmentation or explicit closed-loop constraint."
+  },
+  "cases": [
+    {
+      "name": "baseline-349",
+      "target_quads": 349,
+      "accepted": false,
+      "failure": "Disconnected quad vertex fan"
+    },
+    {
+      "name": "full-guides-349",
+      "target_quads": 349,
+      "accepted": false,
+      "failure": "Disconnected quad vertex fan"
+    },
+    {
+      "name": "baseline-1396",
+      "target_quads": 1396,
+      "accepted": true,
+      "surface_fit_error": null,
+      "quality": {
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 1471,
+        "quads_without_outward_diagonal": 0,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.01433704882158803,
+          "max_spacing_ratio": 0.4974551273781405,
+          "point": [
+            2.4823618366324567,
+            0.4295717816102996,
+            1.3708286326825483
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.013741771514186636,
+          "max_spacing_ratio": 0.4768006849985632,
+          "point": [
+            2.1819239,
+            0.570882,
+            1.4483521
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 1473
+      },
+      "loop_measurement": {
+        "quads": 1471,
+        "closed_edge_loops_total": 0,
+        "classified_finger_rings": 0,
+        "finger_rings": [],
+        "measured_finger_edges": 1178,
+        "length_weighted_alignment_error_degrees": 21.190218197836877,
+        "edge_length_fraction_within_10_degrees": 0.25749606343594056,
+        "surface_fit_error": null
+      }
+    },
+    {
+      "name": "direction-349",
+      "target_quads": 349,
+      "accepted": false,
+      "surface_fit_error": "Retopology lost source shape at DVec3(2.6236825, 0.2922128, 1.3368038): error 0.08159, local grid spacing 0.05764",
+      "quality": {
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 294,
+        "quads_without_outward_diagonal": 0,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.04886523119644973,
+          "max_spacing_ratio": 0.8477427995010461,
+          "point": [
+            2.5293668225422046,
+            0.37215809383677145,
+            1.285360801852136
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.20653229140304916,
+          "max_spacing_ratio": 3.5830437841887774,
+          "point": [
+            2.6248574,
+            0.22213352,
+            1.5029156000000001
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 296
+      },
+      "loop_measurement": {
+        "quads": 294,
+        "closed_edge_loops_total": 2,
+        "classified_finger_rings": 2,
+        "finger_rings": [
+          {
+            "vertices": [
+              167,
+              170,
+              174,
+              193,
+              203,
+              182
+            ],
+            "center": [
+              2.409749571866334,
+              0.420530934668269,
+              1.4697466378580035
+            ],
+            "perimeter": 0.3549851451759675,
+            "axis_alignment": 0.9965395375996126,
+            "planarity_ratio": 0.00015665101493526803
+          },
+          {
+            "vertices": [
+              169,
+              172,
+              176,
+              194,
+              200,
+              183
+            ],
+            "center": [
+              2.410507510278371,
+              0.389539226865806,
+              1.5195664487482607
+            ],
+            "perimeter": 0.33424758792152043,
+            "axis_alignment": 0.9981569666148425,
+            "planarity_ratio": 0.00014860851787814024
+          }
+        ],
+        "measured_finger_edges": 282,
+        "length_weighted_alignment_error_degrees": 14.014002797380662,
+        "edge_length_fraction_within_10_degrees": 0.45271545378398825,
+        "surface_fit_error": "Retopology lost source shape at DVec3(2.6236825, 0.2922128, 1.3368038): error 0.08159, local grid spacing 0.05764"
+      }
+    },
+    {
+      "name": "direction-1396",
+      "target_quads": 1396,
+      "accepted": true,
+      "surface_fit_error": null,
+      "quality": {
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 1288,
+        "quads_without_outward_diagonal": 0,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.022289962893286344,
+          "max_spacing_ratio": 0.7733987983383043,
+          "point": [
+            2.1238326984127824,
+            0.604452186716127,
+            1.3618436871528647
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.02083468204039396,
+          "max_spacing_ratio": 0.7229046603148304,
+          "point": [
+            2.1057377,
+            0.61937827,
+            1.3556955
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 1290
+      },
+      "loop_measurement": {
+        "quads": 1288,
+        "closed_edge_loops_total": 7,
+        "classified_finger_rings": 6,
+        "finger_rings": [
+          {
+            "vertices": [
+              794,
+              795,
+              800,
+              801,
+              831,
+              952,
+              951,
+              1040,
+              931,
+              929,
+              868,
+              870
+            ],
+            "center": [
+              2.39467855666827,
+              0.4565104454830618,
+              1.414608503908559
+            ],
+            "perimeter": 0.40730817879678205,
+            "axis_alignment": 0.9841283044344046,
+            "planarity_ratio": 0.001940779338781952
+          },
+          {
+            "vertices": [
+              796,
+              799,
+              802,
+              830,
+              913,
+              953,
+              1039,
+              932,
+              930,
+              871,
+              872,
+              883
+            ],
+            "center": [
+              2.399409430139663,
+              0.4432954894110937,
+              1.4398839042761258
+            ],
+            "perimeter": 0.3863210676644424,
+            "axis_alignment": 0.9902159328967458,
+            "planarity_ratio": 0.0004357673064247841
+          },
+          {
+            "vertices": [
+              798,
+              811,
+              866,
+              875,
+              874,
+              938,
+              937,
+              1045,
+              954,
+              912,
+              827,
+              826
+            ],
+            "center": [
+              2.4021806914417283,
+              0.42908697011655583,
+              1.4648446525994412
+            ],
+            "perimeter": 0.3718348070674272,
+            "axis_alignment": 0.9943760080480325,
+            "planarity_ratio": 0.0001091757439204776
+          },
+          {
+            "vertices": [
+              804,
+              805,
+              829,
+              914,
+              1046,
+              1044,
+              935,
+              936,
+              873,
+              865,
+              864,
+              809
+            ],
+            "center": [
+              2.4032974444741266,
+              0.41422576947347606,
+              1.4895877446372976
+            ],
+            "perimeter": 0.35919145416903714,
+            "axis_alignment": 0.9961011463189958,
+            "planarity_ratio": 4.487882033548244e-05
+          },
+          {
+            "vertices": [
+              806,
+              810,
+              876,
+              878,
+              879,
+              928,
+              939,
+              1043,
+              917,
+              918,
+              828,
+              825
+            ],
+            "center": [
+              2.4039899207789728,
+              0.3992720313964482,
+              1.5141383658689194
+            ],
+            "perimeter": 0.3493089457992617,
+            "axis_alignment": 0.9973187231318928,
+            "planarity_ratio": 5.622041524412395e-05
+          },
+          {
+            "vertices": [
+              815,
+              816,
+              885,
+              877,
+              1025,
+              906,
+              905,
+              919,
+              916,
+              911,
+              910,
+              824
+            ],
+            "center": [
+              2.404547594440611,
+              0.38456475736221063,
+              1.5387329671266434
+            ],
+            "perimeter": 0.33871021158762726,
+            "axis_alignment": 0.9964813539548101,
+            "planarity_ratio": 0.00022885612729366315
+          }
+        ],
+        "measured_finger_edges": 1244,
+        "length_weighted_alignment_error_degrees": 12.677144293709235,
+        "edge_length_fraction_within_10_degrees": 0.5295764142640541,
+        "surface_fit_error": null
+      }
+    }
+  ],
+  "field_alignment": {
+    "baseline-349": {
+      "guide_samples": 492,
+      "mean_error_degrees": 13.947523671086886,
+      "median_error_degrees": 10.382504107041823,
+      "fraction_within_10_degrees": 0.483739837398374,
+      "nominal_spacing": 0.05764157622478211,
+      "nonzero_position_constraints": 0
+    },
+    "baseline-1396": {
+      "guide_samples": 492,
+      "mean_error_degrees": 15.844880218030054,
+      "median_error_degrees": 12.264982799889719,
+      "fraction_within_10_degrees": 0.4410569105691057,
+      "nominal_spacing": 0.028820788112391336,
+      "nonzero_position_constraints": 0
+    },
+    "full-guides-349": {
+      "guide_samples": 492,
+      "mean_error_degrees": 1.4711475415353772,
+      "median_error_degrees": 0.757483970018856,
+      "fraction_within_10_degrees": 0.991869918699187,
+      "nominal_spacing": 0.05764157622478211,
+      "nonzero_position_constraints": 4177
+    },
+    "direction-349": {
+      "guide_samples": 492,
+      "mean_error_degrees": 1.4711475415353772,
+      "median_error_degrees": 0.757483970018856,
+      "fraction_within_10_degrees": 0.991869918699187,
+      "nominal_spacing": 0.05764157622478211,
+      "nonzero_position_constraints": 0
+    },
+    "direction-1396": {
+      "guide_samples": 492,
+      "mean_error_degrees": 1.467501144039648,
+      "median_error_degrees": 0.7574840669242349,
+      "fraction_within_10_degrees": 0.991869918699187,
+      "nominal_spacing": 0.028820788112391336,
+      "nonzero_position_constraints": 0
+    }
+  },
+  "loop_classifier": "Opposite-edge continuation at valence-4 vertices. Finger rings: every vertex in z>1.15,x+z>=3.36; nearest hint within .10; PCA planarity lambda_min/lambda_mid<.2; mean normal/axis alignment cos25deg; perimeter<1.5. Edge alignment is measured within .065 of a hint and weighted by edge length.",
+  "all_six_higher_budget_finger_rings_on_same_long_finger": true,
+  "checks": {
+    "direction_only_control_focused_rust_test": "passed",
+    "existing_multiple_guides_regression": "passed",
+    "analytic_cylinder_direction_estimation": {
+      "samples": 310,
+      "minimum_absolute_axial_alignment": 1.0
+    },
+    "analytic_cylinder_loop_tracer": {
+      "expected": 10,
+      "measured": 10
+    },
+    "highlighted_loop_edges_exist_and_close": true,
+    "validated_obj_matches_candidate_positions_and_quads": true,
+    "clippy_audit_example": "passed with warnings denied",
+    "full_suite": "not rerun; CI owns broad checks"
+  },
+  "runs": [
+    {
+      "group": "full-guides",
+      "name": "guided-349-raw",
+      "exit": 0,
+      "seconds": 1.2658996930113062,
+      "cumulative_child_max_rss_kib": 30656
+    },
+    {
+      "group": "full-guides",
+      "name": "guided-349-repair",
+      "exit": 0,
+      "seconds": 44.47200115094893,
+      "cumulative_child_max_rss_kib": 126136
+    },
+    {
+      "group": "full-guides",
+      "name": "guided-349-diagnose",
+      "exit": 1,
+      "seconds": 0.11439268197864294,
+      "cumulative_child_max_rss_kib": 126136
+    },
+    {
+      "group": "full-guides",
+      "name": "guided-349-validate",
+      "exit": 1,
+      "seconds": 0.11381709203124046,
+      "cumulative_child_max_rss_kib": 126136
+    },
+    {
+      "group": "direction-only",
+      "name": "direction-349-raw",
+      "exit": 0,
+      "seconds": 1.417354946024716,
+      "cumulative_child_max_rss_kib": 30712
+    },
+    {
+      "group": "direction-only",
+      "name": "direction-349-repair",
+      "exit": 0,
+      "seconds": 1.0151893630390987,
+      "cumulative_child_max_rss_kib": 30712
+    },
+    {
+      "group": "direction-only",
+      "name": "direction-349-diagnose",
+      "exit": 0,
+      "seconds": 0.26392116700299084,
+      "cumulative_child_max_rss_kib": 30712
+    },
+    {
+      "group": "direction-only",
+      "name": "direction-349-validate",
+      "exit": 1,
+      "seconds": 0.16380027902778238,
+      "cumulative_child_max_rss_kib": 30712
+    },
+    {
+      "group": "direction-only",
+      "name": "direction-1396-raw",
+      "exit": 0,
+      "seconds": 4.319269203930162,
+      "cumulative_child_max_rss_kib": 54884
+    },
+    {
+      "group": "direction-only",
+      "name": "direction-1396-repair",
+      "exit": 0,
+      "seconds": 71.49737688200548,
+      "cumulative_child_max_rss_kib": 54884
+    },
+    {
+      "group": "direction-only",
+      "name": "direction-1396-diagnose",
+      "exit": 0,
+      "seconds": 0.6144714039983228,
+      "cumulative_child_max_rss_kib": 54884
+    },
+    {
+      "group": "direction-only",
+      "name": "direction-1396-validate",
+      "exit": 0,
+      "seconds": 0.46464896900579333,
+      "cumulative_child_max_rss_kib": 54884
+    }
+  ],
+  "limits": [
+    "A single run per condition; bounded SAT repair can depend on wall-clock timing.",
+    "The higher-budget guided result has six strict closed rings on one finger, not all fingers. Other fingers and their junctions still have diagonal flow.",
+    "Guided higher-budget maximum sampled two-way error is 0.02229 versus 0.01434 for baseline: both pass current checks; guided fit is less accurate.",
+    "The low-budget direction-only result still loses finger shape; first rejected distance is 0.08159 and worst measured source-to-result error is 0.20653.",
+    "Actual output counts differ at the same target: 1471 baseline versus 1288 guided.",
+    "Current checks do not certify animation-ready topology or absence of every self-intersection.",
+    "This is an offline audit control, not an app/UI change or a fix for the whole-body crotch problem."
+  ],
+  "resources": "Sequential under shared build lock, 500 MiB cap and no swapping; one Cargo compiler job. Repair subprocesses bounded to 180 seconds.",
+  "local_artifact_directory": "retopology-review/hand-directions",
+  "artifact_sha256": {
+    "guides.json": "df6e1298f57f351794e649697d7de816fa2e27a55f6335cadf2b2224663de242",
+    "guide-analysis.json": "ffc0c1ac1ef0e3167f213afb147d245e29bd630f908ac116c15bcf3071013bc5",
+    "guided-349.raw.json": "23c5de65815f4a9dc2f36d710e5c2b69a81e4f6ea70ce8ec62d35f3c13df35a6",
+    "guided-349.snapshot.json": "5e4dca6c6d20a2398836a6ecd86ac25c465ffcc1596dd3d901b8cdbe55b9fca2",
+    "direction-349.raw.json": "2f9a12a34cb4738b3cd47f448e7d335e955ab8baf1e80608104d426ba9195246",
+    "direction-349.snapshot.json": "55952dadc86b8e0ef57aa18f03ca2ae60f99f03271baed2bf38f2327db313684",
+    "direction-349.audit.json": "fdb0c444f22c17abc626df173fb5f0635182749b44d9492003f9d105f6465090",
+    "direction-1396.raw.json": "8138d18a9c5015a7bd456733a1f168aa3fc8cdca835924e3d5e01d3b32554722",
+    "direction-1396.snapshot.json": "280f45f0c3bc85e12d76cb9631843b396db546003a9ded3dabe50a4ffecd8f75",
+    "direction-1396.audit.json": "9506baf9f48d96104cf7dfa979ec3d252fe549e009d40314bad837f9bbeeea03",
+    "direction-1396.validated.obj": "56ceaf5d4550e97fd4367383bf8dcb1b8a9e396f3402de92f48db21ea2bb77e2",
+    "measure-loops.py": "f13371bf68aa68757592369dc41eaa8fb0afe8a8d9d25e991d703f196cb29c3e",
+    "render-comparison.py": "d761673aab34853879f4de7813730f99f89ad33f24e6af570dee4d87385ba8d7",
+    "direction-comparison.png": "924d11e83936f9d4fbfada9549de0f8e32dbe495d7ad37352ebbfba88d5315e2"
+  }
+}

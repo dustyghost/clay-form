@@ -575,5 +575,19 @@
       "sha256": "d30047bca3b516639339a3c279bb84c3483124fb5a9dafe3c75056a85090e745",
       "source": "https://raw.githubusercontent.com/etemesi254/zune-image/24603fed7981bbbc6db6dca7f58b1bbcc0a5e885/LICENSE-MIT"
     }
+  ],
+  "clay-retopology@0.1.0|GPL-3.0-only": [
+    {
+      "file": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986.txt",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+      "source": "https://github.com/dustyghost/clay-form/blob/feat/10-guided-retopology/crates/clay-retopology/LICENSE"
+    }
+  ],
+  "batsat@0.6.0|MIT": [
+    {
+      "file": "85d99a7ef76f11734aeef4c5e28f45f05809cf32a194dd621cff0890a04ebdd2.txt",
+      "sha256": "85d99a7ef76f11734aeef4c5e28f45f05809cf32a194dd621cff0890a04ebdd2",
+      "source": "https://github.com/c-cube/batsat/blob/d3084b531c6f3cfc75aebc97927f6a18db30c491/LICENSE"
+    }
   ]
 }

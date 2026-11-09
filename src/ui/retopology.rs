@@ -5,11 +5,11 @@ use crate::sculpt::paths::PathMode;
 impl ProjectionControls {
     fn layout_options(&mut self, ui: &mut egui::Ui, document: &Document) {
         ui.horizontal(|ui| {
-            ui.label("Target polygons");
-            let range = 1..=document.mesh().triangles.len().div_ceil(2);
+            ui.label("Target quads");
+            let range = 4..=50_000;
             ui.add(egui::DragValue::new(&mut self.layout.target).range(range));
         });
-        ui.weak("Boundaries, creases and face groups can limit reduction.");
+        ui.weak("A fresh quad layout follows the surface. Face-group borders may move.");
         ui.checkbox(
             &mut self.layout.preserve_sharp,
             "Protect bends of 45° or more",
@@ -22,35 +22,67 @@ impl ProjectionControls {
                         .range(1..=crate::sculpt::max_triangles())
                         .speed(1_000),
                 ),
-                "Defaults to 24,000. Raise for larger tests, up to the active mesh capacity. Higher limits may use more time and memory. Kept for this app session.",
+                "Defaults to 200,000. Raise for larger tests, up to the active mesh capacity. Higher limits may use more time and memory. Kept for this app session.",
             );
         });
 
         ui.separator();
         ui.label("Edge direction");
-        let selected = self.flow_path.and_then(|id| document.path(id));
-        egui::ComboBox::from_id_salt("retopology_path")
-            .selected_text(selected.map_or("No guide", |p| &p.name))
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut self.flow_path, None, "No guide");
-                for path in document.paths().iter().filter(|p| {
-                    p.target == document.active_model_id() && p.mode == PathMode::Surface
-                }) {
-                    ui.selectable_value(&mut self.flow_path, Some(path.id), &path.name);
+        let paths: Vec<_> = document
+            .paths()
+            .iter()
+            .filter(|p| p.target == document.active_model_id() && p.mode == PathMode::Surface)
+            .collect();
+        if paths.is_empty() {
+            ui.weak("Save surface paths on this model to use as optional guides.");
+        }
+        for path in paths {
+            let mut selected = self.flow_paths.contains(&path.id);
+            if ui.checkbox(&mut selected, &path.name).changed() {
+                if selected {
+                    self.flow_paths.push(path.id);
+                } else {
+                    self.flow_paths.retain(|&id| id != path.id);
                 }
-            });
-        ui.weak("Select one saved surface path to steer nearby quad edges. Closed paths guide flow but do not guarantee a complete edge loop.");
-        ui.add_enabled_ui(self.flow_path.is_some(), |ui| {
+            }
+        }
+        ui.weak("Select any number of paths. Guides steer nearby edges; closed paths do not guarantee complete edge loops.");
+        ui.add_enabled_ui(!self.flow_paths.is_empty(), |ui| {
             ui.add(egui::Slider::new(&mut self.layout.flow, 0. ..=1.).text("Path strength"));
-            ui.checkbox(
-                &mut self.layout.mirror_path_x,
-                "Mirror path influence across X = 0",
-            );
+            ui.checkbox(&mut self.layout.mirror_path_x, "Mirror paths across X = 0");
         });
 
         ui.separator();
         ui.label("Polygon density");
-        ui.weak("Paint with the Mask brush before opening this tool. Higher mask weights retain more vertices during reduction.");
+        ui.add(egui::Slider::new(&mut self.layout.adaptive, 0. ..=1.).text("Shape adaptation"));
+        ui.weak("Zero uses uniform spacing; higher values put more quads around bends. Paint adjusts that automatic spacing and is saved separately from the sculpt mask.");
+        use crate::sculpt::retopology::DensityPaint;
+        ui.horizontal_wrapped(|ui| {
+            ui.selectable_value(&mut self.density_paint, None, "Inspect");
+            ui.selectable_value(
+                &mut self.density_paint,
+                Some(DensityPaint::More),
+                "More detail",
+            );
+            ui.selectable_value(
+                &mut self.density_paint,
+                Some(DensityPaint::Less),
+                "Less detail",
+            );
+            ui.selectable_value(
+                &mut self.density_paint,
+                Some(DensityPaint::Automatic),
+                "Automatic / erase",
+            );
+        });
+        if self.density_paint.is_some() {
+            ui.weak("Paint on the model: orange = more, blue = less, grey = automatic. Right-drag to orbit. Painting supports Undo.");
+            ui.add(egui::Slider::new(&mut self.density_radius, 5. ..=200.).text("Brush radius"));
+            ui.add(
+                egui::Slider::new(&mut self.density_brush_strength, 0.05..=1.)
+                    .text("Paint strength"),
+            );
+        }
         ui.add(egui::Slider::new(&mut self.layout.density, 0. ..=1.).text("Density strength"));
     }
 }
@@ -67,23 +99,24 @@ impl UiState {
         let window = egui::Window::new("Guided retopology")
             .open(&mut open)
             .default_width(380.)
-            .default_height(640.)
+            .default_height((ctx.content_rect().height() - 48.).max(300.))
             .resizable(false);
         window.show(ctx, |ui| {
             let source = document.model(document.active_model_index()).unwrap();
             ui.label(format!("Source · {}", source.name));
             ui.label(format!("{} source triangles", document.mesh().triangles.len()));
-            ui.weak("Experimental quad-dominant layout. Apply adds an editable model and keeps the source below it for detail projection.");
+            ui.weak("Experimental automatic quad reconstruction. Apply adds an editable model and keeps the source below it for detail projection.");
             let budget = state.layout.require_input_budget(document.mesh());
             if let Err(error) = &budget {
                 ui.label(error);
             }
             if state.busy {
                 ui.spinner();
+                ui.label(&state.progress);
             }
             if let Some(report) = &state.report {
                 ui.label(report.summary());
-                if state.flow_path.is_some() && state.layout.flow > 0. {
+                if !state.flow_paths.is_empty() && state.layout.flow > 0. {
                     ui.checkbox(&mut state.hide_flow_guide, "Hide path overlay");
                 }
             }
@@ -106,13 +139,13 @@ impl UiState {
                 }
             });
             ui.separator();
-            let old = (state.layout, state.flow_path);
+            let old = (state.layout, state.flow_paths.clone(), state.density_paint);
             egui::ScrollArea::vertical()
                 .max_height((ctx.content_rect().height() - 300.).max(50.))
                 .show(ui, |ui| {
                     ui.add_enabled_ui(!state.busy, |ui| state.layout_options(ui, document));
                 });
-            if old != (state.layout, state.flow_path) {
+            if old != (state.layout, state.flow_paths.clone(), state.density_paint) {
                 commands.push(Command::ClearProjectionPreview);
                 if matches!(requested, Some(Command::ApplyProjection)) {
                     requested = None;

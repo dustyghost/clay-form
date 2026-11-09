@@ -8,6 +8,7 @@ mod edges;
 mod interaction;
 mod modeling;
 pub(crate) mod objects;
+mod retopology_density;
 pub(crate) use modeling::{
     Component, ComponentMode, ModelAxis, ModelConstruction, ModelInteraction, ModelTool,
     ModelingOptions, SelectionChange, SelectionSpan,
@@ -204,6 +205,7 @@ impl Viewport {
             brush.cancel(document);
         }
         self.blocked_until_release |= self.session.guided.dragging()
+            || self.session.density_last.is_some()
             || self.references.dragging()
             || self.session.stencil_overlay.controls.capturing();
         self.modeling.cancel();
@@ -458,6 +460,8 @@ impl Viewport {
             return;
         }
         if self.session.projection_mode {
+            let density_drawing =
+                self.paint_retopology_density(ui, &response, &painter, &scene, document, options);
             if let Some(guides) = &self.session.retopology_guides {
                 for samples in guides.iter() {
                     for pair in samples.windows(2) {
@@ -534,7 +538,7 @@ impl Viewport {
             if options.enabled && response.hovered() {
                 camera.zoom_by(ui.input(|i| i.smooth_scroll_delta.y));
             }
-            if options.enabled && response.dragged() {
+            if options.enabled && !density_drawing && response.dragged() {
                 let delta = ui.input(|i| i.pointer.delta());
                 if options.zoom_hold.active(modifiers) {
                     camera.zoom_drag(delta);

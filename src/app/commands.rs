@@ -188,6 +188,9 @@ impl App {
             self.ui.status = error;
             return;
         }
+        if matches!(command, Command::Undo | Command::Redo) && self.ui.projection.open {
+            self.clear_projection_preview();
+        }
         let projection_changed = match command {
             Command::ResetView => true,
             Command::SetPerspective(value) => value != self.camera.perspective,

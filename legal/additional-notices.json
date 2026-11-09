@@ -13,5 +13,25 @@
     "file": "aced7b57e474a63edb5a724954222bf7659c01ceef0e648a03af799582991db7.txt",
     "sha256": "aced7b57e474a63edb5a724954222bf7659c01ceef0e648a03af799582991db7",
     "source": "https://raw.githubusercontent.com/SSheldon/malloc_buf/d9a3e539642bd90e07df458d226b19cdfa606863/LICENSE"
+  },
+  {
+    "file": "d703194a6aa4982774b41114633179d806fdf73a707814c9bd8376d3483a727e.txt",
+    "sha256": "d703194a6aa4982774b41114633179d806fdf73a707814c9bd8376d3483a727e",
+    "source": "https://github.com/vidstige/quadrs"
+  },
+  {
+    "file": "14737a4779999eda6fcedaaa1f0d8180369dc9cbe2bdf300171a6fa8b6c44ee8.txt",
+    "sha256": "14737a4779999eda6fcedaaa1f0d8180369dc9cbe2bdf300171a6fa8b6c44ee8",
+    "source": "https://github.com/hjwdzh/QuadriFlow/tree/810b7a0967c35b0dc85b4464e3835e26a756c967"
+  },
+  {
+    "file": "71723ff8e381a0c33f6789f8c88633962897e8ba98a01dbdbe153936c01c9695.txt",
+    "sha256": "71723ff8e381a0c33f6789f8c88633962897e8ba98a01dbdbe153936c01c9695",
+    "source": "https://github.com/cnr-isti-vclab/vcglib/tree/5cae2abc2f9056785b0537dcbe156c40da2aea20"
+  },
+  {
+    "file": "4d9ea401f641937f6d84d912a84e8b05c579fc54b48d7f32e736c0a4c63af880.txt",
+    "sha256": "4d9ea401f641937f6d84d912a84e8b05c579fc54b48d7f32e736c0a4c63af880",
+    "source": "https://www.boost.org/doc/libs/release/boost/graph/boykov_kolmogorov_max_flow.hpp"
   }
 ]

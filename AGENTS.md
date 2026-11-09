@@ -10,6 +10,7 @@
 - Let PR CI run the full test suite, formatting, lint, and configured GPU regression checks. Do not duplicate the full checks locally before opening or updating a PR; fix CI failures and require CI to pass on the final commit before merging.
 - Leave release builds to the release workflow by default. Run broader checks or a release build locally only when explicitly requested or needed to investigate a specific failure or validate behavior that focused checks and CI do not cover.
 - Keep progress updates brief and informative: state what was learned and what the next check will resolve.
+- When retopology work stalls, consult primary research and the pinned original QuadriFlow code without waiting for another user prompt. Prefer controlled comparisons on the same saved input before increasing solver budgets or changing the model.
 
 ## Next work batch: trim redundant CI screenshot work
 

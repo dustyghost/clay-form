@@ -1,0 +1,10 @@
+{
+  "upstream_commit": "810b7a0967c35b0dc85b4464e3835e26a756c967",
+  "generator": "scripts/retopology/make-field-reference.py",
+  "seed": 0,
+  "samples": 66,
+  "input_sha256": "1180740a3a5a599af4531b58f40dab6a9e8f5bf36db1d57cbb6a61f8a417d2df",
+  "expected_sha256": "37b34cc3fbbe1612d588f9d93bb38b6fac1bd03fa90877dc21f488eab1a57f7f",
+  "reference_binary_sha256": "610775d87c9fb6cd45a5b74aa8a0c7f19a49a335eef9542af3f3d1d3c0644f2a",
+  "scope": "Uniform unconstrained fields; common native fine geometry, normals, areas, adjacency. Small asymmetric closed octahedron refined at target 19."
+}

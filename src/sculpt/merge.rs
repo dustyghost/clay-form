@@ -50,6 +50,7 @@ impl Mesh {
             let mut weights = vec![0.; offset];
             weights.extend_from_slice(&group.weights);
             merged.vertex_groups.push(VertexGroup {
+                purpose: group.purpose,
                 name,
                 weights,
                 visible: group.visible,

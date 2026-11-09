@@ -1,0 +1,485 @@
+{
+  "date": "2026-11-05",
+  "status": "audit_only_closed_topology_body_geometry_rejected",
+  "original_lattice_inversions": 64,
+  "upstream_commit": "810b7a0967c35b0dc85b4464e3835e26a756c967",
+  "baseline": {
+    "path": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/junction-patch/retained-body-fine/attempted.json",
+    "sha256": "b55081fda2eaec0b8f36fec0370f28c44658c6ada5e7a0fa0e9f7fc61cea6b09",
+    "source": "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+    "source_sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+    "target_quads": 10000,
+    "uniform_spacing": 0.05762159740626388
+  },
+  "artifact_directory": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/patch-rebuild",
+  "selection": "Negative coarse cell area and graph adjacency; no anatomical or world-coordinate selection.",
+  "fill": "Quads only; existing boundary vertices; atomic fill; even simple loops of 4..32 vertices; runtime loop limit unchanged.",
+  "cut_comparison": {
+    "input_sha256": "b55081fda2eaec0b8f36fec0370f28c44658c6ada5e7a0fa0e9f7fc61cea6b09",
+    "binary_sha256": "6ff99f4ac3e5634ad3e00c0e608e4e68ad92a3f614ef458bff9ed66e852f5b18",
+    "peak_rss_kib": 138680,
+    "runs": [
+      {
+        "halo": 0,
+        "exit": 0,
+        "elapsed": 0.9146865799557418,
+        "cut": {
+          "coarse_faces": 15644,
+          "coarse_inversions": 64,
+          "excluded_coarse_faces": 64,
+          "excluded_fraction": 0.004091025313219126,
+          "halo": 0,
+          "remaining_quads": 7741,
+          "selection": "Negative-area coarse faces and adjacency rings; no anatomy, coordinates or source topology edits."
+        },
+        "boundary_error": null,
+        "loops": [
+          4,
+          4,
+          28
+        ]
+      },
+      {
+        "halo": 1,
+        "exit": 0,
+        "elapsed": 0.9656383469700813,
+        "cut": {
+          "coarse_faces": 15644,
+          "coarse_inversions": 64,
+          "excluded_coarse_faces": 78,
+          "excluded_fraction": 0.004985937100485809,
+          "halo": 1,
+          "remaining_quads": 7741,
+          "selection": "Negative-area coarse faces and adjacency rings; no anatomy, coordinates or source topology edits."
+        },
+        "boundary_error": null,
+        "loops": [
+          4,
+          4,
+          28
+        ]
+      },
+      {
+        "halo": 2,
+        "exit": 0,
+        "elapsed": 0.8649618610506877,
+        "cut": {
+          "coarse_faces": 15644,
+          "coarse_inversions": 64,
+          "excluded_coarse_faces": 105,
+          "excluded_fraction": 0.006711838404500128,
+          "halo": 2,
+          "remaining_quads": 7725,
+          "selection": "Negative-area coarse faces and adjacency rings; no anatomy, coordinates or source topology edits."
+        },
+        "boundary_error": null,
+        "loops": [
+          4,
+          4,
+          36
+        ]
+      },
+      {
+        "halo": 3,
+        "exit": 0,
+        "elapsed": 0.8646922329207882,
+        "cut": {
+          "coarse_faces": 15644,
+          "coarse_inversions": 64,
+          "excluded_coarse_faces": 133,
+          "excluded_fraction": 0.008501661979033496,
+          "halo": 3,
+          "remaining_quads": 7709,
+          "selection": "Negative-area coarse faces and adjacency rings; no anatomy, coordinates or source topology edits."
+        },
+        "boundary_error": null,
+        "loops": [
+          4,
+          4,
+          38
+        ]
+      },
+      {
+        "halo": 4,
+        "exit": 0,
+        "elapsed": 0.8647597450762987,
+        "cut": {
+          "coarse_faces": 15644,
+          "coarse_inversions": 64,
+          "excluded_coarse_faces": 165,
+          "excluded_fraction": 0.010547174635643058,
+          "halo": 4,
+          "remaining_quads": 7689,
+          "selection": "Negative-area coarse faces and adjacency rings; no anatomy, coordinates or source topology edits."
+        },
+        "boundary_error": null,
+        "loops": [
+          4,
+          4,
+          48
+        ]
+      },
+      {
+        "halo": 6,
+        "exit": 0,
+        "elapsed": 0.9148288239957765,
+        "cut": {
+          "coarse_faces": 15644,
+          "coarse_inversions": 64,
+          "excluded_coarse_faces": 241,
+          "excluded_fraction": 0.01540526719509077,
+          "halo": 6,
+          "remaining_quads": 7650,
+          "selection": "Negative-area coarse faces and adjacency rings; no anatomy, coordinates or source topology edits."
+        },
+        "boundary_error": null,
+        "loops": [
+          4,
+          4,
+          60
+        ]
+      },
+      {
+        "halo": 8,
+        "exit": 0,
+        "elapsed": 0.9148233849555254,
+        "cut": {
+          "coarse_faces": 15644,
+          "coarse_inversions": 64,
+          "excluded_coarse_faces": 340,
+          "excluded_fraction": 0.021733571976476605,
+          "halo": 8,
+          "remaining_quads": 7596,
+          "selection": "Negative-area coarse faces and adjacency rings; no anatomy, coordinates or source topology edits."
+        },
+        "boundary_error": null,
+        "loops": [
+          74,
+          4,
+          4
+        ]
+      }
+    ]
+  },
+  "ordered_dynamic_comparison": {
+    "binary_sha256": "d5438a03898f396390e80df0e43a9e1ec3f649bb388fe212cc3fc71936aee91f",
+    "peak_rss_kib": 138404,
+    "runs": [
+      {
+        "name": "body",
+        "exit": 0,
+        "elapsed": 3.217269147047773,
+        "input_sha256": "b55081fda2eaec0b8f36fec0370f28c44658c6ada5e7a0fa0e9f7fc61cea6b09",
+        "result": {
+          "accepted": false,
+          "cut": {
+            "coarse_faces": 15644,
+            "coarse_inversions": 64,
+            "excluded_coarse_faces": 64,
+            "excluded_fraction": 0.004091025313219126,
+            "halo": 0,
+            "remaining_quads": 7741,
+            "selection": "Negative-area coarse faces and adjacency rings; no anatomy, coordinates or source topology edits."
+          },
+          "boundary_error": null,
+          "fill_error": null,
+          "acceptance_error": "Retopology vertex 2964 drifted 0.07253 from the source (local grid spacing 0.05762)",
+          "added_quads": 15,
+          "cleanup_quad_delta": 3,
+          "candidate_stage": "before_surface_projection",
+          "seconds": 2.465386912
+        },
+        "quality": {
+          "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+          "quads": 7759,
+          "quads_without_outward_diagonal": 27,
+          "result_to_source": {
+            "distance_at_max_ratio": 0.2517296052320218,
+            "max_spacing_ratio": 4.3686675927637175,
+            "point": [
+              0.7527218735740754,
+              -1.6296562377825181,
+              0.5337822520285347
+            ]
+          },
+          "source_to_result": {
+            "distance_at_max_ratio": 0.2004266636222641,
+            "max_spacing_ratio": 3.4783253613943916,
+            "point": [
+              2.7454388,
+              0.16729873,
+              1.2617568
+            ]
+          },
+          "topology": {
+            "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+          },
+          "vertices": 7761
+        }
+      },
+      {
+        "name": "hand",
+        "exit": 0,
+        "elapsed": 0.41524209501221776,
+        "input_sha256": "096f57e06f0c50650c2b0640e891a288328e8d0d1391f1224cbacd14cb78c976",
+        "result": {
+          "accepted": true,
+          "cut": {
+            "coarse_faces": 2410,
+            "coarse_inversions": 0,
+            "excluded_coarse_faces": 0,
+            "excluded_fraction": 0.0,
+            "halo": 0,
+            "remaining_quads": 1199,
+            "selection": "Negative-area coarse faces and adjacency rings; no anatomy, coordinates or source topology edits."
+          },
+          "boundary_error": null,
+          "fill_error": null,
+          "acceptance_error": null,
+          "added_quads": 0,
+          "cleanup_quad_delta": 3,
+          "candidate_stage": "projected",
+          "seconds": 0.262821881
+        },
+        "quality": {
+          "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+          "quads": 1202,
+          "quads_without_outward_diagonal": 0,
+          "result_to_source": {
+            "distance_at_max_ratio": 0.010973224840901177,
+            "max_spacing_ratio": 0.3807399297378444,
+            "point": [
+              2.4897989723803446,
+              0.4542499690991775,
+              1.3542740436187124
+            ]
+          },
+          "source_to_result": {
+            "distance_at_max_ratio": 0.01900834220484546,
+            "max_spacing_ratio": 0.6595358229177963,
+            "point": [
+              2.40133650407497,
+              0.25540821532037244,
+              0.7986634959250299
+            ]
+          },
+          "topology": {
+            "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+          },
+          "vertices": 1204
+        }
+      },
+      {
+        "name": "torus",
+        "exit": 0,
+        "elapsed": 0.21407399896997958,
+        "input_sha256": "b66adb3b487c2c7d267e24e3e8af1d710179ed54e285b980a78838d7f539915b",
+        "result": {
+          "accepted": true,
+          "cut": {
+            "coarse_faces": 1512,
+            "coarse_inversions": 0,
+            "excluded_coarse_faces": 0,
+            "excluded_fraction": 0.0,
+            "halo": 0,
+            "remaining_quads": 756,
+            "selection": "Negative-area coarse faces and adjacency rings; no anatomy, coordinates or source topology edits."
+          },
+          "boundary_error": null,
+          "fill_error": null,
+          "acceptance_error": null,
+          "added_quads": 0,
+          "cleanup_quad_delta": 0,
+          "candidate_stage": "projected",
+          "seconds": 0.131559496
+        },
+        "quality": {
+          "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+          "quads": 756,
+          "quads_without_outward_diagonal": 0,
+          "result_to_source": {
+            "distance_at_max_ratio": 0.030822246215844586,
+            "max_spacing_ratio": 0.09692497089485576,
+            "point": [
+              1.966744939946112,
+              2.976781129176332,
+              -0.0014963340866172015
+            ]
+          },
+          "source_to_result": {
+            "distance_at_max_ratio": 0.033844237569680226,
+            "max_spacing_ratio": 0.10642805584083392,
+            "point": [
+              2.782837632105853,
+              2.2838158229891237,
+              0.0
+            ]
+          },
+          "topology": {
+            "Ok": "Topology { components: 1, euler: 0, boundaries: 0 }"
+          },
+          "vertices": 756
+        }
+      }
+    ]
+  },
+  "source_placement_comparison": {
+    "exit": 0,
+    "elapsed": 1.3153340009739622,
+    "binary_sha256": "4a55b032f0c9fd0d849022b16a6a3a11655200baa9eea0b47a80e62269f9800d",
+    "peak_rss_kib": 138376,
+    "result": {
+      "accepted": false,
+      "cut": {
+        "coarse_faces": 15644,
+        "coarse_inversions": 64,
+        "excluded_coarse_faces": 64,
+        "excluded_fraction": 0.004091025313219126,
+        "halo": 0,
+        "remaining_quads": 7741,
+        "selection": "Negative-area coarse faces and adjacency rings; no anatomy, coordinates or source topology edits."
+      },
+      "boundary_error": null,
+      "fill_error": null,
+      "acceptance_error": "Retopology vertex 697 drifted 0.05864 from the source (local grid spacing 0.05762)",
+      "added_quads": 15,
+      "cleanup_quad_delta": 5,
+      "candidate_stage": "before_surface_projection",
+      "seconds": 0.605810464
+    },
+    "quality": {
+      "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+      "quads": 7761,
+      "quads_without_outward_diagonal": 72,
+      "result_to_source": {
+        "distance_at_max_ratio": 0.2838784770603973,
+        "max_spacing_ratio": 4.926598529695376,
+        "point": [
+          -0.0007281692449122822,
+          -0.7153342273976608,
+          0.023256674027777757
+        ]
+      },
+      "source_to_result": {
+        "distance_at_max_ratio": 0.21979567588863927,
+        "max_spacing_ratio": 3.8144668975238587,
+        "point": [
+          0.34805016,
+          -1.0896167,
+          0.72641925
+        ]
+      },
+      "topology": {
+        "Err": "Degenerate source triangle"
+      },
+      "vertices": 7763
+    }
+  },
+  "historical_superseded_fill": {
+    "run": {
+      "exit": 0,
+      "elapsed": 3.2180337930331007,
+      "binary_sha256": "de66ef7b8f5e3a681f9bc8e064036d6bdb05f4fc893573a62ca4a6f56c69a576",
+      "peak_rss_kib": 138340,
+      "result": {
+        "accepted": false,
+        "cut": {
+          "coarse_faces": 15644,
+          "coarse_inversions": 64,
+          "excluded_coarse_faces": 64,
+          "excluded_fraction": 0.004091025313219126,
+          "halo": 0,
+          "remaining_quads": 7741,
+          "selection": "Negative-area coarse faces and adjacency rings; no anatomy, coordinates or source topology edits."
+        },
+        "boundary_error": null,
+        "fill_error": null,
+        "acceptance_error": "Retopology vertex 3814 drifted 0.05808 from the source (local grid spacing 0.05762)",
+        "added_quads": 15,
+        "seconds": 2.458722514
+      }
+    },
+    "note": "Before normal grid-fit ordering, valence cleanup and rollback; partial projection output is superseded."
+  },
+  "control_equivalence": {
+    "hand": {
+      "prior_output": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/junction-patch/scalar-hand-native/accepted.obj",
+      "prior_output_sha256": "87c876316409f0dda704069956ff27c3dd53454e7f002120706429899b6c455f",
+      "positions_equal": true,
+      "quads_equal": true
+    },
+    "torus": {
+      "prior_output": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/junction-patch/scalar-torus-native/accepted.obj",
+      "prior_output_sha256": "0a8db9d412bd5175ae946cbc24eb924945be14c0ada39858ccc8cd929d7b4c40",
+      "positions_equal": true,
+      "quads_equal": true
+    }
+  },
+  "validation_scope": {
+    "accepted": "Existing topology, orientation and sampled surface-distance gates only.",
+    "self_intersections": "not_tested",
+    "distance": "Sampled topology-only diagonal diagnostics; rejected body positions are rolled back before projection.",
+    "original_grid": "Unchanged; cutting during extraction does not solve its 64 inversions.",
+    "binary_provenance": "Recorded binaries precede the later explanatory validation_scope JSON field; solver behavior unchanged."
+  },
+  "resources": {
+    "cargo_jobs": 1,
+    "build_cap_mib": 700,
+    "audit_cap_mib": 500,
+    "swap_allowed": false,
+    "serialized_with": "/home/mark/.cache/codex-build.lock"
+  },
+  "source_sha256": {
+    "crates/clay-retopology/src/extraction.rs": "9876af479985afb50d5d91a3bc912c2bcf15f9aa8a62f7f67169f81fc03ae52a",
+    "crates/clay-retopology/src/audit/patch_rebuild.rs": "02b46b56a8c00d99ba5603bcb195182e2d1776cbaa23e2741216b8cc2ae3f15c",
+    "crates/clay-retopology/examples/audit.rs": "fd52dce8f387cda250139379f028c77bcdcc483d7f19bcbd0a8ca0d3f68a162d",
+    "scripts/retopology/render-patch-rebuild.py": "1c1860cf0c96989528abdecc936ef532be482835d0295c4ae74667c13c357e2f"
+  },
+  "image": {
+    "file": "native-patch-rebuild.png",
+    "sha256": "b16dad71bd124315f6e893d20c5004753a881f6465c95cdca6a4f80a42784d85",
+    "note": "Fixed render diagonals; backface culling; red identifies the 27 diagnostic bad quads."
+  },
+  "underarm_visual_followup": {
+    "candidate_sha256": "fd8299b33185ee3c1631825f535986328a57f4a3742c1243f4c034202f3fea6a",
+    "boundary_edges": 0,
+    "edges_more_than_two_incident_quads": 0,
+    "underarm_failed_quad_ids": [
+      606,
+      1106,
+      1107
+    ],
+    "camera_only_coordinates": true,
+    "self_intersections": "not_tested",
+    "note": "Orientation-failure count does not count all distorted faces. Candidate geometry is unchanged and still rejected before projection. Both-sided renders highlight camera-facing backs in magenta.",
+    "views": [
+      {
+        "file": "native-patch-underarm-positive.png",
+        "sha256": "0e1e36ab7e349741bb77c4cf36d270efabec12d1e59752255fcef2d910c08623",
+        "center": [
+          1,
+          0.2,
+          0.3
+        ],
+        "yaw": 0.32,
+        "zoom": 4,
+        "two_sided": true,
+        "wire": false
+      },
+      {
+        "file": "native-patch-underarm-negative.png",
+        "sha256": "0151a1740774c2c0291f0fbb6667e503a0ad62b35f157074e83ac4eb0bad47fb",
+        "center": [
+          -1,
+          0.2,
+          0.3
+        ],
+        "yaw": -0.5,
+        "zoom": 4,
+        "two_sided": true,
+        "wire": false
+      }
+    ],
+    "renderer_sha256": "b232f509aabdaf639e0915fb5a299454a870810116e192c8bf34ee2f848a275e"
+  }
+}

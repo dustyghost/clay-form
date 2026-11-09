@@ -360,7 +360,7 @@ fn guided_retopology_keeps_source_and_attributes_and_roundtrips_as_one_edit() {
     app.dispatch(Command::CancelProjection, &ctx);
     assert!(app.document.project() == before && !app.document.is_dirty());
     app.dispatch(Command::OpenRetopology, &ctx);
-    app.ui.projection.flow_path = Some(id);
+    app.ui.projection.flow_paths = vec![id];
     app.dispatch(Command::PreviewProjection, &ctx);
     finish_projection(&mut app);
     assert!(app.document.project() == before && !app.document.is_dirty());
@@ -427,21 +427,10 @@ fn guided_retopology_keeps_source_and_attributes_and_roundtrips_as_one_edit() {
 
 #[test]
 fn guided_retopology_input_limit_allows_larger_preview_and_apply() {
-    use crate::sculpt::Vec3;
-    // An open strip just above the default budget. Boundary protection keeps
-    // reduction cheap while pairing still produces an editable quad result.
-    let cells = 12_001;
-    let mut mesh = Mesh::default();
-    for x in 0..=cells {
-        mesh.vertices
-            .extend([Vec3(x as f32, 0., 0.), Vec3(x as f32, 1., 0.)]);
-    }
-    for x in 0..cells {
-        let a = 2 * x;
-        mesh.triangles
-            .extend([[a, a + 2, a + 3], [a, a + 3, a + 1]]);
-    }
-    mesh.mask.resize(mesh.vertices.len(), 0.);
+    use crate::sculpt::{Primitive, PrimitiveKind};
+    let mut primitive = Primitive::for_kind(PrimitiveKind::Plane);
+    primitive.divisions = [16, 16, 1];
+    let mesh = primitive.mesh().unwrap();
     let triangles = mesh.triangles.len();
     let mut app = App::default();
     app.document.replace_geometry(Geometry::new(mesh)).unwrap();
@@ -454,6 +443,7 @@ fn guided_retopology_input_limit_allows_larger_preview_and_apply() {
         app.ui.projection.open,
         "Larger sources can reach the limit control"
     );
+    app.ui.projection.layout.input_triangle_limit = triangles - 1;
     app.dispatch(Command::PreviewProjection, &ctx);
     assert!(!app.ui.projection.busy);
     assert!(app.projection.draft.is_none());
@@ -466,7 +456,7 @@ fn guided_retopology_input_limit_allows_larger_preview_and_apply() {
     assert_eq!(app.document.history_counts(), history);
 
     app.ui.projection.layout.input_triangle_limit = triangles;
-    app.ui.projection.layout.target = cells;
+    app.ui.projection.layout.target = 64;
     app.dispatch(Command::PreviewProjection, &ctx);
     finish_projection(&mut app);
     let draft = app
@@ -474,7 +464,7 @@ fn guided_retopology_input_limit_allows_larger_preview_and_apply() {
         .draft
         .as_ref()
         .expect("Raised limit permits preview");
-    assert_eq!(draft.mesh.quads.len(), cells);
+    assert!(!draft.mesh.quads.is_empty());
     assert_eq!(
         draft.settings.view_input.as_ref().unwrap()["guided_retopology"]["input_triangle_limit"],
         triangles
@@ -482,7 +472,7 @@ fn guided_retopology_input_limit_allows_larger_preview_and_apply() {
     assert!(app.document.project() == before && !app.document.is_dirty());
     app.dispatch(Command::ApplyProjection, &ctx);
     assert_eq!(app.document.model_count(), 2);
-    assert_eq!(app.document.mesh().quads.len(), cells);
+    assert!(!app.document.mesh().quads.is_empty());
     assert_eq!(
         app.document.model(1).unwrap().mesh.triangles.len(),
         triangles

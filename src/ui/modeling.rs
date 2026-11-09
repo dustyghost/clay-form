@@ -450,11 +450,12 @@ impl UiState {
                 }
                 let groups = &document.mesh().vertex_groups;
                 self.modeling.group = self.modeling.group.min(groups.len().saturating_sub(1));
-                if !groups.is_empty() {
+                if let Some(first) = groups.iter().position(|g| g.purpose.is_selection()) {
+                    if !groups[self.modeling.group].purpose.is_selection() { self.modeling.group = first; }
                     egui::ComboBox::from_id_salt("modeling_group")
                         .selected_text(&groups[self.modeling.group].name)
                         .show_ui(ui, |ui| {
-                            for (i, group) in groups.iter().enumerate() {
+                            for (i, group) in groups.iter().enumerate().filter(|(_, g)| g.purpose.is_selection()) {
                                 ui.selectable_value(&mut self.modeling.group, i, &group.name);
                             }
                         });

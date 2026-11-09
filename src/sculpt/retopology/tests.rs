@@ -1,8 +1,5 @@
 use super::*;
-use crate::sculpt::{
-    paths::{PathMode, PathPoint, mesh_signature},
-    projection::Surface as Reference,
-};
+use crate::sculpt::paths::{PathMode, PathPoint, mesh_signature};
 
 /// Two closed surfaces with exactly the same source connectivity. The cylinder
 /// has sharp cap rims. The asymmetric bulb has a curved silhouette and poles.
@@ -77,122 +74,90 @@ pub(crate) fn fixture(bulb: bool) -> (Mesh, SurfacePath) {
     };
     (mesh, path)
 }
-fn surface_error(from: &Mesh, to: &Mesh) -> f32 {
-    let surface = Reference::new(to, &|| false).unwrap();
-    let mut budget = 20_000_000;
-    let mut worst = 0_f32;
-    for t in &from.triangles {
-        let [a, b, c] = t.map(|i| from.vertices[i]);
-        for p in [
-            a,
-            b,
-            c,
-            (a + b) * 0.5,
-            (b + c) * 0.5,
-            (c + a) * 0.5,
-            (a + b + c) * (1. / 3.),
-        ] {
-            let d = surface
-                .nearest(p, 5., None, &mut budget)
-                .unwrap()
-                .unwrap()
-                .2;
-            worst = worst.max(d);
-        }
-    }
-    worst
-}
-fn coverage(mesh: &Mesh, samples: &[crate::sculpt::paths::PathSample]) -> f32 {
-    let edges = mesh.polygon_edges();
-    let aligned = samples
-        .iter()
-        .filter(|s| {
-            edges.iter().any(|&[a, b]| {
-                let p = mesh.vertices[a];
-                let e = mesh.vertices[b] - p;
-                let t = ((s.position - p).dot(e) / e.dot(e)).clamp(0., 1.);
-                e.norm().dot(s.tangent).abs() >= 15_f32.to_radians().cos()
-                    && (p + e * t - s.position).len() <= 0.065
-            })
-        })
-        .count();
-    100. * aligned as f32 / samples.len() as f32
-}
+
 #[test]
-fn guided_retopology_compares_flow_and_heat_independently() {
-    for bulb in [false, true] {
-        let (source, path) = fixture(bulb);
-        let samples = path.samples_on_mesh(&source, 0.018).unwrap();
-        let mut scores = Vec::new();
-        for (flow, density) in [(0., 0.), (1., 0.), (0., 1.), (1., 1.)] {
-            let start = std::time::Instant::now();
-            let layout = source
-                .guided_retopology(
-                    Options {
-                        target: 460,
-                        flow,
-                        density,
-                        ..Default::default()
-                    },
-                    Some(&path),
-                    &|| false,
-                )
-                .unwrap();
-            let elapsed = start.elapsed();
-            let mesh = &layout.mesh;
-            mesh.validate_closed().unwrap();
-            Surface::new(mesh, &|| false).unwrap();
-            let hot = mesh.vertices.iter().filter(|v| v.1 < -0.2).count();
-            let along = coverage(mesh, &samples);
-            let from = surface_error(&source, mesh);
-            let to = surface_error(mesh, &source);
-            println!(
-                "bulb={bulb} flow={flow} heat={density} polygons={} quads={} hot={hot}/{} aligned={along:.1}% source→out={from:.5} out→source={to:.5} time={elapsed:.0?}",
-                layout.polygons,
-                mesh.quads.len(),
-                mesh.vertices.len()
-            );
-            assert!(from.max(to) < 0.1);
-            assert_eq!(layout.polygons, 460);
-            assert!(mesh.quads.len() > layout.polygons / 2);
-            scores.push((along, hot));
-        }
-        assert!(scores[1].0 > scores[0].0 + 5., "{scores:?}");
-        assert!(scores[2].1 as f32 > scores[0].1 as f32 * 1.1, "{scores:?}");
+fn native_retopology_solver_coordinates_match_project_export_without_losing_f32_precision() {
+    let (mesh, _) = fixture(true);
+    let positions = solver_positions(&mesh.vertices).unwrap();
+    let encoded = serde_json::to_vec(&mesh).unwrap();
+    let exported: serde_json::Value = serde_json::from_slice(&encoded).unwrap();
+    for ((source, solver), saved) in mesh
+        .vertices
+        .iter()
+        .zip(positions)
+        .zip(exported["vertices"].as_array().unwrap())
+    {
+        assert_eq!(
+            *source,
+            Vec3(solver.x as f32, solver.y as f32, solver.z as f32)
+        );
+        assert_eq!(
+            solver.to_array(),
+            [
+                saved[0].as_f64().unwrap(),
+                saved[1].as_f64().unwrap(),
+                saved[2].as_f64().unwrap()
+            ]
+        );
     }
 }
 
 #[test]
-fn guided_retopology_rejects_pinched_fans_and_cancels_inside_worker() {
-    let (mesh, path) = fixture(false);
-    let calls = std::cell::Cell::new(0);
-    let cancelled = || {
-        calls.set(calls.get() + 1);
-        calls.get() > 25
-    };
-    assert!(
-        mesh.guided_retopology(Options::default(), Some(&path), &cancelled)
-            .err()
-            .unwrap()
-            .contains("cancelled")
-    );
-    let pinch = Mesh {
-        vertices: vec![
-            Vec3(0., 0., 0.),
-            Vec3(1., 0., 0.),
-            Vec3(0., 1., 0.),
-            Vec3(-1., 0., 0.),
-            Vec3(0., -1., 0.),
-        ],
-        triangles: vec![[0, 1, 2], [0, 3, 4]],
-        mask: vec![0.; 5],
+fn native_retopology_reconstructs_quads_without_using_the_sculpt_mask_as_density() {
+    let (source, _) = fixture(true);
+    let options = Options {
+        target: 300,
         ..Default::default()
     };
+    let first = source.guided_retopology(options, None, &|| false).unwrap();
+    first.mesh.validate_closed().unwrap();
+    assert_eq!(first.mesh.triangles.len(), first.mesh.quads.len() * 2);
+    assert!((180..=420).contains(&first.mesh.quads.len()));
+    let mut unmasked = source.clone();
+    unmasked.mask.fill(0.);
+    let second = unmasked
+        .guided_retopology(options, None, &|| false)
+        .unwrap();
+    assert_eq!(first.mesh.vertices, second.mesh.vertices);
+    assert_eq!(first.mesh.quads, second.mesh.quads);
+    assert_ne!(first.mesh.mask, second.mesh.mask);
+    assert_ne!(source.vertices, first.mesh.vertices);
+}
+
+#[test]
+fn native_retopology_multiple_guides_mirror_and_stale_attachments() {
+    let (source, path) = fixture(true);
+    let mut second = path.clone();
+    second.id = 2;
+    second.points.reverse();
+    let options = Options {
+        target: 300,
+        mirror_path_x: true,
+        ..Default::default()
+    };
+    let result = source
+        .guided_retopology_with_progress(options, &[path.clone(), second], &|| false, &|_| {})
+        .unwrap();
+    assert_eq!(result.guides.len(), 4);
+    assert!((result.guides[0][0].position.0 + result.guides[1][0].position.0).abs() < 1e-6);
+    let mut stale = source.clone();
+    stale.vertices[0].0 += 0.1;
     assert!(
-        pinch
+        stale
+            .guided_retopology(options, Some(&path), &|| false)
+            .is_err()
+    );
+}
+
+#[test]
+fn native_retopology_limits_and_worker_cancellation_do_not_change_source() {
+    let (source, path) = fixture(true);
+    let before = source.clone();
+    assert!(
+        source
             .guided_retopology(
                 Options {
-                    target: 1,
+                    input_triangle_limit: source.triangles.len() - 1,
                     ..Default::default()
                 },
                 None,
@@ -200,158 +165,117 @@ fn guided_retopology_rejects_pinched_fans_and_cancels_inside_worker() {
             )
             .err()
             .unwrap()
-            .contains("nonmanifold vertex")
+            .contains("Input triangle limit")
     );
-}
-
-#[test]
-#[ignore = "measures existing voxel algorithms on the retopology fixtures"]
-fn guided_retopology_voxel_comparison() {
-    use crate::sculpt::{QuadRemeshAlgorithm, Topology};
-    for bulb in [false, true] {
-        let (mesh, path) = fixture(bulb);
-        let samples = path.samples_on_mesh(&mesh, 0.018).unwrap();
-        for algorithm in [QuadRemeshAlgorithm::Fast, QuadRemeshAlgorithm::Optimized] {
-            let start = std::time::Instant::now();
-            let result =
-                mesh.remesh_algorithm_cancellable(16, Topology::Quads, algorithm, &|| false);
-            let elapsed = start.elapsed();
-            match result {
-                Ok(result) => {
-                    result.validate_closed().unwrap();
-                    println!(
-                        "bulb={bulb} {algorithm:?} quads={} aligned={:.1}% source→out={:.5} out→source={:.5} time={elapsed:.0?}",
-                        result.quads.len(),
-                        coverage(&result, &samples),
-                        surface_error(&mesh, &result),
-                        surface_error(&result, &mesh)
-                    );
-                }
-                Err(error) => println!("bulb={bulb} {algorithm:?} time={elapsed:.0?} {error}"),
-            }
-        }
-    }
-}
-
-#[test]
-fn guided_retopology_preserves_open_rims_creases_and_separate_parts() {
-    let (mut mesh, _) = fixture(false);
-    // Two separated open tubes cut from the same cylinder; no shared vertices.
-    let rings = 32 * 19;
-    mesh.vertices.truncate(rings);
-    mesh.mask.truncate(rings);
-    mesh.triangles.retain(|t| {
-        t.iter().all(|&v| v < rings)
-            && !(t.iter().any(|&v| v / 32 == 8) && t.iter().any(|&v| v / 32 == 9))
-    });
-    let boundaries: Vec<_> = [0, 8, 9, 18]
-        .into_iter()
-        .flat_map(|r| (0..32).map(move |j| r * 32 + j))
-        .map(|i| mesh.vertices[i])
-        .collect();
-    let crease = [3 * 32, 4 * 32];
-    mesh.creases = vec![crease];
-    let result = mesh
-        .guided_retopology(
-            Options {
-                target: 340,
-                ..Default::default()
-            },
-            None,
-            &|| false,
-        )
-        .unwrap()
-        .mesh;
-    assert!(boundaries.iter().all(|p| result.vertices.contains(p)));
-    assert_eq!(result.creases.len(), 1);
-    assert_eq!(
-        result.creases[0].map(|i| result.vertices[i]),
-        crease.map(|i| mesh.vertices[i])
-    );
-    let edges = Surface::new(&result, &|| false).unwrap().edges;
-    assert_eq!(edges.values().filter(|(_, b)| b.is_none()).count(), 4 * 32);
-    assert!(
-        result
-            .triangles
-            .iter()
-            .all(|t| !(t.iter().any(|&v| result.vertices[v].1 < -0.06)
-                && t.iter().any(|&v| result.vertices[v].1 > -0.06)))
-    );
-}
-
-#[test]
-fn guided_retopology_worker_enforces_configured_input_limit() {
-    let (mesh, _) = fixture(false);
-    for input_triangle_limit in [
-        0,
-        mesh.triangles.len() - 1,
-        super::super::max_triangles() + 1,
-    ] {
-        let error = mesh
-            .guided_retopology(
-                Options {
-                    input_triangle_limit,
-                    ..Default::default()
-                },
-                None,
-                &|| false,
-            )
-            .err()
-            .unwrap();
-        assert!(
-            error.to_lowercase().contains("input triangle limit"),
-            "{error}"
-        );
-    }
-    mesh.guided_retopology(
-        Options {
-            input_triangle_limit: mesh.triangles.len(),
-            ..Default::default()
-        },
-        None,
-        &|| false,
-    )
-    .unwrap();
-}
-
-#[test]
-fn guided_retopology_mirrors_a_closed_surface_guide_and_rejects_stale_paths() {
-    let (mesh, mut path) = fixture(false);
-    path.closed = true;
-    let normals = mesh.normals();
-    path.points = (0..32)
-        .step_by(2)
-        .map(|j| {
-            let v = 9 * 32 + j;
-            PathPoint {
-                position: mesh.vertices[v],
-                normal: normals[v],
+    let cancel = std::cell::Cell::new(false);
+    let error = source
+        .guided_retopology_with_progress(Options::default(), &[path], &|| cancel.get(), &|s| {
+            if matches!(s, clay_retopology::Stage::Preparation { iteration: 1, .. }) {
+                cancel.set(true);
             }
         })
-        .collect();
-    let result = mesh
-        .guided_retopology(
+        .err()
+        .unwrap();
+    assert!(error.contains("cancelled"));
+    assert_eq!(source, before);
+}
+
+#[test]
+fn density_paint_is_signed_persistent_and_independent_of_selection_groups_and_mask() {
+    use crate::sculpt::{Brush, Dab, Kind};
+    let (mut source, _) = fixture(true);
+    let before = source.clone();
+    let mut brush = Brush::new(Kind::Mask);
+    brush.strength = 1.;
+    brush.pressure = false;
+    brush.alpha = crate::sculpt::Alpha::Hard;
+    let normal = source.normals()[320];
+    let dab = Dab {
+        center: source.vertices[320],
+        normal,
+        right: Vec3(0., 1., 0.),
+        up: normal.cross(Vec3(0., 1., 0.)),
+        radius: 0.25,
+        pressure: 1.,
+        delta: Vec3::default(),
+        invert: false,
+    };
+    for (mode, value) in [
+        (DensityPaint::More, 1.),
+        (DensityPaint::Less, -1.),
+        (DensityPaint::Automatic, 0.),
+    ] {
+        assert!(
+            source
+                .paint_retopology_density(&brush, &[dab], mode)
+                .unwrap()
+        );
+        assert!((source.retopology_detail()[320] - value).abs() < 1e-6);
+        assert_eq!(source.mask, before.mask);
+        assert_eq!(source.vertices, before.vertices);
+        assert_eq!(source.triangles, before.triangles);
+        let saved = serde_json::to_vec(&source).unwrap();
+        let reopened: Mesh = serde_json::from_slice(&saved).unwrap();
+        assert_eq!(source, reopened);
+        source.validate().unwrap();
+    }
+    let before = source.clone();
+    assert!(source.assign_mask_to_group(0, 0.5, false).is_err());
+    assert!(source.remove_vertex_group(0).is_err());
+    assert!(source.rename_vertex_group(0, "Selection".into()).is_err());
+    assert_eq!(source, before);
+}
+
+#[test]
+#[ignore = "whole-sculpt adapter validation; set CLAY_RETOPO_SOURCE and optionally CLAY_RETOPO_OUTPUT"]
+fn native_retopology_whole_sculpt_adapter() {
+    let path = std::env::var("CLAY_RETOPO_SOURCE").unwrap();
+    let value: serde_json::Value =
+        serde_json::from_reader(std::fs::File::open(path).unwrap()).unwrap();
+    let source: Mesh = serde_json::from_value(value["mesh"].clone()).unwrap();
+    let start = std::time::Instant::now();
+    let result = source
+        .guided_retopology_with_progress(
             Options {
-                mirror_path_x: true,
+                target: std::env::var("CLAY_RETOPO_TARGET")
+                    .ok()
+                    .map(|s| s.parse().unwrap())
+                    .unwrap_or(10000),
                 ..Default::default()
             },
-            Some(&path),
+            &[],
             &|| false,
+            &|s| eprintln!("{:.3}s {s:?}", start.elapsed().as_secs_f64()),
         )
         .unwrap();
-    assert_eq!(result.guides.len(), 2);
-    for samples in result.guides.iter() {
-        assert_eq!(samples.first(), samples.last());
-    }
-    for (a, b) in result.guides[0].iter().zip(&result.guides[1]) {
-        assert_eq!(a.position, Vec3(-b.position.0, b.position.1, b.position.2));
-        assert_eq!(a.tangent, Vec3(-b.tangent.0, b.tangent.1, b.tangent.2));
-    }
-    path.surface_signature = 0;
-    assert!(
-        mesh.guided_retopology(Options::default(), Some(&path), &|| false)
-            .err()
-            .unwrap()
-            .contains("reproject")
+    result.mesh.validate_closed().unwrap();
+    eprintln!(
+        "{:.3}s {} quads",
+        start.elapsed().as_secs_f64(),
+        result.mesh.quads.len()
     );
+    if let Ok(path) = std::env::var("CLAY_RETOPO_OUTPUT") {
+        use std::io::Write;
+        let mut output = std::io::BufWriter::new(
+            std::fs::OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(path)
+                .unwrap(),
+        );
+        for p in result.mesh.vertices {
+            writeln!(output, "v {} {} {}", p.0, p.1, p.2).unwrap();
+        }
+        for q in result.mesh.quads {
+            writeln!(
+                output,
+                "f {} {} {} {}",
+                q[0] + 1,
+                q[1] + 1,
+                q[2] + 1,
+                q[3] + 1
+            )
+            .unwrap();
+        }
+    }
 }

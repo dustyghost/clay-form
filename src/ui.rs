@@ -1495,7 +1495,7 @@ impl UiState {
                 for (face, &id) in model.mesh.polygroups.iter().enumerate() {
                     if id != 0 { *group_visibility[id - 1].get_or_insert(false) |= model.mesh.face_visible(face); }
                 }
-                for (g, group) in model.mesh.vertex_groups.iter().enumerate() {
+                for (g, group) in model.mesh.vertex_groups.iter().enumerate().filter(|(_, g)| g.purpose.is_selection()) {
                     let color = crate::sculpt::Mesh::group_color(g).map(|c| (c * 255.) as u8);
                     let visible = group_visibility[g].unwrap_or(group.visible);
                     ui.horizontal(|ui| {
@@ -1508,7 +1508,7 @@ impl UiState {
                     });
                 }
                 if let Some((target, g)) = self.selected_vertex_group
-                    && target == index && g < model.mesh.vertex_groups.len() {
+                    && target == index && model.mesh.vertex_groups.get(g).is_some_and(|group| group.purpose.is_selection()) {
                         ui.horizontal_wrapped(|ui| {
                             if ui.button("Mask group").customize(Action::MaskGroup).clicked() { commands.push(Command::MaskVertexGroup(g)); }
                             if ui.button("Add masked").on_hover_text("Move masked membership into this group. Keep old groups’ remaining regions and remove fully replaced groups. Supports Undo.").customize(Action::AddMaskedToGroup).clicked() { commands.push(Command::AssignMaskToGroup(g, false)); }

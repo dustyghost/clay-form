@@ -13,7 +13,7 @@ impl PathRegions {
         let find = |role: &str| {
             mesh.vertex_groups
                 .iter()
-                .find(|g| g.name.eq_ignore_ascii_case(role))
+                .find(|g| g.purpose.is_selection() && g.name.eq_ignore_ascii_case(role))
                 .map_or_else(String::new, |g| g.name.clone())
         };
         Self {
@@ -38,7 +38,7 @@ impl PathRegions {
             groups.push(
                 mesh.vertex_groups
                     .iter()
-                    .position(|g| &g.name == name)
+                    .position(|g| g.purpose.is_selection() && &g.name == name)
                     .ok_or_else(|| {
                         format!("Path region group ‘{name}’ is missing; reassign its role")
                     })?,

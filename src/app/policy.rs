@@ -77,6 +77,9 @@ impl<'a> EditorPolicy<'a> {
             return Err("Apply or cancel the mesh join before editing the scene");
         }
         if ui.projection.open
+            && !(intent == Intent::History
+                && ui.projection.mode == crate::ui::SurfaceMode::Retopology
+                && !ui.projection.busy)
             && !matches!(
                 intent,
                 Intent::Projection | Intent::Navigate | Intent::Request
@@ -135,6 +138,16 @@ impl<'a> EditorPolicy<'a> {
             _ => Intent::Edit,
         };
         self.available(intent)?;
+        if self.ui.projection.open && intent == Intent::History {
+            let label = if *action == Action::Undo {
+                self.document.undo_label()
+            } else {
+                self.document.redo_label()
+            };
+            if label != Some("Retopology density stroke") {
+                return Err("Close Guided retopology to undo or redo other edits");
+            }
+        }
         if *action == Action::CancelMeshOperation {
             return if self.ui.mesh_busy {
                 Ok(())
@@ -200,7 +213,11 @@ impl<'a> EditorPolicy<'a> {
                     && self.ui.modeling.count > 0
                     && document.mesh_settings().levels() == 1
                     && (*action == Action::ModelCreateGroup
-                        || self.ui.modeling.group < document.mesh().vertex_groups.len())
+                        || document
+                            .mesh()
+                            .vertex_groups
+                            .get(self.ui.modeling.group)
+                            .is_some_and(|group| group.purpose.is_selection()))
             }
             Action::ModelRepeat => {
                 self.edge_unavailable(action).is_none()
@@ -321,7 +338,11 @@ impl<'a> EditorPolicy<'a> {
                 sculpt
                     && self.ui.selected_vertex_group.is_some_and(|(m, g)| {
                         m == document.active_model_index()
-                            && g < document.mesh().vertex_groups.len()
+                            && document
+                                .mesh()
+                                .vertex_groups
+                                .get(g)
+                                .is_some_and(|group| group.purpose.is_selection())
                     })
             }
             Action::SplitHidden => {

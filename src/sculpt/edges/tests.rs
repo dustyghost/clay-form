@@ -107,6 +107,7 @@ fn edge_support_loops_preserve_holes_attributes_and_closed_polygroup_surfaces() 
     let mut grouped = cube();
     grouped.vertex_groups = (0..6)
         .map(|i| VertexGroup {
+            purpose: crate::sculpt::GroupPurpose::Selection,
             name: format!("Face {i}"),
             weights: vec![1.; grouped.vertices.len()],
             visible: true,

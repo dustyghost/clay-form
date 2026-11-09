@@ -154,6 +154,7 @@ fn reconstruct(
         .vertex_groups
         .iter()
         .map(|g| crate::sculpt::VertexGroup {
+            purpose: g.purpose,
             name: g.name.clone(),
             visible: g.visible,
             weights: Vec::new(),

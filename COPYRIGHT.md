@@ -30,3 +30,12 @@ Product and project names used to identify dependencies, documented file
 formats or optional interoperability belong to their respective owners.
 Their mention does not imply affiliation, sponsorship or endorsement.
 Do not remove required third-party copyright or attribution notices.
+
+## Native retopology sources
+
+The Rust retopology implementation includes ports and adaptations from QuadriFlow,
+quad-rs, Boost's maximum-flow implementation and VCGLib. Their original copyright
+and licence notices are retained in [legal/retopology](legal/retopology/) and the
+bundled third-party notices. The implementation and modifications are distributed
+as part of Clay Form under GPLv3; see the [upstream audit](docs/validation/guided-retopology/upstream-audit.md)
+for the pinned source revisions and algorithm comparisons.

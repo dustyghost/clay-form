@@ -316,12 +316,12 @@ pub(super) fn join_parts(
     let mut positions = vec![Vec3::default(); total];
     let mut counts = vec![0usize; total];
     let mut masks = vec![0_f32; total];
-    let mut group_names = Vec::<(String, bool)>::new();
+    let mut group_names = Vec::<(String, bool, crate::sculpt::GroupPurpose)>::new();
     let mut group_maps = Vec::new();
     for (i, c) in copies.iter().enumerate() {
         let mut map = Vec::new();
         for g in &c.mesh.vertex_groups {
-            let key = (g.name.clone(), g.visible);
+            let key = (g.name.clone(), g.visible, g.purpose);
             let index = if let Some(index) = group_names.iter().position(|k| k == &key) {
                 index
             } else {
@@ -404,7 +404,8 @@ pub(super) fn join_parts(
     }
     result.vertex_groups = group_names
         .into_iter()
-        .map(|(name, visible)| VertexGroup {
+        .map(|(name, visible, purpose)| VertexGroup {
+            purpose,
             name,
             visible,
             weights: vec![0.; result.vertices.len()],

@@ -1,0 +1,261 @@
+{
+  "date": "2026-11-05",
+  "status": "diagnostic_complete_character_still_rejected",
+  "rust_source_digest_sha256": "f3581ed585419fc5968254393b480ed94fb501885995d0060d37eed811c475fb",
+  "upstream_commit": "810b7a0967c35b0dc85b4464e3835e26a756c967",
+  "source_input": "clay-session-retopo2 unmasked biped; uniform target 10000; no sharp constraints or guides",
+  "snapshot_sha256": "f643a939e48541b911e79ad0498decee565dc9d9b70ec60810031a5b376883e4",
+  "dynamic_input_sha256": "8277f14e651942f600199cab58cdbb8803467a698760ae9ac460138df985189e",
+  "scope": "Original dynamic optimizer on frozen Rust field, integer map, extracted quad connectivity, memberships and ideal-edge observations. Not a complete upstream remeshing run. All quality measurements precede final Rust projection and untangling.",
+  "runs": [
+    {
+      "name": "export",
+      "exit": 0,
+      "seconds": 1.7806321610696614,
+      "max_rss_kib": 138668
+    },
+    {
+      "name": "exact",
+      "exit": 0,
+      "seconds": 19.10912775702309,
+      "max_rss_kib": 58020
+    },
+    {
+      "name": "quality",
+      "exit": 0,
+      "seconds": 1.4546524710021913,
+      "max_rss_kib": 95744
+    }
+  ],
+  "unmodified_upstream_quality": {
+    "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+    "quads": 10618,
+    "quads_without_outward_diagonal": 57,
+    "result_to_source": {
+      "distance_at_max_ratio": 0.04868197392814678,
+      "max_spacing_ratio": 0.844856375378009,
+      "point": [
+        0.4322568724096325,
+        -0.8450579805391987,
+        -0.07410642763757735
+      ]
+    },
+    "source_to_result": {
+      "distance_at_max_ratio": 0.10391588064578702,
+      "max_spacing_ratio": 1.8034189492027353,
+      "point": [
+        2.643002,
+        0.2196667,
+        1.4882323
+      ]
+    },
+    "topology": {
+      "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+    },
+    "vertices": 10620
+  },
+  "rust_quality": {
+    "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+    "quads": 10618,
+    "quads_without_outward_diagonal": 56,
+    "result_to_source": {
+      "distance_at_max_ratio": 0.039428169718730165,
+      "max_spacing_ratio": 0.6842602686062328,
+      "point": [
+        0.5431289210034382,
+        -0.787897919890305,
+        -0.08443610833361952
+      ]
+    },
+    "source_to_result": {
+      "distance_at_max_ratio": 0.10621946201122891,
+      "max_spacing_ratio": 1.8433966913885407,
+      "point": [
+        2.643002,
+        0.2196667,
+        1.4882323
+      ]
+    },
+    "topology": {
+      "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+    },
+    "vertices": 10620
+  },
+  "shared_failing_quad_indices": [
+    5266,
+    5267,
+    5271,
+    5275,
+    5276,
+    5277,
+    5279,
+    5509,
+    5510,
+    5730,
+    5731,
+    10420,
+    10422,
+    10423,
+    10424,
+    10425,
+    10426,
+    10434,
+    10435,
+    10436,
+    10438,
+    10439,
+    10440,
+    10441,
+    10447,
+    10448,
+    10449,
+    10520,
+    10525,
+    10532,
+    10533,
+    10535,
+    10536,
+    10538,
+    10548,
+    10557,
+    10558,
+    10561,
+    10562,
+    10563,
+    10564,
+    10565,
+    10566,
+    10567,
+    10570,
+    10572,
+    10587,
+    10593,
+    10595,
+    10596,
+    10597,
+    10598,
+    10599,
+    10602
+  ],
+  "upstream_only_failing_quad_indices": [
+    5278,
+    5280,
+    10594
+  ],
+  "rust_only_failing_quad_indices": [
+    10450,
+    10534
+  ],
+  "unmodified_vs_rust_positions": {
+    "maximum_difference": 0.1703045490971859,
+    "rms_difference": 0.028585074619159944,
+    "note": "Rust includes the documented rotation-axis normalization correction."
+  },
+  "upstream_solver_verification": {
+    "exit": 0,
+    "seconds": 19.42455882905051,
+    "max_rss_kib": 58228,
+    "log": "ITER 0 solver-info 0 relative-residual 1.13316e-15\nITER 1 solver-info 0 relative-residual 6.55757e-16\nITER 2 solver-info 0 relative-residual 5.3634e-16\nITER 3 solver-info 0 relative-residual 4.70369e-16\nITER 4 solver-info 0 relative-residual 4.44669e-16\nITER 5 solver-info 0 relative-residual 4.03922e-16\nITER 6 solver-info 0 relative-residual 4.05838e-16\nITER 7 solver-info 0 relative-residual 3.96424e-16\nITER 8 solver-info 0 relative-residual 3.92454e-16\nITER 9 solver-info 0 relative-residual 3.94656e-16\n",
+    "output_identical": true
+  },
+  "normalized_axis_control": {
+    "exit": 0,
+    "seconds": 19.31146341294516,
+    "max_rss_kib": 57904,
+    "max_position_difference_from_rust": 2.0075375307456198e-10,
+    "rms_position_difference_from_rust": 5.795560292300386e-11
+  },
+  "fixed_position_control": {
+    "samples": 89718,
+    "maximum_position_difference": 2.7282487194598796e-10,
+    "rms_position_difference": 7.311949691889766e-11,
+    "input_sha256": "56d310507f6ec4e9cc998516d1c29b06a94956486cce2aed955737acd8281242",
+    "runs": [
+      {
+        "name": "fixed-export",
+        "exit": 0,
+        "seconds": 1.0704579929588363,
+        "max_rss_kib": 82196
+      },
+      {
+        "name": "fixed-rust",
+        "exit": 0,
+        "seconds": 1.0594435719540343,
+        "max_rss_kib": 90988
+      },
+      {
+        "name": "fixed-upstream",
+        "exit": 0,
+        "seconds": 6.652816124027595,
+        "max_rss_kib": 63636
+      }
+    ]
+  },
+  "initial_patch": {
+    "sample": "The 56 quads failing the Rust post-optimizer orientation check",
+    "opposite_assigned_normals_before_dynamic": 39,
+    "collapsed_before_dynamic": 1,
+    "opposite_assigned_normals_after_upstream_iteration_0": 44,
+    "opposite_assigned_normals_after_upstream_iteration_9": 51,
+    "method": "Dot of quad area vector with average assigned-source normals, not the stricter per-triangle final orientation gate."
+  },
+  "alternative_initialization": {
+    "change": "Only initial output positions replaced by the arithmetic mean of existing source-member positions. All source samples, normals, directions, memberships, quad indices, ideal edge vectors and flags unchanged.",
+    "quality": {
+      "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+      "quads": 10618,
+      "quads_without_outward_diagonal": 59,
+      "result_to_source": {
+        "distance_at_max_ratio": 0.034162014899564185,
+        "max_spacing_ratio": 0.5928682375586254,
+        "point": [
+          0.7598397527355907,
+          -2.289208008217449,
+          0.4256281544879878
+        ]
+      },
+      "source_to_result": {
+        "distance_at_max_ratio": 0.08255951345630298,
+        "max_spacing_ratio": 1.432787655541957,
+        "point": [
+          2.643002,
+          0.2196667,
+          1.4882323
+        ]
+      },
+      "topology": {
+        "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+      },
+      "vertices": 10620
+    },
+    "runs": [
+      {
+        "name": "source-centroids",
+        "exit": 0,
+        "seconds": 19.339769584010355,
+        "max_rss_kib": 57988
+      },
+      {
+        "name": "source-centroids-quality",
+        "exit": 0,
+        "seconds": 1.5474634740967304,
+        "max_rss_kib": 95776
+      }
+    ],
+    "conclusion": "Fingertip coverage improves but the reversed patch remains; initialization alone does not solve the problem."
+  },
+  "edge_target_diagnostic": {
+    "fully_observed_failing_quads": 52,
+    "failing_quads_with_negative_initial_target_normal": 0,
+    "minimum_target_normal_dot_assigned_normal_for_fully_observed_failures": 0.9768363318364088,
+    "mean_relative_loop_closure_error_failing": 0.14427479881787483,
+    "mean_relative_loop_closure_error_other": 0.019919486332654397,
+    "method": "Length of sum of four initial ideal-edge vectors divided by their total length. Descriptive correlation, not proof of cause."
+  },
+  "interpretation": [
+    "Both pinned original positioning stages reproduce the problem with the same earlier data.",
+    "The normalized-axis upstream variant matches Rust to 2.01e-10 model units on this current case.",
+    "The earlier field/integer mapping and its derived geometric constraints are now the primary investigation; a particular defect in those stages has not yet been established.",
+    "No runtime algorithm, acceptance threshold or app integration changed in this experiment."
+  ]
+}

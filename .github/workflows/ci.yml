@@ -50,6 +50,12 @@ jobs:
       - name: Run Clippy
         run: cargo clippy --locked --all-targets -- -D warnings
 
+      - name: Check experimental native retopology solver
+        run: |
+          cargo fmt --manifest-path crates/clay-retopology/Cargo.toml --check
+          cargo test --locked --manifest-path crates/clay-retopology/Cargo.toml --all-features --lib -- --test-threads=1
+          cargo clippy --locked --manifest-path crates/clay-retopology/Cargo.toml --all-features --all-targets -- -D warnings
+
   graphics:
     name: Headless wgpu/Vulkan regressions
     runs-on: ubuntu-latest
@@ -109,7 +115,7 @@ jobs:
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-universal" cargo test --locked --lib universal_transform_offscreen_review -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-shared-selection" cargo test --locked --lib shared_selection_offscreen_review -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-mesh-refinement" cargo test --locked --lib mesh_refinement_offscreen_review -- --ignored
-          CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-guided-retopology" cargo test --locked --lib guided_retopology_offscreen_review -- --ignored --test-threads=1
+          CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-guided-retopology" cargo test --locked --lib native_retopology_controls_offscreen_review -- --ignored --test-threads=1
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-local-fusion" cargo test --locked --lib local_fusion_controls_offscreen_review -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-surface-boolean" cargo test --locked --lib surface_boolean_method_offscreen_review -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-level-switch" cargo test --locked --lib subdivision_level_switch_offscreen_review -- --ignored

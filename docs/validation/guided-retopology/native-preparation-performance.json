@@ -1,0 +1,125 @@
+{
+  "date": "2026-11-06",
+  "source_sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+  "target_quads": 10000,
+  "iterations": 5,
+  "scope": "Preparation only, including source loading, all safety/shape checks and output serialization; excludes compilation and downstream quadrangulation.",
+  "profiles": {
+    "dev": {
+      "opt_level": 2,
+      "debug_symbols": 0,
+      "debug_assertions": true
+    },
+    "release": {
+      "opt_level": 3,
+      "debug_symbols": 0,
+      "debug_assertions": false
+    }
+  },
+  "baseline_mesh_sha256": "4420db8defa35d8e14e06b1b81a3ea24f03d50be0faa296723781370febb5c7c",
+  "runs": [
+    {
+      "profile": "release",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/release/examples/audit",
+        "prepare-surface",
+        "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/preparation-performance-20261106/1-release.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/preparation-performance-20261106/1-release.preparation.json",
+        "10000",
+        "5"
+      ],
+      "exit": 0,
+      "wall_seconds": 15.932379781967029,
+      "user_cpu_seconds": 15.714027,
+      "system_cpu_seconds": 0.079202,
+      "cumulative_peak_child_rss_kib": 108340,
+      "binary_sha256": "1ce6ccb37072199d53089f3b62c44ce86d40c4c9b1ab91de2b35d05bf8659e57",
+      "mesh_sha256": "4420db8defa35d8e14e06b1b81a3ea24f03d50be0faa296723781370febb5c7c",
+      "same_geometry_as_baseline": true,
+      "same_preparation_report_as_baseline": true,
+      "last_iteration_progress_seconds": 15.21,
+      "reported_finish_seconds": 15.897,
+      "after_last_iteration_seconds": 0.6869999999999994
+    },
+    {
+      "profile": "dev",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+        "prepare-surface",
+        "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/preparation-performance-20261106/2-dev.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/preparation-performance-20261106/2-dev.preparation.json",
+        "10000",
+        "5"
+      ],
+      "exit": 0,
+      "wall_seconds": 17.685170347918756,
+      "user_cpu_seconds": 17.443354999999997,
+      "system_cpu_seconds": 0.073434,
+      "cumulative_peak_child_rss_kib": 108340,
+      "binary_sha256": "a5bc5fb81532e4cb4c64f93409da06c676a22d71ad40950ed1e4caa8ddfa978d",
+      "mesh_sha256": "4420db8defa35d8e14e06b1b81a3ea24f03d50be0faa296723781370febb5c7c",
+      "same_geometry_as_baseline": true,
+      "same_preparation_report_as_baseline": true,
+      "last_iteration_progress_seconds": 16.838,
+      "reported_finish_seconds": 17.628,
+      "after_last_iteration_seconds": 0.7899999999999991
+    },
+    {
+      "profile": "dev",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+        "prepare-surface",
+        "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/preparation-performance-20261106/3-dev.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/preparation-performance-20261106/3-dev.preparation.json",
+        "10000",
+        "5"
+      ],
+      "exit": 0,
+      "wall_seconds": 18.244629367021844,
+      "user_cpu_seconds": 17.812303,
+      "system_cpu_seconds": 0.08135499999999998,
+      "cumulative_peak_child_rss_kib": 108404,
+      "binary_sha256": "a5bc5fb81532e4cb4c64f93409da06c676a22d71ad40950ed1e4caa8ddfa978d",
+      "mesh_sha256": "4420db8defa35d8e14e06b1b81a3ea24f03d50be0faa296723781370febb5c7c",
+      "same_geometry_as_baseline": true,
+      "same_preparation_report_as_baseline": true,
+      "last_iteration_progress_seconds": 17.407,
+      "reported_finish_seconds": 18.195,
+      "after_last_iteration_seconds": 0.7880000000000003
+    },
+    {
+      "profile": "release",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/release/examples/audit",
+        "prepare-surface",
+        "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/preparation-performance-20261106/4-release.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/preparation-performance-20261106/4-release.preparation.json",
+        "10000",
+        "5"
+      ],
+      "exit": 0,
+      "wall_seconds": 15.983406123938039,
+      "user_cpu_seconds": 15.780089000000004,
+      "system_cpu_seconds": 0.077433,
+      "cumulative_peak_child_rss_kib": 108404,
+      "binary_sha256": "1ce6ccb37072199d53089f3b62c44ce86d40c4c9b1ab91de2b35d05bf8659e57",
+      "mesh_sha256": "4420db8defa35d8e14e06b1b81a3ea24f03d50be0faa296723781370febb5c7c",
+      "same_geometry_as_baseline": true,
+      "same_preparation_report_as_baseline": true,
+      "last_iteration_progress_seconds": 15.256,
+      "reported_finish_seconds": 15.947,
+      "after_last_iteration_seconds": 0.690999999999999
+    }
+  ],
+  "build": "cargo build --locked --release --manifest-path crates/clay-retopology/Cargo.toml --features audit --example audit -j1",
+  "median_wall_seconds": {
+    "dev": 17.9648998574703,
+    "release": 15.957892952952534
+  },
+  "release_elapsed_reduction_percent": 11.171823502724386,
+  "interpretation": "Release reduces preparation elapsed time by about 11%; remaining cost is not explained by an unoptimised debug build. Less than 0.8 s elapses after the last iteration progress event, bounding final packing/validation/measurement/serialization together; individual operation costs have not been profiled."
+}

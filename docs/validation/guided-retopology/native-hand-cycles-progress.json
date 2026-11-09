@@ -1,0 +1,1869 @@
+{
+  "date": "2026-11-05",
+  "status": "closed_rings_on_two_shafts_and_short_finger_base_accepted_offline",
+  "source_digest_at_record_sha256": "8cb9895e803e121f7706e0a18349dbbb74f6ca0d2c8ebc405211df96c0716648",
+  "run_binary_sha256": "2c32390c15c0a8ac7cf457e39f0d27cf41413c7650147dd912c3722976112889",
+  "target_quads": 1396,
+  "frozen_input_snapshot_sha256": "8138d18a9c5015a7bd456733a1f168aa3fc8cdca835924e3d5e01d3b32554722",
+  "source_sha256": "0f79026c6e8434e5312edc9d43277fb2135f6080dabc68725dba6c11d55cc9a5",
+  "source_positions_unchanged": true,
+  "research": [
+    {
+      "title": "Global Structure Optimization of Quadrilateral Meshes",
+      "authors": "Bommes, Lempfer, Kobbelt",
+      "year": 2011,
+      "url": "https://cgg.unibe.ch/media/papers/bommes_2011_eg1.pdf",
+      "relevance": "Sections 2.4\u20132.5 describe integer row offsets producing tube helices and connectivity changes to remove them. This experiment uses native integer-edge locks on selected source cycles; it does not implement the paper\u2019s GP-operator algorithm."
+    },
+    {
+      "title": "LoopyCuts: Practical Feature-Preserving Block Decomposition for Strongly Hex-Dominant Meshing",
+      "year": 2020,
+      "url": "https://vcgdata.isti.cnr.it/Publications/2020/LPPSC20/LPPSC20.pdf",
+      "relevance": "Reviewed as a loop-first decomposition approach. Its volumetric hex-meshing pipeline is outside this focused surface-grid experiment."
+    }
+  ],
+  "diagnosis": [
+    {
+      "finger": "short_outer",
+      "axis": [
+        0.45783818478069466,
+        -0.5250590891473864,
+        0.7174239677209252
+      ],
+      "region_vertices": 79,
+      "region_hint_count": 48,
+      "poles": [
+        {
+          "vertex": 286,
+          "valence": 3,
+          "position": [
+            2.729575195633531,
+            0.1829141667179714,
+            1.2254789721778092
+          ]
+        },
+        {
+          "vertex": 317,
+          "valence": 3,
+          "position": [
+            2.713647242760685,
+            0.2747159703791569,
+            1.2557704442214783
+          ]
+        },
+        {
+          "vertex": 372,
+          "valence": 3,
+          "position": [
+            2.7081244884473,
+            0.21715968457294277,
+            1.3201276033280736
+          ]
+        },
+        {
+          "vertex": 374,
+          "valence": 5,
+          "position": [
+            2.722043642864268,
+            0.2150091189875884,
+            1.3284483999528995
+          ]
+        },
+        {
+          "vertex": 403,
+          "valence": 3,
+          "position": [
+            2.6943493669970544,
+            0.19768169581422249,
+            1.3023842143880104
+          ]
+        },
+        {
+          "vertex": 430,
+          "valence": 3,
+          "position": [
+            2.7526325409873196,
+            0.20777694594146298,
+            1.3287365300173561
+          ]
+        }
+      ],
+      "longest_circumferential_trace": {
+        "seed": [
+          428,
+          429
+        ],
+        "vertices": [
+          428,
+          429,
+          421,
+          424,
+          446,
+          525,
+          410,
+          401,
+          418,
+          394,
+          393,
+          383,
+          292,
+          293,
+          289,
+          282,
+          169,
+          172,
+          202,
+          189,
+          186,
+          212,
+          435,
+          433,
+          507,
+          508,
+          501,
+          500,
+          512,
+          489,
+          416,
+          400,
+          398,
+          481,
+          480,
+          367,
+          371,
+          356,
+          254,
+          253,
+          251,
+          260,
+          264,
+          265,
+          1140,
+          1146
+        ],
+        "local_vertices": [
+          428,
+          429,
+          421,
+          424,
+          446,
+          525,
+          410,
+          401,
+          418,
+          394,
+          393,
+          383
+        ],
+        "closed": false,
+        "local_turns": 0.7715796573707362,
+        "local_axial_advance": -0.0219991968502825,
+        "end_valence": 3
+      }
+    },
+    {
+      "finger": "adjacent_long",
+      "axis": [
+        0.33742683119279526,
+        -0.5217349012538323,
+        0.7835405710011724
+      ],
+      "region_vertices": 64,
+      "region_hint_count": 73,
+      "poles": [
+        {
+          "vertex": 712,
+          "valence": 3,
+          "position": [
+            2.621885174975441,
+            0.21589887315550024,
+            1.4827742162457929
+          ]
+        },
+        {
+          "vertex": 713,
+          "valence": 3,
+          "position": [
+            2.626710573183283,
+            0.24509365487697354,
+            1.5158342084698502
+          ]
+        },
+        {
+          "vertex": 716,
+          "valence": 3,
+          "position": [
+            2.5896303580432183,
+            0.24512196423267824,
+            1.4998216948150238
+          ]
+        },
+        {
+          "vertex": 738,
+          "valence": 3,
+          "position": [
+            2.6201667680399368,
+            0.2985434714820993,
+            1.5067527890154158
+          ]
+        }
+      ],
+      "longest_circumferential_trace": {
+        "seed": [
+          652,
+          743
+        ],
+        "vertices": [
+          652,
+          743,
+          744,
+          727,
+          735,
+          629,
+          561,
+          560,
+          646,
+          647,
+          739,
+          791,
+          722,
+          724,
+          632,
+          630,
+          644,
+          642,
+          742,
+          746,
+          792,
+          791,
+          790,
+          793,
+          744,
+          789,
+          745,
+          732,
+          752,
+          753,
+          751,
+          750,
+          748,
+          658,
+          668,
+          591,
+          589,
+          465,
+          464,
+          339,
+          338,
+          1114,
+          1113,
+          1084,
+          1083,
+          1082,
+          1088,
+          1091,
+          1092,
+          1270,
+          1261,
+          1254,
+          1242,
+          1230,
+          1214,
+          1180,
+          1169,
+          1161,
+          1149,
+          1145,
+          1134,
+          1133,
+          1132,
+          250,
+          122,
+          123,
+          247,
+          249,
+          244,
+          245,
+          232,
+          229,
+          350,
+          241,
+          309,
+          308,
+          380,
+          307,
+          384,
+          385,
+          302,
+          1278,
+          383,
+          382,
+          376,
+          375,
+          426,
+          427,
+          429,
+          422,
+          1281,
+          445,
+          443,
+          330,
+          329,
+          435,
+          328,
+          440,
+          447,
+          453,
+          452,
+          325,
+          324,
+          318,
+          209,
+          205,
+          100,
+          101,
+          67,
+          65,
+          13,
+          12,
+          17,
+          20,
+          22,
+          1237,
+          1227,
+          1219,
+          1214,
+          1212,
+          1189,
+          1197,
+          1198,
+          1196,
+          1192,
+          1191,
+          1190,
+          596,
+          680,
+          679,
+          616,
+          615,
+          610,
+          614,
+          613,
+          687,
+          688,
+          636,
+          635,
+          705,
+          706,
+          702,
+          701,
+          703,
+          735,
+          628,
+          704,
+          724,
+          723,
+          716
+        ],
+        "local_vertices": [
+          652,
+          743,
+          744,
+          727,
+          735,
+          629,
+          561,
+          560,
+          646,
+          647,
+          739,
+          791,
+          722,
+          724,
+          632,
+          630,
+          644,
+          642,
+          742,
+          746,
+          792,
+          791,
+          790,
+          793,
+          744,
+          789,
+          745
+        ],
+        "closed": false,
+        "local_turns": 2.228887352878232,
+        "local_axial_advance": -0.028813851061712276,
+        "end_valence": 3
+      }
+    },
+    {
+      "finger": "central_long",
+      "axis": [
+        0.08210164081217486,
+        -0.49224490875557214,
+        0.866576176905508
+      ],
+      "region_vertices": 109,
+      "region_hint_count": 111,
+      "poles": [
+        {
+          "vertex": 814,
+          "valence": 3,
+          "position": [
+            2.458778320295808,
+            0.3452991394306345,
+            1.5794372936937946
+          ]
+        },
+        {
+          "vertex": 889,
+          "valence": 3,
+          "position": [
+            2.4227065028956685,
+            0.32106857935651256,
+            1.586241641348168
+          ]
+        },
+        {
+          "vertex": 899,
+          "valence": 3,
+          "position": [
+            2.37537434838603,
+            0.352792921509826,
+            1.5960627358339605
+          ]
+        },
+        {
+          "vertex": 900,
+          "valence": 3,
+          "position": [
+            2.372652524119404,
+            0.39018484776635265,
+            1.5935169457240441
+          ]
+        }
+      ],
+      "longest_circumferential_trace": {
+        "seed": [
+          903,
+          904
+        ],
+        "vertices": [
+          903,
+          904,
+          880,
+          881,
+          886,
+          812,
+          813,
+          823,
+          908,
+          909,
+          915,
+          902,
+          903
+        ],
+        "local_vertices": [
+          903,
+          904,
+          880,
+          881,
+          886,
+          812,
+          813,
+          823,
+          908,
+          909,
+          915,
+          902,
+          903
+        ],
+        "closed": true,
+        "local_turns": 1.0000000000000002,
+        "local_axial_advance": 0.0,
+        "end_valence": 4
+      }
+    },
+    {
+      "finger": "opposite_outer",
+      "axis": [
+        -0.4037353383873166,
+        -0.21992482133828262,
+        0.8880489003971593
+      ],
+      "region_vertices": 54,
+      "region_hint_count": 41,
+      "poles": [
+        {
+          "vertex": 945,
+          "valence": 5,
+          "position": [
+            2.2355615760181746,
+            0.5963688652111248,
+            1.381335744920064
+          ]
+        },
+        {
+          "vertex": 972,
+          "valence": 3,
+          "position": [
+            2.12591073665255,
+            0.5478617110797694,
+            1.4296960901591578
+          ]
+        },
+        {
+          "vertex": 973,
+          "valence": 3,
+          "position": [
+            2.1362637933517097,
+            0.5462754907203838,
+            1.4334769174198614
+          ]
+        },
+        {
+          "vertex": 982,
+          "valence": 3,
+          "position": [
+            2.1243939003576777,
+            0.5552513445016868,
+            1.4332831929358958
+          ]
+        },
+        {
+          "vertex": 984,
+          "valence": 3,
+          "position": [
+            2.162089216002413,
+            0.584580478207822,
+            1.4430555015075042
+          ]
+        }
+      ],
+      "longest_circumferential_trace": {
+        "seed": [
+          1107,
+          969
+        ],
+        "vertices": [
+          1107,
+          969,
+          949,
+          947,
+          1038,
+          1048,
+          1060,
+          1108,
+          970,
+          948,
+          946,
+          1047,
+          1049,
+          1061,
+          1109,
+          971,
+          965,
+          966,
+          1064,
+          1057,
+          1059,
+          983,
+          984
+        ],
+        "local_vertices": [
+          1107,
+          969,
+          949,
+          947,
+          1038,
+          1048,
+          1060,
+          1108,
+          970,
+          948,
+          946,
+          1047,
+          1049,
+          1061,
+          1109,
+          971,
+          965,
+          966,
+          1064,
+          1057,
+          1059,
+          983,
+          984
+        ],
+        "closed": false,
+        "local_turns": 3.1019323425611676,
+        "local_axial_advance": 0.06776714089684335,
+        "end_valence": 3
+      }
+    }
+  ],
+  "cycle_selection": {
+    "candidates": [
+      {
+        "finger": "short_outer",
+        "level": 0.5475949741354355,
+        "center": [
+          2.6839178308510645,
+          0.25408554388297877,
+          1.2259961148936172
+        ],
+        "perimeter": 0.4441318538210433,
+        "vertices": [
+          3728,
+          4267,
+          4222,
+          4236,
+          4138,
+          4251,
+          4066,
+          4113,
+          14948,
+          14949,
+          14365,
+          14950,
+          4085,
+          4144,
+          14991,
+          14420,
+          4052,
+          4169,
+          4299,
+          4146,
+          4232,
+          2218,
+          4215,
+          3980,
+          14335,
+          14334,
+          4194,
+          4233,
+          4261,
+          4311,
+          14224,
+          14222,
+          4235,
+          3990,
+          4025,
+          4277,
+          4119,
+          4283,
+          4272,
+          4129,
+          4188,
+          4189,
+          4291,
+          4225,
+          14173,
+          14172,
+          4254
+        ],
+        "rotation": 0,
+        "period": [
+          21,
+          7
+        ],
+        "along_axis": 0,
+        "axial_period": 7,
+        "circumferential_period": 21,
+        "mean_alignment": 0.7321577702423295
+      },
+      {
+        "finger": "adjacent_long",
+        "level": 0.5475949741354355,
+        "center": [
+          2.5573831940000002,
+          0.36676907079999993,
+          1.3389885939999993
+        ],
+        "perimeter": 0.5937989381799328,
+        "vertices": [
+          2399,
+          3013,
+          2625,
+          2895,
+          2442,
+          2768,
+          3027,
+          2327,
+          3023,
+          2957,
+          2666,
+          2571,
+          2849,
+          2721,
+          2787,
+          2708,
+          2796,
+          2660,
+          2840,
+          1527,
+          2630,
+          2576,
+          2797,
+          2547,
+          2958,
+          2799,
+          2923,
+          2962,
+          2879,
+          2937,
+          1425,
+          1557,
+          2904,
+          2657,
+          2976,
+          4378,
+          2907,
+          2977,
+          1240,
+          4435,
+          2910,
+          2582,
+          2862,
+          3007,
+          2477,
+          2588,
+          2818,
+          3021,
+          2366,
+          2866
+        ],
+        "rotation": 0,
+        "period": [
+          -9,
+          3
+        ],
+        "along_axis": 0,
+        "axial_period": 3,
+        "circumferential_period": -9,
+        "mean_alignment": 0.6956178265709292
+      },
+      {
+        "finger": "central_long",
+        "level": 0.5475949741354355,
+        "center": [
+          2.4198820542553188,
+          0.40886795680851074,
+          1.4914004914893622
+        ],
+        "perimeter": 0.5496877801461223,
+        "vertices": [
+          4754,
+          4576,
+          1742,
+          2060,
+          4620,
+          4603,
+          4746,
+          1973,
+          1824,
+          4718,
+          4740,
+          4751,
+          4839,
+          4600,
+          4577,
+          2016,
+          4800,
+          4563,
+          4756,
+          14594,
+          4783,
+          4657,
+          2069,
+          1670,
+          4828,
+          4752,
+          4741,
+          1920,
+          1860,
+          1616,
+          4790,
+          4831,
+          1858,
+          1269,
+          4785,
+          1972,
+          4815,
+          2074,
+          4566,
+          4744,
+          2092,
+          14543,
+          1464,
+          4734,
+          1548,
+          4639,
+          4598
+        ],
+        "rotation": 0,
+        "period": [
+          12,
+          0
+        ],
+        "along_axis": 0,
+        "axial_period": 0,
+        "circumferential_period": 12,
+        "mean_alignment": 0.671171532035253
+      },
+      {
+        "finger": "short_outer",
+        "level": 0.6052365503602181,
+        "center": [
+          2.7136730841463415,
+          0.2213408535365854,
+          1.2666795115853655
+        ],
+        "perimeter": 0.3671094179633139,
+        "vertices": [
+          4304,
+          4130,
+          4294,
+          4292,
+          4055,
+          4296,
+          4220,
+          4048,
+          14380,
+          14969,
+          4240,
+          4202,
+          3891,
+          4213,
+          4035,
+          4217,
+          4124,
+          3842,
+          3799,
+          3927,
+          14328,
+          4036,
+          3830,
+          14911,
+          14325,
+          3141,
+          14213,
+          3248,
+          3055,
+          3973,
+          4148,
+          3850,
+          3068,
+          3168,
+          18,
+          3229,
+          3066,
+          14147,
+          14152,
+          14805,
+          14804
+        ],
+        "rotation": 0,
+        "period": [
+          7,
+          -21
+        ],
+        "along_axis": 1,
+        "axial_period": 7,
+        "circumferential_period": -21,
+        "mean_alignment": 0.8087320133141732
+      },
+      {
+        "finger": "adjacent_long",
+        "level": 0.6052365503602181,
+        "center": [
+          2.591460361111111,
+          0.31855607513888884,
+          1.3951471069444445
+        ],
+        "perimeter": 0.46138724742560816,
+        "vertices": [
+          4365,
+          2877,
+          4350,
+          2152,
+          4369,
+          2679,
+          4330,
+          4331,
+          2946,
+          14480,
+          4408,
+          2926,
+          4456,
+          4355,
+          4423,
+          4333,
+          2654,
+          4349,
+          4440,
+          1410,
+          2704,
+          3010,
+          4545,
+          4363,
+          4532,
+          2222,
+          4499,
+          4500,
+          2911,
+          4484,
+          4336,
+          2842,
+          2295,
+          4430,
+          2122,
+          4424
+        ],
+        "rotation": 0,
+        "period": [
+          9,
+          -3
+        ],
+        "along_axis": 0,
+        "axial_period": -3,
+        "circumferential_period": 9,
+        "mean_alignment": 0.7390602707681964
+      },
+      {
+        "finger": "central_long",
+        "level": 0.6052365503602181,
+        "center": [
+          2.4177901141025635,
+          0.3767269967948717,
+          1.5535538064102563
+        ],
+        "perimeter": 0.4399960728004046,
+        "vertices": [
+          1779,
+          4649,
+          4781,
+          4731,
+          4830,
+          4837,
+          2068,
+          4855,
+          1418,
+          1218,
+          1451,
+          2005,
+          4866,
+          1401,
+          2044,
+          2014,
+          4665,
+          1878,
+          1694,
+          14557,
+          1743,
+          4688,
+          4789,
+          70,
+          14548,
+          4561,
+          4807,
+          2012,
+          1199,
+          1933,
+          1922,
+          4805,
+          14523,
+          1541,
+          4838,
+          2040,
+          4699,
+          4832,
+          4825
+        ],
+        "rotation": 0,
+        "period": [
+          12,
+          0
+        ],
+        "along_axis": 0,
+        "axial_period": 0,
+        "circumferential_period": 12,
+        "mean_alignment": 0.753076987415179
+      },
+      {
+        "finger": "adjacent_long",
+        "level": 0.6628781265850008,
+        "center": [
+          2.609949909375,
+          0.27771543640625,
+          1.4506133265624994
+        ],
+        "perimeter": 0.4049835422177265,
+        "vertices": [
+          2484,
+          2245,
+          2505,
+          2944,
+          4403,
+          4428,
+          4364,
+          4467,
+          2297,
+          4469,
+          2207,
+          4425,
+          4398,
+          4513,
+          4405,
+          2214,
+          14483,
+          2964,
+          4334,
+          2927,
+          4325,
+          4455,
+          2966,
+          1267,
+          4480,
+          2743,
+          2854,
+          2583,
+          14502,
+          1692,
+          2191,
+          4427
+        ],
+        "rotation": 0,
+        "period": [
+          -9,
+          3
+        ],
+        "along_axis": 0,
+        "axial_period": 3,
+        "circumferential_period": -9,
+        "mean_alignment": 0.7576697018941803
+      },
+      {
+        "finger": "central_long",
+        "level": 0.6628781265850008,
+        "center": [
+          2.4316225499999997,
+          0.3534103655555556,
+          1.58782375
+        ],
+        "perimeter": 0.1760473427085587,
+        "vertices": [
+          1504,
+          1429,
+          1189,
+          1434,
+          128,
+          1626,
+          1282,
+          1631,
+          1501,
+          1498,
+          1584,
+          1499,
+          1196,
+          1488,
+          127,
+          1433,
+          1449,
+          1623
+        ],
+        "rotation": 0,
+        "period": [
+          0,
+          0
+        ],
+        "along_axis": 0,
+        "axial_period": 0,
+        "circumferential_period": 0,
+        "mean_alignment": 0.7598575237262769
+      },
+      {
+        "finger": "adjacent_long",
+        "level": 0.7205197028097835,
+        "center": [
+          2.6329462760869573,
+          0.25741195326086963,
+          1.4967339369565216
+        ],
+        "perimeter": 0.2622402241841181,
+        "vertices": [
+          2212,
+          2301,
+          2267,
+          2317,
+          4393,
+          2246,
+          1235,
+          1113,
+          1542,
+          1491,
+          1198,
+          14506,
+          1324,
+          1258,
+          1321,
+          1207,
+          1691,
+          2157,
+          2156,
+          4374,
+          2210,
+          4332,
+          2284
+        ],
+        "rotation": 0,
+        "period": [
+          0,
+          0
+        ],
+        "along_axis": 0,
+        "axial_period": 0,
+        "circumferential_period": 0,
+        "mean_alignment": 0.7297468836873872
+      }
+    ],
+    "selected": [
+      {
+        "finger": "adjacent_long",
+        "level": 0.5475949741354355,
+        "center": [
+          2.5573831940000002,
+          0.36676907079999993,
+          1.3389885939999993
+        ],
+        "perimeter": 0.5937989381799328,
+        "vertices": [
+          2399,
+          3013,
+          2625,
+          2895,
+          2442,
+          2768,
+          3027,
+          2327,
+          3023,
+          2957,
+          2666,
+          2571,
+          2849,
+          2721,
+          2787,
+          2708,
+          2796,
+          2660,
+          2840,
+          1527,
+          2630,
+          2576,
+          2797,
+          2547,
+          2958,
+          2799,
+          2923,
+          2962,
+          2879,
+          2937,
+          1425,
+          1557,
+          2904,
+          2657,
+          2976,
+          4378,
+          2907,
+          2977,
+          1240,
+          4435,
+          2910,
+          2582,
+          2862,
+          3007,
+          2477,
+          2588,
+          2818,
+          3021,
+          2366,
+          2866
+        ],
+        "rotation": 0,
+        "period": [
+          -9,
+          3
+        ],
+        "along_axis": 0,
+        "axial_period": 3,
+        "circumferential_period": -9,
+        "mean_alignment": 0.6956178265709292
+      },
+      {
+        "finger": "central_long",
+        "level": 0.5475949741354355,
+        "center": [
+          2.4198820542553188,
+          0.40886795680851074,
+          1.4914004914893622
+        ],
+        "perimeter": 0.5496877801461223,
+        "vertices": [
+          4754,
+          4576,
+          1742,
+          2060,
+          4620,
+          4603,
+          4746,
+          1973,
+          1824,
+          4718,
+          4740,
+          4751,
+          4839,
+          4600,
+          4577,
+          2016,
+          4800,
+          4563,
+          4756,
+          14594,
+          4783,
+          4657,
+          2069,
+          1670,
+          4828,
+          4752,
+          4741,
+          1920,
+          1860,
+          1616,
+          4790,
+          4831,
+          1858,
+          1269,
+          4785,
+          1972,
+          4815,
+          2074,
+          4566,
+          4744,
+          2092,
+          14543,
+          1464,
+          4734,
+          1548,
+          4639,
+          4598
+        ],
+        "rotation": 0,
+        "period": [
+          12,
+          0
+        ],
+        "along_axis": 0,
+        "axial_period": 0,
+        "circumferential_period": 12,
+        "mean_alignment": 0.671171532035253
+      },
+      {
+        "finger": "short_outer",
+        "level": 0.5475949741354355,
+        "center": [
+          2.6839178308510645,
+          0.25408554388297877,
+          1.2259961148936172
+        ],
+        "perimeter": 0.4441318538210433,
+        "vertices": [
+          3728,
+          4267,
+          4222,
+          4236,
+          4138,
+          4251,
+          4066,
+          4113,
+          14948,
+          14949,
+          14365,
+          14950,
+          4085,
+          4144,
+          14991,
+          14420,
+          4052,
+          4169,
+          4299,
+          4146,
+          4232,
+          2218,
+          4215,
+          3980,
+          14335,
+          14334,
+          4194,
+          4233,
+          4261,
+          4311,
+          14224,
+          14222,
+          4235,
+          3990,
+          4025,
+          4277,
+          4119,
+          4283,
+          4272,
+          4129,
+          4188,
+          4189,
+          4291,
+          4225,
+          14173,
+          14172,
+          4254
+        ],
+        "rotation": 0,
+        "period": [
+          21,
+          7
+        ],
+        "along_axis": 0,
+        "axial_period": 7,
+        "circumferential_period": 21,
+        "mean_alignment": 0.7321577702423295
+      }
+    ]
+  },
+  "method": "Start from the frozen direction-guided raw snapshot. Transport a common lattice axis around each selected closed source-edge path; reject nonzero rotational holonomy, invalid/repeated vertices, missing edges or conflicting axes. Lock perpendicular integer offsets to zero, rerun regularity correction and subdivision, then use unchanged repair, extraction, fitting and validation. Production defaults unchanged.",
+  "baseline": {
+    "quality": {
+      "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+      "quads": 1288,
+      "quads_without_outward_diagonal": 0,
+      "result_to_source": {
+        "distance_at_max_ratio": 0.022289962893286344,
+        "max_spacing_ratio": 0.7733987983383043,
+        "point": [
+          2.1238326984127824,
+          0.604452186716127,
+          1.3618436871528647
+        ]
+      },
+      "source_to_result": {
+        "distance_at_max_ratio": 0.02083468204039396,
+        "max_spacing_ratio": 0.7229046603148304,
+        "point": [
+          2.1057377,
+          0.61937827,
+          1.3556955
+        ]
+      },
+      "topology": {
+        "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+      },
+      "vertices": 1290
+    },
+    "finger_rings": 6,
+    "distribution": {
+      "central_long": 6
+    }
+  },
+  "cases": [
+    {
+      "name": "ring-placement",
+      "accepted": true,
+      "quality": {
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 1398,
+        "quads_without_outward_diagonal": 0,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.013296284361824404,
+          "max_spacing_ratio": 0.46134353821184165,
+          "point": [
+            2.066139827775638,
+            0.5483184659396321,
+            1.152663957898023
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.01660151137117863,
+          "max_spacing_ratio": 0.5760255863385256,
+          "point": [
+            2.047183139836723,
+            0.5504001421930755,
+            1.1528168601632764
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 1400
+      },
+      "loops": {
+        "quads": 1398,
+        "closed_edge_loops_total": 0,
+        "classified_finger_rings": 0,
+        "finger_rings": [],
+        "measured_finger_edges": 1204,
+        "length_weighted_alignment_error_degrees": 21.620581940700248,
+        "edge_length_fraction_within_10_degrees": 0.21663344797505435,
+        "surface_fit_error": null
+      }
+    },
+    {
+      "name": "ring-direction",
+      "accepted": true,
+      "quality": {
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 1421,
+        "quads_without_outward_diagonal": 0,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.01313206905572785,
+          "max_spacing_ratio": 0.4556457305926964,
+          "point": [
+            2.6411032998290542,
+            0.2442194650517751,
+            1.4454707127368058
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.017782672546757906,
+          "max_spacing_ratio": 0.6170085452698757,
+          "point": [
+            2.395979970283531,
+            0.2470212342569828,
+            0.8040200297164688
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 1423
+      },
+      "loops": {
+        "quads": 1421,
+        "closed_edge_loops_total": 0,
+        "classified_finger_rings": 0,
+        "finger_rings": [],
+        "measured_finger_edges": 1290,
+        "length_weighted_alignment_error_degrees": 21.646468286055576,
+        "edge_length_fraction_within_10_degrees": 0.22313288810786464,
+        "surface_fit_error": null
+      }
+    },
+    {
+      "name": "cycle-locked",
+      "accepted": true,
+      "quality": {
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 1216,
+        "quads_without_outward_diagonal": 0,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.022445509201858126,
+          "max_spacing_ratio": 0.7787958162118338,
+          "point": [
+            2.12390987008966,
+            0.6042339355630221,
+            1.36192380342781
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.024000174270904364,
+          "max_spacing_ratio": 0.8327383060210496,
+          "point": [
+            2.636561,
+            0.27647507,
+            1.3692417
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 1218
+      },
+      "loops": {
+        "quads": 1216,
+        "closed_edge_loops_total": 15,
+        "classified_finger_rings": 10,
+        "finger_rings": [
+          {
+            "vertices": [
+              169,
+              174,
+              190,
+              183,
+              181,
+              206,
+              306,
+              534,
+              1208,
+              488,
+              487,
+              502,
+              501,
+              498,
+              482,
+              383,
+              384,
+              373,
+              374,
+              369,
+              286,
+              1201,
+              283,
+              275,
+              276,
+              268
+            ],
+            "center": [
+              2.672870967944143,
+              0.25975818356653513,
+              1.217960329023548
+            ],
+            "perimeter": 0.3434578851913565,
+            "axis_alignment": 0.911586555248602,
+            "planarity_ratio": 0.005953337337366549
+          },
+          {
+            "vertices": [
+              537,
+              538,
+              622,
+              691,
+              673,
+              680
+            ],
+            "center": [
+              2.5665863510772797,
+              0.3340977931662827,
+              1.3644189133837321
+            ],
+            "perimeter": 0.33118963753205655,
+            "axis_alignment": 0.996668242738353,
+            "planarity_ratio": 0.0014638118879882409
+          },
+          {
+            "vertices": [
+              543,
+              544,
+              554,
+              683,
+              672,
+              601
+            ],
+            "center": [
+              2.5805408007457658,
+              0.3136085895559612,
+              1.3984692918141632
+            ],
+            "perimeter": 0.3052128744700108,
+            "axis_alignment": 0.9964282581057876,
+            "planarity_ratio": 0.0006849324887071512
+          },
+          {
+            "vertices": [
+              545,
+              547,
+              599,
+              671,
+              727,
+              681
+            ],
+            "center": [
+              2.5951369649263882,
+              0.29153060107423284,
+              1.4305121208017935
+            ],
+            "perimeter": 0.29512223728068326,
+            "axis_alignment": 0.9973407786287017,
+            "planarity_ratio": 0.0010012568851063568
+          },
+          {
+            "vertices": [
+              546,
+              598,
+              670,
+              728,
+              613,
+              609
+            ],
+            "center": [
+              2.607447524191121,
+              0.27079464814113763,
+              1.462057961801677
+            ],
+            "perimeter": 0.27921556447359136,
+            "axis_alignment": 0.9888749746605411,
+            "planarity_ratio": 0.003757061074968231
+          },
+          {
+            "vertices": [
+              729,
+              730,
+              733,
+              734,
+              761,
+              878,
+              877,
+              965,
+              859,
+              857,
+              797,
+              799
+            ],
+            "center": [
+              2.396827114293987,
+              0.4525753078607147,
+              1.4198520092698235
+            ],
+            "perimeter": 0.40287850800468156,
+            "axis_alignment": 0.9870528532532211,
+            "planarity_ratio": 0.0012633080493708382
+          },
+          {
+            "vertices": [
+              731,
+              735,
+              757,
+              760,
+              842,
+              879,
+              964,
+              860,
+              858,
+              800,
+              801,
+              813
+            ],
+            "center": [
+              2.4011594415497703,
+              0.43817167659016687,
+              1.4480937287332745
+            ],
+            "perimeter": 0.38136162972589294,
+            "axis_alignment": 0.9912315506794757,
+            "planarity_ratio": 0.00043642304224311994
+          },
+          {
+            "vertices": [
+              738,
+              739,
+              808,
+              804,
+              803,
+              865,
+              864,
+              969,
+              880,
+              841,
+              765,
+              764
+            ],
+            "center": [
+              2.4035518688877247,
+              0.42233143753061153,
+              1.4759987001240429
+            ],
+            "perimeter": 0.3658129359480131,
+            "axis_alignment": 0.9936469037557593,
+            "planarity_ratio": 0.0002358345890225041
+          },
+          {
+            "vertices": [
+              741,
+              742,
+              756,
+              759,
+              843,
+              847,
+              968,
+              836,
+              863,
+              802,
+              807,
+              805
+            ],
+            "center": [
+              2.4043071334109465,
+              0.4059658824678771,
+              1.5036636532613186
+            ],
+            "perimeter": 0.35355099042285537,
+            "axis_alignment": 0.9960860811389193,
+            "planarity_ratio": 8.968624908251894e-05
+          },
+          {
+            "vertices": [
+              743,
+              747,
+              755,
+              758,
+              844,
+              846,
+              848,
+              835,
+              837,
+              812,
+              806,
+              815
+            ],
+            "center": [
+              2.404869947925261,
+              0.38922326271685076,
+              1.5309912336484388
+            ],
+            "perimeter": 0.34237679652436637,
+            "axis_alignment": 0.9970237435391849,
+            "planarity_ratio": 0.0002042590117388652
+          }
+        ],
+        "measured_finger_edges": 1109,
+        "length_weighted_alignment_error_degrees": 11.96459620086877,
+        "edge_length_fraction_within_10_degrees": 0.5675367259315959,
+        "surface_fit_error": null
+      }
+    }
+  ],
+  "accepted_ring_distribution": {
+    "central_long": 5,
+    "adjacent_long": 4,
+    "short_outer_base": 1,
+    "opposite_outer": 0
+  },
+  "locks": {
+    "edges_after_subdivision": 149,
+    "same_locks_after_repair": true,
+    "perpendicular_offset_violations_after_repair": 0
+  },
+  "checks": {
+    "closed_cycle_axis_transport_and_atomic_rejection_test": "passed",
+    "audit_example_clippy_warnings_denied": "passed",
+    "diff_whitespace_check": "passed",
+    "validated_obj_matches_render_candidate": true,
+    "all_highlighted_cycles_close_on_actual_quad_edges": true,
+    "full_suite": "not rerun; CI owns broad checks"
+  },
+  "runs": [
+    {
+      "group": "soft-ring-guides",
+      "name": "ring-placement-raw",
+      "exit": 0,
+      "seconds": 2.7672752090729773,
+      "cumulative_child_max_rss_kib": 54448
+    },
+    {
+      "group": "soft-ring-guides",
+      "name": "ring-placement-repair",
+      "exit": 0,
+      "seconds": 10.226728576002643,
+      "cumulative_child_max_rss_kib": 54448
+    },
+    {
+      "group": "soft-ring-guides",
+      "name": "ring-placement-diagnose",
+      "exit": 0,
+      "seconds": 0.6148193610133603,
+      "cumulative_child_max_rss_kib": 54448
+    },
+    {
+      "group": "soft-ring-guides",
+      "name": "ring-placement-validate",
+      "exit": 0,
+      "seconds": 0.46443810604978353,
+      "cumulative_child_max_rss_kib": 54448
+    },
+    {
+      "group": "soft-ring-guides",
+      "name": "ring-direction-raw",
+      "exit": 0,
+      "seconds": 2.516546271974221,
+      "cumulative_child_max_rss_kib": 54532
+    },
+    {
+      "group": "soft-ring-guides",
+      "name": "ring-direction-repair",
+      "exit": 0,
+      "seconds": 9.67529603803996,
+      "cumulative_child_max_rss_kib": 54532
+    },
+    {
+      "group": "soft-ring-guides",
+      "name": "ring-direction-diagnose",
+      "exit": 0,
+      "seconds": 0.6203636239515617,
+      "cumulative_child_max_rss_kib": 54532
+    },
+    {
+      "group": "soft-ring-guides",
+      "name": "ring-direction-validate",
+      "exit": 0,
+      "seconds": 0.5145384579664096,
+      "cumulative_child_max_rss_kib": 54532
+    },
+    {
+      "group": "fixed-cycle-offsets",
+      "name": "cycle-locked-constrain",
+      "exit": 0,
+      "seconds": 0.4153475268976763,
+      "cumulative_child_max_rss_kib": 57512
+    },
+    {
+      "group": "fixed-cycle-offsets",
+      "name": "cycle-locked-repair",
+      "exit": 0,
+      "seconds": 104.74857097992208,
+      "cumulative_child_max_rss_kib": 129024
+    },
+    {
+      "group": "fixed-cycle-offsets",
+      "name": "cycle-locked-diagnose",
+      "exit": 0,
+      "seconds": 0.6147288560168818,
+      "cumulative_child_max_rss_kib": 129024
+    },
+    {
+      "group": "fixed-cycle-offsets",
+      "name": "cycle-locked-validate",
+      "exit": 0,
+      "seconds": 0.414613442029804,
+      "cumulative_child_max_rss_kib": 129024
+    }
+  ],
+  "limits": [
+    "Only this detached capped hand, one run per condition. Bounded SAT repairs can vary with timing.",
+    "The two longer fingers now have multiple rings; the short finger has one at its base. The opposite outer finger remains without closed rings.",
+    "Some quads near the newly aligned finger base are stretched. This is not production-ready deformation topology.",
+    "Maximum sampled two-way error increases from 0.02229 to 0.02400, within unchanged gates. Actual output count decreases from 1288 to 1216 at the same requested 1396 target.",
+    "Selection still depends on a known wrist plane, hand-specific region thresholds and branch labels. Automatic tube recognition, robust scaling/rotation behavior, full-body integration and UI work remain.",
+    "Passing current topology/orientation/sampled-distance checks does not certify all self-intersections or animation behavior.",
+    "The perpendicular-offset rule is stronger than a soft guide; feasibility and fit on other shapes remain to be tested."
+  ],
+  "resources": "Sequential shared lock; MemoryMax=500M, MemorySwapMax=0; one compiler job; repair subprocess time limit 180 seconds.",
+  "local_artifact_directory": "retopology-review/hand-rings",
+  "artifact_sha256": {
+    "ring-guides.json": "fc742fd2de2f7c8b401cb5ac43b12eb32e5abbc1991b158d6a7c6ce631dcd1c5",
+    "ring-guide-analysis.json": "4d16e7093186c316bfde5968a37398d161415e17412ebeece232b1e7d81041d5",
+    "finger-traces.json": "00bbf734be9bcc2b27b4555fc9870e06c5b5c5b40048849e928d75a37e53a5fe",
+    "lattice-cycles.json": "39a88f4a5bfc1a354fb73a207b76cc7d47881d701c9a0d4960cee9842a0cd916",
+    "lattice-cycle-analysis.json": "119dad433a5b9dd9d3a97b777d26f9c25edc361de7409f1ccff4ed0cbc9213ee",
+    "cycle-locked.raw.json": "eb31866f427684a78d54562192e2c8c0e9af652562ac874453dfd2776a1cd9fd",
+    "cycle-locked.snapshot.json": "4c521f8f3ec85cbf378411621f074dffecd9ea516061c177fb942ff5ab8f37d4",
+    "cycle-locked.audit.json": "e21365f6d1bd8a65d664c5054acfcc92d8f76ec88b7d6affae3dc76dacc46e41",
+    "cycle-locked.validated.obj": "143b7fdbe29a9d08d68e4b72608ee139c13c9c372aeee24fd1f5c8848fb2d3de",
+    "ring-measurements.json": "82098eddbd0194cd557d07f640ae95108aefbdf243060f6a5becad3e4386685e",
+    "cycle-comparison.png": "02ba7ec369b6916d648f27e09d9be38d12e1fc0625252fb4a89c13b28b0f8601",
+    "trace-finger-flow.py": "b4434f3c6a580b6d150eb894006abf932c64b774b74bbc1114b8a06fde8bc47f",
+    "make-ring-guides.py": "aefd4a558fcd9f477cd99d7a4b6d5c418aff8351192614dc2fff9bcc757e44dd",
+    "make-lattice-cycles.py": "1204e208e1ab7cb2217647e937abdcc3661717290fc7317a1a900ceeaf0afabe",
+    "run-cycle-constraints.py": "4baa6d7f2ee22b10ac50250f586b8537c7fc726f41b172d8804695fd1e5e2127",
+    "measure-rings.py": "7418f5ac9e3a0e622e4fef06b4c931e6a5ddeb34681e2d1e97209ff3cdffabc1",
+    "render-comparison.py": "58423f5c80d9721e6f3ae7681582a8e657b2a08c50f804f8f376bf4441a8c3b7"
+  }
+}

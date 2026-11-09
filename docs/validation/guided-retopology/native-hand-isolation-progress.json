@@ -1,0 +1,211 @@
+{
+  "date": "2026-11-05",
+  "status": "denser_isolated_capped_hand_accepted_body_still_rejected",
+  "rust_source_digest_sha256": "f3581ed585419fc5968254393b480ed94fb501885995d0060d37eed811c475fb",
+  "cut": {
+    "source_sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+    "cut_plane": [
+      1,
+      0,
+      1,
+      -3.2
+    ],
+    "kept_halfspace": "x + z >= 3.2",
+    "vertices": 4934,
+    "retained_original_vertices": 4867,
+    "inserted_cut_vertices": 67,
+    "open_triangles": 9799,
+    "cap_triangles": 65,
+    "body_area": 33.20248487649557,
+    "body_10000_spacing": 0.05762159740626388,
+    "cases": {
+      "open": {
+        "area": 0.9474564194033273,
+        "euler": 1,
+        "boundary_edges": 67,
+        "matched_target": 285,
+        "matched_spacing": 0.05765768369553603,
+        "denser_target": 1140,
+        "denser_spacing": 0.028828841847768016
+      },
+      "capped": {
+        "area": 1.1595704070774118,
+        "euler": 2,
+        "boundary_edges": 0,
+        "matched_target": 349,
+        "matched_spacing": 0.05764157622478238,
+        "denser_target": 1396,
+        "denser_spacing": 0.02882078811239119
+      }
+    }
+  },
+  "source_unchanged": true,
+  "retained_source_vertices_unchanged": true,
+  "parameters": {
+    "preserve_sharp": false,
+    "adaptive": 0,
+    "detail": [],
+    "guides": [],
+    "max_vertices": 150000
+  },
+  "matching_method": "Set target = round(hand surface area / whole-body spacing squared). Capped area includes the new cap. Original world scale is preserved. Four times target halves nominal edge spacing; actual output counts are approximate.",
+  "cases": [
+    {
+      "name": "capped_matched",
+      "target_quads": 349,
+      "accepted": false,
+      "failure": "Disconnected quad vertex fan",
+      "diagnostic_output_available": false
+    },
+    {
+      "name": "capped_four_times_density",
+      "target_quads": 1396,
+      "accepted": true,
+      "output_quads": 1471,
+      "output_vertices": 1473,
+      "before_surface_fit": {
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 1471,
+        "quads_without_outward_diagonal": 1,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.014915975306079313,
+          "max_spacing_ratio": 0.517542242353403,
+          "point": [
+            2.482482977394034,
+            0.4300086373568112,
+            1.3729638446794474
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.013760268158889512,
+          "max_spacing_ratio": 0.4774424663624435,
+          "point": [
+            2.1819239,
+            0.570882,
+            1.4483521
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 1473
+      },
+      "after_surface_fit": {
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 1471,
+        "quads_without_outward_diagonal": 0,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.01433704882158803,
+          "max_spacing_ratio": 0.4974551273781405,
+          "point": [
+            2.4823618366324567,
+            0.4295717816102996,
+            1.3708286326825483
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.013741771514186636,
+          "max_spacing_ratio": 0.4768006849985632,
+          "point": [
+            2.1819239,
+            0.570882,
+            1.4483521
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 1473
+      },
+      "validated_obj_matches_diagnostic_positions_and_quads": true
+    },
+    {
+      "name": "open_matched",
+      "target_quads": 285,
+      "accepted": null,
+      "status": "interrupted_inconclusive",
+      "wrapper_exit_code": 143,
+      "last_progress_seconds": 63.389,
+      "last_reported_remaining_inverted_cells": 152,
+      "note": "The process group ended before a final solver result. Cause was not established; systemd reported 152.7 MiB peak for the entire comparison scope, below its 500 MiB cap. No output was produced. Do not classify this as a completed solver rejection."
+    }
+  ],
+  "whole_body_comparison": {
+    "target_quads": 10000,
+    "accepted": false,
+    "source_to_result": {
+      "distance_at_max_ratio": 0.10632587605556842,
+      "max_spacing_ratio": 1.8452434649791658,
+      "point": [
+        2.643002,
+        0.2196667,
+        1.4882323
+      ]
+    },
+    "hand_quad_count_by_centroid": 293,
+    "note": "Worst whole-body sampled source-coverage error lies on this hand; the body has separate crotch-region failures."
+  },
+  "runs": [
+    {
+      "name": "capped-349-capture",
+      "exit": 0,
+      "seconds": 4.319238070049323,
+      "max_rss_kib": 40312
+    },
+    {
+      "name": "capped-349-diagnose",
+      "exit": 1,
+      "seconds": 0.09783503401558846,
+      "max_rss_kib": 13516
+    },
+    {
+      "name": "capped-349-validate",
+      "exit": 1,
+      "seconds": 0.0776166319847107,
+      "max_rss_kib": 13784
+    },
+    {
+      "name": "capped-1396-capture",
+      "exit": 0,
+      "seconds": 20.32149860006757,
+      "max_rss_kib": 58404
+    },
+    {
+      "name": "capped-1396-diagnose",
+      "exit": 0,
+      "seconds": 0.6012054019374773,
+      "max_rss_kib": 23996
+    },
+    {
+      "name": "capped-1396-validate",
+      "exit": 0,
+      "seconds": 0.4646552010672167,
+      "max_rss_kib": 24148
+    }
+  ],
+  "limits": [
+    "One run per case, with bounded SAT repair.",
+    "Detaching changes the hierarchy, global constraints, and the wrist boundary/cap. The matched capped case did not succeed; the denser capped case did. This supports local resolution as a useful lead but does not isolate the cause of the whole-body failure.",
+    "The open-wrist control was interrupted and remains inconclusive.",
+    "Guides and signed density painting were not exercised in these runs. A uniformly denser isolated hand is not proof that painting the attached hand will produce the same result.",
+    "Passing current topology, orientation and sampled-distance checks does not certify deformation-ready edge flow or absence of all self-intersections."
+  ],
+  "excluded_first_cut": {
+    "plane": "x >= 2.15",
+    "reason": "Visual inspection found that this clipped the side of the forward-bent hand and retained excess forearm. Its results are excluded from the hand-isolation conclusion."
+  },
+  "local_artifact_directory": "retopology-review/hand-isolation/wrist-cut",
+  "artifact_sha256": {
+    "hand-open.clay": "bd3fbfbfdcb49fdc8cf9a0fd3297e024fcc28d1521a776810f5571ceea4293a0",
+    "hand-capped.clay": "0f79026c6e8434e5312edc9d43277fb2135f6080dabc68725dba6c11d55cc9a5",
+    "capped-349.snapshot.json": "a756348d197f1f5779e06264edc021815c099daf8284a10b9f6b011e62a4102e",
+    "capped-1396.snapshot.json": "1d62e85444f211f30f6e08a9f66876feeb9ceebe450742b4d5339babc70fc3a3",
+    "capped-1396.audit.json": "708e2e3af080b7d7d5a0664b9b453cb466ae2b54cc9d94ae53c7e966ca67d946",
+    "capped-1396.validated.obj": "9c73552cdfa34b61b16db7c30a2ecfbfa49aab8ee79cc2c4c67ca033ebc65b9e",
+    "cut-wrist.py": "146e478f72f0737898ea42b3825c1638a9bf613fb970a620754a414f43f32af2",
+    "run-comparison.py": "8b867ce6b79faff743de78c24be434d94fe44b0b1a7378a7afa2fb0430acd03c",
+    "render-comparison.py": "28489d7cb4fd2e241babb504edb9f79c1ca983e8811796fe69b5328405da7152",
+    "hand-comparison.png": "b00dc39bba37b5060b9089e9c33afe89fd50ce1539b72c7967e836c135f64698"
+  },
+  "resources": "Sequential under shared codex-build.lock; MemoryMax=500M and MemorySwapMax=0. No build or solver code change."
+}
