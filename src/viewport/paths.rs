@@ -866,10 +866,10 @@ impl PathEditor {
                 });
             if self.camera_drag.is_none() && !self.frozen && self.confirm_delete.is_none() {
                 if self.tool == PathTool::Whole {
-                    if let Some(path) = &self.draft {
-                        if !self.transform.press(path, scene, pos) {
-                            self.camera_drag = Some(PathNavigation::Orbit);
-                        }
+                    if let Some(path) = &self.draft
+                        && !self.transform.press(path, scene, pos)
+                    {
+                        self.camera_drag = Some(PathNavigation::Orbit);
                     }
                 } else if let Some((_, axis, _, _)) = self
                     .free_axes(scene)

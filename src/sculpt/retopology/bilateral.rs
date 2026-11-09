@@ -297,7 +297,6 @@ pub(super) fn bridge_layout(
         direction,
         offset,
         target_quads,
-        count,
         bridge_start,
         &mut result,
         cancel,
@@ -308,7 +307,6 @@ pub(super) fn bridge_layout(
             direction,
             offset,
             target_quads,
-            count,
             bridge_start,
             &mut result,
             cancel,
@@ -325,11 +323,11 @@ fn repair_strip(
     direction: Vec3,
     offset: f64,
     target: usize,
-    count: usize,
     bridge_start: usize,
     result: &mut clay_retopology::Layout,
     cancel: &dyn Fn() -> bool,
 ) -> Result<(), String> {
+    let count = result.positions.len() / 2;
     let axis = native(direction);
     let spacing = f64::from(target_spacing(reference, target));
     let surface = Surface::new(reference, &cancel)?;
@@ -445,11 +443,11 @@ fn space_centreline_strip(
     direction: Vec3,
     offset: f64,
     target: usize,
-    count: usize,
     bridge_start: usize,
     result: &mut clay_retopology::Layout,
     cancel: &dyn Fn() -> bool,
 ) -> Result<(), String> {
+    let count = result.positions.len() / 2;
     let spacing = f64::from(target_spacing(reference, target));
     let axis = native(direction);
     let surface = Surface::new(reference, &cancel)?;

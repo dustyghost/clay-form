@@ -83,14 +83,12 @@ pub(crate) fn show(
                     if editor.tool==PathTool::Whole && ui.button("Edit points").clicked() { editor.tool=PathTool::Move; }
                 });
             }
-            if editor.tool==PathTool::Whole {
-                if let Some(path)=&mut editor.draft {
-                    if path.mode==PathMode::Surface {
-                        ui.weak("Detach the path to move it freely away from the surface. Its current route is preserved.");
-                        if ui.button("Detach from surface").clicked() { commands.push(Command::Path(PathCommand::Detach)); }
-                    } else {
-                        transform::controls(ui,path,&mut editor.transform,&mut editor.notice);
-                    }
+            if editor.tool == PathTool::Whole && let Some(path) = &mut editor.draft {
+                if path.mode==PathMode::Surface {
+                    ui.weak("Detach the path to move it freely away from the surface. Its current route is preserved.");
+                    if ui.button("Detach from surface").clicked() { commands.push(Command::Path(PathCommand::Detach)); }
+                } else {
+                    transform::controls(ui,path,&mut editor.transform,&mut editor.notice);
                 }
             }
             if editor.tool!=PathTool::Whole && editor.draft.as_ref().is_some_and(|path|path.id!=0) {
