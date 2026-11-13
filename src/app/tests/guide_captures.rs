@@ -134,7 +134,7 @@ fn native_retopology_controls_offscreen_review() {
     use crate::sculpt::{Geometry, paths::PathMode, retopology::tests::fixture};
     let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
     std::fs::create_dir_all(&directory).unwrap();
-    let mut g = Guide::new(&directory, [1200, 1000]);
+    let mut g = Guide::new(&directory, [1200, 1400]);
     g.toolbar = false;
     g.interactive = true;
     let (mesh, path) = fixture(true);
@@ -169,6 +169,10 @@ fn native_retopology_controls_offscreen_review() {
     assert_eq!(g.app.ui.projection.flow_paths.len(), 2);
     let before = g.app.document.project();
     click_guide_label(&mut g, "More detail");
+    assert_eq!(
+        g.app.ui.projection.density_paint,
+        Some(crate::sculpt::retopology::DensityPaint::More)
+    );
     let rect = g.frame(vec![]).0;
     let point = rect.center() + g.app.camera.pan;
     g.stroke(point, point + Vec2::new(0., 20.));
