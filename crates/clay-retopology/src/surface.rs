@@ -355,8 +355,27 @@ pub(crate) fn fit(
     }
     let mut triangles =
         oriented_triangulation(&original, positions, quads, &mut work, cancel, false)?;
+    let mut repaired = false;
     if !untangle(&original, positions, quads, &triangles, &mut work, cancel)? {
-        triangles = outward_triangulation(&original, positions, quads, &mut work, cancel)?;
+        if let Ok(outward) = outward_triangulation(&original, positions, quads, &mut work, cancel) {
+            triangles = outward;
+        } else {
+            check(cancel)?;
+            repair_projected_quads(&original, positions, quads, &mut work, cancel)?;
+            triangles = outward_triangulation(&original, positions, quads, &mut work, cancel)?;
+            repaired = true;
+        }
+    }
+    if repaired {
+        repair_source_coverage(
+            &original,
+            spacing,
+            positions,
+            quads,
+            &mut triangles,
+            &mut work,
+            cancel,
+        )?;
     }
     let result = Surface {
         positions: positions.to_vec(),
@@ -368,6 +387,212 @@ pub(crate) fn fit(
         error,
         triangles: result.triangles,
     })
+}
+
+// Restore source coverage around the repaired layout while keeping the output
+// on the source and rechecking orientation after each accepted move.
+fn repair_source_coverage(
+    original: &Bvh<'_>,
+    spacing: &[f64],
+    positions: &mut [Vec3],
+    quads: &[[usize; 4]],
+    triangles: &mut Vec<[usize; 3]>,
+    work: &mut usize,
+    cancel: &dyn Fn() -> bool,
+) -> Result<()> {
+    let source = original.surface;
+    let mut edges = std::collections::BTreeMap::new();
+    for q in quads {
+        for k in 0..4 {
+            *edges
+                .entry(crate::topology::edge(q[k], q[(k + 1) % 4]))
+                .or_insert(0) += 1;
+        }
+    }
+    let mut fixed = vec![false; positions.len()];
+    for ([a, b], count) in edges {
+        if count == 1 {
+            fixed[a] = true;
+            fixed[b] = true;
+        }
+    }
+    for _ in 0..12 {
+        check(cancel)?;
+        let mesh = Surface {
+            positions: positions.to_vec(),
+            triangles: triangles.clone(),
+        };
+        let rebuilt = Bvh::new(&mesh, cancel)?;
+        let mut worst = None;
+        let mut ratio = 1.;
+        for (i, &point) in source.positions.iter().enumerate() {
+            let hit = rebuilt.nearest(point, work, cancel)?;
+            if hit.distance / spacing[i] > ratio {
+                ratio = hit.distance / spacing[i];
+                worst = Some((point, hit));
+            }
+        }
+        let Some((point, hit)) = worst else { break };
+        let mut best = hit.distance;
+        let mut accepted = None;
+        for v in mesh.triangles[hit.face] {
+            if fixed[v] {
+                continue;
+            }
+            let old = positions[v];
+            for fraction in [0.1, 0.25, 0.5] {
+                let candidate = original
+                    .nearest(old + (point - hit.point) * fraction, work, cancel)?
+                    .point;
+                positions[v] = candidate;
+                if let Ok(next) = outward_triangulation(original, positions, quads, work, cancel) {
+                    let trial = Surface {
+                        positions: positions.to_vec(),
+                        triangles: next.clone(),
+                    };
+                    let distance = Bvh::new(&trial, cancel)?
+                        .nearest(point, work, cancel)?
+                        .distance;
+                    if distance < best {
+                        best = distance;
+                        accepted = Some((v, candidate, next));
+                    }
+                }
+                positions[v] = old;
+            }
+        }
+        let Some((v, point, next)) = accepted else {
+            break;
+        };
+        positions[v] = point;
+        *triangles = next;
+    }
+    check(cancel)
+}
+
+// Move vertices on the surface while evaluating both diagonals of each incident quad.
+fn repair_projected_quads(
+    source: &Bvh<'_>,
+    positions: &mut [Vec3],
+    quads: &[[usize; 4]],
+    work: &mut usize,
+    cancel: &dyn Fn() -> bool,
+) -> Result<()> {
+    use std::collections::BTreeMap;
+    let mut edges = BTreeMap::new();
+    let mut incident = vec![Vec::new(); positions.len()];
+    for (i, q) in quads.iter().enumerate() {
+        for k in 0..4 {
+            incident[q[k]].push(i);
+            *edges
+                .entry(crate::topology::edge(q[k], q[(k + 1) % 4]))
+                .or_insert(0) += 1;
+        }
+    }
+    let mut fixed = vec![false; positions.len()];
+    for (&[a, b], &count) in &edges {
+        if count == 1 {
+            fixed[a] = true;
+            fixed[b] = true;
+        }
+    }
+    let score = |i: usize, positions: &[Vec3], work: &mut usize| -> Result<f64> {
+        let [a, b, c, d] = quads[i];
+        let mut best: f64 = -1.;
+        for (edge, triangles) in [
+            (crate::topology::edge(a, c), [[a, b, c], [a, c, d]]),
+            (crate::topology::edge(b, d), [[a, b, d], [b, c, d]]),
+        ] {
+            if edges.contains_key(&edge) {
+                continue;
+            }
+            let mut minimum: f64 = 1.;
+            for t in triangles {
+                let [a, b, c] = t.map(|v| positions[v]);
+                let n = (b - a).cross(c - a);
+                let dot = if n.length_squared() < 1e-24 {
+                    -1.
+                } else {
+                    n.normalize()
+                        .dot(source.nearest((a + b + c) / 3., work, cancel)?.normal)
+                };
+                minimum = minimum.min(dot);
+            }
+            best = best.max(minimum);
+        }
+        Ok(best)
+    };
+    let mut scores = (0..quads.len())
+        .map(|i| score(i, positions, work))
+        .collect::<Result<Vec<_>>>()?;
+    for _ in 0..8 {
+        check(cancel)?;
+        let bad: Vec<_> = scores
+            .iter()
+            .enumerate()
+            .filter_map(|(i, s)| (*s <= 0.).then_some(i))
+            .collect();
+        if bad.is_empty() {
+            break;
+        }
+        let mut changed = false;
+        for i in bad {
+            if scores[i] > 0. {
+                continue;
+            }
+            for v in quads[i] {
+                if fixed[v] {
+                    continue;
+                }
+                let old = positions[v];
+                let anchor = source.nearest(old, work, cancel)?;
+                let adjacent = &incident[v];
+                let mut best = adjacent.iter().map(|&f| (-scores[f]).max(0.)).sum::<f64>();
+                let mut winning = None;
+                for f in adjacent {
+                    for u in quads[*f] {
+                        if u == v {
+                            continue;
+                        }
+                        for fraction in [0.15, 0.3, 0.5] {
+                            let hit =
+                                source.nearest(old.lerp(positions[u], fraction), work, cancel)?;
+                            if hit.normal.dot(anchor.normal) <= 0. {
+                                continue;
+                            }
+                            positions[v] = hit.point;
+                            let next = adjacent
+                                .iter()
+                                .map(|&f| score(f, positions, work))
+                                .collect::<Result<Vec<_>>>()?;
+                            let cost = next.iter().map(|s| (-s).max(0.)).sum::<f64>();
+                            if cost + 1e-9 < best
+                                && adjacent
+                                    .iter()
+                                    .zip(&next)
+                                    .all(|(&f, &s)| scores[f] <= 0. || s > 0.)
+                            {
+                                best = cost;
+                                winning = Some((hit.point, next));
+                            }
+                            positions[v] = old;
+                        }
+                    }
+                }
+                if let Some((point, next)) = winning {
+                    positions[v] = point;
+                    for (&f, s) in adjacent.iter().zip(next) {
+                        scores[f] = s;
+                    }
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    Ok(())
 }
 
 /// Check a completed mesh without projecting or moving any vertex.
