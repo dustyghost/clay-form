@@ -840,8 +840,10 @@ fn workspace_recovery_requires_a_visible_scope_confirmation() {
     let ctx = egui::Context::default();
     ctx.style_mut(|s| s.animation_time = 0.);
     let doc = Document::default();
-    let mut state = UiState::default();
-    state.layout_open = true;
+    let mut state = UiState {
+        layout_open: true,
+        ..Default::default()
+    };
     state.preferences.panels[0].dock = Dock::Hidden;
     state.preferences.save_workspace_as("My layout").unwrap();
     let bindings = state.preferences.bindings.clone();
@@ -884,8 +886,10 @@ fn workspace_recovery_requires_a_visible_scope_confirmation() {
 fn workspace_hub_offers_pen_access_to_roll_and_shortcuts() {
     let ctx = egui::Context::default();
     let doc = Document::default();
-    let mut state = UiState::default();
-    state.layout_open = true;
+    let mut state = UiState {
+        layout_open: true,
+        ..Default::default()
+    };
     frame(&mut state, &ctx, &doc, vec![]);
     let (output, _) = frame(&mut state, &ctx, &doc, vec![]);
     click(

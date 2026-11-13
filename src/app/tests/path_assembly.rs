@@ -109,9 +109,13 @@ fn reusable_path_bend_join_offscreen_review() {
     click_guide_label(&mut g, "Uniform");
     click_guide_label(&mut g, "End-to-end taper");
     click_guide_label(&mut g, "Along-curve profile");
+    // The profile graph follows the scene and instance controls in the sidebar.
+    // Reveal its footer before measuring points so the drag reaches the graph.
+    reach_sidebar_control(&mut g, "0% → 100% · drag points to shape thickness");
     for _ in 0..3 {
         g.frame(vec![]);
     }
+    let viewport_top = g.frame(vec![]).0.top();
     let (plot, max) = g
         .ctx
         .data(|d| d.get_temp::<(egui::Rect, f32)>(egui::Id::new("path_thickness_plot")))
@@ -127,6 +131,17 @@ fn reusable_path_bend_join_offscreen_review() {
         plot.bottom() - point.factor / max * plot.height(),
     );
     let end = start - egui::vec2(0., 0.25 / max * plot.height());
+    let visible_sidebar = egui::Rect::from_min_max(
+        egui::pos2(
+            g.size[0] as f32 - g.app.ui.preferences.right_width,
+            viewport_top,
+        ),
+        g.ctx.content_rect().right_bottom(),
+    );
+    assert!(
+        visible_sidebar.contains(start) && visible_sidebar.contains(end),
+        "profile drag must stay within the visible sidebar: {start:?} to {end:?}, visible {visible_sidebar:?}"
+    );
     g.frame(vec![
         egui::Event::PointerMoved(start),
         primary_event(start, true),
