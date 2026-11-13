@@ -53,12 +53,12 @@ fn compact_stock_layout(rect: egui::Rect, count: usize) -> Option<CompactStockLa
     // short, fit a grid beside it, leaving room above for the editor launcher.
     let regions = [
         egui::Rect::from_min_max(
-            rect.min + egui::vec2(12., 158.),
-            rect.max - egui::vec2(12., 12.),
+            rect.min + egui::vec2(24., 158.),
+            rect.max - egui::vec2(24., 24.),
         ),
         egui::Rect::from_min_max(
-            rect.min + egui::vec2(12., 84.),
-            rect.max - egui::vec2(158., 12.),
+            rect.min + egui::vec2(24., 84.),
+            rect.max - egui::vec2(158., 24.),
         ),
     ];
     for region in regions {
@@ -91,8 +91,43 @@ fn compact_stock_layout(rect: egui::Rect, count: usize) -> Option<CompactStockLa
 
 impl UiState {
     pub(crate) fn align_viewport_controls(&mut self, ctx: &egui::Context, vertical: bool) {
+        self.preferences.viewport_controls_auto_layout = false;
         self.viewport_controls.pending_alignment = Some(vertical);
         self.apply_viewport_alignment(ctx, vertical);
+    }
+
+    /// An explicit placement edit starts from the currently visible stock grid.
+    /// Ordinary responsive rendering never mutates saved controls.
+    fn materialise_viewport_controls(&mut self, rect: Option<egui::Rect>) {
+        let defaults = crate::preferences::default_viewport_controls();
+        let rect = rect
+            .or(self.viewport_menu.viewport_rect)
+            .map(|rect| self.navigation_rect(rect));
+        if self.preferences.viewport_controls_auto_layout
+            && self.preferences.viewport_controls == defaults
+            && let Some(rect) = rect
+            && let Some(layout) = compact_stock_layout(rect, defaults.len())
+        {
+            let bounds = rect.shrink(24_f32.min(rect.width().min(rect.height()).max(0.) * 0.25));
+            let travel = (bounds.size() - Vec2::splat(40.)).max(Vec2::ZERO);
+            for (control, position) in self
+                .preferences
+                .viewport_controls
+                .iter_mut()
+                .zip(layout.positions)
+            {
+                for axis in 0..2 {
+                    control.position[axis] = if travel[axis] > 0. {
+                        ((position[axis] - bounds.min[axis]) / travel[axis]).clamp(0., 1.)
+                    } else {
+                        0.
+                    };
+                    control.offset[axis] =
+                        position[axis] - bounds.min[axis] - control.position[axis] * travel[axis];
+                }
+            }
+        }
+        self.preferences.viewport_controls_auto_layout = false;
     }
 
     fn apply_viewport_alignment(&mut self, ctx: &egui::Context, vertical: bool) {
@@ -229,6 +264,7 @@ impl UiState {
             self.status = "The viewport holds up to 128 controls".into();
             return;
         }
+        self.materialise_viewport_controls(None);
         let offset = (self.preferences.viewport_controls.len() % 8) as f32 * 0.04;
         self.preferences.viewport_controls.push(ViewportControl {
             kind,
@@ -273,11 +309,8 @@ impl UiState {
             return output;
         }
         let defaults = crate::preferences::default_viewport_controls();
-        let compact = self
-            .preferences
-            .viewport_controls
-            .iter()
-            .any(|control| defaults.contains(control))
+        let compact = (self.preferences.viewport_controls_auto_layout
+            && self.preferences.viewport_controls == defaults)
             .then(|| compact_stock_layout(rect, defaults.len()))
             .flatten();
         let launcher_y = if self
@@ -342,12 +375,7 @@ impl UiState {
             let travel = (bounds.size() - size).max(Vec2::ZERO);
             let position = compact
                 .as_ref()
-                .and_then(|layout| {
-                    defaults
-                        .iter()
-                        .position(|stock| stock == control)
-                        .map(|index| layout.positions[index])
-                })
+                .map(|layout| layout.positions[index])
                 .unwrap_or_else(|| {
                     bounds.min
                         + egui::vec2(
@@ -383,6 +411,7 @@ impl UiState {
                                 )
                             });
                             if response.drag_started_by(egui::PointerButton::Primary) && arranging {
+                                self.materialise_viewport_controls(Some(rect));
                                 let saved = &mut self.preferences.viewport_controls[index];
                                 for axis in 0..2 {
                                     if travel[axis] > 0. {
@@ -412,19 +441,25 @@ impl UiState {
                             output.blocks_viewport |=
                                 response.is_pointer_button_down_on() || response.drag_stopped();
                             response.context_menu(|ui| {
-                                let control = &mut self.preferences.viewport_controls[index];
                                 ui.label("Button style");
                                 for style in Style::ALL {
                                     if ui
-                                        .selectable_value(&mut control.style, style, style.label())
+                                        .selectable_label(
+                                            self.preferences.viewport_controls[index].style
+                                                == style,
+                                            style.label(),
+                                        )
                                         .clicked()
                                     {
+                                        self.materialise_viewport_controls(Some(rect));
+                                        self.preferences.viewport_controls[index].style = style;
                                         ui.close();
                                     }
                                 }
                                 ui.separator();
 
                                 if ui.button("Move viewport controls").clicked() {
+                                    self.materialise_viewport_controls(Some(rect));
                                     self.viewport_controls.arranging = true;
                                     ui.close();
                                 }
@@ -446,6 +481,7 @@ impl UiState {
             output.blocks_viewport |= enabled && area.response.contains_pointer();
         }
         if let Some(index) = remove {
+            self.materialise_viewport_controls(Some(rect));
             self.preferences.viewport_controls.remove(index);
         }
         // Reapply with the actual widget measurements after leaving the editor.
@@ -481,6 +517,7 @@ impl UiState {
                         ui.horizontal_wrapped(|ui| {
                             if ui.button("Use default controls").clicked() {
                                 self.preferences.viewport_controls = crate::preferences::default_viewport_controls();
+                                self.preferences.viewport_controls_auto_layout = true;
                                 self.viewport_controls.reset_confirmation = false;
                                 self.viewport_controls.feedback = "Restored default viewport controls for this workspace.".into();
                             }
@@ -492,6 +529,7 @@ impl UiState {
                     ui.label("New button style");
                     style_picker(ui, "new_style", &mut self.viewport_controls.new_style);
                     if ui.button("Apply style to all").clicked() {
+                        self.materialise_viewport_controls(None);
                         for control in &mut self.preferences.viewport_controls { control.style = self.viewport_controls.new_style; }
                     }
                 });
@@ -506,21 +544,33 @@ impl UiState {
                     ui.push_id(index, |ui| { ui.horizontal_wrapped(|ui| {
                         let response = ui.add_sized([130., 32.], egui::Label::new(self.viewport_control_label(control, document)).truncate());
                         super::search::highlight_response(&response, &format!("navigation:{:?}", control.kind));
-                        style_picker(ui, "style", &mut self.preferences.viewport_controls[index].style);
+                        let mut style = control.style;
+                        if style_picker(ui, "style", &mut style) {
+                            self.materialise_viewport_controls(None);
+                            self.preferences.viewport_controls[index].style = style;
+                        }
                         let glyph = control_glyph(control);
                         egui::ComboBox::from_id_salt("icon").width(80.).selected_text(control.icon.label()).show_ui(ui, |ui| {
                             for icon in Icon::ALL {
                                 if ui.add(design::button(ui, icon_glyph(icon).unwrap_or(glyph), icon.label()).selected(control.icon == icon)).clicked() {
+                                    self.materialise_viewport_controls(None);
                                     self.preferences.viewport_controls[index].icon = icon;
                                     ui.close();
                                 }
                             }
                         });
-                        ui.add(egui::TextEdit::singleline(&mut self.preferences.viewport_controls[index].label).desired_width(90.).char_limit(128).hint_text("Custom label"));
+                        let mut label = control.label.clone();
+                        if ui.add(egui::TextEdit::singleline(&mut label).desired_width(90.).char_limit(128).hint_text("Custom label")).changed() {
+                            self.materialise_viewport_controls(None);
+                            self.preferences.viewport_controls[index].label = label;
+                        }
                         if ui.button("Remove").clicked() { remove = Some(index); }
                     }); });
                 }
-                if let Some(index) = remove { self.preferences.viewport_controls.remove(index); }
+                if let Some(index) = remove {
+                    self.materialise_viewport_controls(None);
+                    self.preferences.viewport_controls.remove(index);
+                }
                 ui.separator();
                 ui.heading("Add a control");
                 ui.add(egui::TextEdit::singleline(&mut self.viewport_controls.search).hint_text("Search controls, brushes and menus"));
@@ -541,6 +591,7 @@ impl UiState {
                 });
             });
         if place {
+            self.materialise_viewport_controls(None);
             open = false;
             self.viewport_controls.arranging = true;
         }
@@ -553,15 +604,17 @@ impl UiState {
     }
 }
 
-fn style_picker(ui: &mut egui::Ui, id: &str, style: &mut Style) {
+fn style_picker(ui: &mut egui::Ui, id: &str, style: &mut Style) -> bool {
+    let mut changed = false;
     egui::ComboBox::from_id_salt(id)
         .width(90.)
         .selected_text(style.label())
         .show_ui(ui, |ui| {
             for option in Style::ALL {
-                ui.selectable_value(style, option, option.label());
+                changed |= ui.selectable_value(style, option, option.label()).changed();
             }
         });
+    changed
 }
 
 fn icon_glyph(icon: Icon) -> Option<Glyph> {
@@ -620,6 +673,7 @@ mod compact_layout_tests {
     use super::*;
 
     fn render(state: &mut UiState, ctx: &egui::Context, rect: egui::Rect) {
+        state.viewport_menu.viewport_rect = Some(rect);
         let document = Document::default();
         for _ in 0..3 {
             let _ = ctx.run(
@@ -715,17 +769,94 @@ mod compact_layout_tests {
         state.preferences.viewport_controls[0].offset = [4., -6.];
         let before = state.preferences.viewport_controls.clone();
         let ctx = egui::Context::default();
-        let rect = egui::Rect::from_min_size(egui::pos2(8., 166.), egui::vec2(624., 229.));
+        let rect = egui::Rect::from_min_size(egui::pos2(8., 20.), egui::vec2(624., 500.));
         render(&mut state, &ctx, rect);
-        let actual = control_rect(&ctx, 0);
         let bounds = rect.shrink(24.);
-        let expected = bounds.min
-            + (bounds.size() - actual.size()) * egui::vec2(0.2, 0.5)
-            + egui::vec2(4., -6.);
-        assert!(
-            (actual.min - expected).length() < 1.,
-            "custom placement was changed"
-        );
+        for (index, control) in before.iter().enumerate() {
+            let actual = control_rect(&ctx, index);
+            let expected = bounds.min
+                + (bounds.size() - actual.size())
+                    * egui::vec2(control.position[0], control.position[1])
+                + egui::vec2(control.offset[0], control.offset[1]);
+            assert!(
+                (actual.min - expected).length() < 1.,
+                "mixed custom layout moved control {index}"
+            );
+        }
         assert_eq!(state.preferences.viewport_controls, before);
+    }
+
+    #[test]
+    fn manual_alignment_survives_workspace_switch_and_serialization() {
+        let mut state = UiState::default();
+        let ctx = egui::Context::default();
+        state.preferences.save_workspace_as("Adaptive").unwrap();
+        state
+            .preferences
+            .save_workspace_as("Manual column")
+            .unwrap();
+        state.align_viewport_controls(&ctx, true);
+        assert!(!state.preferences.viewport_controls_auto_layout);
+        state.preferences.sync_active_workspace();
+        state.preferences.switch_workspace(0);
+        assert!(state.preferences.viewport_controls_auto_layout);
+        state.preferences.switch_workspace(1);
+        assert!(!state.preferences.viewport_controls_auto_layout);
+        let restored: Preferences =
+            serde_json::from_str(&serde_json::to_string(&state.preferences).unwrap()).unwrap();
+        restored.validate().unwrap();
+        state.preferences = restored;
+        let rect = egui::Rect::from_min_size(egui::pos2(8., 20.), egui::vec2(624., 500.));
+        render(&mut state, &ctx, rect);
+        for index in 1..7 {
+            let previous = control_rect(&ctx, index - 1);
+            let next = control_rect(&ctx, index);
+            assert!((previous.right() - next.right()).abs() < 1.);
+            assert!((next.top() - previous.bottom() - 8.).abs() < 1.);
+        }
+    }
+
+    #[test]
+    fn adding_or_placing_controls_keeps_the_visible_compact_arrangement() {
+        for add in [false, true] {
+            let mut state = UiState::default();
+            let ctx = egui::Context::default();
+            let rect = egui::Rect::from_min_size(egui::pos2(8., 166.), egui::vec2(624., 229.));
+            render(&mut state, &ctx, rect);
+            let before: Vec<_> = (0..7).map(|index| control_rect(&ctx, index)).collect();
+            if add {
+                state.add_viewport_control(Kind::Action(Action::Undo));
+            } else {
+                state.materialise_viewport_controls(Some(rect));
+                state.viewport_controls.arranging = true;
+            }
+            assert!(!state.preferences.viewport_controls_auto_layout);
+            render(&mut state, &ctx, rect);
+            for (index, old) in before.iter().enumerate() {
+                assert!(
+                    (control_rect(&ctx, index).min - old.min).length() < 1.,
+                    "control {index} jumped during explicit edit"
+                );
+            }
+            state.preferences.validate().unwrap();
+        }
+    }
+
+    #[test]
+    fn old_viewport_preferences_get_safe_auto_layout_default() {
+        let mut preferences = Preferences::default();
+        preferences.save_workspace_as("Legacy").unwrap();
+        let mut old = serde_json::to_value(preferences).unwrap();
+        old.as_object_mut()
+            .unwrap()
+            .remove("viewport_controls_auto_layout");
+        old["workspaces"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("viewport_controls_auto_layout");
+        let restored: Preferences = serde_json::from_value(old).unwrap();
+        assert!(restored.viewport_controls_auto_layout);
+        assert!(restored.workspaces[0].viewport_controls_auto_layout);
+        restored.validate().unwrap();
     }
 }

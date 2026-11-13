@@ -587,7 +587,7 @@ impl UiState {
         document: &Document,
         commands: &mut Vec<Command>,
     ) {
-        egui::CollapsingHeader::new("Reusable models and personal brushes")
+        design::section_header(ui, "Reusable models and personal brushes")
             .id_salt("reusable_models")
             .default_open(false)
             .open(requested_section(ui.ctx(), "reusable_models"))

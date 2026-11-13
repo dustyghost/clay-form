@@ -334,7 +334,12 @@ fn background_mesh_jobs_commit_once_and_cancellation_or_failure_keeps_original()
     app.dispatch(Command::Remesh, &ctx);
     finish_mesh_job(&mut app);
     assert_eq!(app.document.geometry_snapshot(), before);
-    assert!(app.ui.status.contains("Switch to dynamic"));
+    assert_eq!(
+        app.ui.status,
+        crate::app::policy::EditorPolicy::new(&app.ui, &app.document)
+            .action(&Action::Remesh)
+            .unwrap_err()
+    );
 }
 
 #[test]

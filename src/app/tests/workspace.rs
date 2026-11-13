@@ -141,6 +141,7 @@ fn compact_workspace_keeps_project_search_and_undo_reachable() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 #[ignore = "interactive workspace captures; requires Vulkan and CLAY_GUIDE_PREVIEW"]
 fn discoverable_workspace_offscreen_review() {
     let directory = std::path::PathBuf::from(

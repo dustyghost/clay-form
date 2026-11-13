@@ -192,6 +192,10 @@ Keyboard bindings are shared across workspaces, so switching layouts keeps your 
 Named workspaces store panels, menus and shelves, viewport controls, positions, widths,
 collapsed sections, compact toolbar choice, and colours. Your sculpt remains in its project file.
 
+Default view buttons adapt to a short canvas. Placing, aligning or editing them
+keeps your chosen arrangement across restarts. **Restore default controls**
+returns them to automatic fitting.
+
 ### A short customisation walkthrough
 
 1. Open **Workspace**, enter **My sculpting**, and choose **Save as workspace**.

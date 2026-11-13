@@ -809,6 +809,12 @@ fn brush_sidebar_resize_offscreen_review() {
     menu.columns = 4;
     menu.placement = crate::preferences::Placement::LeftPanel;
     menu.expanded = true;
+    let menu_id = menu.id;
+    g.app
+        .ui
+        .preferences
+        .sidebar_order
+        .insert(0, crate::preferences::SidebarSection::Custom(menu_id));
     g.save("wide-before-resize");
     assert!(
         g.app.ui.preferences.left_width <= 601.,
@@ -1421,6 +1427,10 @@ impl Guide {
             .unwrap();
         panel.dock = dock;
         panel.open = true;
+        if self.size[0] < 960 && matches!(dock, Dock::Left | Dock::Right) {
+            // Explicit panel fixtures make the same choice as the Panels menu.
+            self.app.ui.narrow_panel = Some(dock);
+        }
     }
     fn frame(&mut self, events: Vec<egui::Event>) -> (egui::Rect, Vec<u8>) {
         self.app.poll_fusion();
@@ -1681,6 +1691,7 @@ fn guide_workflows_offscreen_preview() {
             .ui
             .preferences
             .dock_menu(BuiltinMenu::Primitive, Dock::Right);
+        g.app.ui.narrow_panel = Some(Dock::Right);
         g.app.camera.yaw = 0.5;
         g.app.camera.pitch = -0.3;
         g.app.ui.wire = true;
@@ -2049,6 +2060,7 @@ fn asset_file_dialog_offscreen_review() {
             .ui
             .preferences
             .dock_menu(BuiltinMenu::References, Dock::Right);
+        g.app.ui.narrow_panel = Some(Dock::Right);
         g.app.ui.reference_path = images.to_string_lossy().into();
         click_guide_label(&mut g, "Add image…");
         assert_eq!(
@@ -3495,6 +3507,7 @@ fn viewport_context_menu_offscreen_review() {
                 &g.ctx,
             );
             g.app.ui.preferences.dock_menu(BuiltinMenu::Modeling, dock);
+            g.app.ui.narrow_panel = Some(dock);
             g.frame(vec![]);
             click_guide_label(&mut g, "Edge");
             g.save(&format!("modeling-docked-{dock:?}-top-{}", size[0]));

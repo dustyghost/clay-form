@@ -347,6 +347,9 @@ pub(crate) struct Workspace {
     pub menus: Vec<CustomMenu>,
     #[serde(default = "default_viewport_controls")]
     pub viewport_controls: Vec<ViewportControl>,
+    /// Only untouched stock controls adapt automatically to short viewports.
+    #[serde(default = "expanded_default")]
+    pub viewport_controls_auto_layout: bool,
     #[serde(default)]
     pub pinned_menus: Vec<PinnedMenu>,
     #[serde(default)]
@@ -411,6 +414,9 @@ pub(crate) struct Preferences {
     pub menus: Vec<CustomMenu>,
     #[serde(default = "default_viewport_controls")]
     pub viewport_controls: Vec<ViewportControl>,
+    /// Only untouched stock controls adapt automatically to short viewports.
+    #[serde(default = "expanded_default")]
+    pub viewport_controls_auto_layout: bool,
     pub pinned_menus: Vec<PinnedMenu>,
     #[serde(default)]
     pub menu_sections: Vec<MenuSection>,
@@ -479,6 +485,7 @@ impl Default for Preferences {
             right_width: 260.,
             menus: Vec::new(),
             viewport_controls: default_viewport_controls(),
+            viewport_controls_auto_layout: true,
             pinned_menus: Vec::new(),
             menu_sections: Vec::new(),
             sidebar_order: Vec::new(),
@@ -586,6 +593,7 @@ impl Preferences {
                 panels: workspace.panels.clone(),
                 menus: workspace.menus.clone(),
                 viewport_controls: workspace.viewport_controls.clone(),
+                viewport_controls_auto_layout: workspace.viewport_controls_auto_layout,
                 pinned_menus: workspace.pinned_menus.clone(),
                 menu_sections: workspace.menu_sections.clone(),
                 sidebar_order: workspace.sidebar_order.clone(),
@@ -941,6 +949,7 @@ impl Preferences {
             panels: self.panels.clone(),
             menus: self.menus.clone(),
             viewport_controls: self.viewport_controls.clone(),
+            viewport_controls_auto_layout: self.viewport_controls_auto_layout,
             pinned_menus: self.pinned_menus.clone(),
             menu_sections: self.menu_sections.clone(),
             sidebar_order: self.sidebar_order.clone(),
@@ -955,6 +964,7 @@ impl Preferences {
         self.panels = workspace.panels.clone();
         self.menus = workspace.menus.clone();
         self.viewport_controls = workspace.viewport_controls.clone();
+        self.viewport_controls_auto_layout = workspace.viewport_controls_auto_layout;
         self.pinned_menus = workspace.pinned_menus.clone();
         self.menu_sections = workspace.menu_sections.clone();
         self.sidebar_order = workspace.sidebar_order.clone();

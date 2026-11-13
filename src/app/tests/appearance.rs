@@ -455,6 +455,23 @@ fn colour_pair_workflow(size: [i32; 2], capture: bool) {
     let mut h = AppearanceHarness::new(size, capture);
     h.app.ui.preferences.compact_toolbar = true;
     h.alpha = true;
+    // This workflow checks an always-visible custom appearance panel. The fresh
+    // workspace keeps Tool controls in the menu bar until the artist docks it.
+    let controls = h
+        .app
+        .ui
+        .preferences
+        .menus
+        .iter_mut()
+        .find(|menu| {
+            menu.items
+                .iter()
+                .any(|item| item.action == Some(Action::AppearanceControls))
+        })
+        .unwrap();
+    controls.placement = crate::preferences::Placement::LeftPanel;
+    controls.expanded = true;
+    h.app.ui.narrow_panel = Some(crate::preferences::Dock::Left);
     for panel in &mut h.app.ui.preferences.panels {
         panel.dock = crate::preferences::Dock::Hidden;
     }
@@ -469,7 +486,7 @@ fn colour_pair_workflow(size: [i32; 2], capture: bool) {
     h.frame(vec![]);
     assert!(
         h.point("Material: Copper").is_some(),
-        "selected material is visible with menus closed and compact toolbar"
+        "selected material stays visible in the custom Tool controls panel with a compact toolbar"
     );
     assert!(h.point("Primary").is_some());
     assert!(h.point("Secondary").is_some());

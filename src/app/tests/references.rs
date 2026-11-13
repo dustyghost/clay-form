@@ -461,6 +461,8 @@ fn reference_remove_control_is_accessible_for_hidden_locked_image() {
     app.ui
         .preferences
         .dock_menu(BuiltinMenu::References, Dock::Right);
+    // This narrow workspace explicitly opens the dock under test.
+    app.ui.narrow_panel = Some(Dock::Right);
     let frame = |app: &mut App, events| {
         ctx.run(
             egui::RawInput {
@@ -519,6 +521,7 @@ fn reference_images_offscreen_preview() {
         app.ui
             .preferences
             .dock_menu(BuiltinMenu::References, Dock::Right);
+        app.ui.narrow_panel = Some(Dock::Right);
         app.document.add_reference(image()).unwrap();
         let mut second = image();
         second.name = "Side study".into();

@@ -317,6 +317,9 @@ fn viewport_controls_icons_drag_toggle_and_open_live_values() {
 fn viewport_controls_alignment_keeps_even_gaps_after_resize_and_style_changes() {
     let mut app = App::default();
     let ctx = egui::Context::default();
+    // This checks an explicit vertical arrangement, which stays authoritative
+    // even when the untouched starter layout would adapt to a short viewport.
+    app.ui.align_viewport_controls(&ctx, true);
     for size in [Vec2::new(1000., 800.), Vec2::new(650., 550.)] {
         for _ in 0..4 {
             let _ = ctx.run(

@@ -951,7 +951,7 @@ impl UiState {
                     });
                     return;
                 }
-                egui::CollapsingHeader::new("Brush library management")
+                design::section_header(ui, "Brush library management")
                     .id_salt("brush_library_management")
                     .open(search::requested_section(
                         ui.ctx(),
@@ -1024,7 +1024,7 @@ impl UiState {
                     );
                     ui.weak("Redistributes vertices without smoothing the shape. Consecutive Relax strokes share a fixed surface; another mesh edit or reopening captures a new reference. Boundaries, creases and hidden faces stay fixed. Esc cancels the stroke.");
                 }
-                egui::CollapsingHeader::new("Stroke settings")
+                design::section_header(ui, "Stroke settings")
                     .id_salt("brush_stroke_settings")
                     .open(search::requested_section(ui.ctx(), "brush_stroke_settings"))
                     .default_open(false)
@@ -1072,7 +1072,7 @@ impl UiState {
                     ui.add_enabled(b.stabilize, egui::Slider::new(&mut b.stabilizer_distance, 1. ..=200.).text("Trailing distance (px)"));
                 });
                     });
-                egui::CollapsingHeader::new("Brush shape and pressure")
+                design::section_header(ui, "Brush shape and pressure")
                     .id_salt("brush_shape_settings")
                     .open(search::requested_section(ui.ctx(), "brush_shape_settings"))
                     .default_open(false)
@@ -1089,7 +1089,7 @@ impl UiState {
                 design::checkbox(ui, &mut b.pressure_radius, "Pressure → radius");
                 ui.add(egui::Slider::new(&mut b.pressure_curve, 0.1..=4.).text("Pressure curve"));
                     });
-                egui::CollapsingHeader::new("Brush preset settings")
+                design::section_header(ui, "Brush preset settings")
                     .id_salt("brush_preset_settings")
                     .open(search::requested_section(ui.ctx(), "brush_preset_settings"))
                     .default_open(false)
