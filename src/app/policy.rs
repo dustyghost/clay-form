@@ -126,6 +126,7 @@ impl<'a> EditorPolicy<'a> {
     }
     pub fn action(&self, action: &Action) -> Result<(), &'static str> {
         let intent = match action {
+            Action::Search | Action::ToggleZen => Intent::Request,
             Action::CreateInstanceArray
             | Action::CreatePathAssembly
             | Action::CaptureObjectBrush => Intent::Instances,
@@ -159,20 +160,273 @@ impl<'a> EditorPolicy<'a> {
         }
         if self.action_supported(action) {
             Ok(())
-        } else if *action == Action::Undo {
-            Err("Nothing to undo")
-        } else if *action == Action::Redo {
-            Err("Nothing to redo")
-        } else if *action == Action::Remesh && !self.document.mesh_settings().dynamic {
-            Err("Switch to dynamic mode first")
         } else {
-            Err("Action is unavailable for the current selection")
+            Err(self.action_prerequisite(action))
+        }
+    }
+
+    /// The same explanation is shown by search, shelves, menus and the dispatcher.
+    /// Only called after the shared modal/job checks and the support check fail.
+    fn action_prerequisite(&self, action: &Action) -> &'static str {
+        let document = self.document;
+        match action {
+            Action::Undo => return "Nothing to undo",
+            Action::Redo => return "Nothing to redo",
+            Action::TemporaryMaskPreset(id) if !document.brushes().iter().any(|brush| brush.kind == Kind::Mask && brush.identity() == *id) => return "This Mask preset no longer exists. Choose a Mask brush in Mask / visibility",
+            Action::SelectBrush(_) => return "This brush is no longer in the project. Choose a brush from the Brushes panel",
+            Action::OpenMenu(_) => return "This custom menu no longer exists. Open Workspace to create or restore one",
+            Action::ModelPreset(_) | Action::ModelDeletePreset(_) => {
+                if !self.ui.preferences.modeling_presets.iter().any(|p| matches!(action, Action::ModelPreset(id) | Action::ModelDeletePreset(id) if p.id == *id)) {
+                    return "This modelling preset no longer exists. Choose a current preset";
+                }
+            }
+            Action::ToggleStencil | Action::RemoveStencil | Action::AttachStencil => {
+                if document.stencil().is_none() {
+                    return "Load an alpha and enable its stencil first";
+                }
+            }
+            Action::ImportObj | Action::JoinMeshes | Action::KeepProjectionReference | Action::GuidedRetopology if document.model_count() >= 64 => return "Remove an unused submodel to free a model slot first",
+            Action::AddReference => return "Remove an unused reference image before adding another",
+            Action::ArrangeReferences => return "Add a reference image first",
+            Action::MergeDown => return "Choose a model with another model below it in Submodels",
+            Action::ConvertPrimitive => return "Select a primitive with a surface to convert",
+            Action::ApplyThickness => return "Enable the Thickness modifier on the active model first",
+            _ => {}
+        }
+        if document.primitive().is_some() {
+            return "Convert the primitive in Submodels to a sculpting mesh first";
+        }
+        if !document.active_visible() {
+            return "Show the active model in Submodels first";
+        }
+        if matches!(
+            action,
+            Action::ModelApply
+                | Action::ModelRepeat
+                | Action::ModelTopology(_)
+                | Action::ModelBoundary
+                | Action::ModelDissolveLoops
+                | Action::ModelTarget(_)
+                | Action::ModelCreateGroup
+                | Action::ModelAddToGroup
+                | Action::ModelRemoveFromGroup
+                | Action::ModelPreset(_)
+                | Action::ModelTool(_)
+                | Action::ModelProtectMask
+                | Action::ModelFewerLoops
+                | Action::ModelMoreLoops
+                | Action::ModelSmoothPreview
+                | Action::ModelTapRepeat
+                | Action::PenModeling
+                | Action::ModelFaces
+                | Action::ModelEdges
+                | Action::ModelVertices
+                | Action::ModelSelect
+                | Action::ModelExtrude
+                | Action::ModelLoopCut
+                | Action::ModelReplace
+                | Action::ModelAdd
+                | Action::ModelRemove
+                | Action::ModelJoin
+                | Action::ModelClearSelection
+                | Action::ModelSelectLoop
+                | Action::ModelSelectSingle
+                | Action::ModelSelectLoops
+                | Action::ModelSelectRing
+                | Action::SelectEdges
+                | Action::SelectCreases
+                | Action::SelectBorderEdges
+                | Action::ExpandEdgeLoop
+                | Action::ClearEdgeSelection
+                | Action::CreaseEdges
+                | Action::UncreaseEdges
+                | Action::ClearCreases
+                | Action::AddSupportLoops
+                | Action::RelaxBorders
+                | Action::SmoothSubdivide
+        ) && let Some(reason) = self.edge_unavailable(action)
+        {
+            return reason;
+        }
+        if matches!(action, Action::Mirror(..))
+            && let Some(reason) = self.mirror_unavailable()
+        {
+            return reason;
+        }
+        if matches!(
+            action,
+            Action::GuidedRetopology
+                | Action::ProjectDetails
+                | Action::RelaxMesh
+                | Action::KeepProjectionReference
+        ) {
+            if document
+                .attached_array(document.active_model_index())
+                .is_some_and(|array| array.visible)
+                && !document.editing_array_source()
+            {
+                return "Choose Edit source for this array, or Make editable before editing its surface";
+            }
+            if document
+                .model(document.active_model_index())
+                .is_some_and(|model| model.metadata.temporary_thickness > 0.)
+            {
+                return "Apply or remove the target's Thickness modifier before editing its surface";
+            }
+        }
+        match action {
+            Action::ModelApply if !self.ui.modeling.active => {
+                "Enable Modeling and choose a tool first"
+            }
+            Action::ModelApply
+                if !self.ui.modeling.tool.is_edit()
+                    && self.ui.modeling.tool != crate::viewport::ModelTool::Extrude =>
+            {
+                "Choose an editing tool in Modeling before applying an amount"
+            }
+            Action::ModelRepeat if !self.ui.modeling.can_repeat => {
+                "Apply a modelling edit first, then select components to repeat it"
+            }
+            Action::ModelDissolveLoops
+                if self.ui.modeling.mode != crate::viewport::ComponentMode::Edge =>
+            {
+                "Switch to Edge mode and select a loop first"
+            }
+            Action::ModelBoundary
+                if self.ui.modeling.mode != crate::viewport::ComponentMode::Face =>
+            {
+                "Switch to Face mode and select faces first"
+            }
+            Action::ModelApply
+            | Action::ModelRepeat
+            | Action::ModelTopology(_)
+            | Action::ModelBoundary
+                if self.ui.modeling.count == 0 =>
+            {
+                match self.ui.modeling.mode {
+                    crate::viewport::ComponentMode::Face => "Select a face in the viewport first",
+                    crate::viewport::ComponentMode::Edge => "Select an edge in the viewport first",
+                    crate::viewport::ComponentMode::Vertex => {
+                        "Select a vertex in the viewport first"
+                    }
+                }
+            }
+            Action::ModelDissolveLoops => "Select an edge loop in the viewport first",
+            Action::FillMaterial | Action::FillAllMaterial
+                if !document
+                    .brushes()
+                    .get(self.ui.selected)
+                    .is_some_and(|brush| brush.kind == Kind::Paint) =>
+            {
+                "Select a Paint brush before filling material"
+            }
+            Action::FillMaterial | Action::FillAllMaterial
+                if document.texture_paint.is_some()
+                    && !document.mesh().uv.current(document.mesh()) =>
+            {
+                "Generate current UVs in UV / textures before painting the image"
+            }
+            Action::FillMaterial | Action::FillAllMaterial => {
+                "Choose an assigned paint image in Textures first"
+            }
+            Action::ModelSavePreset => "Enable Modeling before saving its settings as a preset",
+            Action::ModelTarget(_) => "Choose a component mode that supports this selection target",
+            Action::ModelFewerLoops => "The loop count is already at its minimum",
+            Action::ModelMoreLoops => "The loop count is already at its maximum",
+            Action::ModelCreateGroup | Action::ModelAddToGroup | Action::ModelRemoveFromGroup
+                if document.mesh_settings().levels() > 1 =>
+            {
+                "Use a mesh with a single subdivision level before editing component groups"
+            }
+            Action::ModelCreateGroup | Action::ModelAddToGroup | Action::ModelRemoveFromGroup
+                if self.ui.modeling.count == 0 =>
+            {
+                "Select components in the viewport first"
+            }
+            Action::ModelAddToGroup | Action::ModelRemoveFromGroup => {
+                "Choose a selection group in Modeling first"
+            }
+            Action::MaskGroup
+            | Action::AddMaskedToGroup
+            | Action::RemoveMaskedFromGroup
+            | Action::DeleteGroup
+            | Action::RenameGroup => "Choose a selection group on the active model first",
+            Action::LowerLevel | Action::DeleteLowerLevels => {
+                "The active model is already at its lowest subdivision level"
+            }
+            Action::HigherLevel | Action::DeleteHigherLevels => {
+                "The active model is already at its highest subdivision level"
+            }
+            Action::Subdivide
+                if document.mesh_settings().dynamic
+                    || document.mesh_settings().adaptive.enabled =>
+            {
+                "Switch to Subdivision mode before adding a level"
+            }
+            Action::Subdivide if !document.mesh_settings().upper.is_empty() => {
+                "Switch to the highest subdivision level before subdividing"
+            }
+            Action::Subdivide => {
+                "Reduce the current mesh to 250,000 faces or fewer before subdividing"
+            }
+            Action::Remesh if !document.mesh_settings().dynamic => "Switch to Dynamic mode first",
+            Action::Remesh => "Show all faces before remeshing",
+            Action::SplitHidden => {
+                "Hide some faces, leaving some visible, before splitting the model"
+            }
+            Action::StrokeEntirePath => "Create a surface path on the active model first",
+            Action::CreatePathAssembly if document.paths().is_empty() => {
+                "Create a path before adding a path assembly"
+            }
+            Action::ApplyVisibilityPath
+            | Action::ClearVisibilityPath
+            | Action::DeleteVisibilityPoint => "Choose Closed path in Mask / visibility first",
+            Action::FlipMaskLine => "Choose the Mask line tool first",
+            Action::GuidedRetopology => {
+                "Choose an editable surface with valid topology for Guided retopology"
+            }
+            Action::ResetPivot => "Enable a transform tool before resetting its pivot",
+            _ if document.mesh().triangles.is_empty() => {
+                "Select a model with a surface in Submodels first"
+            }
+            _ => "Choose an editable model and the required components in the tool panel",
         }
     }
     fn action_supported(&self, action: &Action) -> bool {
         let document = self.document;
         let sculpt = document.primitive().is_none() && document.active_visible();
         match action {
+            Action::TemporaryMaskPreset(id) => {
+                sculpt
+                    && document
+                        .brushes()
+                        .iter()
+                        .any(|brush| brush.kind == Kind::Mask && brush.identity() == *id)
+            }
+            Action::TemporaryMaskBrush
+            | Action::TemporaryMaskLasso
+            | Action::TemporaryMaskLine
+            | Action::TemporaryMaskAdd
+            | Action::TemporaryMaskErase
+            | Action::TemporaryMaskFlip
+            | Action::TemporaryVisibilityRectangle
+            | Action::TemporaryVisibilityLasso => sculpt,
+            Action::FillMaterial | Action::FillAllMaterial => {
+                sculpt
+                    && document
+                        .brushes()
+                        .get(self.ui.selected)
+                        .is_some_and(|brush| brush.kind == Kind::Paint)
+                    && document.texture_paint.is_none_or(|channel| {
+                        document.mesh().uv.current(document.mesh())
+                            && document
+                                .mesh()
+                                .uv
+                                .textures
+                                .iter()
+                                .any(|texture| texture.channel == channel)
+                    })
+            }
             Action::CreateInstanceArray | Action::CaptureObjectBrush => {
                 !document.mesh().triangles.is_empty()
             }
@@ -576,6 +830,79 @@ mod tests {
             assert_eq!(app.document.history_counts(), counts);
         }
     }
+    #[test]
+    fn prerequisites_explain_component_selection_and_stale_entries() {
+        let mut app = App::default();
+        app.ui.modeling.active = true;
+        app.ui.modeling.tool = crate::viewport::ModelTool::Move;
+        assert_eq!(
+            EditorPolicy::new(&app.ui, &app.document).action(&Action::ModelApply),
+            Err("Select a face in the viewport first")
+        );
+        app.ui.modeling.mode = crate::viewport::ComponentMode::Edge;
+        assert_eq!(
+            EditorPolicy::new(&app.ui, &app.document).action(&Action::ModelApply),
+            Err("Select an edge in the viewport first")
+        );
+        app.ui.modeling.count = 1;
+        assert!(
+            EditorPolicy::new(&app.ui, &app.document)
+                .action(&Action::ModelApply)
+                .is_ok()
+        );
+        assert!(
+            EditorPolicy::new(&app.ui, &app.document)
+                .action(&Action::SelectBrush("removed-brush".into()))
+                .unwrap_err()
+                .contains("no longer")
+        );
+        assert!(
+            EditorPolicy::new(&app.ui, &app.document)
+                .action(&Action::OpenMenu(u64::MAX))
+                .unwrap_err()
+                .contains("no longer")
+        );
+    }
+
+    #[test]
+    fn unrelated_thickness_does_not_obscure_subdivision_prerequisites() {
+        let mut app = App::default();
+        let plane = crate::sculpt::Primitive::for_kind(crate::sculpt::PrimitiveKind::Plane);
+        app.document
+            .replace_geometry(crate::sculpt::Geometry::new(plane.mesh().unwrap()))
+            .unwrap();
+        app.document.set_temporary_thickness(0.02).unwrap();
+        assert_eq!(
+            EditorPolicy::new(&app.ui, &app.document).action(&Action::LowerLevel),
+            Err("The active model is already at its lowest subdivision level")
+        );
+    }
+
+    #[test]
+    fn paint_fill_explains_brush_and_missing_uv_prerequisites() {
+        let mut app = App::default();
+        assert_eq!(
+            EditorPolicy::new(&app.ui, &app.document).action(&Action::FillMaterial),
+            Err("Select a Paint brush before filling material")
+        );
+        app.ui.selected = app
+            .document
+            .brushes()
+            .iter()
+            .position(|brush| brush.kind == Kind::Paint)
+            .unwrap();
+        assert!(
+            EditorPolicy::new(&app.ui, &app.document)
+                .action(&Action::FillMaterial)
+                .is_ok()
+        );
+        app.document.texture_paint = Some(crate::sculpt::texture::Channel::Color);
+        assert_eq!(
+            EditorPolicy::new(&app.ui, &app.document).action(&Action::FillMaterial),
+            Err("Generate current UVs in UV / textures before painting the image")
+        );
+    }
+
     #[test]
     fn navigation_and_cancellation_remain_available_during_jobs() {
         let mut app = App::default();

@@ -87,6 +87,7 @@ jobs:
           cargo test --locked --lib viewport::gpu:: -- --ignored --skip gpu_load_profile --test-threads=1
           cargo test --locked --lib diagnostic_export_dialog_offscreen_preview -- --ignored
           cargo test --locked --lib recovery_and_menu_placement_offscreen_preview -- --ignored
+          CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-workspace" cargo test --locked --lib discoverable_workspace_offscreen_review -- --ignored --test-threads=1
           cargo test --locked --lib obj_import_offscreen_preview -- --ignored
           cargo test --locked --lib material_controls_offscreen_review -- --ignored
           cargo test --locked --lib paint_palette_picker_offscreen_review -- --ignored

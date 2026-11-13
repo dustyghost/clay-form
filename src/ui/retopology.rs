@@ -17,31 +17,41 @@ impl ProjectionControls {
         ui.horizontal(|ui| {
             setting_label(ui, Glyph::Mesh, "Target quads");
             let range = 4..=50_000;
-            ui.add(egui::DragValue::new(&mut self.layout.target).range(range));
+            search::setting_response(
+                ui.add(egui::DragValue::new(&mut self.layout.target).range(range)),
+                "Target quads",
+            );
         });
         ui.weak("A fresh quad layout follows the surface. Face-group borders may move.");
         ui.horizontal_wrapped(|ui| {
-            ui.checkbox(&mut self.layout.preserve_sharp, "Protect sharp bends");
-            ui.add_enabled(
-                self.layout.preserve_sharp,
-                egui::DragValue::new(&mut self.layout.sharp_angle_degrees)
-                    .range(1. ..=180.)
-                    .suffix("° or more"),
+            search::setting_response(
+                ui.checkbox(&mut self.layout.preserve_sharp, "Protect sharp bends"),
+                "Protect sharp bends",
+            );
+            search::setting_response(
+                ui.add_enabled(
+                    self.layout.preserve_sharp,
+                    egui::DragValue::new(&mut self.layout.sharp_angle_degrees)
+                        .range(1. ..=180.)
+                        .suffix("° or more"),
+                ),
+                "Protect sharp bends",
             );
         });
         ui.horizontal(|ui| {
             ui.label("Input triangle limit");
             design::help(
-                ui.add(
+                search::setting_response(ui.add(
                     egui::DragValue::new(&mut self.layout.input_triangle_limit)
                         .range(1..=crate::sculpt::max_triangles())
                         .speed(1_000),
-                ),
+                ), "Input triangle limit"),
                 "Defaults to 200,000. Raise for larger tests, up to the active mesh capacity. Higher limits may use more time and memory. Kept for this app session.",
             );
         });
 
         ui.separator();
+        search::mark_destination(ui, "setting:Layout symmetry");
         setting_label(ui, Glyph::Symmetry, "Layout symmetry (experimental)");
         ui.horizontal_wrapped(|ui| {
             ui.selectable_value(&mut self.layout.symmetry_axis, None, "Off");
@@ -119,7 +129,7 @@ impl ProjectionControls {
         }
         ui.weak("Select any number of paths. Guides steer nearby edges; closed paths do not guarantee complete edge loops.");
         ui.add_enabled_ui(!self.flow_paths.is_empty(), |ui| {
-            ui.add(egui::Slider::new(&mut self.layout.flow, 0. ..=1.).text("Path strength"));
+            search::setting_response(ui.add(egui::Slider::new(&mut self.layout.flow, 0. ..=1.).text("Path strength")), "Retopology path strength");
             if self.layout.symmetry_axis.is_some() {
                 ui.weak("Layout symmetry reflects guides. When mirroring the sculpt, guides on the retained side drive the layout.");
             } else {
@@ -129,7 +139,10 @@ impl ProjectionControls {
 
         ui.separator();
         setting_label(ui, Glyph::Edit, "Polygon density");
-        ui.add(egui::Slider::new(&mut self.layout.adaptive, 0. ..=1.).text("Shape adaptation"));
+        search::setting_response(
+            ui.add(egui::Slider::new(&mut self.layout.adaptive, 0. ..=1.).text("Shape adaptation")),
+            "Shape adaptation",
+        );
         ui.weak("Zero uses uniform spacing; higher values put more quads around bends. Paint adjusts that automatic spacing and is saved separately from the sculpt mask.");
         use crate::sculpt::retopology::DensityPaint;
         ui.horizontal_wrapped(|ui| {
@@ -152,13 +165,24 @@ impl ProjectionControls {
         });
         if self.density_paint.is_some() {
             ui.weak("Paint on the model: orange = more, blue = less, grey = automatic. Right-drag to orbit. Painting supports Undo.");
-            ui.add(egui::Slider::new(&mut self.density_radius, 5. ..=200.).text("Brush radius"));
-            ui.add(
-                egui::Slider::new(&mut self.density_brush_strength, 0.05..=1.)
-                    .text("Paint strength"),
+            search::setting_response(
+                ui.add(
+                    egui::Slider::new(&mut self.density_radius, 5. ..=200.).text("Brush radius"),
+                ),
+                "Density brush radius",
+            );
+            search::setting_response(
+                ui.add(
+                    egui::Slider::new(&mut self.density_brush_strength, 0.05..=1.)
+                        .text("Paint strength"),
+                ),
+                "Density paint strength",
             );
         }
-        ui.add(egui::Slider::new(&mut self.layout.density, 0. ..=1.).text("Density strength"));
+        search::setting_response(
+            ui.add(egui::Slider::new(&mut self.layout.density, 0. ..=1.).text("Density strength")),
+            "Density strength",
+        );
     }
 }
 

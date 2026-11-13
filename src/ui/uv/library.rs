@@ -12,6 +12,7 @@ impl UiState {
         document: &Document,
         commands: &mut Vec<Command>,
     ) {
+        search::mark_destination(ui, "textures");
         if self.mesh_busy || self.pending.is_some() {
             ui.disable();
         }
@@ -95,15 +96,18 @@ impl UiState {
                                 } else {
                                     texture.name.clone()
                                 };
-                                if design::brush_tile(
+                                let response = design::brush_tile(
                                     ui,
                                     preview,
                                     &label,
                                     self.uv.asset_selected == Some(texture.id),
                                     width,
-                                )
-                                .clicked()
-                                {
+                                );
+                                search::highlight_response(
+                                    &response,
+                                    &format!("texture:{}", texture.id),
+                                );
+                                if response.clicked() {
                                     self.uv.asset_selected = Some(texture.id);
                                     self.uv.asset_replace = None;
                                     self.uv.asset_delete = None;

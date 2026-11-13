@@ -4,12 +4,38 @@ use crate::command::AssetKind;
 
 impl App {
     pub(super) fn execute_action(&mut self, action: Action, ctx: &egui::Context) {
+        if action == Action::Search {
+            egui::Popup::close_all(ctx);
+            self.ui.customization.popup_menu = None;
+            self.ui.customization.popup_blocks_viewport = false;
+            self.ui.viewport_menu.context = None;
+            self.ui.viewport_menu.hold = None;
+            let refresh_library =
+                Command::Instances(crate::command::InstanceCommand::ListPersonalBrushes);
+            if self.preferences_path.is_some()
+                && !self.ui.instances.saved_brushes_listed
+                && policy::EditorPolicy::new(&self.ui, &self.document)
+                    .command(&refresh_library)
+                    .is_ok()
+            {
+                self.dispatch(refresh_library, ctx);
+            }
+            self.ui.open_search();
+            self.viewport.wait_for_release();
+            return;
+        }
         if !self.ui.action_enabled(&action, &self.document) {
             return;
         }
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
         let active_brush = self.ui.brush_index_for_context(&self.document, ctx);
         let command = match action {
+            Action::Search => unreachable!("search is handled before action policy"),
+            Action::ToggleZen => {
+                self.ui.set_zen_mode(!self.ui.zen_mode);
+                self.viewport.wait_for_release();
+                None
+            }
             Action::SwapPaintColours | Action::ResetPaintColours => {
                 self.ui.paint_input_index(&self.document).map(|index| {
                     let mut brush = self.document.brushes()[index].clone();

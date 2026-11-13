@@ -3,6 +3,8 @@ use crate::{preferences::Tool, sculpt::Axis};
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum Action {
+    Search,
+    ToggleZen,
     TemporaryMaskBrush,
     TemporaryMaskLasso,
     TemporaryMaskLine,
@@ -227,6 +229,8 @@ impl Action {
         let ctrl = Modifiers::CTRL;
         let none = Modifiers::NONE;
         let (key, modifiers) = match self {
+            Self::Search => (Key::K, ctrl),
+            Self::ToggleZen => (Key::Tab, none),
             Self::ObjectBrushModels => (Key::B, none),
             Self::Save => (Key::S, ctrl),
             Self::SaveAs => (Key::S, ctrl | Modifiers::SHIFT),
@@ -501,10 +505,18 @@ impl Action {
         Self::ModelAxis(crate::viewport::ModelAxis::Uniform),
         Self::RelaxMesh,
         Self::GuidedRetopology,
+        Self::Search,
+        Self::ToggleZen,
     ];
     /// Help shared by the built-in controls, custom menus, and shelves.
     pub fn help(&self) -> Option<&'static str> {
         Some(match self {
+            Self::Search => {
+                "Find commands, tools, settings and named items. Run an action or reveal its control without changing your tool."
+            }
+            Self::ToggleZen => {
+                "Hide workspace panels while keeping navigation and search available. Return to the same layout when finished."
+            }
             Self::EditPaths => {
                 "Draw and edit saved surface or free-space paths. Orbit while drawing, close loops, then save and sculpt near a surface path to follow it."
             }
@@ -573,6 +585,8 @@ impl Action {
     }
     pub fn label(&self) -> &'static str {
         match self {
+            Self::Search => "Search Clay Form",
+            Self::ToggleZen => "Zen mode",
             Self::TemporaryMaskBrush => "Temporary mask: Surface brush",
             Self::TemporaryMaskLasso => "Temporary mask: Through-depth lasso",
             Self::TemporaryMaskLine => "Temporary mask: Through-depth line",

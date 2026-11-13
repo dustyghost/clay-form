@@ -79,7 +79,7 @@ impl UiState {
                         let mut placement = image.placement;
                         design::checkbox(ui, &mut placement.visible, "")
                             .on_hover_text("Show image");
-                        ui.selectable_value(
+                        let response = ui.selectable_value(
                             &mut self.selected_reference,
                             index,
                             format!(
@@ -88,6 +88,10 @@ impl UiState {
                                 image.name,
                                 if placement.locked { " (locked)" } else { "" }
                             ),
+                        );
+                        search::highlight_response(
+                            &response,
+                            &format!("reference:{index}:{}", image.name),
                         );
                         if placement != image.placement {
                             commands.push(Command::PlaceReference(index, placement));

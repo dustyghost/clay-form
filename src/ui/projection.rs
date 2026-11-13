@@ -69,6 +69,9 @@ impl UiState {
         document: &Document,
         commands: &mut Vec<Command>,
     ) {
+        if search::requested_section(ui.ctx(), "retopology_options").is_some() {
+            ui.label("Open Guided retopology below to inspect layout, path and density controls. Opening a preview does not replace the sculpt; Apply is a separate step.");
+        }
         let enabled = !self.mesh_busy && document.require_projection_target().is_ok();
         if design::help(ui.add_enabled(enabled, design::button(ui, Glyph::Mesh, "Relax mesh…")), "Redistribute vertices along the surface. Mask areas to protect them; preview before applying.").customize(Action::RelaxMesh).clicked() {
             commands.push(Command::OpenRelaxation);

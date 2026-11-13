@@ -101,7 +101,8 @@ impl MaterialControls {
             }
         }
         let mut selected = brush.material.primary_asset();
-        ui.weak("Choose a material for future strokes. Existing paint changes only in the shared material editor below.");
+        ui.strong("Future strokes");
+        ui.weak("Choose the next stroke's material. Existing surfaces change only when you assign a material or edit its shared definition.");
         ui.scope(|ui| {
             let height_id = ui.make_persistent_id("material_library_height");
             let mut height = ui
@@ -119,15 +120,18 @@ impl MaterialControls {
                         for (index, asset) in presets.iter().enumerate() {
                             let (name, material) = (&asset.name, &asset.material);
                             let texture = self.texture(ui.ctx(), index, material.clone());
-                            if super::design::brush_tile(
+                            let response = super::design::brush_tile(
                                 ui,
                                 texture,
                                 name,
                                 selected == Some(asset.id),
                                 width,
-                            )
-                            .clicked()
-                            {
+                            );
+                            super::search::highlight_response(
+                                &response,
+                                &format!("material:{}", asset.id),
+                            );
+                            if response.clicked() {
                                 brush.material = material.with_link(asset.id);
                                 selected = Some(asset.id);
                                 commands.push(Command::SaveMaterial(asset.clone()));
@@ -201,16 +205,20 @@ impl MaterialControls {
             return;
         }
         ui.separator();
+        ui.strong("Apply to current model");
         ui.label(format!(
             "Model: {}",
             document.model(document.active_model_index()).unwrap().name
         ));
-        if ui.add_enabled(document.primitive().is_none(), egui::Button::new("Assign material to model"))
+        if super::search::setting_response(ui.add_enabled(document.primitive().is_none(), egui::Button::new("Assign material to model")), "Assign material to model")
             .on_hover_text("Replace the whole material on all vertices, including masks, hidden regions and stored subdivision levels. Keeps UVs and image pixels. One Undo restores it.")
             .clicked() {
             commands.push(Command::AssignModelMaterial(brush.material.clone()));
         }
         ui.weak("Assign changes this model’s vertex appearance. Undo restores it.");
+        if document.primitive().is_some() {
+            ui.label("Convert the primitive in Submodels before assigning a surface material.");
+        }
         if !document.mesh().uv.textures.is_empty() {
             ui.weak("Assigned images still overlay the material; unassign in Textures to reveal its base colour.");
         }
@@ -220,7 +228,7 @@ impl MaterialControls {
         if let Some(asset) = selected.and_then(|id| presets.iter().find(|a| a.id == id)) {
             brush.material = asset.material.with_link(asset.id);
         }
-        ui.collapsing("Edit shared project material", |ui| {
+        egui::CollapsingHeader::new("Edit shared project material").open(super::search::requested_any_section(ui.ctx(), &["material_shared", "material_surface", "material_subsurface", "material_layers"])).show(ui, |ui| {
         if let Some(id) = selected {
             let revision = document.display_revision();
             if !self.usage.is_some_and(|(r, i, _, _)| r == revision && i == id) {
@@ -235,11 +243,11 @@ impl MaterialControls {
         let mut edited_name = name.clone();
         ui.horizontal(|ui| {
             ui.label("Material name");
-            ui.add(
+            super::search::setting_response(ui.add(
                 egui::TextEdit::singleline(&mut edited_name)
                     .char_limit(32)
                     .desired_width(140.),
-            );
+            ), "Material name");
         });
         let before = brush.material.clone();
         let mut original = selected
@@ -297,25 +305,29 @@ impl MaterialControls {
         ui.horizontal(|ui| {
             ui.label("Shared colour");
             let mut color = brush.material.base_color;
-            if ui.color_edit_button_rgb(&mut color).changed() {
+            if super::search::setting_response(ui.color_edit_button_rgb(&mut color), "Shared colour").changed() {
                 brush.material.base_color = color;
             }
         });
-        ui.add(egui::Slider::new(&mut brush.material.roughness, 0. ..=1.).text("Roughness"));
-        ui.add(egui::Slider::new(&mut brush.material.metallic, 0. ..=1.).text("Metallic"));
-        ui.collapsing("Surface options", |ui| {
-            ui.add(egui::Slider::new(&mut brush.material.ior, 1. ..=4.).text("IOR"));
-            ui.add(egui::Slider::new(&mut brush.material.specular, 0. ..=1.).text("Specular"));
+        let response = ui.add(egui::Slider::new(&mut brush.material.roughness, 0. ..=1.).text("Roughness"));
+        super::search::highlight_response(&response, "setting:Roughness");
+        let response = ui.add(egui::Slider::new(&mut brush.material.metallic, 0. ..=1.).text("Metallic"));
+        super::search::highlight_response(&response, "setting:Metallic");
+        egui::CollapsingHeader::new("Surface options").open(super::search::requested_section(ui.ctx(), "material_surface")).show(ui, |ui| {
+            let response = ui.add(egui::Slider::new(&mut brush.material.ior, 1. ..=4.).text("IOR"));
+            super::search::highlight_response(&response, "setting:IOR");
+            let response = ui.add(egui::Slider::new(&mut brush.material.specular, 0. ..=1.).text("Specular"));
+            super::search::highlight_response(&response, "setting:Specular");
             ui.horizontal(|ui| {
                 ui.label("Emission");
-                ui.color_edit_button_rgb(&mut brush.material.emission);
+                super::search::setting_response(ui.color_edit_button_rgb(&mut brush.material.emission), "Emission colour");
             });
-            ui.add(
+            super::search::setting_response(ui.add(
                 egui::Slider::new(&mut brush.material.emission_strength, 0. ..=100.)
                     .text("Emission strength"),
-            );
+            ), "Emission strength");
         });
-        ui.collapsing("Subsurface scattering", |ui| {
+        egui::CollapsingHeader::new("Subsurface scattering").open(super::search::requested_section(ui.ctx(), "material_subsurface")).show(ui, |ui| {
             subsurface_controls(
                 ui,
                 &mut brush.material.subsurface,
@@ -323,7 +335,8 @@ impl MaterialControls {
                 &mut brush.material.subsurface_scale,
             );
         });
-        ui.collapsing("Material layers", |ui| {
+        egui::CollapsingHeader::new("Material layers").open(super::search::requested_section(ui.ctx(), "material_layers")).show(ui, |ui| {
+            super::search::mark_destination(ui, "setting:Material layers");
             ui.weak("Layers are evaluated from top to bottom. Editing a named material updates its painted uses.");
             let occupied:Vec<_>=brush.material.layers.iter().enumerate().filter_map(|(i,layer)|(!layer.is_empty()).then_some(i)).collect();
             let mut remove=None;
@@ -331,13 +344,14 @@ impl MaterialControls {
             for (number,&i) in occupied.iter().enumerate() {
                 let layer=&mut brush.material.layers[i];
                 ui.push_id(i,|ui| {
-                    ui.collapsing(format!("Layer {}",number+1),|ui| {
+                    egui::CollapsingHeader::new(format!("Layer {}",number+1)).open(super::search::requested_section(ui.ctx(), "material_layers")).show(ui,|ui| {
                         ui.horizontal(|ui| {
                             if ui.button("Remove layer").on_hover_text("Delete this layer and keep the remaining layers in order. Undo restores it.").clicked() {remove=Some(i);}
                             if number>0 && ui.button("Move up").clicked() {swap=Some((i,occupied[number-1]));}
                         });
-                        ui.add(egui::Slider::new(&mut layer.weight,0. ..=1.).text("Weight"));
-                        ui.horizontal(|ui| {ui.selectable_value(&mut layer.add,0.,"Mix");ui.selectable_value(&mut layer.add,1.,"Add");});
+                        super::search::setting_response(ui.add(egui::Slider::new(&mut layer.weight,0. ..=1.).text("Weight")), "Layer weight");
+                        let blend = ui.horizontal(|ui| {ui.selectable_value(&mut layer.add,0.,"Mix");ui.selectable_value(&mut layer.add,1.,"Add");});
+                        super::search::setting_response(blend.response, "Layer blending");
                         egui::ComboBox::from_label("Start from").selected_text("Surface preset").show_ui(ui,|ui| {
                             for (name,m) in Material::examples() {if ui.button(name).clicked() {layer.surface=m.surface();layer.weight=1.;ui.close();}}
                         });
@@ -371,7 +385,7 @@ impl MaterialControls {
             }
         }
         if self.pending.is_some() { ui.weak("Release to apply to shared painted surfaces. Esc cancels."); }
-        if ui.button("Save to personal library")
+        if super::search::setting_response(ui.button("Save to personal library"), "Save material to personal library")
             .on_hover_text("Save these settings for future projects. This explicit library change is independent of project Undo.")
             .clicked()
         {
@@ -683,14 +697,20 @@ fn subsurface_controls(
     ui.weak(
         "Fast viewport approximation; Blender export uses full Principled subsurface scattering.",
     );
-    ui.add(egui::Slider::new(weight, 0. ..=1.).text("Subsurface weight"));
-    ui.add(
-        egui::Slider::new(scale, 0. ..=10.)
-            .logarithmic(true)
-            .text("Subsurface scale"),
+    super::search::setting_response(
+        ui.add(egui::Slider::new(weight, 0. ..=1.).text("Subsurface weight")),
+        "Subsurface weight",
+    );
+    super::search::setting_response(
+        ui.add(
+            egui::Slider::new(scale, 0. ..=10.)
+                .logarithmic(true)
+                .text("Subsurface scale"),
+        ),
+        "Subsurface scale",
     );
     ui.horizontal(|ui| {
-        ui.label("Radius RGB");
+        super::search::setting_response(ui.label("Radius RGB"), "Subsurface radius RGB");
         for (value, label) in radius.iter_mut().zip(["R ", "G ", "B "]) {
             ui.add(
                 egui::DragValue::new(value)

@@ -194,7 +194,7 @@ fn obj_import_offscreen_preview() {
             output
         };
         frame(vec![]);
-        for label in ["Import", "OBJ…"] {
+        for label in ["Project", "Import", "OBJ…"] {
             let output = frame(vec![]);
             let point = output
                 .shapes

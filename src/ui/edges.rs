@@ -91,7 +91,10 @@ impl UiState {
         // Leave room for the numeric value and label in narrow docked panels.
         ui.spacing_mut().slider_width = (ui.available_width() * 0.3).clamp(48., 100.);
         design::help(
-            ui.add(egui::Slider::new(&mut self.edges.smoothness, 0. ..=1.).text("Smoothness")),
+            search::setting_response(
+                ui.add(egui::Slider::new(&mut self.edges.smoothness, 0. ..=1.).text("Smoothness")),
+                "Smooth subdivision amount",
+            ),
             "0 refines without rounding; 1 fully smooths uncreased areas. Used when you click Smooth subdivide; this slider does not change the mesh by itself.",
         );
         self.edge_action(ui, document, commands, Action::SmoothSubdivide);
@@ -107,7 +110,7 @@ impl UiState {
         if self.edges.selecting {
             ui.label("Edge selection active · Esc to exit");
         }
-        ui.collapsing("Edges and creases", |ui| {
+        egui::CollapsingHeader::new("Edges and creases").open(search::requested_any_section(ui.ctx(), &["edge_controls", "edge_support", "edge_cleanup"])).show(ui, |ui| {
             ui.strong("Selection");
             let mut selecting = self.edges.selecting;
             let response = ui.add_enabled(self.action_enabled(&Action::SelectEdges, document),
@@ -123,7 +126,7 @@ impl UiState {
             self.edge_action(ui, document, commands, Action::ClearEdgeSelection);
             ui.weak("Cyan: selected · Orange: creased");
             ui.separator();
-            ui.strong("Affected edges");
+            search::setting_response(ui.strong("Affected edges"), "Affected edges");
             egui::ComboBox::from_id_salt("edge_target").width(ui.available_width())
                 .selected_text(self.edges.target.label()).show_ui(ui, |ui| {
                     for target in BorderTarget::ALL {
@@ -147,15 +150,15 @@ impl UiState {
             ui.add_space(4.);
             self.edge_action(ui, document, commands, Action::ClearCreases);
             ui.separator();
-            ui.collapsing("Support loops", |ui| {
-                design::help(ui.add(egui::Slider::new(&mut self.edges.loops, 1..=8).text("Loop count")),
+            egui::CollapsingHeader::new("Support loops").open(search::requested_section(ui.ctx(), "edge_support")).show(ui, |ui| {
+                design::help(search::setting_response(ui.add(egui::Slider::new(&mut self.edges.loops, 1..=8).text("Loop count")), "Support loop count"),
                     "Number of support loops to insert around each affected border when you click Add support loops.");
-                design::help(ui.add(egui::Slider::new(&mut self.edges.width, 0.01..=0.45).text("Inset width")),
+                design::help(search::setting_response(ui.add(egui::Slider::new(&mut self.edges.width, 0.01..=0.45).text("Inset width")), "Inset width"),
                     "Total inset as a fraction of nearby border-edge length. Reduce it for narrow or irregular regions.");
                 self.edge_action(ui, document, commands, Action::AddSupportLoops);
             });
-            ui.collapsing("Border cleanup", |ui| {
-                design::help(ui.add(egui::Slider::new(&mut self.edges.relax, 0. ..=1.).text("Relax amount")),
+            egui::CollapsingHeader::new("Border cleanup").open(search::requested_section(ui.ctx(), "edge_cleanup")).show(ui, |ui| {
+                design::help(search::setting_response(ui.add(egui::Slider::new(&mut self.edges.relax, 0. ..=1.).text("Relax amount")), "Border relax amount"),
                     "How far border vertices move when you click Relax borders. 0 leaves them unchanged; 1 applies full relaxation.");
                 self.edge_action(ui, document, commands, Action::RelaxBorders);
             });

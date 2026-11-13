@@ -5,6 +5,7 @@ impl UiState {
     pub(super) fn touch_settings(&mut self, ui: &mut egui::Ui, document: &Document) {
         egui::CollapsingHeader::new("Touch and trackpad gestures")
             .id_salt("touch_settings")
+            .open(search::requested_section(ui.ctx(), "touch_navigation"))
             .show(ui, |ui| {
                 let catalog: Vec<_> = self.action_catalog(document).into_iter()
                     .map(|action| { let label = self.action_label(&action, document); (action, label) })

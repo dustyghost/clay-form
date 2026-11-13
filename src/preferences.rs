@@ -471,7 +471,7 @@ impl Default for Preferences {
                     } else {
                         Dock::Left
                     },
-                    open: true,
+                    open: matches!(tool, Tool::Library | Tool::Brush | Tool::Submodels),
                     position: [320. + i as f32 * 25., 100. + i as f32 * 25.],
                 })
                 .collect(),
@@ -491,6 +491,12 @@ impl Default for Preferences {
             shelf_sizes: default_shelf_sizes(),
         };
         prefs.add_brush_controls();
+        prefs.menus[0].placement = Placement::Menu;
+        prefs.sidebar_order = vec![
+            SidebarSection::Tool(Tool::Brush),
+            SidebarSection::Tool(Tool::Library),
+            SidebarSection::Tool(Tool::Submodels),
+        ];
         prefs
     }
 }
@@ -958,6 +964,94 @@ impl Preferences {
         self.shelf_sizes = workspace.shelf_sizes;
         self.appearance = workspace.appearance.clone();
     }
+    /// Recover hidden controls without changing their contents, keys or saved layouts.
+    pub fn restore_hidden_panels(&mut self) -> usize {
+        let mut restored = 0;
+        for panel in &mut self.panels {
+            if panel.dock == Dock::Hidden {
+                panel.dock = if matches!(panel.tool, Tool::Mesh | Tool::Transform | Tool::Submodels)
+                {
+                    Dock::Right
+                } else {
+                    Dock::Left
+                };
+                panel.open = true;
+                restored += 1;
+            }
+        }
+        for menu in &mut self.menus {
+            if menu.placement == Placement::Hidden {
+                menu.placement = Placement::LeftPanel;
+                menu.expanded = true;
+                restored += 1;
+            }
+        }
+        restored
+    }
+
+    /// Put window title bars back within reach after a display change.
+    pub fn recover_floating_panels(&mut self, bounds: egui::Rect) -> usize {
+        let min = bounds.min + egui::vec2(16., 16.);
+        let max = egui::pos2(
+            (bounds.right() - 240.).max(min.x),
+            (bounds.bottom() - 160.).max(min.y),
+        );
+        let mut recovered = 0;
+        let positions = self
+            .panels
+            .iter_mut()
+            .filter(|p| p.dock == Dock::Floating)
+            .map(|p| &mut p.position)
+            .chain(
+                self.menus
+                    .iter_mut()
+                    .filter(|m| m.placement == Placement::Floating)
+                    .map(|m| &mut m.position),
+            )
+            .chain(self.pinned_menus.iter_mut().map(|m| &mut m.position));
+        for position in positions {
+            let next = [
+                position[0].clamp(min.x, max.x),
+                position[1].clamp(min.y, max.y),
+            ];
+            if next != *position {
+                *position = next;
+                recovered += 1;
+            }
+        }
+        recovered
+    }
+
+    /// Start a fresh layout while retaining an explicit route to the old arrangement.
+    /// This deliberately does not reset bindings or any non-workspace preferences.
+    pub fn start_default_workspace(&mut self) -> String {
+        self.sync_active_workspace();
+        let previous = if let Some(index) = self.active_workspace {
+            self.workspaces[index].name.clone()
+        } else {
+            let base = "Before layout reset";
+            let mut name = base.to_owned();
+            let mut number = 2;
+            while self.workspaces.iter().any(|w| w.name == name) {
+                name = format!("{base} {number}");
+                number += 1;
+            }
+            self.workspaces.push(self.workspace(name.clone()));
+            name
+        };
+        let brush_id = self
+            .menus
+            .iter()
+            .find(|m| m.items.iter().any(|i| i.action == Some(Action::BrushSize)))
+            .map(|m| m.id)
+            .unwrap_or_else(|| self.add_menu());
+        let mut defaults = Self::default().workspace(String::new());
+        defaults.menus[0].id = brush_id;
+        self.apply_workspace(&defaults);
+        self.active_workspace = None;
+        previous
+    }
+
     pub fn sync_active_workspace(&mut self) {
         if let Some(index) = self.active_workspace
             && let Some(saved) = self.workspaces.get(index)
@@ -1702,6 +1796,9 @@ mod sidebar_tests {
     #[test]
     fn mixed_sidebar_order_and_collapsed_menus_survive_workspace_switch_and_reload() {
         let mut prefs = Preferences::default();
+        // This fixture starts with the original implicit custom-menu-first order.
+        // Fresh workspace visual defaults are exercised separately.
+        prefs.sidebar_order.clear();
         prefs.menus.clear();
         prefs
             .bindings
@@ -1756,11 +1853,22 @@ mod sidebar_tests {
     #[test]
     fn old_layouts_keep_their_order_and_invalid_menu_layouts_are_rejected() {
         let mut prefs = Preferences::default();
+        // Legacy files had no explicit sidebar order. Their custom menus came
+        // first, followed by the persisted panel vector, including user moves.
+        prefs.sidebar_order.clear();
         prefs.panels.swap(0, 1);
         prefs.add_menu();
         prefs.menus[0].placement = Placement::LeftPanel;
         prefs.save_workspace_as("Legacy").unwrap();
         let expected = prefs.sidebar_sections(Dock::Left);
+        assert_eq!(
+            &expected[..3],
+            &[
+                SidebarSection::Custom(prefs.menus[0].id),
+                SidebarSection::Tool(Tool::Brush),
+                SidebarSection::Tool(Tool::Library),
+            ]
+        );
         let mut old = serde_json::to_value(&prefs).unwrap();
         for key in ["menu_sections", "sidebar_order"] {
             old.as_object_mut().unwrap().remove(key);
@@ -1768,6 +1876,8 @@ mod sidebar_tests {
         }
         let mut restored: Preferences = serde_json::from_value(old).unwrap();
         restored.validate().unwrap();
+        assert_eq!(restored.sidebar_sections(Dock::Left), expected);
+        restored.switch_workspace(0);
         assert_eq!(restored.sidebar_sections(Dock::Left), expected);
         restored.dock_menu(BuiltinMenu::Symmetry, Dock::Left);
         restored.menu_sections[0].dock = Dock::Hidden;
@@ -1929,3 +2039,6 @@ mod quick_menu_migration_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod workspace_recovery_tests;

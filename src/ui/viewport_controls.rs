@@ -12,6 +12,8 @@ pub(crate) struct ControlsState {
     new_style: Style,
     gap: f32,
     pending_alignment: Option<bool>,
+    reset_confirmation: bool,
+    feedback: String,
 }
 
 impl Default for ControlsState {
@@ -23,6 +25,8 @@ impl Default for ControlsState {
             new_style: Style::Icon,
             gap: 8.,
             pending_alignment: None,
+            reset_confirmation: false,
+            feedback: String::new(),
         }
     }
 }
@@ -31,6 +35,58 @@ pub(crate) struct ControlsOutput {
     pub commands: Vec<Command>,
     pub navigation: Vec<(Kind, Vec2)>,
     pub blocks_viewport: bool,
+}
+
+/// The stock column shares the right edge with the axis gizmo. On short
+/// canvases, use a temporary grid without rewriting the artist's preferences.
+struct CompactStockLayout {
+    positions: Vec<egui::Pos2>,
+    launcher: egui::Pos2,
+}
+fn compact_stock_layout(rect: egui::Rect, count: usize) -> Option<CompactStockLayout> {
+    if rect.height() >= 600. || count == 0 {
+        return None;
+    }
+    let button = 40.;
+    let step = 48.;
+    // Prefer a row below the 134px axis gizmo. If the viewport is especially
+    // short, fit a grid beside it, leaving room above for the editor launcher.
+    let regions = [
+        egui::Rect::from_min_max(
+            rect.min + egui::vec2(12., 158.),
+            rect.max - egui::vec2(12., 12.),
+        ),
+        egui::Rect::from_min_max(
+            rect.min + egui::vec2(12., 84.),
+            rect.max - egui::vec2(158., 12.),
+        ),
+    ];
+    for region in regions {
+        let columns = (((region.width() + 8.) / step).floor().max(0.) as usize).min(count);
+        if columns == 0 {
+            continue;
+        }
+        let rows = count.div_ceil(columns);
+        let height = button + (rows - 1) as f32 * step;
+        if height > region.height() {
+            continue;
+        }
+        let width = button + (columns - 1) as f32 * step;
+        let start = egui::pos2(region.center().x - width * 0.5, region.bottom() - height);
+        return Some(CompactStockLayout {
+            positions: (0..count)
+                .map(|index| {
+                    start
+                        + egui::vec2(
+                            (index % columns) as f32 * step,
+                            (index / columns) as f32 * step,
+                        )
+                })
+                .collect(),
+            launcher: rect.min + egui::vec2(24., 44.),
+        });
+    }
+    None
 }
 
 impl UiState {
@@ -137,6 +193,10 @@ impl UiState {
             .map(|s| format!(" · {}", s.label()))
             .unwrap_or_default();
         let response = response.on_hover_text(format!("{label}{shortcut}\n{hint}"));
+        super::search::highlight_response(&response, &format!("navigation:{:?}", control.kind));
+        if let Some(action) = action {
+            super::search::highlight_response(&response, &format!("action:{action:?}"));
+        }
         if !arranging && let Some(action) = action {
             if super::brush_controls::is_control(action) {
                 egui::Popup::menu(&response)
@@ -150,6 +210,18 @@ impl UiState {
             }
         }
         response
+    }
+
+    pub(crate) fn reveal_viewport_control(&mut self, kind: Kind) {
+        self.layout_open = false;
+        self.viewport_controls.editor_open = true;
+        self.viewport_controls.search = match kind {
+            Kind::Pan => "Pan view".into(),
+            Kind::Zoom => "Zoom view".into(),
+            Kind::Orbit => "Rotate view".into(),
+            Kind::Roll => "Roll view".into(),
+            Kind::Action(action) => action.label().into(),
+        };
     }
 
     pub(super) fn add_viewport_control(&mut self, kind: Kind) {
@@ -167,6 +239,7 @@ impl UiState {
             offset: [0.; 2],
         });
         self.viewport_controls.arranging = true;
+        self.viewport_controls.feedback = "Added to the viewport. Choose Place controls, drag the new control, then Done placing controls.".into();
     }
 
     fn viewport_control_label(&self, control: &ViewportControl, document: &Document) -> String {
@@ -199,6 +272,14 @@ impl UiState {
             output.blocks_viewport = true;
             return output;
         }
+        let defaults = crate::preferences::default_viewport_controls();
+        let compact = self
+            .preferences
+            .viewport_controls
+            .iter()
+            .any(|control| defaults.contains(control))
+            .then(|| compact_stock_layout(rect, defaults.len()))
+            .flatten();
         let launcher_y = if self
             .preferences
             .viewport_controls
@@ -214,7 +295,13 @@ impl UiState {
             .order(egui::Order::Foreground)
             .default_size(egui::vec2(240., 40.))
             .movable(false)
-            .fixed_pos(egui::pos2(rect.left() + 24., launcher_y))
+            .fixed_pos(
+                compact
+                    .as_ref()
+                    .map_or(egui::pos2(rect.left() + 24., launcher_y), |layout| {
+                        layout.launcher
+                    }),
+            )
             .constrain_to(rect)
             .show(ctx, |ui| {
                 ui.add_enabled_ui(enabled, |ui| {
@@ -230,6 +317,13 @@ impl UiState {
                     });
                 });
             });
+        #[cfg(test)]
+        ctx.data_mut(|data| {
+            data.insert_temp(
+                egui::Id::new("viewport_controls_launcher_response"),
+                launcher.response.rect,
+            )
+        });
         output.blocks_viewport |= enabled && launcher.response.contains_pointer();
         let arranging = self.viewport_controls.arranging;
         let controls = self.preferences.viewport_controls.clone();
@@ -246,12 +340,22 @@ impl UiState {
             );
             let bounds = rect.shrink(24_f32.min(rect.width().min(rect.height()).max(0.) * 0.25));
             let travel = (bounds.size() - size).max(Vec2::ZERO);
-            let position = bounds.min
-                + egui::vec2(
-                    control.position[0] * travel.x,
-                    control.position[1] * travel.y,
-                )
-                + egui::vec2(control.offset[0], control.offset[1]);
+            let position = compact
+                .as_ref()
+                .and_then(|layout| {
+                    defaults
+                        .iter()
+                        .position(|stock| stock == control)
+                        .map(|index| layout.positions[index])
+                })
+                .unwrap_or_else(|| {
+                    bounds.min
+                        + egui::vec2(
+                            control.position[0] * travel.x,
+                            control.position[1] * travel.y,
+                        )
+                        + egui::vec2(control.offset[0], control.offset[1])
+                });
             let area = egui::Area::new(id)
                 .order(egui::Order::Foreground)
                 // Avoid the default Area estimate covering the model before
@@ -357,22 +461,41 @@ impl UiState {
     pub fn viewport_controls_editor(&mut self, ctx: &egui::Context, document: &Document) {
         let mut open = self.viewport_controls.editor_open;
         let mut place = false;
+        let mut return_to_workspace = false;
         egui::Window::new("Viewport controls").open(&mut open).default_size([620., 740.])
+            .max_width((ctx.content_rect().width() - 32.).max(260.))
             .max_height((ctx.content_rect().height() - 100.).max(160.)).vscroll(true).show(ctx, |ui| {
+                super::search::mark_destination(ui, "viewport_controls");
                 ui.label("Add controls, then drag them anywhere in the drawing area. Layouts save automatically with your workspace.");
+                ui.weak("Style, custom labels, removal and placement apply only to these viewport copies. The original tools and their shortcuts stay available.");
+                if ui.button("Back to workspace").clicked() { return_to_workspace = true; }
+                if !self.viewport_controls.feedback.is_empty() { ui.weak(&self.viewport_controls.feedback); }
                 self.touch_settings(ui, document);
                 ui.horizontal(|ui| {
                     place = ui.button("Place controls").clicked();
-                    if ui.button("Restore default controls").clicked() { self.preferences.viewport_controls = crate::preferences::default_viewport_controls(); }
+                    if ui.button("Restore default controls…").clicked() { self.viewport_controls.reset_confirmation = true; }
                 });
-                ui.horizontal(|ui| {
+                if self.viewport_controls.reset_confirmation {
+                    ui.group(|ui| {
+                        ui.label("Replace this workspace's viewport controls with the defaults? Panels, shelves and keyboard bindings stay unchanged.");
+                        ui.horizontal_wrapped(|ui| {
+                            if ui.button("Use default controls").clicked() {
+                                self.preferences.viewport_controls = crate::preferences::default_viewport_controls();
+                                self.viewport_controls.reset_confirmation = false;
+                                self.viewport_controls.feedback = "Restored default viewport controls for this workspace.".into();
+                            }
+                            if ui.button("Keep these controls").clicked() { self.viewport_controls.reset_confirmation = false; }
+                        });
+                    });
+                }
+                ui.horizontal_wrapped(|ui| {
                     ui.label("New button style");
                     style_picker(ui, "new_style", &mut self.viewport_controls.new_style);
                     if ui.button("Apply style to all").clicked() {
                         for control in &mut self.preferences.viewport_controls { control.style = self.viewport_controls.new_style; }
                     }
                 });
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.add(egui::DragValue::new(&mut self.viewport_controls.gap).range(4. ..=32.).prefix("Spacing: ").suffix(" px"));
                     if ui.button("Align right").clicked() { self.align_viewport_controls(ctx, true); }
                     if ui.button("Align bottom").clicked() { self.align_viewport_controls(ctx, false); }
@@ -380,8 +503,9 @@ impl UiState {
                 ui.separator();
                 let mut remove = None;
                 for (index, control) in self.preferences.viewport_controls.clone().iter().enumerate() {
-                    ui.push_id(index, |ui| { ui.horizontal(|ui| {
-                        ui.add_sized([130., 32.], egui::Label::new(self.viewport_control_label(control, document)).truncate());
+                    ui.push_id(index, |ui| { ui.horizontal_wrapped(|ui| {
+                        let response = ui.add_sized([130., 32.], egui::Label::new(self.viewport_control_label(control, document)).truncate());
+                        super::search::highlight_response(&response, &format!("navigation:{:?}", control.kind));
                         style_picker(ui, "style", &mut self.preferences.viewport_controls[index].style);
                         let glyph = control_glyph(control);
                         egui::ComboBox::from_id_salt("icon").width(80.).selected_text(control.icon.label()).show_ui(ui, |ui| {
@@ -408,8 +532,9 @@ impl UiState {
                         let label = self.viewport_control_label(&ViewportControl { kind: kind.clone(), style: self.viewport_controls.new_style, icon: Icon::Auto, label: String::new(), position: [0.; 2], offset: [0.; 2] }, document);
                         if label.to_lowercase().contains(&search) {
                             ui.horizontal(|ui| {
-                                if ui.add_enabled(self.preferences.viewport_controls.len() < 128, egui::Button::new("Add")).clicked() { self.add_viewport_control(kind); }
-                                ui.label(label);
+                                if ui.add_enabled(self.preferences.viewport_controls.len() < 128, egui::Button::new("Add")).clicked() { self.add_viewport_control(kind.clone()); }
+                                let response = ui.label(label);
+                                super::search::highlight_response(&response, &format!("navigation:{kind:?}"));
                             });
                         }
                     }
@@ -418,6 +543,11 @@ impl UiState {
         if place {
             open = false;
             self.viewport_controls.arranging = true;
+        }
+        if return_to_workspace {
+            open = false;
+            self.viewport_controls.arranging = false;
+            self.layout_open = true;
         }
         self.viewport_controls.editor_open = open;
     }
@@ -482,5 +612,120 @@ fn control_glyph(control: &ViewportControl) -> Glyph {
             Action::Move | Action::Scale | Action::Rotate => Glyph::Transform,
             _ => Glyph::Edit,
         },
+    }
+}
+
+#[cfg(test)]
+mod compact_layout_tests {
+    use super::*;
+
+    fn render(state: &mut UiState, ctx: &egui::Context, rect: egui::Rect) {
+        let document = Document::default();
+        for _ in 0..3 {
+            let _ = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(800., 600.),
+                    )),
+                    ..Default::default()
+                },
+                |ctx| {
+                    state.viewport_controls(ctx, rect, &document, true);
+                },
+            );
+        }
+    }
+    fn control_rect(ctx: &egui::Context, index: usize) -> egui::Rect {
+        ctx.data(|data| {
+            data.get_temp::<egui::Rect>(egui::Id::new(("viewport_control_response", index)))
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn compact_stock_controls_fit_without_overlapping_gizmo_launcher_or_each_other() {
+        for size in [
+            egui::vec2(624., 229.),
+            egui::vec2(480., 229.),
+            egui::vec2(624., 180.),
+        ] {
+            let mut state = UiState::default();
+            let before = state.preferences.clone();
+            let ctx = egui::Context::default();
+            let rect = egui::Rect::from_min_size(egui::pos2(8., 166.), size);
+            render(&mut state, &ctx, rect);
+            let gizmo = egui::Rect::from_min_size(
+                egui::pos2(rect.right() - 146., rect.top() + 12.),
+                Vec2::splat(134.),
+            );
+            let launcher = ctx
+                .data(|data| {
+                    data.get_temp::<egui::Rect>(egui::Id::new(
+                        "viewport_controls_launcher_response",
+                    ))
+                })
+                .unwrap();
+            for index in 0..state.preferences.viewport_controls.len() {
+                let control = control_rect(&ctx, index);
+                assert!(
+                    rect.contains_rect(control),
+                    "{index}: {control:?} outside {rect:?}"
+                );
+                assert!(
+                    !control.intersects(gizmo),
+                    "{index} overlaps the axis gizmo"
+                );
+                assert!(
+                    !control.intersects(launcher),
+                    "{index} overlaps the editor launcher"
+                );
+                for previous in 0..index {
+                    assert!(
+                        !control.intersects(control_rect(&ctx, previous)),
+                        "{index} overlaps {previous}"
+                    );
+                }
+            }
+            assert_eq!(
+                state.preferences, before,
+                "responsive placement must not rewrite preferences"
+            );
+            let positions: Vec<_> = (0..7).map(|index| control_rect(&ctx, index)).collect();
+            state.viewport_menu.viewport_rect = Some(rect);
+            state.set_zen_mode(true);
+            let zen_rect = state.navigation_rect(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(800., 600.),
+            ));
+            render(&mut state, &ctx, zen_rect);
+            assert_eq!(
+                (0..7)
+                    .map(|index| control_rect(&ctx, index))
+                    .collect::<Vec<_>>(),
+                positions
+            );
+        }
+    }
+
+    #[test]
+    fn compact_layout_keeps_custom_control_positions() {
+        let mut state = UiState::default();
+        state.preferences.viewport_controls[0].position = [0.2, 0.5];
+        state.preferences.viewport_controls[0].offset = [4., -6.];
+        let before = state.preferences.viewport_controls.clone();
+        let ctx = egui::Context::default();
+        let rect = egui::Rect::from_min_size(egui::pos2(8., 166.), egui::vec2(624., 229.));
+        render(&mut state, &ctx, rect);
+        let actual = control_rect(&ctx, 0);
+        let bounds = rect.shrink(24.);
+        let expected = bounds.min
+            + (bounds.size() - actual.size()) * egui::vec2(0.2, 0.5)
+            + egui::vec2(4., -6.);
+        assert!(
+            (actual.min - expected).length() < 1.,
+            "custom placement was changed"
+        );
+        assert_eq!(state.preferences.viewport_controls, before);
     }
 }

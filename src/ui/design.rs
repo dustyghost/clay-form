@@ -2,6 +2,7 @@
 use eframe::egui::{self, Color32, Vec2};
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Glyph {
+    Search,
     Pan,
     Zoom,
     Orbit,
@@ -41,6 +42,7 @@ impl Glyph {
     fn lines(self) -> Vec<Vec<[f32; 2]>> {
         use Glyph::*;
         match self {
+            Search => vec![circle(10., 10., 6.), vec![[14.5, 14.5], [21., 21.]]],
             Path => vec![
                 vec![
                     [3., 18.],

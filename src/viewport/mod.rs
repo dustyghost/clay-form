@@ -86,6 +86,7 @@ pub(crate) enum Gesture {
 }
 #[derive(Default)]
 pub(crate) struct Viewport {
+    pub(crate) navigation_rect: Option<egui::Rect>,
     pub(crate) object_brush: Option<objects::ObjectBrush>,
     pub(crate) capture_axes: Option<(Vec3, usize, usize)>,
     pub(crate) size_preview: Option<Brush>,
@@ -296,8 +297,9 @@ impl Viewport {
                 );
             }
         }
+        let navigation_rect = self.navigation_rect.unwrap_or(rect);
         let gizmo_rect = egui::Rect::from_min_size(
-            Pos2::new(rect.right() - 146., rect.top() + 12.),
+            Pos2::new(navigation_rect.right() - 146., navigation_rect.top() + 12.),
             Vec2::splat(134.),
         );
         if let Some(renderer) = &self.renderer {
@@ -554,6 +556,7 @@ impl Viewport {
             return;
         }
         if self.paths.active {
+            self.paths.navigation_rect = Some(navigation_rect);
             self.paths
                 .show(ui, &response, &painter, &scene, camera, document, options);
             draw_gizmo(camera, &painter, gizmo_rect, response.hover_pos());

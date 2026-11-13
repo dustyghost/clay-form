@@ -9,12 +9,14 @@ impl UiState {
             .default_width(420.)
             .resizable(false)
             .show(ctx, |ui| {
+                search::mark_destination(ui, "mesh_capacity");
                 ui.label("Maximum geometry per mesh. Quads count as two triangles.");
                 ui.label("Higher limits allow larger meshes and use more memory.");
                 ui.separator();
                 let limits = &mut self.preferences.mesh_capacity;
                 egui::Grid::new("mesh_capacity_limits").show(ui, |ui| {
                     let vertices_label = ui.label("Maximum vertices");
+                    search::highlight_response(&vertices_label, "setting:Maximum vertices");
                     ui.add(
                         egui::DragValue::new(&mut limits.vertices)
                             .range(MeshCapacity::DEFAULT.vertices..=MeshCapacity::MAX.vertices)
@@ -23,6 +25,7 @@ impl UiState {
                     .labelled_by(vertices_label.id);
                     ui.end_row();
                     let triangles_label = ui.label("Maximum triangles");
+                    search::highlight_response(&triangles_label, "setting:Maximum triangles");
                     ui.add(
                         egui::DragValue::new(&mut limits.triangles)
                             .range(MeshCapacity::DEFAULT.triangles..=MeshCapacity::MAX.triangles)

@@ -8,7 +8,7 @@ impl UiState {
         document: &Document,
         commands: &mut Vec<Command>,
     ) {
-        ui.collapsing("Hold to mask", |ui| {
+        egui::CollapsingHeader::new("Hold to mask").open(search::requested_section(ui.ctx(), "mask_hold")).show(ui, |ui| {
             ui.label(format!("Shared selection hold: {} (choose Mask in the X menu)", self.preferences.visibility_hold.label()));
             if ui.button("Configure hold and menu keys…").clicked() {
                 self.settings_open = true;
@@ -30,6 +30,7 @@ impl UiState {
                 commands.push(Command::Action(Action::TemporaryMaskFlip));
             }
             let selected = self.preferences.mask_preset.brush_index(document);
+            search::mark_destination(ui, "setting:Mask brush preset");
             egui::ComboBox::from_label("Mask brush preset").selected_text(selected.map_or("Default Mask", |i| document.brushes()[i].name.as_str())).show_ui(ui, |ui| {
                 for (i, brush) in document.brushes().iter().enumerate().filter(|(_,b)| b.kind == Kind::Mask) {
                     if ui.selectable_label(selected == Some(i), &brush.name).clicked() {

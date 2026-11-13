@@ -59,11 +59,26 @@ fn menu_entry(
                 .selected(keyboard_selected)
                 .min_size(egui::vec2(width, 32.)),
         )
-        .on_hover_text(&entry.hint);
+        .on_hover_text(&entry.hint)
+        .on_disabled_hover_text(&entry.hint);
     if keyboard_selected && reveal {
         response.scroll_to_me(Some(egui::Align::Center));
     }
     response.clicked()
+}
+
+/// Visible help also works with a pen, which cannot hover a disabled button.
+fn unavailable_menu_help(ui: &mut egui::Ui, entries: &[ViewportMenuEntry]) {
+    let count = entries.iter().filter(|entry| !entry.enabled).count();
+    if count == 0 {
+        return;
+    }
+    ui.collapsing(format!("Why are {count} actions unavailable?"), |ui| {
+        for entry in entries.iter().filter(|entry| !entry.enabled) {
+            ui.strong(&entry.label);
+            ui.label(entry.hint.split("\n\n").next().unwrap_or(&entry.hint));
+        }
+    });
 }
 
 fn modeling_choices(
@@ -156,6 +171,7 @@ impl UiState {
         popup: bool,
     ) {
         let entries = self.viewport_menu_entries(ViewportMenuContext::Modeling, document);
+        unavailable_menu_help(ui, &entries);
         if let Some((_, action)) = modeling_choices(ui, &entries, None, false) {
             let function = matches!(action, Action::ModelTool(_));
             commands.push(Command::Action(action));
@@ -176,7 +192,7 @@ impl UiState {
         context: ViewportMenuContext,
         document: &Document,
     ) -> Vec<ViewportMenuEntry> {
-        match context {
+        let mut entries = match context {
             ViewportMenuContext::Modeling => {
                 let mut entries: Vec<_> = [
                     (ComponentMode::Face, Action::ModelFaces, "Face"),
@@ -269,7 +285,19 @@ impl UiState {
             }
             ViewportMenuContext::Mask => self.temporary_mask_menu_entries(document),
             ViewportMenuContext::Transform => self.transform_menu_entries(document),
+        };
+        for entry in &mut entries {
+            if let Some(reason) = self.action_unavailable(&entry.action, document) {
+                entry.enabled = false;
+                entry.hint = format!("{reason}.\n\n{}", entry.hint);
+            }
+            if let Some(shortcut) = self.preferences.shortcut(&entry.action) {
+                entry
+                    .hint
+                    .push_str(&format!("\nShortcut: {}", shortcut.label()));
+            }
         }
+        entries
     }
 
     fn transform_menu_entries(&self, document: &Document) -> Vec<ViewportMenuEntry> {
@@ -429,6 +457,10 @@ impl UiState {
         .order(egui::Order::Foreground)
         .show(ctx, |ui| {
             ui.weak("Up/Down choose · Enter apply · Escape close");
+            if let Some(entry) = entries.get(index) {
+                ui.label(format!("{}: {}", entry.label, entry.hint));
+            }
+            unavailable_menu_help(ui, &entries);
             if matches!(
                 context,
                 ViewportMenuContext::Mask | ViewportMenuContext::Visibility
@@ -541,5 +573,49 @@ impl UiState {
             self.viewport_menu.context = None;
         }
         (action, closed)
+    }
+}
+
+#[cfg(test)]
+mod availability_tests {
+    use super::*;
+
+    #[test]
+    fn quick_menu_uses_the_same_job_reason_as_search_and_shortcuts() {
+        let state = UiState {
+            mesh_busy: true,
+            ..Default::default()
+        };
+        let document = Document::default();
+        for context in [
+            ViewportMenuContext::Modeling,
+            ViewportMenuContext::Visibility,
+            ViewportMenuContext::Mask,
+        ] {
+            let entries = state.viewport_menu_entries(context, &document);
+            assert!(!entries.is_empty());
+            for entry in entries {
+                assert!(!entry.enabled);
+                let reason = state.action_unavailable(&entry.action, &document).unwrap();
+                assert!(entry.hint.starts_with(reason));
+            }
+        }
+    }
+
+    #[test]
+    fn quick_menu_describes_the_configured_binding() {
+        let mut state = UiState::default();
+        let document = Document::default();
+        let binding = crate::preferences::Shortcut::new(egui::Key::F7, egui::Modifiers::NONE);
+        state
+            .preferences
+            .bind(Action::ModelFaces, binding.clone())
+            .unwrap();
+        let entries = state.viewport_menu_entries(ViewportMenuContext::Modeling, &document);
+        let entry = entries
+            .iter()
+            .find(|entry| entry.action == Action::ModelFaces)
+            .unwrap();
+        assert!(entry.hint.contains(&binding.label()));
     }
 }

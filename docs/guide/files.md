@@ -16,7 +16,7 @@ Keep an editable `.clay` project, export a mesh for another app, or recover work
 
 Choose **Open** (**Ctrl+O**) to browse for a project. Double-click folders to enter them, select a file, then choose **Open project**. **Home**, **Up**, and the folder field help you navigate.
 
-The first **Save** (**Ctrl+S**) opens a file chooser. Choose a folder and file name; `.clay` is added when you omit the extension. Later saves update that project's established file directly. Use **Save as…** (**Ctrl+Shift+S**) to choose another destination. The toolbar path seeds the chooser; changing it also makes Save ask for a destination.
+The first **Save** (**Ctrl+S**) opens a file chooser. Choose a folder and file name; `.clay` is added when you omit the extension. Later saves update that project's established file directly. Use **Project → Save as…** (**Ctrl+Shift+S**) to choose another destination. The path inside **Project** seeds the chooser; changing it also makes Save ask for a destination.
 
 Save As asks before replacing an existing file. Cancel leaves the document and files unchanged. The parent folder must exist. New, Open, and Quit still prompt when work is unsaved; Save and continue opens the chooser when a destination is needed.
 
@@ -33,7 +33,7 @@ Camera position and undo history are session-only. [Workspace preferences](works
 
 ## Diagnostic bundles
 
-Choose **Settings → Export diagnostic bundle…**, or the same action beside **Export OBJ** in the file toolbar. Finish any active edit or mesh operation, enter a **new folder path** whose parent exists, and choose **Export locally**. The dialog lists the included content and lets you configure saved history retention limits.
+Choose **Settings → Export diagnostic bundle…**. Finish any active edit or mesh operation, enter a **new folder path** whose parent exists, and choose **Export locally**. The dialog lists the included content and lets you configure saved history retention limits.
 
 The folder contains:
 
@@ -60,7 +60,7 @@ For tooling, `clay_form::diagnostics::load_manifest` checks the schema version, 
 ### Example: import the sample pyramid
 
 1. Download [pyramid.obj](../examples/pyramid.obj), or use `docs/examples/pyramid.obj` from a checkout.
-2. Open **Import → OBJ…** in the top toolbar, browse to the model, and choose **Import OBJ**. **Submodels → Import OBJ…** is also available; you can enter its path in **OBJ path** before opening that picker.
+2. Open **Project → Import → OBJ…**, browse to the model, and choose **Import OBJ**. **Submodels → Import OBJ…** is also available; you can enter its path in **OBJ path** before opening that picker.
 3. Wait for the new submodel to appear. Use the original sphere's eye icon to hide it when inspecting the pyramid.
 4. Save a `.clay` project to keep both models, or undo the import.
 

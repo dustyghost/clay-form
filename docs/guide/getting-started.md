@@ -8,12 +8,12 @@ If you have not opened Clay Form yet, follow the [installation guide](../install
 
 ## 1. Start with a sphere
 
-1. Choose **New sphere**. Save any work you want to keep before replacing it.
+1. Choose **New sphere** (or **Project → New sphere** in a compact workspace). Save any work you want to keep before replacing it.
 2. Select **Standard** in **Brush library**.
-3. In **Brush settings**, choose **Add**, **Freehand**, **Soft** alpha, **Radius 60**, and **Strength 0.25**. Turn **Stroke stabilisation** off for this exercise.
+3. In **Brush settings**, choose **Add**, **Radius 60**, and **Strength 0.25**. Expand **Stroke settings** to choose **Freehand** and turn **Stroke stabilisation** off. In **Alpha**, choose **Soft**.
 4. Turn **Symmetry** off so each crater appears only where you draw. For a single clay colour, turn off **View → Show vertex group colors**.
 
-You should have an unmarked sphere and a circular brush preview when you hover over it. Your panels may be arranged differently.
+You should have an unmarked sphere and a circular brush preview when you hover over it. Your panels may be arranged differently. **Search…** can find a control by name and **Show in UI** reveals its location. **Workspace…** lets you arrange the controls or restore the default layout.
 
 <a id="2-make-a-mark"></a>
 
@@ -62,9 +62,9 @@ Compare a change with **Ctrl+Z**, then restore it with **Ctrl+Shift+Z**. Open **
 2. Browse to a folder you can find again and name the project `pocket-moon.clay`.
 3. To return to your moon later, choose **Open** (**Ctrl+O**) and select that file.
 
-You now have a saved project to continue sculpting. Later saves update the same file; **Save as…** (**Ctrl+Shift+S**) makes a separate version.
+You now have a saved project to continue sculpting. Later saves update the same file; **Project → Save as…** (**Ctrl+Shift+S**) makes a separate version.
 
-Keep the `.clay` project for further sculpting. **Export OBJ** saves the active mesh for other applications. See [Files and recovery](files.md).
+Keep the `.clay` project for further sculpting. **Project → Export → OBJ** saves the active mesh for other applications. See [Files and recovery](files.md).
 
 Your moon is ready when you can see three distinct hollows from an angled view and have a saved project. Try adding one tiny crater across the edge of a larger one, or leave the far side smooth.
 

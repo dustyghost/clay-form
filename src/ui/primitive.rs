@@ -1,6 +1,6 @@
 //! Primitive replacement warning and inline submodel parameter controls.
-use super::design;
 use super::{Action, ActionResponse, UiState};
+use super::{design, search};
 use crate::{
     command::Command,
     document::Document,
@@ -25,7 +25,10 @@ fn axis_control(ui: &mut egui::Ui, axis: usize, add: impl FnOnce(&mut egui::Ui))
 fn resolution_control(ui: &mut egui::Ui, label: &str, value: &mut u32, min: u32, max: u32) {
     ui.push_id(label, |ui| {
         ui.horizontal(|ui| {
-            ui.add_sized([105., 18.], egui::Label::new(label));
+            search::setting_response(
+                ui.add_sized([105., 18.], egui::Label::new(label)),
+                &format!("Primitive {}", label.to_lowercase()),
+            );
             if ui.small_button("-").clicked() {
                 *value = value.saturating_sub(1).max(min);
             }
@@ -90,10 +93,16 @@ impl UiState {
         commands: &mut Vec<Command>,
     ) {
         let Some(current) = document.primitive() else {
+            if search::requested_section(ui.ctx(), "primitive_dimensions").is_some() {
+                ui.label("Create or select a parametric primitive to adjust its dimensions. Converted sculpt meshes no longer have primitive dimensions.");
+            }
             return;
         };
         let mut params = current.clone();
-        let forced = self.primitive_controls_requested.then_some(true);
+        let forced = self
+            .primitive_controls_requested
+            .then_some(true)
+            .or_else(|| search::requested_section(ui.ctx(), "primitive_dimensions"));
         let response = egui::CollapsingHeader::new(format!("Primitive · {}", current.kind.label()))
             .id_salt(("primitive_controls", document.active_model_index()))
             .default_open(true).open(forced).show(ui, |ui| {
@@ -105,9 +114,9 @@ impl UiState {
                     if kind!=params.kind { let mut replacement=Primitive::for_kind(kind);replacement.center=params.center;replacement.basis=params.basis;params=replacement; }
                     ui.separator();
                     if matches!(kind,Kind::Cube|Kind::Plane|Kind::Grid|Kind::UvSphere|Kind::Icosphere) {
-                        axis_control(ui, 0, |ui| { ui.add(egui::Slider::new(&mut params.size.0,0.05..=10.).text("Width")); });
-                        axis_control(ui, 1, |ui| { ui.add(egui::Slider::new(&mut params.size.1,0.05..=10.).text("Height")); });
-                        if !matches!(kind,Kind::Plane|Kind::Grid) {axis_control(ui, 2, |ui| { ui.add(egui::Slider::new(&mut params.size.2,0.05..=10.).text("Depth")); });}
+                        axis_control(ui, 0, |ui| { search::setting_response(ui.add(egui::Slider::new(&mut params.size.0,0.05..=10.).text("Width")), "Primitive width"); });
+                        axis_control(ui, 1, |ui| { search::setting_response(ui.add(egui::Slider::new(&mut params.size.1,0.05..=10.).text("Height")), "Primitive height"); });
+                        if !matches!(kind,Kind::Plane|Kind::Grid) {axis_control(ui, 2, |ui| { search::setting_response(ui.add(egui::Slider::new(&mut params.size.2,0.05..=10.).text("Depth")), "Primitive depth"); });}
                     }
                     match kind {
                         Kind::Cube=>{
@@ -124,29 +133,29 @@ impl UiState {
                         }
                         Kind::Icosphere=>{resolution_control(ui,"Subdivisions",&mut params.subdivisions,1,6);}
                         Kind::Circle=>{
-                            ui.add(egui::Slider::new(&mut params.radius,0.05..=10.).text("Radius"));
+                            search::setting_response(ui.add(egui::Slider::new(&mut params.radius,0.05..=10.).text("Radius")), "Primitive radius");
                             resolution_control(ui,"Vertices",&mut params.segments,3,256);
-                            design::checkbox(ui, &mut params.filled,"Fill circle");
+                            search::setting_response(design::checkbox(ui, &mut params.filled,"Fill circle"), "Primitive fill and caps");
                         }
                         Kind::Cylinder|Kind::Cone=>{
-                            ui.add(egui::Slider::new(&mut params.radius,0.05..=10.).text(if kind==Kind::Cone {"Base radius"} else {"Radius"}));
-                            if kind==Kind::Cone {ui.add(egui::Slider::new(&mut params.top_radius,0. ..=10.).text("Top radius"));}
-                            axis_control(ui, 1, |ui| { ui.add(egui::Slider::new(&mut params.size.1,0.05..=10.).text("Height")); });
+                            search::setting_response(ui.add(egui::Slider::new(&mut params.radius,0.05..=10.).text(if kind==Kind::Cone {"Base radius"} else {"Radius"})), "Primitive radius");
+                            if kind==Kind::Cone {search::setting_response(ui.add(egui::Slider::new(&mut params.top_radius,0. ..=10.).text("Top radius")), "Primitive top radius");}
+                            axis_control(ui, 1, |ui| { search::setting_response(ui.add(egui::Slider::new(&mut params.size.1,0.05..=10.).text("Height")), "Primitive height"); });
                             resolution_control(ui,"Sides",&mut params.segments,3,256);
                             axis_control(ui, 1, |ui| { resolution_control(ui,"Height spans",&mut params.divisions[1],1,128); });
-                            design::checkbox(ui, &mut params.filled,"Cap ends");
+                            search::setting_response(design::checkbox(ui, &mut params.filled,"Cap ends"), "Primitive fill and caps");
                         }
                         Kind::Torus=>{
-                            ui.add(egui::Slider::new(&mut params.radius,0.05..=10.).text("Major radius"));
+                            search::setting_response(ui.add(egui::Slider::new(&mut params.radius,0.05..=10.).text("Major radius")), "Primitive radius");
                             params.tube_radius=params.tube_radius.min(params.radius-0.01);
-                            ui.add(egui::Slider::new(&mut params.tube_radius,0.01..=(params.radius-0.01).min(5.)).text("Tube radius"));
+                            search::setting_response(ui.add(egui::Slider::new(&mut params.tube_radius,0.01..=(params.radius-0.01).min(5.)).text("Tube radius")), "Primitive radius");
                             resolution_control(ui,"Major segments",&mut params.segments,3,256);
                             resolution_control(ui,"Tube segments",&mut params.rings,3,128);
                         }
                     }
 
                     ui.separator();
-                    design::checkbox(ui, &mut params.triangulated,"Triangle topology");
+                    search::setting_response(design::checkbox(ui, &mut params.triangulated,"Triangle topology"), "Primitive fill and caps");
                     design::checkbox(ui, &mut self.wire,"Show wireframe");
                     ui.label(format!("{} vertices · {} triangles",document.mesh().vertices.len(),document.mesh().triangles.len()));
                     if params!=*current {commands.push(Command::UpdatePrimitive(params.clone()));}

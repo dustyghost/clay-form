@@ -17,6 +17,8 @@ To begin:
 
 The stroke changes the surface appearance without moving the geometry. Use Undo to remove it.
 
+The operation strip keeps the active model and Paint destination visible when its panel is collapsed. Check whether it names **Vertices** or **Image** before painting. The Materials panel separates **Future strokes**, **Apply to current model**, and **Edit shared project material**. The shared editor reports how many existing uses will change. Image painting explains when UVs need generating, with **Set up texture painting** beside the target controls.
+
 Choose **Focus Paint workspace** to keep one painting sidebar and give the model more screen space. **Restore workspace** in the top toolbar returns your previous layout, including after restarting the app. The model selector switches the active model directly from this workspace.
 
 ![Focused Paint workspace with image target and inspection controls](../images/paint-focused-workspace.png)
@@ -153,8 +155,8 @@ Open **Subsurface scattering** for weight, RGB scattering radius and scale. Bees
 
 ## Exporting paint
 
-Choose **Export → PLY…** for geometry and base vertex colours, or **Export → Blender…** for the full painted material stack and editable named definitions. Blender export needs Blender 4.0 or newer installed on `PATH`. Export runs in the background and can be cancelled. Choose a destination in the file dialog; replacing a file requires confirmation.
+Choose **Project → Export → PLY…** for geometry and base vertex colours, or **Project → Export → Blender…** for the full painted material stack and editable named definitions. Blender export needs Blender 4.0 or newer installed on `PATH`. Export runs in the background and can be cancelled. Choose a destination in the file dialog; replacing a file requires confirmation.
 
-**Export → Blender… → Include viewport lights** optionally exports your current lights and ambient fill. It starts unchecked; leaving it off keeps the neutral preview light used by Blender export. Directional lights become Sun lights and point lights retain their positions, colours and distance falloff. Camera-relative lights are frozen at their current world positions. Blender’s shadows, reflections and material shading can make the final appearance differ. OBJ and PLY do not export this light setup.
+**Project → Export → Blender… → Include viewport lights** optionally exports your current lights and ambient fill. It starts unchecked; leaving it off keeps the neutral preview light used by Blender export. Directional lights become Sun lights and point lights retain their positions, colours and distance falloff. Camera-relative lights are frozen at their current world positions. Blender’s shadows, reflections and material shading can make the final appearance differ. OBJ and PLY do not export this light setup.
 
 Both formats export the active model at its current mesh level, including hidden faces. PLY does not contain roughness, metallic, emission or layers. Keep a `.clay` project for the full scene and subdivision levels. In Blender, edit the labelled values inside the node group named after your material. Changes coming back from Blender are part of the later exchange flow.

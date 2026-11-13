@@ -73,15 +73,15 @@ pub(in crate::ui) fn library_tiles(
             .objects
             .first()
             .and_then(|id| library.assets.iter().find(|a| a.id == *id));
-        if design::brush_tile_with_icon(
+        let response = design::brush_tile_with_icon(
             ui,
             &brush.name,
             c.placing && c.group == Some(brush.id),
             width,
             |ctx| cover.and_then(|a| c.object_icon(ctx, a)),
-        )
-        .clicked()
-        {
+        );
+        search::highlight_response(&response, &format!("object-brush:{}", brush.id));
+        if response.clicked() {
             commands.push(Command::Instances(C::ChooseBrush(brush.id)));
         }
     }
@@ -188,6 +188,7 @@ pub(in crate::ui) fn settings(
     }
     egui::CollapsingHeader::new("Capture a model into this brush")
         .id_salt(("capture_part", brush.id))
+        .open(search::requested_section(ui.ctx(), "object_capture"))
         .default_open(brush.objects.is_empty())
         .show(ui, |ui| capture(ui, c, d, commands));
     if !d.instances().assets.is_empty() {

@@ -41,11 +41,11 @@ Tap X, Y, or Z on the top-right orientation gizmo. Dimmed axes face away from yo
 
 ## Zoom
 
-Use the wheel, toolbar **− / +**, or **View → Zoom in / Zoom out**. Default keys are **− / =**. Zoom goes up to **800%** and can go below **20%** to accommodate large imported models.
+Use the wheel, viewport **Zoom** control, or **View → Zoom in / Zoom out**. Default keys are **− / =**. Zoom goes up to **800%** and can go below **20%** to accommodate large imported models.
 
 | Reset | What changes |
 | --- | --- |
-| Click the toolbar percentage, or **Reset zoom** | Zoom returns to 100%; rotation and pan stay |
+| Choose **View → Reset zoom to 100%** | Zoom returns to 100%; rotation and pan stay |
 | **Reset view** or **F** | Return to the front orthographic view, center the visible models and zoom out as needed to fit them with a margin |
 
 For pen zoom, hold **Ctrl** and drag up to enlarge or down to shrink. This also works during an orbit or gizmo drag.
@@ -173,7 +173,7 @@ Reconnect the tablet and restart Clay Form. The rule grants the active desktop u
 
 For OpenTabletDriver's virtual artist tablet, install `packaging/linux/72-clay-form-opentabletdriver.rules` into `/etc/udev/rules.d/` using the same command pattern, reload the rules, then restart OpenTabletDriver to recreate the virtual device. This rule grants access only to the artist tablet, not its virtual keyboard. Physical and virtual pen endpoints are monitored together, so an idle endpoint cannot hide pressure from the one in use.
 
-Other devices may need their own narrowly scoped permission rule. If pressure reports permission denied, grant your normal user device-specific access; do not run the app as root. In **Brush settings**, enable **Pressure → strength**; **Pressure → radius** can stay off. The default curve of 1 is linear: 25% pressure produces one quarter of the full-pressure strength.
+Other devices may need their own narrowly scoped permission rule. If pressure reports permission denied, grant your normal user device-specific access; do not run the app as root. In **Brush settings → Brush shape and pressure**, enable **Pressure → strength**; **Pressure → radius** can stay off. The default curve of 1 is linear: 25% pressure produces one quarter of the full-pressure strength.
 
 ## Related guides
 

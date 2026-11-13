@@ -2,6 +2,130 @@
 use super::*;
 
 impl UiState {
+    /// File operations stay reachable even when the rest of the toolbar is compact.
+    pub(super) fn project_menu(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &Document,
+        commands: &mut Vec<Command>,
+    ) {
+        design::menu(ui, Glyph::Open, "Project", false, false, |ui| {
+            self.project_menu_contents(ui, document, commands);
+        });
+    }
+
+    pub(super) fn project_menu_contents(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &Document,
+        commands: &mut Vec<Command>,
+    ) {
+        search::mark_destination(ui, "project");
+        for (glyph, label, action) in [
+            (Glyph::New, "New sphere", Action::New),
+            (Glyph::Open, "Open…", Action::Open),
+            (Glyph::Save, "Save", Action::Save),
+            (Glyph::Save, "Save as…", Action::SaveAs),
+        ] {
+            if self.toolbar_action(ui, glyph, label, action, document, commands) {
+                ui.close();
+            }
+        }
+        ui.separator();
+        ui.menu_button("Import", |ui| {
+            if self.toolbar_action(
+                ui,
+                Glyph::Open,
+                "OBJ…",
+                Action::ImportObj,
+                document,
+                commands,
+            ) {
+                ui.close_kind(egui::UiKind::Menu);
+            }
+        });
+        ui.menu_button("Export", |ui| {
+            if self.toolbar_action(ui, Glyph::Export, "OBJ", Action::Export, document, commands) {
+                ui.close_kind(egui::UiKind::Menu);
+            }
+            for (format, label) in [
+                (
+                    crate::persistence::material_export::ExportFormat::OpenUsd,
+                    "OpenUSD…",
+                ),
+                (
+                    crate::persistence::material_export::ExportFormat::Fbx,
+                    "FBX…",
+                ),
+                (
+                    crate::persistence::material_export::ExportFormat::Ply,
+                    "PLY…",
+                ),
+                (
+                    crate::persistence::material_export::ExportFormat::Blender,
+                    "Blender…",
+                ),
+            ] {
+                if design::help(
+                    ui.add_enabled(!self.export_busy, egui::Button::new(label)),
+                    format.description(),
+                )
+                .clicked()
+                {
+                    commands.push(Command::BrowseExport(format));
+                    ui.close_kind(egui::UiKind::Menu);
+                }
+            }
+        });
+        ui.separator();
+        ui.weak("Project path");
+        ui.add(egui::TextEdit::singleline(&mut self.path).desired_width(260.));
+    }
+
+    pub(super) fn toolbar_action(
+        &self,
+        ui: &mut egui::Ui,
+        glyph: Glyph,
+        label: &str,
+        action: Action,
+        document: &Document,
+        commands: &mut Vec<Command>,
+    ) -> bool {
+        let available = crate::app::policy::EditorPolicy::new(self, document).action(&action);
+        let mut button = design::button(ui, glyph, label);
+        let shortcut = self
+            .preferences
+            .shortcut(&action)
+            .map(|shortcut| shortcut.label());
+        if ui.layout().main_dir().is_vertical()
+            && let Some(shortcut) = &shortcut
+        {
+            button = button.shortcut_text(shortcut);
+        }
+        let help = available.err().map_or_else(
+            || match action {
+                Action::Undo => document
+                    .undo_label()
+                    .unwrap_or("Undo the previous change")
+                    .to_owned(),
+                Action::Redo => document
+                    .redo_label()
+                    .unwrap_or("Redo the previous change")
+                    .to_owned(),
+                _ => self.action_label(&action, document),
+            },
+            str::to_owned,
+        );
+        let help = shortcut.map_or_else(|| help.clone(), |shortcut| format!("{help} · {shortcut}"));
+        let response =
+            design::help(ui.add_enabled(available.is_ok(), button), help).customize(action.clone());
+        let clicked = response.clicked();
+        if clicked {
+            commands.push(Command::Action(action));
+        }
+        clicked
+    }
+
     pub(super) fn builtin_menu(
         &mut self,
         ui: &mut egui::Ui,
@@ -168,6 +292,10 @@ impl UiState {
                         });
                 });
             if let Some(response) = response {
+                self.search_placement_drag(
+                    SidebarSection::Builtin(pinned.menu),
+                    response.response.dragged(),
+                );
                 // Include the closing frame so its click cannot edit the model underneath.
                 self.pinned_menu_rects.push(response.response.rect);
                 if let Some(current) = self
@@ -201,6 +329,7 @@ impl UiState {
         camera: &crate::camera::Camera,
         commands: &mut Vec<Command>,
     ) {
+        search::mark_destination(ui, &format!("menu:{menu:?}"));
         let popup = ui
             .stack()
             .iter()
@@ -570,7 +699,7 @@ impl UiState {
                     .unwrap()
                     .metadata
                     .mask_threshold;
-                if ui.add_enabled(!self.mesh_busy, egui::Slider::new(&mut threshold, 0. ..=1.).text("Selection threshold").custom_formatter(|v,_| format!("{:.0}%",v*100.)).custom_parser(|text| text.trim().trim_end_matches('%').trim().parse::<f64>().ok().map(|v|v/100.))).on_hover_text("Minimum vertex mask value for grouping, deletion and extraction. Zero-valued vertices are always excluded. Complete faces must meet the threshold at every corner.").changed() { commands.push(Command::MaskThreshold(threshold)); }
+                if search::setting_response(ui.add_enabled(!self.mesh_busy, egui::Slider::new(&mut threshold, 0. ..=1.).text("Selection threshold").custom_formatter(|v,_| format!("{:.0}%",v*100.)).custom_parser(|text| text.trim().trim_end_matches('%').trim().parse::<f64>().ok().map(|v|v/100.))), "Selection threshold").on_hover_text("Minimum vertex mask value for grouping, deletion and extraction. Zero-valued vertices are always excluded. Complete faces must meet the threshold at every corner.").changed() { commands.push(Command::MaskThreshold(threshold)); }
                 ui.add_enabled_ui(!self.mesh_busy && document.primitive().is_none(), |ui| {
                         ui.strong("Mask through");
                         if ui.add_enabled(document.active_visible(), egui::Button::new("Line").selected(matches!(self.selection_tool, Some(crate::viewport::SelectionTool::MaskLine { .. })))).on_hover_text("Draw a dividing line from empty space. Add or erase masking on one side, front to back; never cuts geometry.").customize(Action::MaskLine).clicked() {
@@ -592,7 +721,7 @@ impl UiState {
                             if ui.add_enabled(document.active_visible(), egui::Button::new("Blur mask")).on_hover_text("Soften the mask by one mesh-edge ring on every subdivision level, including hidden faces. Geometry and saved vertex group weights stay unchanged.").customize(Action::BlurMask).clicked() { commands.push(Command::BlurMask); }
                             if ui.add_enabled(document.active_visible(), egui::Button::new("Sharpen mask")).on_hover_text("Tighten soft mask transitions around 50% on every subdivision level, including hidden faces. Geometry and saved vertex group weights stay unchanged.").customize(Action::SharpenMask).clicked() { commands.push(Command::SharpenMask); }
                         });
-                        if ui.add(egui::Slider::new(&mut intensity, 0. ..=1.).text("Mask intensity").custom_formatter(|v,_| format!("{:.0}%",v*100.)).custom_parser(|text| text.trim().trim_end_matches('%').trim().parse::<f64>().ok().map(|v|v/100.))).on_hover_text("Scale the mask on every subdivision level while preserving its soft falloff. Stored group weights stay unchanged.").changed() { commands.push(Command::MaskIntensity(intensity)); }
+                        if search::setting_response(ui.add(egui::Slider::new(&mut intensity, 0. ..=1.).text("Mask intensity").custom_formatter(|v,_| format!("{:.0}%",v*100.)).custom_parser(|text| text.trim().trim_end_matches('%').trim().parse::<f64>().ok().map(|v|v/100.))), "Mask intensity").on_hover_text("Scale the mask on every subdivision level while preserving its soft falloff. Stored group weights stay unchanged.").changed() { commands.push(Command::MaskIntensity(intensity)); }
                         if ui.add(design::button(ui, Glyph::Delete, "Delete masked")).on_hover_text("Remove faces meeting the mask threshold at every vertex. Creates open boundaries and resets subdivision levels and closed-surface modes. Undo restores everything.").customize(Action::DeleteMasked).clicked() { commands.push(Command::DeleteMasked); }
                     });
             }
@@ -613,7 +742,9 @@ impl UiState {
                     }
                 }
                 ui.separator();
-                ui.collapsing("Lighting", |ui| self.preferences.lighting.controls(ui));
+                egui::CollapsingHeader::new("Lighting")
+                    .open(search::requested_section(ui.ctx(), "viewport_lighting"))
+                    .show(ui, |ui| self.preferences.lighting.controls(ui));
                 ui.separator();
                 design::checkbox(ui, &mut self.flat_shading, "Flat shading")
                     .customize(Action::FlatShading)
@@ -722,12 +853,12 @@ impl UiState {
                     }
                 });
                 if self.slice_options.mode != crate::sculpt::SliceMode::Polygroups {
-                    design::checkbox(ui, &mut self.slice_options.cap, "Cap cuts").on_hover_text(
+                    search::setting_response(design::checkbox(ui, &mut self.slice_options.cap, "Cap cuts"), "Cap cuts").on_hover_text(
                         "Close the cut with flat faces; requires a closed source surface",
                     );
                 }
                 if self.slice_options.mode == crate::sculpt::SliceMode::Trim {
-                    design::checkbox(ui, &mut self.slice_options.flip, "Flip kept side");
+                    search::setting_response(design::checkbox(ui, &mut self.slice_options.flip, "Flip kept side"), "Flip kept side");
                 }
                 ui.label("Active model · through all depths · resets subdivision levels");
                 ui.separator();

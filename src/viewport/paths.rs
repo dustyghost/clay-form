@@ -90,6 +90,7 @@ struct CornerDrag {
 
 #[derive(Default)]
 pub(crate) struct PathEditor {
+    pub navigation_rect: Option<egui::Rect>,
     pub active: bool,
     pub panel: bool,
     pub exit_brush: bool,
@@ -773,8 +774,9 @@ impl PathEditor {
     ) {
         let pos = ui.input(|i| i.pointer.interact_pos());
         let primary = ui.input(|i| i.pointer.primary_down());
+        let navigation_rect = self.navigation_rect.unwrap_or(response.rect);
         let gizmo_rect = egui::Rect::from_min_size(
-            Pos2::new(response.rect.right() - 146., response.rect.top() + 12.),
+            Pos2::new(navigation_rect.right() - 146., navigation_rect.top() + 12.),
             egui::Vec2::splat(134.),
         );
         let camera_controls = hud::camera_targets(gizmo_rect);

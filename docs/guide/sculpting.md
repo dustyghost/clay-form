@@ -169,7 +169,7 @@ Resetting brush settings does not undo a sculpt stroke. Use **Undo** for geometr
 
 In **Presets**, **Import brush…** and **Import library…** open a file picker for JSON presets/libraries. Export paths remain editable in the panel. Imports update brushes with matching IDs; **Duplicate brush** creates an independent variation. Importing an unchanged library does not modify the project.
 
-Choose **Capture model icon** in Brush settings or the library to preview the active model as a thumbnail. Select **Use as brush icon**, optionally **Save PNG**, or cancel. **Restore default icon** brings back the built-in illustration. Icons are embedded in projects and exported presets.
+Choose **Capture model icon** under **Brush settings → Brush preset settings**, or expand **Brush library management** in the library to preview the active model as a thumbnail. Select **Use as brush icon**, optionally **Save PNG**, or cancel. **Restore default icon** brings back the built-in illustration. Icons are embedded in projects and exported presets.
 
 ## Detail brush
 
@@ -190,7 +190,7 @@ Use subdivision or adaptive sculpting if a fine crease looks faceted. Detail's a
 
 ## Stroke modes
 
-Choose **Brush settings → Stroke mode**. Each preset remembers its own mode.
+Choose **Brush settings → Stroke settings → Stroke mode**. Each preset remembers its own mode.
 
 To brush along a reusable surface guide:
 
@@ -227,7 +227,7 @@ Each completed stroke is one undo step. Switching tool or view cancels an unappl
 
 To copy an existing half and replace the other, use [Mirror one side](modeling.md#mirror-one-side). The controls below repeat new brush strokes.
 
-1. Open **Symmetry** in the Model toolbar row and check **Enable symmetry**.
+1. Open **Symmetry** in the editing toolbar row and check **Enable symmetry**.
 2. Choose X, Y, or Z mirror planes.
 3. Draw on one side of the model. The stroke repeats across the selected planes.
 
@@ -344,7 +344,7 @@ History is temporary: **New/Open clears it, and projects do not save it**. A new
 | Number of edits | 24 | 1–256 |
 | Estimated memory shared by undo and redo | 1024 MiB | 16–1024 MiB |
 
-To change these limits, open **Export diagnostic bundle…** in the file toolbar. Lowering a limit may remove steps immediately.
+To change these limits, open **Settings → Export diagnostic bundle…**. Lowering a limit may remove steps immediately.
 
 When the budget is full, the oldest undo steps are removed first, then the most distant redo steps. A single snapshot larger than the budget cannot be retained. The memory estimate includes geometry and captured settings; it excludes the live project and allocator overhead.
 

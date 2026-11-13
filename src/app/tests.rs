@@ -5,10 +5,12 @@ mod about;
 mod appearance;
 mod attached_arrays;
 mod deformation_stack;
+mod discoverability;
 mod grouped_path;
 mod instances;
 mod path_transform;
 mod startup;
+mod workspace;
 fn navigation_frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) -> egui::Rect {
     navigation_frame_with_modifiers(app, ctx, events, egui::Modifiers::NONE)
 }

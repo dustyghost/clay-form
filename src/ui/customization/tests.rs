@@ -6,6 +6,12 @@ fn default_brush_control_can_be_removed_from_its_context_menu() {
     ctx.style_mut(|s| s.animation_time = 0.);
     let doc = Document::default();
     let mut state = UiState::default();
+    // Exercise a docked copy independently of the fresh workspace's menu placement.
+    state.preferences.menus[0].placement = Placement::LeftPanel;
+    state
+        .preferences
+        .sidebar_order
+        .insert(0, SidebarSection::Custom(state.preferences.menus[0].id));
     frame(&mut state, &ctx, &doc, vec![]);
     let (output, _) = frame(&mut state, &ctx, &doc, vec![]);
     let size = text_center(&output, "Size");
@@ -400,8 +406,13 @@ fn unavailable_custom_buttons_can_still_be_removed() {
     ctx.style_mut(|s| s.animation_time = 0.);
     let doc = Document::default();
     let mut state = empty_state();
-    state.preferences.add_menu();
+    let menu_id = state.preferences.add_menu();
     state.preferences.menus[0].placement = Placement::LeftPanel;
+    // Keep the unavailable action in view while testing its edit context menu.
+    state
+        .preferences
+        .sidebar_order
+        .insert(0, SidebarSection::Custom(menu_id));
     state.preferences.menus[0].items.push(CustomItem {
         action: Some(Action::Undo),
         label: "Unavailable undo".into(),
@@ -446,6 +457,9 @@ fn whole_menu_converts_collapses_reorders_with_tools_and_returns_to_toolbar() {
     ctx.style_mut(|s| s.animation_time = 0.);
     let doc = Document::default();
     let mut state = empty_state();
+    // Reordering is checked against an explicit library-first fixture, not the
+    // starter workspace's evolving visual hierarchy.
+    state.preferences.sidebar_order = Tool::ALL.into_iter().map(SidebarSection::Tool).collect();
     for panel in &mut state.preferences.panels {
         panel.open = false;
     }
@@ -609,6 +623,7 @@ fn typing_in_brush_settings_keeps_the_preset_that_received_focus() {
         let mut state = empty_state();
         let doc = Document::default();
         let ctx = egui::Context::default();
+        ctx.style_mut(|style| style.animation_time = 0.);
         let render = |state: &mut UiState, modifiers, events| {
             let mut commands = Vec::new();
             let output = ctx.run(
@@ -636,7 +651,32 @@ fn typing_in_brush_settings_keeps_the_preset_that_received_focus() {
         };
         let (output, _) = render(&mut state, held, vec![]);
         let name = if temporary { "Smooth" } else { "Standard" };
-        let pos = text_center(&output, name);
+        let preset_header = text_center(&output, "Brush preset settings");
+        render(
+            &mut state,
+            held,
+            vec![
+                egui::Event::PointerMoved(preset_header),
+                egui::Event::PointerButton {
+                    pos: preset_header,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: held,
+                },
+                egui::Event::PointerButton {
+                    pos: preset_header,
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: held,
+                },
+            ],
+        );
+        render(&mut state, held, vec![]);
+        let pos = ctx.data(|data| {
+            data.get_temp::<egui::Rect>(egui::Id::new("brush_preset_name_field"))
+                .expect("Expanded preset settings expose the name field")
+                .center()
+        });
         render(
             &mut state,
             held,
@@ -793,4 +833,80 @@ fn modeling_buttons_offer_menu_and_shortcut_customization() {
             action
         );
     }
+}
+
+#[test]
+fn workspace_recovery_requires_a_visible_scope_confirmation() {
+    let ctx = egui::Context::default();
+    ctx.style_mut(|s| s.animation_time = 0.);
+    let doc = Document::default();
+    let mut state = UiState::default();
+    state.layout_open = true;
+    state.preferences.panels[0].dock = Dock::Hidden;
+    state.preferences.save_workspace_as("My layout").unwrap();
+    let bindings = state.preferences.bindings.clone();
+    frame(&mut state, &ctx, &doc, vec![]);
+    let (output, _) = frame(&mut state, &ctx, &doc, vec![]);
+    // Rendering measures sidebar widths. Compare against that settled layout,
+    // not the requested default width before its first frame.
+    let original = state.preferences.workspace("My layout".into());
+    click(
+        &mut state,
+        &ctx,
+        &doc,
+        text_center(&output, "Start a default workspace…"),
+        egui::PointerButton::Primary,
+    );
+    assert!(state.customization.layout_reset_confirmation);
+    assert_eq!(state.preferences.workspace("My layout".into()), original);
+    let (output, _) = frame(&mut state, &ctx, &doc, vec![]);
+    click(
+        &mut state,
+        &ctx,
+        &doc,
+        text_center(&output, "Use default layout"),
+        egui::PointerButton::Primary,
+    );
+    assert_eq!(state.preferences.active_workspace, None);
+    assert_eq!(state.preferences.bindings, bindings);
+    let (output, _) = frame(&mut state, &ctx, &doc, vec![]);
+    click(
+        &mut state,
+        &ctx,
+        &doc,
+        text_center(&output, "Return to My layout"),
+        egui::PointerButton::Primary,
+    );
+    assert_eq!(state.preferences.workspace("My layout".into()), original);
+}
+
+#[test]
+fn workspace_hub_offers_pen_access_to_roll_and_shortcuts() {
+    let ctx = egui::Context::default();
+    let doc = Document::default();
+    let mut state = UiState::default();
+    state.layout_open = true;
+    frame(&mut state, &ctx, &doc, vec![]);
+    let (output, _) = frame(&mut state, &ctx, &doc, vec![]);
+    click(
+        &mut state,
+        &ctx,
+        &doc,
+        text_center(&output, "Find Roll view…"),
+        egui::PointerButton::Primary,
+    );
+    assert!(state.viewport_controls.editor_open);
+    assert!(!state.layout_open);
+    state.viewport_controls.editor_open = false;
+    state.layout_open = true;
+    let (output, _) = frame(&mut state, &ctx, &doc, vec![]);
+    click(
+        &mut state,
+        &ctx,
+        &doc,
+        text_center(&output, "Shortcuts…"),
+        egui::PointerButton::Primary,
+    );
+    assert!(state.settings_open);
+    assert!(!state.layout_open);
 }

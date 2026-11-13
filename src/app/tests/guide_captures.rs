@@ -1411,14 +1411,16 @@ impl Guide {
         }
     }
     fn panel(&mut self, tool: Tool, dock: Dock) {
-        self.app
+        let panel = self
+            .app
             .ui
             .preferences
             .panels
             .iter_mut()
             .find(|p| p.tool == tool)
-            .unwrap()
-            .dock = dock;
+            .unwrap();
+        panel.dock = dock;
+        panel.open = true;
     }
     fn frame(&mut self, events: Vec<egui::Event>) -> (egui::Rect, Vec<u8>) {
         self.app.poll_fusion();
@@ -2015,6 +2017,7 @@ fn project_file_dialog_offscreen_review() {
     g.save("project-open-dialog");
     click_guide_label(&mut g, "Cancel");
     assert!(g.app.ui.file_picker.is_none());
+    click_guide_label(&mut g, "Project");
     click_guide_label(&mut g, "Save as…");
     assert!(g.app.ui.file_picker.as_ref().unwrap().save);
     g.save("project-save-dialog");
@@ -3380,7 +3383,34 @@ fn viewport_context_menu_offscreen_review() {
         g.frame(vec![]);
         let history = g.app.document.history_counts();
         let before = g.app.document.geometry_snapshot();
-        click_guide_label(&mut g, "Tool menu");
+        // The quick popup uses its configurable keyboard route; the toolbar's
+        // labelled Modeling menu provides the same modelling controls directly.
+        let shortcut = g
+            .app
+            .ui
+            .preferences
+            .shortcut(&Action::ViewportContextMenu)
+            .unwrap()
+            .clone();
+        let _ = g.ctx.run(
+            egui::RawInput {
+                events: vec![egui::Event::Key {
+                    key: egui::Key::from_name(&shortcut.key).unwrap(),
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers {
+                        ctrl: shortcut.ctrl,
+                        shift: shortcut.shift,
+                        alt: shortcut.alt,
+                        mac_cmd: shortcut.command,
+                        command: shortcut.command || shortcut.ctrl,
+                    },
+                }],
+                ..Default::default()
+            },
+            |ctx| g.app.shortcuts(ctx),
+        );
         assert!(g.app.ui.viewport_menu.context.is_some());
         g.app.ui.viewport_menu.position =
             Some(egui::pos2(size[0] as f32 - 10., size[1] as f32 - 10.));
@@ -4376,6 +4406,7 @@ fn material_controls_offscreen_review() {
     assert!(g.app.document.materials().iter().any(|a| a.id == 6));
     click_paint_control(&mut g, "Restore built-in materials");
     assert!(g.app.ui.preferences.materials.hidden_builtins.is_empty());
+    click_guide_label(&mut g, "Project");
     click_guide_label(&mut g, "Export");
     click_guide_label(&mut g, "PLY…");
     assert_eq!(
@@ -4669,6 +4700,7 @@ fn interchange_export_controls_offscreen_review() {
         (ExportFormat::OpenUsd, "OpenUSD…", "openusd-picker"),
         (ExportFormat::Fbx, "FBX…", "fbx-picker"),
     ] {
+        click_guide_label(&mut g, "Project");
         click_guide_label(&mut g, "Export");
         click_guide_label(&mut g, label);
         assert_eq!(g.app.ui.file_picker.as_ref().unwrap().export, Some(format));
