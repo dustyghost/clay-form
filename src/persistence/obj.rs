@@ -285,6 +285,7 @@ fn parse(text: &str, cancelled: &impl Fn() -> bool) -> Result<Mesh, String> {
         vertex_groups: names
             .into_iter()
             .map(|name| VertexGroup {
+                purpose: crate::sculpt::GroupPurpose::Selection,
                 name,
                 visible: true,
                 weights: vec![0.; vertices.len()],

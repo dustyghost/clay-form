@@ -105,6 +105,8 @@ Screen-relative orbit has a manual interaction capture: `CLAY_GPU_SOFTWARE=1 LP_
 
 `local_fusion_controls_offscreen_review` runs in GPU CI. It selects two open rims with viewport pointer events, clicks Preview/Apply for open ends and intersecting solids, checks source restoration with Undo/Redo, and clicks Cancel in a 640×480 window. Set `CLAY_GUIDE_PREVIEW` for its shaded and wireframe captures (default `/tmp/clay-local-fusion`). Inspect them using the [local fusion validation notes](validation/local-fusion/README.md); the screenshots themselves are reviewed manually. The separate `fusion_dense_source_profile` geometry timing/RSS probe is opt-in and excluded from routine CI.
 
+`guided_retopology_offscreen_review` runs in GPU CI. It clicks Preview and Apply, checks visible guide pixels, and verifies Undo on the cylinder and bulb fixtures. Set `CLAY_GUIDE_PREVIEW` for its comparison captures; topology quality in those images still requires manual review.
+
 `surface_boolean_method_offscreen_review` selects **Preserve surfaces** in the Submodels panel, renders the same part with Subtract, Intersect and Add, then checks Bake and Undo.
 
 `subdivision_level_switch_offscreen_review` runs in GPU CI with a 75,266-vertex sphere. It clicks Lower/Higher, checks display reuse and exact viewport pixels, and verifies that a mask edit invalidates the cache. For a local 301,058-vertex timing run, set `CLAY_LEVEL_SWITCH_PROFILE=1` and run this test with `-- --ignored --test-threads=1 --nocapture`; the timings include offscreen framebuffer readback and are not hardware frame-rate measurements.

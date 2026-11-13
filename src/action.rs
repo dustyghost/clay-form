@@ -101,6 +101,7 @@ pub(crate) enum Action {
     ProjectDetails,
     JoinMeshes,
     RelaxMesh,
+    GuidedRetopology,
     KeepProjectionReference,
     EditPaths,
     TogglePathGuides,
@@ -499,6 +500,7 @@ impl Action {
         Self::ModelAxis(crate::viewport::ModelAxis::Normal),
         Self::ModelAxis(crate::viewport::ModelAxis::Uniform),
         Self::RelaxMesh,
+        Self::GuidedRetopology,
     ];
     /// Help shared by the built-in controls, custom menus, and shelves.
     pub fn help(&self) -> Option<&'static str> {
@@ -517,6 +519,9 @@ impl Action {
             }
             Self::DeleteSubmodel => {
                 "Confirm removal of the selected submodel, including hidden geometry, masks, levels and modifiers. Undo restores it. Deleting the last model leaves an empty model slot."
+            }
+            Self::GuidedRetopology => {
+                "Preview a quad-dominant layout. A saved path guides edges and painted mask weights retain local density. Apply keeps the original as a hidden reference."
             }
             Self::RelaxMesh => {
                 "Redistribute existing vertices along a fixed surface reference. Masks protect local regions; preview, inspect and apply one undoable edit."
@@ -674,6 +679,7 @@ impl Action {
             Self::ProjectDetails => "Project details",
             Self::JoinMeshes => "Join meshes",
             Self::RelaxMesh => "Relax mesh",
+            Self::GuidedRetopology => "Guided retopology",
             Self::KeepProjectionReference => "Keep projection reference",
             Self::LowerLevel => "Lower subdivision level",
             Self::HigherLevel => "Higher subdivision level",

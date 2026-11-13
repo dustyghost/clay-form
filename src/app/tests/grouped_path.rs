@@ -26,6 +26,7 @@ pub(super) fn source_mesh() -> Mesh {
     }
     mesh.vertex_groups = ["Start", "Middle", "End"]
         .map(|name| VertexGroup {
+            purpose: crate::sculpt::GroupPurpose::Selection,
             name: name.into(),
             visible: true,
             weights: vec![0.; mesh.vertices.len()],

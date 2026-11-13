@@ -79,6 +79,9 @@ impl SurfacePath {
             }
         }
         self.closed = closed;
+        if !closed {
+            self.ring_orientation = None;
+        }
         self.seam = if closed {
             self.seam.min(self.points.len().saturating_sub(1))
         } else {
@@ -249,6 +252,8 @@ mod tests {
             closed: true,
             seam: 0,
             surface_signature: 0,
+            offset: 0.,
+            ring_orientation: None,
             attached_route: None,
             corner_rounding: Vec::new(),
         }

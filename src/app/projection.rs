@@ -2,7 +2,7 @@
 use super::*;
 use crate::background_job::BackgroundJob;
 use crate::sculpt::{Mesh, ProjectionOptions};
-use crate::ui::SurfaceReport;
+use crate::ui::{SurfaceMode, SurfaceReport};
 use std::sync::Arc;
 
 pub(super) struct ProjectionDraft {
@@ -14,12 +14,14 @@ struct Worker {
     job: BackgroundJob<(Mesh, SurfaceReport)>,
     revision: u64,
     settings: crate::diagnostics::EditSettings,
+    progress: Option<Arc<std::sync::Mutex<String>>>,
 }
 #[derive(Default)]
 pub(super) struct ProjectionState {
     worker: Option<Worker>,
     pub draft: Option<ProjectionDraft>,
     pub reference: Option<(u64, Arc<Mesh>)>,
+    pub density_display: Option<(u64, Arc<Mesh>)>,
 }
 impl App {
     pub(super) fn open_projection(&mut self) -> Result<(), String> {
@@ -29,7 +31,7 @@ impl App {
         }
         self.viewport.cancel(&mut self.document);
         self.ui.projection.open = true;
-        self.ui.projection.relaxation = false;
+        self.ui.projection.mode = SurfaceMode::Projection;
         if self
             .ui
             .projection
@@ -50,17 +52,24 @@ impl App {
         self.viewport.session.projection_preview = None;
         self.ui.projection.report = None;
         self.ui.projection.busy = false;
+        self.ui.projection.progress.clear();
+        self.ui.projection.error = None;
     }
     pub(super) fn cancel_projection(&mut self) {
         self.clear_projection_preview();
         self.ui.projection.open = false;
+        self.ui.projection.density_paint = None;
+        self.projection.density_display = None;
         self.viewport.wait_for_release();
     }
     pub(super) fn start_projection(&mut self) -> Result<(), String> {
         if !self.ui.projection.open || self.mesh_job.is_some() {
             return Err("Open a surface preview when no mesh job is running".into());
         }
-        if self.ui.projection.relaxation {
+        if self.ui.projection.mode == SurfaceMode::Retopology {
+            return self.start_retopology();
+        }
+        if self.ui.projection.mode == SurfaceMode::Relaxation {
             return self.start_relaxation();
         }
         let source = self
@@ -95,6 +104,7 @@ impl App {
         });
         self.projection.worker = Some(Worker {
             job,
+            progress: None,
             revision: self.document.display_revision(),
             settings,
         });
@@ -103,6 +113,15 @@ impl App {
         Ok(())
     }
     pub(super) fn poll_projection(&mut self) {
+        if let Some(progress) = self
+            .projection
+            .worker
+            .as_ref()
+            .and_then(|w| w.progress.as_ref())
+            && let Ok(label) = progress.lock()
+        {
+            self.ui.projection.progress = label.clone();
+        }
         let result = self.projection.worker.as_mut().and_then(|w| w.job.poll());
         if let Some(result) = result {
             let worker = self.projection.worker.take().unwrap();
@@ -121,7 +140,10 @@ impl App {
                         settings: worker.settings.clone(),
                     });
                 }
-                Err(error) => self.ui.status = error,
+                Err(error) => {
+                    self.ui.projection.error = Some(error.clone());
+                    self.ui.status = error;
+                }
             }
         }
     }
@@ -131,10 +153,10 @@ impl App {
             .draft
             .take()
             .ok_or("Preview the surface edit before applying it")?;
-        let apply = if self.ui.projection.relaxation {
-            Document::apply_relaxation
-        } else {
-            Document::apply_projection
+        let apply = match self.ui.projection.mode {
+            SurfaceMode::Projection => Document::apply_projection,
+            SurfaceMode::Relaxation => Document::apply_relaxation,
+            SurfaceMode::Retopology => Document::apply_retopology,
         };
         let result = apply(
             &mut self.document,
@@ -143,18 +165,119 @@ impl App {
             Some(draft.settings),
         );
         if result.is_ok()
-            && self.ui.projection.relaxation
+            && self.ui.projection.mode == SurfaceMode::Relaxation
             && let Some((revision, _)) = &mut self.projection.reference
         {
             *revision = self.document.display_revision();
+        }
+        if result.is_ok() && self.ui.projection.mode == SurfaceMode::Retopology {
+            self.ui.projection.source = Some(crate::document::ProjectionSource::Submodel(
+                self.document.active_model_index() + 1,
+            ));
+            self.ui.status =
+                "Layout applied. The hidden model below is the detail projection reference.".into();
         }
         self.cancel_projection();
         result
     }
     pub(super) fn open_relaxation(&mut self) -> Result<(), String> {
         self.open_projection()?;
-        self.ui.projection.relaxation = true;
+        self.ui.projection.mode = SurfaceMode::Relaxation;
         self.ui.status = "Mask protected areas, then preview mesh relaxation".into();
+        Ok(())
+    }
+    pub(super) fn open_retopology(&mut self) -> Result<(), String> {
+        self.document.require_retopology_target()?;
+        if self.viewport.paths.brush.is_some() {
+            if self.viewport.paths.has_unfinished(&self.document) {
+                return Err(
+                    "Complete or cancel the current path before opening Guided retopology".into(),
+                );
+            }
+            self.dispatch_path(crate::command::PathCommand::Close)?;
+        }
+        self.viewport.cancel(&mut self.document);
+        self.clear_projection_preview();
+        let state = &mut self.ui.projection;
+        state.mode = SurfaceMode::Retopology;
+        state.open = true;
+        // Start large sculpts at a bounded, reviewable budget. The explicit
+        // control still permits up to 50,000 quads.
+        let symmetry = self.document.symmetry();
+        let mut enabled_axes = crate::sculpt::Axis::ALL
+            .into_iter()
+            .zip(symmetry.mirror)
+            .filter_map(|(axis, enabled)| enabled.then_some(axis));
+        state.layout.symmetry_axis = enabled_axes
+            .next()
+            .filter(|_| symmetry.enabled && enabled_axes.next().is_none());
+        state.layout.symmetry_center = symmetry.center;
+        state.layout.symmetry_source = crate::sculpt::retopology::SymmetrySource::Original;
+        state.layout.target = (self.document.mesh().triangles.len() / 10).clamp(4, 10_000);
+        state.flow_paths.retain(|&id| {
+            self.document.path(id).is_some_and(|p| {
+                p.target == self.document.active_model_id()
+                    && p.mode == crate::sculpt::paths::PathMode::Surface
+            })
+        });
+        state.density_paint = None;
+        if state.density_radius == 0. {
+            state.density_radius = 50.;
+            state.density_brush_strength = 0.5;
+        }
+        Ok(())
+    }
+    fn start_retopology(&mut self) -> Result<(), String> {
+        self.document.require_retopology_target()?;
+        self.clear_projection_preview();
+        self.viewport.cancel(&mut self.document);
+        let options = self.ui.projection.layout;
+        options.require_input_budget(self.document.mesh())?;
+        self.ui.projection.density_paint = None;
+        let paths = self
+            .ui
+            .projection
+            .flow_paths
+            .iter()
+            .map(|&id| {
+                self.document
+                    .path(id)
+                    .filter(|p| p.target == self.document.active_model_id())
+                    .cloned()
+                    .ok_or("Select a surface path on the active model")
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mesh = self.document.mesh().clone();
+        let progress = Arc::new(std::sync::Mutex::new(String::from("Preparing surface…")));
+        let worker_progress = progress.clone();
+        let job = BackgroundJob::start("clay-guided-retopology", move |cancel| {
+            let layout =
+                mesh.guided_retopology_with_progress(options, &paths, cancel, &|stage| {
+                    if let Ok(mut label) = worker_progress.lock() {
+                        *label = crate::sculpt::retopology::progress_label(stage);
+                    }
+                })?;
+            let report = SurfaceReport::Retopology {
+                quads: layout.mesh.quads.len(),
+                polygons: layout.polygons,
+                changed: layout.mesh != mesh,
+                guides: layout.guides,
+            };
+            Ok((layout.mesh, report))
+        })?;
+        let mut settings = self.document.capture_edit_settings();
+        let view = settings
+            .view_input
+            .get_or_insert_with(|| serde_json::json!({}));
+        view["guided_retopology"] = serde_json::json!({"backend":"native_surface_field","input_triangle_limit":options.input_triangle_limit,"target":options.target,"paths":self.ui.projection.flow_paths,"path_strength":options.flow,"density_strength":options.density,"shape_adaptation":options.adaptive,"mirror_path_x":options.mirror_path_x,"preserve_sharp":options.preserve_sharp,"sharp_angle_degrees":options.sharp_angle_degrees,"symmetry_axis":options.symmetry_axis,"symmetry_center":options.symmetry_center,"symmetry_centreline":options.symmetry_centreline,"symmetry_source":options.symmetry_source});
+        self.projection.worker = Some(Worker {
+            job,
+            progress: Some(progress),
+            revision: self.document.display_revision(),
+            settings,
+        });
+        self.ui.projection.busy = true;
+        self.ui.status = "Computing retopology preview…".into();
         Ok(())
     }
     fn start_relaxation(&mut self) -> Result<(), String> {
@@ -186,6 +309,7 @@ impl App {
         view["relaxation"] = serde_json::json!({"strength":options.strength,"iterations":options.iterations,"max_deviation":options.max_deviation});
         self.projection.worker = Some(Worker {
             job,
+            progress: None,
             revision,
             settings,
         });

@@ -84,6 +84,44 @@ impl Document {
     ) -> Result<(), String> {
         self.apply_surface_positions(mesh, revision, settings, "Project details")
     }
+    pub(crate) fn require_retopology_target(&self) -> Result<(), String> {
+        self.require_projection_target()?;
+        if self.model_count() >= 64 {
+            return Err("Free a submodel slot to keep the retopology source".into());
+        }
+        self.mesh().require_retopology_input()
+    }
+    pub(crate) fn apply_retopology(
+        &mut self,
+        mesh: Mesh,
+        revision: u64,
+        settings: Option<crate::diagnostics::EditSettings>,
+    ) -> Result<(), String> {
+        self.require_retopology_target()?;
+        if revision != self.display_revision() {
+            return Err("Scene changed. Preview the layout again".into());
+        }
+        if mesh == *self.mesh() {
+            return Ok(());
+        }
+        let active = self.active_model_index();
+        let mut geometry = self.geometry_snapshot();
+        let name = (1..)
+            .map(|n| format!("Retopology {n}"))
+            .find(|n| !self.submodel_names().any(|m| m == n))
+            .unwrap();
+        let mut result_metadata = geometry.scene.active_metadata.clone();
+        result_metadata.model_id = 0;
+        let mut source = crate::sculpt::Submodel {
+            mesh: std::mem::replace(&mut geometry.mesh, mesh),
+            mesh_settings: std::mem::take(&mut geometry.settings),
+            name: std::mem::replace(&mut geometry.name, name),
+            metadata: std::mem::replace(&mut geometry.scene.active_metadata, result_metadata),
+        };
+        source.metadata.visible = false;
+        geometry.submodels.insert(active, source);
+        self.replace_geometry_recorded(geometry, "Guided retopology", settings)
+    }
     pub(crate) fn apply_relaxation(
         &mut self,
         mesh: Mesh,

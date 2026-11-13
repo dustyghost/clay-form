@@ -61,6 +61,7 @@ pub(crate) enum Command {
     ApplyFusion,
     CancelFusion,
     OpenRelaxation,
+    OpenRetopology,
     KeepProjectionReference,
     PreviewProjection,
     ClearProjectionPreview,

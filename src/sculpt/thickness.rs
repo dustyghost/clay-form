@@ -118,6 +118,7 @@ impl Mesh {
                 .vertex_groups
                 .iter()
                 .map(|g| super::VertexGroup {
+                    purpose: g.purpose,
                     visible: g.visible,
                     name: g.name.clone(),
                     weights: g
@@ -268,6 +269,7 @@ impl Mesh {
                         })
                         .collect();
                     shell.vertex_groups.push(super::VertexGroup {
+                        purpose: super::GroupPurpose::Selection,
                         visible: true,
                         name,
                         weights,

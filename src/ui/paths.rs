@@ -4,7 +4,7 @@ use crate::{
     app::paths::PathState,
     command::PathCommand,
     sculpt::paths::PathMode,
-    viewport::paths::{PathEditor, PathTool, RingAxis, RingMode},
+    viewport::paths::{PathEditor, PathTool},
 };
 mod transform;
 
@@ -13,14 +13,31 @@ pub(crate) fn show(
     editor: &mut PathEditor,
     state: &mut PathState,
     document: &Document,
+    camera: &Camera,
     selected_brush: &mut usize,
 ) -> Vec<Command> {
     let mut commands = Vec::new();
     if !editor.active {
         return commands;
     }
+    if !state.busy()
+        && !state.has_preview()
+        && !editor.gesture_active()
+        && !ctx.wants_keyboard_input()
+        && ctx.input(|i| {
+            i.events.iter().any(|event| {
+                matches!(event, egui::Event::Key {
+            key: egui::Key::Delete, pressed: true, repeat: false, modifiers, ..
+        } if modifiers.is_none())
+            })
+        })
+    {
+        editor.confirm_delete = editor.draft.as_ref().map(|p| p.id).filter(|&id| id != 0);
+    }
     let mut open = true;
-    egui::Window::new("Editable paths").id(egui::Id::new("editable_paths"))
+    let mut open_panel = true;
+    if editor.panel {
+        egui::Window::new("Editable paths").id(egui::Id::new("editable_paths"))
         .open(&mut open).default_pos(egui::pos2(20.,80.)).default_width(330.).default_height(620.)
         .resizable(true).vscroll(true).show(ctx,|ui| {
         let busy=state.busy();
@@ -47,59 +64,32 @@ pub(crate) fn show(
             if ui.button(if state.applying_entire_path() { "Cancel stroke" } else { "Cancel preview" }).clicked() { commands.push(Command::Path(PathCommand::CancelPreview)); }
         }
         if preview { ui.label("Brush preview — Apply or Cancel to continue editing."); }
-        ui.label("Save your surface path, then sculpt near it. The brush follows the section you draw.");
         ui.add_enabled_ui(!busy && !preview,|ui| {
-            ui.horizontal_wrapped(|ui| {
-                if ui.button("New ring").on_hover_text("Create a complete loop with one pen press, then drag to position it.").clicked() { commands.push(Command::Path(PathCommand::NewRing)); }
-                if ui.button("New surface path").clicked() { commands.push(Command::Path(PathCommand::New(PathMode::Surface))); }
-                if ui.button("New free path").clicked() { commands.push(Command::Path(PathCommand::New(PathMode::Free))); }
-            });
-            if editor.tool==PathTool::Ring {
-                ui.strong("Ring from one pen drag");
+            path_explorer(ui, editor, document, camera, &mut commands);
+            if editor.draft.is_some() {
                 ui.horizontal_wrapped(|ui| {
-                    ui.selectable_value(&mut editor.ring_mode,RingMode::Level,"Level ring");
-                    ui.selectable_value(&mut editor.ring_mode,RingMode::Shortest,"Shortest surface route");
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Around axis");
-                    ui.selectable_value(&mut editor.ring_axis,RingAxis::X,"X");
-                    ui.selectable_value(&mut editor.ring_axis,RingAxis::Y,"Y");
-                    ui.selectable_value(&mut editor.ring_axis,RingAxis::Z,"Z");
-                });
-                ui.weak(match editor.ring_mode {
-                    RingMode::Level=>"Press on the side to create a complete level loop. Drag along the axis to move its plane, then release and Save & sculpt.",
-                    RingMode::Shortest=>"Press on the side for a short surface loop around the axis. Drag to reposition it. This follows mesh edges, so the shortest route is approximate.",
-                });
-            }
-            let active=editor.draft.as_ref().map(|p|p.id);
-            egui::ComboBox::from_id_salt("saved_paths").selected_text(
-                editor.draft.as_ref().map_or("Choose saved path",|p|p.name.as_str()))
-                .show_ui(ui,|ui| {
-                    for path in document.paths().iter().filter(|p|p.target==document.active_model_id()) {
-                        if ui.selectable_label(active==Some(path.id),&path.name).clicked() {
-                            commands.push(Command::Path(PathCommand::Select(path.id)));
+                    for (tool, label) in [(PathTool::Add, "Add points"), (PathTool::Move, "Move points"), (PathTool::Insert, "Insert point")] {
+                        if ui.selectable_label(editor.brush.is_none() && editor.tool == tool, label).clicked() {
+                            editor.brush = None;
+                            editor.tool = tool;
                         }
                     }
                 });
+            }
             if editor.draft.as_ref().is_some_and(|path|path.points.len()>=2) {
                 ui.horizontal_wrapped(|ui| {
-                    ui.selectable_value(&mut editor.tool,PathTool::Whole,"Transform whole path");
+                    if ui.selectable_value(&mut editor.tool,PathTool::Whole,"Transform whole path").clicked() {
+                        editor.brush = None;
+                    }
                     if editor.tool==PathTool::Whole && ui.button("Edit points").clicked() { editor.tool=PathTool::Move; }
                 });
             }
-            if editor.tool==PathTool::Whole {
-                let dirty=editor.dirty(document);
-                if let Some(path)=&mut editor.draft {
-                    if path.mode==PathMode::Surface {
-                        ui.weak("Detach the path to move it freely away from the surface. Its current route is preserved.");
-                        if ui.button("Detach from surface").clicked() { commands.push(Command::Path(PathCommand::Detach)); }
-                    } else {
-                        transform::controls(ui,path,&mut editor.transform,&mut editor.notice);
-                    }
-                    ui.horizontal(|ui| {
-                        if ui.add_enabled(dirty,egui::Button::new("Save path")).clicked() { commands.push(Command::Path(PathCommand::Save)); }
-                        if ui.button("Discard edits").clicked() { commands.push(Command::Path(PathCommand::Discard)); }
-                    });
+            if editor.tool == PathTool::Whole && let Some(path) = &mut editor.draft {
+                if path.mode==PathMode::Surface {
+                    ui.weak("Detach the path to move it freely away from the surface. Its current route is preserved.");
+                    if ui.button("Detach from surface").clicked() { commands.push(Command::Path(PathCommand::Detach)); }
+                } else {
+                    transform::controls(ui,path,&mut editor.transform,&mut editor.notice);
                 }
             }
             if editor.tool!=PathTool::Whole && editor.draft.as_ref().is_some_and(|path|path.id!=0) {
@@ -148,21 +138,11 @@ pub(crate) fn show(
             ui.weak("Save edits first. Uses the active brush, masks, symmetry and adaptive sculpt settings; disable the stencil.");
             }
             ui.separator();
-            let dirty=editor.dirty(document);
             if let Some(path)=editor.draft.as_mut() {
-                ui.text_edit_singleline(&mut path.name);
-                ui.horizontal_wrapped(|ui| {
-                    ui.selectable_value(&mut editor.tool,PathTool::Add,"Add / draw");
-                    ui.selectable_value(&mut editor.tool,PathTool::Move,"Move points");
-                    ui.selectable_value(&mut editor.tool,PathTool::Insert,"Insert point");
-                    ui.add_enabled_ui(path.mode==PathMode::Surface,|ui| {
-                        ui.selectable_value(&mut editor.tool,PathTool::Ring,"Ring");
-                    });
-                });
                 ui.weak(if editor.tool==PathTool::Whole {
                     "Transform the whole draft with its gizmo or numeric controls. Save path commits one undo step; Esc cancels a drag."
                 } else if editor.tool==PathTool::Ring {
-                    "One press creates the whole ring. Drag to position it; Esc restores the previous draft."
+                    "Drag to position a ring. Esc cancels the active drag."
                 } else if path.mode==PathMode::Surface {
                     "Click or drag on the surface. Right-drag to orbit and continue around the model."
                 } else {
@@ -214,13 +194,6 @@ pub(crate) fn show(
                             && let Err(e)=path.set_seam(index) { editor.notice=Some(e); }
                     });
                 }
-                ui.horizontal_wrapped(|ui| {
-                    if ui.add_enabled(path.mode==PathMode::Surface && path.points.len()>=if path.closed {3} else {2},egui::Button::new("Save & sculpt")).clicked() { commands.push(Command::Path(PathCommand::SaveAndSculpt)); }
-                    if ui.add_enabled(dirty,egui::Button::new("Save path")).clicked() { commands.push(Command::Path(PathCommand::Save)); }
-                    if ui.button("Discard edits").clicked() { commands.push(Command::Path(PathCommand::Discard)); }
-                    if ui.add_enabled(path.id!=0,egui::Button::new("Delete path")).clicked() { commands.push(Command::Path(PathCommand::Delete)); }
-                });
-                if dirty { ui.weak("Unsaved path edits — Save path creates one undo step."); }
                 if path.id!=0 {
                     if path.is_stale(document.mesh()) { ui.colored_label(egui::Color32::from_rgb(245,150,90),"Surface changed. Reproject before editing or applying this path."); }
                     ui.horizontal_wrapped(|ui| {
@@ -237,11 +210,166 @@ pub(crate) fn show(
             });
         }
         ui.separator();
-        if ui.button("Done").clicked() { commands.push(Command::Path(PathCommand::Close)); }
-        ui.weak("Done discards unsaved edits. Esc cancels an active point, corner, ring or transform drag or brush preview.");
+        if ui.button("Done").clicked() { open_panel = false; }
     });
-    if !open {
-        commands.push(Command::Path(PathCommand::Close));
+    }
+    if !open || !open_panel {
+        if editor.brush.is_some() {
+            editor.panel = false;
+        } else {
+            commands.push(Command::Path(PathCommand::Close));
+        }
+    }
+    if let Some(id) = editor.confirm_delete
+        && let Some(path) = document.path(id)
+    {
+        let modal = egui::Modal::new(egui::Id::new("delete_path")).show(ctx, |ui| {
+            ui.heading(format!("Delete “{}”?", path.name));
+            ui.label("Undo restores the path.");
+            ui.horizontal(|ui| {
+                let cancel = ui.button("Cancel").clicked();
+                let delete = ui.button("Delete path").clicked();
+                (cancel, delete)
+            })
+            .inner
+        });
+        let (cancel, delete) = modal.inner;
+        if delete {
+            commands.push(Command::Path(PathCommand::Delete(id)));
+        }
+        if delete || cancel || modal.should_close() {
+            editor.confirm_delete = None;
+        }
     }
     commands
+}
+
+fn path_explorer(
+    ui: &mut egui::Ui,
+    editor: &mut PathEditor,
+    document: &Document,
+    camera: &Camera,
+    commands: &mut Vec<Command>,
+) {
+    let dirty = editor.dirty(document);
+    let active = editor.draft.as_ref().map(|path| path.id);
+    let target = document.active_model_id();
+    ui.strong("Saved paths");
+    let thumbnail = document
+        .paths()
+        .iter()
+        .any(|p| p.target == target)
+        .then(|| super::path_thumbnail::active_model(ui, document, camera));
+    egui::ScrollArea::vertical()
+        .id_salt("path_explorer")
+        .max_height(150.)
+        .show(ui, |ui| {
+            for (mode, label) in [
+                (PathMode::Surface, "Surface"),
+                (PathMode::Free, "Free space"),
+            ] {
+                let paths = document
+                    .paths()
+                    .iter()
+                    .filter(|p| p.target == target && p.mode == mode);
+                let count = paths.clone().count();
+                if count == 0 {
+                    continue;
+                }
+                egui::CollapsingHeader::new(format!("{label} ({count})"))
+                    .id_salt((target, label))
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        for path in paths {
+                            ui.push_id(path.id, |ui| {
+                                ui.horizontal(|ui| {
+                                    let mut visible = !editor.hidden_ghosts.contains(&path.id);
+                                    if ui
+                                        .checkbox(&mut visible, "")
+                                        .on_hover_text(
+                                            "Show as a ghost when another path is active",
+                                        )
+                                        .changed()
+                                    {
+                                        if visible {
+                                            editor.hidden_ghosts.remove(&path.id);
+                                        } else {
+                                            editor.hidden_ghosts.insert(path.id);
+                                        }
+                                    }
+                                    let selectable = (!dirty || editor.brush.is_some())
+                                        && active != Some(path.id);
+                                    let preview_clicked = thumbnail
+                                        .as_ref()
+                                        .is_some_and(|preview| preview.show(ui, path).clicked());
+                                    if ui
+                                        .add_enabled(
+                                            selectable,
+                                            egui::Button::selectable(
+                                                active == Some(path.id),
+                                                &path.name,
+                                            ),
+                                        )
+                                        .on_disabled_hover_text(
+                                            "Save or discard your draft before switching paths",
+                                        )
+                                        .clicked()
+                                        || (selectable && preview_clicked)
+                                    {
+                                        commands.push(Command::Path(PathCommand::Select(path.id)));
+                                    }
+                                });
+                            });
+                        }
+                    });
+            }
+        });
+    if let Some(path) = &mut editor.draft {
+        ui.horizontal(|ui| {
+            ui.label("Name");
+            ui.text_edit_singleline(&mut path.name);
+        });
+        let can_save = path.points.len() >= if path.closed { 3 } else { 2 };
+        ui.horizontal_wrapped(|ui| {
+            if ui
+                .add_enabled(dirty && can_save, egui::Button::new("Save path"))
+                .clicked()
+            {
+                commands.push(Command::Path(PathCommand::Save));
+            }
+            if editor.brush.is_none()
+                && ui
+                    .add_enabled(can_save, egui::Button::new("Save & next"))
+                    .on_hover_text("Save this path and start another of the same type")
+                    .clicked()
+            {
+                commands.push(Command::Path(PathCommand::SaveAndNext));
+            }
+            if ui
+                .add_enabled(
+                    path.mode == PathMode::Surface && can_save,
+                    egui::Button::new("Save & sculpt"),
+                )
+                .clicked()
+            {
+                commands.push(Command::Path(PathCommand::SaveAndSculpt));
+            }
+            if ui
+                .add_enabled(dirty, egui::Button::new("Discard edits"))
+                .clicked()
+            {
+                commands.push(Command::Path(PathCommand::Discard));
+            }
+            if ui
+                .add_enabled(path.id != 0, egui::Button::new("Delete path"))
+                .clicked()
+            {
+                editor.confirm_delete = Some(path.id);
+            }
+        });
+        if dirty {
+            ui.weak("Save or discard this draft to switch paths.");
+        }
+    }
+    ui.separator();
 }

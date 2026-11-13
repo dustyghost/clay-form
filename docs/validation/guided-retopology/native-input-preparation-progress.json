@@ -1,0 +1,1627 @@
+{
+  "date": "2026-11-06",
+  "status": "native_preparation_validated_passing_cpp_integer_stage_control_native_mapping_still_rejected",
+  "target_quads": 10000,
+  "source": {
+    "path": "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+    "sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f"
+  },
+  "original_spacing": 0.05762159740626388,
+  "artifact_directory": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106",
+  "scope": {
+    "anatomy_rules": false,
+    "guides": [],
+    "detail": "uniform/unpainted",
+    "preserve_sharp_in_character_comparison": false,
+    "app_backend_changed": false,
+    "module": "audit/test only",
+    "acceptance_limits_changed": false
+  },
+  "references": {
+    "quadriflow_commit": "810b7a0967c35b0dc85b4464e3835e26a756c967",
+    "vcglib_commit": "5cae2abc2f9056785b0537dcbe156c40da2aea20",
+    "paper": "https://graphics.rwth-aachen.de/media/papers/remeshing1.pdf"
+  },
+  "preparations": {
+    "guarded-5": {
+      "run": {
+        "command": [
+          "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+          "prepare-surface",
+          "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+          "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5.clay",
+          "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5.preparation.json",
+          "10000",
+          "5"
+        ],
+        "exit": 0,
+        "seconds": 17.987181068048812,
+        "max_child_rss_kib": 108564,
+        "source_sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+        "audit_sha256": "a5bc5fb81532e4cb4c64f93409da06c676a22d71ad40950ed1e4caa8ddfa978d"
+      },
+      "measurements": {
+        "spacing": 0.05762159740626389,
+        "edge_target": 0.028810798703131944,
+        "local_surface_limit": 0.0005762159740626389,
+        "sampled_surface_limit": 0.008643239610939582,
+        "before": {
+          "vertices": 52601,
+          "triangles": 105198,
+          "edge_length_p05_p50_p95": [
+            0.007717379014464576,
+            0.01744693214234078,
+            0.06670850332514527
+          ],
+          "triangle_quality_p05_p50_p95": [
+            0.5989409668356614,
+            0.9020793232821002,
+            0.9922147070988252
+          ]
+        },
+        "after": {
+          "vertices": 52083,
+          "triangles": 104162,
+          "edge_length_p05_p50_p95": [
+            0.01690867057796012,
+            0.02784203385783262,
+            0.0357691631685865
+          ],
+          "triangle_quality_p05_p50_p95": [
+            0.8311962886632798,
+            0.952458646415323,
+            0.9969231134179857
+          ]
+        },
+        "steps": [
+          {
+            "iteration": 1,
+            "vertices": 53331,
+            "splits": 23523,
+            "collapses": 22793,
+            "flips": 17985,
+            "moved": 53259
+          },
+          {
+            "iteration": 2,
+            "vertices": 55407,
+            "splits": 8282,
+            "collapses": 6206,
+            "flips": 5248,
+            "moved": 55087
+          },
+          {
+            "iteration": 3,
+            "vertices": 53296,
+            "splits": 578,
+            "collapses": 2689,
+            "flips": 1129,
+            "moved": 52576
+          },
+          {
+            "iteration": 4,
+            "vertices": 52552,
+            "splits": 238,
+            "collapses": 982,
+            "flips": 544,
+            "moved": 51283
+          },
+          {
+            "iteration": 5,
+            "vertices": 52083,
+            "splits": 164,
+            "collapses": 633,
+            "flips": 374,
+            "moved": 50275
+          }
+        ],
+        "source_to_working": 0.007493322007020245,
+        "working_to_source": 0.0005762138839542573,
+        "triangle_queries": 163520133
+      },
+      "output_sha256": "4420db8defa35d8e14e06b1b81a3ea24f03d50be0faa296723781370febb5c7c"
+    },
+    "guarded-10": {
+      "run": {
+        "command": [
+          "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+          "prepare-surface",
+          "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+          "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10.clay",
+          "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10.preparation.json",
+          "10000",
+          "10"
+        ],
+        "exit": 0,
+        "seconds": 30.799353861017153,
+        "max_child_rss_kib": 108344,
+        "source_sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+        "audit_sha256": "a5bc5fb81532e4cb4c64f93409da06c676a22d71ad40950ed1e4caa8ddfa978d"
+      },
+      "measurements": {
+        "spacing": 0.05762159740626389,
+        "edge_target": 0.028810798703131944,
+        "local_surface_limit": 0.0005762159740626389,
+        "sampled_surface_limit": 0.008643239610939582,
+        "before": {
+          "vertices": 52601,
+          "triangles": 105198,
+          "edge_length_p05_p50_p95": [
+            0.007717379014464576,
+            0.01744693214234078,
+            0.06670850332514527
+          ],
+          "triangle_quality_p05_p50_p95": [
+            0.5989409668356614,
+            0.9020793232821002,
+            0.9922147070988252
+          ]
+        },
+        "after": {
+          "vertices": 50857,
+          "triangles": 101710,
+          "edge_length_p05_p50_p95": [
+            0.017175797223882978,
+            0.02816357915144346,
+            0.03569605466477205
+          ],
+          "triangle_quality_p05_p50_p95": [
+            0.8454698155462435,
+            0.9659430442374565,
+            0.9979972246785845
+          ]
+        },
+        "steps": [
+          {
+            "iteration": 1,
+            "vertices": 53331,
+            "splits": 23523,
+            "collapses": 22793,
+            "flips": 17985,
+            "moved": 53259
+          },
+          {
+            "iteration": 2,
+            "vertices": 55407,
+            "splits": 8282,
+            "collapses": 6206,
+            "flips": 5248,
+            "moved": 55087
+          },
+          {
+            "iteration": 3,
+            "vertices": 53296,
+            "splits": 578,
+            "collapses": 2689,
+            "flips": 1129,
+            "moved": 52576
+          },
+          {
+            "iteration": 4,
+            "vertices": 52552,
+            "splits": 238,
+            "collapses": 982,
+            "flips": 544,
+            "moved": 51283
+          },
+          {
+            "iteration": 5,
+            "vertices": 52083,
+            "splits": 164,
+            "collapses": 633,
+            "flips": 374,
+            "moved": 50275
+          },
+          {
+            "iteration": 6,
+            "vertices": 51682,
+            "splits": 112,
+            "collapses": 513,
+            "flips": 283,
+            "moved": 49305
+          },
+          {
+            "iteration": 7,
+            "vertices": 51365,
+            "splits": 102,
+            "collapses": 419,
+            "flips": 256,
+            "moved": 48507
+          },
+          {
+            "iteration": 8,
+            "vertices": 51181,
+            "splits": 106,
+            "collapses": 290,
+            "flips": 218,
+            "moved": 47812
+          },
+          {
+            "iteration": 9,
+            "vertices": 51006,
+            "splits": 83,
+            "collapses": 258,
+            "flips": 151,
+            "moved": 47183
+          },
+          {
+            "iteration": 10,
+            "vertices": 50857,
+            "splits": 73,
+            "collapses": 222,
+            "flips": 129,
+            "moved": 46650
+          }
+        ],
+        "source_to_working": 0.007493322007020245,
+        "working_to_source": 0.0005762154726925011,
+        "triangle_queries": 287943838
+      },
+      "output_sha256": "a996af67dd567a64102c335da6e2badede242fbff592a97fc43a719c24bef3a5"
+    }
+  },
+  "native_field_runs": {
+    "guarded-5": {
+      "target_quads": 10000,
+      "guides": "none",
+      "detail": "uniform",
+      "files": {
+        "source": {
+          "path": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5.clay",
+          "sha256": "4420db8defa35d8e14e06b1b81a3ea24f03d50be0faa296723781370febb5c7c"
+        },
+        "audit": {
+          "path": "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+          "sha256": "a5bc5fb81532e4cb4c64f93409da06c676a22d71ad40950ed1e4caa8ddfa978d"
+        },
+        "reference_solver": {
+          "path": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/integer-comparison-20261106/fan-field-reference",
+          "sha256": "bc57cf4e10a2ec02343014ca6117e8ac7e41240d9abd3fbb8d968dde41a159e5"
+        },
+        "original_snapshot": {
+          "path": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+          "sha256": "c8beee3387271c3c16ec2a9ab3d4888e967c74285761eb16d7b4fea71e6f03d7"
+        }
+      },
+      "runs": [
+        {
+          "name": "capture",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "capture-field",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5.clay",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fields.json",
+            "10000"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 2.2666658039670438,
+          "limit_seconds": 60,
+          "cumulative_child_peak_rss_kib": 96984
+        },
+        {
+          "name": "export",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "export-field",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fields.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/shared.input"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 1.0654494060436264,
+          "limit_seconds": 60,
+          "cumulative_child_peak_rss_kib": 96984
+        },
+        {
+          "name": "reference",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/integer-comparison-20261106/fan-field-reference",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/shared.input",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/reference.output"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 1.7660504860104993,
+          "limit_seconds": 60,
+          "cumulative_child_peak_rss_kib": 96984
+        },
+        {
+          "name": "import",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "import-field",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fields.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/reference.output",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/reference.fields.json"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 1.0152855039341375,
+          "limit_seconds": 60,
+          "cumulative_child_peak_rss_kib": 96984
+        },
+        {
+          "name": "native-integerize",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "integerize-field",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fields.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.raw.json"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 12.380681224982254,
+          "limit_seconds": 150,
+          "cumulative_child_peak_rss_kib": 324992
+        },
+        {
+          "name": "native-repair",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "repair-trace",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.raw.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native-repair",
+            "60"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 2.517030772054568,
+          "limit_seconds": 75,
+          "cumulative_child_peak_rss_kib": 324992
+        },
+        {
+          "name": "native-resume",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "resume",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native-repair/attempted.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.accepted.obj"
+          ],
+          "exit": 1,
+          "timed_out": false,
+          "seconds": 5.471156834042631,
+          "limit_seconds": 40,
+          "cumulative_child_peak_rss_kib": 324992
+        },
+        {
+          "name": "native-candidate",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "diagnose-candidate",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native-repair/attempted.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.audit.json"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 7.1736781189683825,
+          "limit_seconds": 40,
+          "cumulative_child_peak_rss_kib": 324992
+        },
+        {
+          "name": "native-measure",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "diagnose-obj",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.candidate.obj",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.quality.json"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 1.766294491942972,
+          "limit_seconds": 40,
+          "cumulative_child_peak_rss_kib": 324992
+        },
+        {
+          "name": "native-validate",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "validate-obj",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.candidate.obj"
+          ],
+          "exit": 1,
+          "timed_out": false,
+          "seconds": 0.9648584669921547,
+          "limit_seconds": 40,
+          "cumulative_child_peak_rss_kib": 324992
+        },
+        {
+          "name": "native-layout",
+          "command": [
+            "/usr/bin/python3",
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/scripts/retopology/measure-layout.py",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.mesh.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.layout.json"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 0.26454506593290716,
+          "limit_seconds": 30,
+          "cumulative_child_peak_rss_kib": 324992
+        }
+      ],
+      "input_identity": {
+        "source_equal": true,
+        "field_arrays_equal": {
+          "surface": true,
+          "normals": true,
+          "spacing": true,
+          "areas": true,
+          "constraints": true
+        }
+      },
+      "field_parity": {
+        "directions_equal": true,
+        "origins_equal": true,
+        "snapshot_bytes_equal": true,
+        "maximum_direction_distance": 0.0,
+        "maximum_origin_distance": 0.0
+      },
+      "direction_difference_degrees": {
+        "median": 0.0,
+        "p95": 1.2074182697257333e-06,
+        "maximum": 1.7075472925031877e-06
+      },
+      "sampled_vertices": 52130,
+      "sampled_triangles": 104256,
+      "spacing": 0.05759450378728222,
+      "downstream_cases": [
+        "native"
+      ]
+    },
+    "guarded-10": {
+      "target_quads": 10000,
+      "guides": "none",
+      "detail": "uniform",
+      "files": {
+        "source": {
+          "path": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10.clay",
+          "sha256": "a996af67dd567a64102c335da6e2badede242fbff592a97fc43a719c24bef3a5"
+        },
+        "audit": {
+          "path": "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+          "sha256": "a5bc5fb81532e4cb4c64f93409da06c676a22d71ad40950ed1e4caa8ddfa978d"
+        },
+        "reference_solver": {
+          "path": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/integer-comparison-20261106/fan-field-reference",
+          "sha256": "bc57cf4e10a2ec02343014ca6117e8ac7e41240d9abd3fbb8d968dde41a159e5"
+        },
+        "original_snapshot": {
+          "path": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+          "sha256": "c8beee3387271c3c16ec2a9ab3d4888e967c74285761eb16d7b4fea71e6f03d7"
+        }
+      },
+      "runs": [
+        {
+          "name": "capture",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "capture-field",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10.clay",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/native.fields.json",
+            "10000"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 2.268757826066576,
+          "limit_seconds": 60,
+          "cumulative_child_peak_rss_kib": 97072
+        },
+        {
+          "name": "export",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "export-field",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/native.fields.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/shared.input"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 1.0647196699865162,
+          "limit_seconds": 60,
+          "cumulative_child_peak_rss_kib": 97072
+        },
+        {
+          "name": "reference",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/integer-comparison-20261106/fan-field-reference",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/shared.input",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/reference.output"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 1.9170290110632777,
+          "limit_seconds": 60,
+          "cumulative_child_peak_rss_kib": 97072
+        },
+        {
+          "name": "import",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "import-field",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/native.fields.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/reference.output",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/reference.fields.json"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 1.116268016048707,
+          "limit_seconds": 60,
+          "cumulative_child_peak_rss_kib": 97072
+        },
+        {
+          "name": "native-integerize",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "integerize-field",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/native.fields.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/native.raw.json"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 11.928946022992022,
+          "limit_seconds": 150,
+          "cumulative_child_peak_rss_kib": 318000
+        },
+        {
+          "name": "native-repair",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "repair-trace",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/native.raw.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/native-repair",
+            "60"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 22.39290984591935,
+          "limit_seconds": 75,
+          "cumulative_child_peak_rss_kib": 318000
+        },
+        {
+          "name": "native-resume",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "resume",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/native-repair/attempted.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/native.accepted.obj"
+          ],
+          "exit": 1,
+          "timed_out": false,
+          "seconds": 6.829263826017268,
+          "limit_seconds": 40,
+          "cumulative_child_peak_rss_kib": 318000
+        },
+        {
+          "name": "native-candidate",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "diagnose-candidate",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/native-repair/attempted.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/native.audit.json"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 8.125348301022314,
+          "limit_seconds": 40,
+          "cumulative_child_peak_rss_kib": 318000
+        },
+        {
+          "name": "native-measure",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "diagnose-obj",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/native.candidate.obj",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/native.quality.json"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 1.61588443396613,
+          "limit_seconds": 40,
+          "cumulative_child_peak_rss_kib": 318000
+        },
+        {
+          "name": "native-validate",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "validate-obj",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/native.candidate.obj"
+          ],
+          "exit": 1,
+          "timed_out": false,
+          "seconds": 1.015844987006858,
+          "limit_seconds": 40,
+          "cumulative_child_peak_rss_kib": 318000
+        },
+        {
+          "name": "native-layout",
+          "command": [
+            "/usr/bin/python3",
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/scripts/retopology/measure-layout.py",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/native.mesh.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-10-retopo/native.layout.json"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 0.26402315602172166,
+          "limit_seconds": 30,
+          "cumulative_child_peak_rss_kib": 318000
+        }
+      ],
+      "input_identity": {
+        "source_equal": true,
+        "field_arrays_equal": {
+          "surface": true,
+          "normals": true,
+          "spacing": true,
+          "areas": true,
+          "constraints": true
+        }
+      },
+      "field_parity": {
+        "directions_equal": true,
+        "origins_equal": true,
+        "snapshot_bytes_equal": true,
+        "maximum_direction_distance": 0.0,
+        "maximum_origin_distance": 0.0
+      },
+      "direction_difference_degrees": {
+        "median": 0.0,
+        "p95": 1.2074182697257333e-06,
+        "maximum": 1.9090959104164224e-06
+      },
+      "sampled_vertices": 50882,
+      "sampled_triangles": 101760,
+      "spacing": 0.05759126798985186,
+      "downstream_cases": [
+        "native"
+      ]
+    }
+  },
+  "results": {
+    "guarded-5": {
+      "status": "geometry_rejected",
+      "repair": {
+        "deadline_reached": false,
+        "error": null,
+        "input_fingerprint": "d9734c9c3c349374",
+        "lattice_inversions": 0,
+        "repaired": true,
+        "resume_input": "Use the original frozen input plus checkpoint.json; attempted.json is not a coarse-stage resume checkpoint.",
+        "schedule": "depth_outer",
+        "seconds": 1.6902015860000001,
+        "stage": "complete"
+      },
+      "fit_error": "Retopology lost source shape at DVec3(-2.7467325369746267, 0.1875043888511479, 1.330641060697294): error 0.05913, local grid spacing 0.05759",
+      "before_fit_against_prepared_source": {
+        "quads": 9521,
+        "quads_without_outward_diagonal": 15,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.034331667988441866,
+          "max_spacing_ratio": 0.5960927819647757,
+          "point": [
+            -2.7163085473581883,
+            0.2052275104979316,
+            1.270749274993761
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.06414237415254138,
+          "max_spacing_ratio": 1.1136891532123077,
+          "point": [
+            -2.7431326502713826,
+            0.16745077387162327,
+            1.3163676750146367
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 9523
+      },
+      "attempted_fit_against_prepared_source": {
+        "quads": 9521,
+        "quads_without_outward_diagonal": 0,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.034212552957684154,
+          "max_spacing_ratio": 0.594024615335584,
+          "point": [
+            -2.716882022308976,
+            0.2053080906737602,
+            1.2705695618377555
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.06434564365272252,
+          "max_spacing_ratio": 1.117218474359546,
+          "point": [
+            -2.7431326502713826,
+            0.16745077387162327,
+            1.3163676750146367
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 9523
+      },
+      "attempted_fit_complete": true,
+      "complete_fit_against_original": {
+        "quads": 9521,
+        "quads_without_outward_diagonal": 0,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.034535563043289155,
+          "max_spacing_ratio": 0.5993510176365753,
+          "point": [
+            -2.716882022308976,
+            0.2053080906737602,
+            1.2705695618377555
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.06436701876927334,
+          "max_spacing_ratio": 1.1170641160023873,
+          "point": [
+            -2.7430212,
+            0.16677843,
+            1.3157395
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 9523
+      },
+      "layout": {
+        "quads": 9521,
+        "vertices": 9523,
+        "closed_edge_loops_total": 5,
+        "simple_closed_edge_loops": 5,
+        "closed_loops": [
+          {
+            "vertices": [
+              401,
+              402,
+              453,
+              494
+            ],
+            "center": [
+              -2.6890411043021887,
+              0.24169167642032893,
+              1.2307619437368844
+            ]
+          },
+          {
+            "vertices": [
+              539,
+              540,
+              647,
+              645,
+              631,
+              588
+            ],
+            "center": [
+              -2.5839973789569783,
+              0.3133832385435797,
+              1.3967773743446505
+            ]
+          },
+          {
+            "vertices": [
+              585,
+              586,
+              634,
+              642,
+              646,
+              591
+            ],
+            "center": [
+              -2.6015872993013383,
+              0.2840283440759261,
+              1.440813714306277
+            ]
+          },
+          {
+            "vertices": [
+              2130,
+              2131,
+              2136,
+              2221,
+              2234,
+              2231
+            ],
+            "center": [
+              2.4064771401888123,
+              0.4199437756259945,
+              1.4668928692782377
+            ]
+          },
+          {
+            "vertices": [
+              2132,
+              2135,
+              2138,
+              2222,
+              2232,
+              2230
+            ],
+            "center": [
+              2.4077269902109877,
+              0.39397315075395145,
+              1.5142420934051728
+            ]
+          }
+        ],
+        "edge_ratio_max": 10.889732985616966,
+        "edge_ratio_p95": 1.5362411797968298,
+        "quality": null
+      }
+    },
+    "guarded-10": {
+      "status": "geometry_rejected",
+      "repair": {
+        "deadline_reached": false,
+        "error": null,
+        "input_fingerprint": "d1d4384dbeb589c0",
+        "lattice_inversions": 0,
+        "repaired": true,
+        "resume_input": "Use the original frozen input plus checkpoint.json; attempted.json is not a coarse-stage resume checkpoint.",
+        "schedule": "depth_outer",
+        "seconds": 21.584897929,
+        "stage": "complete"
+      },
+      "fit_error": "Retopology quad 572 has no outward render diagonal near DVec3(-2.5710625833209053, 0.3761546331797234, 1.2424236525824346)",
+      "before_fit_against_prepared_source": {
+        "quads": 8935,
+        "quads_without_outward_diagonal": 6,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.03665992626567192,
+          "max_spacing_ratio": 0.6365535530860642,
+          "point": [
+            -2.530341818873335,
+            0.35697112824060573,
+            1.2964414117508354
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.06536109052899312,
+          "max_spacing_ratio": 1.1349132049065211,
+          "point": [
+            -2.624368202901971,
+            0.23905965129931098,
+            1.5195918548796385
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 8937
+      },
+      "attempted_fit_against_prepared_source": {
+        "quads": 8935,
+        "quads_without_outward_diagonal": 4,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.0390999102460199,
+          "max_spacing_ratio": 0.6789208088439671,
+          "point": [
+            -2.532330458979544,
+            0.3587013157563572,
+            1.294724684271995
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.06489915524906575,
+          "max_spacing_ratio": 1.1268922792340952,
+          "point": [
+            -2.624368202901971,
+            0.23905965129931098,
+            1.5195918548796385
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 8937
+      },
+      "attempted_fit_complete": false
+    },
+    "guarded-5-original-mapper": {
+      "status": "passes_original_checks",
+      "passed_own_source_checks": true,
+      "passed_original_checks": true,
+      "repair": {
+        "deadline_reached": false,
+        "error": null,
+        "input_fingerprint": "4125baaa1dd05a8a",
+        "lattice_inversions": 0,
+        "repaired": true,
+        "resume_input": "Use the original frozen input plus checkpoint.json; attempted.json is not a coarse-stage resume checkpoint.",
+        "schedule": "depth_outer",
+        "seconds": 1.918799726,
+        "stage": "complete"
+      },
+      "fit_error": null,
+      "quality_against_original": {
+        "quads": 10122,
+        "quads_without_outward_diagonal": 0,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.03222874336965611,
+          "max_spacing_ratio": 0.5593170758947538,
+          "point": [
+            0.1004488248916654,
+            1.3456723962412493,
+            0.09364884152957642
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.04337227537219919,
+          "max_spacing_ratio": 0.7527086600255288,
+          "point": [
+            -2.4100654,
+            0.32421145,
+            1.6032611
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 10124
+      },
+      "layout": {
+        "quads": 10122,
+        "vertices": 10124,
+        "closed_edge_loops_total": 4,
+        "simple_closed_edge_loops": 4,
+        "closed_loops": [
+          {
+            "vertices": [
+              521,
+              522,
+              603,
+              601,
+              588,
+              555
+            ],
+            "center": [
+              -2.573722391403911,
+              0.32654394436389195,
+              1.3716959080849698
+            ]
+          },
+          {
+            "vertices": [
+              552,
+              553,
+              590,
+              599,
+              602,
+              557
+            ],
+            "center": [
+              -2.594247196237733,
+              0.2961584535011448,
+              1.4192667310178209
+            ]
+          },
+          {
+            "vertices": [
+              878,
+              879,
+              2852,
+              2903,
+              2972,
+              2968,
+              3050,
+              3090,
+              3155,
+              3160,
+              3158,
+              3161,
+              3163,
+              3102,
+              3103,
+              3188,
+              3099,
+              3115,
+              3113,
+              3121,
+              6868,
+              6872,
+              6999,
+              7082,
+              7305,
+              7295,
+              1122,
+              1120,
+              1051,
+              1050,
+              1084,
+              1020,
+              1002,
+              998
+            ],
+            "center": [
+              -0.8865231483451491,
+              -2.3212665054571016,
+              0.8980545848788776
+            ]
+          },
+          {
+            "vertices": [
+              2125,
+              2128,
+              2131,
+              2229,
+              2238,
+              2236
+            ],
+            "center": [
+              2.407658072438197,
+              0.397763954566444,
+              1.5073689474076586
+            ]
+          }
+        ],
+        "edge_ratio_max": 3.239520379999992,
+        "edge_ratio_p95": 1.5004856046522128,
+        "quality": null
+      },
+      "accepted_obj_sha256": "ae157e1cbd7be512dc3564176e1fdd7b3f48983f251579bbf9a4a08a2a7060e5"
+    },
+    "blender-guarded-5": {
+      "run": {
+        "command": [
+          "/usr/bin/blender",
+          "--background",
+          "--factory-startup",
+          "-t",
+          "1",
+          "--python",
+          "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/scripts/compare-retopology-blender.py",
+          "--",
+          "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5.clay",
+          "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/blender-guarded-5",
+          "10000"
+        ],
+        "exit": 0,
+        "seconds": 12.229215865954757,
+        "max_child_rss_kib": 619268
+      },
+      "statistics": {
+        "source_sha256": "4420db8defa35d8e14e06b1b81a3ea24f03d50be0faa296723781370febb5c7c",
+        "blender_version": "5.2.3 LTS",
+        "blender_build_hash": "e13b728c6880",
+        "source": {
+          "vertices": 52083,
+          "triangles": 104162
+        },
+        "refinement": "none",
+        "settings": {
+          "use_mesh_symmetry": false,
+          "use_preserve_sharp": false,
+          "use_preserve_boundary": true,
+          "preserve_attributes": false,
+          "smooth_normals": false,
+          "mode": "FACES",
+          "target_faces": 10000,
+          "seed": 0
+        },
+        "elapsed_seconds": 8.66649316099938,
+        "max_rss_kib": 619268,
+        "vertices": 9870,
+        "polygons": 9868,
+        "face_sizes": {
+          "4": 9868
+        },
+        "belly_vertices": 154,
+        "components": 1,
+        "euler": 2,
+        "inconsistent_or_open_edges": 0,
+        "edge_incidence": {
+          "2": 19736
+        },
+        "vertex_valence": {
+          "4": 9744,
+          "3": 67,
+          "5": 59
+        }
+      },
+      "quality_against_original": {
+        "quads": 9868,
+        "quads_without_outward_diagonal": 1,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.02856290234487379,
+          "max_spacing_ratio": 0.49569785689018264,
+          "point": [
+            2.719502685,
+            0.1933402645,
+            1.26377392
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.03566481487037278,
+          "max_spacing_ratio": 0.6189487358171696,
+          "point": [
+            -0.2200528,
+            1.7625778,
+            0.043950893
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 9870
+      },
+      "status": "orientation_rejected"
+    }
+  },
+  "rejected_one_way_preparation": {
+    "run": {
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+        "prepare-surface",
+        "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/native-5.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/native-5.preparation.json",
+        "10000",
+        "5"
+      ],
+      "exit": 1,
+      "seconds": 15.280662880977616,
+      "max_child_rss_kib": 94684,
+      "source_sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+      "audit_sha256": "d0a257dbdf2f7776aa135312515a663dc16b66f972723147447476371b3fd16f"
+    },
+    "reason": "Source-to-working distance 0.008660 exceeded the unchanged 0.008643 limit. No preparation exported."
+  },
+  "integer_control": {
+    "runner": {
+      "runs": [
+        {
+          "name": "integer-export",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "export-field-grid",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fields.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5.integer.input"
+          ],
+          "exit": 0,
+          "seconds": 1.2657043659128249,
+          "max_child_rss_kib": 67088
+        },
+        {
+          "name": "integer-reference-max",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/integer-comparison-20261106/integer-reference",
+            "max"
+          ],
+          "exit": 0,
+          "seconds": 2.0665587799157947,
+          "max_child_rss_kib": 237284
+        },
+        {
+          "name": "integer-native-downstream",
+          "command": [
+            "python3",
+            "scripts/retopology/compare-integers.py",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fields.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5.max.grid.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-max"
+          ],
+          "exit": 0,
+          "seconds": 19.78558236802928,
+          "max_child_rss_kib": 237284
+        }
+      ],
+      "reference_sha256": "e9e34e5be4c313419ff1794c18672164b7fd8b410d6bdf5e57fb10d9c3243346"
+    },
+    "downstream": {
+      "stage": "corrected_integer_grid_before_subdivision",
+      "files": {
+        "fields": {
+          "path": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fields.json",
+          "sha256": "fe97b06115497cf0fcc39ba1bdd71d8bd10f931aaba8d88191f2f4ad3a2b9dfe"
+        },
+        "grid": {
+          "path": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5.max.grid.json",
+          "sha256": "a35ad9611a5a19d4cb5221ea35add796ae6385835de20ade2f93622e2d512824"
+        },
+        "audit": {
+          "path": "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+          "sha256": "a5bc5fb81532e4cb4c64f93409da06c676a22d71ad40950ed1e4caa8ddfa978d"
+        },
+        "original_snapshot": {
+          "path": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+          "sha256": "c8beee3387271c3c16ec2a9ab3d4888e967c74285761eb16d7b4fea71e6f03d7"
+        }
+      },
+      "runs": [
+        {
+          "name": "reference-import",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "import-integer-grid",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fields.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5.max.grid.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-max/reference.raw.json"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 1.966049098991789,
+          "limit_seconds": 60,
+          "cumulative_child_peak_rss_kib": 99084
+        },
+        {
+          "name": "reference-repair",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "repair-trace",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-max/reference.raw.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-max/reference-repair",
+            "60"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 2.7212515679420903,
+          "limit_seconds": 75,
+          "cumulative_child_peak_rss_kib": 123496
+        },
+        {
+          "name": "reference-resume",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "resume",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-max/reference-repair/attempted.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-max/reference.accepted.obj"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 4.669552742037922,
+          "limit_seconds": 40,
+          "cumulative_child_peak_rss_kib": 123496
+        },
+        {
+          "name": "reference-candidate",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "diagnose-candidate",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-max/reference-repair/attempted.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-max/reference.audit.json"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 6.070960263023153,
+          "limit_seconds": 40,
+          "cumulative_child_peak_rss_kib": 123496
+        },
+        {
+          "name": "reference-measure",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "diagnose-obj",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-max/reference.candidate.obj",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-max/reference.quality.json"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 1.715667227981612,
+          "limit_seconds": 40,
+          "cumulative_child_peak_rss_kib": 123496
+        },
+        {
+          "name": "reference-validate",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+            "validate-obj",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-max/reference.candidate.obj"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 1.76650232297834,
+          "limit_seconds": 40,
+          "cumulative_child_peak_rss_kib": 125188
+        },
+        {
+          "name": "reference-layout",
+          "command": [
+            "/usr/bin/python3",
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/scripts/retopology/measure-layout.py",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-max/reference.mesh.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-max/reference.layout.json"
+          ],
+          "exit": 0,
+          "timed_out": false,
+          "seconds": 0.3142622869927436,
+          "limit_seconds": 30,
+          "cumulative_child_peak_rss_kib": 125188
+        }
+      ]
+    },
+    "grid_sha256": "a35ad9611a5a19d4cb5221ea35add796ae6385835de20ade2f93622e2d512824",
+    "fields_sha256": "fe97b06115497cf0fcc39ba1bdd71d8bd10f931aaba8d88191f2f4ad3a2b9dfe",
+    "stage_statistics": {
+      "input_fingerprint": "fac9a9e07beaab0c",
+      "solver": "max",
+      "native_seed": {
+        "closure_defects": 467,
+        "negative_faces": 15,
+        "negative_area": 15,
+        "offset_l1_from_native_seed": 0
+      },
+      "sign_edits": 41,
+      "reference_seed": {
+        "closure_defects": 467,
+        "negative_faces": 16,
+        "negative_area": 17,
+        "offset_l1_from_native_seed": 2
+      },
+      "balanced": {
+        "closure_defects": 493,
+        "negative_faces": 17,
+        "negative_area": 18,
+        "offset_l1_from_native_seed": 16
+      },
+      "corrected": {
+        "closure_defects": 0,
+        "negative_faces": 1629,
+        "negative_area": 1886,
+        "offset_l1_from_native_seed": 19182
+      }
+    }
+  },
+  "measurements": [
+    {
+      "name": "native-5-final-measure",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+        "diagnose-obj",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fitted.obj",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fitted.quality.json"
+      ],
+      "exit": 0,
+      "seconds": 1.6656007409328595,
+      "max_child_rss_kib": 95144
+    },
+    {
+      "name": "native-5-final-validate",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+        "validate-obj",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fitted.obj"
+      ],
+      "exit": 1,
+      "seconds": 1.115255968994461,
+      "max_child_rss_kib": 95144
+    },
+    {
+      "name": "blender-5-measure",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+        "diagnose-obj",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/blender-guarded-5/quadriflow-10000-original.obj",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/blender-guarded-5/original.quality.json"
+      ],
+      "exit": 0,
+      "seconds": 1.615535109071061,
+      "max_child_rss_kib": 95584
+    },
+    {
+      "name": "blender-5-validate",
+      "command": [
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/debug/examples/audit",
+        "validate-obj",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/fresh-start-20261105/comparison-v2/native-original.raw.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/blender-guarded-5/quadriflow-10000-original.obj"
+      ],
+      "exit": 1,
+      "seconds": 0.9648360969731584,
+      "max_child_rss_kib": 95584
+    },
+    {
+      "name": "native-5-layout",
+      "command": [
+        "python3",
+        "scripts/retopology/measure-layout.py",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fitted.mesh.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fitted.layout.json"
+      ],
+      "exit": 0,
+      "seconds": 0.3143223160877824,
+      "max_child_rss_kib": 95584
+    },
+    {
+      "name": "render-full",
+      "command": [
+        "python3",
+        "scripts/retopology/render-patch-rebuild.py",
+        "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/integer-comparison-20261106/even-native/native.mesh.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/integer-comparison-20261106/even-native/native.quality.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/native-resampling.png",
+        "--candidate-label",
+        "MeshLab prep: 9,157 quads (passes)",
+        "--extra",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fitted.mesh.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fitted.quality.json",
+        "Rust prep: 9,521 quads (rejected)",
+        "--caption",
+        "Same 10,000 target; both complete fitted meshes. Rust preparation preserves shape, but the resulting quads still fail finger coverage."
+      ],
+      "exit": 0,
+      "seconds": 10.02538900997024,
+      "max_child_rss_kib": 140548
+    },
+    {
+      "name": "render-hand",
+      "command": [
+        "python3",
+        "scripts/retopology/render-patch-rebuild.py",
+        "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/integer-comparison-20261106/even-native/native.mesh.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/integer-comparison-20261106/even-native/native.quality.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/native-resampling.png",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/native-resampling-hand.png",
+        "MeshLab prep: 9,157 quads (passes)",
+        "--extra",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fitted.mesh.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fitted.quality.json",
+        "Rust prep: 9,521 quads (rejected)",
+        "--caption",
+        "Same 10,000 target; both complete fitted meshes. Rust preparation preserves shape, but the resulting quads still fail finger coverage.",
+        "--yaw",
+        "-0.7",
+        "--pitch",
+        ".25",
+        "--zoom",
+        "3.5",
+        "--center",
+        "-2.5",
+        ".3",
+        "1.2"
+      ],
+      "exit": 2,
+      "seconds": 0.2140834250021726,
+      "max_child_rss_kib": 140548
+    }
+  ],
+  "renders": [
+    {
+      "command": [
+        "python3",
+        "scripts/retopology/render-patch-rebuild.py",
+        "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fitted.mesh.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fitted.quality.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/native-resampling-mapping.png",
+        "--candidate-label",
+        "Native mapping: 9,521 quads (rejected)",
+        "--extra",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-max/reference.mesh.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-max/reference.quality.json",
+        "Original mapping: 10,122 quads (passes)",
+        "--caption",
+        "Same Rust-prepared triangles and fields; only integer mapping changes. Right panel is a C++ stage control, not an all-Rust result."
+      ],
+      "exit": 0,
+      "seconds": 9.778094399953261
+    },
+    {
+      "command": [
+        "python3",
+        "scripts/retopology/render-patch-rebuild.py",
+        "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fitted.mesh.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fitted.quality.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/native-resampling-hand.png",
+        "--candidate-label",
+        "Native mapping: 9,521 quads (rejected)",
+        "--extra",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-max/reference.mesh.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-max/reference.quality.json",
+        "Original mapping: 10,122 quads (passes)",
+        "--caption",
+        "Same Rust-prepared triangles and fields; only integer mapping changes. Right panel is a C++ stage control, not an all-Rust result.",
+        "--yaw",
+        "-.7",
+        "--pitch",
+        ".25",
+        "--zoom",
+        "3.5",
+        "--center",
+        "-2.5",
+        ".3",
+        "1.2"
+      ],
+      "exit": 0,
+      "seconds": 5.119795595994219
+    },
+    {
+      "command": [
+        "python3",
+        "scripts/retopology/render-patch-rebuild.py",
+        "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fitted.mesh.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fitted.quality.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/native-resampling-underarm.png",
+        "--candidate-label",
+        "Native mapping: 9,521 quads (rejected)",
+        "--extra",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-max/reference.mesh.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-max/reference.quality.json",
+        "Original mapping: 10,122 quads (passes)",
+        "--caption",
+        "Same Rust-prepared triangles and fields; only integer mapping changes. Right panel is a C++ stage control, not an all-Rust result.",
+        "--yaw",
+        "1.2",
+        "--pitch",
+        ".35",
+        "--zoom",
+        "3.3",
+        "--center",
+        ".97",
+        "-.1",
+        ".2"
+      ],
+      "exit": 0,
+      "seconds": 4.818619069992565
+    }
+  ],
+  "images": [
+    {
+      "file": "native-resampling-mapping.png",
+      "sha256": "26f302c37622caef15f0605aeb06b9ec9714ce0abb7a54a268d916eb2dfbab29",
+      "visually_inspected": true
+    },
+    {
+      "file": "native-resampling-hand.png",
+      "sha256": "f1b63a85b191d20b4843e33be23da0aa83b78e42b249424016656eb9a3a7b76a",
+      "visually_inspected": true
+    },
+    {
+      "file": "native-resampling-underarm.png",
+      "sha256": "beec90c08483e225a80a230f500b33f3e29bf603913e3b0eec6fbdd8db76ae95",
+      "visually_inspected": true
+    }
+  ],
+  "validation": {
+    "focused_tests": {
+      "command": "cargo test --manifest-path crates/clay-retopology/Cargo.toml --features audit --lib -j1 -- resample::tests --test-threads=1",
+      "passed": 7,
+      "failed": 0
+    },
+    "audit_clippy": {
+      "command": "cargo clippy --manifest-path crates/clay-retopology/Cargo.toml --features audit --lib --example audit -j1 -- -D warnings",
+      "passed": true
+    },
+    "resample_rustfmt": true,
+    "full_suites": "left to CI",
+    "default_clippy": {
+      "command": "cargo clippy --manifest-path crates/clay-retopology/Cargo.toml --lib -j1 -- -D warnings",
+      "passed": true
+    }
+  },
+  "source_files": {
+    "crates/clay-retopology/src/resample.rs": "40084d286827353d936474be18e35d493b1335c0939bd5c3ed4d1edd84bc178b",
+    "crates/clay-retopology/src/lib.rs": "326e2d3d951c8d79b3c077330b7e250c6732ff0c7e24794e75bc040a1632f656",
+    "crates/clay-retopology/src/surface.rs": "b8db9091cddb25c2abca5e951b9aa659d7927dbda553043e3eba17034b69c525",
+    "crates/clay-retopology/src/audit.rs": "9adbd7e23e2be7143c14f93b0cca9010115f4d3e48aac6dbe7fec6f118e51ccf",
+    "crates/clay-retopology/examples/audit.rs": "741fc06177acd1f86eecd570df795a0e501de11a71dddd193a0dbd29286bf4dd"
+  },
+  "notes": [
+    "Five-pass fitted mesh is complete: projection and untangling succeeded; the subsequent shape measure rejected it.",
+    "Ten-pass attempted fitting failed outward-triangulation; do not present those positions as a completed fit.",
+    "Passing control still imports original C++ integer mapping; it is not an all-Rust or app-integrated result.",
+    "Audit executable digest in run records predates only attribution comments and the added sharp-crease test; preparation algorithm unchanged.",
+    "Renderer hand-command typo rejected by argparse; corrected commands are in renders, and only successful rendered images are included."
+  ]
+}

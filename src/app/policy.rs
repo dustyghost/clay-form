@@ -77,6 +77,9 @@ impl<'a> EditorPolicy<'a> {
             return Err("Apply or cancel the mesh join before editing the scene");
         }
         if ui.projection.open
+            && !(intent == Intent::History
+                && ui.projection.mode == crate::ui::SurfaceMode::Retopology
+                && !ui.projection.busy)
             && !matches!(
                 intent,
                 Intent::Projection | Intent::Navigate | Intent::Request
@@ -131,10 +134,22 @@ impl<'a> EditorPolicy<'a> {
                 Intent::Navigate
             }
             Action::Undo | Action::Redo => Intent::History,
+            Action::SelectBrush(_) if self.ui.path_brush_active => Intent::Brush,
+            Action::GuidedRetopology if self.ui.path_brush_active => Intent::Path,
             Action::TogglePathGuides | Action::TogglePathOnlyStrokes => Intent::PathGuides,
             _ => Intent::Edit,
         };
         self.available(intent)?;
+        if self.ui.projection.open && intent == Intent::History {
+            let label = if *action == Action::Undo {
+                self.document.undo_label()
+            } else {
+                self.document.redo_label()
+            };
+            if label != Some("Retopology density stroke") {
+                return Err("Close Guided retopology to undo or redo other edits");
+            }
+        }
         if *action == Action::CancelMeshOperation {
             return if self.ui.mesh_busy {
                 Ok(())
@@ -200,7 +215,11 @@ impl<'a> EditorPolicy<'a> {
                     && self.ui.modeling.count > 0
                     && document.mesh_settings().levels() == 1
                     && (*action == Action::ModelCreateGroup
-                        || self.ui.modeling.group < document.mesh().vertex_groups.len())
+                        || document
+                            .mesh()
+                            .vertex_groups
+                            .get(self.ui.modeling.group)
+                            .is_some_and(|group| group.purpose.is_selection()))
             }
             Action::ModelRepeat => {
                 self.edge_unavailable(action).is_none()
@@ -321,7 +340,11 @@ impl<'a> EditorPolicy<'a> {
                 sculpt
                     && self.ui.selected_vertex_group.is_some_and(|(m, g)| {
                         m == document.active_model_index()
-                            && g < document.mesh().vertex_groups.len()
+                            && document
+                                .mesh()
+                                .vertex_groups
+                                .get(g)
+                                .is_some_and(|group| group.purpose.is_selection())
                     })
             }
             Action::SplitHidden => {
@@ -335,6 +358,7 @@ impl<'a> EditorPolicy<'a> {
             Action::HigherLevel | Action::DeleteHigherLevels => {
                 sculpt && document.mesh_settings().level() < document.mesh_settings().levels()
             }
+            Action::GuidedRetopology => document.require_retopology_target().is_ok(),
             Action::ProjectDetails | Action::RelaxMesh => {
                 document.require_projection_target().is_ok()
             }
@@ -465,6 +489,7 @@ impl<'a> EditorPolicy<'a> {
         let intent = match command {
             Command::Action(action) => return self.action(action),
             Command::Path(_) => Intent::Path,
+            Command::OpenRetopology if self.ui.path_brush_active => Intent::Path,
             Command::Instances(_) => Intent::Instances,
             Command::ResetView
             | Command::ZoomIn
@@ -509,6 +534,7 @@ impl<'a> EditorPolicy<'a> {
             Command::SplitHidden => Some(Action::SplitHidden),
             Command::ConvertPrimitive => Some(Action::ConvertPrimitive),
             Command::OpenProjection => Some(Action::ProjectDetails),
+            Command::OpenRetopology => Some(Action::GuidedRetopology),
             Command::OpenRelaxation => Some(Action::RelaxMesh),
             Command::OpenFusion => Some(Action::JoinMeshes),
             Command::KeepProjectionReference => Some(Action::KeepProjectionReference),

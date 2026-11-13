@@ -145,8 +145,11 @@ impl MeshSettings {
             if level
                 .vertex_groups
                 .iter()
-                .map(|g| (&g.name, g.visible))
-                .ne(mesh.vertex_groups.iter().map(|g| (&g.name, g.visible)))
+                .map(|g| (&g.name, g.visible, g.purpose))
+                .ne(mesh
+                    .vertex_groups
+                    .iter()
+                    .map(|g| (&g.name, g.visible, g.purpose)))
             {
                 return Err("Subdivision levels have incompatible vertex groups".into());
             }

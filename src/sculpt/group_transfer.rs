@@ -93,6 +93,7 @@ impl Mesh {
             .vertex_groups
             .iter()
             .map(|g| VertexGroup {
+                purpose: g.purpose,
                 visible: g.visible,
                 name: g.name.clone(),
                 weights: source.iter().map(|&i| g.weights[i]).collect(),

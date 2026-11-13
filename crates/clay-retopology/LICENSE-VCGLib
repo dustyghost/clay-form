@@ -1,0 +1,20 @@
+Source consulted for resample.rs local quality, normal and distance guards:
+cnr-isti-vclab/vcglib, commit 5cae2abc2f9056785b0537dcbe156c40da2aea20
+vcg/complex/algorithms/isotropic_remeshing.h
+
+Copyright(C) 2004-2017 Visual Computing Lab
+ISTI - Italian National Research Council
+All rights reserved.
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+The Rust implementation is distributed under GPL-3.0-only. The full GPLv3
+terms are in ../../LICENSE. No VCGLib binary or C++ dependency is bundled.

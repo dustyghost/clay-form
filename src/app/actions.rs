@@ -401,6 +401,7 @@ impl App {
                 Some(Command::EditEdges(edit))
             }
             Action::ProjectDetails => Some(Command::OpenProjection),
+            Action::GuidedRetopology => Some(Command::OpenRetopology),
             Action::JoinMeshes => Some(Command::OpenFusion),
             Action::RelaxMesh => Some(Command::OpenRelaxation),
             Action::KeepProjectionReference => Some(Command::KeepProjectionReference),
@@ -647,7 +648,12 @@ impl App {
                 .selected_vertex_group
                 .filter(|(m, g)| {
                     *m == self.document.active_model_index()
-                        && *g < self.document.mesh().vertex_groups.len()
+                        && self
+                            .document
+                            .mesh()
+                            .vertex_groups
+                            .get(*g)
+                            .is_some_and(|group| group.purpose.is_selection())
                 })
                 .map(|(_, g)| match action {
                     Action::MaskGroup => Command::MaskVertexGroup(g),
@@ -814,6 +820,15 @@ impl App {
                     .iter()
                     .position(|b| b.identity() == id)
                 {
+                    if self.ui.path_brush_active {
+                        if self.viewport.paths.has_unfinished(&self.document) {
+                            self.ui.status =
+                                "Complete or cancel the current path before switching brushes"
+                                    .into();
+                            return;
+                        }
+                        let _ = self.dispatch_path(crate::command::PathCommand::Close);
+                    }
                     self.ui.select_brush(index, &self.document);
                 }
                 None

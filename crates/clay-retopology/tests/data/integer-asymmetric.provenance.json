@@ -1,0 +1,22 @@
+{
+  "reference_commit": "810b7a0967c35b0dc85b4464e3835e26a756c967",
+  "generator": "scripts/retopology/make-integer-reference.py",
+  "mode": "max",
+  "fixtures": [
+    {
+      "name": "integer-asymmetric-19",
+      "target": 19,
+      "input_sha256": "618726a8e25be231c9b36110546456c841808e18efddc0a51ea8ab1b61b3f434",
+      "expected_sha256": "887dd6337b2d1dd9a263e5fc473ce5a84ec80a7dc0c1a378d39132f08fed0469",
+      "cpp_binary_sha256": "e9e34e5be4c313419ff1794c18672164b7fd8b410d6bdf5e57fb10d9c3243346"
+    },
+    {
+      "name": "integer-asymmetric-83",
+      "target": 83,
+      "input_sha256": "8ed9b0cbcadb535c526e7fd8f1193fad27ebe4f9b462aefd2c0990b26e4811c4",
+      "expected_sha256": "18e82774f9de15160c0bd8ea12f8731dfce2f250a66d05c2dc230bcd4536dce8",
+      "cpp_binary_sha256": "e9e34e5be4c313419ff1794c18672164b7fd8b410d6bdf5e57fb10d9c3243346"
+    }
+  ],
+  "scope": "Independent C++ integer mapping on native-exported shared fields; no Rust mapper used to generate expected output."
+}

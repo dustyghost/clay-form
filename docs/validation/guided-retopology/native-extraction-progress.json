@@ -1,0 +1,3402 @@
+{
+  "date": "2026-11-04",
+  "status": "experimental_not_integrated",
+  "source_digest_sha256": "f3581ed585419fc5968254393b480ed94fb501885995d0060d37eed811c475fb",
+  "source_digest_method": "Sorted relative paths followed by NUL, file bytes, NUL; Cargo.toml, Cargo.lock, src/*.rs and examples/*.rs.",
+  "upstream_commit": "810b7a0967c35b0dc85b4464e3835e26a756c967",
+  "biped_source_sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+  "extraction_parity": [
+    {
+      "target": 5000,
+      "stage": "raw",
+      "vertices": [
+        4639,
+        4639
+      ],
+      "quads": [
+        4588,
+        4588
+      ],
+      "memberships_equal": true,
+      "quads_equal": true,
+      "max_position_difference": 0.0
+    },
+    {
+      "target": 5000,
+      "stage": "clean",
+      "vertices": [
+        4585,
+        4585
+      ],
+      "quads": [
+        4583,
+        4583
+      ],
+      "memberships_equal": true,
+      "quads_equal": true,
+      "max_position_difference": 0.0
+    },
+    {
+      "target": 10000,
+      "stage": "raw",
+      "vertices": [
+        10655,
+        10655
+      ],
+      "quads": [
+        10620,
+        10620
+      ],
+      "memberships_equal": true,
+      "quads_equal": true,
+      "max_position_difference": 0.0
+    },
+    {
+      "target": 10000,
+      "stage": "clean",
+      "vertices": [
+        10620,
+        10620
+      ],
+      "quads": [
+        10618,
+        10618
+      ],
+      "memberships_equal": true,
+      "quads_equal": true,
+      "max_position_difference": 0.0
+    }
+  ],
+  "runs": [
+    {
+      "name": "raw-5000-upstream",
+      "exit": 0,
+      "seconds": 4.142215050989762,
+      "max_rss_kib": 49600
+    },
+    {
+      "name": "clean-5000-rust",
+      "exit": 0,
+      "seconds": 0.8056210519280285,
+      "max_rss_kib": 97956
+    },
+    {
+      "name": "candidate-5000",
+      "exit": 0,
+      "seconds": 2.3476050479803234,
+      "max_rss_kib": 98104
+    },
+    {
+      "name": "raw-10000-upstream",
+      "exit": 0,
+      "seconds": 5.8838304409291595,
+      "max_rss_kib": 75928
+    },
+    {
+      "name": "clean-10000-rust",
+      "exit": 0,
+      "seconds": 1.3554236670024693,
+      "max_rss_kib": 138848
+    },
+    {
+      "name": "candidate-10000",
+      "exit": 0,
+      "seconds": 8.731431668973528,
+      "max_rss_kib": 138808
+    },
+    {
+      "name": "original-full-diagnostics",
+      "exit": 0,
+      "seconds": 1.1705074340570718,
+      "max_rss_kib": 71620
+    },
+    {
+      "name": "fixture-capture",
+      "exit": 0,
+      "seconds": 0.031119733001105487,
+      "max_rss_kib": 13672
+    },
+    {
+      "name": "fixture-export",
+      "exit": 0,
+      "seconds": 0.005819899030029774,
+      "max_rss_kib": 13672
+    },
+    {
+      "name": "fixture-reference",
+      "exit": 0,
+      "seconds": 0.02206832601223141,
+      "max_rss_kib": 13672
+    }
+  ],
+  "reference_quality": {
+    "bad_quads": [
+      {
+        "center": [
+          2.5806446674999997,
+          0.36682262250000003,
+          1.2288612724999999
+        ],
+        "diagonals": [
+          {
+            "degenerate": false,
+            "normal_dots": [
+              0.8509116708771822,
+              -0.36786655930290063
+            ],
+            "perimeter_collision": false
+          },
+          {
+            "degenerate": false,
+            "normal_dots": [
+              0.4785216503595178,
+              -0.356755253441395
+            ],
+            "perimeter_collision": false
+          }
+        ],
+        "quad": 4
+      },
+      {
+        "center": [
+          -0.3109619395,
+          1.81194684,
+          -0.02743461425
+        ],
+        "diagonals": [
+          {
+            "degenerate": false,
+            "normal_dots": [
+              -0.0043084060372478306,
+              0.9137506437214643
+            ],
+            "perimeter_collision": false
+          },
+          {
+            "degenerate": false,
+            "normal_dots": [
+              0.8472089655004597,
+              -0.06708899142392888
+            ],
+            "perimeter_collision": false
+          }
+        ],
+        "quad": 2789
+      },
+      {
+        "center": [
+          -2.424769225,
+          0.3982338605,
+          1.488813845
+        ],
+        "diagonals": [
+          {
+            "degenerate": false,
+            "normal_dots": [
+              0.6287112385496949,
+              -0.5634598892200027
+            ],
+            "perimeter_collision": false
+          },
+          {
+            "degenerate": false,
+            "normal_dots": [
+              0.7937381629705478,
+              -0.48868968234860055
+            ],
+            "perimeter_collision": false
+          }
+        ],
+        "quad": 3366
+      }
+    ],
+    "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+    "quads": 4368,
+    "quads_without_outward_diagonal": 3,
+    "result_to_source": {
+      "distance_at_max_ratio": 0.050146386899678264,
+      "max_spacing_ratio": 0.615374301041371,
+      "point": [
+        -2.40002835,
+        0.4361524435,
+        1.4445061099999998
+      ]
+    },
+    "source_to_result": {
+      "distance_at_max_ratio": 0.14254312749971473,
+      "max_spacing_ratio": 1.7492262728493961,
+      "point": [
+        2.74468745,
+        0.182763875,
+        1.327731
+      ]
+    },
+    "topology": {
+      "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+    },
+    "vertices": 4370
+  },
+  "biped_candidates": [
+    {
+      "target": 5000,
+      "repaired_snapshot_sha256": "dfd1a68441ddc9e6d6fe94a304a0d21c68746bad55f406989594b4f468ee10de",
+      "extraction_input_sha256": "fa453cb435a39c1b48b258b7eaf917208347abab2d4e70beb97ab949f34d8bcf",
+      "accepted": false,
+      "first_failure": "Retopology lost source shape at DVec3(-2.759019, 0.20808735, 1.3294377): error 0.09024, local grid spacing 0.08149",
+      "before_surface_fit": {
+        "bad_quads": [
+          {
+            "center": [
+              2.5611009133298754,
+              0.3702392983787098,
+              1.1745144297225107
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.3839414305684854,
+                  0.36583712623998244
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.44142753623345327,
+                  -0.34259771378900195
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 1367
+          },
+          {
+            "center": [
+              2.5290334369706233,
+              0.3971959380811372,
+              1.3067559691484685
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.10518581270788142,
+                  0.14086470565412784
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.062093415408588065,
+                  0.0025657753359510267
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 1438
+          },
+          {
+            "center": [
+              -0.2652219708819839,
+              -1.0874347033723697,
+              0.273030905257012
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.9995779274639569,
+                  -0.2795482630107779
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9990278923938813,
+                  0.997275012870016
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 1978
+          },
+          {
+            "center": [
+              0.3891929991495806,
+              1.9212791463786276,
+              -0.06154299640531492
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.16539016401294832,
+                  0.8768004492755352
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.7274436723395603,
+                  -0.28795253335555643
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 3444
+          }
+        ],
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 4583,
+        "quads_without_outward_diagonal": 4,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.07580986706482926,
+          "max_spacing_ratio": 0.9303051892928675,
+          "point": [
+            0.019764519124279952,
+            1.8515889772975624,
+            -1.048726693504742
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.26092331499017857,
+          "max_spacing_ratio": 3.20193562317266,
+          "point": [
+            2.739613,
+            0.15895358,
+            1.3021954
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 4585
+      },
+      "after_surface_fit": {
+        "bad_quads": [],
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 4583,
+        "quads_without_outward_diagonal": 0,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.07134757016613709,
+          "max_spacing_ratio": 0.8755458535791037,
+          "point": [
+            0.019596077606303296,
+            1.8524914217849244,
+            -1.055532849302518
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.2911766989757981,
+          "max_spacing_ratio": 3.573191782894235,
+          "point": [
+            2.739613,
+            0.15895358,
+            1.3021954
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 4585
+      }
+    },
+    {
+      "target": 10000,
+      "repaired_snapshot_sha256": "f643a939e48541b911e79ad0498decee565dc9d9b70ec60810031a5b376883e4",
+      "extraction_input_sha256": "6f0bf006a556bbb0a29c4b0ab3fa60f7f75df66fdc80c494cd418343f6be89fb",
+      "accepted": false,
+      "first_failure": "Retopology quad 5266 has no outward render diagonal near DVec3(0.20570629026096837, -0.9683863691626281, -0.13415353795373974)",
+      "before_surface_fit": {
+        "bad_quads": [
+          {
+            "center": [
+              0.20575340423163463,
+              -0.9686084136844454,
+              -0.13418685781204961
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9987819740081442,
+                  -0.997286093247956
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.35827743340371176,
+                  -0.9212950435674375
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5266
+          },
+          {
+            "center": [
+              0.2502031757727005,
+              -0.9609570874793261,
+              -0.10905368888139622
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.987255977936779,
+                  -0.9333156100008233
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9694956874053888,
+                  -0.9851800558569468
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5267
+          },
+          {
+            "center": [
+              0.17639968320550506,
+              -0.9718113488709477,
+              -0.15000830482625277
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9781582475381373,
+                  0.8768521536917782
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9997596731024005,
+                  -0.9996515382973037
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5271
+          },
+          {
+            "center": [
+              0.4940519894616255,
+              -0.860377307161331,
+              -0.12028675111647033
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9985212600174572,
+                  -0.9998949131956612
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9998950607459598,
+                  -0.9146092627544623
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5275
+          },
+          {
+            "center": [
+              0.5327816482082485,
+              -0.8356870671586594,
+              -0.1289936796568507
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999002396518618,
+                  -0.9995036704972091
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9988275744053053,
+                  -0.9999292892168762
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5276
+          },
+          {
+            "center": [
+              0.4860384161083634,
+              -0.8646645384842242,
+              -0.12265911193680658
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.9999703995871496,
+                  -0.9988793504107736
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.7889780972884796,
+                  -0.9986535508836643
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5277
+          },
+          {
+            "center": [
+              0.45470672858785266,
+              -0.8815226269684253,
+              -0.12028932799707237
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9896039110305446,
+                  -0.9989057742022703
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9916741505712489,
+                  -0.9989266654256975
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5279
+          },
+          {
+            "center": [
+              0.29251258295209626,
+              -0.9531821140518558,
+              -0.06257106368975746
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9924424323089905,
+                  -0.9992701649256692
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9809941689394747,
+                  -0.99862440465147
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5509
+          },
+          {
+            "center": [
+              0.21799448872286953,
+              -0.9651222531092624,
+              -0.1393645215758315
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9894195209725427,
+                  -0.9970711472567683
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9985788479380315,
+                  -0.9999444451895322
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5510
+          },
+          {
+            "center": [
+              0.7362297917831964,
+              -2.304831375685648,
+              0.40594017955984263
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.35334630301532977,
+                  -0.20830694557131638
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.7033434780589414,
+                  -0.9371647171116796
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5730
+          },
+          {
+            "center": [
+              0.7374043869037397,
+              -2.322327612319738,
+              0.41219584367476336
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.8560738075817255,
+                  0.6252790417181648
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.6925334048894487,
+                  0.5180029631890041
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5731
+          },
+          {
+            "center": [
+              0.30575818012132644,
+              -0.9406843430771131,
+              -0.14283231932285123
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.986671022712815,
+                  -0.9798268173093262
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.39447552705105365,
+                  -0.8992690878331551
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10420
+          },
+          {
+            "center": [
+              0.37380650235838553,
+              -0.9203730485091534,
+              -0.11088296185824258
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9991353818323256,
+                  -0.9993291703291847
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9995311531885624,
+                  -0.9990641959285465
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10422
+          },
+          {
+            "center": [
+              0.4110663797515286,
+              -0.9031670900276136,
+              -0.11725025938236235
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9836245075506375,
+                  -0.6199030976484935
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9877722413097907,
+                  -0.9998210471908386
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10423
+          },
+          {
+            "center": [
+              0.3990393170212164,
+              -0.9082075298891172,
+              -0.11974879086639406
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9873281262668361,
+                  -0.9997237718287294
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9969053081419333,
+                  -0.9704551911567545
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10424
+          },
+          {
+            "center": [
+              0.35838656723143675,
+              -0.925397256132422,
+              -0.11689090143346202
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9968689129841184,
+                  -0.9923664755617783
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999790853174374,
+                  -0.9957893135270108
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10425
+          },
+          {
+            "center": [
+              0.33838137981206484,
+              -0.9352814565184758,
+              -0.10055114238334663
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9992092991241479,
+                  -0.9986724392391734
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9991212826078387,
+                  -0.9989224338067181
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10426
+          },
+          {
+            "center": [
+              0.5325158391295678,
+              -0.8267782098317954,
+              -0.11071013547349075
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9997040493752122,
+                  -0.6130006599009873
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.6075239389835698,
+                  -0.6350476979880455
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10434
+          },
+          {
+            "center": [
+              0.5772138666824477,
+              -0.8056547450462465,
+              -0.12972029280136474
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9994791352193289,
+                  -0.9999795592749298
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999698969155894,
+                  -0.9993603947074146
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10435
+          },
+          {
+            "center": [
+              0.5212977567093809,
+              -0.8395951588833104,
+              -0.14751361709489802
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9998777070052575,
+                  -0.9999922843018457
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999703097782701,
+                  -0.9999767078685329
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10436
+          },
+          {
+            "center": [
+              0.27403741902551454,
+              -0.9504630342837832,
+              -0.13942215600601227
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.09501576848995003,
+                  -0.8199880254063769
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9968196446944849,
+                  -0.9814310627397986
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10438
+          },
+          {
+            "center": [
+              0.31658145299005364,
+              -0.9383536147139728,
+              -0.1320561787159185
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9967049462472808,
+                  -0.9998565055554226
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9848364649575259,
+                  -0.9724220090794535
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10439
+          },
+          {
+            "center": [
+              0.3625708734704117,
+              -0.9214253363371925,
+              -0.1349362202467348
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9947098367921157,
+                  -0.9659551621267939
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999743102577296,
+                  -0.9997868884018997
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10440
+          },
+          {
+            "center": [
+              0.31860299477576515,
+              -0.9367368269187236,
+              -0.1396020620912526
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9973027735419628,
+                  -0.9889095020425317
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9864344039812547,
+                  -0.46049560077706075
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10441
+          },
+          {
+            "center": [
+              0.30784320876216725,
+              -0.9471246599960965,
+              -0.08457583185784238
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9996295595333157,
+                  -0.9987533993354378
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9998798871751787,
+                  -0.9999625854680372
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10447
+          },
+          {
+            "center": [
+              0.2503912125757992,
+              -0.9593045682091719,
+              -0.1247420087607078
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9997701736759603,
+                  -0.9998411143145788
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9945171349033768,
+                  -0.9935163852859018
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10448
+          },
+          {
+            "center": [
+              0.2806797462094609,
+              -0.9531705545691824,
+              -0.10684200080948425
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999983889825212,
+                  -0.9998811946834939
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999760189586168,
+                  -0.9999726194846809
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10449
+          },
+          {
+            "center": [
+              0.3041641680855779,
+              -0.9518517187253955,
+              -0.03024375853142088
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.9997998645190392,
+                  -0.9985087462670166
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9798594566840603,
+                  0.9997487121045789
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10450
+          },
+          {
+            "center": [
+              0.6200554490739978,
+              -0.774318037142948,
+              -0.12024900796257591
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.9996532874494979,
+                  -0.999963056827085
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.9997103383846717,
+                  -0.9999694860229323
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10520
+          },
+          {
+            "center": [
+              0.6605113240608199,
+              -0.7386445416101339,
+              -0.13192544965624484
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.8014466666983125,
+                  0.4397663742792251
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9746445409191996,
+                  -0.11619016108962149
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10525
+          },
+          {
+            "center": [
+              0.3209817268611994,
+              -0.9440666317782889,
+              -0.06939942168654187
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.999976140690361,
+                  -0.9999756693422122
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999772198493145,
+                  -0.9999746212583006
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10532
+          },
+          {
+            "center": [
+              0.3486055102216632,
+              -0.9323081034934133,
+              -0.092377650006289
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.999933470856051,
+                  -0.9988623096617445
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999126595618792,
+                  -0.9994543338897085
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10533
+          },
+          {
+            "center": [
+              0.6303189956090468,
+              -0.7630791539820837,
+              -0.13680557197007526
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.9403366070890817,
+                  -0.9376577215205032
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9319430379610447,
+                  -0.4499402334575987
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10534
+          },
+          {
+            "center": [
+              0.6555255336207015,
+              -0.7433922240128032,
+              -0.12761151320403863
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.47487733678749416,
+                  -0.9938103269422639
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9993705237006002,
+                  -0.996284410469267
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10535
+          },
+          {
+            "center": [
+              0.6022577051896219,
+              -0.7845195098666856,
+              -0.14363254885219431
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.7385501814619918,
+                  -0.9992722998974201
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9954677337773311,
+                  -0.9999415860137139
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10536
+          },
+          {
+            "center": [
+              0.6742042917258462,
+              -0.7274552396356999,
+              -0.12620564955682778
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.8411173925057188,
+                  -0.9999117731072839
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.8940352800987632,
+                  -0.48468557225554226
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10538
+          },
+          {
+            "center": [
+              0.41723205828268417,
+              -0.9006982397937016,
+              -0.11572234306903018
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9998036286840261,
+                  -0.9999996569600977
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999952591646699,
+                  -0.9998076050077851
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10548
+          },
+          {
+            "center": [
+              0.5744909377795813,
+              -0.7984704484174003,
+              -0.10895862421276835
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.6080226413556082,
+                  -0.6762533671053303
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999771997871167,
+                  -0.6045797040079278
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10557
+          },
+          {
+            "center": [
+              0.2955031495666034,
+              -0.9463363423817976,
+              -0.12438432141260028
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9888225644637099,
+                  -0.9983575787340604
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9978595643784681,
+                  -0.9999641412799691
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10558
+          },
+          {
+            "center": [
+              0.5679269947507599,
+              -0.8084489645532128,
+              -0.14917054658227416
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9998253515786687,
+                  -0.9932473347230859
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9998497795293935,
+                  -0.9971717609423932
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10561
+          },
+          {
+            "center": [
+              0.6175312651171745,
+              -0.7748292898433358,
+              -0.12918771805180823
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9998400013245583,
+                  -0.9978825491920501
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9997937958129176,
+                  -0.9999824156663142
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10562
+          },
+          {
+            "center": [
+              0.3424591332212126,
+              -0.9304720090744029,
+              -0.12377166251628273
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9751819997509483,
+                  -0.9992265731888432
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9916171390025692,
+                  -0.9999403364184754
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10563
+          },
+          {
+            "center": [
+              0.2679062204718746,
+              -0.952924709394729,
+              -0.1361374356700499
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9928618690056034,
+                  -0.961657873755901
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9979119900745089,
+                  -0.9999190415466269
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10564
+          },
+          {
+            "center": [
+              0.38750425934156413,
+              -0.912501621560865,
+              -0.1265868438584629
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9996293863842498,
+                  -0.9995695705328533
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9995122035047863,
+                  -0.99963366535528
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10565
+          },
+          {
+            "center": [
+              0.4313689657487126,
+              -0.8910313654049044,
+              -0.1369364487018186
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9997549444246892,
+                  -0.9997277273602696
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9995681316612711,
+                  -0.9996376805222675
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10566
+          },
+          {
+            "center": [
+              0.3599989783648966,
+              -0.920970553275315,
+              -0.1451855238239279
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.3891210276915178,
+                  -0.9827508640711204
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9992254871490729,
+                  -0.9998548562317067
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10567
+          },
+          {
+            "center": [
+              0.26436229580076986,
+              -0.9533494433766447,
+              -0.1407606690216945
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.8093881332595133,
+                  0.3277771045402704
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.6618453119329076,
+                  -0.999942375122997
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10570
+          },
+          {
+            "center": [
+              0.6522512680718204,
+              -0.7452012178642429,
+              -0.13204276824732214
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9933257493430105,
+                  0.530980776525953
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9189356095524519,
+                  -0.9976672359131092
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10572
+          },
+          {
+            "center": [
+              0.5078232996215755,
+              -0.8461116265397378,
+              -0.15862869748624037
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.9458437758922271,
+                  -0.9995551358391238
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.999880365622146,
+                  0.9956637346054564
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10587
+          },
+          {
+            "center": [
+              0.3182081229564668,
+              -0.9406964138445788,
+              -0.1123911129155098
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9988883209362739,
+                  -0.9995944282653163
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9998069688623132,
+                  -0.9984291697888584
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10593
+          },
+          {
+            "center": [
+              0.4377649823752703,
+              -0.8902839659927428,
+              -0.1210610881054706
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999215663267897,
+                  -0.9898111707338236
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.999968291355715,
+                  -0.9972669151104362
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10595
+          },
+          {
+            "center": [
+              0.40708469605832953,
+              -0.900585751237791,
+              -0.14796381594728764
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.46533053507186173,
+                  -0.9966451217912375
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.999044306752304,
+                  -0.9994836992158934
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10596
+          },
+          {
+            "center": [
+              0.4733758292376177,
+              -0.8670949600342341,
+              -0.1511709076067035
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9998425049515826,
+                  -0.999800547309875
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9979593407998388,
+                  -0.9998287243046946
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10597
+          },
+          {
+            "center": [
+              0.47608114981791005,
+              -0.8688307449732131,
+              -0.13201350734838307
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9997027942907062,
+                  -0.9999800385524762
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9997082660931806,
+                  -0.9999513184660159
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10598
+          },
+          {
+            "center": [
+              0.38160686887639944,
+              -0.9178788056412237,
+              -0.10657715632124198
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999570884702079,
+                  -0.9995972767162358
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9996189365547193,
+                  -0.9999730430841844
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10599
+          },
+          {
+            "center": [
+              -2.5580727362196463,
+              0.35534167655916715,
+              1.2359231180999297
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.5951593105405559,
+                  -0.30352620969179067
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.9107007473687483,
+                  -0.6041860555288685
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10602
+          }
+        ],
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 10618,
+        "quads_without_outward_diagonal": 56,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.039428169718730165,
+          "max_spacing_ratio": 0.6842602686062328,
+          "point": [
+            0.5431289210034382,
+            -0.787897919890305,
+            -0.08443610833361952
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.10621946201122891,
+          "max_spacing_ratio": 1.8433966913885407,
+          "point": [
+            2.643002,
+            0.2196667,
+            1.4882323
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 10620
+      },
+      "after_surface_fit": {
+        "bad_quads": [
+          {
+            "center": [
+              0.20570629026096837,
+              -0.9683863691626281,
+              -0.13415353795373974
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9926426207903756,
+                  -0.9999999027585875
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.3750780947733428,
+                  -0.8976816082928286
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5266
+          },
+          {
+            "center": [
+              0.25021601046831954,
+              -0.9609895379161411,
+              -0.10905296611583783
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9873258855823882,
+                  -0.8468242872892534
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9959274484965344,
+                  -0.9944783694962169
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5267
+          },
+          {
+            "center": [
+              0.17638738012238694,
+              -0.9717361459412832,
+              -0.14999658165197
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9765839135406433,
+                  0.858101899978952
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.999296264211022,
+                  -0.9993538702341553
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5271
+          },
+          {
+            "center": [
+              0.4939488871158361,
+              -0.8602116912540781,
+              -0.12026341897836665
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9951732618995851,
+                  -0.9995803227145743
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9995808356694745,
+                  -0.7750554113680153
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5275
+          },
+          {
+            "center": [
+              0.5326088035280605,
+              -0.8354258558197492,
+              -0.1289512601994692
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9997450362981499,
+                  -0.9996770737134344
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9996013204721769,
+                  -0.9997487686553309
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5276
+          },
+          {
+            "center": [
+              0.48594794009413644,
+              -0.8645089227867282,
+              -0.12263758986722625
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.9976416963648354,
+                  -0.9983308716267939
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9927272754887196,
+                  -0.9983901769725375
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5277
+          },
+          {
+            "center": [
+              0.4547068288462326,
+              -0.8815229714580255,
+              -0.120289368623364
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9890458266159398,
+                  -0.9988774540519871
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9912300469275539,
+                  -0.9988992283782585
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5279
+          },
+          {
+            "center": [
+              0.29259007910682044,
+              -0.9534809562971316,
+              -0.06258934861778281
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999587728580648,
+                  -0.9999766473323963
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9998486451107264,
+                  -0.9999833267801075
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5509
+          },
+          {
+            "center": [
+              0.21795715687187392,
+              -0.9649702135126397,
+              -0.1393449491376775
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9920079286988039,
+                  -0.9962762417903266
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9991720189660892,
+                  -0.9999072510643243
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5510
+          },
+          {
+            "center": [
+              0.7354890388925482,
+              -2.3235752601505792,
+              0.40904305065836255
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.8396944223132649,
+                  0.9975722602096906
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9983055612131526,
+                  0.9983044634165187
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 5731
+          },
+          {
+            "center": [
+              0.3056725603703859,
+              -0.9404213724329117,
+              -0.14279723905441677
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9397047513825967,
+                  -0.9985228364062548
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.3743409472284068,
+                  -0.9361078894910674
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10420
+          },
+          {
+            "center": [
+              0.37372172397024406,
+              -0.920152557529767,
+              -0.11085421998728368
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9998188437998712,
+                  -0.9999994830928155
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9998104894288402,
+                  -0.9997272186588663
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10422
+          },
+          {
+            "center": [
+              0.41105895575559426,
+              -0.9031488299259176,
+              -0.11724788469474137
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9877045779041218,
+                  -0.6232244891273624
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9911789734785731,
+                  -0.9992418496622966
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10423
+          },
+          {
+            "center": [
+              0.39899721424538453,
+              -0.9081192854044883,
+              -0.11973709196912152
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.998166693956125,
+                  -0.9988589669151383
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.996891489671187,
+                  -0.9938733969766347
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10424
+          },
+          {
+            "center": [
+              0.3583549660527507,
+              -0.9253062680912254,
+              -0.11687913728042582
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9968683886985534,
+                  -0.9969483918984836
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999033061511159,
+                  -0.998457694353841
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10425
+          },
+          {
+            "center": [
+              0.33827183131560573,
+              -0.9349865935982928,
+              -0.1005131346684221
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9998286136448694,
+                  -0.998307877076822
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9997054724476387,
+                  -0.9991139113194006
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10426
+          },
+          {
+            "center": [
+              0.5380681688648852,
+              -0.8345152557113434,
+              -0.1119555206063505
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999602635237244,
+                  -0.9998829946341223
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9998938352035691,
+                  -0.9996774820955592
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10434
+          },
+          {
+            "center": [
+              0.5770994148451492,
+              -0.8054950552404673,
+              -0.1296906410791379
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9996772294627847,
+                  -0.9999112576900236
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999349626740514,
+                  -0.9997344666837145
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10435
+          },
+          {
+            "center": [
+              0.5211686893169327,
+              -0.8393894898763423,
+              -0.14747658660916485
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9989710229931105,
+                  -0.9999619956717417
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9996880304593884,
+                  -0.999908357622564
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10436
+          },
+          {
+            "center": [
+              0.27401710649416444,
+              -0.9503865164553552,
+              -0.1394123293963304
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.10499497725319537,
+                  -0.8042203945908687
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9986349901755078,
+                  -0.9979275656709253
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10438
+          },
+          {
+            "center": [
+              0.31654034371599327,
+              -0.9382461155554855,
+              -0.13204211758938045
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9984330933503787,
+                  -0.9998504918638957
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9792554678672025,
+                  -0.97791629959257
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10439
+          },
+          {
+            "center": [
+              0.3624794849303039,
+              -0.9212097669954334,
+              -0.134907994394925
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9961196618974014,
+                  -0.9840395283283203
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9997610696613464,
+                  -0.9999967065597752
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10440
+          },
+          {
+            "center": [
+              0.31850083692868025,
+              -0.9364558543838646,
+              -0.13956566555056804
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9996649845930853,
+                  -0.9983245855494813
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9725217568823201,
+                  -0.5106382017484594
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10441
+          },
+          {
+            "center": [
+              0.3077803262834883,
+              -0.946936061624595,
+              -0.08455672767584821
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9996559530124532,
+                  -0.9994094164687471
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9997864268111653,
+                  -0.9999773814470524
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10447
+          },
+          {
+            "center": [
+              0.2503525910152669,
+              -0.9591512725808182,
+              -0.12472226831071376
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9998793518469004,
+                  -0.9997680958792564
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9946442552284677,
+                  -0.9946594398891567
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10448
+          },
+          {
+            "center": [
+              0.28062905756697815,
+              -0.9530058117302688,
+              -0.10682297498638176
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999905262578329,
+                  -0.9990702616885876
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999041529388105,
+                  -0.9998190940596942
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10449
+          },
+          {
+            "center": [
+              0.30425535305101287,
+              -0.9522326388919465,
+              -0.03025689040679266
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.9997560344177184,
+                  -0.9999166855068673
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9986434032708543,
+                  0.9997470735710017
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10450
+          },
+          {
+            "center": [
+              0.6200834102660963,
+              -0.7743550761602805,
+              -0.1202545952509531
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.9994513743654013,
+                  -0.999928579972454
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.9995313546233815,
+                  -0.9999322117818439
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10520
+          },
+          {
+            "center": [
+              0.6602912458602141,
+              -0.738406870486135,
+              -0.13187655799630893
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.8697840211473962,
+                  1.0000000000000002
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9079303275668779,
+                  -0.4207311012728871
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10525
+          },
+          {
+            "center": [
+              0.3209393050096117,
+              -0.9439433156713795,
+              -0.06938977479390941
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999982867287568,
+                  -0.9999964523794134
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999968352616826,
+                  -0.9999967695545612
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10532
+          },
+          {
+            "center": [
+              0.3485117556328432,
+              -0.9320775080120806,
+              -0.09234813882622182
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9997434399539245,
+                  -0.999263231066101
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9996925667934083,
+                  -0.9995194293580156
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10533
+          },
+          {
+            "center": [
+              0.6302183981032116,
+              -0.7629581497568145,
+              -0.13678195130627904
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.9161869906018488,
+                  -0.9169868553854181
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9186470607749831,
+                  -1.0
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10534
+          },
+          {
+            "center": [
+              0.6554898687203911,
+              -0.7433516396403127,
+              -0.1276041376925621
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.4961115272398883,
+                  -0.9920367165314512
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999157644328485,
+                  -0.9948172714691997
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10535
+          },
+          {
+            "center": [
+              0.6021751929036384,
+              -0.7844156537113005,
+              -0.14361186099977555
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.8322670530414574,
+                  -0.9996067615579758
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9973642600930652,
+                  -0.9999659370127583
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10536
+          },
+          {
+            "center": [
+              0.6739081015336666,
+              -0.7271388253538342,
+              -0.12614145975667213
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.999613607139127,
+                  -0.999875436131275
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999672764495864,
+                  -0.9999752219896513
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10538
+          },
+          {
+            "center": [
+              0.41720775892230133,
+              -0.900638732577665,
+              -0.11571460113069235
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999414462705155,
+                  -0.9999675612800942
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999810636389496,
+                  -0.9999411992093779
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10548
+          },
+          {
+            "center": [
+              0.580161975293157,
+              -0.8063947243372159,
+              -0.1102305685148555
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999999629486577,
+                  -1.0
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.999999930395686,
+                  -0.9999999612094976
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10557
+          },
+          {
+            "center": [
+              0.2954706989369047,
+              -0.9462351283848521,
+              -0.1243711829363466
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.992846961667704,
+                  -0.9976404425369007
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9990365163777807,
+                  -0.9997735707434316
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10558
+          },
+          {
+            "center": [
+              0.5678407940946117,
+              -0.8083291956271312,
+              -0.1491470895960961
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9997294649879991,
+                  -0.9975946155615321
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.999998396203395,
+                  -0.9990821636397896
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10561
+          },
+          {
+            "center": [
+              0.6175050693058564,
+              -0.7747954590634707,
+              -0.1291802678820514
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9996690890777062,
+                  -0.9985665009992155
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9996375471562045,
+                  -0.9999660165195563
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10562
+          },
+          {
+            "center": [
+              0.3424175324448929,
+              -0.9303628300494498,
+              -0.12375738575185728
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9876619333675694,
+                  -0.998264238140337
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9967342623479616,
+                  -0.9996751962271944
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10563
+          },
+          {
+            "center": [
+              0.2678702997841341,
+              -0.9528084578201712,
+              -0.13612237081397915
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9939743714556389,
+                  -0.9403602764605828
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9988636185565649,
+                  -0.9997920273900156
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10564
+          },
+          {
+            "center": [
+              0.3874173340825262,
+              -0.9123113486830419,
+              -0.12656169530472922
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9993273011553896,
+                  -0.9999935313553012
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9988737694716983,
+                  -0.9992334693061036
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10565
+          },
+          {
+            "center": [
+              0.4312824490538784,
+              -0.8908560137745063,
+              -0.13691197237489475
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9997692295024582,
+                  -0.9999855369352217
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9996006297594404,
+                  -0.9997992566156821
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10566
+          },
+          {
+            "center": [
+              0.3598576732863944,
+              -0.9206231531417912,
+              -0.14513407725987454
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.2923941408906501,
+                  -0.9838456459101714
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9998864338758199,
+                  -0.9959778747120659
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10567
+          },
+          {
+            "center": [
+              0.2642514585369972,
+              -0.9529654089086599,
+              -0.1407111930939175
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.71474754816148,
+                  0.29122731904578464
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.7039336503607659,
+                  -0.9792784623856033
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10570
+          },
+          {
+            "center": [
+              0.652190618318814,
+              -0.745130245460335,
+              -0.13202911275458287
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9935022115568909,
+                  0.5272435736834067
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9159698008243966,
+                  -0.9978119424062611
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10572
+          },
+          {
+            "center": [
+              0.5077147168256497,
+              -0.8459256480350106,
+              -0.1585935276787461
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.9826831959900417,
+                  -0.9991251372249143
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9995223557647381,
+                  0.9993278279746686
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10587
+          },
+          {
+            "center": [
+              0.3181466550151065,
+              -0.9405200299523868,
+              -0.11236822791375894
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9995672564918955,
+                  -0.9999999332209086
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9991897815920332,
+                  -0.9991967532507626
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10593
+          },
+          {
+            "center": [
+              0.43768996458664067,
+              -0.8901351027235508,
+              -0.12104122485823562
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9998814918884494,
+                  -0.9993247521063221
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9998733138373493,
+                  -0.9999496753088899
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10595
+          },
+          {
+            "center": [
+              0.4069607012651563,
+              -0.9003129668376919,
+              -0.147921716360066
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.48970413496317855,
+                  -0.9955815213334899
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9997318510366874,
+                  -0.9989116045393881
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10596
+          },
+          {
+            "center": [
+              0.4732961352881746,
+              -0.866949468043818,
+              -0.15114477712470595
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.999999308315825,
+                  -0.9998269962317143
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9997175402232427,
+                  -0.9998316749609424
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10597
+          },
+          {
+            "center": [
+              0.47598813621965164,
+              -0.8686606250413196,
+              -0.13198708203959436
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9995921732862013,
+                  -0.9999985644930821
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9996130594651299,
+                  -0.9998965920483092
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10598
+          },
+          {
+            "center": [
+              0.3814935978351446,
+              -0.9176029111120023,
+              -0.10654100815069323
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.99999992453088,
+                  -0.9999992820069848
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  -0.9999993157962697,
+                  -0.9999999518930394
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10599
+          },
+          {
+            "center": [
+              -2.558758028362354,
+              0.3555978785507903,
+              1.236148189834847
+            ],
+            "diagonals": [
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.19918658755069293,
+                  -0.495995483464425
+                ],
+                "perimeter_collision": false
+              },
+              {
+                "degenerate": false,
+                "normal_dots": [
+                  0.9035606926663683,
+                  -0.8679462577477357
+                ],
+                "perimeter_collision": false
+              }
+            ],
+            "quad": 10602
+          }
+        ],
+        "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+        "quads": 10618,
+        "quads_without_outward_diagonal": 55,
+        "result_to_source": {
+          "distance_at_max_ratio": 0.03810471803623575,
+          "max_spacing_ratio": 0.6612922888544158,
+          "point": [
+            2.5943774671875537,
+            0.2939046214414172,
+            1.410695727653371
+          ]
+        },
+        "source_to_result": {
+          "distance_at_max_ratio": 0.10632587605556842,
+          "max_spacing_ratio": 1.8452434649791658,
+          "point": [
+            2.643002,
+            0.2196667,
+            1.4882323
+          ]
+        },
+        "topology": {
+          "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+        },
+        "vertices": 10620
+      }
+    }
+  ],
+  "checks": {
+    "focused_rust_tests": 30,
+    "clippy_all_features_all_targets": "passed with warnings denied",
+    "fmt": "passed",
+    "ci": "not run"
+  },
+  "limitations": [
+    "Closed unconstrained biped stage comparisons; not complete-pipeline parity",
+    "SAT wall-time budgets can alter fresh repaired states; comparisons use frozen inputs",
+    "Diagnostic distances use topology-only diagonals and do not certify absence of intersections",
+    "App integration and multiple-path/density-paint UI remain pending"
+  ],
+  "diagonal_first_fitting_fix": {
+    "5000": {
+      "vertices_changed_above_1e-9": 52,
+      "maximum_position_change": 0.02737772830523851,
+      "first_failure_error_before": 0.11111,
+      "first_failure_error_after": 0.09024,
+      "local_spacing": 0.08149,
+      "worst_coverage_error_unchanged": true
+    },
+    "10000": {
+      "geometry_unchanged": true
+    },
+    "acceptance_thresholds_unchanged": true
+  },
+  "current_reference_resumes": [
+    {
+      "target": 5000,
+      "exit": 1,
+      "seconds": 2.0191475229803473,
+      "max_rss_kib": 103232,
+      "log": "1.712s SurfaceFit\nError: \"Retopology lost source shape at DVec3(-2.759019, 0.20808735, 1.3294377): error 0.09024, local grid spacing 0.08149\"\n"
+    },
+    {
+      "target": 10000,
+      "exit": 1,
+      "seconds": 7.697818801971152,
+      "max_rss_kib": 122972,
+      "log": "3.896s SurfaceFit\nError: \"Retopology quad 5266 has no outward render diagonal near DVec3(0.20570629026096837, -0.9683863691626281, -0.13415353795373974)\"\n"
+    }
+  ]
+}

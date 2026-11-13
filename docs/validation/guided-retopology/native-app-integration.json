@@ -1,0 +1,47 @@
+{
+  "date": "2026-11-06",
+  "source": "clay-session-retopo2/stage-000.clay",
+  "source_sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+  "source_vertices": 52601,
+  "source_triangles": 105198,
+  "target_quads": 10000,
+  "output_vertices": 10124,
+  "output_quads": 10122,
+  "preview_seconds": 30.574,
+  "build": "test app; solver and SAT dependencies opt-level=3; not a release application",
+  "exact_quads_match_standalone": true,
+  "exact_f32_positions_match_standalone": true,
+  "saved_project_sha256": "dea592d0a2109858761cabe4f2c03c53ae0228d5272c029d4e40b94c26fdb25e",
+  "known_failure": {
+    "target_quads": 10519,
+    "message": "Retopology lost source shape",
+    "source_sample": [
+      -2.758799205944338,
+      0.20816730615395643,
+      1.3285619256818404
+    ],
+    "error": 0.058,
+    "local_spacing": 0.05616
+  },
+  "artifact_hashes": {
+    "whole-app-optimized.log": "3b7764fa75e01d60eb20d6cf8536efe048dc60cfa7107de1b28c108899a93a82",
+    "whole-app-10519-optimized.log": "92247cca2e6774ecea95bd1f3cb0192f93eaa6b8ad2834af011aa12cfa649c89",
+    "controls-optimized.log": "94986869f33fd67e87a3afe8a7c616c6a33fc28827d8a43f23295331d3fb26d9",
+    "focused-optimized.log": "407ad3226925b746a740d387d188cf4d47ec89ddadf38aaaa1637df1eec90d46",
+    "focused-complete.log": "31496df7374ac6b236026fb9559053d04c8441d9165922b706c8c27f95163c96",
+    "controls-complete.log": "b241711f15d3c43a3a1174ea43681321c90c04ce689fe0fbe9af565f92dd5cc6",
+    "core-combined.log": "93f167a31d2e83244d914a67a2ba7808bc2125c3d701e36f589339ebcd3c2154"
+  },
+  "validation": {
+    "focused_tests_passed": 12,
+    "interactive_density_and_history": "passed",
+    "whole_character_preview_apply_undo_redo": "passed",
+    "core_combined_signed_paint_and_guides": "passed",
+    "production_clippy": "passed; warnings denied",
+    "focused_test_clippy": "passed; unused helpers/imports from excluded cases allowed",
+    "formatting": "passed",
+    "release_notice_check": "passed",
+    "full_ci": "not run locally",
+    "release_app_build": "not built"
+  }
+}

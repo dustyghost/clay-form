@@ -38,6 +38,16 @@ impl Geometry {
         options: MirrorOptions,
         cancel: &impl Fn() -> bool,
     ) -> Result<(), String> {
+        self.mirror_geometry(options, false, false, cancel)
+    }
+
+    pub(crate) fn mirror_geometry(
+        &mut self,
+        options: MirrorOptions,
+        quad_bridge: bool,
+        centreline: bool,
+        cancel: &impl Fn() -> bool,
+    ) -> Result<(), String> {
         if self.settings.primitive.is_some() {
             return Err("Convert the primitive to a sculpting mesh before mirroring".into());
         }
@@ -47,7 +57,12 @@ impl Geometry {
         if self.scene.active_metadata.temporary_thickness > 0. {
             return Err("Apply or remove thickness modifier before mirroring".into());
         }
-        let mesh = self.mesh.mirror_half(options, cancel)?;
+        let mesh = if quad_bridge {
+            self.mesh
+                .mirror_with_quad_bridge(options, centreline, cancel)?
+        } else {
+            self.mesh.mirror_half(options, cancel)?
+        };
         check_cancel(cancel)?;
         self.mesh = mesh;
         self.settings = MeshSettings {

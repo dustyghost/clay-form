@@ -147,6 +147,8 @@ Pivot/line placement does not change geometry or consume undo. These controls ar
 
 This works with brush symmetry turned off. Directions use object coordinates; rotating the camera does not change them.
 
+Enable **Bridge with quads (experimental)** on an untextured, closed all-quad mesh to try an all-quad join across the plane. **Add centreline** divides the bridge into quad rows on either side.
+
 The active submodel becomes symmetric across the plane. Source masks, vertex-group weights, and face colors are copied too; masks do **not** protect the destination. Crossing faces are cut and joined at a shared center seam. Open surfaces can remain open.
 
 ### Example: repeat an existing sculpted fold
@@ -583,6 +585,25 @@ Dynamic mesh and Adaptive sculpt save their topology choices independently. To r
 Enable **Adapt only unmasked areas** there to protect masked topology during local sculpting. **This does not make whole-surface remeshing local or preserve its masks.**
 
 Mesh operations run in the background. Cancel keeps the original surface; Undo restores prior geometry and settings. A failed remesh keeps the original model so you can adjust the settings and try again.
+
+## Guide a retopology preview
+
+Use **Mesh → Guided retopology…** to reconstruct a fresh quad layout from a sculpt's surface. This experimental Rust solver accepts open or closed manifold meshes. Convert parametric primitives first, show hidden faces and use a source without UVs or textures.
+
+1. Open **Guided retopology…**, set **Target quads** (large models start at 10,000), and try **Preview layout** without guides or paint first. **Input triangle limit** defaults to 200,000; raise it to at least the displayed source count for larger tests. Preparation and reconstruction run in the background, with progress and cancellation. The count is a target, not an exact promise.
+2. To direct edges, draw and save **Surface** paths in **Editable paths**, then choose guides individually or use **Select all** under **Edge direction**. **Path strength** controls their influence. **Mirror paths** reflects them across world X = 0. Open curves and closed loops steer nearby edges; a closed guide does not guarantee a continuous edge loop.
+3. Under **Polygon density**, **Shape adaptation** ranges from uniform spacing at zero to more quads around bends at higher values. Choose **More detail** (orange) or **Less detail** (blue) and paint directly on the model. **Automatic / erase** removes that request; grey regions use automatic spacing. Paint has its own radius and strength, supports Undo, and saves with the model independently of the sculpt mask. **Density strength** scales its effect on reconstruction. Right-drag to orbit while painting; choose **Inspect** to return to ordinary preview navigation.
+4. Choose **Preview layout** again after changing controls or painting. Orbit the wireframe and inspect fingers, folds, underarms and other narrow regions. **Hide path overlay** reveals edges beneath guides. A rejected solve leaves the original intact and reports the failure; it does not publish a broken draft. **Cancel** discards the draft. Density strokes are document edits and can be undone separately.
+5. Choose **Apply as new model**. The editable result receives interpolated vertex paint, sculpt mask, density paint and selection weights. Face-group borders may move. The hidden source below it keeps its original topology, paths and subdivision levels. **Undo** reverses the application as one edit.
+6. To recover finer sculpted detail, subdivide the result if needed, then use **Project details…** with the model below as the reference. Reduce the result's sculpt mask where vertices should move. Save the project to keep both models.
+
+**Protect sharp bends** uses a configurable threshold from 1° to 180°, initially 45°. The path thumbnails show where each guide sits on the source model.
+
+**Layout symmetry (experimental)** is available for closed meshes. Select X, Y or Z to generate mirrored connectivity with quads that cross the sculpt symmetry plane. Guided retopology starts with the enabled sculpt mirror axis when exactly one is active. **Add centreline** divides the bridge into quad rows on either side. **Keep sculpt shape** fits both sides to the source when it is nearly symmetric. If the preview reports asymmetry, choose **Keep + and mirror** or **Keep − and mirror** to mirror that side in the result, or choose **Off**. With symmetry enabled, guides steer the mirrored layout. When mirroring the sculpt, guides on the retained side drive the layout. Density on the reconstructed half influences both sides.
+
+The solver does not identify body parts. Coarse fingers and uneven poles remain limitations; inspect the output before applying it. Guides and paint refine automatic reconstruction rather than preserving the source triangulation.
+
+[Feasibility decision, matched wireframes and measurements](../validation/guided-retopology/README.md)
 
 ## Recover detail after remeshing
 

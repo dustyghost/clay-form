@@ -1,5 +1,6 @@
 //! Session-only path drafts. Navigation never edits the draft or document.
 use super::{ViewportOptions, controls, navigation, scene::Scene};
+pub(crate) use crate::sculpt::paths::RingOrientation as RingAxis;
 use crate::{
     camera::Camera,
     document::Document,
@@ -9,6 +10,8 @@ use crate::{
     },
 };
 use eframe::egui::{self, Color32, Pos2, Stroke, Vec2};
+use std::collections::BTreeSet;
+mod hud;
 pub(crate) mod transform;
 
 #[derive(Clone, Copy, Default, PartialEq)]
@@ -20,27 +23,35 @@ pub(crate) enum PathTool {
     Ring,
     Whole,
 }
-#[derive(Clone, Copy, Default, PartialEq)]
-pub(crate) enum RingMode {
-    #[default]
-    Level,
-    Shortest,
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum PathBrush {
+    Surface,
+    Free,
+    Ring,
 }
-#[derive(Clone, Copy, Default, PartialEq)]
-pub(crate) enum RingAxis {
-    X,
-    #[default]
-    Y,
-    Z,
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum PathNavigation {
+    Orbit,
+    Pan,
+    Zoom,
 }
-impl RingAxis {
-    fn vector(self) -> Vec3 {
-        match self {
-            Self::X => Vec3(1., 0., 0.),
-            Self::Y => Vec3(0., 1., 0.),
-            Self::Z => Vec3(0., 0., 1.),
-        }
-    }
+#[derive(Clone, Copy, PartialEq)]
+struct RingPlane {
+    hit: PathPoint,
+    normal: Vec3,
+    orientation: RingAxis,
+}
+
+#[derive(Clone, Copy)]
+enum RingDragKind {
+    Place,
+    Tilt { start: Pos2, right: Vec3, up: Vec3 },
+}
+
+struct RingDrag {
+    before: SurfacePath,
+    plane: Option<RingPlane>,
+    kind: RingDragKind,
 }
 
 struct GuideCache {
@@ -50,6 +61,12 @@ struct GuideCache {
     warning: Option<String>,
 }
 
+struct GhostPaths {
+    revision: u64,
+    target: u64,
+    routes: Vec<(u64, PathMode, bool, Vec<PathPoint>)>,
+}
+
 #[derive(Clone, Copy)]
 struct CornerHandle {
     index: usize,
@@ -57,6 +74,12 @@ struct CornerHandle {
     axis: Vec2,
     pixels_per_amount: f32,
     diamond: bool,
+}
+struct PointDrag {
+    index: usize,
+    before: SurfacePath,
+    start: Pos2,
+    axis: Option<Vec3>,
 }
 struct CornerDrag {
     handle: CornerHandle,
@@ -68,40 +91,375 @@ struct CornerDrag {
 #[derive(Default)]
 pub(crate) struct PathEditor {
     pub active: bool,
+    pub panel: bool,
+    pub exit_brush: bool,
+    insert_on_path: bool,
+    suspended: Option<SurfacePath>,
+    ring_move: bool,
+    camera_drag: Option<PathNavigation>,
     pub frozen: bool,
     pub draft: Option<SurfacePath>,
     pub selected: Option<usize>,
     pub tool: PathTool,
-    pub ring_mode: RingMode,
     pub ring_axis: RingAxis,
+    pub brush: Option<PathBrush>,
+    pub commit_gesture: bool,
+    pub confirm_delete: Option<u64>,
     pub notice: Option<String>,
+    pub hidden_ghosts: BTreeSet<u64>,
+    ghosts: Option<GhostPaths>,
     pub transform: transform::State,
-    drag: Option<(usize, SurfacePath)>,
+    drag: Option<PointDrag>,
+    draw_before: Option<SurfacePath>,
     corner_drag: Option<CornerDrag>,
-    ring_drag: Option<SurfacePath>,
+    ring_drag: Option<RingDrag>,
+    ring_plane: Option<RingPlane>,
     ring_last: Option<Pos2>,
     drawing: bool,
-    navigating: bool,
+    navigation_last: Option<Pos2>,
     last_draw: Option<Pos2>,
     guide: Option<GuideCache>,
 }
 impl PathEditor {
     pub(crate) fn select(&mut self, path: SurfacePath) {
-        self.transform.reset();
+        self.reset_selection();
+        self.ring_plane = path.ring_orientation.and_then(|orientation| {
+            if !path.closed || path.mode != PathMode::Surface {
+                return None;
+            }
+            let hit = *path.points.get(path.seam)?;
+            let normal = path
+                .points
+                .iter()
+                .zip(path.points.iter().cycle().skip(1))
+                .fold(Vec3::default(), |normal, (a, b)| {
+                    normal + (a.position - hit.position).cross(b.position - hit.position)
+                })
+                .norm();
+            (normal.len() > 0.5).then_some(RingPlane {
+                hit,
+                normal,
+                orientation,
+            })
+        });
         self.draft = Some(path);
+    }
+
+    pub(crate) fn clear_selection(&mut self) {
+        self.reset_selection();
+        self.draft = None;
+        self.ring_plane = None;
+    }
+
+    fn reset_selection(&mut self) {
+        self.transform.reset();
         self.selected = None;
+        self.confirm_delete = None;
+        self.ring_move = false;
+        self.insert_on_path = false;
         self.drag = None;
+        self.draw_before = None;
         self.corner_drag = None;
         self.ring_drag = None;
         self.ring_last = None;
         self.drawing = false;
+        self.camera_drag = None;
+        self.navigation_last = None;
     }
+    pub(crate) fn accept_saved(&mut self, path: SurfacePath) {
+        let selected = self.selected;
+        self.select(path);
+        self.selected = selected;
+    }
+
+    pub(crate) fn gesture_active(&self) -> bool {
+        self.drawing
+            || self.drag.is_some()
+            || self.corner_drag.is_some()
+            || self.ring_drag.is_some()
+    }
+
+    pub(crate) fn new_draft(document: &Document, mode: PathMode) -> SurfacePath {
+        SurfacePath {
+            id: 0,
+            target: document.active_model_id(),
+            name: format!("Path {}", document.paths().len() + 1),
+            mode,
+            points: Vec::new(),
+            smoothing: 0.,
+            closed: false,
+            seam: 0,
+            surface_signature: 0,
+            offset: 0.,
+            ring_orientation: None,
+            attached_route: None,
+            corner_rounding: Vec::new(),
+        }
+    }
+
+    pub(crate) fn select_for_edit(
+        &mut self,
+        path: SurfacePath,
+        document: &Document,
+    ) -> Result<(), String> {
+        if self.dirty(document) {
+            if self.brush.is_some() && self.draft.as_ref().is_some_and(|p| p.id == 0) {
+                self.suspended = self.draft.take();
+            } else {
+                return Err("Apply or discard the current path edits first".into());
+            }
+        }
+        self.select(path);
+        self.tool = if self.ring_plane.is_some() {
+            PathTool::Ring
+        } else {
+            PathTool::Move
+        };
+        Ok(())
+    }
+
+    fn resume_draft(&mut self) {
+        if let Some(draft) = self.suspended.take() {
+            self.brush = Some(if draft.mode == PathMode::Free {
+                PathBrush::Free
+            } else {
+                PathBrush::Surface
+            });
+            self.select(draft);
+            self.tool = PathTool::Add;
+        }
+    }
+
+    pub(crate) fn has_unfinished(&self, document: &Document) -> bool {
+        self.suspended.is_some() || self.dirty(document)
+    }
+
+    fn editable_draft(&self) -> bool {
+        self.brush.is_some()
+            && self.draft.as_ref().is_some_and(|path| {
+                path.id == 0 && !path.points.is_empty() && path.ring_orientation.is_none()
+            })
+    }
+
+    fn brush_press(
+        &mut self,
+        document: &Document,
+        scene: &Scene,
+        pos: Pos2,
+        brush: PathBrush,
+    ) -> bool {
+        if self.dirty(document) && self.draft.as_ref().is_some_and(|p| p.id != 0) {
+            self.notice = Some(
+                "Save or discard the current path settings before drawing another path".into(),
+            );
+            return true;
+        }
+        let active = self.draft.as_ref().map(|path| path.id);
+        let mut hit = None;
+        for path in self.draft.iter().chain(document.paths().iter().filter(|p| {
+            p.target == document.active_model_id()
+                && Some(p.id) != active
+                && !self.hidden_ghosts.contains(&p.id)
+        })) {
+            for (index, point) in path.points.iter().enumerate().filter(|(i, _)| {
+                *i == path.seam
+                    || (!path.closed && *i + 1 == path.points.len())
+                    || (active == Some(path.id)
+                        && (self.tool == PathTool::Move || self.selected == Some(*i)))
+            }) {
+                let position = path.display_position(*point);
+                if !scene.visible_depth(position)
+                    || (path.mode == PathMode::Surface && !faces_camera(scene, point))
+                {
+                    continue;
+                }
+                let distance = scene.project(position).distance(pos);
+                if distance <= controls::HIT_RADIUS
+                    && hit.is_none_or(|(_, _, previous)| distance < previous)
+                {
+                    hit = Some((path, index, distance));
+                }
+            }
+        }
+        if let Some((path, index, _)) = hit {
+            if Some(path.id) != active
+                && let Err(error) = self.select_for_edit(path.clone(), document)
+            {
+                self.notice = Some(error);
+                return true;
+            }
+            self.selected = Some(index);
+            if let Some(plane) = self.ring_plane {
+                self.tool = PathTool::Ring;
+                self.ring_drag = self.draft.clone().map(|before| RingDrag {
+                    before,
+                    plane: Some(plane),
+                    kind: RingDragKind::Place,
+                });
+                self.ring_last = Some(pos);
+            } else {
+                self.tool = PathTool::Move;
+                self.start_point_drag(index, pos, None);
+            }
+            return true;
+        }
+
+        if let Some(path) = self.ghost_at(document, scene, pos) {
+            if let Err(error) = self.select_for_edit(path.clone(), document) {
+                self.notice = Some(error);
+            }
+            return true;
+        }
+        let brush = self.suspended.as_ref().map_or(brush, |draft| {
+            if draft.mode == PathMode::Free {
+                PathBrush::Free
+            } else {
+                PathBrush::Surface
+            }
+        });
+        let mode = if brush == PathBrush::Free {
+            PathMode::Free
+        } else {
+            PathMode::Surface
+        };
+        if mode == PathMode::Surface && scene.pick(pos).is_none() {
+            self.camera_drag = Some(PathNavigation::Orbit);
+            return true;
+        }
+        self.resume_draft();
+        if self.editable_draft() && self.draft.as_ref().is_some_and(|p| p.closed) {
+            return true;
+        }
+        let unfinished = self.draft.as_ref().is_some_and(|p| {
+            p.id == 0
+                && p.mode == mode
+                && p.target == document.active_model_id()
+                && (p.points.is_empty() || (brush != PathBrush::Ring && !p.closed))
+        });
+        if !unfinished {
+            self.select(Self::new_draft(document, mode));
+        }
+        if brush == PathBrush::Free && self.draft.as_ref().is_some_and(|p| p.points.is_empty()) {
+            self.draft.as_mut().unwrap().smoothing = 1.;
+        }
+        self.tool = if brush == PathBrush::Ring {
+            PathTool::Ring
+        } else {
+            PathTool::Add
+        };
+        false
+    }
+
     pub(crate) fn dirty(&self, document: &Document) -> bool {
-        self.draft
-            .as_ref()
-            .is_some_and(|p| document.path(p.id) != Some(p))
-            || self.transform.pending_section_scale != 1.
+        self.draft.as_ref().is_some_and(|p| {
+            if p.id == 0 {
+                !p.points.is_empty()
+            } else {
+                document.path(p.id) != Some(p)
+            }
+        }) || self.transform.pending_section_scale != 1.
     }
+    fn ghost_at<'a>(
+        &self,
+        document: &'a Document,
+        scene: &Scene,
+        pos: Pos2,
+    ) -> Option<&'a SurfacePath> {
+        let active = self.draft.as_ref().map(|p| p.id);
+        self.ghosts
+            .as_ref()
+            .filter(|cache| {
+                cache.revision == document.display_revision()
+                    && cache.target == document.active_model_id()
+            })?
+            .routes
+            .iter()
+            .filter(|(id, _, _, _)| Some(*id) != active && !self.hidden_ghosts.contains(id))
+            .filter_map(|(id, mode, _, route)| {
+                let distance = route
+                    .windows(2)
+                    .filter(|pair| *mode == PathMode::Free || faces_camera(scene, &pair[0]))
+                    .filter_map(|pair| scene.clip_segment([pair[0].position, pair[1].position]))
+                    .map(|[a, b]| {
+                        let edge = b - a;
+                        let t = ((pos - a).dot(edge) / edge.length_sq().max(1e-6)).clamp(0., 1.);
+                        (a + edge * t).distance(pos)
+                    })
+                    .min_by(f32::total_cmp)?;
+                (distance <= 7.).then_some((*id, distance))
+            })
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .and_then(|(id, _)| document.path(id))
+    }
+
+    fn paint_ghosts(&mut self, document: &Document, scene: &Scene, painter: &egui::Painter) {
+        let revision = document.display_revision();
+        let target = document.active_model_id();
+        if self
+            .ghosts
+            .as_ref()
+            .is_none_or(|g| g.revision != revision || g.target != target)
+        {
+            self.ghosts = Some(GhostPaths {
+                revision,
+                target,
+                routes: document
+                    .paths()
+                    .iter()
+                    .filter(|p| p.target == target)
+                    .map(|p| (p.id, p.mode, p.closed, p.dense_curve()))
+                    .collect(),
+            });
+        }
+        let ghosts = self.ghosts.as_ref().unwrap();
+        let active = self.draft.as_ref().map(|p| p.id);
+        for (id, mode, closed, points) in &ghosts.routes {
+            if active == Some(*id) || self.hidden_ghosts.contains(id) || points.len() < 2 {
+                continue;
+            }
+            if self.brush.is_some()
+                && let Some(path) = document.path(*id)
+            {
+                for point in [
+                    path.points.get(path.seam),
+                    (!path.closed).then(|| path.points.last()).flatten(),
+                ]
+                .into_iter()
+                .flatten()
+                {
+                    let position = path.display_position(*point);
+                    if scene.visible_depth(position)
+                        && (*mode == PathMode::Free || faces_camera(scene, point))
+                    {
+                        controls::marker(
+                            painter,
+                            scene.project(position),
+                            controls::Marker::Circle,
+                            controls::SHAPE.gamma_multiply(0.45),
+                            false,
+                        );
+                    }
+                }
+            }
+            let count = points.len() - usize::from(!*closed);
+            for i in 0..count {
+                let p = &points[i];
+                let front = *mode == PathMode::Free || faces_camera(scene, p);
+                if !front && i % 4 >= 2 {
+                    continue;
+                }
+                let q = &points[(i + 1) % points.len()];
+                if let Some(segment) = scene.clip_segment([p.position, q.position]) {
+                    let opacity = if front { 0.45 } else { 0.2 };
+                    painter.line_segment(
+                        segment,
+                        Stroke::new(1.5_f32, controls::SHAPE.gamma_multiply(opacity)),
+                    );
+                }
+            }
+        }
+    }
+
     /// Geometry and draft edits invalidate the guide; camera navigation does not.
     fn refresh_guide(&mut self, document: &Document) {
         let Some(path) = &self.draft else {
@@ -109,11 +467,10 @@ impl PathEditor {
             return;
         };
         let revision = document.display_revision();
-        if self
-            .guide
-            .as_ref()
-            .is_some_and(|cache| cache.revision == revision && cache.draft == *path)
-        {
+        if self.guide.as_mut().is_some_and(|cache| {
+            cache.draft.offset = path.offset;
+            cache.revision == revision && cache.draft == *path
+        }) {
             self.transform.route_start = self
                 .guide
                 .as_ref()
@@ -121,7 +478,7 @@ impl PathEditor {
                 .map(|p| p.position);
             return;
         }
-        let mut points = path.dense_curve();
+        let mut points = path.surface_curve();
         let mut warning = None;
         if path.mode == PathMode::Surface && path.points.len() >= 2 {
             if path.id != 0 && path.target != document.active_model_id() {
@@ -192,20 +549,55 @@ impl PathEditor {
                 .map_or(Vec3::default(), |p| p.position);
             Some(PathPoint {
                 position: scene.at_depth(pos, anchor),
-                normal: scene.view,
+                normal: draft
+                    .points
+                    .first()
+                    .map_or(scene.view, |point| point.normal),
             })
         }
     }
+    fn start_point_drag(&mut self, index: usize, start: Pos2, axis: Option<Vec3>) {
+        self.drag = self.draft.clone().map(|before| PointDrag {
+            index,
+            before,
+            start,
+            axis,
+        });
+    }
+
+    fn free_axes(&self, scene: &Scene) -> impl Iterator<Item = (usize, Vec3, Pos2, Pos2)> + use<> {
+        let pivot = self
+            .draft
+            .as_ref()
+            .filter(|p| {
+                p.mode == PathMode::Free && self.brush.is_some() && self.tool != PathTool::Whole
+            })
+            .and_then(|p| p.points.get(self.selected?))
+            .filter(|p| scene.visible_depth(p.position))
+            .map(|p| p.position);
+        let mut handles = [None; 3];
+        if let Some(pivot) = pivot {
+            let center = scene.project(pivot);
+            for (i, handle) in handles.iter_mut().enumerate() {
+                let axis = crate::sculpt::instances::axis(i);
+                let direction = scene.axis_direction(pivot, axis);
+                if direction.length() > 0.1 {
+                    *handle = Some((i, axis, center, center + direction.normalized() * 48.));
+                }
+            }
+        }
+        handles.into_iter().flatten()
+    }
+
     fn nearest_point(&self, scene: &Scene, pos: Pos2) -> Option<usize> {
-        let surface = self.draft.as_ref()?.mode == PathMode::Surface;
-        self.draft
-            .as_ref()?
-            .points
+        let path = self.draft.as_ref()?;
+        let surface = path.mode == PathMode::Surface;
+        path.points
             .iter()
             .enumerate()
-            .filter(|(_, p)| scene.visible_depth(p.position))
+            .filter(|(_, p)| scene.visible_depth(path.display_position(**p)))
             .filter(|(_, p)| !surface || faces_camera(scene, p))
-            .map(|(i, p)| (i, scene.project(p.position).distance(pos)))
+            .map(|(i, p)| (i, scene.project(path.display_position(*p)).distance(pos)))
             .filter(|(_, d)| *d <= 12.)
             .min_by(|a, b| a.1.total_cmp(&b.1))
             .map(|(i, _)| i)
@@ -218,8 +610,8 @@ impl PathEditor {
         }
         (0..if path.closed { n } else { n - 1 })
             .map(|i| {
-                let a = scene.project(path.points[i].position);
-                let b = scene.project(path.points[(i + 1) % n].position);
+                let a = scene.project(path.display_position(path.points[i]));
+                let b = scene.project(path.display_position(path.points[(i + 1) % n]));
                 let edge = b - a;
                 let t = ((pos - a).dot(edge) / edge.length_sq().max(1e-6)).clamp(0., 1.);
                 (i + 1, (a + edge * t).distance(pos))
@@ -301,7 +693,31 @@ impl PathEditor {
                     .total_cmp(&b.position.distance(pos))
             })
     }
-    fn update_ring(&mut self, document: &Document, hit: PathPoint) {
+    fn ring_tilt_handle(&self, scene: &Scene) -> Option<(Pos2, Pos2)> {
+        let plane = self.ring_plane?;
+        if self.tool == PathTool::Whole
+            || self
+                .draft
+                .as_ref()
+                .is_none_or(|p| !p.closed || p.mode != PathMode::Surface)
+        {
+            return None;
+        }
+        let position = self.draft.as_ref()?.display_position(plane.hit);
+        if !scene.visible_depth(position) {
+            return None;
+        }
+        let anchor = scene.project(position);
+        Some((anchor, anchor + Vec2::new(36., -28.)))
+    }
+
+    fn update_ring(
+        &mut self,
+        document: &Document,
+        hit: PathPoint,
+        orientation: RingAxis,
+        manual_normal: Option<Vec3>,
+    ) {
         let Some(path) = &self.draft else {
             return;
         };
@@ -315,20 +731,14 @@ impl PathEditor {
             self.notice = Some("Select and reproject this path's target before replacing its ring, or create a new ring".into());
             return;
         }
-        let result = match self.ring_mode {
-            RingMode::Level => crate::sculpt::paths::ring::section_ring(
-                document.mesh(),
-                hit,
-                self.ring_axis.vector(),
-            ),
-            RingMode::Shortest => crate::sculpt::paths::ring::shortest_ring(
-                document.mesh(),
-                hit,
-                self.ring_axis.vector(),
-            ),
+        use crate::sculpt::paths::ring::{auto_section_ring, section_ring};
+        let result = if let Some(axis) = manual_normal.or_else(|| orientation.vector()) {
+            section_ring(document.mesh(), hit, axis).map(|points| (axis, points))
+        } else {
+            auto_section_ring(document.mesh(), hit)
         };
         match result {
-            Ok(points) => {
+            Ok((normal, points)) => {
                 let path = self.draft.as_mut().unwrap();
                 path.points = points;
                 path.corner_rounding.clear();
@@ -336,8 +746,16 @@ impl PathEditor {
                 path.closed = true;
                 path.seam = 0;
                 path.smoothing = 0.;
+                path.ring_orientation = Some(orientation);
                 self.selected = None;
-                self.notice = Some("Ring positioned. Release the pen, then Save & sculpt.".into());
+                self.ring_plane = Some(RingPlane {
+                    hit,
+                    normal,
+                    orientation,
+                });
+                if self.brush.is_none() {
+                    self.notice = Some("Drag Tilt to angle the ring, or save the path.".into());
+                }
             }
             Err(error) => self.notice = Some(format!("Ring unchanged: {error}")),
         }
@@ -359,6 +777,20 @@ impl PathEditor {
             Pos2::new(response.rect.right() - 146., response.rect.top() + 12.),
             egui::Vec2::splat(134.),
         );
+        let camera_controls = hud::camera_targets(gizmo_rect);
+        if self.brush.is_some() {
+            self.brush_hud(ui.ctx(), response.rect, document);
+            hud::paint_camera_targets(painter, &camera_controls, self.camera_drag, pos);
+            if response.hovered() {
+                let over_camera = pos
+                    .is_some_and(|pos| camera_controls.iter().any(|(_, rect)| rect.contains(pos)));
+                ui.ctx().set_cursor_icon(if over_camera {
+                    egui::CursorIcon::Grab
+                } else {
+                    egui::CursorIcon::Crosshair
+                });
+            }
+        }
         let modifiers = ui.input(|i| i.modifiers);
         let escape =
             ui.input(|i| i.key_pressed(egui::Key::Escape)) && !ui.ctx().wants_keyboard_input();
@@ -369,32 +801,108 @@ impl PathEditor {
             if let Some(drag) = self.corner_drag.take() {
                 self.draft = Some(drag.before);
             }
-            if let Some((_, before)) = self.drag.take() {
-                self.draft = Some(before);
+            if let Some(drag) = self.drag.take() {
+                self.draft = Some(drag.before);
             }
-            if let Some(before) = self.ring_drag.take() {
+            if let Some(before) = self.draw_before.take() {
                 self.draft = Some(before);
+                self.selected = None;
+            } else if escape && !self.gesture_active() && self.editable_draft() {
+                self.clear_selection();
+            }
+            if escape {
+                self.ring_move = false;
+                self.insert_on_path = false;
+            }
+            if let Some(drag) = self.ring_drag.take() {
+                self.draft = Some(drag.before);
+                self.ring_plane = drag.plane;
             }
             self.ring_last = None;
             self.drawing = false;
+            self.camera_drag = None;
+            self.navigation_last = None;
         }
+        let frame_hovered = response
+            .hover_pos()
+            .is_some_and(|p| navigation::contains(response.rect, p));
+        navigation::paint(painter, response.rect, frame_hovered);
         if options.enabled && response.hovered() {
             camera.zoom_by(ui.input(|i| i.smooth_scroll_delta.y));
         }
-        let pressed = ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Primary));
-        if pressed && response.hovered() && options.enabled {
-            self.navigating = pos.is_some_and(|p| navigation::contains(response.rect, p))
-                || pos.is_some_and(|p| gizmo_rect.contains(p))
-                || options.pan_hold.active(modifiers)
-                || options.zoom_hold.active(modifiers);
-            if !self.navigating
-                && !self.frozen
-                && !escape
-                && let Some(pos) = pos
-            {
+        // A pen can report its first position and its down event in the same
+        // frame. Use the press position, since hover can still refer to the
+        // path palette or the previous contact in that frame.
+        let press = ui.input(|i| {
+            i.events.iter().find_map(|event| match event {
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers,
+                } => Some((*pos, *modifiers)),
+                _ => None,
+            })
+        });
+        if options.enabled
+            && !escape
+            && let Some((pos, press_modifiers)) = press
+            && response.rect.contains(pos)
+            && ui.ctx().layer_id_at(pos) == Some(response.layer_id)
+        {
+            self.navigation_last = Some(pos);
+            self.camera_drag = camera_controls
+                .iter()
+                .find(|(_, rect)| self.brush.is_some() && rect.contains(pos))
+                .map(|(mode, _)| *mode)
+                .or_else(|| match self.tool {
+                    _ if options.zoom_hold.active(press_modifiers) => Some(PathNavigation::Zoom),
+                    _ if options.pan_hold.active(press_modifiers) => Some(PathNavigation::Pan),
+                    _ if navigation::contains(response.rect, pos)
+                        || gizmo_rect.contains(pos)
+                        || ui.input(|i| i.pointer.secondary_down() || i.pointer.middle_down()) =>
+                    {
+                        Some(PathNavigation::Orbit)
+                    }
+                    _ => None,
+                });
+            if self.camera_drag.is_none() && !self.frozen && self.confirm_delete.is_none() {
                 if self.tool == PathTool::Whole {
-                    if let Some(path) = &self.draft {
-                        self.navigating = !self.transform.press(path, scene, pos);
+                    if let Some(path) = &self.draft
+                        && !self.transform.press(path, scene, pos)
+                    {
+                        self.camera_drag = Some(PathNavigation::Orbit);
+                    }
+                } else if let Some((_, axis, _, _)) = self
+                    .free_axes(scene)
+                    .filter(|(_, _, _, handle)| handle.distance(pos) <= controls::HIT_RADIUS)
+                    .min_by(|a, b| a.3.distance_sq(pos).total_cmp(&b.3.distance_sq(pos)))
+                    && let Some(index) = self.selected
+                {
+                    self.start_point_drag(index, pos, Some(axis));
+                } else if self.insert_on_path {
+                    if let Some(index) = self.insert_index(scene, pos)
+                        && let Some(point) = self.point(scene, pos)
+                    {
+                        self.add(point, Some(index));
+                        self.insert_on_path = false;
+                        self.commit_gesture = true;
+                    }
+                } else if self.ring_move {
+                    if let Some(plane) = self.ring_plane
+                        && let Some((position, normal)) = scene.pick(pos)
+                    {
+                        let previous = self.ring_plane;
+                        self.update_ring(
+                            document,
+                            PathPoint { position, normal },
+                            plane.orientation,
+                            (plane.orientation == RingAxis::Manual).then_some(plane.normal),
+                        );
+                        if self.ring_plane != previous {
+                            self.ring_move = false;
+                            self.commit_gesture = true;
+                        }
                     }
                 } else if let Some(handle) = self.corner_at(scene, pos) {
                     if let Some(before) = self.draft.clone() {
@@ -406,38 +914,78 @@ impl PathEditor {
                             amount,
                         });
                     }
-                } else if self.tool == PathTool::Ring {
-                    if let Some((position, normal)) = scene.pick(pos) {
-                        self.ring_drag = self.draft.clone();
-                        self.ring_last = Some(pos);
-                        self.update_ring(document, PathPoint { position, normal });
-                    } else {
-                        self.notice =
-                            Some("Press on the model's side to create a complete ring".into());
-                    }
-                } else if let Some(index) = self.nearest_point(scene, pos) {
-                    self.selected = Some(index);
-                    if self.tool == PathTool::Move {
-                        self.drag = self.draft.clone().map(|p| (index, p));
-                    }
-                } else if let Some(point) = self.point(scene, pos) {
-                    if self.tool == PathTool::Insert {
-                        if let Some(index) = self.insert_index(scene, pos) {
-                            self.add(point, Some(index));
-                        } else {
-                            self.notice = Some(
-                                "Click within 24 pixels of a path segment to insert a point".into(),
-                            );
+                } else if let Some((_, handle)) = self.ring_tilt_handle(scene)
+                    && handle.distance(pos) <= controls::HIT_RADIUS + 4.
+                    && let Some(before) = self.draft.clone()
+                {
+                    let (right, up, _) = camera.basis();
+                    self.ring_drag = Some(RingDrag {
+                        before,
+                        plane: self.ring_plane,
+                        kind: RingDragKind::Tilt {
+                            start: pos,
+                            right,
+                            up,
+                        },
+                    });
+                    self.ring_last = Some(pos);
+                } else if !(self
+                    .brush
+                    .is_some_and(|brush| self.brush_press(document, scene, pos, brush)))
+                {
+                    if self.tool == PathTool::Ring {
+                        let before = self.draft.clone();
+                        let plane = self.ring_plane;
+                        if let Some(before) = before {
+                            if let Some((position, normal)) = scene.pick(pos) {
+                                self.ring_drag = Some(RingDrag {
+                                    before,
+                                    plane: self.ring_plane,
+                                    kind: RingDragKind::Place,
+                                });
+                                self.ring_last = Some(pos);
+                                self.update_ring(
+                                    document,
+                                    PathPoint { position, normal },
+                                    plane.map_or(self.ring_axis, |p| p.orientation),
+                                    plane
+                                        .filter(|p| p.orientation == RingAxis::Manual)
+                                        .map(|p| p.normal),
+                                );
+                            } else {
+                                self.notice = Some(
+                                    "Press on the model's side to create a complete ring".into(),
+                                );
+                            }
                         }
-                    } else if self.tool == PathTool::Add {
-                        self.add(point, None);
-                        self.drawing = true;
-                        self.last_draw = Some(pos);
+                    } else if let Some(index) = self.nearest_point(scene, pos) {
+                        self.selected = Some(index);
+                        if self.tool == PathTool::Move {
+                            self.start_point_drag(index, pos, None);
+                        }
+                    } else if let Some(point) = self.point(scene, pos) {
+                        if self.tool == PathTool::Insert {
+                            if let Some(index) = self.insert_index(scene, pos) {
+                                self.add(point, Some(index));
+                            } else {
+                                self.notice = Some(
+                                    "Click within 24 pixels of a path segment to insert a point"
+                                        .into(),
+                                );
+                            }
+                        } else if self.tool == PathTool::Add {
+                            if self.brush.is_some() {
+                                self.draw_before = self.draft.clone();
+                            }
+                            self.add(point, None);
+                            self.drawing = true;
+                            self.last_draw = Some(pos);
+                        } else {
+                            self.camera_drag = Some(PathNavigation::Orbit);
+                        }
                     } else {
-                        self.navigating = true;
+                        self.camera_drag = Some(PathNavigation::Orbit);
                     }
-                } else {
-                    self.navigating = true;
                 }
             }
         }
@@ -453,14 +1001,32 @@ impl PathEditor {
             }
             let secondary = response.dragged_by(egui::PointerButton::Secondary);
             let middle = response.dragged_by(egui::PointerButton::Middle);
-            if secondary || middle || (primary && self.navigating) {
-                let delta = ui.input(|i| i.pointer.delta());
-                if options.zoom_hold.active(modifiers) {
-                    camera.zoom_drag(delta);
-                } else if middle || options.pan_hold.active(modifiers) {
-                    camera.pan += delta;
+            if secondary || middle || (primary && self.camera_drag.is_some()) {
+                let delta = if primary && self.camera_drag.is_some() && !secondary && !middle {
+                    pos.map_or(Vec2::ZERO, |p| {
+                        self.navigation_last
+                            .replace(p)
+                            .map_or(Vec2::ZERO, |last| p - last)
+                    })
                 } else {
-                    camera.orbit(delta);
+                    ui.input(|i| i.pointer.delta())
+                };
+                let mode = if secondary || middle {
+                    if options.zoom_hold.active(modifiers) {
+                        PathNavigation::Zoom
+                    } else if middle || options.pan_hold.active(modifiers) {
+                        PathNavigation::Pan
+                    } else {
+                        PathNavigation::Orbit
+                    }
+                } else {
+                    self.camera_drag.unwrap_or(PathNavigation::Orbit)
+                };
+                hud::paint_camera_status(ui.ctx(), painter, response.rect, mode);
+                match mode {
+                    PathNavigation::Zoom => camera.zoom_drag(delta),
+                    PathNavigation::Pan => camera.pan += delta,
+                    PathNavigation::Orbit => camera.orbit(delta),
                 }
             } else if !self.frozen
                 && let Some(pos) = pos
@@ -480,29 +1046,83 @@ impl PathEditor {
                     {
                         self.notice = Some(error);
                     }
-                } else if self.ring_drag.is_some() {
+                } else if let Some(drag) = &self.ring_drag {
                     if response.rect.contains(pos)
                         && self.ring_last.is_none_or(|last| {
                             last.distance(pos) >= 2. || (!primary && last != pos)
                         })
                     {
                         self.ring_last = Some(pos);
-                        if let Some((position, normal)) = scene.pick(pos) {
-                            self.update_ring(document, PathPoint { position, normal });
-                        } else {
-                            self.notice = Some("Keep the pen on the model to move the ring; the last valid ring is kept".into());
+                        match drag.kind {
+                            RingDragKind::Place => {
+                                let pick = if let Some(plane) = drag.plane {
+                                    pos + (scene.project(plane.hit.position)
+                                        - scene.project(drag.before.display_position(plane.hit)))
+                                } else {
+                                    pos
+                                };
+                                if let Some((position, normal)) = scene.pick(pick) {
+                                    let plane = self.ring_plane;
+                                    let orientation =
+                                        plane.map_or(self.ring_axis, |p| p.orientation);
+                                    self.update_ring(
+                                        document,
+                                        PathPoint { position, normal },
+                                        orientation,
+                                        plane
+                                            .filter(|p| p.orientation == RingAxis::Manual)
+                                            .map(|p| p.normal),
+                                    );
+                                } else {
+                                    self.notice = Some("Keep the pen on the model to move the ring; the last valid ring is kept".into());
+                                }
+                            }
+                            RingDragKind::Tilt { start, right, up } => {
+                                if let Some(plane) = drag.plane {
+                                    let delta = pos - start;
+                                    let normal = plane
+                                        .normal
+                                        .rotated(up, delta.x * 0.01)
+                                        .rotated(right, delta.y * 0.01)
+                                        .norm();
+                                    self.update_ring(
+                                        document,
+                                        plane.hit,
+                                        RingAxis::Manual,
+                                        Some(normal),
+                                    );
+                                }
+                            }
                         }
                     }
-                } else if self.drag.is_some()
-                    && let Some(point) = self.point(scene, pos)
-                {
-                    let index = self.drag.as_ref().unwrap().0;
-                    if let Some(path) = self.draft.as_mut() {
-                        path.points[index] = point;
+                } else if let Some(drag) = &self.drag {
+                    let original = drag.before.points[drag.index];
+                    let point = if let Some(axis) = drag.axis {
+                        scene
+                            .axis_parameter(pos, original.position, axis)
+                            .zip(scene.axis_parameter(drag.start, original.position, axis))
+                            .map(|(end, start)| PathPoint {
+                                position: original.position + axis * (end - start),
+                                ..original
+                            })
+                    } else {
+                        let pick =
+                            if drag.before.mode == PathMode::Surface && drag.before.offset != 0. {
+                                scene.project(original.position) + (pos - drag.start)
+                            } else {
+                                pos
+                            };
+                        self.point(scene, pick)
+                    };
+                    if pos != drag.start
+                        && let Some(point) = point
+                        && let Some(path) = self.draft.as_mut()
+                    {
+                        path.points[drag.index] = point;
                     }
-                } else if primary
-                    && self.drawing
+                } else if self.drawing
                     && response.rect.contains(pos)
+                    && ui.ctx().layer_id_at(pos) == Some(response.layer_id)
                     && self.last_draw.is_none_or(|last| last.distance(pos) >= 12.)
                     && let Some(point) = self.point(scene, pos)
                 {
@@ -512,15 +1132,25 @@ impl PathEditor {
             }
         }
         if !primary {
+            self.commit_gesture |= self.brush.is_some()
+                && !self.editable_draft()
+                && self.gesture_active()
+                && self
+                    .draft
+                    .as_ref()
+                    .is_some_and(|p| p.points.len() >= if p.closed { 3 } else { 2 });
             self.transform.finish();
             self.corner_drag = None;
             self.ring_drag = None;
             self.ring_last = None;
             self.drag = None;
+            self.draw_before = None;
             self.drawing = false;
-            self.navigating = false;
+            self.camera_drag = None;
+            self.navigation_last = None;
         }
         self.refresh_guide(document);
+        self.paint_ghosts(document, scene, painter);
         let hovered = pos
             .filter(|_| response.contains_pointer() && self.tool == PathTool::Add)
             .and_then(|pos| self.nearest_point(scene, pos));
@@ -530,6 +1160,11 @@ impl PathEditor {
                 Color32::from_rgb(245, 150, 90)
             } else {
                 controls::SHAPE
+            };
+            let color = if self.camera_drag.is_some() {
+                color.gamma_multiply(0.5)
+            } else {
+                color
             };
             let points = &cache.points;
             if cache.warning.is_some() {
@@ -546,7 +1181,10 @@ impl PathEditor {
                 if !front && index % 4 >= 2 {
                     continue;
                 }
-                if let Some(segment) = scene.clip_segment([pair[0].position, pair[1].position]) {
+                if let Some(segment) = scene.clip_segment([
+                    path.display_position(pair[0]),
+                    path.display_position(pair[1]),
+                ]) {
                     painter.line_segment(
                         segment,
                         Stroke::new(
@@ -562,8 +1200,10 @@ impl PathEditor {
             }
             if path.closed
                 && points.len() > 2
-                && let Some(segment) =
-                    scene.clip_segment([points.last().unwrap().position, points[0].position])
+                && let Some(segment) = scene.clip_segment([
+                    path.display_position(*points.last().unwrap()),
+                    path.display_position(points[0]),
+                ])
             {
                 painter.line_segment(segment, Stroke::new(2_f32, color));
             }
@@ -578,10 +1218,11 @@ impl PathEditor {
                 {
                     continue;
                 }
-                if !scene.visible_depth(point.position) {
+                let position = path.display_position(*point);
+                if !scene.visible_depth(position) {
                     continue;
                 }
-                let center = scene.project(point.position);
+                let center = scene.project(position);
                 let selected = self.selected == Some(i);
                 let front = path.mode == PathMode::Free || faces_camera(scene, point);
                 controls::marker(
@@ -610,9 +1251,9 @@ impl PathEditor {
             if path.closed
                 && path.corner_rounding(path.seam) > 0.
                 && let Some(start) = points.first()
-                && scene.visible_depth(start.position)
+                && scene.visible_depth(path.display_position(*start))
             {
-                let center = scene.project(start.position);
+                let center = scene.project(path.display_position(*start));
                 let front = path.mode == PathMode::Free || faces_camera(scene, start);
                 let seam_color = if front {
                     controls::ACTION
@@ -628,6 +1269,42 @@ impl PathEditor {
                     seam_color,
                 );
             }
+        }
+        for (i, _, start, handle) in self.free_axes(scene) {
+            let color = controls::AXES[i];
+            painter.line_segment([start, handle], Stroke::new(2_f32, color));
+            controls::marker(
+                painter,
+                handle,
+                controls::Marker::Square,
+                color,
+                pos.is_some_and(|p| p.distance(handle) <= controls::HIT_RADIUS),
+            );
+            painter.text(
+                handle + Vec2::new(8., -8.),
+                egui::Align2::LEFT_BOTTOM,
+                ["X", "Y", "Z"][i],
+                egui::FontId::proportional(12.),
+                color,
+            );
+        }
+        if let Some((anchor, handle)) = self.ring_tilt_handle(scene) {
+            let color = controls::ACTION;
+            painter.line_segment([anchor, handle], Stroke::new(1_f32, color));
+            controls::marker(
+                painter,
+                handle,
+                controls::Marker::Diamond,
+                color,
+                pos.is_some_and(|p| p.distance(handle) <= controls::HIT_RADIUS + 4.),
+            );
+            painter.text(
+                handle + Vec2::new(9., -7.),
+                egui::Align2::LEFT_BOTTOM,
+                "Tilt",
+                egui::FontId::proportional(12.),
+                color,
+            );
         }
         for handle in self.corner_handles(scene) {
             let center = scene.project(self.draft.as_ref().unwrap().points[handle.index].position);
@@ -655,13 +1332,15 @@ impl PathEditor {
         {
             self.transform.paint(path, scene, painter, pos);
         }
-        painter.text(
-            response.rect.center_bottom() - egui::vec2(0., 26.),
-            egui::Align2::CENTER_BOTTOM,
-            "Paths · right-drag: orbit · middle-drag: pan · wheel: zoom · Save path to keep edits",
-            egui::FontId::proportional(13.),
-            controls::NEUTRAL,
-        );
+        if self.brush.is_none() {
+            painter.text(
+                response.rect.center_bottom() - egui::vec2(0., 26.),
+                egui::Align2::CENTER_BOTTOM,
+                "Path editing · right-drag to orbit · middle-drag to pan · wheel to zoom",
+                egui::FontId::proportional(13.),
+                controls::NEUTRAL,
+            );
+        }
     }
 }
 
@@ -714,6 +1393,8 @@ mod guide_tests {
             closed: false,
             seam: 0,
             surface_signature: 0,
+            offset: 0.,
+            ring_orientation: None,
             attached_route: None,
             corner_rounding: Vec::new(),
         }

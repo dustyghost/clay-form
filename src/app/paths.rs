@@ -104,6 +104,8 @@ impl App {
     }
     pub(super) fn sync_path_history_state(&mut self) {
         self.ui.paths_active = self.viewport.paths.active;
+        self.ui.path_brush_active =
+            self.viewport.paths.active && self.viewport.paths.brush.is_some();
         self.ui.paths_preview_active = self.paths.busy() || self.paths.has_preview();
         self.ui.paths_history_reason = if !self.viewport.paths.active {
             None
@@ -159,18 +161,33 @@ impl App {
         } else {
             // Retain the identity so Redo can restore the just-undone path.
             self.paths.selected_path = id;
-            let tool = self.viewport.paths.tool;
-            let ring_mode = self.viewport.paths.ring_mode;
-            let ring_axis = self.viewport.paths.ring_axis;
-            self.viewport.paths = Default::default();
-            self.viewport.paths.active = true;
-            self.viewport.paths.tool = tool;
-            self.viewport.paths.ring_mode = ring_mode;
-            self.viewport.paths.ring_axis = ring_axis;
+            self.viewport.paths.clear_selection();
         }
         self.viewport.paths.notice = None;
         self.sync_path_history_state();
     }
+    pub(super) fn commit_path_gesture(&mut self, ctx: &egui::Context) {
+        if std::mem::take(&mut self.viewport.paths.exit_brush) {
+            self.dispatch(Command::Path(PathCommand::Close), ctx);
+            return;
+        }
+        if std::mem::take(&mut self.viewport.paths.commit_gesture)
+            && self.viewport.paths.dirty(&self.document)
+        {
+            self.dispatch(Command::Path(PathCommand::Save), ctx);
+        }
+        if self.viewport.paths.brush.is_some()
+            && let Some(path) = self
+                .viewport
+                .paths
+                .draft
+                .as_ref()
+                .filter(|path| path.id != 0)
+        {
+            self.paths.selected_path = Some(path.id);
+        }
+    }
+
     pub(super) fn show_paths(&mut self, ctx: &egui::Context) {
         self.sync_path_history_state();
         if self.viewport.paths.active
@@ -186,6 +203,7 @@ impl App {
             &mut self.viewport.paths,
             &mut self.paths,
             &self.document,
+            &self.camera,
             &mut self.ui.selected,
         );
         for command in commands {
@@ -208,7 +226,10 @@ impl App {
         super::policy::EditorPolicy::new(&self.ui, &self.document).path()?;
         if !matches!(
             command,
-            PathCommand::Open | PathCommand::New(_) | PathCommand::NewRing
+            PathCommand::Open
+                | PathCommand::ActivateBrush
+                | PathCommand::New(_)
+                | PathCommand::NewRing
         ) && !self.viewport.paths.active
         {
             if matches!(command, PathCommand::StrokeEntirePath) {
@@ -242,7 +263,19 @@ impl App {
             return Err("Apply or cancel the brush preview first".into());
         }
         match command {
+            PathCommand::ActivateBrush => {
+                use crate::viewport::paths::{PathBrush, PathTool};
+                if !self.viewport.paths.active {
+                    self.dispatch_path(PathCommand::Open)?;
+                    self.viewport.paths.panel = false;
+                }
+                self.viewport.paths.brush.get_or_insert(PathBrush::Surface);
+                self.viewport.paths.tool = PathTool::Add;
+                self.viewport.wait_for_release();
+                self.ui.status = "Path Brush active".into();
+            }
             PathCommand::Open => {
+                self.viewport.paths.panel = true;
                 if self.viewport.paths.active {
                     return Ok(());
                 }
@@ -269,9 +302,10 @@ impl App {
                 {
                     self.paths.selected_path = Some(path.id);
                     self.viewport.paths.select(path.clone());
+                } else {
+                    self.dispatch_path(PathCommand::New(PathMode::Surface))?;
                 }
-                self.ui.status =
-                    "Choose a saved path, or start a surface or free-space path".into();
+                self.ui.status = "Draw on the surface, or choose a path from the list".into();
             }
             PathCommand::NewRing => {
                 self.dispatch_path(PathCommand::New(PathMode::Surface))?;
@@ -284,27 +318,12 @@ impl App {
                 if !self.viewport.paths.active {
                     self.dispatch_path(PathCommand::Open)?;
                 }
-                self.viewport.paths.select(SurfacePath {
-                    id: 0,
-                    target: self.document.active_model_id(),
-                    name: format!("Path {}", self.document.paths().len() + 1),
-                    mode,
-                    points: Vec::new(),
-                    smoothing: 0.,
-                    closed: false,
-                    seam: 0,
-                    surface_signature: 0,
-                    attached_route: None,
-                    corner_rounding: Vec::new(),
-                });
+                let draft = crate::viewport::paths::PathEditor::new_draft(&self.document, mode);
+                self.viewport.paths.select(draft);
+                self.viewport.paths.brush = None;
                 self.viewport.paths.tool = crate::viewport::paths::PathTool::Add;
             }
             PathCommand::Select(id) => {
-                if self.viewport.paths.dirty(&self.document) {
-                    return Err(
-                        "Save or discard the current edits before choosing another path".into(),
-                    );
-                }
                 let path = self
                     .document
                     .path(id)
@@ -313,8 +332,25 @@ impl App {
                 if path.target != self.document.active_model_id() {
                     return Err("Select the path's target submodel first".into());
                 }
-                self.viewport.paths.select(path);
+                self.viewport.paths.select_for_edit(path, &self.document)?;
                 self.paths.selected_path = Some(id);
+            }
+            PathCommand::SaveAndNext => {
+                let mode = self
+                    .viewport
+                    .paths
+                    .draft
+                    .as_ref()
+                    .ok_or("Start a path first")?
+                    .mode;
+                let ring = self.viewport.paths.tool == crate::viewport::paths::PathTool::Ring;
+                self.dispatch_path(PathCommand::Save)?;
+                self.dispatch_path(if ring {
+                    PathCommand::NewRing
+                } else {
+                    PathCommand::New(mode)
+                })?;
+                self.ui.status = "Path saved. Draw the next path on the model.".into();
             }
             PathCommand::SaveAndSculpt => {
                 self.dispatch_path(PathCommand::Save)?;
@@ -323,7 +359,7 @@ impl App {
                 self.ui.status = "Path saved. Start a brush stroke near the guide and draw along the section you want to sculpt.".into();
             }
             PathCommand::Save => {
-                let path = self
+                let mut path = self
                     .viewport
                     .paths
                     .draft
@@ -332,27 +368,20 @@ impl App {
                 let id = if path.id == 0 {
                     // Opening a new loop at its chosen seam preserves that seam
                     // with create_path's canonical zero-index starting point.
-                    let mut points = path.points;
-                    let mut corner_rounding = path.corner_rounding;
-                    if !corner_rounding.is_empty() && corner_rounding.len() != points.len() {
+                    if !path.corner_rounding.is_empty()
+                        && path.corner_rounding.len() != path.points.len()
+                    {
                         return Err("Corner rounding must match the path points".into());
                     }
-                    if path.closed && !points.is_empty() {
-                        let n = points.len();
-                        let seam = path.seam.min(n - 1);
-                        points.rotate_left(seam);
-                        if !corner_rounding.is_empty() {
-                            corner_rounding.rotate_left(seam);
+                    if path.closed && !path.points.is_empty() {
+                        let seam = path.seam.min(path.points.len() - 1);
+                        path.points.rotate_left(seam);
+                        if !path.corner_rounding.is_empty() {
+                            path.corner_rounding.rotate_left(seam);
                         }
+                        path.seam = 0;
                     }
-                    self.document.create_path_with_rounding(
-                        path.name,
-                        path.mode,
-                        points,
-                        path.closed,
-                        path.smoothing,
-                        corner_rounding,
-                    )?
+                    self.document.create_path_draft(path)?
                 } else {
                     let id = path.id;
                     self.document.update_path_with_section_scale(
@@ -363,27 +392,36 @@ impl App {
                 };
                 self.viewport
                     .paths
-                    .select(self.document.path(id).unwrap().clone());
+                    .accept_saved(self.document.path(id).unwrap().clone());
                 self.paths.selected_path = Some(id);
                 self.ui.status = "Path saved; Undo restores the previous path".into();
             }
             PathCommand::Discard => {
                 let id = self.viewport.paths.draft.as_ref().map(|p| p.id);
-                self.viewport.paths.draft = id.and_then(|id| self.document.path(id).cloned());
-                self.viewport.paths.selected = None;
-                self.viewport.paths.transform.reset();
+                if let Some(path) = id.and_then(|id| self.document.path(id).cloned()) {
+                    self.viewport.paths.select(path);
+                } else {
+                    self.viewport.paths.clear_selection();
+                }
             }
-            PathCommand::Delete => {
-                let id = self
+            PathCommand::Delete(id) => {
+                if self
                     .viewport
                     .paths
                     .draft
                     .as_ref()
-                    .ok_or("Select a saved path")?
-                    .id;
+                    .is_none_or(|path| path.id != id)
+                    || self
+                        .document
+                        .path(id)
+                        .is_none_or(|path| path.target != self.document.active_model_id())
+                {
+                    return Err("Select a saved path on the active model first".into());
+                }
                 self.document.delete_path(id)?;
-                self.viewport.paths.draft = None;
-                self.viewport.paths.selected = None;
+                self.viewport.paths.clear_selection();
+                self.paths.selected_path = None;
+                self.ui.status = "Path deleted. Undo restores it.".into();
             }
             PathCommand::Reproject => {
                 if self.viewport.paths.dirty(&self.document) {

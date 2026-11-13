@@ -1,0 +1,33 @@
+[package]
+name = "clay-retopology"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+description = "Cancellable surface-field quad reconstruction for Clay Form"
+repository = "https://github.com/dustyghost/clay-form"
+
+[workspace]
+
+[features]
+audit = ["dep:serde", "dep:serde_json"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", features = ["float_roundtrip"], optional = true }
+glam = { version = "0.32.1", default-features = false, features = ["std"] }
+batsat = { version = "=0.6.0", default-features = false }
+
+[dev-dependencies]
+serde_json = "1"
+
+[profile.dev]
+opt-level = 2
+debug = 0
+
+[profile.test]
+opt-level = 2
+debug = 0
+
+[[example]]
+name = "audit"
+required-features = ["audit"]

@@ -1,0 +1,80 @@
+[
+  {
+    "source_sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+    "blender_version": "5.2.3 LTS",
+    "blender_build_hash": "e13b728c6880",
+    "source": {
+      "vertices": 52601,
+      "triangles": 105198
+    },
+    "refinement": "none",
+    "settings": {
+      "use_mesh_symmetry": false,
+      "use_preserve_sharp": false,
+      "use_preserve_boundary": true,
+      "preserve_attributes": false,
+      "smooth_normals": false,
+      "mode": "FACES",
+      "target_faces": 5000,
+      "seed": 0
+    },
+    "elapsed_seconds": 6.655316988006234,
+    "max_rss_kib": 569568,
+    "vertices": 4370,
+    "polygons": 4368,
+    "face_sizes": {
+      "4": 4368
+    },
+    "edge_incidence": {
+      "2": 8736
+    },
+    "vertex_valence": {
+      "5": 51,
+      "4": 4260,
+      "3": 59
+    },
+    "belly_vertices": 70,
+    "components": 1,
+    "euler": 2,
+    "inconsistent_or_open_edges": 0
+  },
+  {
+    "source_sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+    "blender_version": "5.2.3 LTS",
+    "blender_build_hash": "e13b728c6880",
+    "source": {
+      "vertices": 54661,
+      "triangles": 109318
+    },
+    "refinement": "9 coplanar children per belly triangle (centroid abs(x/y)<0.4, z>0)",
+    "settings": {
+      "use_mesh_symmetry": false,
+      "use_preserve_sharp": false,
+      "use_preserve_boundary": true,
+      "preserve_attributes": false,
+      "smooth_normals": false,
+      "mode": "FACES",
+      "target_faces": 5000,
+      "seed": 0
+    },
+    "elapsed_seconds": 4.857984978938475,
+    "max_rss_kib": 574780,
+    "vertices": 4527,
+    "polygons": 4525,
+    "face_sizes": {
+      "4": 4525
+    },
+    "belly_vertices": 74,
+    "edge_incidence": {
+      "2": 9050
+    },
+    "vertex_valence": {
+      "4": 4425,
+      "5": 47,
+      "3": 55
+    },
+    "components": 1,
+    "euler": 2,
+    "inconsistent_or_open_edges": 0
+  }
+]

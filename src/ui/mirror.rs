@@ -19,6 +19,19 @@ impl UiState {
                 ui.selectable_value(&mut self.mirror_axis, axis, format!("{axis:?}"));
             }
         });
+        ui.add_enabled(
+            document.mesh().quad_mirror_available(),
+            egui::Checkbox::new(
+                &mut self.mirror_quad_bridge,
+                "Bridge with quads (experimental)",
+            ),
+        )
+        .on_hover_text(
+            "Join the two sides with quads on a closed all-quad mesh without UVs or creases.",
+        );
+        if self.mirror_quad_bridge && document.mesh().quad_mirror_available() {
+            ui.checkbox(&mut self.mirror_centreline, "Add centreline");
+        }
         let axis = self.mirror_axis;
         let offset = document.symmetry().center.dot(axis.vector());
         ui.label(format!("Mirror plane: {axis:?} = {offset:.3}"));

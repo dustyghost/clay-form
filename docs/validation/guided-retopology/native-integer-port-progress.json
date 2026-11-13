@@ -1,0 +1,1186 @@
+{
+  "date": "2026-11-06",
+  "status": "complete_native_original_sculpt_pipeline_passes_existing_checks_app_integration_outstanding",
+  "git_base": "018fb5824e2df0dff5e8a4cfaec3cd3fe37296ad",
+  "artifact_directory": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-integer-port-20261106",
+  "source": {
+    "path": "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+    "sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+    "vertices": 52601,
+    "triangles": 105198
+  },
+  "scope": {
+    "anatomy_rules": false,
+    "character_guides": [],
+    "character_detail": "uniform",
+    "character_preserve_sharp": false,
+    "acceptance_limits_changed": false,
+    "app_backend_changed": false,
+    "mapper_selection": "closed surface without hard field constraints; retain existing constraint-aware correction for open/hard cases",
+    "entry_point": "reconstruct_regularized_with_progress",
+    "preparation_iterations": 5
+  },
+  "reference": {
+    "quadriflow_commit": "810b7a0967c35b0dc85b4464e3835e26a756c967",
+    "cpp_binary_sha256": "e9e34e5be4c313419ff1794c18672164b7fd8b410d6bdf5e57fb10d9c3243346",
+    "algorithm": "original default maximum flow; unit BFS below supply 20, Boost Boykov-Kolmogorov otherwise",
+    "paper": "https://www.csd.uwo.ca/~yboykov/Papers/pami04.pdf"
+  },
+  "whole_character_quality": {
+    "bad_quads": [],
+    "note": "Distance measurements use topology-only render diagonals; these are diagnostics, not acceptance or a self-intersection test.",
+    "quads": 10122,
+    "quads_without_outward_diagonal": 0,
+    "result_to_source": {
+      "distance_at_max_ratio": 0.03222874336965611,
+      "max_spacing_ratio": 0.5593170758947538,
+      "point": [
+        0.1004488248916654,
+        1.3456723962412493,
+        0.09364884152957642
+      ]
+    },
+    "source_to_result": {
+      "distance_at_max_ratio": 0.04337227537219919,
+      "max_spacing_ratio": 0.7527086600255288,
+      "point": [
+        -2.4100654,
+        0.32421145,
+        1.6032611
+      ]
+    },
+    "topology": {
+      "Ok": "Topology { components: 1, euler: 2, boundaries: 0 }"
+    },
+    "vertices": 10124
+  },
+  "quality_provenance": "Earlier independently measured metrics reused only after exact accepted OBJ byte identity; new public pipeline also validates its output against the immutable original.",
+  "output_sha256": {
+    "prepared-run-1": "ae157e1cbd7be512dc3564176e1fdd7b3f48983f251579bbf9a4a08a2a7060e5",
+    "original-run": "ae157e1cbd7be512dc3564176e1fdd7b3f48983f251579bbf9a4a08a2a7060e5",
+    "prepared-run-2": "ae157e1cbd7be512dc3564176e1fdd7b3f48983f251579bbf9a4a08a2a7060e5",
+    "prior_cpp_integer_transplant": "ae157e1cbd7be512dc3564176e1fdd7b3f48983f251579bbf9a4a08a2a7060e5"
+  },
+  "grid_parity": [
+    {
+      "input": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fields.json",
+      "input_sha256": "fe97b06115497cf0fcc39ba1bdd71d8bd10f931aaba8d88191f2f4ad3a2b9dfe",
+      "equal": true,
+      "native_sha256": "fb32f8698f65903bde762150af5ca8033dd4d7fa2cfc27c85af626e0656719e7",
+      "cpp_sha256": "a35ad9611a5a19d4cb5221ea35add796ae6385835de20ade2f93622e2d512824",
+      "edges": {
+        "count": 156384,
+        "differing": 0
+      },
+      "faces": {
+        "count": 104256,
+        "differing": 0
+      },
+      "runs": [
+        {
+          "name": "prepared-export",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/release/examples/audit",
+            "export-field-grid",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fields.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-integer-port-20261106/prepared.input"
+          ],
+          "exit": 0,
+          "process_wall_seconds": 1.1152731738984585,
+          "user_seconds": 1.015267,
+          "system_seconds": 0.045639,
+          "cumulative_child_peak_rss_kib": 66560,
+          "events": [],
+          "solver_seconds": 1.085
+        },
+        {
+          "name": "prepared-cpp",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/integer-comparison-20261106/integer-reference",
+            "max"
+          ],
+          "exit": 0,
+          "process_wall_seconds": 2.117699925089255,
+          "user_seconds": 1.9416849999999999,
+          "system_seconds": 0.11800199999999998,
+          "cumulative_child_peak_rss_kib": 237408,
+          "events": []
+        },
+        {
+          "name": "prepared-rust",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/release/examples/audit",
+            "export-native-mapping",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5-retopo/native.fields.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-integer-port-20261106/prepared.release.grid.json"
+          ],
+          "exit": 0,
+          "process_wall_seconds": 2.267166308942251,
+          "user_seconds": 2.1238230000000002,
+          "system_seconds": 0.07337200000000002,
+          "cumulative_child_peak_rss_kib": 237408,
+          "events": [],
+          "solver_seconds": 2.214
+        }
+      ]
+    },
+    {
+      "input": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/integer-comparison-20261106/original-native/native.fields.json",
+      "input_sha256": "e2a459cca34375ac63d18e9fc27b6bde9ee608557c4e9d9246f6f6ae743cf898",
+      "equal": true,
+      "native_sha256": "4394ff651c00f8332a42f70d4789ae9c8fd1cba33b85e832002bd5e120922936",
+      "cpp_sha256": "5769def748bfec5882f3e2e45164f5ceb829d108c1690c1c42cf7e0ffa93c351",
+      "edges": {
+        "count": 244902,
+        "differing": 0
+      },
+      "faces": {
+        "count": 163268,
+        "differing": 0
+      },
+      "runs": [
+        {
+          "name": "irregular-export",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/release/examples/audit",
+            "export-field-grid",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/integer-comparison-20261106/original-native/native.fields.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-integer-port-20261106/irregular.input"
+          ],
+          "exit": 0,
+          "process_wall_seconds": 1.4661978359799832,
+          "user_seconds": 1.333723,
+          "system_seconds": 0.076636,
+          "cumulative_child_peak_rss_kib": 149348,
+          "events": [],
+          "solver_seconds": 1.416
+        },
+        {
+          "name": "irregular-cpp",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/integer-comparison-20261106/integer-reference",
+            "max"
+          ],
+          "exit": 0,
+          "process_wall_seconds": 2.8190722189610824,
+          "user_seconds": 2.58353,
+          "system_seconds": 0.17004999999999998,
+          "cumulative_child_peak_rss_kib": 361912,
+          "events": []
+        },
+        {
+          "name": "irregular-rust",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/release/examples/audit",
+            "export-native-mapping",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/integer-comparison-20261106/original-native/native.fields.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-integer-port-20261106/irregular.release.grid.json"
+          ],
+          "exit": 0,
+          "process_wall_seconds": 2.8696471859002486,
+          "user_seconds": 2.7221990000000003,
+          "system_seconds": 0.11536100000000002,
+          "cumulative_child_peak_rss_kib": 361912,
+          "events": [],
+          "solver_seconds": 2.854
+        }
+      ]
+    },
+    {
+      "input": "/home/mark/Documents/ChatGPT/Clay From/retopology-review/integer-comparison-20261106/even-native/native.fields.json",
+      "input_sha256": "96c84892776f38057676981a9d36529995f8cac30c4cb1f95aafa278d8a6e4f3",
+      "equal": true,
+      "native_sha256": "8c05ad99cc9c66e3e1fc40766f6c559b0f44be79d8fd9d0967f4f9e08da18f18",
+      "cpp_sha256": "be695b80c6f93f92002f64765e93be3033e0861aea83b4236d35d8eeff48d8a9",
+      "edges": {
+        "count": 158565,
+        "differing": 0
+      },
+      "faces": {
+        "count": 105710,
+        "differing": 0
+      },
+      "runs": [
+        {
+          "name": "meshlab-export",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/release/examples/audit",
+            "export-field-grid",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/integer-comparison-20261106/even-native/native.fields.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-integer-port-20261106/meshlab.input"
+          ],
+          "exit": 0,
+          "process_wall_seconds": 1.165908778901212,
+          "user_seconds": 1.0848489999999993,
+          "system_seconds": 0.04860199999999998,
+          "cumulative_child_peak_rss_kib": 361912,
+          "events": [],
+          "solver_seconds": 1.144
+        },
+        {
+          "name": "meshlab-cpp",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/integer-comparison-20261106/integer-reference",
+            "max"
+          ],
+          "exit": 0,
+          "process_wall_seconds": 1.916259465040639,
+          "user_seconds": 1.7911100000000006,
+          "system_seconds": 0.10837899999999995,
+          "cumulative_child_peak_rss_kib": 361912,
+          "events": []
+        },
+        {
+          "name": "meshlab-rust",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/release/examples/audit",
+            "export-native-mapping",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/integer-comparison-20261106/even-native/native.fields.json",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-integer-port-20261106/meshlab.release.grid.json"
+          ],
+          "exit": 0,
+          "process_wall_seconds": 2.166083262069151,
+          "user_seconds": 2.0441260000000003,
+          "system_seconds": 0.06256600000000001,
+          "cumulative_child_peak_rss_kib": 361912,
+          "events": [],
+          "solver_seconds": 2.115
+        }
+      ]
+    }
+  ],
+  "independent_fixture_provenance": {
+    "reference_commit": "810b7a0967c35b0dc85b4464e3835e26a756c967",
+    "generator": "scripts/retopology/make-integer-reference.py",
+    "mode": "max",
+    "fixtures": [
+      {
+        "name": "integer-asymmetric-19",
+        "target": 19,
+        "input_sha256": "618726a8e25be231c9b36110546456c841808e18efddc0a51ea8ab1b61b3f434",
+        "expected_sha256": "887dd6337b2d1dd9a263e5fc473ce5a84ec80a7dc0c1a378d39132f08fed0469",
+        "cpp_binary_sha256": "e9e34e5be4c313419ff1794c18672164b7fd8b410d6bdf5e57fb10d9c3243346"
+      },
+      {
+        "name": "integer-asymmetric-83",
+        "target": 83,
+        "input_sha256": "8ed9b0cbcadb535c526e7fd8f1193fad27ebe4f9b462aefd2c0990b26e4811c4",
+        "expected_sha256": "18e82774f9de15160c0bd8ea12f8731dfce2f250a66d05c2dc230bcd4536dce8",
+        "cpp_binary_sha256": "e9e34e5be4c313419ff1794c18672164b7fd8b410d6bdf5e57fb10d9c3243346"
+      }
+    ],
+    "scope": "Independent C++ integer mapping on native-exported shared fields; no Rust mapper used to generate expected output."
+  },
+  "performance": {
+    "prepared_solver_median_seconds": 8.318999999999999,
+    "integer_stage_median_seconds": 0.9175000000000001,
+    "old_native_prepared_solver_median_seconds": 17.825,
+    "old_native_integer_stage_median_seconds": 10.187,
+    "previous_cpp_operator_median_seconds": 8.50698,
+    "cpp_caveat": "Earlier matched-input measurement, not rerun interleaved with new Rust; different validation workload, saved C++ output has one outward failure.",
+    "complete_original_solver_seconds": 25.346,
+    "complete_original_repetitions": 1,
+    "release_build_command": [
+      "cargo",
+      "build",
+      "--locked",
+      "--release",
+      "--manifest-path",
+      "crates/clay-retopology/Cargo.toml",
+      "--features",
+      "audit",
+      "--example",
+      "compare",
+      "--example",
+      "audit",
+      "-j",
+      "1"
+    ],
+    "runtime_cap_mib": 700,
+    "swap_allowed": false,
+    "raw": {
+      "profile": "release opt-level=3",
+      "binary_sha256": "287def13340872f3d76c71230fd92755c88e8dbecf59a128f4e999a1f5ec6499",
+      "prepared_sha256": "4420db8defa35d8e14e06b1b81a3ea24f03d50be0faa296723781370febb5c7c",
+      "original_sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+      "target_quads": 10000,
+      "guides": [],
+      "detail": "uniform",
+      "preserve_sharp": false,
+      "runs": [
+        {
+          "name": "prepared-run-1",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/release/examples/compare",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5.clay",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-integer-port-20261106/prepared-run-1.obj",
+            "10000"
+          ],
+          "exit": 0,
+          "process_wall_seconds": 8.423862245981582,
+          "user_seconds": 8.217613,
+          "system_seconds": 0.10783999999999999,
+          "cumulative_child_peak_rss_kib": 180548,
+          "events": [
+            {
+              "seconds": 0.141,
+              "stage": "Sampling"
+            },
+            {
+              "seconds": 0.198,
+              "stage": "Hierarchy { samples: 52130 }"
+            },
+            {
+              "seconds": 0.477,
+              "stage": "Hierarchy { samples: 27969 }"
+            },
+            {
+              "seconds": 0.511,
+              "stage": "Hierarchy { samples: 15131 }"
+            },
+            {
+              "seconds": 0.527,
+              "stage": "Hierarchy { samples: 8179 }"
+            },
+            {
+              "seconds": 0.535,
+              "stage": "Hierarchy { samples: 4442 }"
+            },
+            {
+              "seconds": 0.539,
+              "stage": "Hierarchy { samples: 2404 }"
+            },
+            {
+              "seconds": 0.542,
+              "stage": "Hierarchy { samples: 1302 }"
+            },
+            {
+              "seconds": 0.543,
+              "stage": "Hierarchy { samples: 711 }"
+            },
+            {
+              "seconds": 0.543,
+              "stage": "Hierarchy { samples: 385 }"
+            },
+            {
+              "seconds": 0.544,
+              "stage": "Hierarchy { samples: 210 }"
+            },
+            {
+              "seconds": 0.544,
+              "stage": "Hierarchy { samples: 116 }"
+            },
+            {
+              "seconds": 0.544,
+              "stage": "Hierarchy { samples: 61 }"
+            },
+            {
+              "seconds": 0.544,
+              "stage": "Hierarchy { samples: 34 }"
+            },
+            {
+              "seconds": 0.544,
+              "stage": "Hierarchy { samples: 18 }"
+            },
+            {
+              "seconds": 0.544,
+              "stage": "Hierarchy { samples: 9 }"
+            },
+            {
+              "seconds": 0.544,
+              "stage": "Hierarchy { samples: 5 }"
+            },
+            {
+              "seconds": 0.544,
+              "stage": "Hierarchy { samples: 3 }"
+            },
+            {
+              "seconds": 0.544,
+              "stage": "Hierarchy { samples: 2 }"
+            },
+            {
+              "seconds": 0.544,
+              "stage": "Hierarchy { samples: 1 }"
+            },
+            {
+              "seconds": 0.553,
+              "stage": "Orientation"
+            },
+            {
+              "seconds": 0.845,
+              "stage": "Position"
+            },
+            {
+              "seconds": 1.816,
+              "stage": "Regularity { defects: 467 }"
+            },
+            {
+              "seconds": 2.712,
+              "stage": "Subdivision { long_edges: 3673, fixed_variables: 3294 }"
+            },
+            {
+              "seconds": 2.785,
+              "stage": "Inversions { flipped: 1968 }"
+            },
+            {
+              "seconds": 2.892,
+              "stage": "Repair { radius: 0, flipped: 17 }"
+            },
+            {
+              "seconds": 2.96,
+              "stage": "CoarseRepair { radius: 1, flipped: 17 }"
+            },
+            {
+              "seconds": 2.973,
+              "stage": "CoarseRepair { radius: 2, flipped: 16 }"
+            },
+            {
+              "seconds": 3.001,
+              "stage": "CoarseRepair { radius: 3, flipped: 14 }"
+            },
+            {
+              "seconds": 3.047,
+              "stage": "CoarseRepair { radius: 4, flipped: 14 }"
+            },
+            {
+              "seconds": 3.183,
+              "stage": "CoarseRepair { radius: 1, flipped: 14 }"
+            },
+            {
+              "seconds": 3.198,
+              "stage": "CoarseRepair { radius: 2, flipped: 10 }"
+            },
+            {
+              "seconds": 3.216,
+              "stage": "CoarseRepair { radius: 3, flipped: 10 }"
+            },
+            {
+              "seconds": 3.259,
+              "stage": "CoarseRepair { radius: 4, flipped: 10 }"
+            },
+            {
+              "seconds": 3.311,
+              "stage": "CoarseRepair { radius: 1, flipped: 10 }"
+            },
+            {
+              "seconds": 3.346,
+              "stage": "CoarseRepair { radius: 2, flipped: 7 }"
+            },
+            {
+              "seconds": 3.377,
+              "stage": "CoarseRepair { radius: 3, flipped: 7 }"
+            },
+            {
+              "seconds": 3.451,
+              "stage": "CoarseRepair { radius: 4, flipped: 7 }"
+            },
+            {
+              "seconds": 3.79,
+              "stage": "CoarseRepair { radius: 1, flipped: 2 }"
+            },
+            {
+              "seconds": 3.804,
+              "stage": "CoarseRepair { radius: 2, flipped: 2 }"
+            },
+            {
+              "seconds": 3.899,
+              "stage": "CoarseRepair { radius: 3, flipped: 2 }"
+            },
+            {
+              "seconds": 4.005,
+              "stage": "CoarseRepair { radius: 4, flipped: 2 }"
+            },
+            {
+              "seconds": 4.311,
+              "stage": "CoarseRepair { radius: 1, flipped: 1 }"
+            },
+            {
+              "seconds": 4.321,
+              "stage": "CoarseRepair { radius: 2, flipped: 1 }"
+            },
+            {
+              "seconds": 4.376,
+              "stage": "Fitting"
+            },
+            {
+              "seconds": 4.652,
+              "stage": "Extraction"
+            },
+            {
+              "seconds": 4.753,
+              "stage": "QuadOptimization"
+            },
+            {
+              "seconds": 7.505,
+              "stage": "SurfaceFit"
+            }
+          ],
+          "solver_seconds": 8.273,
+          "output_sha256": "ae157e1cbd7be512dc3564176e1fdd7b3f48983f251579bbf9a4a08a2a7060e5"
+        },
+        {
+          "name": "original-run",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/release/examples/compare",
+            "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-integer-port-20261106/original-run.obj",
+            "10000",
+            "--regularize"
+          ],
+          "exit": 0,
+          "process_wall_seconds": 25.495236854068935,
+          "user_seconds": 25.121636000000002,
+          "system_seconds": 0.163595,
+          "cumulative_child_peak_rss_kib": 182452,
+          "events": [
+            {
+              "seconds": 0.12,
+              "stage": "Preparation { iteration: 0, vertices: 52601 }"
+            },
+            {
+              "seconds": 4.878,
+              "stage": "Preparation { iteration: 1, vertices: 53331 }"
+            },
+            {
+              "seconds": 7.974,
+              "stage": "Preparation { iteration: 2, vertices: 55407 }"
+            },
+            {
+              "seconds": 10.568,
+              "stage": "Preparation { iteration: 3, vertices: 53296 }"
+            },
+            {
+              "seconds": 13.096,
+              "stage": "Preparation { iteration: 4, vertices: 52552 }"
+            },
+            {
+              "seconds": 15.477,
+              "stage": "Preparation { iteration: 5, vertices: 52083 }"
+            },
+            {
+              "seconds": 16.303,
+              "stage": "Sampling"
+            },
+            {
+              "seconds": 16.355,
+              "stage": "Hierarchy { samples: 52130 }"
+            },
+            {
+              "seconds": 16.606,
+              "stage": "Hierarchy { samples: 27969 }"
+            },
+            {
+              "seconds": 16.639,
+              "stage": "Hierarchy { samples: 15131 }"
+            },
+            {
+              "seconds": 16.655,
+              "stage": "Hierarchy { samples: 8179 }"
+            },
+            {
+              "seconds": 16.662,
+              "stage": "Hierarchy { samples: 4442 }"
+            },
+            {
+              "seconds": 16.666,
+              "stage": "Hierarchy { samples: 2404 }"
+            },
+            {
+              "seconds": 16.668,
+              "stage": "Hierarchy { samples: 1302 }"
+            },
+            {
+              "seconds": 16.669,
+              "stage": "Hierarchy { samples: 711 }"
+            },
+            {
+              "seconds": 16.669,
+              "stage": "Hierarchy { samples: 385 }"
+            },
+            {
+              "seconds": 16.669,
+              "stage": "Hierarchy { samples: 210 }"
+            },
+            {
+              "seconds": 16.67,
+              "stage": "Hierarchy { samples: 116 }"
+            },
+            {
+              "seconds": 16.67,
+              "stage": "Hierarchy { samples: 61 }"
+            },
+            {
+              "seconds": 16.67,
+              "stage": "Hierarchy { samples: 34 }"
+            },
+            {
+              "seconds": 16.67,
+              "stage": "Hierarchy { samples: 18 }"
+            },
+            {
+              "seconds": 16.67,
+              "stage": "Hierarchy { samples: 9 }"
+            },
+            {
+              "seconds": 16.67,
+              "stage": "Hierarchy { samples: 5 }"
+            },
+            {
+              "seconds": 16.67,
+              "stage": "Hierarchy { samples: 3 }"
+            },
+            {
+              "seconds": 16.67,
+              "stage": "Hierarchy { samples: 2 }"
+            },
+            {
+              "seconds": 16.67,
+              "stage": "Hierarchy { samples: 1 }"
+            },
+            {
+              "seconds": 16.679,
+              "stage": "Orientation"
+            },
+            {
+              "seconds": 16.962,
+              "stage": "Position"
+            },
+            {
+              "seconds": 17.938,
+              "stage": "Regularity { defects: 467 }"
+            },
+            {
+              "seconds": 18.839,
+              "stage": "Subdivision { long_edges: 3673, fixed_variables: 3294 }"
+            },
+            {
+              "seconds": 18.909,
+              "stage": "Inversions { flipped: 1968 }"
+            },
+            {
+              "seconds": 19.021,
+              "stage": "Repair { radius: 0, flipped: 17 }"
+            },
+            {
+              "seconds": 19.087,
+              "stage": "CoarseRepair { radius: 1, flipped: 17 }"
+            },
+            {
+              "seconds": 19.099,
+              "stage": "CoarseRepair { radius: 2, flipped: 16 }"
+            },
+            {
+              "seconds": 19.127,
+              "stage": "CoarseRepair { radius: 3, flipped: 14 }"
+            },
+            {
+              "seconds": 19.176,
+              "stage": "CoarseRepair { radius: 4, flipped: 14 }"
+            },
+            {
+              "seconds": 19.319,
+              "stage": "CoarseRepair { radius: 1, flipped: 14 }"
+            },
+            {
+              "seconds": 19.334,
+              "stage": "CoarseRepair { radius: 2, flipped: 10 }"
+            },
+            {
+              "seconds": 19.351,
+              "stage": "CoarseRepair { radius: 3, flipped: 10 }"
+            },
+            {
+              "seconds": 19.387,
+              "stage": "CoarseRepair { radius: 4, flipped: 10 }"
+            },
+            {
+              "seconds": 19.437,
+              "stage": "CoarseRepair { radius: 1, flipped: 10 }"
+            },
+            {
+              "seconds": 19.476,
+              "stage": "CoarseRepair { radius: 2, flipped: 7 }"
+            },
+            {
+              "seconds": 19.514,
+              "stage": "CoarseRepair { radius: 3, flipped: 7 }"
+            },
+            {
+              "seconds": 19.592,
+              "stage": "CoarseRepair { radius: 4, flipped: 7 }"
+            },
+            {
+              "seconds": 19.953,
+              "stage": "CoarseRepair { radius: 1, flipped: 2 }"
+            },
+            {
+              "seconds": 19.967,
+              "stage": "CoarseRepair { radius: 2, flipped: 2 }"
+            },
+            {
+              "seconds": 20.064,
+              "stage": "CoarseRepair { radius: 3, flipped: 2 }"
+            },
+            {
+              "seconds": 20.164,
+              "stage": "CoarseRepair { radius: 4, flipped: 2 }"
+            },
+            {
+              "seconds": 20.448,
+              "stage": "CoarseRepair { radius: 1, flipped: 1 }"
+            },
+            {
+              "seconds": 20.458,
+              "stage": "CoarseRepair { radius: 2, flipped: 1 }"
+            },
+            {
+              "seconds": 20.516,
+              "stage": "Fitting"
+            },
+            {
+              "seconds": 20.776,
+              "stage": "Extraction"
+            },
+            {
+              "seconds": 20.88,
+              "stage": "QuadOptimization"
+            },
+            {
+              "seconds": 23.683,
+              "stage": "SurfaceFit"
+            },
+            {
+              "seconds": 24.433,
+              "stage": "OriginalSurfaceValidation"
+            }
+          ],
+          "solver_seconds": 25.346,
+          "output_sha256": "ae157e1cbd7be512dc3564176e1fdd7b3f48983f251579bbf9a4a08a2a7060e5"
+        },
+        {
+          "name": "prepared-run-2",
+          "command": [
+            "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/crates/clay-retopology/target/release/examples/compare",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-resampling-20261106/guarded-5.clay",
+            "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-integer-port-20261106/prepared-run-2.obj",
+            "10000"
+          ],
+          "exit": 0,
+          "process_wall_seconds": 8.52356437803246,
+          "user_seconds": 8.305279999999996,
+          "system_seconds": 0.12569799999999998,
+          "cumulative_child_peak_rss_kib": 182452,
+          "events": [
+            {
+              "seconds": 0.137,
+              "stage": "Sampling"
+            },
+            {
+              "seconds": 0.187,
+              "stage": "Hierarchy { samples: 52130 }"
+            },
+            {
+              "seconds": 0.46,
+              "stage": "Hierarchy { samples: 27969 }"
+            },
+            {
+              "seconds": 0.503,
+              "stage": "Hierarchy { samples: 15131 }"
+            },
+            {
+              "seconds": 0.518,
+              "stage": "Hierarchy { samples: 8179 }"
+            },
+            {
+              "seconds": 0.527,
+              "stage": "Hierarchy { samples: 4442 }"
+            },
+            {
+              "seconds": 0.531,
+              "stage": "Hierarchy { samples: 2404 }"
+            },
+            {
+              "seconds": 0.533,
+              "stage": "Hierarchy { samples: 1302 }"
+            },
+            {
+              "seconds": 0.534,
+              "stage": "Hierarchy { samples: 711 }"
+            },
+            {
+              "seconds": 0.535,
+              "stage": "Hierarchy { samples: 385 }"
+            },
+            {
+              "seconds": 0.536,
+              "stage": "Hierarchy { samples: 210 }"
+            },
+            {
+              "seconds": 0.536,
+              "stage": "Hierarchy { samples: 116 }"
+            },
+            {
+              "seconds": 0.536,
+              "stage": "Hierarchy { samples: 61 }"
+            },
+            {
+              "seconds": 0.536,
+              "stage": "Hierarchy { samples: 34 }"
+            },
+            {
+              "seconds": 0.536,
+              "stage": "Hierarchy { samples: 18 }"
+            },
+            {
+              "seconds": 0.536,
+              "stage": "Hierarchy { samples: 9 }"
+            },
+            {
+              "seconds": 0.536,
+              "stage": "Hierarchy { samples: 5 }"
+            },
+            {
+              "seconds": 0.536,
+              "stage": "Hierarchy { samples: 3 }"
+            },
+            {
+              "seconds": 0.536,
+              "stage": "Hierarchy { samples: 2 }"
+            },
+            {
+              "seconds": 0.536,
+              "stage": "Hierarchy { samples: 1 }"
+            },
+            {
+              "seconds": 0.544,
+              "stage": "Orientation"
+            },
+            {
+              "seconds": 0.83,
+              "stage": "Position"
+            },
+            {
+              "seconds": 1.775,
+              "stage": "Regularity { defects: 467 }"
+            },
+            {
+              "seconds": 2.714,
+              "stage": "Subdivision { long_edges: 3673, fixed_variables: 3294 }"
+            },
+            {
+              "seconds": 2.787,
+              "stage": "Inversions { flipped: 1968 }"
+            },
+            {
+              "seconds": 2.891,
+              "stage": "Repair { radius: 0, flipped: 17 }"
+            },
+            {
+              "seconds": 2.957,
+              "stage": "CoarseRepair { radius: 1, flipped: 17 }"
+            },
+            {
+              "seconds": 2.971,
+              "stage": "CoarseRepair { radius: 2, flipped: 16 }"
+            },
+            {
+              "seconds": 3.004,
+              "stage": "CoarseRepair { radius: 3, flipped: 14 }"
+            },
+            {
+              "seconds": 3.052,
+              "stage": "CoarseRepair { radius: 4, flipped: 14 }"
+            },
+            {
+              "seconds": 3.193,
+              "stage": "CoarseRepair { radius: 1, flipped: 14 }"
+            },
+            {
+              "seconds": 3.207,
+              "stage": "CoarseRepair { radius: 2, flipped: 10 }"
+            },
+            {
+              "seconds": 3.226,
+              "stage": "CoarseRepair { radius: 3, flipped: 10 }"
+            },
+            {
+              "seconds": 3.262,
+              "stage": "CoarseRepair { radius: 4, flipped: 10 }"
+            },
+            {
+              "seconds": 3.312,
+              "stage": "CoarseRepair { radius: 1, flipped: 10 }"
+            },
+            {
+              "seconds": 3.347,
+              "stage": "CoarseRepair { radius: 2, flipped: 7 }"
+            },
+            {
+              "seconds": 3.378,
+              "stage": "CoarseRepair { radius: 3, flipped: 7 }"
+            },
+            {
+              "seconds": 3.452,
+              "stage": "CoarseRepair { radius: 4, flipped: 7 }"
+            },
+            {
+              "seconds": 3.789,
+              "stage": "CoarseRepair { radius: 1, flipped: 2 }"
+            },
+            {
+              "seconds": 3.804,
+              "stage": "CoarseRepair { radius: 2, flipped: 2 }"
+            },
+            {
+              "seconds": 3.899,
+              "stage": "CoarseRepair { radius: 3, flipped: 2 }"
+            },
+            {
+              "seconds": 3.999,
+              "stage": "CoarseRepair { radius: 4, flipped: 2 }"
+            },
+            {
+              "seconds": 4.281,
+              "stage": "CoarseRepair { radius: 1, flipped: 1 }"
+            },
+            {
+              "seconds": 4.29,
+              "stage": "CoarseRepair { radius: 2, flipped: 1 }"
+            },
+            {
+              "seconds": 4.34,
+              "stage": "Fitting"
+            },
+            {
+              "seconds": 4.6,
+              "stage": "Extraction"
+            },
+            {
+              "seconds": 4.697,
+              "stage": "QuadOptimization"
+            },
+            {
+              "seconds": 7.615,
+              "stage": "SurfaceFit"
+            }
+          ],
+          "solver_seconds": 8.365,
+          "output_sha256": "ae157e1cbd7be512dc3564176e1fdd7b3f48983f251579bbf9a4a08a2a7060e5"
+        }
+      ]
+    }
+  },
+  "validation": {
+    "integration_tests": "32 focused audit/public/integer regressions passed before pipeline composition; includes open/closed reconstruction, separate guides and signed-density sizing.",
+    "new_pipeline_tests": "2 regularized_ regressions passed: signed paint plus two guides, and immutable-original validation/cancellation.",
+    "final_commands": [
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--manifest-path",
+          "crates/clay-retopology/Cargo.toml",
+          "--features",
+          "audit",
+          "-j",
+          "1",
+          "original_validation_spacing_",
+          "--",
+          "--test-threads=1"
+        ],
+        "exit": 0,
+        "seconds": 26.054885165998712
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--manifest-path",
+          "crates/clay-retopology/Cargo.toml",
+          "--features",
+          "audit",
+          "-j",
+          "1",
+          "resample::tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "exit": 0,
+        "seconds": 0.3293847859604284
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--manifest-path",
+          "crates/clay-retopology/Cargo.toml",
+          "--features",
+          "audit",
+          "-j",
+          "1",
+          "integer::maxflow::tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "exit": 0,
+        "seconds": 0.07400843396317214
+      },
+      {
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--manifest-path",
+          "crates/clay-retopology/Cargo.toml",
+          "--lib",
+          "-j",
+          "1",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exit": 0,
+        "seconds": 1.2056185419205576
+      }
+    ],
+    "audit_clippy": {
+      "exit": 0,
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--manifest-path",
+        "crates/clay-retopology/Cargo.toml",
+        "--features",
+        "audit",
+        "--lib",
+        "--tests",
+        "--example",
+        "compare",
+        "--example",
+        "audit",
+        "-j",
+        "1",
+        "--",
+        "-D",
+        "warnings"
+      ]
+    },
+    "visual_review": [
+      "whole body",
+      "finger close-up",
+      "underarm close-up"
+    ],
+    "broad_suites": "left to CI per AGENTS.md"
+  },
+  "remaining": [
+    "Application preview/apply and cancellation/progress wiring",
+    "Independent density brush and persistence",
+    "Multiple-path selection UI",
+    "Coarse finger shape and uneven poles",
+    "Further preparation performance work",
+    "Broader meshes, hard boundaries/features and platform CI"
+  ],
+  "current_sources_sha256": {
+    "crates/clay-retopology/src/audit/field_comparison.rs": "a4feeaddee9b546b411e3427b3431fc1e52967860ec51883cd90dbbd1bb08921",
+    "crates/clay-retopology/src/audit/integer_comparison.rs": "2e4423cffe47a18b37ab5aecfb833e3ede1566c5b5d98c3271401df12837b12a",
+    "crates/clay-retopology/src/audit/orientation_repair.rs": "a7fdd847316292b6d4ce2f47167f5b208cdcdf33b845585d286112f93dd4c944",
+    "crates/clay-retopology/src/audit/patch_rebuild.rs": "02b46b56a8c00d99ba5603bcb195182e2d1776cbaa23e2741216b8cc2ae3f15c",
+    "crates/clay-retopology/src/audit/repair_patch.rs": "4b640302fa18e73f2a430fb583e9002580ed6ae9e15820a3fe33f9fa5fd4078f",
+    "crates/clay-retopology/src/audit/repair_trace.rs": "8829402ba2426333ab367f30c18326542af50c43df943dbabdd8b3ad9c2576cc",
+    "crates/clay-retopology/src/audit.rs": "2d2509d33e1702b0a49ad46980b5bfaa44fe53025d2ccd03f0bfd1195c955f11",
+    "crates/clay-retopology/src/coarse.rs": "cad76fbd21d9742129e0cc759fe4178ff290dce130ed14f2d62fdc9a623c1401",
+    "crates/clay-retopology/src/coarse_sat.rs": "e77e2686a18551e615ffba0c08af3703cc7e2d9d65806cda5b3a88a333285be0",
+    "crates/clay-retopology/src/curvature.rs": "b51798bd356a9ebbf7c76a98443206dc9f7a8d07c5512228c39473231c480cf5",
+    "crates/clay-retopology/src/cycles.rs": "2b7c7acb42b143802270e032003ff00dd679d904c25793d86bc23d82ccfe51cb",
+    "crates/clay-retopology/src/extraction.rs": "9876af479985afb50d5d91a3bc912c2bcf15f9aa8a62f7f67169f81fc03ae52a",
+    "crates/clay-retopology/src/field/adjacency.rs": "d5740cd6b1c1e78e4e69605722f36d36543702f704d72b23959b78c1a93fb168",
+    "crates/clay-retopology/src/field/reference.rs": "4d37017e72bf2a4dff37841a4dc46863bac4e96bdc4dc04a55c49d49f034514f",
+    "crates/clay-retopology/src/field.rs": "5ee2a7ffdfd84cdfc53722defb6fad4a105a6550303c49113c6183f93f7620cf",
+    "crates/clay-retopology/src/flow.rs": "749d3dbbc3ae2b85c6b6b0f05f8e2dd514acbdae9a612cb9f83f02e12d37f3d2",
+    "crates/clay-retopology/src/geometry.rs": "fcfcdd58d0daf700fe878f8a1c0430f77e56549f549a3b07815d6db09f07d0ba",
+    "crates/clay-retopology/src/integer/maxflow.rs": "1dcc2f375c7ae685b3fc9de2b6d5d3021734ed3e109883338d7cc02eff8a282b",
+    "crates/clay-retopology/src/integer/reference.rs": "99a7877978918a86fa240147994669236a7624cdfee94c6bf999162110dc997a",
+    "crates/clay-retopology/src/integer/reference_rng.rs": "01f9dfb74bfc6f6dce788e3cec3d73cb8363307f77641905404aa8ed00e51e44",
+    "crates/clay-retopology/src/integer.rs": "09a3f91373a1ad068e9f5ddc1dbf067bd76092cc3a217dd5cdc81e2fac80fcc5",
+    "crates/clay-retopology/src/lib.rs": "d7086fb179d8931b164ab590a031eab1f6bdcc697fb9ea39111adc4c94d67622",
+    "crates/clay-retopology/src/quad.rs": "5e0b6a30afd11361a024dc0f3d99a2a8b76c4a3ba75de741f49d4622177d678f",
+    "crates/clay-retopology/src/resample.rs": "40084d286827353d936474be18e35d493b1335c0939bd5c3ed4d1edd84bc178b",
+    "crates/clay-retopology/src/sat/grid.rs": "33ff47f6aeafcde2334d5477bb34464f09c7ebc626f49274c0d7df7cb1cc1c65",
+    "crates/clay-retopology/src/sat.rs": "6f9872fd89cbaf85bb3a07a343b8d43618bcad5593f2d222c8e6671c9e688567",
+    "crates/clay-retopology/src/surface.rs": "5154f47333e82c379e541c90231ce24ae47dea4ad59937004bed89782eac21c3",
+    "crates/clay-retopology/src/symmetry.rs": "e2d346c215a10f96c3fb792dbd164237d73ef4edc8014673d3d194193659647b",
+    "crates/clay-retopology/src/topology.rs": "e34115a1e6f64fde06373a317c0dfdcad17307ac5e9dd87edffa633997e3e3e6"
+  },
+  "source_hash_note": "Current sources include later test additions and test-only lint cleanup; release executable hash is separately recorded in performance.raw.",
+  "render_runs": [
+    {
+      "command": [
+        "python3",
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/scripts/retopology/render-patch-rebuild.py",
+        "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-integer-port-20261106/original-run.mesh.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-integer-port-20261106/original-run.quality.json",
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/docs/validation/guided-retopology/native-integer-port.png",
+        "--candidate-label",
+        "Rust pipeline: 10,122 quads",
+        "--caption",
+        "Original sculpt through Rust only. Passes existing checks; fingers remain coarse. Fixed render diagonals."
+      ],
+      "output_sha256": "7a3554f3b3ab06e0d0255d23e8f1216dd1542b5a3d3554d5af6845b2eff72a4d"
+    },
+    {
+      "command": [
+        "python3",
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/scripts/retopology/render-patch-rebuild.py",
+        "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-integer-port-20261106/original-run.mesh.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-integer-port-20261106/original-run.quality.json",
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/docs/validation/guided-retopology/native-integer-port-hand.png",
+        "--candidate-label",
+        "Rust pipeline: 10,122 quads",
+        "--caption",
+        "Original sculpt through Rust only. Passes existing checks; fingers remain coarse. Fixed render diagonals.",
+        "--yaw",
+        "-.7",
+        "--pitch",
+        ".25",
+        "--zoom",
+        "3.5",
+        "--center",
+        "-2.5",
+        ".3",
+        "1.2"
+      ],
+      "output_sha256": "a676672dc614addf30e90be80f520af4d253d4804db9e91632f2e6ba60332aed"
+    },
+    {
+      "command": [
+        "python3",
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/scripts/retopology/render-patch-rebuild.py",
+        "/home/mark/Documents/ChatGPT/Clay From/pr119-test-018fb58/clay-session-retopo2/stage-000.clay",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-integer-port-20261106/original-run.mesh.json",
+        "/home/mark/Documents/ChatGPT/Clay From/retopology-review/native-integer-port-20261106/original-run.quality.json",
+        "/home/mark/Documents/ChatGPT/Clay From/clay-form-guided-retopo/docs/validation/guided-retopology/native-integer-port-underarm.png",
+        "--candidate-label",
+        "Rust pipeline: 10,122 quads",
+        "--caption",
+        "Original sculpt through Rust only. Passes existing checks; fingers remain coarse. Fixed render diagonals.",
+        "--yaw",
+        "1.2",
+        "--pitch",
+        ".35",
+        "--zoom",
+        "3.3",
+        "--center",
+        ".97",
+        "-.1",
+        ".2"
+      ],
+      "output_sha256": "658813c2b3bc5b4637b4ad903af42697258ab330f3583c52dc0c4bb539bda661"
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "date": "2026-11-04",
+  "status": "experimental_not_integrated",
+  "crate": "crates/clay-retopology",
+  "source_digest_sha256": "9ec8765dd15012282225cc10d28c2e601a845103b2a215481da77dda2e38a178",
+  "source_digest_method": "Sorted relative paths followed by NUL, file bytes, NUL; Cargo.toml, Cargo.lock, src/*.rs and examples/*.rs.",
+  "fixture": {
+    "name": "asymmetric bulb",
+    "construction": "Four midpoint subdivisions of an octahedron projected to the unit sphere; warp x*(1+0.24*y), 1.4*y, z*(0.85+0.25*exp(-((y-0.25)/0.4)^2)).",
+    "source_sha256": "8a1d9eca303cc1fffd3f2eb2535d37cb24db76db4a0009e10c3275154ce76074",
+    "input_vertices": 1026,
+    "input_triangles": 2048,
+    "target_quads": 300,
+    "preserve_sharp": false,
+    "adaptive": 0,
+    "guides": [],
+    "detail": [],
+    "output_vertices": 274,
+    "output_quads": 272,
+    "elapsed_seconds": 0.354,
+    "peak_rss_kib": 10100,
+    "position_defects_after": 0,
+    "flipped_after": 0,
+    "max_fitting_distance": 0.04024387542642896,
+    "max_sampled_bidirectional_surface_error": 0.036018613302637975,
+    "height_model_units": 2.8,
+    "obj_sha256": "74f5b673e5ffd7c35284aaba9cfe6961047156c6e9b3d93a7521d937e6433b7c",
+    "image": "native-bulb.png"
+  },
+  "limits": {
+    "max_vertices": 150000,
+    "process_memory_mib": 500,
+    "process_swap_mib": 0,
+    "compiler_jobs": 1,
+    "build_profile": "dev, opt-level 2",
+    "comparison_timeout_seconds": 240
+  },
+  "notes": [
+    "Single bounded run; not a speed comparison with Blender or QuadriFlow.",
+    "The visual result was checked against the source at the same camera.",
+    "Multiple guides and density fields have focused tests; painting UI, saved attributes, and selection of multiple paths are not integrated.",
+    "Character validation remains unresolved."
+  ],
+  "biped": {
+    "source_sha256": "f4c3c753a19a1f867f133d2d7794d8c28489c82143d79233d80a7d592b9b581f",
+    "input_vertices": 52601,
+    "input_triangles": 105198,
+    "preserve_sharp": false,
+    "adaptive": 0,
+    "guides": [],
+    "detail": [],
+    "runs": [
+      {
+        "target_quads": 5000,
+        "elapsed_seconds": 41.542,
+        "peak_rss_kib": 247724,
+        "initial_sampling_vertices": 66356,
+        "initial_position_defects": 426,
+        "inversions_before_repair": 1308,
+        "inversions_after_repair": 0,
+        "initial_geometric_folded_triangles": 45,
+        "unresolved_geometric_folded_triangles": 16,
+        "result": "rejected",
+        "failure_stage": "SurfaceFit",
+        "error": "Retopology fitting could not resolve 16 of 45 folded surface triangles",
+        "output_written": false
+      },
+      {
+        "target_quads": 10000,
+        "elapsed_seconds": 87.202,
+        "peak_rss_kib": 300400,
+        "initial_sampling_vertices": 81636,
+        "initial_position_defects": 678,
+        "inversions_before_repair": 1716,
+        "inversions_after_repair": 0,
+        "result": "rejected",
+        "failure_stage": "SurfaceFit",
+        "error": "Retopology vertex 4897 drifted 0.09369 from the source (local grid spacing 0.05762)",
+        "output_written": false
+      }
+    ]
+  },
+  "checks": {
+    "focused_tests_passed": 19,
+    "clippy_all_targets": "passed with warnings denied",
+    "rustfmt": "passed",
+    "app_build": "not run; backend not integrated",
+    "ci": "workflow updated; remote CI not run for these working-tree changes"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "purpose": "Small integer-only regression for rejecting contractions that invert previously valid neighbouring faces and restoring rejected offset changes.",
+  "source_snapshot_sha256": "b55081fda2eaec0b8f36fec0370f28c44658c6ada5e7a0fa0e9f7fc61cea6b09",
+  "source_coarse_export_sha256": "b4d4d9149d6716b231f7a646ae0425f4a892a1fbab5f48243328ad1354d7059f",
+  "selection": "First three negative-area source faces in index order; include every incident face in each of their three closed vertex fans. Renumber selected edges in ascending source-edge order; preserve offsets, per-axis permissions, face ordering and rotations.",
+  "negative_seed_faces": [69460, 69462, 69776],
+  "source_faces": [69460, 69462, 69465, 69776, 69778, 69781, 69788, 167295, 167444, 167446, 167447, 167448, 167449, 167452, 174809, 174823, 174830, 174883, 174889, 174895, 179095, 179097, 179100, 179119, 179124, 179128, 179129, 179130, 179135, 179148, 179153, 179154, 179155, 179156, 179170, 181578, 181590, 181591, 181592, 181598, 181599, 181600],
+  "faces": 42,
+  "edges": 78,
+  "geometry_included": false,
+  "anatomical_predicates": false
+}

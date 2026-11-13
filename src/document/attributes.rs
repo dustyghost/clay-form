@@ -57,7 +57,11 @@ impl Document {
             name
         };
         let index = if all {
-            0
+            self.mesh()
+                .vertex_groups
+                .iter()
+                .filter(|g| !g.purpose.is_selection())
+                .count()
         } else {
             self.mesh().vertex_groups.len()
         };
@@ -75,7 +79,7 @@ impl Document {
                         .map(|i| mesh.face_visible(i))
                         .collect();
                     mesh.set_face_visibility(visible);
-                    mesh.vertex_groups.clear();
+                    mesh.vertex_groups.retain(|g| !g.purpose.is_selection());
                     mesh.polygroups.clear();
                 }
                 let previous = mesh.vertex_groups.clone();
@@ -133,6 +137,7 @@ impl Document {
     }
     pub fn set_vertex_group_visible(&mut self, index: usize, visible: bool) -> Result<(), String> {
         self.edit_group_meshes("Vertex group visibility", |mesh| {
+            mesh.require_selection_group(index)?;
             mesh.vertex_groups
                 .get_mut(index)
                 .ok_or("Vertex group no longer exists")?

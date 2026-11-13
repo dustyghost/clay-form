@@ -188,6 +188,9 @@ impl App {
             self.ui.status = error;
             return;
         }
+        if matches!(command, Command::Undo | Command::Redo) && self.ui.projection.open {
+            self.clear_projection_preview();
+        }
         let projection_changed = match command {
             Command::ResetView => true,
             Command::SetPerspective(value) => value != self.camera.perspective,
@@ -320,13 +323,15 @@ impl App {
             | Command::ModelSelectLoop
             | Command::GroupModelSelection(..)) => self.dispatch_modeling(command),
             Command::EditEdges(edit) => self.start_mesh_job(Operation::Edges(edit)),
-            Command::Mirror(axis, source_positive) => {
-                self.start_mesh_job(Operation::Mirror(crate::sculpt::MirrorOptions {
+            Command::Mirror(axis, source_positive) => self.start_mesh_job(Operation::Mirror(
+                crate::sculpt::MirrorOptions {
                     axis,
                     source_positive,
                     offset: self.document.symmetry().center.dot(axis.vector()),
-                }))
-            }
+                },
+                self.ui.mirror_quad_bridge && self.document.mesh().quad_mirror_available(),
+                self.ui.mirror_centreline,
+            )),
             Command::Action(_) => unreachable!(),
             Command::AddReference(file) => self.add_reference(file),
             Command::ArrangeReferences(active) => {
@@ -721,6 +726,7 @@ impl App {
                 Ok(())
             }
             Command::OpenProjection => self.open_projection(),
+            Command::OpenRetopology => self.open_retopology(),
             Command::OpenFusion => self.open_fusion(),
             Command::DiscoverFusion => self.discover_fusion(),
             Command::PreviewFusion => self.preview_fusion(),

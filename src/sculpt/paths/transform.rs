@@ -3,10 +3,19 @@ use super::*;
 impl SurfacePath {
     /// Release surface attachment without changing the displayed route.
     pub fn detached(&self) -> Self {
-        let route = self.attached_points().map(<[PathPoint]>::to_vec);
+        let route = if self.offset != 0. {
+            Some(self.dense_curve())
+        } else {
+            self.attached_points().map(<[PathPoint]>::to_vec)
+        };
         let mut result = self.clone();
+        for point in &mut result.points {
+            point.position = self.display_position(*point);
+        }
         result.mode = PathMode::Free;
         result.surface_signature = 0;
+        result.offset = 0.;
+        result.ring_orientation = None;
         result.attached_route = route.map(|points| AttachedRoute {
             points,
             shape_signature: result.shape_signature(),
@@ -95,6 +104,8 @@ mod tests {
             closed: false,
             seam: 0,
             surface_signature: 0,
+            offset: 0.,
+            ring_orientation: None,
             attached_route: None,
         }
     }

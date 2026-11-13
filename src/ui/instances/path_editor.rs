@@ -48,7 +48,12 @@ pub(super) fn controls(
                         }
                     ))
                     .show_ui(ui, |ui| {
-                        for (i, g) in mesh.vertex_groups.iter().enumerate() {
+                        for (i, g) in mesh
+                            .vertex_groups
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, g)| g.purpose.is_selection())
+                        {
                             let color =
                                 crate::sculpt::Mesh::group_color(i).map(|v| (v * 255.) as u8);
                             if ui
@@ -69,7 +74,13 @@ pub(super) fn controls(
             if groups_changed {
                 groups.orient_piece(mesh, &mut a.middle);
             }
-            if mesh.vertex_groups.len() < 3 {
+            if mesh
+                .vertex_groups
+                .iter()
+                .filter(|g| g.purpose.is_selection())
+                .count()
+                < 3
+            {
                 ui.weak("Cancel the preview and use Selection to vertex group to mark three adjoining face regions on the source.");
             }
         }

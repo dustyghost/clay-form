@@ -352,7 +352,7 @@ impl GuidedPaths {
         Ok(())
     }
 }
-fn front(scene: &Scene, sample: &PathSample) -> bool {
+pub(super) fn front(scene: &Scene, sample: &PathSample) -> bool {
     let view = if scene.eye_distance == 0. {
         scene.view
     } else {

@@ -33,6 +33,243 @@ struct Guide {
 }
 
 #[test]
+#[ignore = "whole-sculpt native app workflow; requires Vulkan, CLAY_GUIDE_PREVIEW and CLAY_RETOPO_SOURCE"]
+fn native_retopology_whole_sculpt_offscreen_review() {
+    let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    let source = std::env::var("CLAY_RETOPO_SOURCE").unwrap();
+    let project = crate::persistence::load_project(&source).unwrap();
+    let mut g = Guide::new(&directory, [1300, 1000]);
+    g.toolbar = false;
+    g.interactive = true;
+    g.app.document.replace_project(project, &source).unwrap();
+    let before = g.app.document.project();
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    g.app.camera.zoom = 0.23;
+    g.app.camera.pan = Vec2::new(200., 0.);
+    g.app.ui.wire = false;
+    g.app.dispatch(Command::OpenRetopology, &g.ctx);
+    if let Ok(target) = std::env::var("CLAY_RETOPO_TARGET") {
+        g.app.ui.projection.layout.target = target.parse().unwrap();
+    }
+    let symmetry = std::env::var("CLAY_RETOPO_SYMMETRY").ok();
+    let centreline = std::env::var_os("CLAY_RETOPO_CENTRELINE").is_some();
+    g.app.ui.projection.layout.symmetry_centreline = centreline;
+    g.app.ui.projection.layout.symmetry_axis = None;
+    if let Some(side) = symmetry.as_deref() {
+        g.app.ui.projection.layout.symmetry_axis = Some(crate::sculpt::Axis::X);
+        g.app.ui.projection.layout.symmetry_source = match side {
+            "original" => crate::sculpt::retopology::SymmetrySource::Original,
+            "+" => crate::sculpt::retopology::SymmetrySource::Positive,
+            "-" => crate::sculpt::retopology::SymmetrySource::Negative,
+            _ => panic!("Use original, +, or - for CLAY_RETOPO_SYMMETRY"),
+        };
+    }
+    eprintln!("App target {}", g.app.ui.projection.layout.target);
+    g.save("whole-source");
+    click_guide_label(&mut g, "Preview layout");
+    let start = std::time::Instant::now();
+    while g.app.ui.projection.busy {
+        g.app.poll_projection();
+        assert!(start.elapsed().as_secs() < 150, "retopology timed out");
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(
+        g.app
+            .ui
+            .projection
+            .report
+            .as_ref()
+            .is_some_and(|r| r.can_apply()),
+        "{}",
+        g.app.ui.status
+    );
+    eprintln!(
+        "App preview {:.3}s: {}",
+        start.elapsed().as_secs_f64(),
+        g.app.ui.status
+    );
+    assert!(g.app.document.project() == before);
+    g.save("whole-preview-front");
+    g.app.camera.yaw = 0.5;
+    g.app.camera.pitch = 0.15;
+    g.save("whole-preview-quarter");
+    click_guide_label(&mut g, "Apply as new model");
+    assert_eq!(g.app.document.model_count(), before.submodels.len() + 2);
+    assert_eq!(g.app.document.model(1).unwrap().mesh, &before.mesh);
+    let mesh = g.app.document.mesh();
+    mesh.validate_closed().unwrap();
+    if symmetry.is_some() {
+        assert_eq!(mesh.triangles.len(), mesh.quads.len() * 2);
+        let offset = before.symmetry.center.0;
+        assert_eq!(
+            mesh.quads.iter().any(|q| {
+                q.iter().any(|&i| mesh.vertices[i].0 > offset)
+                    && q.iter().any(|&i| mesh.vertices[i].0 < offset)
+            }),
+            !centreline
+        );
+        if centreline {
+            assert!(mesh.vertices.iter().any(|v| v.0 == offset));
+        }
+    }
+    let after = g.app.document.project();
+    crate::persistence::save_project(
+        &directory
+            .join("integrated-retopology.clay")
+            .to_string_lossy(),
+        &after,
+    )
+    .unwrap();
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert!(g.app.document.project() == before);
+    g.app.dispatch(Command::Redo, &g.ctx);
+    assert!(g.app.document.project() == after);
+}
+
+#[test]
+#[ignore = "native retopology painting and multi-path UI; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn native_retopology_controls_offscreen_review() {
+    use crate::sculpt::{Geometry, paths::PathMode, retopology::tests::fixture};
+    let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1200, 1400]);
+    g.toolbar = false;
+    g.interactive = true;
+    let (mesh, path) = fixture(true);
+    g.app
+        .document
+        .replace_geometry(Geometry::new(mesh))
+        .unwrap();
+    for name in ["Guide A", "Guide B"] {
+        g.app
+            .document
+            .create_path(
+                name.into(),
+                PathMode::Surface,
+                path.points.clone(),
+                false,
+                0.,
+            )
+            .unwrap();
+    }
+    g.app.camera.pan = Vec2::new(210., 0.);
+    g.app.camera.yaw = 0.;
+    g.app.camera.pitch = 0.;
+    g.app.camera.zoom = 0.6;
+    g.app.ui.wire = false;
+    g.app.dispatch(Command::OpenRetopology, &g.ctx);
+    g.app.ui.projection.layout.target = 300;
+    g.app.ui.projection.density_radius = 80.;
+    g.app.ui.projection.density_brush_strength = 1.;
+    g.save("native-controls");
+    click_guide_label(&mut g, "Guide A");
+    click_guide_label(&mut g, "Guide B");
+    assert_eq!(g.app.ui.projection.flow_paths.len(), 2);
+    let before = g.app.document.project();
+    click_guide_label(&mut g, "More detail");
+    assert_eq!(
+        g.app.ui.projection.density_paint,
+        Some(crate::sculpt::retopology::DensityPaint::More)
+    );
+    let rect = g.frame(vec![]).0;
+    let point = rect.center() + g.app.camera.pan;
+    g.stroke(point, point + Vec2::new(0., 20.));
+    assert!(
+        g.app
+            .document
+            .mesh()
+            .retopology_detail()
+            .iter()
+            .any(|w| *w > 0.1)
+    );
+    assert_eq!(g.app.document.mesh().mask, before.mesh.mask);
+    assert_eq!(g.app.document.mesh().vertices, before.mesh.vertices);
+    g.save("native-density-more");
+    let painted = g.app.document.project();
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert!(g.app.document.project() == before, "{}", g.app.ui.status);
+    g.app.dispatch(Command::Redo, &g.ctx);
+    assert!(g.app.document.project() == painted, "{}", g.app.ui.status);
+    let held = point + Vec2::new(65., 0.);
+    g.frame(vec![
+        egui::Event::PointerMoved(held),
+        primary_event(held, true),
+    ]);
+    g.frame(vec![egui::Event::PointerMoved(held + Vec2::new(0., 20.))]);
+    assert!(g.app.document.project() != painted);
+    g.app.dispatch(Command::Undo, &g.ctx);
+    g.frame(vec![egui::Event::PointerMoved(held + Vec2::new(0., 40.))]);
+    g.frame(vec![primary_event(held, false), egui::Event::PointerGone]);
+    assert!(
+        g.app.document.project() == painted,
+        "Undo must latch until release"
+    );
+    click_guide_label(&mut g, "Less detail");
+    g.stroke(point, point + Vec2::new(0., 20.));
+    assert!(
+        g.app
+            .document
+            .mesh()
+            .retopology_detail()
+            .iter()
+            .any(|w| *w < -0.1)
+    );
+    g.save("native-density-less");
+    let strength = g
+        .app
+        .document
+        .mesh()
+        .retopology_detail()
+        .iter()
+        .map(|v| v.abs())
+        .sum::<f32>();
+    click_guide_label(&mut g, "Automatic / erase");
+    g.stroke(point, point + Vec2::new(0., 20.));
+    assert!(
+        g.app
+            .document
+            .mesh()
+            .retopology_detail()
+            .iter()
+            .map(|v| v.abs())
+            .sum::<f32>()
+            < strength
+    );
+    g.save("native-density-automatic");
+    click_guide_label(&mut g, "Inspect");
+    click_guide_label(&mut g, "Preview layout");
+    assert!(g.app.ui.projection.busy);
+    click_guide_label(&mut g, "Cancel");
+    assert!(!g.app.ui.projection.busy);
+    assert!(g.app.projection.draft.is_none());
+    assert_eq!(g.app.document.model_count(), 1);
+    assert_eq!(g.app.document.mesh().vertices, before.mesh.vertices);
+    g.app.dispatch(Command::OpenRetopology, &g.ctx);
+    g.app.ui.projection.layout.target = 300;
+    click_guide_label(&mut g, "Preview layout");
+    super::projection::finish_projection(&mut g.app);
+    assert!(
+        g.app
+            .ui
+            .projection
+            .report
+            .as_ref()
+            .is_some_and(|r| r.can_apply()),
+        "{}",
+        g.app.ui.status
+    );
+    g.save("native-preview");
+    let painted = g.app.document.project();
+    click_guide_label(&mut g, "Apply as new model");
+    assert_eq!(g.app.document.model_count(), 2);
+    g.app.document.mesh().validate_closed().unwrap();
+    g.app.dispatch(Command::Undo, &g.ctx);
+    assert!(g.app.document.project() == painted);
+}
+
+#[test]
 #[ignore = "mesh fusion controls and visual review; requires Vulkan"]
 fn local_fusion_controls_offscreen_review() {
     use crate::sculpt::{Geometry, Primitive, PrimitiveKind, Submodel, Vec3};
@@ -1228,7 +1465,11 @@ impl Guide {
                 self.app.show_recovery(ctx);
                 commands.extend(self.app.ui.project_file_dialog(ctx));
                 commands.extend(self.app.ui.alpha_popup(ctx));
-                commands.extend(self.app.ui.projection_window(ctx, &self.app.document));
+                commands.extend(self.app.ui.projection_window(
+                    ctx,
+                    &self.app.document,
+                    &self.app.camera,
+                ));
                 commands.extend(self.app.ui.fusion_window(ctx, &self.app.document));
             },
         );
@@ -2750,7 +2991,7 @@ fn detail_projection_offscreen_review() {
         assert!(std::time::Instant::now() < deadline);
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
-    assert!(g.app.ui.projection.report.as_ref().unwrap().moved() > 0);
+    assert!(g.app.ui.projection.report.as_ref().unwrap().can_apply());
     let preview = g.app.projection.draft.as_ref().unwrap().mesh.clone();
     assert_eq!(g.app.document.geometry_snapshot(), before);
     assert!(!g.app.document.is_dirty());
@@ -3475,7 +3716,7 @@ fn mesh_refinement_offscreen_review() {
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
     assert!(
-        g.app.ui.projection.report.as_ref().unwrap().moved() > 0,
+        g.app.ui.projection.report.as_ref().unwrap().can_apply(),
         "{}",
         g.app.ui.status
     );
@@ -4724,6 +4965,78 @@ fn paint_target_scope_inspection_offscreen_review() {
     g.save("paint-target-fallback");
     click_guide_label(&mut g, "Restore workspace");
     assert!(g.app.ui.preferences.paint_workspace_backup.is_none());
+}
+
+#[test]
+#[ignore = "guided retopology controls and comparison; requires Vulkan and CLAY_GUIDE_PREVIEW"]
+fn guided_retopology_offscreen_review() {
+    use crate::sculpt::{Geometry, paths::PathMode, retopology::tests::fixture};
+    let directory = std::path::PathBuf::from(std::env::var("CLAY_GUIDE_PREVIEW").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    for (shape, bulb) in [("cylinder", false), ("bulb", true)] {
+        let mut g = Guide::new(&directory, [1200, 800]);
+        g.toolbar = false;
+        g.interactive = true;
+        let (mesh, path) = fixture(bulb);
+        g.app
+            .document
+            .replace_geometry(Geometry::new(mesh))
+            .unwrap();
+        let id = g
+            .app
+            .document
+            .create_path("Diagonal".into(), PathMode::Surface, path.points, false, 0.)
+            .unwrap();
+        let before = g.app.document.project();
+        g.app.camera.pan = Vec2::new(175., 0.);
+        g.app.camera.pitch = 0.22;
+        g.app.camera.zoom = 0.68;
+        g.app.dispatch(Command::OpenRetopology, &g.ctx);
+        g.app.ui.projection.layout.target = 460;
+        assert!(g.app.ui.projection.open, "{}", g.app.ui.status);
+        g.save(&format!("{shape}-controls"));
+        for guided in [false, true] {
+            // Real settings widgets invalidate the previous draft.
+            g.app.dispatch(Command::ClearProjectionPreview, &g.ctx);
+            g.app.ui.projection.flow_paths = if guided { vec![id] } else { Vec::new() };
+            g.app.ui.projection.layout.density = if guided { 1. } else { 0. };
+            g.frame(vec![]);
+            click_guide_label(&mut g, "Preview layout");
+            assert!(
+                g.app.ui.projection.busy,
+                "Preview click launches a new worker"
+            );
+            super::projection::finish_projection(&mut g.app);
+            assert!(g.app.ui.projection.report.as_ref().unwrap().can_apply());
+            if guided {
+                let crate::ui::SurfaceReport::Retopology { guides, .. } =
+                    g.app.ui.projection.report.as_ref().unwrap()
+                else {
+                    unreachable!()
+                };
+                assert!(!guides.is_empty());
+                let (_, pixels) = g.frame(vec![]);
+                assert!(
+                    pixels
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
+                        .filter(|p| p[0] > 235 && p[1] > 165 && p[1] < 205 && p[2] < 110)
+                        .count()
+                        > 100,
+                    "Visible path overlay"
+                );
+            }
+            g.save(&format!(
+                "{shape}-{}",
+                if guided { "guided" } else { "baseline" }
+            ));
+        }
+        click_guide_label(&mut g, "Apply as new model");
+        assert_eq!(g.app.document.undo_label(), Some("Guided retopology"));
+        g.app.dispatch(Command::Undo, &g.ctx);
+        assert!(g.app.document.project() == before);
+    }
 }
 
 #[test]

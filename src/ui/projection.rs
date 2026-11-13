@@ -5,19 +5,40 @@ use crate::{
     sculpt::{ProjectionOptions, ProjectionReport, RelaxationOptions, RelaxationReport},
 };
 
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SurfaceMode {
+    #[default]
+    Projection,
+    Relaxation,
+    Retopology,
+}
+
 pub(crate) enum SurfaceReport {
+    Retopology {
+        quads: usize,
+        polygons: usize,
+        changed: bool,
+        guides: crate::sculpt::retopology::GuideCurves,
+    },
     Projection(ProjectionReport),
     Relaxation(RelaxationReport),
 }
 impl SurfaceReport {
-    pub fn moved(&self) -> usize {
+    pub fn can_apply(&self) -> bool {
         match self {
-            Self::Projection(r) => r.moved,
-            Self::Relaxation(r) => r.moved,
+            Self::Retopology { changed, .. } => *changed,
+            Self::Projection(r) => r.moved > 0,
+            Self::Relaxation(r) => r.moved > 0,
         }
     }
     pub fn summary(&self) -> String {
         match self {
+            Self::Retopology {
+                quads, polygons, ..
+            } => format!(
+                "{polygons} polygons · {quads} quads · {} triangles",
+                polygons - quads
+            ),
             Self::Projection(r) => r.summary(),
             Self::Relaxation(r) => r.summary(),
         }
@@ -26,7 +47,15 @@ impl SurfaceReport {
 #[derive(Default)]
 pub(crate) struct ProjectionControls {
     pub open: bool,
-    pub relaxation: bool,
+    pub mode: SurfaceMode,
+    pub layout: crate::sculpt::retopology::Options,
+    pub flow_paths: Vec<u64>,
+    pub density_paint: Option<crate::sculpt::retopology::DensityPaint>,
+    pub density_radius: f32,
+    pub density_brush_strength: f32,
+    pub progress: String,
+    pub error: Option<String>,
+    pub hide_flow_guide: bool,
     pub relaxation_options: RelaxationOptions,
     pub source: Option<ProjectionSource>,
     pub options: ProjectionOptions,
@@ -44,6 +73,23 @@ impl UiState {
         if design::help(ui.add_enabled(enabled, design::button(ui, Glyph::Mesh, "Relax mesh…")), "Redistribute vertices along the surface. Mask areas to protect them; preview before applying.").customize(Action::RelaxMesh).clicked() {
             commands.push(Command::OpenRelaxation);
         }
+        let availability = document.require_retopology_target();
+        if design::help(
+            ui.add_enabled(
+                !self.mesh_busy && availability.is_ok(),
+                design::button(ui, Glyph::Mesh, "Guided retopology…"),
+            ),
+            availability
+                .as_ref()
+                .err()
+                .map(String::as_str)
+                .unwrap_or(Action::GuidedRetopology.help().unwrap()),
+        )
+        .customize(Action::GuidedRetopology)
+        .clicked()
+        {
+            commands.push(Command::OpenRetopology);
+        }
         ui.collapsing("Detail projection", |ui| {
             ui.weak("Keep a reference before remeshing or adaptive sculpting.");
             let enabled = !self.mesh_busy && document.require_projection_target().is_ok();
@@ -59,12 +105,16 @@ impl UiState {
         &mut self,
         ctx: &egui::Context,
         document: &Document,
+        camera: &Camera,
     ) -> Vec<Command> {
         let mut commands = Vec::new();
         if !self.projection.open {
             return commands;
         }
-        if self.projection.relaxation {
+        if self.projection.mode == SurfaceMode::Retopology {
+            return self.retopology_window(ctx, document, camera);
+        }
+        if self.projection.mode == SurfaceMode::Relaxation {
             return self.relaxation_window(ctx, document);
         }
         let mut open = true;
@@ -115,7 +165,7 @@ impl UiState {
             } else if !state.busy { ui.label("Preview required before Apply."); }
             ui.horizontal_wrapped(|ui| {
                 if ui.add_enabled(!state.busy && state.source.is_some(), design::button(ui, Glyph::Mesh, "Preview projection")).clicked() { commands.push(Command::PreviewProjection); }
-                if ui.add_enabled(!state.busy && old == (state.source, state.options) && state.report.as_ref().is_some_and(|r| r.moved() > 0), design::button(ui, Glyph::Mesh, "Apply projection")).clicked() { commands.push(Command::ApplyProjection); }
+                if ui.add_enabled(!state.busy && old == (state.source, state.options) && state.report.as_ref().is_some_and(SurfaceReport::can_apply), design::button(ui, Glyph::Mesh, "Apply projection")).clicked() { commands.push(Command::ApplyProjection); }
                 if ui.add(design::button(ui, Glyph::Delete, "Cancel")).clicked() { commands.push(Command::CancelProjection); }
             });
         });
@@ -152,7 +202,7 @@ impl UiState {
             ui.weak("Orbit and zoom to inspect · Escape cancels");
             ui.horizontal_wrapped(|ui| {
                 if ui.add_enabled(!state.busy,design::button(ui,Glyph::Mesh,"Preview relaxation")).clicked() {commands.push(Command::PreviewProjection);}
-                if ui.add_enabled(!state.busy && old==state.relaxation_options && state.report.as_ref().is_some_and(|r|r.moved()>0),design::button(ui,Glyph::Mesh,"Apply relaxation")).clicked() {commands.push(Command::ApplyProjection);}
+                if ui.add_enabled(!state.busy && old==state.relaxation_options && state.report.as_ref().is_some_and(SurfaceReport::can_apply),design::button(ui,Glyph::Mesh,"Apply relaxation")).clicked() {commands.push(Command::ApplyProjection);}
                 if ui.add(design::button(ui,Glyph::Delete,"Cancel")).clicked() {commands.push(Command::CancelProjection);}
             });
         });

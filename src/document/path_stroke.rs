@@ -531,6 +531,8 @@ mod tests {
             closed: false,
             seam: 0,
             surface_signature: mesh_signature(doc.mesh()),
+            offset: 0.,
+            ring_orientation: None,
             attached_route: None,
             corner_rounding: Vec::new(),
             points: [Vec3(-0.5, -0.2, 0.), Vec3(0., 0.2, 0.), Vec3(0.5, -0.2, 0.)]
