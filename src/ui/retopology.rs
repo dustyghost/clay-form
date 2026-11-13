@@ -2,10 +2,20 @@
 use super::{projection::ProjectionControls, *};
 use crate::sculpt::{Axis, paths::PathMode, retopology::SymmetrySource};
 
+fn setting_label(ui: &mut egui::Ui, glyph: Glyph, label: &str) {
+    ui.horizontal(|ui| {
+        ui.add(
+            egui::Image::new((design::icon(ui.ctx(), glyph), Vec2::splat(16.)))
+                .tint(ui.visuals().text_color()),
+        );
+        ui.label(label);
+    });
+}
+
 impl ProjectionControls {
-    fn layout_options(&mut self, ui: &mut egui::Ui, document: &Document) {
+    fn layout_options(&mut self, ui: &mut egui::Ui, document: &Document, camera: &Camera) {
         ui.horizontal(|ui| {
-            ui.label("Target quads");
+            setting_label(ui, Glyph::Mesh, "Target quads");
             let range = 4..=50_000;
             ui.add(egui::DragValue::new(&mut self.layout.target).range(range));
         });
@@ -32,7 +42,7 @@ impl ProjectionControls {
         });
 
         ui.separator();
-        ui.label("Layout symmetry (experimental)");
+        setting_label(ui, Glyph::Symmetry, "Layout symmetry (experimental)");
         ui.horizontal_wrapped(|ui| {
             ui.selectable_value(&mut self.layout.symmetry_axis, None, "Off");
             for (axis, label) in [(Axis::X, "X"), (Axis::Y, "Y"), (Axis::Z, "Z")] {
@@ -65,7 +75,7 @@ impl ProjectionControls {
             ui.weak("Joins the two halves with quads at the sculpt symmetry plane. Keep sculpt shape requires a nearly symmetric surface. The original sculpt is kept when you apply.");
         }
         ui.separator();
-        ui.label("Edge direction");
+        setting_label(ui, Glyph::Path, "Edge direction");
         let paths: Vec<_> = document
             .paths()
             .iter()
@@ -81,7 +91,7 @@ impl ProjectionControls {
             {
                 self.flow_paths = paths.iter().map(|path| path.id).collect();
             }
-            let thumbnail = super::path_thumbnail::active_model(ui, document);
+            let thumbnail = super::path_thumbnail::active_model(ui, document, camera);
             egui::ScrollArea::vertical()
                 .id_salt("retopology_paths")
                 .max_height(190.)
@@ -118,7 +128,7 @@ impl ProjectionControls {
         });
 
         ui.separator();
-        ui.label("Polygon density");
+        setting_label(ui, Glyph::Edit, "Polygon density");
         ui.add(egui::Slider::new(&mut self.layout.adaptive, 0. ..=1.).text("Shape adaptation"));
         ui.weak("Zero uses uniform spacing; higher values put more quads around bends. Paint adjusts that automatic spacing and is saved separately from the sculpt mask.");
         use crate::sculpt::retopology::DensityPaint;
@@ -157,6 +167,7 @@ impl UiState {
         &mut self,
         ctx: &egui::Context,
         document: &Document,
+        camera: &Camera,
     ) -> Vec<Command> {
         let mut commands = Vec::new();
         let mut open = true;
@@ -177,6 +188,9 @@ impl UiState {
             }
             if let Some(error) = &state.error {
                 ui.colored_label(ui.visuals().error_fg_color, error);
+                if error.contains("inverted grid cells within its repair budget") {
+                    ui.weak("Try a different Target quads value or lower Density strength to reduce the influence of your paint. Then choose Preview layout again.");
+                }
                 if state.layout.symmetry_axis.is_some()
                     && error.starts_with("The source differs across this plane.")
                     && ui.button("Preview with symmetry off").clicked()
@@ -218,7 +232,7 @@ impl UiState {
             egui::ScrollArea::vertical()
                 .max_height((ctx.content_rect().height() - 300.).max(50.))
                 .show(ui, |ui| {
-                    ui.add_enabled_ui(!state.busy, |ui| state.layout_options(ui, document));
+                    ui.add_enabled_ui(!state.busy, |ui| state.layout_options(ui, document, camera));
                 });
             if old != (state.layout, state.flow_paths.clone(), state.density_paint) {
                 commands.push(Command::ClearProjectionPreview);

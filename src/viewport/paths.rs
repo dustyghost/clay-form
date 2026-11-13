@@ -236,10 +236,9 @@ impl PathEditor {
 
     fn editable_draft(&self) -> bool {
         self.brush.is_some()
-            && self
-                .draft
-                .as_ref()
-                .is_some_and(|path| path.id == 0 && !path.points.is_empty() && !path.closed)
+            && self.draft.as_ref().is_some_and(|path| {
+                path.id == 0 && !path.points.is_empty() && path.ring_orientation.is_none()
+            })
     }
 
     fn brush_press(
@@ -328,6 +327,9 @@ impl PathEditor {
             return true;
         }
         self.resume_draft();
+        if self.editable_draft() && self.draft.as_ref().is_some_and(|p| p.closed) {
+            return true;
+        }
         let unfinished = self.draft.as_ref().is_some_and(|p| {
             p.id == 0
                 && p.mode == mode
@@ -777,7 +779,7 @@ impl PathEditor {
         );
         let camera_controls = hud::camera_targets(gizmo_rect);
         if self.brush.is_some() {
-            self.brush_hud(ui.ctx(), response.rect, scene, document);
+            self.brush_hud(ui.ctx(), response.rect, document);
             hud::paint_camera_targets(painter, &camera_controls, self.camera_drag, pos);
             if response.hovered() {
                 let over_camera = pos

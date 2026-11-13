@@ -90,6 +90,10 @@ impl Default for App {
     }
 }
 impl App {
+    pub fn open_startup_project(&mut self, path: String, ctx: &egui::Context) {
+        self.request(PendingAction::Open(path), ctx);
+    }
+
     fn reset_touch_for_pen(&mut self, events: &[egui::Event]) {
         // Discard a finger gesture already in progress when the pen takes over.
         self.touch = Default::default();
@@ -872,7 +876,7 @@ impl eframe::App for App {
         ) {
             self.dispatch(command, ctx);
         }
-        for command in self.ui.projection_window(ctx, &self.document) {
+        for command in self.ui.projection_window(ctx, &self.document, &self.camera) {
             self.dispatch(command, ctx);
         }
         for command in self.ui.fusion_window(ctx, &self.document) {

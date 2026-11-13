@@ -13,6 +13,7 @@ pub(crate) fn show(
     editor: &mut PathEditor,
     state: &mut PathState,
     document: &Document,
+    camera: &Camera,
     selected_brush: &mut usize,
 ) -> Vec<Command> {
     let mut commands = Vec::new();
@@ -64,7 +65,7 @@ pub(crate) fn show(
         }
         if preview { ui.label("Brush preview — Apply or Cancel to continue editing."); }
         ui.add_enabled_ui(!busy && !preview,|ui| {
-            path_explorer(ui, editor, document, &mut commands);
+            path_explorer(ui, editor, document, camera, &mut commands);
             if editor.draft.is_some() {
                 ui.horizontal_wrapped(|ui| {
                     for (tool, label) in [(PathTool::Add, "Add points"), (PathTool::Move, "Move points"), (PathTool::Insert, "Insert point")] {
@@ -247,6 +248,7 @@ fn path_explorer(
     ui: &mut egui::Ui,
     editor: &mut PathEditor,
     document: &Document,
+    camera: &Camera,
     commands: &mut Vec<Command>,
 ) {
     let dirty = editor.dirty(document);
@@ -257,7 +259,7 @@ fn path_explorer(
         .paths()
         .iter()
         .any(|p| p.target == target)
-        .then(|| super::path_thumbnail::active_model(ui, document));
+        .then(|| super::path_thumbnail::active_model(ui, document, camera));
     egui::ScrollArea::vertical()
         .id_salt("path_explorer")
         .max_height(150.)

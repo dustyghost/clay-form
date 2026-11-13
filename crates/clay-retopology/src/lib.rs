@@ -100,6 +100,7 @@ pub enum Stage {
         iteration: usize,
         vertices: usize,
     },
+    RetryPreparation,
     OriginalSurfaceValidation,
     Sampling,
     Hierarchy {
@@ -171,9 +172,8 @@ fn reconstruct_using(
 }
 
 /// Redistribute irregular source triangles, reconstruct, then independently
-/// check the completed quads against the untouched original. Five preparation
-/// passes are fixed here; callers comparing already prepared inputs can use
-/// `reconstruct_with_progress` directly. No external solver is required.
+/// check the completed quads against the untouched original. If grid repair
+/// exhausts its budget, retry once with four preparation passes instead of five.
 pub fn reconstruct_regularized_with_progress(
     source: &Surface,
     options: &Options,
@@ -181,11 +181,28 @@ pub fn reconstruct_regularized_with_progress(
     progress: &dyn Fn(Stage),
 ) -> Result<Layout> {
     validate_request(source, options, cancel)?;
+    match reconstruct_prepared(source, options, 5, cancel, progress) {
+        Err(error) if error.ends_with(integer::INVERSION_BUDGET_ERROR) => {
+            check(cancel)?;
+            progress(Stage::RetryPreparation);
+            reconstruct_prepared(source, options, 4, cancel, progress)
+        }
+        result => result,
+    }
+}
+
+fn reconstruct_prepared(
+    source: &Surface,
+    options: &Options,
+    passes: usize,
+    cancel: &dyn Fn() -> bool,
+    progress: &dyn Fn(Stage),
+) -> Result<Layout> {
     progress(Stage::Preparation {
         iteration: 0,
         vertices: source.positions.len(),
     });
-    let prepared = resample::prepare(source, options, 5, cancel, &|step| {
+    let prepared = resample::prepare(source, options, passes, cancel, &|step| {
         progress(Stage::Preparation {
             iteration: step.iteration,
             vertices: step.vertices,

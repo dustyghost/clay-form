@@ -203,6 +203,7 @@ impl App {
             &mut self.viewport.paths,
             &mut self.paths,
             &self.document,
+            &self.camera,
             &mut self.ui.selected,
         );
         for command in commands {

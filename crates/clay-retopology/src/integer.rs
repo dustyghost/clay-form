@@ -14,6 +14,8 @@ use glam::IVec2;
 pub(crate) use reference::solve as solve_reference;
 use std::collections::{BTreeMap, VecDeque};
 
+pub(crate) const INVERSION_BUDGET_ERROR: &str = "inverted grid cells within its repair budget";
+
 fn rot(d: IVec2, k: i32) -> IVec2 {
     match k.rem_euclid(4) {
         0 => d,
@@ -811,7 +813,7 @@ impl Lattice {
         }
         if self.flipped() > 0 {
             return Err(format!(
-                "Retopology could not resolve {} inverted grid cells within its repair budget",
+                "Retopology could not resolve {} {INVERSION_BUDGET_ERROR}",
                 self.flipped()
             ));
         }

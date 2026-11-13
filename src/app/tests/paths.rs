@@ -1284,7 +1284,7 @@ fn path_brush_selects_a_saved_guide_without_losing_a_draft() {
     let point = |x, y| guide_screen(rect, x, y);
     click(&mut app, &ctx, point(-0.4, 0.55));
     click(&mut app, &ctx, point(0.35, 0.55));
-    let complete = path_hud_button(&mut app, &ctx, "Complete");
+    let complete = path_hud_button(&mut app, &ctx, "Complete path");
     click(&mut app, &ctx, complete);
     let saved = app.document.paths()[0].id;
     click(&mut app, &ctx, point(-0.4, -0.5));
@@ -1411,4 +1411,48 @@ fn path_brush_free_point_axis_drag_changes_only_that_coordinate() {
     let changed = app.document.paths()[0].points[1].position;
     assert!(changed.0 > original.0 + 0.05, "{}", app.ui.status);
     assert_eq!((changed.1, changed.2), (original.1, original.2));
+}
+
+#[test]
+fn path_brush_closes_drafts_and_smooths_every_corner_from_the_tool_strip() {
+    let (mut app, ctx, rect) = ring_setup();
+    app.dispatch(Command::Path(PathCommand::ActivateBrush), &ctx);
+    app.viewport.paths.panel = false;
+    navigation_frame(&mut app, &ctx, vec![]);
+    for (x, y) in [(-0.4, 0.3), (0.4, 0.3), (0.4, -0.3), (-0.4, -0.3)] {
+        click(&mut app, &ctx, guide_screen(rect, x, y));
+    }
+    let draft = app.viewport.paths.draft.as_mut().unwrap();
+    draft.set_corner_rounding(1, 0.15).unwrap();
+
+    let close = path_hud_button(&mut app, &ctx, "Close loop");
+    assert!(close.y < rect.top() + 150.);
+    click(&mut app, &ctx, close);
+    assert!(app.viewport.paths.draft.as_ref().unwrap().closed);
+    assert!(app.document.paths().is_empty());
+
+    click(&mut app, &ctx, guide_screen(rect, 0., -0.1));
+    assert_eq!(app.viewport.paths.draft.as_ref().unwrap().points.len(), 4);
+    let complete = path_hud_button(&mut app, &ctx, "Complete path");
+    click(&mut app, &ctx, complete);
+    let before = app.document.paths()[0].clone();
+    assert!(before.closed);
+    assert!(before.corner_rounding(1) > 0.);
+
+    let smooth = path_hud_button(&mut app, &ctx, "Smooth");
+    click(&mut app, &ctx, smooth);
+    let smoothed = &app.document.paths()[0];
+    assert_eq!(smoothed.smoothing, 1.);
+    assert!(smoothed.corner_rounding.is_empty());
+    assert_eq!(smoothed.points.len(), before.points.len());
+    for (a, b) in smoothed.points.iter().zip(&before.points) {
+        assert!((a.position - b.position).len() < 1e-5);
+    }
+    assert_ne!(smoothed.dense_curve(), before.dense_curve());
+    app.dispatch(Command::Undo, &ctx);
+    assert_eq!(app.document.paths()[0], before);
+
+    let open = path_hud_button(&mut app, &ctx, "Open loop");
+    click(&mut app, &ctx, open);
+    assert!(!app.document.paths()[0].closed);
 }

@@ -105,13 +105,14 @@ impl UiState {
         &mut self,
         ctx: &egui::Context,
         document: &Document,
+        camera: &Camera,
     ) -> Vec<Command> {
         let mut commands = Vec::new();
         if !self.projection.open {
             return commands;
         }
         if self.projection.mode == SurfaceMode::Retopology {
-            return self.retopology_window(ctx, document);
+            return self.retopology_window(ctx, document, camera);
         }
         if self.projection.mode == SurfaceMode::Relaxation {
             return self.relaxation_window(ctx, document);

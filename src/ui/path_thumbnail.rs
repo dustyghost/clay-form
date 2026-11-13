@@ -9,34 +9,38 @@ const HEIGHT: usize = 56;
 pub(super) struct Preview {
     revision: u64,
     model: u64,
+    basis: (Vec3, Vec3, Vec3),
     center: Vec2,
     scale: f32,
     depth: Vec<f32>,
     texture: egui::TextureHandle,
 }
 
-fn view(p: Vec3) -> Vec3 {
-    p.rotated(Vec3(0., 1., 0.), -0.46)
-        .rotated(Vec3(1., 0., 0.), 0.18)
+fn view(p: Vec3, (right, up, forward): (Vec3, Vec3, Vec3)) -> Vec3 {
+    Vec3(p.dot(right), p.dot(up), p.dot(forward))
 }
 
-pub(super) fn active_model(ui: &egui::Ui, document: &Document) -> Arc<Preview> {
+pub(super) fn active_model(ui: &egui::Ui, document: &Document, camera: &Camera) -> Arc<Preview> {
     let key = egui::Id::new("active_path_thumbnail");
-    let revision = document.display_revision();
+    let revision = document.geometry_display_revision();
     let model = document.active_model_id();
+    let basis = camera.basis();
     if let Some(preview) = ui.ctx().data(|data| data.get_temp::<Arc<Preview>>(key))
         && preview.revision == revision
         && preview.model == model
+        // Keep orbit drags responsive on dense sculpts. Refresh on release.
+        && (preview.basis == basis || ui.input(|input| input.pointer.any_down()))
     {
         return preview;
     }
-    let (image, depth, center, scale) = raster(document.mesh());
+    let (image, depth, center, scale) = raster(document.mesh(), basis);
     let texture =
         ui.ctx()
             .load_texture("path thumbnail model", image, egui::TextureOptions::LINEAR);
     let preview = Arc::new(Preview {
         revision,
         model,
+        basis,
         center,
         scale,
         depth,
@@ -47,8 +51,8 @@ pub(super) fn active_model(ui: &egui::Ui, document: &Document) -> Arc<Preview> {
     preview
 }
 
-fn raster(mesh: &Mesh) -> (egui::ColorImage, Vec<f32>, Vec2, f32) {
-    let points: Vec<_> = mesh.vertices.iter().map(|&p| view(p)).collect();
+fn raster(mesh: &Mesh, basis: (Vec3, Vec3, Vec3)) -> (egui::ColorImage, Vec<f32>, Vec2, f32) {
+    let points: Vec<_> = mesh.vertices.iter().map(|&p| view(p, basis)).collect();
     let mut bounds = egui::Rect::NOTHING;
     for &Vec3(x, y, _) in &points {
         bounds.extend_with(egui::pos2(x, -y));
@@ -71,19 +75,21 @@ fn raster(mesh: &Mesh) -> (egui::ColorImage, Vec<f32>, Vec2, f32) {
             continue;
         }
         let [a, b, c] = [points[a], points[b], points[c]];
-        let normal = (b - a).cross(c - a).norm();
         let [pa, pb, pc] = [a, b, c].map(|Vec3(x, y, _)| center + egui::vec2(x, -y) * scale);
         let edge = |a: Vec2, b: Vec2| a.x * b.y - a.y * b.x;
         let area = edge(pb - pa, pc - pa);
         if area.abs() < 1e-5 {
             continue;
         }
-        let lo = pa.min(pb).min(pc).floor().max(Vec2::ZERO);
-        let hi = pa
-            .max(pb)
-            .max(pc)
-            .ceil()
+        let half_pixel = Vec2::splat(0.5);
+        let lo = (pa.min(pb).min(pc) - half_pixel).ceil().max(Vec2::ZERO);
+        let hi = (pa.max(pb).max(pc) - half_pixel)
+            .floor()
             .min(egui::vec2((WIDTH - 1) as f32, (HEIGHT - 1) as f32));
+        if lo.x > hi.x || lo.y > hi.y {
+            continue;
+        }
+        let normal = (b - a).cross(c - a).norm();
         let shade = (0.42 + 0.53 * normal.dot(Vec3(-0.28, 0.45, 0.85)).abs()).min(1.);
         let color = Color32::from_rgb(
             (126. * shade) as u8,
@@ -132,10 +138,13 @@ impl Preview {
         }
         let stride = curve.len().div_ceil(512).max(1);
         let project = |p| {
-            let Vec3(x, y, z) = view(p);
+            let Vec3(x, y, z) = view(p, self.basis);
             (self.center + egui::vec2(x, -y) * self.scale, z)
         };
         let mut last = project(curve[0].position);
+        let mut front = Vec::new();
+        let front_stroke = egui::Stroke::new(1.6_f32, Color32::from_rgb(123, 255, 210));
+        let rear_stroke = egui::Stroke::new(1.2_f32, front_stroke.color.gamma_multiply(0.3));
         for i in (stride..curve.len() + stride - 1).step_by(stride) {
             let next = project(curve[i.min(curve.len() - 1)].position);
             let mid = (last.0 + next.0) * 0.5;
@@ -143,17 +152,15 @@ impl Preview {
                 && (0. ..HEIGHT as f32).contains(&mid.y)
                 && self.depth[mid.y as usize * WIDTH + mid.x as usize]
                     > (last.1 + next.1) * 0.5 + 1.5 / self.scale;
-            let color = if hidden {
-                Color32::from_rgb(124, 165, 157)
+            let segment = [rect.min + last.0, rect.min + next.0];
+            if hidden {
+                painter.line_segment(segment, rear_stroke);
             } else {
-                Color32::from_rgb(123, 255, 210)
-            };
-            painter.line_segment(
-                [rect.min + last.0, rect.min + next.0],
-                egui::Stroke::new(1.6_f32, color),
-            );
+                front.push(egui::Shape::line_segment(segment, front_stroke));
+            }
             last = next;
         }
+        painter.extend(front);
         response.on_hover_text(&path.name)
     }
 }

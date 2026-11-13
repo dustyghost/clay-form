@@ -1461,7 +1461,11 @@ impl Guide {
                 self.app.show_recovery(ctx);
                 commands.extend(self.app.ui.project_file_dialog(ctx));
                 commands.extend(self.app.ui.alpha_popup(ctx));
-                commands.extend(self.app.ui.projection_window(ctx, &self.app.document));
+                commands.extend(self.app.ui.projection_window(
+                    ctx,
+                    &self.app.document,
+                    &self.app.camera,
+                ));
                 commands.extend(self.app.ui.fusion_window(ctx, &self.app.document));
             },
         );

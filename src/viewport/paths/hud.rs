@@ -81,16 +81,14 @@ pub(super) fn paint_camera_status(
 }
 
 impl PathEditor {
-    pub(super) fn brush_hud(
-        &mut self,
-        ctx: &egui::Context,
-        viewport: Rect,
-        scene: &Scene,
-        document: &Document,
-    ) {
+    pub(super) fn brush_hud(&mut self, ctx: &egui::Context, viewport: Rect, document: &Document) {
         let Some(mut brush) = self.brush else { return };
         let drawing = self.editable_draft();
-        let can_complete = drawing && self.draft.as_ref().is_some_and(|p| p.points.len() >= 2);
+        let can_complete = drawing
+            && self
+                .draft
+                .as_ref()
+                .is_some_and(|p| p.points.len() >= if p.closed { 3 } else { 2 });
         let saved = self.draft.as_ref().is_some_and(|p| p.id != 0);
         let gesture = self.gesture_active();
         let enabled =
@@ -102,14 +100,16 @@ impl PathEditor {
             && ctx.input(|input| input.key_pressed(egui::Key::Enter));
         self.commit_gesture |= enter;
 
+        let mut new_axis = None;
         egui::Area::new(egui::Id::new("path_brush_hud"))
             .order(egui::Order::Foreground)
             .fixed_pos(viewport.left_top() + Vec2::new(24., 12.))
             .show(ctx, |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     ui.spacing_mut().interact_size.y = 28.;
+                    ui.set_max_width((viewport.width() - 48.).clamp(160., 540.));
                     ui.add_enabled_ui(enabled, |ui| {
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             ui.strong(format!("Path Brush · {}", brush.label()));
                             egui::ComboBox::from_id_salt("path_brush_mode")
                                 .selected_text("Mode")
@@ -160,62 +160,10 @@ impl PathEditor {
                                     }
                                 });
                         }
-                    });
-                });
-            });
-
-        if self.brush != Some(brush) && !editing {
-            self.brush = Some(brush);
-            self.ring_move = false;
-            self.tool = PathTool::Add;
-        }
-        if !drawing && !saved {
-            return;
-        }
-        let Some(path) = self.draft.as_ref() else {
-            return;
-        };
-        let Some(point) = self
-            .selected
-            .and_then(|i| path.points.get(i))
-            .or_else(|| path.points.last())
-        else {
-            return;
-        };
-        let anchor = path.display_position(*point);
-        let origin = if scene.visible_depth(anchor) {
-            scene.project(anchor) + Vec2::new(22., 20.)
-        } else {
-            viewport.center_bottom() - Vec2::new(120., 130.)
-        };
-        // Keep the pen targets reachable when the endpoint is at the view edge.
-        let max = (viewport.right_bottom() - Vec2::new(280., 136.))
-            .max(viewport.left_top() + Vec2::new(20., 94.));
-        let origin = origin.clamp(viewport.left_top() + Vec2::new(20., 94.), max);
-        let mut new_axis = None;
-        egui::Area::new(egui::Id::new("path_inline_hud"))
-            .order(egui::Order::Foreground)
-            .fixed_pos(origin)
-            .show(ctx, |ui| {
-                egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.spacing_mut().interact_size.y = 28.;
-                    ui.set_max_width(260.);
-                    ui.add_enabled_ui(enabled, |ui| {
-                        if drawing {
-                            ui.horizontal(|ui| {
-                                let count = self.draft.as_ref().unwrap().points.len();
-                                ui.label(format!("{count} points"));
-                                if ui
-                                    .add_enabled(can_complete, egui::Button::new("Complete"))
-                                    .clicked()
-                                {
-                                    self.commit_gesture = true;
-                                }
-                            });
+                        if !(drawing || saved) || self.draft.is_none() {
+                            return;
                         }
-                        if saved {
-                            ui.label(&self.draft.as_ref().unwrap().name);
-                        }
+                        ui.separator();
                         if let Some(plane) = self.ring_plane {
                             ui.horizontal_wrapped(|ui| {
                                 if self.ring_move {
@@ -249,11 +197,33 @@ impl PathEditor {
                             return;
                         };
                         ui.horizontal_wrapped(|ui| {
+                            if saved {
+                                ui.weak(&path.name);
+                            } else {
+                                ui.weak(format!("{} points", path.points.len()));
+                            }
                             if path.ring_orientation.is_none() {
-                                let curved = path.smoothing > 0.;
-                                if ui.selectable_label(curved, "Curve").clicked() {
-                                    path.smoothing = if curved { 0. } else { 1. };
+                                let smooth = path.smoothing == 1. && path.corner_rounding.is_empty();
+                                if ui.selectable_label(smooth, "Smooth")
+                                    .on_hover_text("Curve the whole path. Replaces individual corner rounding; Undo restores it.")
+                                    .clicked()
+                                {
+                                    path.smoothing = if smooth { 0. } else { 1. };
+                                    path.corner_rounding.clear();
                                     self.commit_gesture |= saved;
+                                }
+                                let label = if path.closed { "Open loop" } else { "Close loop" };
+                                if ui.add_enabled(path.closed || path.points.len() >= 3, egui::Button::new(label))
+                                    .on_disabled_hover_text("Place at least three points to close the loop")
+                                    .clicked()
+                                {
+                                    match path.set_closed(!path.closed) {
+                                        Ok(()) => {
+                                            self.selected = None;
+                                            self.commit_gesture |= saved;
+                                        }
+                                        Err(error) => self.notice = Some(error),
+                                    }
                                 }
                             }
                             if path.mode == PathMode::Surface {
@@ -268,9 +238,7 @@ impl PathEditor {
                             if saved && ui.button("Delete…").clicked() {
                                 self.confirm_delete = Some(path.id);
                             }
-                        });
-                        if path.ring_orientation.is_none() {
-                            ui.horizontal_wrapped(|ui| {
+                            if path.ring_orientation.is_none() {
                                 if saved
                                     && ui
                                         .selectable_label(
@@ -309,8 +277,8 @@ impl PathEditor {
                                 {
                                     new_axis = Some((path.points[path.seam], self.ring_axis));
                                 }
-                            });
-                        }
+                            }
+                        });
                         if path.mode == PathMode::Free
                             && let Some(point) = self.selected.and_then(|i| path.points.get_mut(i))
                         {
@@ -329,6 +297,12 @@ impl PathEditor {
                     });
                 });
             });
+
+        if self.brush != Some(brush) && !editing {
+            self.brush = Some(brush);
+            self.ring_move = false;
+            self.tool = PathTool::Add;
+        }
         if let Some((hit, axis)) = new_axis {
             let previous = self.ring_plane;
             self.update_ring(document, hit, axis, None);

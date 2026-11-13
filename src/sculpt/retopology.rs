@@ -462,7 +462,10 @@ impl Mesh {
 pub(crate) fn progress_label(stage: clay_retopology::Stage) -> String {
     use clay_retopology::Stage::*;
     match stage {
-        Preparation { iteration, .. } => format!("Preparing surface · pass {iteration}/5"),
+        Preparation { iteration, .. } => format!("Preparing surface · pass {iteration}"),
+        RetryPreparation => {
+            "Grid repair failed. Retrying with different surface preparation…".into()
+        }
         Sampling | Hierarchy { .. } => "Building surface samples…".into(),
         Orientation => "Solving edge directions…".into(),
         Position => "Placing the quad grid…".into(),

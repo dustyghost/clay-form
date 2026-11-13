@@ -6,9 +6,9 @@ Choose **Path Brush** in the **Brush Library** to draw and edit paths in the vie
 
 ## Draw and edit a path
 
-1. Select **Surface** or **Free** in the brush's **Mode** menu. Tap to place points or drag to sketch. Lift the pen between strokes to continue the same path. **Curve** switches between a smooth curve and straight segments.
+1. Select **Surface** or **Free** in the brush's **Mode** menu. Tap to place points or drag to sketch. Lift the pen between strokes to continue the same path. **Smooth** curves the entire path and replaces individual corner rounding. Use **Close loop** after placing at least three points, or **Open loop** to reopen it.
 2. Drag **Orbit**, **Pan**, or **Zoom** beside the viewport gizmo. During the drag the viewport shows which camera action is active. Release to resume the same draft. Right-drag, middle-drag, and the wheel also navigate.
-3. Tap **Complete** by the draft, **Complete path** in the tool strip, or press **Enter**. This saves the path as one undo step. Tap **Cancel** to discard the draft. Press **Escape** during a drag to cancel that gesture.
+3. Tap **Complete path** in the top-left tool strip or press **Enter**. This saves the path as one undo step. Tap **Cancel** to discard the draft. Press **Escape** during a drag to cancel that gesture.
 4. Tap an existing guide or a visible handle to edit it. Grab a point to move it. **Insert point** lets you tap the selected guide to add a point. If a draft is already underway, use **Resume draft** after editing the saved guide. Press **Delete** or tap **Delete…** to open the confirmation for the selected path.
 
 **Free** points lie on a view plane through the previous point, or through the origin for a new path. Rotate the view to place points at different depths. A selected point has X, Y and Z coordinate controls and draggable handles for the axes visible from the current view.
