@@ -68,6 +68,9 @@ struct Entry {
 }
 impl UiState {
     pub(crate) fn open_search(&mut self) {
+        // The visible Search entry can be used while Key settings is waiting for
+        // a binding. Search input must never be captured by that window.
+        self.cancel_shortcut_assignment();
         self.search.open = true;
         self.search.focus = true;
         self.search.selected = None;
@@ -227,7 +230,7 @@ impl UiState {
                     SearchRequest::Bind => {
                         if let Some(action) = entry.action {
                             self.finish_search_reveal(ctx, false);
-                            self.begin_shortcut_assignment(action, document);
+                            self.begin_shortcut_assignment(action, document, ctx);
                         }
                     }
                     SearchRequest::Shelf => {

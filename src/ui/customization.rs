@@ -236,7 +236,23 @@ impl UiState {
     pub fn action_enabled(&self, action: &Action, document: &Document) -> bool {
         self.action_unavailable(action, document).is_none()
     }
-    pub(crate) fn begin_shortcut_assignment(&mut self, action: Action, document: &Document) {
+    pub(super) fn cancel_shortcut_assignment(&mut self) {
+        self.capturing = None;
+        self.customization.binding_conflict = None;
+    }
+    pub(crate) fn begin_shortcut_assignment(
+        &mut self,
+        action: Action,
+        document: &Document,
+        ctx: &egui::Context,
+    ) {
+        // Key settings is rendered later in this frame. Only keys pressed after
+        // entering capture belong to the binding, not Enter/Space used to open it.
+        ctx.input_mut(|input| {
+            input
+                .events
+                .retain(|event| !matches!(event, egui::Event::Key { .. } | egui::Event::Text(_)));
+        });
         self.layout_open = false;
         self.viewport_controls.editor_open = false;
         self.settings_open = true;
@@ -808,7 +824,7 @@ impl UiState {
                 }
 
                 Request::Add(action) => self.begin_add_to_menu(action, document),
-                Request::Bind(action) => self.begin_shortcut_assignment(action, document),
+                Request::Bind(action) => self.begin_shortcut_assignment(action, document, ctx),
             }
         }
         if !self.settings_open {

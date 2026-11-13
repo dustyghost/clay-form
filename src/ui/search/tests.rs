@@ -358,6 +358,155 @@ fn enter_runs_the_selected_result_after_query_field_surrenders_focus() {
     ));
 }
 
+fn shortcut_frame(
+    ui: &mut UiState,
+    ctx: &egui::Context,
+    document: &Document,
+    events: Vec<egui::Event>,
+) -> egui::FullOutput {
+    ctx.run(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::Vec2::new(1200., 900.),
+            )),
+            events,
+            ..Default::default()
+        },
+        |ctx| {
+            ui.search_dialog(ctx, document, &mut Vec::new());
+            // Match the application order: an assignment requested by Search
+            // reaches the key editor in the same frame.
+            ui.settings(ctx, document);
+        },
+    )
+}
+
+fn shortcut_key(key: egui::Key, pressed: bool) -> egui::Event {
+    egui::Event::Key {
+        key,
+        physical_key: Some(key),
+        pressed,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
+    }
+}
+
+#[test]
+fn opening_search_cancels_an_existing_shortcut_capture_before_typing() {
+    let ctx = egui::Context::default();
+    let mut ui = UiState {
+        settings_open: true,
+        capturing: Some(Action::ToggleZen),
+        ..Default::default()
+    };
+    let document = Document::default();
+    let bindings = ui.preferences.bindings.clone();
+
+    // This is the same opener used by the visible Search entry, which remains
+    // available while shortcut capture intentionally suppresses global keys.
+    ui.open_search();
+    assert!(ui.capturing.is_none());
+    shortcut_frame(&mut ui, &ctx, &document, vec![]);
+    shortcut_frame(
+        &mut ui,
+        &ctx,
+        &document,
+        vec![
+            shortcut_key(egui::Key::C, true),
+            egui::Event::Text("capacity".into()),
+        ],
+    );
+    assert!(ui.search_open());
+    assert_eq!(ui.search.query, "capacity");
+    assert!(ui.capturing.is_none());
+    assert_eq!(ui.preferences.bindings, bindings);
+}
+
+#[test]
+fn keyboard_assignment_does_not_bind_its_activation_key() {
+    for activation in [egui::Key::Enter, egui::Key::Space] {
+        let ctx = egui::Context::default();
+        ctx.style_mut(|style| style.animation_time = 0.);
+        let mut ui = UiState::default();
+        let document = Document::default();
+        let original = ui.preferences.shortcut(&Action::ToggleZen).cloned();
+        ui.open_search();
+        ui.search.query = "zen mode".into();
+        shortcut_frame(&mut ui, &ctx, &document, vec![]);
+        shortcut_frame(&mut ui, &ctx, &document, vec![]);
+
+        // Reach the actual button through keyboard navigation, without relying
+        // on generated egui IDs or the number of controls before it.
+        let mut assignment_focused = false;
+        for _ in 0..16 {
+            shortcut_frame(
+                &mut ui,
+                &ctx,
+                &document,
+                vec![shortcut_key(egui::Key::Tab, true)],
+            );
+            let output = shortcut_frame(
+                &mut ui,
+                &ctx,
+                &document,
+                vec![shortcut_key(egui::Key::Tab, false)],
+            );
+            let button = output.shapes.iter().find_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.text() == "Assign shortcut" => {
+                    Some(text.pos + text.galley.size() * 0.5)
+                }
+                _ => None,
+            });
+            assignment_focused = ctx
+                .memory(|memory| memory.focused())
+                .and_then(|id| ctx.read_response(id))
+                .zip(button)
+                .is_some_and(|(response, point)| response.rect.contains(point));
+            if assignment_focused {
+                break;
+            }
+        }
+        assert!(assignment_focused, "Assign shortcut is keyboard reachable");
+
+        shortcut_frame(
+            &mut ui,
+            &ctx,
+            &document,
+            vec![shortcut_key(activation, true)],
+        );
+        assert!(!ui.search_open());
+        assert!(ui.settings_open);
+        assert_eq!(ui.capturing, Some(Action::ToggleZen));
+        assert_eq!(
+            ui.preferences.shortcut(&Action::ToggleZen),
+            original.as_ref()
+        );
+
+        shortcut_frame(
+            &mut ui,
+            &ctx,
+            &document,
+            vec![shortcut_key(activation, false)],
+        );
+        // The same key remains a valid intentional shortcut on a new press.
+        shortcut_frame(
+            &mut ui,
+            &ctx,
+            &document,
+            vec![shortcut_key(activation, true)],
+        );
+        assert!(ui.capturing.is_none());
+        assert_eq!(
+            ui.preferences.shortcut(&Action::ToggleZen),
+            Some(&crate::preferences::Shortcut::new(
+                activation,
+                egui::Modifiers::NONE
+            ))
+        );
+    }
+}
+
 #[test]
 fn temporary_pinned_menu_is_not_persisted_after_automatic_window_clamping() {
     let ctx = egui::Context::default();
