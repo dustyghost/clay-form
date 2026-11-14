@@ -1241,9 +1241,14 @@ pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
                 .bindings
                 .iter()
                 .any(|(_, key)| key.as_ref() == Some(&replacement));
-            if !had_selection_menu {
-                // Materialize this historical default before the X/Z migration.
-                // A custom X binding must still leave the new menu unbound.
+            if !had_selection_menu
+                && prefs.interaction_shortcuts_version == 0
+                && prefs.shortcut(&Action::SwapPaintColours)
+                    == Some(&Shortcut::new(Key::Z, Modifiers::NONE))
+            {
+                // Complete the historical pair before the X/Z migration.
+                // Files without either action receive the current defaults below.
+                // A custom X binding must still leave the old menu unbound.
                 prefs
                     .bindings
                     .push((Action::MaskVisibilityMenu, free.then_some(replacement)));
@@ -1803,6 +1808,7 @@ mod customization_tests {
             "menus",
             "brush_controls_version",
             "search_shortcuts_version",
+            "interaction_shortcuts_version",
             "workspaces",
             "compact_toolbar",
             "next_menu_id",
