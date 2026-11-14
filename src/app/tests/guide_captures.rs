@@ -809,6 +809,12 @@ fn brush_sidebar_resize_offscreen_review() {
     menu.columns = 4;
     menu.placement = crate::preferences::Placement::LeftPanel;
     menu.expanded = true;
+    let menu_id = menu.id;
+    g.app
+        .ui
+        .preferences
+        .sidebar_order
+        .insert(0, crate::preferences::SidebarSection::Custom(menu_id));
     g.save("wide-before-resize");
     assert!(
         g.app.ui.preferences.left_width <= 601.,
@@ -1411,14 +1417,20 @@ impl Guide {
         }
     }
     fn panel(&mut self, tool: Tool, dock: Dock) {
-        self.app
+        let panel = self
+            .app
             .ui
             .preferences
             .panels
             .iter_mut()
             .find(|p| p.tool == tool)
-            .unwrap()
-            .dock = dock;
+            .unwrap();
+        panel.dock = dock;
+        panel.open = true;
+        if self.size[0] < 960 && matches!(dock, Dock::Left | Dock::Right) {
+            // Explicit panel fixtures make the same choice as the Panels menu.
+            self.app.ui.narrow_panel = Some(dock);
+        }
     }
     fn frame(&mut self, events: Vec<egui::Event>) -> (egui::Rect, Vec<u8>) {
         self.app.poll_fusion();
@@ -1679,6 +1691,7 @@ fn guide_workflows_offscreen_preview() {
             .ui
             .preferences
             .dock_menu(BuiltinMenu::Primitive, Dock::Right);
+        g.app.ui.narrow_panel = Some(Dock::Right);
         g.app.camera.yaw = 0.5;
         g.app.camera.pitch = -0.3;
         g.app.ui.wire = true;
@@ -2015,6 +2028,7 @@ fn project_file_dialog_offscreen_review() {
     g.save("project-open-dialog");
     click_guide_label(&mut g, "Cancel");
     assert!(g.app.ui.file_picker.is_none());
+    click_guide_label(&mut g, "Project");
     click_guide_label(&mut g, "Save as…");
     assert!(g.app.ui.file_picker.as_ref().unwrap().save);
     g.save("project-save-dialog");
@@ -2046,6 +2060,7 @@ fn asset_file_dialog_offscreen_review() {
             .ui
             .preferences
             .dock_menu(BuiltinMenu::References, Dock::Right);
+        g.app.ui.narrow_panel = Some(Dock::Right);
         g.app.ui.reference_path = images.to_string_lossy().into();
         click_guide_label(&mut g, "Add image…");
         assert_eq!(
@@ -3380,7 +3395,34 @@ fn viewport_context_menu_offscreen_review() {
         g.frame(vec![]);
         let history = g.app.document.history_counts();
         let before = g.app.document.geometry_snapshot();
-        click_guide_label(&mut g, "Tool menu");
+        // The quick popup uses its configurable keyboard route; the toolbar's
+        // labelled Modeling menu provides the same modelling controls directly.
+        let shortcut = g
+            .app
+            .ui
+            .preferences
+            .shortcut(&Action::ViewportContextMenu)
+            .unwrap()
+            .clone();
+        let _ = g.ctx.run(
+            egui::RawInput {
+                events: vec![egui::Event::Key {
+                    key: egui::Key::from_name(&shortcut.key).unwrap(),
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers {
+                        ctrl: shortcut.ctrl,
+                        shift: shortcut.shift,
+                        alt: shortcut.alt,
+                        mac_cmd: shortcut.command,
+                        command: shortcut.command || shortcut.ctrl,
+                    },
+                }],
+                ..Default::default()
+            },
+            |ctx| g.app.shortcuts(ctx),
+        );
         assert!(g.app.ui.viewport_menu.context.is_some());
         g.app.ui.viewport_menu.position =
             Some(egui::pos2(size[0] as f32 - 10., size[1] as f32 - 10.));
@@ -3465,6 +3507,7 @@ fn viewport_context_menu_offscreen_review() {
                 &g.ctx,
             );
             g.app.ui.preferences.dock_menu(BuiltinMenu::Modeling, dock);
+            g.app.ui.narrow_panel = Some(dock);
             g.frame(vec![]);
             click_guide_label(&mut g, "Edge");
             g.save(&format!("modeling-docked-{dock:?}-top-{}", size[0]));
@@ -4376,6 +4419,7 @@ fn material_controls_offscreen_review() {
     assert!(g.app.document.materials().iter().any(|a| a.id == 6));
     click_paint_control(&mut g, "Restore built-in materials");
     assert!(g.app.ui.preferences.materials.hidden_builtins.is_empty());
+    click_guide_label(&mut g, "Project");
     click_guide_label(&mut g, "Export");
     click_guide_label(&mut g, "PLY…");
     assert_eq!(
@@ -4669,6 +4713,7 @@ fn interchange_export_controls_offscreen_review() {
         (ExportFormat::OpenUsd, "OpenUSD…", "openusd-picker"),
         (ExportFormat::Fbx, "FBX…", "fbx-picker"),
     ] {
+        click_guide_label(&mut g, "Project");
         click_guide_label(&mut g, "Export");
         click_guide_label(&mut g, label);
         assert_eq!(g.app.ui.file_picker.as_ref().unwrap().export, Some(format));

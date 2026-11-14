@@ -19,6 +19,14 @@ Start with [a primitive](#parametric-primitives) for a brush sculpt, or try [a s
 - [Combine submodels](#merge-down)
 - [Join meshes locally](#join-meshes-locally)
 
+## Check the next action
+
+The persistent operation strip names the active tool and its target, even with the tool panels collapsed or in Zen mode. Modeling includes the component type and selection count. Slice includes its operation and whether it uses a line or a path.
+
+- Read the short instruction before starting a gesture. Previewed edits explain how to apply or cancel them.
+- Choose **Return to sculpt** to leave Modeling, Slice, selection or transform mode through the normal tool switch.
+- An unavailable action explains its prerequisite in Search. Quick menus also have **Why are actions unavailable?**, which you can open with a pen. Keyboard selection shows the same explanation above the choices.
+
 ## Submodels
 
 ### Select and organize parts
@@ -43,7 +51,7 @@ Extracted boundaries stay open and use a fresh subdivision stack. The selection 
 
 1. Put the parts in the same Submodels group. The **Ungrouped** section also works as a group.
 2. Each submodel row has a role selector. Set the bottom solid to **Add**. Moving upward, use **Add** to fuse a solid, **Subtract** to cut it away, or **Intersect** to keep the volume shared with the accumulated shape. **Regular** keeps a part separate. The eye bypasses a hidden operand.
-3. Toggle **Boolean result** in Submodels or the Display toolbar to see the evaluated group in the main viewport. Change roles directly on any row or use the row arrows to change the order. Moving an Add above a cutter can fill the cut back in. Select a source row and use the transform handles to move the operand. Toggle the result off to see and sculpt the source surfaces.
+3. Toggle **Boolean result** in Submodels or the View toolbar row to see the evaluated group in the main viewport. Change roles directly on any row or use the row arrows to change the order. Moving an Add above a cutter can fill the cut back in. Select a source row and use the transform handles to move the operand. Toggle the result off to see and sculpt the source surfaces.
 4. In **Boolean method**, choose how to build the result. **Voxel** is the default. Its resolution controls how finely it samples the shape. A finer grid can recover narrow cuts. **Preserve surfaces** clips the source faces at each intersection and keeps intact quads, UVs, vertex paint, groups and creases away from the cut. Both methods support all three roles.
 5. Choose **Bake result** to create a sculptable submodel and hide its sources. A voxel bake uses plain clay. A surface bake carries the surviving source attributes. Undo restores the editable stack in one step. To revise a saved bake, hide the baked part and show its source operands again.
 
@@ -753,7 +761,7 @@ Merge bakes primitives and thickness modifier, uses current mesh levels, and res
 
 ### Switch functions beside the model
 
-Press **Q** over the viewport, or click **Tool menu** in the toolbar. Choose **Face**, **Edge** or **Vertex** under **Component**, then choose a **Target** such as Individual, Loop, Connected or Flat island. Targets follow the current component mode, just like the Modeling panel. Component changes convert the selection; target changes keep the current tool and selection. These controls leave the menu open so you can then choose a function.
+Open **Modeling** in the toolbar, or press **Q** over the viewport for its quick popup. Choose **Face**, **Edge** or **Vertex** under **Component**, then choose a **Target** such as Individual, Loop, Connected or Flat island. Targets follow the current component mode, just like the Modeling panel. Component changes convert the selection; target changes keep the current tool and selection. These controls leave the menu open so you can then choose a function.
 
 The same controls are also in **Model → Modeling** on the top bar. Use its Panel controls to pin a movable window or dock a collapsible section on the left or right. These placements are saved with your workspace. Pinned and docked controls stay open when you choose a function; the drop-down and Q popup close after a function choice. Opening or moving the menu alone does not edit the model.
 

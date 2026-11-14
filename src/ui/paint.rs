@@ -37,7 +37,8 @@ impl UiState {
         });
         ui.strong("Paint");
         self.appearance_brush = Some(brush.identity());
-        ui.label(format!("Inputs: {}", brush.name));
+        ui.label(format!("Future stroke inputs: {}", brush.name));
+        ui.weak("Changing these inputs affects the next stroke. Fill and Assign are explicit changes to an existing surface.");
         ui.horizontal_wrapped(|ui| {
             for (label, action) in [
                 ("Materials…", Action::OpenMaterials),
@@ -52,6 +53,7 @@ impl UiState {
         if self.preferences.paint_workspace_backup.is_none()
             && ui.button("Focus Paint workspace").on_hover_text("Keep one paint sidebar and give the model more screen space. Restore your layout from the top toolbar.").clicked()
         {
+            self.finish_search_reveal(ui.ctx(), false);
             self.preferences.focus_paint_workspace();
         }
 
@@ -70,7 +72,7 @@ impl UiState {
                     }
                 }
             });
-        egui::ComboBox::from_label("Target")
+        let response = egui::ComboBox::from_label("Target")
             .selected_text(texture.map_or("Vertices".into(), |t| format!("Image: {}", t.name)))
             .show_ui(ui, |ui| {
                 if ui
@@ -86,9 +88,13 @@ impl UiState {
                     .filter(|texture| texture.channel == Channel::Color)
                 {
                     if ui
-                        .selectable_label(
-                            paint_target == Some(texture.channel),
-                            format!("Image: {}", texture.name),
+                        .add_enabled(
+                            mesh.uv.current(mesh),
+                            egui::Button::new(format!("Image: {}", texture.name))
+                                .selected(paint_target == Some(texture.channel)),
+                        )
+                        .on_disabled_hover_text(
+                            "Generate current UVs using Set up texture painting first",
                         )
                         .clicked()
                     {
@@ -96,6 +102,10 @@ impl UiState {
                     }
                 }
             });
+        search::setting_response(response.response, "Paint target");
+        if !mesh.uv.textures.is_empty() && !mesh.uv.current(mesh) {
+            ui.label("Image painting is unavailable: generate current UVs with Set up texture painting below.");
+        }
         if let Some(texture) = texture {
             let precision = match texture.pixels.precision() {
                 Precision::U16 => "16-bit integer",
@@ -118,7 +128,7 @@ impl UiState {
                 })
                 .count();
             if users > 1 {
-                ui.weak(format!("Shared image · strokes update {users} models"));
+                ui.label(format!("Shared image: strokes update {users} models"));
             }
         } else {
             ui.weak("Vertex materials · saved with this model");
@@ -144,7 +154,7 @@ impl UiState {
             InspectionMode::Metallic => "Metallic",
             InspectionMode::UvChecker => "UV checker",
         };
-        egui::ComboBox::from_label("Inspect")
+        let response = egui::ComboBox::from_label("Inspect")
             .selected_text(inspection_label(self.preferences.paint_inspection))
             .show_ui(ui, |ui| {
                 for mode in [
@@ -159,14 +169,16 @@ impl UiState {
                     );
                 }
             });
+        search::setting_response(response.response, "Paint inspection");
         if paint_target.is_none() {
-            egui::ComboBox::from_label("Paint channels")
+            let response = egui::ComboBox::from_label("Paint channels")
                 .selected_text(brush.paint_channels.label())
                 .show_ui(ui, |ui| {
                     for channel in PaintChannels::ALL {
                         ui.selectable_value(&mut brush.paint_channels, channel, channel.label());
                     }
                 });
+            search::setting_response(response.response, "Paint channels");
         }
         let colour = matches!(paint_target, Some(Channel::Color))
             || (paint_target.is_none()
@@ -192,14 +204,20 @@ impl UiState {
             ui.label("Colour applies to future strokes only");
         }
         if roughness {
-            changed |= ui
-                .add(egui::Slider::new(&mut material.roughness, 0. ..=1.).text("Brush roughness"))
-                .changed();
+            changed |= search::setting_response(
+                ui.add(
+                    egui::Slider::new(&mut material.roughness, 0. ..=1.).text("Brush roughness"),
+                ),
+                "Brush roughness",
+            )
+            .changed();
         }
         if metallic {
-            changed |= ui
-                .add(egui::Slider::new(&mut material.metallic, 0. ..=1.).text("Brush metallic"))
-                .changed();
+            changed |= search::setting_response(
+                ui.add(egui::Slider::new(&mut material.metallic, 0. ..=1.).text("Brush metallic")),
+                "Brush metallic",
+            )
+            .changed();
         }
         if changed {
             brush.material = material.unlinked();
@@ -210,26 +228,29 @@ impl UiState {
         if texture.is_some_and(|t| {
             t.channel == Channel::Color && t.pixels.precision() == Precision::Float32
         }) {
-            ui.collapsing("HDR colour values", |ui| {
-                let mut values = brush.texture_colour.unwrap_or(brush.material.base_color);
-                let mut edited = false;
-                ui.label("Linear RGB (float)");
-                ui.horizontal(|ui| {
-                    for (label, value) in ["R: ", "G: ", "B: "].into_iter().zip(&mut values) {
-                        edited |= ui
-                            .add(
-                                egui::DragValue::new(value)
-                                    .prefix(label)
-                                    .speed(0.01)
-                                    .max_decimals(4),
-                            )
-                            .changed();
+            egui::CollapsingHeader::new("HDR colour values")
+                .open(search::requested_section(ui.ctx(), "paint_hdr"))
+                .show(ui, |ui| {
+                    search::mark_destination(ui, "setting:HDR colour values");
+                    let mut values = brush.texture_colour.unwrap_or(brush.material.base_color);
+                    let mut edited = false;
+                    ui.label("Linear RGB (float)");
+                    ui.horizontal(|ui| {
+                        for (label, value) in ["R: ", "G: ", "B: "].into_iter().zip(&mut values) {
+                            edited |= ui
+                                .add(
+                                    egui::DragValue::new(value)
+                                        .prefix(label)
+                                        .speed(0.01)
+                                        .max_decimals(4),
+                                )
+                                .changed();
+                        }
+                    });
+                    if edited {
+                        brush.texture_colour = Some(values);
                     }
                 });
-                if edited {
-                    brush.texture_colour = Some(values);
-                }
-            });
         }
         if colour {
             self.materials
@@ -249,36 +270,58 @@ impl UiState {
             PaintMode::Airbrush => "Airbrush",
             PaintMode::Spray => "Spray dots",
         };
-        egui::ComboBox::from_label("Application")
+        let response = egui::ComboBox::from_label("Application")
             .selected_text(label(brush.paint_effect.mode))
             .show_ui(ui, |ui| {
                 for mode in [PaintMode::Stroke, PaintMode::Airbrush, PaintMode::Spray] {
                     ui.selectable_value(&mut brush.paint_effect.mode, mode, label(mode));
                 }
             });
+        search::setting_response(response.response, "Paint application");
+        if brush.paint_effect.mode == PaintMode::Stroke
+            && ["Flow per second", "Dot density", "Dot size"]
+                .iter()
+                .any(|name| search::is_requested(ui.ctx(), &format!("setting:{name}")))
+        {
+            ui.label("Choose Airbrush for continuous flow, or Spray dots for dot density and size. Use Freehand for continuous painting.");
+        }
+        if search::is_requested(ui.ctx(), "setting:HDR colour values")
+            && !texture.is_some_and(|texture| texture.pixels.precision() == Precision::Float32)
+        {
+            ui.label("HDR colour values are available when the target is a 32-bit float colour image. Set up texture painting to choose one.");
+        }
         if brush.paint_effect.mode != PaintMode::Stroke {
             let continuous = brush.effective_stroke_mode() == StrokeMode::Freehand;
-            ui.add_enabled(
-                continuous,
-                egui::Slider::new(&mut brush.paint_effect.flow, 0.01..=1.).text("Flow / second"),
+            search::setting_response(
+                ui.add_enabled(
+                    continuous,
+                    egui::Slider::new(&mut brush.paint_effect.flow, 0.01..=1.)
+                        .text("Flow / second"),
+                ),
+                "Flow per second",
             )
             .on_hover_text("Continuous buildup while holding the pen down in Freehand");
             if !continuous {
                 ui.weak("Choose the Freehand path for continuous flow.");
             }
             if brush.paint_effect.mode == PaintMode::Spray {
-                ui.add(
-                    egui::Slider::new(&mut brush.paint_effect.density, 0.02..=1.)
-                        .text("Dot density"),
+                search::setting_response(
+                    ui.add(
+                        egui::Slider::new(&mut brush.paint_effect.density, 0.02..=1.)
+                            .text("Dot density"),
+                    ),
+                    "Dot density",
                 );
                 let mut percent = brush.paint_effect.dot_size * 100.;
-                if ui
-                    .add(
+                if search::setting_response(
+                    ui.add(
                         egui::Slider::new(&mut percent, 0.5..=20.)
                             .suffix("% of radius")
                             .text("Dot size"),
-                    )
-                    .changed()
+                    ),
+                    "Dot size",
+                )
+                .changed()
                 {
                     brush.paint_effect.dot_size = percent / 100.;
                 }

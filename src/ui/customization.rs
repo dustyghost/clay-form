@@ -9,6 +9,11 @@ pub(crate) struct Customization {
     key_search: String,
     chosen: Option<Action>,
     workspace_name: String,
+    layout_reset_confirmation: bool,
+    keys_reset_confirmation: bool,
+    recovery_workspace: Option<String>,
+    feedback: String,
+    binding_conflict: Option<Action>,
     pub popup_menu: Option<u64>,
     pub popup_position: Option<egui::Pos2>,
     pub popup_blocks_viewport: bool,
@@ -39,6 +44,7 @@ impl ActionResponse for egui::Response {
         self.customize_in(action, Placement::Menu)
     }
     fn customize_in(self, action: Action, placement: Placement) -> Self {
+        super::search::highlight_response(&self, &format!("action:{action:?}"));
         self.context_menu(|ui| {
             if placement != Placement::Menu {
                 sidebar_options(ui, placement);
@@ -222,10 +228,51 @@ impl UiState {
         }
         actions
     }
-    pub fn action_enabled(&self, action: &Action, document: &Document) -> bool {
+    pub fn action_unavailable(&self, action: &Action, document: &Document) -> Option<&'static str> {
         crate::app::policy::EditorPolicy::new(self, document)
             .action(action)
-            .is_ok()
+            .err()
+    }
+    pub fn action_enabled(&self, action: &Action, document: &Document) -> bool {
+        self.action_unavailable(action, document).is_none()
+    }
+    pub(super) fn cancel_shortcut_assignment(&mut self) {
+        self.capturing = None;
+        self.customization.binding_conflict = None;
+    }
+    pub(crate) fn begin_shortcut_assignment(
+        &mut self,
+        action: Action,
+        document: &Document,
+        ctx: &egui::Context,
+    ) {
+        // Key settings is rendered later in this frame. Only keys pressed after
+        // entering capture belong to the binding, not Enter/Space used to open it.
+        ctx.input_mut(|input| {
+            input
+                .events
+                .retain(|event| !matches!(event, egui::Event::Key { .. } | egui::Event::Text(_)));
+        });
+        self.layout_open = false;
+        self.viewport_controls.editor_open = false;
+        self.settings_open = true;
+        self.customization.key_search = self.action_label(&action, document);
+        self.customization.binding_conflict = None;
+        self.capturing = Some(action);
+    }
+    pub(crate) fn begin_add_to_menu(&mut self, action: Action, document: &Document) {
+        self.settings_open = false;
+        self.capturing = None;
+        self.viewport_controls.editor_open = false;
+        self.layout_open = true;
+        self.customization.search = self.action_label(&action, document);
+        self.customization.chosen = Some(action);
+    }
+    pub(crate) fn workspace_label(&self) -> &str {
+        self.preferences
+            .active_workspace
+            .and_then(|i| self.preferences.workspaces.get(i))
+            .map_or("Custom", |w| w.name.as_str())
     }
     pub(super) fn action_selected(
         &self,
@@ -410,7 +457,9 @@ impl UiState {
     ) -> egui::Response {
         let action = item.action.as_ref().expect("action widget");
         if super::brush_controls::is_control(action) {
-            return self.brush_control(ui, action, &item.label, document, commands);
+            let response = self.brush_control(ui, action, &item.label, document, commands);
+            super::search::highlight_response(&response, &format!("action:{action:?}"));
+            return response;
         }
         let label = if item.label.trim().is_empty() {
             self.action_label(action, document)
@@ -437,6 +486,17 @@ impl UiState {
             )
         };
         let response = self.edge_help(response, action, document);
+        let response = if let Some(reason) = self.action_unavailable(action, document) {
+            if response.has_focus() {
+                ui.weak(reason);
+            }
+            response
+                .on_hover_text(reason)
+                .on_disabled_hover_text(reason)
+        } else {
+            response
+        };
+        super::search::highlight_response(&response, &format!("action:{action:?}"));
         if response.clicked() && available {
             commands.push(Command::Action(action.clone()));
             if close_menu {
@@ -644,7 +704,7 @@ impl UiState {
             let mut open = true;
             let response = egui::Window::new(&menu.name)
                 .id(egui::Id::new(("custom_float", menu.id)))
-                .default_pos(menu.position)
+                .current_pos(menu.position)
                 .open(&mut open)
                 .vscroll(true)
                 .show(ctx, |ui| {
@@ -652,6 +712,12 @@ impl UiState {
                     ui.separator();
                     self.custom_items(ui, &menu, document, &mut commands, false);
                 });
+            if let Some(response) = &response {
+                self.search_placement_drag(
+                    SidebarSection::Custom(menu.id),
+                    response.response.dragged(),
+                );
+            }
             if let Some(current) = self.preferences.menus.iter_mut().find(|m| m.id == menu.id) {
                 if let Some(response) = response {
                     current.position = [response.response.rect.min.x, response.response.rect.min.y];
@@ -757,15 +823,8 @@ impl UiState {
                     self.layout_open = true;
                 }
 
-                Request::Add(action) => {
-                    self.layout_open = true;
-                    self.customization.chosen = Some(action);
-                }
-                Request::Bind(action) => {
-                    self.settings_open = true;
-                    self.customization.key_search = self.action_label(&action, document);
-                    self.capturing = Some(action);
-                }
+                Request::Add(action) => self.begin_add_to_menu(action, document),
+                Request::Bind(action) => self.begin_shortcut_assignment(action, document, ctx),
             }
         }
         if !self.settings_open {
@@ -782,13 +841,24 @@ impl UiState {
                 if shortcut.key == "Escape" {
                     self.capturing = None;
                 } else {
-                    match self.preferences.bind(action.clone(), shortcut) {
+                    match self.preferences.bind(action.clone(), shortcut.clone()) {
                         Ok(()) => {
                             self.settings_message =
                                 format!("Updated {}", self.action_label(&action, document));
                             self.capturing = None;
+                            self.customization.binding_conflict = None;
                         }
-                        Err(error) => self.settings_message = error,
+                        Err(error) => {
+                            self.customization.binding_conflict = self
+                                .preferences
+                                .bindings
+                                .iter()
+                                .find(|(other, binding)| {
+                                    *other != action && binding.as_ref() == Some(&shortcut)
+                                })
+                                .map(|(other, _)| other.clone());
+                            self.settings_message = error;
+                        }
                     }
                 }
                 ctx.input_mut(|i| {
@@ -798,16 +868,24 @@ impl UiState {
             }
         }
         let mut open = self.settings_open;
-        egui::Window::new("Key settings").open(&mut open).default_size([540., 700.]).default_pos([350., 80.]).max_height((ctx.content_rect().height()-100.).max(160.)).vscroll(true).show(ctx, |ui| {
+        egui::Window::new("Key settings").open(&mut open).default_size([540., 700.]).default_pos([350., 80.]).max_width((ctx.content_rect().width() - 32.).max(260.)).max_height((ctx.content_rect().height()-100.).max(160.)).vscroll(true).show(ctx, |ui| {
+            super::search::mark_destination(ui, "keys");
             ui.label("Click a binding and press the new keys. Escape cancels.");
             ui.label("1–0 and Shift+1–0 are separate bindings. Changes save automatically.");
+            ui.label("Shortcuts are shared across every workspace. Layout resets keep them unchanged.");
             ui.label("Shortcuts pause during text entry and settings editing.");
             self.touch_settings(ui, document);
             ui.add(egui::TextEdit::singleline(&mut self.customization.key_search).hint_text("Search actions, brushes and menus"));
             if let Some(action) = &self.capturing { ui.strong(format!("Press keys for {}…", self.action_label(action, document))); }
             ui.label(&self.settings_message);
+            if let Some(conflict) = self.customization.binding_conflict.clone()
+                && ui.button(format!("Find binding: {}", self.action_label(&conflict, document))).clicked() {
+                self.customization.key_search = self.action_label(&conflict, document);
+                self.capturing = None;
+                self.customization.binding_conflict = None;
+            }
             egui::ScrollArea::vertical().id_salt("key_rows").max_height(350.).show(ui, |ui| {
-                egui::Grid::new("bindings").striped(true).show(ui, |ui| {
+                egui::Grid::new("bindings").max_col_width(240.).striped(true).show(ui, |ui| {
                     for action in self.action_catalog(document) {
                         let label = self.action_label(&action, document);
                         if !label.to_lowercase().contains(&self.customization.key_search.to_lowercase()) { continue; }
@@ -842,32 +920,65 @@ impl UiState {
                 }
             }
             ui.weak("Temporary selection takes priority over tool modifiers. Middle/right-button navigation remains available. Zoom takes priority over pan with shared modifiers. Pan starts off the model; on the model, brush modifiers apply. Choose Mask or Visibility in the X menu; the hold uses that mode and its remembered shape.");
-            if ui.button("Reset keys to defaults").clicked() {
-                let defaults = Preferences::default();
-                self.preferences.visibility_hold = defaults.visibility_hold;
-                self.preferences.mask_hold = defaults.mask_hold;
-                self.preferences.reset_key_bindings(); self.preferences.smooth = defaults.smooth;
-                self.preferences.reverse = defaults.reverse; self.preferences.zoom_hold = defaults.zoom_hold; self.preferences.pan_hold = defaults.pan_hold;
-                self.capturing = None; self.settings_message.clear();
+            if ui.button("Reset keys to defaults…").clicked() {
+                self.customization.keys_reset_confirmation = true;
+            }
+            if self.customization.keys_reset_confirmation {
+                ui.group(|ui| {
+                    ui.label("Reset all keyboard bindings and held modifiers across every workspace? Layouts and saved workspaces stay unchanged.");
+                    ui.horizontal_wrapped(|ui| {
+                        if ui.button("Reset shared keys").clicked() {
+                            let defaults = Preferences::default();
+                            self.preferences.visibility_hold = defaults.visibility_hold;
+                            self.preferences.mask_hold = defaults.mask_hold;
+                            self.preferences.reset_key_bindings();
+                            self.preferences.smooth = defaults.smooth;
+                            self.preferences.reverse = defaults.reverse;
+                            self.preferences.zoom_hold = defaults.zoom_hold;
+                            self.preferences.pan_hold = defaults.pan_hold;
+                            self.capturing = None;
+                            self.settings_message = "Shared shortcuts reset. Workspace layouts are unchanged.".into();
+                            self.customization.keys_reset_confirmation = false;
+                        }
+                        if ui.button("Keep my keys").clicked() { self.customization.keys_reset_confirmation = false; }
+                    });
+                });
             }
         });
         self.settings_open = open;
         let mut open = self.layout_open;
-        egui::Window::new("Customize workspace").open(&mut open).default_size([760., 750.]).default_pos([300., 80.]).max_height((ctx.content_rect().height()-100.).max(160.)).vscroll(true).show(ctx, |ui| {
-            ui.label("Build menus and button shelves. Right-click an action button to add it or assign a key.");
-            ui.label("Changes save automatically. Drag floating shelves by their titles.");
+        egui::Window::new("Customize workspace").open(&mut open)
+            .default_size([760., 750.]).default_pos([300., 80.])
+            .max_width((ctx.content_rect().width() - 32.).max(260.))
+            .max_height((ctx.content_rect().height()-64.).max(160.)).vscroll(true).show(ctx, |ui| {
+            super::search::mark_destination(ui, "workspace");
+            ui.heading(format!("Workspace: {}", self.workspace_label()));
+            ui.label("Arrange panels, favourite tools and navigation here. Changes save automatically.");
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("Shortcuts…").clicked() { self.settings_open = true; }
+                if ui.button("Configure viewport controls…").clicked() { self.viewport_controls.editor_open = true; }
+                if ui.button("Find Roll view…").clicked() {
+                    self.reveal_viewport_control(crate::preferences::ViewportControlKind::Roll);
+                }
+            });
             self.workspace_editor(ui);
             ui.separator();
-            if ui.button("Configure viewport controls…").clicked() {
-                self.viewport_controls.editor_open = true;
-            }
+            self.workspace_recovery(ui);
+            if !self.customization.feedback.is_empty() { ui.weak(&self.customization.feedback); }
             ui.separator();
+            super::search::mark_destination(ui, "setting:Custom menus and shelves");
+            ui.heading("Custom menus and shelves");
+            ui.weak("Choose a destination, search for a brush or action, then Add. Right-click shortcuts remain available on existing controls.");
             self.custom_editor(ui, document);
             ui.separator();
-            egui::CollapsingHeader::new("Built-in panels and toolbar").show(ui, |ui| {
-                design::checkbox(ui, &mut self.preferences.compact_toolbar, "Compact toolbar (keep Settings and custom menus)");
+            egui::CollapsingHeader::new("Built-in panels and toolbar")
+                .open(super::search::requested_section(ui.ctx(), "workspace_panels"))
+                .show(ui, |ui| {
+                super::search::mark_destination(ui, "setting:Panel placement");
+                ui.weak("Choose Left, Right, Floating or Hidden. Expand a panel to reveal its controls.");
+                design::checkbox(ui, &mut self.preferences.compact_toolbar, "Compact toolbar (keep Project, Search and Workspace)");
                 for index in 0..self.preferences.panels.len() {
-                    ui.push_id(index, |ui| { ui.horizontal(|ui| {
+                    ui.push_id(index, |ui| { ui.horizontal_wrapped(|ui| {
                         let panel = &mut self.preferences.panels[index];
                         ui.label(panel.tool.label());
                         egui::ComboBox::from_id_salt("dock").selected_text(format!("{:?}", panel.dock)).show_ui(ui, |ui| {
@@ -883,7 +994,7 @@ impl UiState {
             });
             ui.separator();
         });
-        self.layout_open = open && !self.viewport_controls.editor_open;
+        self.layout_open = open && !self.viewport_controls.editor_open && !self.settings_open;
         super::design::appearance(ctx, &self.preferences.appearance);
     }
     fn custom_editor(&mut self, ui: &mut egui::Ui, document: &Document) {
@@ -930,7 +1041,7 @@ impl UiState {
         };
         let mut menu = self.preferences.menus[index].clone();
         let mut delete = false;
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.add(
                 egui::TextEdit::singleline(&mut menu.name)
                     .desired_width(150.)
@@ -950,8 +1061,13 @@ impl UiState {
             );
             delete = ui.button("Delete menu").clicked();
         });
+        ui.weak(format!(
+            "Adding to {} · {}",
+            menu.name,
+            menu.placement.label()
+        ));
         design::checkbox(ui, &mut menu.collapsible, "Collapsible section");
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.add(
                 egui::TextEdit::singleline(&mut self.customization.search)
                     .desired_width(200.)
@@ -985,6 +1101,12 @@ impl UiState {
                             self.customization.chosen = Some(action.clone());
                         }
                         if ui.small_button("Add").clicked() {
+                            self.customization.feedback = format!(
+                                "Added {} to {} ({})",
+                                self.action_label(&action, document),
+                                menu.name,
+                                menu.placement.label()
+                            );
                             menu.items.push(CustomItem::action(action));
                         }
                     });
@@ -998,6 +1120,12 @@ impl UiState {
                 ))
                 .clicked()
         {
+            self.customization.feedback = format!(
+                "Added {} to {} ({})",
+                self.action_label(action, document),
+                menu.name,
+                menu.placement.label()
+            );
             menu.items.push(CustomItem::action(action.clone()));
         }
         ui.label("Menu contents · drag the grip or use arrows to reorder · optional custom labels");
@@ -1057,9 +1185,15 @@ impl UiState {
             });
         if let Some(i) = remove {
             menu.items.remove(i);
+            self.customization.feedback = format!(
+                "Removed the copy from {}. The original tool is still available.",
+                menu.name
+            );
         } else if let Some((a, b)) = reorder {
             let item = menu.items.remove(a);
             menu.items.insert(b, item);
+            self.customization.feedback =
+                format!("Moved item to position {} in {}", b + 1, menu.name);
         }
         if delete {
             self.delete_custom_menu(menu.id);
@@ -1142,6 +1276,9 @@ impl UiState {
         // Bindings are global: another workspace can still contain this menu.
     }
     fn activate_workspace(&mut self, ctx: &egui::Context, index: usize) {
+        let layout_open = self.layout_open;
+        self.finish_search_reveal(ctx, false);
+        self.layout_open = layout_open;
         self.preferences.switch_workspace(index);
         self.customization.selected_menu = None;
         self.customization.popup_menu = None;
@@ -1156,6 +1293,8 @@ impl UiState {
             .map_or("Custom", |w| w.name.as_str())
             .to_owned();
         egui::ComboBox::from_id_salt("active_workspace")
+            .width(190.)
+            .truncate()
             .selected_text(format!("Workspace: {name}"))
             .show_ui(ui, |ui| {
                 let mut selected = None;
@@ -1180,6 +1319,64 @@ impl UiState {
                 }
             });
     }
+    fn workspace_recovery(&mut self, ui: &mut egui::Ui) {
+        super::search::mark_destination(ui, "setting:Recover workspace");
+        ui.label("Recover your layout");
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("Restore hidden panels").clicked() {
+                self.finish_search_reveal(ui.ctx(), false);
+                let count = self.preferences.restore_hidden_panels();
+                self.customization.feedback =
+                    format!("Restored {count} hidden panels and shelves to the sidebars.");
+            }
+            if ui.button("Recover floating panels").clicked() {
+                self.finish_search_reveal(ui.ctx(), false);
+                let count = self
+                    .preferences
+                    .recover_floating_panels(ui.ctx().content_rect());
+                reset_panel_memory(ui.ctx());
+                self.customization.feedback =
+                    format!("Recovered {count} floating panels inside this window.");
+            }
+            if ui.button("Start a default workspace…").clicked() {
+                self.customization.layout_reset_confirmation = true;
+            }
+        });
+        ui.weak("Restore reveals hidden panels. Recover brings floating title bars back on screen. Neither changes shortcuts or panel contents.");
+        if self.customization.layout_reset_confirmation {
+            ui.group(|ui| {
+                ui.label("Start with the default panel layout, shelves, viewport controls and colours? Your current arrangement is kept as a named workspace. Shortcuts and other saved workspaces stay unchanged.");
+                ui.horizontal_wrapped(|ui| {
+                    if ui.button("Use default layout").clicked() {
+                        self.finish_search_reveal(ui.ctx(), false);
+                        let name = self.preferences.start_default_workspace();
+                        self.customization.feedback = format!("Default layout ready. Return to {name} at any time.");
+                        self.customization.recovery_workspace = Some(name);
+                        self.customization.selected_menu = None;
+                        self.customization.popup_menu = None;
+                        self.customization.layout_reset_confirmation = false;
+                        reset_panel_memory(ui.ctx());
+                    }
+                    if ui.button("Keep this layout").clicked() {
+                        self.customization.layout_reset_confirmation = false;
+                    }
+                });
+            });
+        }
+        if let Some(name) = self.customization.recovery_workspace.clone()
+            && let Some(index) = self
+                .preferences
+                .workspaces
+                .iter()
+                .position(|w| w.name == name)
+            && ui.button(format!("Return to {name}")).clicked()
+        {
+            self.activate_workspace(ui.ctx(), index);
+            self.customization.recovery_workspace = None;
+            self.customization.feedback = format!("Restored workspace: {name}");
+        }
+    }
+
     fn workspace_editor(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             self.workspace_selector(ui);
@@ -1196,91 +1393,82 @@ impl UiState {
                 .add_enabled(valid, egui::Button::new("Save as workspace"))
                 .on_hover_text("Use a unique workspace name")
                 .clicked()
-                && self
+            {
+                self.finish_search_reveal(ui.ctx(), false);
+                if self
                     .preferences
                     .save_workspace_as(&self.customization.workspace_name)
                     .is_ok()
-            {
-                self.customization.workspace_name.clear();
+                {
+                    self.customization.workspace_name.clear();
+                }
             }
         });
         ui.weak("Named workspaces automatically remember menus, pinned menu positions, sidebar order, panel sizes, collapsed sections and colours. Keys are shared across workspaces.");
-        egui::CollapsingHeader::new("Workspace colours and style").show(ui, |ui| {
-            let appearance = &mut self.preferences.appearance;
-            ui.horizontal(|ui| {
-                ui.label("Presets:");
-                if ui.button("Dark").clicked() {
-                    *appearance = Appearance::default();
-                }
-                if ui.button("Light").clicked() {
-                    *appearance = Appearance::light();
-                }
-                if ui.button("Warm").clicked() {
-                    *appearance = Appearance::warm();
-                }
-            });
-            ui.horizontal_wrapped(|ui| {
-                for (name, colour) in [
-                    ("Panels", &mut appearance.panels),
-                    ("Buttons", &mut appearance.buttons),
-                    ("Accent", &mut appearance.accent),
-                    ("Text", &mut appearance.text),
-                    ("Model view", &mut appearance.viewport),
-                ] {
-                    ui.color_edit_button_srgb(colour);
-                    ui.label(name);
-                }
-            });
-            ui.add(egui::Slider::new(&mut appearance.spacing, 2..=16).text("Control spacing"));
-            ui.add(egui::Slider::new(&mut appearance.rounding, 0..=16).text("Corner rounding"));
-        });
-        egui::CollapsingHeader::new("Manage saved workspaces").show(ui, |ui| {
-            let mut remove = None;
-            for (index, workspace) in self.preferences.workspaces.clone().iter().enumerate() {
-                ui.push_id(index, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(&workspace.name);
-                        if ui.button("Switch").clicked() {
-                            self.activate_workspace(ui.ctx(), index);
-                        }
-                        if ui.button("Delete workspace").clicked() {
-                            remove = Some(index);
-                        }
-                    });
+        egui::CollapsingHeader::new("Workspace colours and style")
+            .open(super::search::requested_section(
+                ui.ctx(),
+                "workspace_appearance",
+            ))
+            .show(ui, |ui| {
+                super::search::mark_destination(ui, "setting:Workspace appearance");
+                let appearance = &mut self.preferences.appearance;
+                ui.horizontal(|ui| {
+                    ui.label("Presets:");
+                    if ui.button("Dark").clicked() {
+                        *appearance = Appearance::default();
+                    }
+                    if ui.button("Light").clicked() {
+                        *appearance = Appearance::light();
+                    }
+                    if ui.button("Warm").clicked() {
+                        *appearance = Appearance::warm();
+                    }
                 });
-            }
-            if let Some(index) = remove {
-                self.preferences.delete_workspace(index);
-            }
-            if ui.button("Start a default workspace").clicked() {
-                self.preferences.sync_active_workspace();
-                self.preferences.active_workspace = None;
-                // Keep the brush-menu shortcut identity across named workspaces.
-                let brush_id = self
-                    .preferences
-                    .menus
-                    .iter()
-                    .find(|m| m.items.iter().any(|i| i.action == Some(Action::BrushSize)))
-                    .map(|m| m.id)
-                    .unwrap_or_else(|| self.preferences.add_menu());
-                let mut defaults = Preferences::default().workspace(String::new());
-                defaults.menus[0].id = brush_id;
-                self.preferences.apply_workspace(&defaults);
-                if !self
-                    .preferences
-                    .bindings
-                    .iter()
-                    .any(|(a, _)| *a == Action::OpenMenu(brush_id))
-                {
-                    let _ = self.preferences.bind(
-                        Action::OpenMenu(brush_id),
-                        Shortcut::new(egui::Key::S, egui::Modifiers::NONE),
-                    );
+                ui.horizontal_wrapped(|ui| {
+                    for (name, colour) in [
+                        ("Panels", &mut appearance.panels),
+                        ("Buttons", &mut appearance.buttons),
+                        ("Accent", &mut appearance.accent),
+                        ("Text", &mut appearance.text),
+                        ("Model view", &mut appearance.viewport),
+                    ] {
+                        ui.color_edit_button_srgb(colour);
+                        ui.label(name);
+                    }
+                });
+                ui.add(egui::Slider::new(&mut appearance.spacing, 2..=16).text("Control spacing"));
+                ui.add(egui::Slider::new(&mut appearance.rounding, 0..=16).text("Corner rounding"));
+            });
+        egui::CollapsingHeader::new("Manage saved workspaces")
+            .open(super::search::requested_section(
+                ui.ctx(),
+                "workspace_saved",
+            ))
+            .show(ui, |ui| {
+                super::search::mark_destination(ui, "setting:Saved workspaces");
+                let mut remove = None;
+                for (index, workspace) in self.preferences.workspaces.clone().iter().enumerate() {
+                    ui.push_id(index, |ui| {
+                        ui.horizontal(|ui| {
+                            let response = ui.label(&workspace.name);
+                            super::search::highlight_response(
+                                &response,
+                                &format!("workspace:{index}:{}", workspace.name),
+                            );
+                            if ui.button("Switch").clicked() {
+                                self.activate_workspace(ui.ctx(), index);
+                            }
+                            if ui.button("Delete workspace").clicked() {
+                                remove = Some(index);
+                            }
+                        });
+                    });
                 }
-                self.customization.selected_menu = None;
-                self.customization.popup_menu = None;
-                reset_panel_memory(ui.ctx());
-            }
-        });
+                if let Some(index) = remove {
+                    self.finish_search_reveal(ui.ctx(), false);
+                    self.preferences.delete_workspace(index);
+                }
+            });
     }
 }

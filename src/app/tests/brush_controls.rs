@@ -7,6 +7,19 @@ fn setup() -> (App, egui::Context) {
     for panel in &mut app.ui.preferences.panels {
         panel.dock = Dock::Hidden;
     }
+    // These regressions exercise an artist's docked Tool controls shelf and
+    // its S popup, independently of the fresh workspace's menu placement.
+    let shelf = app
+        .ui
+        .preferences
+        .menus
+        .iter_mut()
+        .find(|menu| menu.name == "Tool controls")
+        .unwrap();
+    shelf.placement = Placement::LeftPanel;
+    shelf.expanded = true;
+    // Reproduce choosing Panels > Sculpting panels in a narrow window.
+    app.ui.narrow_panel = Some(Dock::Left);
     let ctx = egui::Context::default();
     ctx.style_mut(|s| s.animation_time = 0.);
     (app, ctx)

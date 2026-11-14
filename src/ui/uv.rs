@@ -349,6 +349,7 @@ impl UiState {
         let has_image = uv.textures.iter().any(|t| t.channel == self.uv.channel);
         egui::CollapsingHeader::new("Create from model surface")
             .id_salt(("new_texture", has_image))
+            .open(search::requested_section(ui.ctx(), "texture_resolution"))
             .default_open(!has_image)
             .show(ui, |ui| {
                 ui.label("Create an image and assign it to the active model");
@@ -528,7 +529,7 @@ impl UiState {
                     }
                 });
             }
-            ui.collapsing("External painting", |ui| {
+            egui::CollapsingHeader::new("External painting").open(search::requested_section(ui.ctx(), "external_paint")).show(ui, |ui| {
             ui.label(format!("Assigned image: {}", texture.name));
             let users = document.texture_users(texture.id);
             ui.weak(format!("Reload updates {} shared model uses: {}", users.len(), users.join(", ")));

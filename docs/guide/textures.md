@@ -60,7 +60,7 @@ OBJ import/export retains face-corner UVs without splitting sculpt vertices. Con
 
 ## Export to Maya, Cinema 4D and other DCCs
 
-Use **Export → OpenUSD…** for an ASCII `.usda` stage, or **Export → FBX…** for binary FBX. OpenUSD export is built in. FBX requires Blender 4.0 or newer on PATH. Both export the **active model at its current subdivision level**, with triangle topology, split normals, face-corner UVs and base metallic/roughness materials. Positions are Y-up; one Clay Form unit is exported as one metre. Check scene scale on import. Maya needs its USD plug-in enabled for OpenUSD.
+Use **Project → Export → OpenUSD…** for an ASCII `.usda` stage, or **Project → Export → FBX…** for binary FBX. OpenUSD export is built in. FBX requires Blender 4.0 or newer on PATH. Both export the **active model at its current subdivision level**, with triangle topology, split normals, face-corner UVs and base metallic/roughness materials. Positions are Y-up; one Clay Form unit is exported as one metre. Check scene scale on import. Maya needs its USD plug-in enabled for OpenUSD.
 
 Keep the model beside its generated **`clay-assets-…` folder** when moving or sharing it. Texture references are relative. Every export creates a fresh folder so re-exporting cannot overwrite older texture assets. Old folders can be removed after checking that no model references them. Export cancellation leaves the existing model untouched. A filesystem failure during final publication may leave an unused companion folder.
 

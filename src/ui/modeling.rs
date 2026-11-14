@@ -104,29 +104,44 @@ impl UiState {
         if let Some(amount) = self.modeling.preview_amount {
             ui.label(format!("Radius {amount:.6} (preview)"));
         } else {
-            ui.add(
-                egui::DragValue::new(&mut self.modeling.amount)
-                    .prefix("Radius ")
-                    .range(0.000001..=1000.)
-                    .speed(0.001)
-                    .max_decimals(6),
+            search::setting_response(
+                ui.add(
+                    egui::DragValue::new(&mut self.modeling.amount)
+                        .prefix("Radius ")
+                        .range(0.000001..=1000.)
+                        .speed(0.001)
+                        .max_decimals(6),
+                ),
+                "Modeling amount",
             );
         }
-        design::checkbox(
-            ui,
-            &mut self.modeling.construction.double_ring,
-            "Double ring sides (4 to 8)",
+        search::setting_response(
+            design::checkbox(
+                ui,
+                &mut self.modeling.construction.double_ring,
+                "Double ring sides (4 to 8)",
+            ),
+            "Double ring sides",
         );
-        design::checkbox(
-            ui,
-            &mut self.modeling.construction.round,
+        search::setting_response(
+            design::checkbox(
+                ui,
+                &mut self.modeling.construction.round,
+                "Circularize ring",
+            ),
             "Circularize ring",
         );
-        design::checkbox(ui, &mut self.modeling.construction.crease, "Crease ring");
-        design::checkbox(
-            ui,
-            &mut self.modeling.construction.triangulate,
-            "Triangulate center",
+        search::setting_response(
+            design::checkbox(ui, &mut self.modeling.construction.crease, "Crease ring"),
+            "Crease ring",
+        );
+        search::setting_response(
+            design::checkbox(
+                ui,
+                &mut self.modeling.construction.triangulate,
+                "Triangulate center",
+            ),
+            "Triangulate centre",
         );
         design::checkbox(ui, &mut self.modeling.tap_repeat, "Tap to repeat")
             .customize(Action::ModelTapRepeat);
@@ -143,6 +158,7 @@ impl UiState {
         document: &Document,
         commands: &mut Vec<Command>,
     ) {
+        search::mark_destination(ui, "section:modeling_options");
         let unavailable = self.edge_unavailable(&Action::SelectEdges, document);
         let mut active = self.modeling.active;
         let response = ui
@@ -172,7 +188,14 @@ impl UiState {
         {
             commands.push(Command::Action(Action::PenModeling));
         }
+        if let Some(reason) = unavailable {
+            ui.label(reason);
+        }
+        if search::requested_section(ui.ctx(), "modeling_options").is_some() {
+            ui.label("Tool options follow the active Modeling tool and selection target. Enable Modeling, then choose the relevant tool to adjust its settings.");
+        }
         if !self.modeling.active {
+            ui.weak("Enable Modeling to select faces, edges or vertices. Your component selection is kept when switching tools.");
             return;
         }
         ui.label(format!(
@@ -181,6 +204,17 @@ impl UiState {
             self.modeling.tool.label(),
             self.modeling.count
         ));
+        if self.modeling.preview_amount.is_some() {
+            ui.label("Preview: release to apply, or Escape to cancel and keep the selection.");
+        } else if self.modeling.count == 0 {
+            ui.label(match self.modeling.mode {
+                ComponentMode::Face => "Select a face in the viewport to use component actions.",
+                ComponentMode::Edge => "Select an edge in the viewport to use component actions.",
+                ComponentMode::Vertex => {
+                    "Select a vertex in the viewport to use component actions."
+                }
+            });
+        }
         if document.symmetry().enabled {
             ui.weak("Symmetry on · matching geometry and topology required");
         }
@@ -233,7 +267,7 @@ impl UiState {
                 }
             });
             if self.modeling.span==SelectionSpan::Flat {
-                ui.add(egui::Slider::new(&mut self.modeling.flat_angle,0. ..=180.).text("Island angle").suffix("°"));
+                search::setting_response(ui.add(egui::Slider::new(&mut self.modeling.flat_angle,0. ..=180.).text("Island angle").suffix("°")), "Island angle");
                 ui.weak("Connected faces within this angle of the first face");
             }
             }
@@ -248,12 +282,12 @@ impl UiState {
                     if matches!(tool,ModelTool::EdgeSplit|ModelTool::EdgeCollapse) {
                         ui.label("Position from marked endpoint (0–1)");
                         let range=if tool==ModelTool::EdgeSplit {0.001..=0.999}else{0.0..=1.0};
-                        ui.add(egui::DragValue::new(&mut self.modeling.amount).range(range).speed(0.01));
+                        search::setting_response(ui.add(egui::DragValue::new(&mut self.modeling.amount).range(range).speed(0.01)), "Modeling amount");
                         if tool==ModelTool::EdgeCollapse {ui.horizontal_wrapped(|ui|{ui.selectable_value(&mut self.modeling.amount,0.,"Marked end");ui.selectable_value(&mut self.modeling.amount,0.5,"Midpoint");ui.selectable_value(&mut self.modeling.amount,1.,"Other end");});}
                         ui.weak("Drag along the edge to place the point · Esc cancels");
                     } else if !tool.instant() {
                         ui.label(if tool==ModelTool::PointSplit {"Radius"}else{"Distance"});
-                        ui.add(egui::DragValue::new(&mut self.modeling.amount).speed(0.01));
+                        search::setting_response(ui.add(egui::DragValue::new(&mut self.modeling.amount).speed(0.01)), "Modeling amount");
                         ui.weak("Drag up/down to adjust · release applies · Esc cancels");
                     }
                     if tool==ModelTool::EdgeExtrude {
@@ -261,11 +295,11 @@ impl UiState {
                         ui.weak("Border: extend outward · surface: extrude the highlighted side");
                     }
                     if tool==ModelTool::PointExtrude {
-                        ui.add(egui::DragValue::new(&mut self.modeling.construction.width).prefix("Base radius ").range(0.0001..=1000.).speed(0.01));
+                        search::setting_response(ui.add(egui::DragValue::new(&mut self.modeling.construction.width).prefix("Base radius ").range(0.0001..=1000.).speed(0.01)), "Point base radius");
                     }
                     if matches!(tool,ModelTool::PointSplit|ModelTool::PointExtrude) {
-                        design::checkbox(ui, &mut self.modeling.construction.round,"Circularize ring");
-                        design::checkbox(ui, &mut self.modeling.construction.crease,"Crease ring");
+                        search::setting_response(design::checkbox(ui, &mut self.modeling.construction.round,"Circularize ring"), "Circularize ring");
+                        search::setting_response(design::checkbox(ui, &mut self.modeling.construction.crease,"Crease ring"), "Crease ring");
                         ui.weak("Closed point fan · radius below half the shortest edge");
                     }
                     if tool.instant(){ui.weak(if tool==ModelTool::FacePoint {"Tap: connect a center point to each corner"}else{"Tap: split into quads and connect neighboring edges"});}
@@ -286,11 +320,11 @@ impl UiState {
                         }
                     });
                     let mut erase = self.modeling.erase_radius > 0.;
-                    if ui.checkbox(&mut erase, "Paint away selection").changed() {
+                    if search::setting_response(ui.checkbox(&mut erase, "Paint away selection"), "Paint away selection").changed() {
                         self.modeling.erase_radius = if erase { 32. } else { 0. };
                     }
                     if erase {
-                        ui.add(egui::Slider::new(&mut self.modeling.erase_radius,4. ..=160.).text("Eraser radius (px)"));
+                        search::setting_response(ui.add(egui::Slider::new(&mut self.modeling.erase_radius,4. ..=160.).text("Eraser radius (px)")), "Eraser radius");
                         ui.weak("Brush visible selected components · Esc restores the selection");
                     } else { ui.weak("Tap or drag to select · Shift adds · Ctrl removes"); }
                     match (self.modeling.mode,self.modeling.span) {
@@ -311,11 +345,11 @@ impl UiState {
                 ModelTool::Extrude | ModelTool::Fuse => {
                     if self.modeling.tool==ModelTool::Fuse {
                         ui.label("Snap range (fraction of local edge)");
-                        ui.add(egui::DragValue::new(&mut self.modeling.snap).range(0.0..=0.25).speed(0.005));
+                        search::setting_response(ui.add(egui::DragValue::new(&mut self.modeling.snap).range(0.0..=0.25).speed(0.005)), "Snap range");
                         ui.weak("Each separate flat region snaps to its own compatible loop or cap.");
                     }
-                    if self.modeling.tool==ModelTool::Extrude {design::checkbox(ui, &mut self.modeling.individual,"Individual faces");}
-                    ui.add(egui::DragValue::new(&mut self.modeling.amount).prefix("Distance ").speed(0.01));
+                    if self.modeling.tool==ModelTool::Extrude {search::setting_response(design::checkbox(ui, &mut self.modeling.individual,"Individual faces"), "Individual faces");}
+                    search::setting_response(ui.add(egui::DragValue::new(&mut self.modeling.amount).prefix("Distance ").speed(0.01)), "Modeling amount");
                     ui.horizontal_wrapped(|ui| {
                         if self.modeling.tool == ModelTool::Fuse && ui.add_enabled(self.modeling.count>0, egui::Button::new("Preview")).clicked() { commands.push(Command::ModelPreviewFuse); }
                         if ui.add_enabled(self.modeling.count>0, egui::Button::new("Apply amount")).customize(Action::ModelApply).clicked(){commands.push(Command::ModelApply);}
@@ -333,8 +367,8 @@ impl UiState {
                     }
                 }
                 ModelTool::Inset | ModelTool::Bevel => {
-                    design::checkbox(ui, &mut self.modeling.individual,"Individual faces");
-                    ui.add(egui::DragValue::new(&mut self.modeling.amount).prefix("Width ").range(0.0..=1000.).speed(0.01));
+                    search::setting_response(design::checkbox(ui, &mut self.modeling.individual,"Individual faces"), "Individual faces");
+                    search::setting_response(ui.add(egui::DragValue::new(&mut self.modeling.amount).prefix("Width ").range(0.0..=1000.).speed(0.01)), "Modeling amount");
                     if ui.add_enabled(self.modeling.count>0,egui::Button::new("Apply amount")).customize(Action::ModelApply).clicked(){commands.push(Command::ModelApply);}
                     ui.weak("Drag up to increase width · release applies · Esc cancels");
                     if self.modeling.tool==ModelTool::Bevel {ui.weak("Flat region with one exterior edge at each corner.");}
@@ -364,7 +398,7 @@ impl UiState {
                         } else { ui.weak(format!("Direction: X {:.2}, Y {:.2}, Z {:.2}",d.0,d.1,d.2)); }
                     }
                     ui.label(match self.modeling.tool { ModelTool::Slide=>"Slide fraction (-1 to 1)", ModelTool::Rotate=>"Angle (degrees)",ModelTool::Scale=>"Scale factor",_=>"Distance" });
-                    ui.add(egui::DragValue::new(&mut self.modeling.amount).speed(0.01));
+                    search::setting_response(ui.add(egui::DragValue::new(&mut self.modeling.amount).speed(0.01)), "Modeling amount");
                     let has_direction=!direct || self.modeling.interaction==ModelInteraction::Axis || self.modeling.tool==ModelTool::Scale || self.modeling.transform_direction.len()>1e-6;
                     if ui.add_enabled(self.modeling.count>0 && has_direction,egui::Button::new("Apply amount")).customize(Action::ModelApply).clicked() { commands.push(Command::ModelApply); }
                     ui.weak("Release applies · Esc cancels · one Undo per drag");
@@ -420,7 +454,7 @@ impl UiState {
                 design::checkbox(ui, &mut self.modeling.smooth_preview,"Smooth preview").customize(Action::ModelSmoothPreview);
             });
             if self.modeling.smooth_preview {ui.weak("One smooth level · cage stays editable · preview pauses during a drag");}
-            ui.collapsing("Tool presets",|ui|{
+            egui::CollapsingHeader::new("Tool presets").open(search::requested_section(ui.ctx(), "model_presets")).show(ui,|ui|{
                 ui.add(egui::TextEdit::singleline(&mut self.modeling.preset_name).hint_text("Preset name"));
                 if ui.button("Save tool preset").customize(Action::ModelSavePreset).clicked(){commands.push(Command::Action(Action::ModelSavePreset));}
                 for preset in &self.preferences.modeling_presets {
@@ -431,7 +465,7 @@ impl UiState {
                 }
                 ui.weak("Saves action, target and options. Right-click a preset to add it to a shelf.");
             });
-            ui.collapsing("Topology",|ui|{
+            egui::CollapsingHeader::new("Topology").open(search::requested_section(ui.ctx(), "model_topology")).show(ui,|ui|{
                 for edit in crate::sculpt::TopologyEdit::ALL {
                     use crate::sculpt::TopologyEdit as T;
                     let mode=match edit {T::DeleteFaces=>ComponentMode::Face,T::Connect|T::Weld=>ComponentMode::Vertex,_=>ComponentMode::Edge};
@@ -439,7 +473,7 @@ impl UiState {
                 }
                 ui.weak("Delete opens holes; dissolve keeps the surface. Weld uses the midpoint.");
             });
-            ui.collapsing("Selection to vertex group", |ui| {
+            egui::CollapsingHeader::new("Selection to vertex group").open(search::requested_section(ui.ctx(), "model_groups")).show(ui, |ui| {
                 ui.text_edit_singleline(&mut self.modeling.group_name);
                 let enabled = self.modeling.count > 0 && document.mesh_settings().levels() == 1;
                 let help = "Use a single subdivision level and select components first. Face colors use only selected faces; vertex weights include their corners. Edges include both ends. Creating or adding replaces previous membership; partial regions remain, fully replaced groups disappear. Masks stay unchanged.";

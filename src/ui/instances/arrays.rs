@@ -12,6 +12,7 @@ pub(super) fn editor(ui: &mut egui::Ui, a: &mut Array, active: &mut usize, docum
     } else if a.owner.is_none() {
         choose_piece(ui, "Source", &mut a.piece, document, false);
     }
+    search::mark_destination(ui, "setting:Array layer options");
     *active = (*active).min(a.layers.len());
     ui.horizontal_wrapped(|ui| {
         ui.label("Array layers");

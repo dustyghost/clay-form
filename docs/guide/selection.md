@@ -18,6 +18,8 @@
 3. Hold **Ctrl+Shift** over the model. All brush highlights clear while the hold is active, and brush names stay unchanged. Mask painting still uses the remembered Mask brush preset. The viewport shows the active mode and shape.
 4. Paint or draw, release the pen to commit, then release Ctrl+Shift to restore the original brush highlight and sculpt or Modeling tool. **Alt** reverses the operation while held.
 
+The operation strip names the temporary mode, shape and Add/Erase or Hide/Isolate operation while the selection hold is active. Releasing the hold returns its feedback to the previous tool. Your normal brush selection stays intact.
+
 Both tabs share a **Clear** section at the top: **Clear mask** removes the active model’s mask, and **Show all** restores its hidden faces. The popup stays open after either action.
 
 Change **Hold for selection (X menu)** in **Settings → Key settings** to rebind the shared hold. The optional **Dedicated mask hold** remains available for existing custom bindings.

@@ -178,14 +178,17 @@ impl App {
         }
     }
     fn save_preferences(&mut self) {
-        self.ui.preferences.sync_active_workspace();
-        if self.ui.preferences == self.saved_preferences {
+        if !self.ui.search_has_reveal() {
+            self.ui.preferences.sync_active_workspace();
+        }
+        let preferences = self.ui.preferences_for_save();
+        if preferences == self.saved_preferences {
             return;
         }
         if let Some(path) = &self.preferences_path {
-            match preferences::save(path, &self.ui.preferences) {
+            match preferences::save(path, &preferences) {
                 Ok(()) => {
-                    self.saved_preferences = self.ui.preferences.clone();
+                    self.saved_preferences = preferences;
                     self.preferences_changed = None;
                 }
                 Err(error) => {
@@ -197,6 +200,8 @@ impl App {
     }
     fn shortcuts(&mut self, ctx: &egui::Context) {
         if ctx.wants_keyboard_input()
+            || self.ui.search_open()
+            || self.ui.search_blocks_frame
             || self.ui.submodel_confirmation_open()
             || self.ui.pending.is_some()
             || self.ui.file_picker.is_some()
@@ -266,6 +271,13 @@ impl App {
             return;
         }
         for action in self.ui.preferences.actions(ctx) {
+            // Plain Tab belongs to focus traversal outside the viewport.
+            if action == Action::ToggleZen
+                && self.ui.preferences.shortcut(&action)
+                    == Some(&Shortcut::new(egui::Key::Tab, egui::Modifiers::NONE))
+            {
+                continue;
+            }
             self.execute_action(action, ctx);
             if self.ui.pending.is_some() || self.ui.file_picker.is_some() {
                 break;
@@ -357,7 +369,9 @@ impl App {
         for command in confirmation_commands {
             self.dispatch(command, ui.ctx());
         }
-        let enabled = !self.ui.customization.popup_blocks_viewport
+        let enabled = !self.ui.search_open()
+            && !self.ui.search_blocks_frame
+            && !self.ui.customization.popup_blocks_viewport
             && self.ui.customization.popup_menu.is_none()
             && !menu_was_open
             && self.ui.viewport_menu.context.is_none()
@@ -411,9 +425,11 @@ impl App {
         let over_toolbar = toolbar_rect.is_some_and(|rect| {
             ui.input(|i| i.pointer.hover_pos().is_some_and(|p| rect.contains(p)))
         });
+        let navigation_rect = ui.available_rect_before_wrap();
+        self.viewport.navigation_rect = Some(navigation_rect);
         let controls = self.ui.viewport_controls(
             ui.ctx(),
-            ui.available_rect_before_wrap(),
+            navigation_rect,
             &self.document,
             enabled
                 && self.viewport.session.gesture.is_none()
@@ -434,7 +450,7 @@ impl App {
         }
         let light_input = self.ui.light_controls.show(
             ui.ctx(),
-            ui.available_rect_before_wrap(),
+            navigation_rect,
             &self.camera,
             &mut self.ui.preferences.lighting,
             enabled && !controls.blocks_viewport && self.viewport.session.gesture.is_none(),
@@ -797,6 +813,220 @@ impl App {
         }
     }
 }
+impl App {
+    /// Workspace rendering is shared by the desktop update and interaction regressions.
+    fn workspace_ui(&mut self, ctx: &egui::Context) {
+        self.workspace_shortcuts(ctx);
+        self.ui.search_blocks_frame = self.ui.search_open();
+        let mut search_commands = Vec::new();
+        self.ui
+            .search_dialog(ctx, &self.document, &mut search_commands);
+        if self.ui.search_blocks_frame && !self.ui.search_open() {
+            self.viewport.wait_for_release();
+        }
+        for command in search_commands {
+            self.dispatch(command, ctx);
+        }
+        // Reserve the return controls before floating destinations choose a position.
+        self.ui.search_reveal_banner(ctx);
+        if !self.ui.zen_mode {
+            for command in self.ui.toolbar(ctx, &self.document, &self.camera) {
+                self.dispatch(command, ctx);
+            }
+        } else {
+            self.zen_toolbar(ctx);
+        }
+        if !self.ui.zen_mode {
+            self.ui.status_bar(ctx);
+        }
+        let mut status_commands = Vec::new();
+        egui::TopBottomPanel::bottom("operation_status").show(ctx, |ui| {
+            self.ui
+                .operation_status(ui, &self.document, &mut status_commands);
+        });
+        for command in status_commands {
+            self.dispatch(command, ctx);
+        }
+        if !self.ui.zen_mode {
+            for command in self.ui.custom_surfaces(ctx, &self.document) {
+                self.dispatch(command, ctx);
+            }
+            for command in self.ui.brush_panel(
+                ctx,
+                &self.document,
+                &self.tablet.status(),
+                self.pressure,
+                &self.camera,
+            ) {
+                self.dispatch(command, ctx);
+            }
+        }
+        for command in self.ui.projection_window(ctx, &self.document, &self.camera) {
+            self.dispatch(command, ctx);
+        }
+        for command in self.ui.fusion_window(ctx, &self.document) {
+            self.dispatch(command, ctx);
+        }
+        for command in self.ui.uv_window(
+            ctx,
+            &self.document,
+            &self.viewport.modeling.selected_faces(),
+        ) {
+            self.dispatch(command, ctx);
+        }
+        self.viewport.set_texture_exposure(if self.ui.uv.open {
+            self.ui.uv.exposure
+        } else {
+            0.
+        });
+        self.viewport
+            .set_uv_checker(self.ui.uv.open && self.ui.uv.checker);
+        if matches!(
+            self.ui.preferences.paint_inspection,
+            crate::viewport::InspectionMode::Roughness | crate::viewport::InspectionMode::Metallic
+        ) {
+            self.ui.preferences.paint_inspection = crate::viewport::InspectionMode::Lit;
+        }
+        self.viewport
+            .set_inspection_mode(self.ui.preferences.paint_inspection);
+        self.ui.settings(ctx, &self.document);
+        self.ui.viewport_controls_editor(ctx, &self.document);
+        self.shortcuts(ctx);
+        if self.recovery_error.is_some() {
+            egui::TopBottomPanel::bottom("recovery_error").show(ctx, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.colored_label(
+                        egui::Color32::LIGHT_RED,
+                        format!(
+                            "Recovery failed: {}",
+                            self.recovery_error.as_deref().unwrap()
+                        ),
+                    );
+                    if ui.button("Recovery settings…").clicked() {
+                        self.open_recovery();
+                    }
+                });
+            });
+        }
+        let mut reveal_commands = Vec::new();
+        if !self.ui.zen_mode {
+            self.ui
+                .search_revealed_project(ctx, &self.document, &mut reveal_commands);
+        }
+        for command in reveal_commands {
+            self.dispatch(command, ctx);
+        }
+        egui::CentralPanel::default().show(ctx, |ui| self.show_viewport(ui));
+        if let Some(command) = self.ui.alpha_popup(ctx) {
+            self.dispatch(command, ctx);
+        }
+        if let Some(command) = self.ui.icon_capture_popup(ctx, &self.document) {
+            self.dispatch(command, ctx);
+        }
+        if let Some(command) = self.ui.project_file_dialog(ctx) {
+            self.dispatch(command, ctx);
+        }
+        if let Some(command) = self.ui.confirmation(ctx) {
+            self.dispatch(command, ctx);
+        }
+        self.show_recovery(ctx);
+        self.show_diagnostics(ctx);
+        self.ui.about(ctx);
+    }
+
+    fn workspace_shortcuts(&mut self, ctx: &egui::Context) {
+        if self.ui.capturing.is_none() {
+            let binding = self.ui.preferences.shortcut(&Action::Search).cloned();
+            let search = binding.is_some_and(|binding| {
+                // Text fields own plain and Shift-only keys. Modified search
+                // shortcuts remain available from a field, like Ctrl+F.
+                if ctx.wants_keyboard_input() && !binding.ctrl && !binding.alt && !binding.command {
+                    return false;
+                }
+                ctx.input_mut(|input| {
+                    let mut pressed = false;
+                    input.events.retain(|event| {
+                        let matched = Shortcut::from_event(event).as_ref() == Some(&binding);
+                        pressed |=
+                            matched && !matches!(event, egui::Event::Key { repeat: true, .. });
+                        !matched
+                    });
+                    pressed
+                })
+            });
+            if search {
+                self.execute_action(Action::Search, ctx);
+            }
+        }
+        let viewport_focus = ctx.memory(|m| m.focused().is_none())
+            && self.ui.viewport_menu.viewport_rect.is_some_and(|rect| {
+                ctx.input(|input| {
+                    input
+                        .pointer
+                        .hover_pos()
+                        .is_some_and(|point| rect.contains(point))
+                })
+            });
+        let unobstructed = !self.ui.search_open()
+            && !self.ui.layout_open
+            && !self.ui.settings_open
+            && !self.ui.viewport_controls.editor_open
+            && !self.ui.viewport_controls.arranging
+            && !self.ui.mesh_capacity_open
+            && !self.ui.recovery_open
+            && !self.ui.diagnostics_open
+            && !self.ui.about_open
+            && self.ui.pending.is_none()
+            && self.ui.file_picker.is_none()
+            && !self.ui.submodel_confirmation_open()
+            && !self.ui.icon_capture_open()
+            && self.ui.alphas.draft.is_none()
+            && self.ui.alphas.overwrite.is_none()
+            && self.ui.viewport_menu.context.is_none()
+            && self.ui.customization.popup_menu.is_none()
+            && !egui::Popup::is_any_open(ctx)
+            && !ctx.input(|i| i.pointer.any_down());
+        let tab = Shortcut::new(egui::Key::Tab, egui::Modifiers::NONE);
+        if viewport_focus
+            && unobstructed
+            && !ctx.wants_keyboard_input()
+            && self.ui.preferences.shortcut(&Action::ToggleZen) == Some(&tab)
+            && ctx.input_mut(|input| {
+                let mut pressed = false;
+                input.events.retain(|event| {
+                    let matched = Shortcut::from_event(event).as_ref() == Some(&tab);
+                    pressed |= matched && !matches!(event, egui::Event::Key { repeat: true, .. });
+                    !matched
+                });
+                pressed
+            })
+        {
+            // egui computes its focus direction before widgets consume events.
+            ctx.memory_mut(|memory| memory.move_focus(egui::FocusDirection::None));
+            self.execute_action(Action::ToggleZen, ctx);
+        }
+    }
+
+    fn zen_toolbar(&mut self, ctx: &egui::Context) {
+        egui::TopBottomPanel::top("zen_toolbar").show(ctx, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.strong("Zen mode");
+                if ui.button("Exit Zen mode").clicked() {
+                    self.ui.set_zen_mode(false);
+                    self.viewport.wait_for_release();
+                }
+                if ui.button("Search…").clicked() {
+                    self.execute_action(Action::Search, ctx);
+                }
+                if ui.button("Workspace…").clicked() {
+                    self.ui.set_zen_mode(false);
+                    self.ui.layout_open = true;
+                }
+            });
+        });
+    }
+}
+
 impl eframe::App for App {
     fn raw_input_hook(&mut self, _: &egui::Context, input: &mut egui::RawInput) {
         if self.tablet.prepare_input(input) {
@@ -861,87 +1091,11 @@ impl eframe::App for App {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.request(PendingAction::Quit, ctx);
         }
-        for command in self.ui.toolbar(ctx, &self.document, &self.camera) {
-            self.dispatch(command, ctx);
+        self.workspace_ui(ctx);
+        if !self.ui.search_has_reveal() {
+            self.ui.preferences.sync_active_workspace();
         }
-        for command in self.ui.custom_surfaces(ctx, &self.document) {
-            self.dispatch(command, ctx);
-        }
-        for command in self.ui.brush_panel(
-            ctx,
-            &self.document,
-            &self.tablet.status(),
-            self.pressure,
-            &self.camera,
-        ) {
-            self.dispatch(command, ctx);
-        }
-        for command in self.ui.projection_window(ctx, &self.document, &self.camera) {
-            self.dispatch(command, ctx);
-        }
-        for command in self.ui.fusion_window(ctx, &self.document) {
-            self.dispatch(command, ctx);
-        }
-        for command in self.ui.uv_window(
-            ctx,
-            &self.document,
-            &self.viewport.modeling.selected_faces(),
-        ) {
-            self.dispatch(command, ctx);
-        }
-        self.viewport.set_texture_exposure(if self.ui.uv.open {
-            self.ui.uv.exposure
-        } else {
-            0.
-        });
-        self.viewport
-            .set_uv_checker(self.ui.uv.open && self.ui.uv.checker);
-        if matches!(
-            self.ui.preferences.paint_inspection,
-            crate::viewport::InspectionMode::Roughness | crate::viewport::InspectionMode::Metallic
-        ) {
-            self.ui.preferences.paint_inspection = crate::viewport::InspectionMode::Lit;
-        }
-        self.viewport
-            .set_inspection_mode(self.ui.preferences.paint_inspection);
-        self.ui.settings(ctx, &self.document);
-        self.ui.viewport_controls_editor(ctx, &self.document);
-        self.shortcuts(ctx);
-        if self.recovery_error.is_some() {
-            egui::TopBottomPanel::bottom("recovery_error").show(ctx, |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    ui.colored_label(
-                        egui::Color32::LIGHT_RED,
-                        format!(
-                            "Recovery failed: {}",
-                            self.recovery_error.as_deref().unwrap()
-                        ),
-                    );
-                    if ui.button("Recovery settings…").clicked() {
-                        self.open_recovery();
-                    }
-                });
-            });
-        }
-        self.ui.status_bar(ctx);
-        egui::CentralPanel::default().show(ctx, |ui| self.show_viewport(ui));
-        if let Some(command) = self.ui.alpha_popup(ctx) {
-            self.dispatch(command, ctx);
-        }
-        if let Some(command) = self.ui.icon_capture_popup(ctx, &self.document) {
-            self.dispatch(command, ctx);
-        }
-        if let Some(command) = self.ui.project_file_dialog(ctx) {
-            self.dispatch(command, ctx);
-        }
-        if let Some(command) = self.ui.confirmation(ctx) {
-            self.dispatch(command, ctx);
-        }
-        self.show_recovery(ctx);
-        self.show_diagnostics(ctx);
-        self.ui.about(ctx);
-        self.ui.preferences.sync_active_workspace();
-        if self.ui.preferences != self.saved_preferences {
+        if self.ui.preferences_for_save() != self.saved_preferences {
             let since = self
                 .preferences_changed
                 .get_or_insert_with(std::time::Instant::now);

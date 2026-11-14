@@ -143,12 +143,22 @@ impl UiState {
             );
         }
         if document.stencil().is_some() {
-            ui.collapsing("Stencil placement", |ui| {
-                self.stencil_controls(ui, document, commands);
-            });
+            egui::CollapsingHeader::new("Stencil placement")
+                .open(search::requested_section(ui.ctx(), "stencil_placement"))
+                .show(ui, |ui| {
+                    self.stencil_controls(ui, document, commands);
+                });
         }
         ui.separator();
         ui.label("Alpha library");
+        if search::requested_section(ui.ctx(), "alpha_adjustments").is_some() {
+            ui.label("Select a project alpha and choose Edit alpha, or Duplicate alpha for a built-in image. The draft editor contains crop, levels, gamma and edge fade.");
+        }
+        if search::requested_section(ui.ctx(), "stencil_placement").is_some()
+            && document.stencil().is_none()
+        {
+            ui.label("Select an alpha and choose Place stencil to adjust its placement, rotation and overlay opacity.");
+        }
         ui.add(
             egui::TextEdit::singleline(&mut self.alphas.search)
                 .hint_text("Search names or categories")
@@ -178,9 +188,16 @@ impl UiState {
                             .chain((0..document.alphas().len()).map(Selection::Project))
                         {
                             let asset = selection.asset(document).expect("existing library entry");
-                            if !format!("{} {}", asset.name, asset.category)
-                                .to_lowercase()
-                                .contains(&query)
+                            let search_key = match selection {
+                                Selection::Builtin(index) => format!("builtin-alpha:{index}"),
+                                Selection::Project(index) => {
+                                    format!("alpha:{index}:{}", asset.name)
+                                }
+                            };
+                            if !search::is_requested(ui.ctx(), &search_key)
+                                && !format!("{} {}", asset.name, asset.category)
+                                    .to_lowercase()
+                                    .contains(&query)
                             {
                                 continue;
                             }
@@ -205,6 +222,7 @@ impl UiState {
                                 }
                                 _ => response,
                             };
+                            search::highlight_response(&response, &search_key);
                             if response.clicked() {
                                 self.alphas.selected = Some(selection);
                             }
@@ -388,26 +406,40 @@ impl UiState {
             for (i, axis) in ["Horizontal", "Vertical"].into_iter().enumerate() {
                 ui.horizontal(|ui| {
                     ui.label(axis);
-                    ui.add(
-                        egui::DragValue::new(&mut stencil.position[i])
-                            .speed(0.005)
-                            .range(-10000. ..=10000.),
+                    search::setting_response(
+                        ui.add(
+                            egui::DragValue::new(&mut stencil.position[i])
+                                .speed(0.005)
+                                .range(-10000. ..=10000.),
+                        ),
+                        "Stencil position",
                     );
                 });
             }
             for (i, axis) in ["Width", "Height"].into_iter().enumerate() {
                 ui.horizontal(|ui| {
                     ui.label(axis);
-                    ui.add(
-                        egui::DragValue::new(&mut stencil.size[i])
-                            .speed(0.005)
-                            .range(0.001..=10000.),
+                    search::setting_response(
+                        ui.add(
+                            egui::DragValue::new(&mut stencil.size[i])
+                                .speed(0.005)
+                                .range(0.001..=10000.),
+                        ),
+                        "Stencil size",
                     );
                 });
             }
-            ui.add(egui::Slider::new(&mut stencil.rotation, -180. ..=180.).text("Rotation"));
+            search::setting_response(
+                ui.add(egui::Slider::new(&mut stencil.rotation, -180. ..=180.).text("Rotation")),
+                "Stencil rotation",
+            );
             design::help(
-                ui.add(egui::Slider::new(&mut stencil.opacity, 0. ..=1.).text("Overlay opacity")),
+                search::setting_response(
+                    ui.add(
+                        egui::Slider::new(&mut stencil.opacity, 0. ..=1.).text("Overlay opacity"),
+                    ),
+                    "Stencil overlay opacity",
+                ),
                 "Changes the guide only, not sculpt strength. Use zero to inspect the sculpt while keeping the stencil active.",
             );
             ui.collapsing("Stencil help", |ui| {
@@ -452,14 +484,20 @@ impl UiState {
                 .max_height((ctx.content_rect().height() - 160.).max(180.))
                 .show(ui, |ui| {
                     ui.label("Name");
-                    ui.add(
-                        egui::TextEdit::singleline(&mut draft.asset.name)
-                            .desired_width(ui.available_width()),
+                    search::setting_response(
+                        ui.add(
+                            egui::TextEdit::singleline(&mut draft.asset.name)
+                                .desired_width(ui.available_width()),
+                        ),
+                        "Alpha name and category",
                     );
                     ui.label("Category");
-                    ui.add(
-                        egui::TextEdit::singleline(&mut draft.asset.category)
-                            .desired_width(ui.available_width()),
+                    search::setting_response(
+                        ui.add(
+                            egui::TextEdit::singleline(&mut draft.asset.category)
+                                .desired_width(ui.available_width()),
+                        ),
+                        "Alpha name and category",
                     );
                     let before = draft.adjustments.clone();
                     ui.columns(2, |columns| {
@@ -479,25 +517,46 @@ impl UiState {
                         controls.label("Crop (source fractions)");
                         for (i, name) in ["Left", "Top", "Right", "Bottom"].into_iter().enumerate()
                         {
-                            controls.add(
-                                egui::Slider::new(&mut draft.adjustments.crop[i], 0. ..=1.)
-                                    .text(name),
+                            search::setting_response(
+                                controls.add(
+                                    egui::Slider::new(&mut draft.adjustments.crop[i], 0. ..=1.)
+                                        .text(name),
+                                ),
+                                "Alpha crop",
                             );
                         }
-                        controls.add(
-                            egui::Slider::new(&mut draft.adjustments.black, 0. ..=1.).text("Black"),
+                        search::setting_response(
+                            controls.add(
+                                egui::Slider::new(&mut draft.adjustments.black, 0. ..=1.)
+                                    .text("Black"),
+                            ),
+                            "Alpha black level",
                         );
-                        controls.add(
-                            egui::Slider::new(&mut draft.adjustments.white, 0. ..=1.).text("White"),
+                        search::setting_response(
+                            controls.add(
+                                egui::Slider::new(&mut draft.adjustments.white, 0. ..=1.)
+                                    .text("White"),
+                            ),
+                            "Alpha white level",
                         );
-                        controls.add(
-                            egui::Slider::new(&mut draft.adjustments.gamma, 0.1..=4.).text("Gamma"),
+                        search::setting_response(
+                            controls.add(
+                                egui::Slider::new(&mut draft.adjustments.gamma, 0.1..=4.)
+                                    .text("Gamma"),
+                            ),
+                            "Alpha gamma",
                         );
-                        controls.add(
-                            egui::Slider::new(&mut draft.adjustments.edge_fade, 0. ..=0.5)
-                                .text("Edge fade"),
+                        search::setting_response(
+                            controls.add(
+                                egui::Slider::new(&mut draft.adjustments.edge_fade, 0. ..=0.5)
+                                    .text("Edge fade"),
+                            ),
+                            "Alpha edge fade",
                         );
-                        controls.checkbox(&mut draft.adjustments.invert, "Invert heights");
+                        search::setting_response(
+                            controls.checkbox(&mut draft.adjustments.invert, "Invert heights"),
+                            "Invert alpha heights",
+                        );
                         if controls.button("Reset adjustments").clicked() {
                             draft.adjustments = Default::default();
                         }

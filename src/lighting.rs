@@ -1,4 +1,5 @@
 //! Viewport illumination, independent of authored material channels.
+use crate::ui::search;
 mod overlay;
 pub(crate) use overlay::LightControls;
 
@@ -87,6 +88,7 @@ impl Light {
         )
     }
     pub fn controls(&mut self, ui: &mut egui::Ui) {
+        search::mark_destination(ui, "setting:Light type");
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.kind, LightKind::Directional, "Directional light");
             ui.selectable_value(&mut self.kind, LightKind::Point, "Point light");
@@ -111,32 +113,47 @@ impl Light {
         if drag.drag_stopped() {
             ui.ctx().data_mut(|d| d.remove::<[f32; 2]>(id));
         }
-        ui.add(
-            egui::Slider::new(&mut self.azimuth, -180. ..=180.)
-                .text("Light azimuth")
-                .suffix("°"),
+        search::setting_response(
+            ui.add(
+                egui::Slider::new(&mut self.azimuth, -180. ..=180.)
+                    .text("Light azimuth")
+                    .suffix("°"),
+            ),
+            "Light azimuth",
         );
-        ui.add(
-            egui::Slider::new(&mut self.elevation, -89. ..=89.)
-                .text("Light elevation")
-                .suffix("°"),
+        search::setting_response(
+            ui.add(
+                egui::Slider::new(&mut self.elevation, -89. ..=89.)
+                    .text("Light elevation")
+                    .suffix("°"),
+            ),
+            "Light elevation",
         );
         if self.kind == LightKind::Point {
-            ui.add(
-                egui::Slider::new(&mut self.distance, 0.1..=50.)
-                    .logarithmic(true)
-                    .text("Light distance"),
+            search::setting_response(
+                ui.add(
+                    egui::Slider::new(&mut self.distance, 0.1..=50.)
+                        .logarithmic(true)
+                        .text("Light distance"),
+                ),
+                "Light distance",
             );
         }
-        ui.add(egui::Slider::new(&mut self.intensity, 0. ..=20.).text("Light intensity"));
+        search::setting_response(
+            ui.add(egui::Slider::new(&mut self.intensity, 0. ..=20.).text("Light intensity")),
+            "Light intensity",
+        );
         ui.horizontal(|ui| {
-            ui.label("Light colour");
+            search::setting_response(ui.label("Light colour"), "Light colour");
             let mut colour = self.colour;
             if ui.color_edit_button_rgb(&mut colour).changed() {
                 self.colour = colour;
             }
         });
-        ui.checkbox(&mut self.camera_relative, "Light follows camera");
+        search::setting_response(
+            ui.checkbox(&mut self.camera_relative, "Light follows camera"),
+            "Light follows camera",
+        );
     }
 }
 
@@ -278,7 +295,11 @@ impl Lighting {
             .unwrap_or_default()
     }
     pub fn controls(&mut self, ui: &mut egui::Ui) {
-        ui.checkbox(&mut self.show_controls, "Show light controls");
+        search::setting_response(
+            ui.checkbox(&mut self.show_controls, "Show light controls"),
+            "Show light controls",
+        );
+        search::mark_destination(ui, "setting:Light list");
         self.selector(ui);
         ui.horizontal_wrapped(|ui| {
             if ui
@@ -302,7 +323,10 @@ impl Lighting {
             ui.push_id(self.selected, |ui| light.controls(ui));
         }
         ui.separator();
-        ui.add(egui::Slider::new(&mut self.fill, 0. ..=4.).text("Ambient fill"));
+        search::setting_response(
+            ui.add(egui::Slider::new(&mut self.fill, 0. ..=4.).text("Ambient fill")),
+            "Ambient fill",
+        );
         if ui.button("Reset studio lighting").clicked() {
             *self = Self {
                 show_controls: self.show_controls,

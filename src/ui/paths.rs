@@ -40,6 +40,7 @@ pub(crate) fn show(
         egui::Window::new("Editable paths").id(egui::Id::new("editable_paths"))
         .open(&mut open).default_pos(egui::pos2(20.,80.)).default_width(330.).default_height(620.)
         .resizable(true).vscroll(true).show(ctx,|ui| {
+        search::mark_destination(ui, "setting:Path editing options");
         let busy=state.busy();
         let preview=state.has_preview();
         ui.spacing_mut().interact_size.y = 28.;

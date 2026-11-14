@@ -347,6 +347,9 @@ pub(crate) struct Workspace {
     pub menus: Vec<CustomMenu>,
     #[serde(default = "default_viewport_controls")]
     pub viewport_controls: Vec<ViewportControl>,
+    /// Only untouched stock controls adapt automatically to short viewports.
+    #[serde(default = "expanded_default")]
+    pub viewport_controls_auto_layout: bool,
     #[serde(default)]
     pub pinned_menus: Vec<PinnedMenu>,
     #[serde(default)]
@@ -387,6 +390,8 @@ pub(crate) struct Preferences {
     #[serde(default)]
     pub paint_shortcuts_version: u32,
     #[serde(default)]
+    pub search_shortcuts_version: u32,
+    #[serde(default)]
     pub brush_controls_version: u32,
     pub selection_mode: SelectionMode,
     pub visibility_selection: VisibilitySettings,
@@ -411,6 +416,9 @@ pub(crate) struct Preferences {
     pub menus: Vec<CustomMenu>,
     #[serde(default = "default_viewport_controls")]
     pub viewport_controls: Vec<ViewportControl>,
+    /// Only untouched stock controls adapt automatically to short viewports.
+    #[serde(default = "expanded_default")]
+    pub viewport_controls_auto_layout: bool,
     pub pinned_menus: Vec<PinnedMenu>,
     #[serde(default)]
     pub menu_sections: Vec<MenuSection>,
@@ -436,6 +444,7 @@ impl Default for Preferences {
             paint_inspection: Default::default(),
             lighting: Default::default(),
             paint_shortcuts_version: 2,
+            search_shortcuts_version: 1,
             brush_controls_version: 3,
             visibility_selection: VisibilitySettings::default(),
             modeling_presets: Vec::new(),
@@ -471,7 +480,7 @@ impl Default for Preferences {
                     } else {
                         Dock::Left
                     },
-                    open: true,
+                    open: matches!(tool, Tool::Library | Tool::Brush | Tool::Submodels),
                     position: [320. + i as f32 * 25., 100. + i as f32 * 25.],
                 })
                 .collect(),
@@ -479,6 +488,7 @@ impl Default for Preferences {
             right_width: 260.,
             menus: Vec::new(),
             viewport_controls: default_viewport_controls(),
+            viewport_controls_auto_layout: true,
             pinned_menus: Vec::new(),
             menu_sections: Vec::new(),
             sidebar_order: Vec::new(),
@@ -491,6 +501,12 @@ impl Default for Preferences {
             shelf_sizes: default_shelf_sizes(),
         };
         prefs.add_brush_controls();
+        prefs.menus[0].placement = Placement::Menu;
+        prefs.sidebar_order = vec![
+            SidebarSection::Tool(Tool::Brush),
+            SidebarSection::Tool(Tool::Library),
+            SidebarSection::Tool(Tool::Submodels),
+        ];
         prefs
     }
 }
@@ -580,6 +596,7 @@ impl Preferences {
                 panels: workspace.panels.clone(),
                 menus: workspace.menus.clone(),
                 viewport_controls: workspace.viewport_controls.clone(),
+                viewport_controls_auto_layout: workspace.viewport_controls_auto_layout,
                 pinned_menus: workspace.pinned_menus.clone(),
                 menu_sections: workspace.menu_sections.clone(),
                 sidebar_order: workspace.sidebar_order.clone(),
@@ -935,6 +952,7 @@ impl Preferences {
             panels: self.panels.clone(),
             menus: self.menus.clone(),
             viewport_controls: self.viewport_controls.clone(),
+            viewport_controls_auto_layout: self.viewport_controls_auto_layout,
             pinned_menus: self.pinned_menus.clone(),
             menu_sections: self.menu_sections.clone(),
             sidebar_order: self.sidebar_order.clone(),
@@ -949,6 +967,7 @@ impl Preferences {
         self.panels = workspace.panels.clone();
         self.menus = workspace.menus.clone();
         self.viewport_controls = workspace.viewport_controls.clone();
+        self.viewport_controls_auto_layout = workspace.viewport_controls_auto_layout;
         self.pinned_menus = workspace.pinned_menus.clone();
         self.menu_sections = workspace.menu_sections.clone();
         self.sidebar_order = workspace.sidebar_order.clone();
@@ -958,6 +977,94 @@ impl Preferences {
         self.shelf_sizes = workspace.shelf_sizes;
         self.appearance = workspace.appearance.clone();
     }
+    /// Recover hidden controls without changing their contents, keys or saved layouts.
+    pub fn restore_hidden_panels(&mut self) -> usize {
+        let mut restored = 0;
+        for panel in &mut self.panels {
+            if panel.dock == Dock::Hidden {
+                panel.dock = if matches!(panel.tool, Tool::Mesh | Tool::Transform | Tool::Submodels)
+                {
+                    Dock::Right
+                } else {
+                    Dock::Left
+                };
+                panel.open = true;
+                restored += 1;
+            }
+        }
+        for menu in &mut self.menus {
+            if menu.placement == Placement::Hidden {
+                menu.placement = Placement::LeftPanel;
+                menu.expanded = true;
+                restored += 1;
+            }
+        }
+        restored
+    }
+
+    /// Put window title bars back within reach after a display change.
+    pub fn recover_floating_panels(&mut self, bounds: egui::Rect) -> usize {
+        let min = bounds.min + egui::vec2(16., 16.);
+        let max = egui::pos2(
+            (bounds.right() - 240.).max(min.x),
+            (bounds.bottom() - 160.).max(min.y),
+        );
+        let mut recovered = 0;
+        let positions = self
+            .panels
+            .iter_mut()
+            .filter(|p| p.dock == Dock::Floating)
+            .map(|p| &mut p.position)
+            .chain(
+                self.menus
+                    .iter_mut()
+                    .filter(|m| m.placement == Placement::Floating)
+                    .map(|m| &mut m.position),
+            )
+            .chain(self.pinned_menus.iter_mut().map(|m| &mut m.position));
+        for position in positions {
+            let next = [
+                position[0].clamp(min.x, max.x),
+                position[1].clamp(min.y, max.y),
+            ];
+            if next != *position {
+                *position = next;
+                recovered += 1;
+            }
+        }
+        recovered
+    }
+
+    /// Start a fresh layout while retaining an explicit route to the old arrangement.
+    /// This deliberately does not reset bindings or any non-workspace preferences.
+    pub fn start_default_workspace(&mut self) -> String {
+        self.sync_active_workspace();
+        let previous = if let Some(index) = self.active_workspace {
+            self.workspaces[index].name.clone()
+        } else {
+            let base = "Before layout reset";
+            let mut name = base.to_owned();
+            let mut number = 2;
+            while self.workspaces.iter().any(|w| w.name == name) {
+                name = format!("{base} {number}");
+                number += 1;
+            }
+            self.workspaces.push(self.workspace(name.clone()));
+            name
+        };
+        let brush_id = self
+            .menus
+            .iter()
+            .find(|m| m.items.iter().any(|i| i.action == Some(Action::BrushSize)))
+            .map(|m| m.id)
+            .unwrap_or_else(|| self.add_menu());
+        let mut defaults = Self::default().workspace(String::new());
+        defaults.menus[0].id = brush_id;
+        self.apply_workspace(&defaults);
+        self.active_workspace = None;
+        previous
+    }
+
     pub fn sync_active_workspace(&mut self) {
         if let Some(index) = self.active_workspace
             && let Some(saved) = self.workspaces.get(index)
@@ -1072,6 +1179,21 @@ pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
             *key = shortcut;
         }
         prefs.paint_shortcuts_version = 2;
+    }
+    if prefs.search_shortcuts_version == 0 {
+        let previous = Shortcut::new(Key::K, Modifiers::CTRL);
+        let replacement = Shortcut::new(Key::F, Modifiers::CTRL);
+        if prefs.shortcut(&Action::Search) == Some(&previous)
+            && !prefs
+                .bindings
+                .iter()
+                .any(|(_, key)| key.as_ref() == Some(&replacement))
+        {
+            prefs.bind(Action::Search, replacement)?;
+        }
+        // Record even a skipped migration so later deliberate Ctrl+K bindings
+        // and subsequently freed Ctrl+F assignments remain the user's choice.
+        prefs.search_shortcuts_version = 1;
     }
     // This update introduces T and moves the stock selection-menu key from W to X.
     // Explicit unbindings and non-default assignments remain intact.
@@ -1335,6 +1457,123 @@ mod tests {
 }
 
 #[cfg(test)]
+mod search_shortcut_migration_tests {
+    use super::*;
+
+    fn write_legacy(path: &std::path::Path, prefs: &Preferences) {
+        let mut value = serde_json::to_value(prefs).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .remove("search_shortcuts_version");
+        crate::persistence::write_json(&path.to_string_lossy(), &value).unwrap();
+    }
+
+    #[test]
+    fn search_default_migrates_once_from_ctrl_k_to_ctrl_f() {
+        let path = std::env::temp_dir().join(format!(
+            "clay-search-default-upgrade-{}.json",
+            std::process::id()
+        ));
+        let mut prefs = Preferences::default();
+        let old = Shortcut::new(Key::K, Modifiers::CTRL);
+        let replacement = Shortcut::new(Key::F, Modifiers::CTRL);
+        assert_eq!(prefs.shortcut(&Action::Search), Some(&replacement));
+        prefs.bind(Action::Search, old.clone()).unwrap();
+        write_legacy(&path, &prefs);
+
+        let mut upgraded = load(&path).unwrap();
+        prefs.bind(Action::Search, replacement).unwrap();
+        assert_eq!(upgraded, prefs);
+        assert_eq!(upgraded.search_shortcuts_version, 1);
+        save(&path, &upgraded).unwrap();
+        assert_eq!(load(&path).unwrap(), upgraded);
+
+        // Choosing the previous default after migration is a normal custom key.
+        upgraded.bind(Action::Search, old).unwrap();
+        save(&path, &upgraded).unwrap();
+        assert_eq!(load(&path).unwrap(), upgraded);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn search_migration_preserves_custom_unbound_and_conflicting_shortcuts() {
+        for (case, binding, conflict) in [
+            (
+                "custom",
+                Some(Shortcut::new(Key::J, Modifiers::CTRL)),
+                false,
+            ),
+            ("unbound", None, false),
+            (
+                "conflict",
+                Some(Shortcut::new(Key::K, Modifiers::CTRL)),
+                true,
+            ),
+        ] {
+            let path = std::env::temp_dir().join(format!(
+                "clay-search-key-{case}-{}.json",
+                std::process::id()
+            ));
+            let mut prefs = Preferences::default();
+            prefs.clear_binding(&Action::Search);
+            if let Some(binding) = binding {
+                prefs.bind(Action::Search, binding).unwrap();
+            }
+            if conflict {
+                prefs
+                    .bind(Action::Guides, Shortcut::new(Key::F, Modifiers::CTRL))
+                    .unwrap();
+            }
+            write_legacy(&path, &prefs);
+
+            let mut upgraded = load(&path).unwrap();
+            assert_eq!(upgraded, prefs, "preserve the {case} assignments");
+            assert_eq!(upgraded.search_shortcuts_version, 1);
+            if conflict {
+                // A migration skipped for a conflict is also final, even when
+                // Ctrl+F becomes free on a later launch.
+                upgraded.clear_binding(&Action::Guides);
+            }
+            save(&path, &upgraded).unwrap();
+            assert_eq!(load(&path).unwrap(), upgraded);
+            std::fs::remove_file(path).unwrap();
+        }
+    }
+
+    #[test]
+    fn newly_added_search_uses_ctrl_f_without_stealing_existing_bindings() {
+        for conflict in [false, true] {
+            let path = std::env::temp_dir().join(format!(
+                "clay-search-introduction-{conflict}-{}.json",
+                std::process::id()
+            ));
+            let mut prefs = Preferences::default();
+            prefs
+                .bindings
+                .retain(|(action, _)| *action != Action::Search);
+            let shortcut = Shortcut::new(Key::F, Modifiers::CTRL);
+            if conflict {
+                prefs.bind(Action::Guides, shortcut.clone()).unwrap();
+            }
+            write_legacy(&path, &prefs);
+
+            let upgraded = load(&path).unwrap();
+            assert_eq!(
+                upgraded.shortcut(&Action::Search),
+                (!conflict).then_some(&shortcut)
+            );
+            assert_eq!(
+                upgraded.shortcut(&Action::Guides),
+                prefs.shortcut(&Action::Guides)
+            );
+            assert_eq!(upgraded.search_shortcuts_version, 1);
+            std::fs::remove_file(path).unwrap();
+        }
+    }
+}
+
+#[cfg(test)]
 mod migration_tests {
     use super::*;
     #[test]
@@ -1532,6 +1771,7 @@ mod customization_tests {
         for key in [
             "menus",
             "brush_controls_version",
+            "search_shortcuts_version",
             "workspaces",
             "compact_toolbar",
             "next_menu_id",
@@ -1702,6 +1942,9 @@ mod sidebar_tests {
     #[test]
     fn mixed_sidebar_order_and_collapsed_menus_survive_workspace_switch_and_reload() {
         let mut prefs = Preferences::default();
+        // This fixture starts with the original implicit custom-menu-first order.
+        // Fresh workspace visual defaults are exercised separately.
+        prefs.sidebar_order.clear();
         prefs.menus.clear();
         prefs
             .bindings
@@ -1756,11 +1999,22 @@ mod sidebar_tests {
     #[test]
     fn old_layouts_keep_their_order_and_invalid_menu_layouts_are_rejected() {
         let mut prefs = Preferences::default();
+        // Legacy files had no explicit sidebar order. Their custom menus came
+        // first, followed by the persisted panel vector, including user moves.
+        prefs.sidebar_order.clear();
         prefs.panels.swap(0, 1);
         prefs.add_menu();
         prefs.menus[0].placement = Placement::LeftPanel;
         prefs.save_workspace_as("Legacy").unwrap();
         let expected = prefs.sidebar_sections(Dock::Left);
+        assert_eq!(
+            &expected[..3],
+            &[
+                SidebarSection::Custom(prefs.menus[0].id),
+                SidebarSection::Tool(Tool::Brush),
+                SidebarSection::Tool(Tool::Library),
+            ]
+        );
         let mut old = serde_json::to_value(&prefs).unwrap();
         for key in ["menu_sections", "sidebar_order"] {
             old.as_object_mut().unwrap().remove(key);
@@ -1768,6 +2022,8 @@ mod sidebar_tests {
         }
         let mut restored: Preferences = serde_json::from_value(old).unwrap();
         restored.validate().unwrap();
+        assert_eq!(restored.sidebar_sections(Dock::Left), expected);
+        restored.switch_workspace(0);
         assert_eq!(restored.sidebar_sections(Dock::Left), expected);
         restored.dock_menu(BuiltinMenu::Symmetry, Dock::Left);
         restored.menu_sections[0].dock = Dock::Hidden;
@@ -1929,3 +2185,6 @@ mod quick_menu_migration_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod workspace_recovery_tests;

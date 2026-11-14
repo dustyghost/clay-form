@@ -5,10 +5,12 @@ mod about;
 mod appearance;
 mod attached_arrays;
 mod deformation_stack;
+mod discoverability;
 mod grouped_path;
 mod instances;
 mod path_transform;
 mod startup;
+mod workspace;
 fn navigation_frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) -> egui::Rect {
     navigation_frame_with_modifiers(app, ctx, events, egui::Modifiers::NONE)
 }
@@ -332,7 +334,12 @@ fn background_mesh_jobs_commit_once_and_cancellation_or_failure_keeps_original()
     app.dispatch(Command::Remesh, &ctx);
     finish_mesh_job(&mut app);
     assert_eq!(app.document.geometry_snapshot(), before);
-    assert!(app.ui.status.contains("Switch to dynamic"));
+    assert_eq!(
+        app.ui.status,
+        crate::app::policy::EditorPolicy::new(&app.ui, &app.document)
+            .action(&Action::Remesh)
+            .unwrap_err()
+    );
 }
 
 #[test]

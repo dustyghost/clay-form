@@ -2,6 +2,7 @@
 use eframe::egui::{self, Color32, Vec2};
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Glyph {
+    Search,
     Pan,
     Zoom,
     Orbit,
@@ -41,6 +42,7 @@ impl Glyph {
     fn lines(self) -> Vec<Vec<[f32; 2]>> {
         use Glyph::*;
         match self {
+            Search => vec![circle(10., 10., 6.), vec![[14.5, 14.5], [21., 21.]]],
             Path => vec![
                 vec![
                     [3., 18.],
@@ -435,6 +437,20 @@ pub(super) fn floating_button(
     };
     button.min_size(Vec2::splat(40.)).corner_radius(10.)
 }
+/// CollapsingHeader normally forces a single-line label, even offscreen.
+/// Pre-layout long section names so they cannot set a sidebar's minimum width.
+pub(super) fn section_header(ui: &egui::Ui, label: &str) -> egui::CollapsingHeader {
+    let width =
+        (ui.available_width() - ui.spacing().indent - ui.spacing().button_padding.x).max(1.);
+    let text = egui::WidgetText::from(label).into_galley(
+        ui,
+        Some(egui::TextWrapMode::Wrap),
+        width,
+        egui::TextStyle::Button,
+    );
+    egui::CollapsingHeader::new(text)
+}
+
 pub(super) fn menu(
     ui: &mut egui::Ui,
     glyph: Glyph,
