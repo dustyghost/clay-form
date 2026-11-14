@@ -277,6 +277,11 @@ fn touch_long_moved_cancelled_extra_finger_and_outside_taps_do_not_act() {
         );
         assert!(app.document.can_undo(), "case {case}");
         assert!(!app.document.can_redo(), "case {case}");
+        if case == 5 {
+            tap(&mut app, &ctx, 2, 2.1);
+            assert!(!app.document.can_undo());
+            assert!(app.document.can_redo());
+        }
     }
 }
 

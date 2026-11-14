@@ -476,7 +476,7 @@ fn appearance_controls_are_not_in_the_main_toolbar() {
 }
 
 #[test]
-fn startup_defaults_and_z_swap_colours_once_per_press() {
+fn startup_defaults_and_x_swap_colours_once_per_press() {
     let (mut app, ctx) = setup();
     let input = app.ui.paint_input_index(&app.document).unwrap();
     let original = app.document.brushes()[input].clone();
@@ -490,7 +490,7 @@ fn startup_defaults_and_z_swap_colours_once_per_press() {
     let geometry = app.document.geometry_snapshot();
     let mut press = |repeat: bool| {
         if !repeat {
-            let mut release = key(egui::Key::Z);
+            let mut release = key(egui::Key::X);
             if let egui::Event::Key { pressed, .. } = &mut release {
                 *pressed = false;
             }
@@ -502,7 +502,7 @@ fn startup_defaults_and_z_swap_colours_once_per_press() {
                 |ctx| app.shortcuts(ctx),
             );
         }
-        let mut event = key(egui::Key::Z);
+        let mut event = key(egui::Key::X);
         if let egui::Event::Key { repeat: value, .. } = &mut event {
             *value = repeat;
         }
@@ -527,7 +527,7 @@ fn startup_defaults_and_z_swap_colours_once_per_press() {
     assert_eq!(swapped.secondary_colour, original.material.base_color);
     assert!(
         press(true) == swapped,
-        "holding Z must not flicker between colours"
+        "holding X must not flicker between colours"
     );
     let restored = press(false);
     assert_eq!(

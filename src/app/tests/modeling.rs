@@ -368,7 +368,11 @@ fn modeling_custom_actions_activate_tools_and_preserve_group_selection() {
     assert_eq!(app.ui.modeling.change, SelectionChange::Add);
     app.ui.settings_open = true;
     app.dispatch(Command::Action(Action::ModelExtrude), &ctx);
-    assert_eq!(app.ui.modeling.mode, ComponentMode::Vertex);
+    assert_eq!(app.ui.modeling.mode, ComponentMode::Face);
+    assert_eq!(app.ui.modeling.tool, ModelTool::Extrude);
+    app.ui.capturing = Some(Action::ModelVertices);
+    app.dispatch(Command::Action(Action::ModelVertices), &ctx);
+    assert_eq!(app.ui.modeling.mode, ComponentMode::Face);
 }
 
 fn selection_grid() -> (App, egui::Context, egui::Rect) {

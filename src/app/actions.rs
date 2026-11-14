@@ -35,7 +35,7 @@ impl App {
                 | Action::PreviousBrush
                 | Action::NextBrush
                 | Action::Sculpt
-        ) && self.prepare_brush_change(&action)
+        ) && self.prepare_brush_change(&action, ctx)
         {
             return;
         }
@@ -878,6 +878,8 @@ impl App {
                 );
                 if let Err(error) = self.dispatch_instances(command) {
                     self.ui.status = error;
+                } else if id.is_none() {
+                    self.execute_action(Action::ShowPanel(crate::preferences::Tool::Brush), ctx);
                 }
                 None
             }

@@ -10,7 +10,7 @@ pub(super) enum Decision {
 }
 
 impl App {
-    pub(super) fn prepare_brush_change(&mut self, action: &Action) -> bool {
+    pub(super) fn prepare_brush_change(&mut self, action: &Action, ctx: &egui::Context) -> bool {
         let pending = self.paths.busy()
             || self.paths.has_preview()
             || (self.viewport.paths.active && self.viewport.paths.has_unfinished(&self.document))
@@ -26,6 +26,9 @@ impl App {
             return true;
         }
         self.leave_preview_tool();
+        if ctx.input(|input| input.pointer.any_down()) {
+            self.viewport.wait_for_release();
+        }
         false
     }
 
@@ -47,7 +50,6 @@ impl App {
         self.ui.arrange_references = false;
         self.ui.transform_mode = crate::viewport::TransformMode::Sculpt;
         self.sync_path_history_state();
-        self.viewport.wait_for_release();
     }
 
     fn tool_change_can_apply(&self) -> bool {

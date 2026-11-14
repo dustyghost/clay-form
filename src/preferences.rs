@@ -1241,7 +1241,13 @@ pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
                 .bindings
                 .iter()
                 .any(|(_, key)| key.as_ref() == Some(&replacement));
-            if free
+            if !had_selection_menu {
+                // Materialize this historical default before the X/Z migration.
+                // A custom X binding must still leave the new menu unbound.
+                prefs
+                    .bindings
+                    .push((Action::MaskVisibilityMenu, free.then_some(replacement)));
+            } else if free
                 && let Some((_, key)) = prefs
                     .bindings
                     .iter_mut()
@@ -2068,10 +2074,24 @@ mod sidebar_tests {
 #[cfg(test)]
 mod quick_menu_migration_tests {
     use super::*;
+    fn legacy_defaults() -> Preferences {
+        let mut prefs = Preferences {
+            interaction_shortcuts_version: 0,
+            ..Default::default()
+        };
+        prefs.clear_binding(&Action::MaskVisibilityMenu);
+        prefs
+            .bind(
+                Action::SwapPaintColours,
+                Shortcut::new(Key::Z, Modifiers::NONE),
+            )
+            .unwrap();
+        prefs
+    }
     #[test]
     fn quick_menu_migration_preserves_custom_bindings_and_moves_stock_symmetry() {
         for custom_x in [false, true] {
-            let mut prefs = Preferences::default();
+            let mut prefs = legacy_defaults();
             prefs.bindings.retain(|(a, _)| {
                 !matches!(
                     a,
@@ -2108,7 +2128,7 @@ mod quick_menu_migration_tests {
             } else {
                 assert_eq!(
                     loaded.shortcut(&Action::MaskVisibilityMenu),
-                    Some(&Shortcut::new(Key::X, Modifiers::NONE))
+                    Some(&Shortcut::new(Key::Z, Modifiers::NONE))
                 );
                 assert_eq!(
                     loaded.shortcut(&Action::Symmetry),
@@ -2123,7 +2143,7 @@ mod quick_menu_migration_tests {
     #[test]
     fn universal_key_upgrade_moves_previous_w_and_preserves_custom_t_and_unbinding() {
         for unbound in [false, true] {
-            let mut prefs = Preferences::default();
+            let mut prefs = legacy_defaults();
             prefs
                 .bindings
                 .retain(|(a, _)| *a != Action::UniversalTransform);
@@ -2166,7 +2186,7 @@ mod quick_menu_migration_tests {
             } else {
                 assert_eq!(
                     loaded.shortcut(&Action::MaskVisibilityMenu),
-                    Some(&Shortcut::new(Key::X, Modifiers::NONE))
+                    Some(&Shortcut::new(Key::Z, Modifiers::NONE))
                 );
                 assert_eq!(
                     loaded.shortcut(&Action::Symmetry),

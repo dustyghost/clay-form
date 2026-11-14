@@ -1468,6 +1468,13 @@ impl Guide {
                     1.,
                     &self.app.camera,
                 ));
+                // Match workspace_ui: commit toolbar/sidebar commands before
+                // the viewport consumes tool transitions in this frame.
+                if self.interactive {
+                    for command in commands.drain(..) {
+                        self.app.dispatch(command, ctx);
+                    }
+                }
                 egui::CentralPanel::default().show(ctx, |ui| {
                     rect = ui.available_rect_before_wrap();
                     if self.viewport {

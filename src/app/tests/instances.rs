@@ -782,7 +782,23 @@ fn built_in_ship_greebles_load_without_personal_files_and_reuse_saved_project_co
     let (mut app, ctx) = setup();
     let original = app.document.geometry_snapshot();
     let history = app.document.history_counts().0;
+    app.ui
+        .preferences
+        .panels
+        .iter_mut()
+        .find(|p| p.tool == crate::preferences::Tool::Brush)
+        .unwrap()
+        .open = false;
     app.dispatch(Command::Instances(C::ChooseShipGreebles), &ctx);
+    assert!(
+        app.ui
+            .preferences
+            .panels
+            .iter()
+            .find(|p| p.tool == crate::preferences::Tool::Brush)
+            .unwrap()
+            .open
+    );
     let id = app.ui.instances.group.unwrap();
     let brush = app
         .document

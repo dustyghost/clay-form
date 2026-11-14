@@ -60,6 +60,7 @@ pub struct App {
     preferences_path: Option<std::path::PathBuf>,
     saved_preferences: Preferences,
     preferences_changed: Option<std::time::Instant>,
+    open_settings_windows: [bool; 3],
 }
 impl Default for App {
     fn default() -> Self {
@@ -87,6 +88,7 @@ impl Default for App {
             preferences_path: None,
             saved_preferences: Preferences::default(),
             preferences_changed: None,
+            open_settings_windows: [false; 3],
         }
     }
 }
@@ -305,6 +307,22 @@ impl App {
     }
 
     pub(crate) fn show_viewport(&mut self, ui: &mut egui::Ui) {
+        let settings_windows = [
+            self.ui.settings_open,
+            self.ui.mesh_capacity_open,
+            self.ui.layout_open,
+        ];
+        let opened_settings = settings_windows
+            .iter()
+            .zip(self.open_settings_windows)
+            .any(|(&open, was_open)| open && !was_open);
+        self.open_settings_windows = settings_windows;
+        if opened_settings {
+            // Opening a window interrupts the current gesture, but leaves the
+            // viewport available for fresh input while ordinary settings stay open.
+            self.viewport.cancel(&mut self.document);
+            self.viewport.wait_for_release();
+        }
         self.ui.preferences.lighting.install(ui.ctx());
         crate::viewport::set_flat_shading(ui.ctx(), self.ui.flat_shading);
         self.boolean_preview(ui.ctx());
@@ -422,7 +440,8 @@ impl App {
         for command in confirmation_commands {
             self.dispatch(command, ui.ctx());
         }
-        let enabled = !self.ui.search_open()
+        let enabled = !opened_settings
+            && !self.ui.search_open()
             && !self.ui.search_blocks_frame
             && !self.ui.customization.popup_blocks_viewport
             && self.ui.customization.popup_menu.is_none()

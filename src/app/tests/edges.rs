@@ -99,7 +99,13 @@ fn edges_cancel_guards_and_modifier_application_are_atomic() {
     assert_eq!(app.document.history_counts(), count);
     app.ui.settings_open = true;
     app.dispatch(Command::EditEdges(EdgeEdit::ClearCreases), &ctx);
+    assert!(app.mesh_job.is_some());
+    finish_mesh_job(&mut app);
+    assert_eq!(app.document.geometry_snapshot(), before);
+    app.ui.capturing = Some(Action::CreaseEdges);
+    app.dispatch(Command::EditEdges(EdgeEdit::ClearCreases), &ctx);
     assert!(app.mesh_job.is_none());
+    app.ui.capturing = None;
     app.ui.settings_open = false;
     let mut geometry = before.clone();
     geometry.scene.active_metadata = ModelMetadata {
