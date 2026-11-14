@@ -289,6 +289,11 @@ fn object_kit_library_and_strokes_offscreen_review() {
     g.app.camera = Default::default();
     click_guide_label(&mut g, "Clay");
     click_guide_label(&mut g, "MyOB");
+    assert!(
+        g.app.viewport.object_brush.is_some(),
+        "Object brush should be active after choosing its tile: {}",
+        g.app.ui.status
+    );
     assert_eq!(
         g.app
             .viewport

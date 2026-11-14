@@ -80,7 +80,7 @@ In a fresh workspace, **Brush settings** comes before **Brush library** on the
 left, and the active model appears first on the right. **Tool controls** is a
 toolbar menu and **S** popup. Existing workspaces retain their placements.
 
-Tool controls contains the selected material preview, editable **Primary** and **Secondary** colours, and **Swap colours** (**Z**), followed by the active brush icon, draggable **Size** (radius in pixels), **Inner radius** (percent of
+Tool controls contains the selected material preview, editable **Primary** and **Secondary** colours, and **Swap colours** (**X**), followed by the active brush icon, draggable **Size** (radius in pixels), **Inner radius** (percent of
 the outer radius), and **Strength** (percent),
 **Surface footprint and normal**, **Stroke mode**, and **Stroke stabilisation**
 with its trailing distance. You can move it to a top shelf, where it wraps to fit narrower windows.
@@ -263,18 +263,18 @@ Shifted numbers use the physical number-row key, so `!` can bind as Shift+1. Oth
 | Toggle symmetry / guides | Shift+X / G |
 | Toggle wireframe | W |
 | Modeling quick menu | Q |
-| Mask / visibility quick menu | X |
+| Mask / visibility / slice quick menu | Z |
 | Transform quick menu | E |
 | Universal transform / return to sculpting | T |
 | Smaller / larger brush | [ / ] |
 | Tool controls popup | S |
-| Swap Primary / Secondary colours | Z |
+| Swap Primary / Secondary colours | X |
 | Previous / next brush | , / . |
 | Subdivide | Ctrl+D |
 | Lower / higher subdivision level | Shift+D / D |
 | Remesh in dynamic mode | Ctrl+R |
 
-The mask/visibility menu now defaults to X; its previous stock W binding upgrades to X and stock symmetry moves to Shift+X. Wireframe returns to W when that key is free. Custom assignments and explicit unbindings are preserved. If a custom action already uses X, E or T, a newly introduced action for that key starts unbound; an existing menu binding is kept. All bindings can be changed in Key settings.
+The default **X** swaps paint colours and **Z** opens the Mask / Visibility / Slice chooser. **Shift+X** still toggles symmetry, and the configured Undo/Redo chords take priority over the chooser. Open the chooser before holding Ctrl+Shift; Ctrl+Shift+Z remains Redo. On first load, an unchanged old pair (Z for colours, X for the chooser) moves together to the new defaults. If either action has been rebound or cleared, both saved choices remain intact. **Reset shortcuts** applies the new defaults deliberately. All bindings can be changed in Key settings.
 
 ## Toolbar and brush previews
 

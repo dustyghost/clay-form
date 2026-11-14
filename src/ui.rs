@@ -66,6 +66,8 @@ pub(crate) struct UiState {
     pub projection: projection::ProjectionControls,
     pub(crate) fusion: fusion::FusionControls,
     pub paths_active: bool,
+    pub tool_change: Option<Action>,
+    pub tool_change_error: Option<String>,
     pub path_brush_active: bool,
     pub paths_history_ready: bool,
     pub paths_history_reason: Option<&'static str>,
@@ -161,6 +163,8 @@ impl Default for UiState {
             projection: Default::default(),
             fusion: Default::default(),
             paths_active: false,
+            tool_change: None,
+            tool_change_error: None,
             path_brush_active: false,
             paths_history_ready: true,
             paths_history_reason: None,
@@ -288,7 +292,10 @@ impl UiState {
         document: &Document,
         ctx: &egui::Context,
     ) -> Option<usize> {
-        if self.instances.placing || self.selection_brush_active() {
+        if self.instances.placing
+            || self.selection_brush_active()
+            || self.viewport_menu.slice_was_active
+        {
             None
         } else {
             self.brush_index_for_context(document, ctx)
@@ -885,12 +892,7 @@ impl UiState {
                             .customize(Action::SelectBrush(b.identity()))
                             .clicked()
                             {
-                                if self.paths_active {
-                                    commands
-                                        .push(Command::Action(Action::SelectBrush(b.identity())));
-                                } else {
-                                    self.select_brush(i, document);
-                                }
+                                commands.push(Command::Action(Action::SelectBrush(b.identity())));
                             }
                             if (i + 1) % columns == 0 {
                                 ui.end_row();

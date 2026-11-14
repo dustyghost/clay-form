@@ -84,11 +84,12 @@ fn mirror_cancel_failure_and_modal_guards_preserve_document() {
     finish_mesh_job(&mut app);
     assert_eq!(app.document.geometry_snapshot(), before);
     assert_eq!(app.document.history_counts(), (0, 0));
-    for modal in 0..4 {
-        app.ui.settings_open = modal == 0;
+    for modal in 0..5 {
+        app.ui.viewport_controls.arranging = modal == 0;
         app.ui.recovery_open = modal == 1;
-        app.ui.layout_open = modal == 2;
+        app.ui.capturing = (modal == 2).then_some(Action::Mirror(Axis::X, true));
         app.ui.pending = (modal == 3).then_some(PendingAction::New);
+        app.ui.diagnostics_open = modal == 4;
         assert!(
             !app.ui
                 .action_enabled(&Action::Mirror(Axis::X, true), &app.document)
@@ -97,6 +98,7 @@ fn mirror_cancel_failure_and_modal_guards_preserve_document() {
         assert!(app.mesh_job.is_none());
         assert_eq!(app.document.geometry_snapshot(), before);
     }
+    app.ui.diagnostics_open = false;
     app.ui.pending = None;
     app.document
         .set_symmetry(Symmetry {

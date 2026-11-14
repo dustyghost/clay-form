@@ -559,3 +559,168 @@ fn automatic_path_settings_offscreen_preview() {
     render(&mut app, &mut capture, Some("undone"));
     app.viewport.destroy_renderer();
 }
+
+#[test]
+fn brush_switch_from_path_settings_preserves_pending_edits_until_decided() {
+    use crate::app::tool_change::Decision;
+    for decision in [Decision::Apply, Decision::Discard, Decision::KeepEditing] {
+        let (mut app, ctx, id) = setup();
+        let before = app.document.project();
+        let counts = app.document.history_counts();
+        let selected = app.ui.selected;
+        app.viewport.paths.draft.as_mut().unwrap().name = "Pending edit".into();
+        let action = Action::SelectBrush(app.document.brushes()[1].identity());
+        assert!(app.ui.action_enabled(&action, &app.document));
+        app.dispatch(Command::Action(action), &ctx);
+        assert!(app.ui.tool_change.is_some());
+        assert!(app.document.project() == before);
+        assert_eq!(app.ui.selected, selected);
+        app.resolve_tool_change(decision, &ctx);
+        assert!(app.ui.tool_change.is_none());
+        if decision == Decision::KeepEditing {
+            assert!(app.viewport.paths.active);
+            assert_eq!(
+                app.viewport.paths.draft.as_ref().unwrap().name,
+                "Pending edit"
+            );
+            assert_eq!(app.ui.selected, selected);
+        } else {
+            assert!(!app.viewport.paths.active);
+            assert!(!app.ui.paths_active);
+            assert_eq!(app.ui.selected, 1);
+        }
+        if decision == Decision::Apply {
+            assert_eq!(app.document.path(id).unwrap().name, "Pending edit");
+            assert_eq!(app.document.history_counts().0, counts.0 + 1);
+            app.dispatch(Command::Undo, &ctx);
+            assert_eq!(app.document.path(id).unwrap().name, "Controller curve");
+            app.dispatch(Command::Redo, &ctx);
+            assert_eq!(app.document.path(id).unwrap().name, "Pending edit");
+        } else {
+            assert!(app.document.project() == before);
+            assert_eq!(app.document.history_counts(), counts);
+        }
+    }
+}
+
+#[test]
+fn brush_switch_leaves_untouched_paths_and_defers_running_entire_path_commit() {
+    use crate::app::tool_change::Decision;
+    for brush in [false, true] {
+        let (mut app, ctx, _) = setup();
+        if brush {
+            app.dispatch(Command::Path(PathCommand::ActivateBrush), &ctx);
+        }
+        let before = app.document.project();
+        let counts = app.document.history_counts();
+        app.dispatch(Command::Action(Action::NextBrush), &ctx);
+        assert!(!app.viewport.paths.active);
+        assert!(!app.ui.path_brush_active);
+        assert!(app.document.project() == before);
+        assert_eq!(app.document.history_counts(), counts);
+    }
+    let (mut app, ctx, _) = setup();
+    let before = app.document.geometry_snapshot();
+    app.dispatch(Command::Path(PathCommand::StrokeEntirePath), &ctx);
+    assert!(app.paths.busy());
+    app.dispatch(Command::Action(Action::NextBrush), &ctx);
+    assert!(app.ui.tool_change.is_some());
+    finish_preview(&mut app);
+    assert_eq!(
+        app.document.geometry_snapshot(),
+        before,
+        "pending decision must defer automatic commit"
+    );
+    app.resolve_tool_change(Decision::Discard, &ctx);
+    app.poll_paths();
+    assert!(!app.paths.busy());
+    assert!(!app.paths.has_preview());
+    assert_eq!(app.document.geometry_snapshot(), before);
+    assert!(!app.viewport.paths.active);
+}
+
+#[test]
+fn brush_switch_applies_ready_stroke_or_cancels_running_preview() {
+    use crate::app::tool_change::Decision;
+    for apply in [false, true] {
+        let (mut app, ctx, _) = setup();
+        let before = app.document.geometry_snapshot();
+        let counts = app.document.history_counts();
+        app.dispatch(Command::Path(PathCommand::Preview), &ctx);
+        let expected = if apply {
+            finish_preview(&mut app);
+            app.paths.preview_mesh.clone()
+        } else {
+            None
+        };
+        app.dispatch(Command::Action(Action::NextBrush), &ctx);
+        assert!(app.ui.tool_change.is_some());
+        app.resolve_tool_change(
+            if apply {
+                Decision::Apply
+            } else {
+                Decision::Discard
+            },
+            &ctx,
+        );
+        assert!(!app.viewport.paths.active);
+        assert!(!app.paths.busy());
+        assert!(!app.paths.has_preview());
+        if let Some(expected) = expected {
+            assert_eq!(app.document.mesh(), expected.as_ref());
+            assert_eq!(app.document.history_counts().0, counts.0 + 1);
+            app.dispatch(Command::Undo, &ctx);
+            assert_eq!(app.document.geometry_snapshot(), before);
+        } else {
+            assert_eq!(app.document.geometry_snapshot(), before);
+            assert_eq!(app.document.history_counts(), counts);
+        }
+    }
+}
+
+#[test]
+fn brush_switch_to_object_capture_uses_the_same_pending_decision() {
+    use crate::{app::tool_change::Decision, command::InstanceCommand};
+    let (mut app, ctx, id) = setup();
+    app.viewport.paths.draft.as_mut().unwrap().name = "Uncommitted".into();
+    app.dispatch(
+        Command::Instances(InstanceCommand::ChooseShipGreebles),
+        &ctx,
+    );
+    assert!(app.ui.tool_change.is_some());
+    assert!(!app.ui.instances.placing);
+    app.resolve_tool_change(Decision::Discard, &ctx);
+    assert!(!app.viewport.paths.active);
+    assert!(app.ui.instances.placing);
+    assert_eq!(app.document.path(id).unwrap().name, "Controller curve");
+    let selected = app.ui.selected;
+    app.dispatch(
+        Command::Action(Action::SelectBrush(
+            app.document.brushes()[selected].identity(),
+        )),
+        &ctx,
+    );
+    assert!(app.ui.instances.stop_placing);
+}
+
+#[test]
+fn brush_switch_never_applies_one_path_and_drops_a_suspended_draft() {
+    use crate::app::tool_change::Decision;
+    let (mut app, ctx, id) = setup();
+    app.dispatch(Command::Path(PathCommand::ActivateBrush), &ctx);
+    app.viewport.paths.draft.as_mut().unwrap().id = 0;
+    app.viewport
+        .paths
+        .select_for_edit(app.document.path(id).unwrap().clone(), &app.document)
+        .unwrap();
+    assert!(app.viewport.paths.has_suspended_draft());
+    app.dispatch(Command::Action(Action::NextBrush), &ctx);
+    let before = app.document.geometry_snapshot();
+    app.resolve_tool_change(Decision::Apply, &ctx);
+    assert!(app.ui.tool_change.is_some());
+    assert!(app.viewport.paths.has_suspended_draft());
+    assert_eq!(app.document.geometry_snapshot(), before);
+    app.resolve_tool_change(Decision::KeepEditing, &ctx);
+    assert!(app.viewport.paths.active);
+    assert!(app.viewport.paths.has_suspended_draft());
+}

@@ -654,6 +654,8 @@ Thickness requires consistently oriented open surfaces with nonbranching boundar
 
 ## Slice
 
+For temporary slicing, press **Z**, choose **Slice**, then hold **Ctrl+Shift**. Choose the cut options in that same menu. Release the hold to restore your previous tool; an unfinished cut is discarded. See [Slice with the shared hold](selection.md#slice-with-the-shared-hold).
+
 For a non-destructive selection, choose **Mask through · Line** in the Slice controls. It switches to [through-depth line masking](selection.md#protect-one-side-through-the-model), with Add/Erase and Flip side controls. This changes mask weights only and retains subdivision levels. The cutting results below remain separate.
 
 ### Trim away one side
@@ -769,7 +771,7 @@ The Q menu shows functions for the current component mode and marks the active c
 
 Change or clear **Modeling quick menu** in **Settings → Key settings**. Its displayed tooltip follows the assigned shortcut; the default Q does not replace right-drag orbit or middle-drag pan. Existing custom bindings remain intact when preferences upgrade; if Q is already assigned, the new menu starts unbound.
 
-**Q** always opens Modeling. **X** opens the mask/visibility chooser, whose selected tab decides whether Ctrl+Shift masks or changes visibility. The shared hold and all three quick-menu bindings can be changed, cleared and reset in Key settings. Hold shortcuts support modifier-only and key-plus-modifier chords. Release the hold to restore the previous tool; unfinished gestures are cancelled. **Alt** temporarily reverses Add/Erase masking or Hide/Isolate visibility.
+**Q** always opens Modeling. **Z** opens the Mask / Visibility / Slice chooser, whose selected tab decides whether Ctrl+Shift masks, changes visibility or slices. The shared hold and all three quick-menu bindings can be changed, cleared and reset in Key settings. Hold shortcuts support modifier-only and key-plus-modifier chords. Release the hold to restore the previous tool; unfinished gestures are cancelled. **Alt** temporarily reverses Add/Erase masking or Hide/Isolate visibility.
 
 **E** opens transform options. In Modeling it offers Move/Rotate/Scale, Free/Gizmo/Axis interaction and applicable axis choices. Otherwise it offers object transforms, World axes/Action Line, pivot controls and Respect mask. Opening the menu makes no geometry edit; choose options and then an operation to begin using it.
 

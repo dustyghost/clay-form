@@ -187,6 +187,30 @@ fn line_mask_interruptions_and_empty_side_preserve_history() {
 }
 
 #[test]
+fn opening_settings_cancels_current_line_but_allows_a_fresh_cut() {
+    for window in 0..3 {
+        let mut app = App::default();
+        let ctx = egui::Context::default();
+        let before = app.document.geometry_snapshot();
+        begin(&mut app, &ctx, false, false);
+        match window {
+            0 => app.ui.settings_open = true,
+            1 => app.ui.mesh_capacity_open = true,
+            _ => app.ui.layout_open = true,
+        }
+        navigation_frame(&mut app, &ctx, vec![]);
+        navigation_frame(&mut app, &ctx, vec![primary_event(END, false)]);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert_eq!(app.document.history_counts(), (0, 0));
+
+        begin(&mut app, &ctx, false, false);
+        navigation_frame(&mut app, &ctx, vec![primary_event(END, false)]);
+        assert_ne!(app.document.mesh().mask, before.mesh.mask);
+        assert_eq!(app.document.history_counts(), (1, 0));
+    }
+}
+
+#[test]
 fn line_mask_fast_pen_samples_flip_and_remapped_navigation() {
     let mut app = App::default();
     let ctx = egui::Context::default();

@@ -1468,6 +1468,13 @@ impl Guide {
                     1.,
                     &self.app.camera,
                 ));
+                // Match workspace_ui: commit toolbar/sidebar commands before
+                // the viewport consumes tool transitions in this frame.
+                if self.interactive {
+                    for command in commands.drain(..) {
+                        self.app.dispatch(command, ctx);
+                    }
+                }
                 egui::CentralPanel::default().show(ctx, |ui| {
                     rect = ui.available_rect_before_wrap();
                     if self.viewport {
@@ -5173,4 +5180,85 @@ fn subdivision_level_switch_offscreen_review() {
     );
     g.app.dispatch(Command::Undo, &g.ctx);
     assert_eq!(g.app.document.mesh_settings().level(), high_level - 1);
+}
+
+#[test]
+#[ignore = "renders and clicks the shared Slice chooser and pending tool transition; requires Vulkan"]
+fn interaction_batch_offscreen_review() {
+    use crate::{
+        command::PathCommand,
+        sculpt::{
+            Vec3,
+            paths::{PathMode, PathPoint},
+        },
+    };
+    let directory = std::env::var_os("CLAY_GUIDE_PREVIEW")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::env::temp_dir().join("clay-interaction-review"));
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut g = Guide::new(&directory, [1000, 760]);
+    g.interactive = true;
+    g.panel(Tool::Library, Dock::Left);
+    g.frame(vec![]);
+    g.app.open_quick_menu(&g.ctx, Action::MaskVisibilityMenu);
+    g.frame(vec![]);
+    g.save("shared-chooser-before");
+    // The toolbar also has a Slice label; target the foreground chooser tab.
+    let point = g
+        .text_positions
+        .iter()
+        .rev()
+        .find(|(text, _)| text == "Slice")
+        .unwrap()
+        .1;
+    g.frame(vec![
+        egui::Event::PointerMoved(point),
+        primary_event(point, true),
+    ]);
+    g.frame(vec![primary_event(point, false), egui::Event::PointerGone]);
+    g.save("shared-chooser-after-tab");
+    assert_eq!(
+        g.app.ui.preferences.selection_mode,
+        preferences::SelectionMode::Slice
+    );
+    g.save("slice-shared-chooser");
+    click_guide_label(&mut g, "Trim");
+    assert_eq!(g.app.ui.slice_options.mode, crate::sculpt::SliceMode::Trim);
+    assert!(!g.app.ui.slice_active);
+    let id = g
+        .app
+        .document
+        .create_path(
+            "Original guide".into(),
+            PathMode::Free,
+            [Vec3(-0.4, 0., 0.), Vec3(0.4, 0., 0.)]
+                .into_iter()
+                .map(|position| PathPoint {
+                    position,
+                    normal: Vec3(0., 0., 1.),
+                })
+                .collect(),
+            false,
+            0.,
+        )
+        .unwrap();
+    g.app.dispatch(Command::Path(PathCommand::Open), &g.ctx);
+    g.app
+        .dispatch(Command::Path(PathCommand::Select(id)), &g.ctx);
+    g.app.viewport.paths.draft.as_mut().unwrap().name = "Edited guide".into();
+    let brush = g.app.document.brushes()[1].identity();
+    g.app
+        .dispatch(Command::Action(Action::SelectBrush(brush.clone())), &g.ctx);
+    g.save("brush-switch-pending-edits");
+    click_guide_label(&mut g, "Keep editing");
+    assert_eq!(g.app.document.path(id).unwrap().name, "Original guide");
+    assert!(g.app.viewport.paths.active);
+    g.app
+        .dispatch(Command::Action(Action::SelectBrush(brush)), &g.ctx);
+    g.frame(vec![]);
+    click_guide_label(&mut g, "Apply and switch");
+    assert_eq!(g.app.document.path(id).unwrap().name, "Edited guide");
+    assert!(!g.app.viewport.paths.active);
+    assert_eq!(g.app.ui.selected, 1);
+    g.save("brush-switch-restored-sculpting");
 }

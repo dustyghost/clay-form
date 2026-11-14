@@ -207,7 +207,7 @@ fn failed_open_after_discard_keeps_existing_unsaved_content() {
 }
 
 #[test]
-fn custom_shortcut_changes_view_and_pauses_during_settings_and_text_entry() {
+fn custom_shortcut_works_with_settings_and_pauses_during_capture_and_text_entry() {
     use crate::preferences::{Action, Shortcut};
     let mut app = App::default();
     app.ui
@@ -218,12 +218,14 @@ fn custom_shortcut_changes_view_and_pauses_during_settings_and_text_entry() {
         )
         .unwrap();
     let ctx = egui::Context::default();
-    for (settings, typing, expected) in [
-        (false, false, true),
-        (true, false, true),
-        (false, true, true),
+    for (settings, capturing, typing, expected) in [
+        (false, false, false, true),
+        (true, false, false, false),
+        (true, true, false, false),
+        (false, false, true, false),
     ] {
         app.ui.settings_open = settings;
+        app.ui.capturing = capturing.then_some(Action::Wireframe);
         let _ = ctx.run(
             egui::RawInput {
                 events: vec![egui::Event::Key {

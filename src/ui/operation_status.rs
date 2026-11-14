@@ -83,6 +83,15 @@ impl UiState {
             summary.hint = "Release the selection hold to restore your tool. Escape cancels an unfinished outline.".into();
             return summary;
         }
+        if self.viewport_menu.slice_was_active && held {
+            summary.mode = format!(
+                "Temporary slice · {} · {}",
+                self.slice_options.mode.label(),
+                if self.slice_path_mode { "Path" } else { "Line" }
+            );
+            summary.hint = "Release the pen to apply a line cut; Enter applies a path. Release the selection hold to restore your tool and discard an unfinished cut.".into();
+            return summary;
+        }
         if self.viewport_menu.visibility_was_active && held {
             let settings = self.preferences.visibility_selection;
             summary.mode = format!(
@@ -282,10 +291,7 @@ impl UiState {
                     Command::Path(crate::command::PathCommand::CancelPreview),
                 ))
             } else if self.paths_active {
-                Some((
-                    "Finish paths",
-                    Command::Path(crate::command::PathCommand::Close),
-                ))
+                Some(("Finish paths", Command::Action(Action::Sculpt)))
             } else {
                 None
             };

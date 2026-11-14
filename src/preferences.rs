@@ -20,6 +20,8 @@ pub(crate) use materials::MaterialLibrary;
 #[cfg(test)]
 mod brush_controls_tests;
 mod hold_binding;
+#[cfg(test)]
+mod interaction_shortcuts_tests;
 pub(crate) use hold_binding::HoldBinding;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Shortcut {
@@ -370,10 +372,11 @@ pub(crate) struct ModelingPreset {
     pub name: String,
     pub options: crate::viewport::ModelingOptions,
 }
-/// The shared selection hold follows the mode chosen in the X menu.
+/// The shared selection hold follows the mode chosen in the shared selection menu.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum SelectionMode {
     Mask,
+    Slice,
     #[default]
     Visibility,
 }
@@ -391,6 +394,8 @@ pub(crate) struct Preferences {
     pub paint_shortcuts_version: u32,
     #[serde(default)]
     pub search_shortcuts_version: u32,
+    #[serde(default)]
+    pub interaction_shortcuts_version: u32,
     #[serde(default)]
     pub brush_controls_version: u32,
     pub selection_mode: SelectionMode,
@@ -445,6 +450,7 @@ impl Default for Preferences {
             lighting: Default::default(),
             paint_shortcuts_version: 2,
             search_shortcuts_version: 1,
+            interaction_shortcuts_version: 1,
             brush_controls_version: 3,
             visibility_selection: VisibilitySettings::default(),
             modeling_presets: Vec::new(),
@@ -820,7 +826,10 @@ impl Preferences {
                 {
                     if matches!(
                         action,
-                        Action::OpenMenu(_) | Action::ObjectBrushModels | Action::SwapPaintColours
+                        Action::OpenMenu(_)
+                            | Action::ObjectBrushModels
+                            | Action::SwapPaintColours
+                            | Action::Slice
                     ) && matches!(event, egui::Event::Key { repeat: true, .. })
                     {
                         return false;
@@ -1168,7 +1177,8 @@ pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
         prefs.paint_shortcuts_version = 1;
     }
     if prefs.paint_shortcuts_version < 2 {
-        let shortcut = Action::SwapPaintColours.default_shortcut();
+        // Upgrade this historical default before applying the newer X/Z swap.
+        let shortcut = Some(Shortcut::new(Key::Z, Modifiers::NONE));
         if !prefs.bindings.iter().any(|(_, key)| *key == shortcut)
             && let Some((_, key)) = prefs
                 .bindings
@@ -1231,7 +1241,18 @@ pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
                 .bindings
                 .iter()
                 .any(|(_, key)| key.as_ref() == Some(&replacement));
-            if free
+            if !had_selection_menu
+                && prefs.interaction_shortcuts_version == 0
+                && prefs.shortcut(&Action::SwapPaintColours)
+                    == Some(&Shortcut::new(Key::Z, Modifiers::NONE))
+            {
+                // Complete the historical pair before the X/Z migration.
+                // Files without either action receive the current defaults below.
+                // A custom X binding must still leave the old menu unbound.
+                prefs
+                    .bindings
+                    .push((Action::MaskVisibilityMenu, free.then_some(replacement)));
+            } else if free
                 && let Some((_, key)) = prefs
                     .bindings
                     .iter_mut()
@@ -1255,6 +1276,21 @@ pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
         {
             *key = Some(wireframe);
         }
+    }
+    if prefs.interaction_shortcuts_version == 0 {
+        let x = Shortcut::new(Key::X, Modifiers::NONE);
+        let z = Shortcut::new(Key::Z, Modifiers::NONE);
+        // Migrate the stock pair atomically. If either was customised or
+        // explicitly cleared, keep both choices and avoid creating a conflict.
+        if prefs.shortcut(&Action::SwapPaintColours) == Some(&z)
+            && prefs.shortcut(&Action::MaskVisibilityMenu) == Some(&x)
+        {
+            prefs.clear_binding(&Action::SwapPaintColours);
+            prefs.clear_binding(&Action::MaskVisibilityMenu);
+            prefs.bind(Action::SwapPaintColours, x)?;
+            prefs.bind(Action::MaskVisibilityMenu, z)?;
+        }
+        prefs.interaction_shortcuts_version = 1;
     }
     // Add newly introduced actions without stealing existing shortcuts or clearing explicit unbindings.
     for action in Action::ALL.iter().cloned() {
@@ -1772,6 +1808,7 @@ mod customization_tests {
             "menus",
             "brush_controls_version",
             "search_shortcuts_version",
+            "interaction_shortcuts_version",
             "workspaces",
             "compact_toolbar",
             "next_menu_id",
@@ -2043,10 +2080,24 @@ mod sidebar_tests {
 #[cfg(test)]
 mod quick_menu_migration_tests {
     use super::*;
+    fn legacy_defaults() -> Preferences {
+        let mut prefs = Preferences {
+            interaction_shortcuts_version: 0,
+            ..Default::default()
+        };
+        prefs.clear_binding(&Action::MaskVisibilityMenu);
+        prefs
+            .bind(
+                Action::SwapPaintColours,
+                Shortcut::new(Key::Z, Modifiers::NONE),
+            )
+            .unwrap();
+        prefs
+    }
     #[test]
     fn quick_menu_migration_preserves_custom_bindings_and_moves_stock_symmetry() {
         for custom_x in [false, true] {
-            let mut prefs = Preferences::default();
+            let mut prefs = legacy_defaults();
             prefs.bindings.retain(|(a, _)| {
                 !matches!(
                     a,
@@ -2083,7 +2134,7 @@ mod quick_menu_migration_tests {
             } else {
                 assert_eq!(
                     loaded.shortcut(&Action::MaskVisibilityMenu),
-                    Some(&Shortcut::new(Key::X, Modifiers::NONE))
+                    Some(&Shortcut::new(Key::Z, Modifiers::NONE))
                 );
                 assert_eq!(
                     loaded.shortcut(&Action::Symmetry),
@@ -2098,7 +2149,7 @@ mod quick_menu_migration_tests {
     #[test]
     fn universal_key_upgrade_moves_previous_w_and_preserves_custom_t_and_unbinding() {
         for unbound in [false, true] {
-            let mut prefs = Preferences::default();
+            let mut prefs = legacy_defaults();
             prefs
                 .bindings
                 .retain(|(a, _)| *a != Action::UniversalTransform);
@@ -2141,7 +2192,7 @@ mod quick_menu_migration_tests {
             } else {
                 assert_eq!(
                     loaded.shortcut(&Action::MaskVisibilityMenu),
-                    Some(&Shortcut::new(Key::X, Modifiers::NONE))
+                    Some(&Shortcut::new(Key::Z, Modifiers::NONE))
                 );
                 assert_eq!(
                     loaded.shortcut(&Action::Symmetry),

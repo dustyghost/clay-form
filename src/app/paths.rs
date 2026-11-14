@@ -547,7 +547,7 @@ impl App {
             self.paths.worker = None;
             match result {
                 Ok(preview) => {
-                    if auto_apply {
+                    if auto_apply && self.ui.tool_change.is_none() {
                         self.paths.preview = Some(preview);
                         if let Err(error) = self.dispatch_path(PathCommand::Apply) {
                             self.paths.cancel();
