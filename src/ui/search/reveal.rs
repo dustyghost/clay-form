@@ -108,7 +108,6 @@ impl UiState {
                 paint: false,
                 active: self.preferences.active_workspace,
                 zen: self.zen_mode,
-                zen_controls_rect: self.zen_controls_rect,
                 narrow_panel: self.narrow_panel,
                 label: entry.name.clone(),
                 dialogs: Dialogs {
@@ -324,7 +323,6 @@ impl UiState {
                     &mut self.preferences,
                 );
                 self.set_zen_mode(reveal.zen);
-                self.zen_controls_rect = reveal.zen_controls_rect;
                 self.narrow_panel = reveal.narrow_panel;
                 self.layout_open = reveal.dialogs.layout;
                 self.settings_open = reveal.dialogs.keys;

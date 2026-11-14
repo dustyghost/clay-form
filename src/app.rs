@@ -425,7 +425,7 @@ impl App {
         let over_toolbar = toolbar_rect.is_some_and(|rect| {
             ui.input(|i| i.pointer.hover_pos().is_some_and(|p| rect.contains(p)))
         });
-        let navigation_rect = self.ui.navigation_rect(ui.available_rect_before_wrap());
+        let navigation_rect = ui.available_rect_before_wrap();
         self.viewport.navigation_rect = Some(navigation_rect);
         let controls = self.ui.viewport_controls(
             ui.ctx(),
@@ -939,7 +939,7 @@ impl App {
             let binding = self.ui.preferences.shortcut(&Action::Search).cloned();
             let search = binding.is_some_and(|binding| {
                 // Text fields own plain and Shift-only keys. Modified search
-                // shortcuts remain available from a field, like Ctrl+K.
+                // shortcuts remain available from a field, like Ctrl+F.
                 if ctx.wants_keyboard_input() && !binding.ctrl && !binding.alt && !binding.command {
                     return false;
                 }

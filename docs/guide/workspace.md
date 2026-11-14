@@ -41,7 +41,7 @@ Checkbox settings use larger indicators and 32-pixel click targets. In vertical
 panels you can click anywhere in the checkbox row, including beside its label.
 Menus scroll when their contents exceed the available window height.
 
-**Search** (default **Ctrl+K**) finds commands, settings, brushes, menus, panels,
+**Search** (default **Ctrl+F**) finds commands, settings, brushes, menus, panels,
 shortcuts and named items in the current project and libraries. Try **cut**, **roll**,
 **Mesh capacity**, a model name or a configured shortcut. Choose **Run** to use
 an action, or **Show in UI** to reveal its control. When an action needs preparation,
@@ -54,6 +54,9 @@ contents during a reveal remains an explicit change. Mode-specific settings can
 still require the relevant tool or selection. Browsing saved paths, reusable models
 and personal object-brush names keeps the active sculpting tool unchanged.
 
+The earlier default **Ctrl+K** moves to **Ctrl+F** when that key is free. Custom
+bindings, an unbound Search action, and any existing use of Ctrl+F are preserved.
+
 Built-in menus share the same controls whether opened from the toolbar, floated,
 or docked in a sidebar. The **Panel** strip offers pin, dock left and dock right
 controls in each location. Hover an icon for its name. Existing saved workspace
@@ -63,7 +66,8 @@ placements and shortcuts continue to apply.
 
 Choose **Zen mode**, or press **Tab** with the pointer over the viewport and no
 text field or dialog active. Panels and shelves disappear while view controls
-stay in place. **Exit Zen mode** or another Tab restores the arrangement. Search
+follow the expanded viewport edges, keeping their configured relative placement.
+**Exit Zen mode** or another Tab restores the normal arrangement. Search
 remains available, and **Show in UI** can temporarily reveal a hidden control.
 Tab continues to move keyboard focus when a field or dialog is active. Rebind
 Zen in **Workspace → Shortcuts** if you prefer another key.
@@ -253,7 +257,7 @@ Shifted numbers use the physical number-row key, so `!` can bind as Shift+1. Oth
 | --- | --- |
 | Save / Open / New sphere | Ctrl+S / Ctrl+O / Ctrl+N |
 | Undo / Redo | Ctrl+Z / Ctrl+Shift+Z |
-| Search Clay Form | Ctrl+K |
+| Search Clay Form | Ctrl+F |
 | Zen mode (viewport) | Tab |
 | Reset view | F |
 | Toggle symmetry / guides | Shift+X / G |

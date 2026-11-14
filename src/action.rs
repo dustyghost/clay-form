@@ -229,7 +229,7 @@ impl Action {
         let ctrl = Modifiers::CTRL;
         let none = Modifiers::NONE;
         let (key, modifiers) = match self {
-            Self::Search => (Key::K, ctrl),
+            Self::Search => (Key::F, ctrl),
             Self::ToggleZen => (Key::Tab, none),
             Self::ObjectBrushModels => (Key::B, none),
             Self::Save => (Key::S, ctrl),

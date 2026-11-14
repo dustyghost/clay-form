@@ -34,7 +34,10 @@ Search can find the Slice tool using “cut”:
 
 ![Search results for cut](workspace-compact-search-cut.png)
 
-Zen hides the workspace while preserving the navigation controls:
+Zen hides the workspace and moves navigation out to the expanded viewport edges.
+Leaving Zen restores the normal control positions and panel layout:
+
+![Standard Zen workspace](workspace-standard-zen.png)
 
 ![Compact Zen workspace](workspace-compact-zen.png)
 
@@ -49,7 +52,8 @@ CLAY_GPU_SOFTWARE=1 WGPU_BACKEND=vulkan LP_NUM_THREADS=2 \
 
 This test opens Project, makes a real viewport stroke, clicks Undo, restores the
 stroke, clicks Save, accepts the project path, opens a new scene and reopens the
-saved sculpt. It also clicks Search and Zen at compact and small window sizes.
+saved sculpt. It also clicks Search in compact and small windows, and Zen at all
+three window sizes.
 The GPU CI job runs it alongside the existing interface regressions.
 
 Focused interaction tests cover keyboard rebinding and text input, Run through

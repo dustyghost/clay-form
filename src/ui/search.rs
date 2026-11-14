@@ -25,7 +25,6 @@ struct Reveal {
     paint: bool,
     active: Option<usize>,
     zen: bool,
-    zen_controls_rect: Option<egui::Rect>,
     narrow_panel: Option<Dock>,
     label: String,
     dialogs: Dialogs,

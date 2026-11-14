@@ -100,9 +100,7 @@ impl UiState {
     /// Ordinary responsive rendering never mutates saved controls.
     fn materialise_viewport_controls(&mut self, rect: Option<egui::Rect>) {
         let defaults = crate::preferences::default_viewport_controls();
-        let rect = rect
-            .or(self.viewport_menu.viewport_rect)
-            .map(|rect| self.navigation_rect(rect));
+        let rect = rect.or(self.viewport_menu.viewport_rect);
         if self.preferences.viewport_controls_auto_layout
             && self.preferences.viewport_controls == defaults
             && let Some(rect) = rect
@@ -748,11 +746,21 @@ mod compact_layout_tests {
             let positions: Vec<_> = (0..7).map(|index| control_rect(&ctx, index)).collect();
             state.viewport_menu.viewport_rect = Some(rect);
             state.set_zen_mode(true);
-            let zen_rect = state.navigation_rect(egui::Rect::from_min_size(
-                egui::Pos2::ZERO,
-                egui::vec2(800., 600.),
-            ));
+            let zen_rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800., 600.));
             render(&mut state, &ctx, zen_rect);
+            let zen_positions: Vec<_> = (0..7).map(|index| control_rect(&ctx, index)).collect();
+            assert_ne!(
+                zen_positions, positions,
+                "Zen uses the expanded viewport instead of retaining an empty margin"
+            );
+            assert!(
+                zen_positions
+                    .iter()
+                    .all(|control| zen_rect.contains_rect(*control))
+            );
+            assert_eq!(state.preferences, before);
+            state.set_zen_mode(false);
+            render(&mut state, &ctx, rect);
             assert_eq!(
                 (0..7)
                     .map(|index| control_rect(&ctx, index))

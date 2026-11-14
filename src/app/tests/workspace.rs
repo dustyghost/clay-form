@@ -266,20 +266,20 @@ fn discoverable_workspace_offscreen_review() {
                 let output = frame(&mut app, &ctx, size, pointer(close, pressed));
                 capture.render(&ctx, output);
             }
-            let output = frame(&mut app, &ctx, size, vec![]);
-            let zen = text_point(&output, "Zen mode");
-            capture.render(&ctx, output);
-            for pressed in [true, false] {
-                let output = frame(&mut app, &ctx, size, pointer(zen, pressed));
-                capture.render(&ctx, output);
-            }
-            let output = frame(&mut app, &ctx, size, vec![]);
-            assert!(app.ui.zen_mode);
-            text_point(&output, "Exit Zen mode");
-            text_point(&output, "Search…");
-            let rgba = capture.render(&ctx, output);
-            capture.save(directory.join(format!("{name}-zen.png")), &rgba);
         }
+        let output = frame(&mut app, &ctx, size, vec![]);
+        let zen = text_point(&output, "Zen mode");
+        capture.render(&ctx, output);
+        for pressed in [true, false] {
+            let output = frame(&mut app, &ctx, size, pointer(zen, pressed));
+            capture.render(&ctx, output);
+        }
+        let output = frame(&mut app, &ctx, size, vec![]);
+        assert!(app.ui.zen_mode);
+        text_point(&output, "Exit Zen mode");
+        text_point(&output, "Search…");
+        let rgba = capture.render(&ctx, output);
+        capture.save(directory.join(format!("{name}-zen.png")), &rgba);
         app.viewport.destroy_renderer();
     }
 }

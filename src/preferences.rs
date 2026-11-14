@@ -390,6 +390,8 @@ pub(crate) struct Preferences {
     #[serde(default)]
     pub paint_shortcuts_version: u32,
     #[serde(default)]
+    pub search_shortcuts_version: u32,
+    #[serde(default)]
     pub brush_controls_version: u32,
     pub selection_mode: SelectionMode,
     pub visibility_selection: VisibilitySettings,
@@ -442,6 +444,7 @@ impl Default for Preferences {
             paint_inspection: Default::default(),
             lighting: Default::default(),
             paint_shortcuts_version: 2,
+            search_shortcuts_version: 1,
             brush_controls_version: 3,
             visibility_selection: VisibilitySettings::default(),
             modeling_presets: Vec::new(),
@@ -1177,6 +1180,21 @@ pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
         }
         prefs.paint_shortcuts_version = 2;
     }
+    if prefs.search_shortcuts_version == 0 {
+        let previous = Shortcut::new(Key::K, Modifiers::CTRL);
+        let replacement = Shortcut::new(Key::F, Modifiers::CTRL);
+        if prefs.shortcut(&Action::Search) == Some(&previous)
+            && !prefs
+                .bindings
+                .iter()
+                .any(|(_, key)| key.as_ref() == Some(&replacement))
+        {
+            prefs.bind(Action::Search, replacement)?;
+        }
+        // Record even a skipped migration so later deliberate Ctrl+K bindings
+        // and subsequently freed Ctrl+F assignments remain the user's choice.
+        prefs.search_shortcuts_version = 1;
+    }
     // This update introduces T and moves the stock selection-menu key from W to X.
     // Explicit unbindings and non-default assignments remain intact.
     if !prefs
@@ -1439,6 +1457,123 @@ mod tests {
 }
 
 #[cfg(test)]
+mod search_shortcut_migration_tests {
+    use super::*;
+
+    fn write_legacy(path: &std::path::Path, prefs: &Preferences) {
+        let mut value = serde_json::to_value(prefs).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .remove("search_shortcuts_version");
+        crate::persistence::write_json(&path.to_string_lossy(), &value).unwrap();
+    }
+
+    #[test]
+    fn search_default_migrates_once_from_ctrl_k_to_ctrl_f() {
+        let path = std::env::temp_dir().join(format!(
+            "clay-search-default-upgrade-{}.json",
+            std::process::id()
+        ));
+        let mut prefs = Preferences::default();
+        let old = Shortcut::new(Key::K, Modifiers::CTRL);
+        let replacement = Shortcut::new(Key::F, Modifiers::CTRL);
+        assert_eq!(prefs.shortcut(&Action::Search), Some(&replacement));
+        prefs.bind(Action::Search, old.clone()).unwrap();
+        write_legacy(&path, &prefs);
+
+        let mut upgraded = load(&path).unwrap();
+        prefs.bind(Action::Search, replacement).unwrap();
+        assert_eq!(upgraded, prefs);
+        assert_eq!(upgraded.search_shortcuts_version, 1);
+        save(&path, &upgraded).unwrap();
+        assert_eq!(load(&path).unwrap(), upgraded);
+
+        // Choosing the previous default after migration is a normal custom key.
+        upgraded.bind(Action::Search, old).unwrap();
+        save(&path, &upgraded).unwrap();
+        assert_eq!(load(&path).unwrap(), upgraded);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn search_migration_preserves_custom_unbound_and_conflicting_shortcuts() {
+        for (case, binding, conflict) in [
+            (
+                "custom",
+                Some(Shortcut::new(Key::J, Modifiers::CTRL)),
+                false,
+            ),
+            ("unbound", None, false),
+            (
+                "conflict",
+                Some(Shortcut::new(Key::K, Modifiers::CTRL)),
+                true,
+            ),
+        ] {
+            let path = std::env::temp_dir().join(format!(
+                "clay-search-key-{case}-{}.json",
+                std::process::id()
+            ));
+            let mut prefs = Preferences::default();
+            prefs.clear_binding(&Action::Search);
+            if let Some(binding) = binding {
+                prefs.bind(Action::Search, binding).unwrap();
+            }
+            if conflict {
+                prefs
+                    .bind(Action::Guides, Shortcut::new(Key::F, Modifiers::CTRL))
+                    .unwrap();
+            }
+            write_legacy(&path, &prefs);
+
+            let mut upgraded = load(&path).unwrap();
+            assert_eq!(upgraded, prefs, "preserve the {case} assignments");
+            assert_eq!(upgraded.search_shortcuts_version, 1);
+            if conflict {
+                // A migration skipped for a conflict is also final, even when
+                // Ctrl+F becomes free on a later launch.
+                upgraded.clear_binding(&Action::Guides);
+            }
+            save(&path, &upgraded).unwrap();
+            assert_eq!(load(&path).unwrap(), upgraded);
+            std::fs::remove_file(path).unwrap();
+        }
+    }
+
+    #[test]
+    fn newly_added_search_uses_ctrl_f_without_stealing_existing_bindings() {
+        for conflict in [false, true] {
+            let path = std::env::temp_dir().join(format!(
+                "clay-search-introduction-{conflict}-{}.json",
+                std::process::id()
+            ));
+            let mut prefs = Preferences::default();
+            prefs
+                .bindings
+                .retain(|(action, _)| *action != Action::Search);
+            let shortcut = Shortcut::new(Key::F, Modifiers::CTRL);
+            if conflict {
+                prefs.bind(Action::Guides, shortcut.clone()).unwrap();
+            }
+            write_legacy(&path, &prefs);
+
+            let upgraded = load(&path).unwrap();
+            assert_eq!(
+                upgraded.shortcut(&Action::Search),
+                (!conflict).then_some(&shortcut)
+            );
+            assert_eq!(
+                upgraded.shortcut(&Action::Guides),
+                prefs.shortcut(&Action::Guides)
+            );
+            assert_eq!(upgraded.search_shortcuts_version, 1);
+            std::fs::remove_file(path).unwrap();
+        }
+    }
+}
+
+#[cfg(test)]
 mod migration_tests {
     use super::*;
     #[test]
@@ -1636,6 +1771,7 @@ mod customization_tests {
         for key in [
             "menus",
             "brush_controls_version",
+            "search_shortcuts_version",
             "workspaces",
             "compact_toolbar",
             "next_menu_id",

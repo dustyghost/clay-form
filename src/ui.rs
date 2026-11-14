@@ -49,7 +49,6 @@ pub(crate) struct UiState {
     pub(crate) search: search::SearchState,
     pub(crate) zen_mode: bool,
     pub(crate) narrow_panel: Option<Dock>,
-    pub(crate) zen_controls_rect: Option<egui::Rect>,
     pub(crate) search_blocks_frame: bool,
     pub instances: instances::Controls,
     pub uv: uv::UvControls,
@@ -145,7 +144,6 @@ impl Default for UiState {
             search: Default::default(),
             zen_mode: false,
             narrow_panel: None,
-            zen_controls_rect: None,
             search_blocks_frame: false,
             instances: Default::default(),
             viewport_controls: Default::default(),
@@ -248,23 +246,9 @@ impl Default for UiState {
 }
 impl UiState {
     pub(crate) fn set_zen_mode(&mut self, enabled: bool) {
-        if self.zen_mode == enabled {
-            return;
-        }
-        self.zen_controls_rect = if enabled {
-            self.viewport_menu.viewport_rect
-        } else {
-            None
-        };
+        // Navigation uses the current viewport bounds, so saved relative
+        // positions follow its edges when workspace panels are hidden.
         self.zen_mode = enabled;
-    }
-
-    pub(crate) fn navigation_rect(&self, viewport: egui::Rect) -> egui::Rect {
-        self.zen_controls_rect
-            .filter(|_| self.zen_mode)
-            .map(|saved| saved.intersect(viewport))
-            .filter(|rect| rect.width() >= 160. && rect.height() >= 160.)
-            .unwrap_or(viewport)
     }
 
     /// Keep the ordinary selection intact while a modifier borrows a Smooth preset.

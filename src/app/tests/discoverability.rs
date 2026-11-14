@@ -99,6 +99,8 @@ fn search_uses_the_current_configured_shortcut() {
     let ctx = egui::Context::default();
     settle(&mut app, &ctx);
     press(&mut app, &ctx, egui::Key::K, egui::Modifiers::CTRL);
+    assert!(!app.ui.search_open());
+    press(&mut app, &ctx, egui::Key::F, egui::Modifiers::CTRL);
     assert!(app.ui.search_open());
     press(&mut app, &ctx, egui::Key::Escape, egui::Modifiers::NONE);
     assert!(!app.ui.search_open());
@@ -109,14 +111,14 @@ fn search_uses_the_current_configured_shortcut() {
             Shortcut::new(egui::Key::J, egui::Modifiers::CTRL),
         )
         .unwrap();
-    press(&mut app, &ctx, egui::Key::K, egui::Modifiers::CTRL);
+    press(&mut app, &ctx, egui::Key::F, egui::Modifiers::CTRL);
     assert!(!app.ui.search_open());
     press(&mut app, &ctx, egui::Key::J, egui::Modifiers::CTRL);
     assert!(app.ui.search_open());
 }
 
 #[test]
-fn plain_search_shortcuts_leave_text_input_intact_but_ctrl_k_stays_global() {
+fn plain_search_shortcuts_leave_text_input_intact_but_ctrl_f_stays_global() {
     let mut app = App::default();
     let ctx = egui::Context::default();
     ctx.style_mut(|style| style.animation_time = 0.);
@@ -152,7 +154,7 @@ fn plain_search_shortcuts_leave_text_input_intact_but_ctrl_k_stays_global() {
         .preferences
         .bind(
             Action::Search,
-            Shortcut::new(egui::Key::K, egui::Modifiers::CTRL),
+            Shortcut::new(egui::Key::F, egui::Modifiers::CTRL),
         )
         .unwrap();
     app.ui.layout_open = true;
@@ -165,10 +167,10 @@ fn plain_search_shortcuts_leave_text_input_intact_but_ctrl_k_stays_global() {
         vec![egui::Event::Text("Detail desk".into())],
     );
     assert!(ctx.wants_keyboard_input());
-    press(&mut app, &ctx, egui::Key::K, egui::Modifiers::CTRL);
+    press(&mut app, &ctx, egui::Key::F, egui::Modifiers::CTRL);
     assert!(
         app.ui.search_open(),
-        "Ctrl+K should work from an existing text field"
+        "Ctrl+F should work from an existing text field"
     );
 }
 
@@ -361,75 +363,183 @@ fn search_typing_and_outside_pointer_drag_cannot_sculpt_or_run_shortcuts() {
     assert!(app.viewport.session.gesture.is_none());
 }
 
-#[test]
-fn zen_keeps_custom_navigation_positions_camera_and_workspace() {
-    let mut app = App::default();
-    let ctx = egui::Context::default();
-    ctx.style_mut(|style| style.animation_time = 0.);
-    app.ui.preferences.viewport_controls = vec![ViewportControl {
-        kind: ViewportControlKind::Roll,
-        label: "My roll control".into(),
-        style: ViewportControlStyle::Text,
-        icon: ViewportControlIcon::Auto,
-        position: [0.37, 0.68],
-        offset: [17., -11.],
-    }];
-    app.ui
-        .preferences
-        .save_workspace_as("Personal sculpt")
-        .unwrap();
-    app.camera.yaw = 0.35;
-    app.camera.pitch = 0.2;
-    app.camera.roll = -0.4;
-    app.camera.pan = Vec2::new(20., -10.);
-    let camera = app.camera;
-    let before = app.document.geometry_snapshot();
-    let selected = app.ui.selected;
-    settle(&mut app, &ctx);
-    let preferences = app.ui.preferences.clone();
-    let control = || {
-        ctx.data(|data| {
-            data.get_temp::<egui::Rect>(egui::Id::new(("viewport_control_response", 0)))
-        })
-        .unwrap()
-    };
-    let normal = control();
-    app.execute_action(Action::ToggleZen, &ctx);
-    settle(&mut app, &ctx);
-    assert!(app.ui.zen_mode);
-    assert_eq!(control(), normal, "Zen must not move custom view controls");
-    assert_eq!(app.camera.basis(), camera.basis());
-    assert_eq!(app.camera.pan, camera.pan);
-    assert_eq!(app.camera.zoom, camera.zoom);
-    assert_eq!(app.ui.preferences, preferences);
-    assert_eq!(app.ui.selected, selected);
-    assert_eq!(app.document.geometry_snapshot(), before);
-
-    search(&mut app, &ctx, "roll");
-    assert!(app.ui.search_open());
-    press(&mut app, &ctx, egui::Key::Escape, egui::Modifiers::NONE);
-    assert!(app.ui.zen_mode);
-    let output = search(&mut app, &ctx, "mesh capacity");
-    let show = text_center(&output, "Show in UI");
-    click(&mut app, &ctx, show);
-    assert!(!app.ui.zen_mode);
-    assert!(app.ui.mesh_capacity_open);
-    let output = settle(&mut app, &ctx);
-    let back = text_center(&output, "Return to workspace");
-    click(&mut app, &ctx, back);
-    settle(&mut app, &ctx);
-    assert!(app.ui.zen_mode);
-    assert!(!app.ui.mesh_capacity_open);
-    assert_eq!(
-        control(),
-        normal,
-        "Return to Zen must recover the original control anchors"
+fn zen_frame(
+    app: &mut App,
+    ctx: &egui::Context,
+    size: Vec2,
+    events: Vec<egui::Event>,
+) -> egui::FullOutput {
+    ctx.run(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, size)),
+            events,
+            ..Default::default()
+        },
+        |ctx| app.workspace_ui(ctx),
+    )
+}
+fn zen_settle(app: &mut App, ctx: &egui::Context, size: Vec2) -> egui::FullOutput {
+    for _ in 0..3 {
+        zen_frame(app, ctx, size, vec![]);
+    }
+    zen_frame(app, ctx, size, vec![])
+}
+fn zen_click(app: &mut App, ctx: &egui::Context, size: Vec2, position: Pos2) {
+    zen_frame(
+        app,
+        ctx,
+        size,
+        vec![
+            egui::Event::PointerMoved(position),
+            primary_event(position, true),
+        ],
     );
-    app.execute_action(Action::ToggleZen, &ctx);
-    settle(&mut app, &ctx);
-    assert!(!app.ui.zen_mode);
-    assert_eq!(control(), normal);
-    assert_eq!(app.ui.preferences, preferences);
+    zen_frame(app, ctx, size, vec![primary_event(position, false)]);
+}
+fn zen_controls(ctx: &egui::Context) -> Vec<egui::Rect> {
+    (0..2)
+        .map(|index| {
+            ctx.data(|data| {
+                data.get_temp::<egui::Rect>(egui::Id::new(("viewport_control_response", index)))
+            })
+            .unwrap()
+        })
+        .collect()
+}
+fn assert_navigation_tracks_viewport(app: &App, ctx: &egui::Context) {
+    let viewport = app.ui.viewport_menu.viewport_rect.unwrap();
+    assert_eq!(
+        app.viewport.navigation_rect,
+        Some(viewport),
+        "Axis gizmo must use the current viewport edges"
+    );
+    let bounds = viewport.shrink(24.);
+    for (control, saved) in zen_controls(ctx)
+        .iter()
+        .zip(&app.ui.preferences.viewport_controls)
+    {
+        let expected = bounds.min
+            + (bounds.size() - control.size()).max(Vec2::ZERO)
+                * Vec2::new(saved.position[0], saved.position[1])
+            + Vec2::new(saved.offset[0], saved.offset[1]);
+        assert!(
+            (control.min - expected).length() < 1.,
+            "Control does not follow its saved relative anchor: {control:?} vs {expected:?}"
+        );
+    }
+    let launcher = ctx
+        .data(|data| {
+            data.get_temp::<egui::Rect>(egui::Id::new("viewport_controls_launcher_response"))
+        })
+        .unwrap();
+    assert!(
+        (launcher.left() - viewport.left() - 24.).abs() < 1.,
+        "Editor launcher must follow the expanded viewport's left edge"
+    );
+}
+
+#[test]
+fn zen_navigation_follows_expanded_edges_and_restores_after_reveal_and_exit() {
+    for size in [
+        Vec2::new(1440., 1000.),
+        Vec2::new(800., 720.),
+        Vec2::new(640., 480.),
+    ] {
+        let mut app = App::default();
+        let ctx = egui::Context::default();
+        ctx.style_mut(|style| style.animation_time = 0.);
+        app.ui.preferences.viewport_controls = vec![
+            ViewportControl {
+                kind: ViewportControlKind::Roll,
+                label: "My roll control".into(),
+                style: ViewportControlStyle::Text,
+                icon: ViewportControlIcon::Auto,
+                position: [1., 1.],
+                offset: [-7., -11.],
+            },
+            ViewportControl {
+                kind: ViewportControlKind::Pan,
+                label: "My pan control".into(),
+                style: ViewportControlStyle::Text,
+                icon: ViewportControlIcon::Auto,
+                position: [0., 0.45],
+                offset: [4., -9.],
+            },
+        ];
+        app.ui
+            .preferences
+            .save_workspace_as("Personal sculpt")
+            .unwrap();
+        app.camera.yaw = 0.35;
+        app.camera.pitch = 0.2;
+        app.camera.roll = -0.4;
+        app.camera.pan = Vec2::new(20., -10.);
+        let camera = app.camera;
+        let before = app.document.geometry_snapshot();
+        let selected = app.ui.selected;
+        zen_settle(&mut app, &ctx, size);
+        let preferences = app.ui.preferences.clone();
+        let normal = zen_controls(&ctx);
+        let normal_viewport = app.ui.viewport_menu.viewport_rect.unwrap();
+        assert_navigation_tracks_viewport(&app, &ctx);
+        app.execute_action(Action::ToggleZen, &ctx);
+        zen_settle(&mut app, &ctx, size);
+        assert!(app.ui.zen_mode);
+        let zen = zen_controls(&ctx);
+        let zen_viewport = app.ui.viewport_menu.viewport_rect.unwrap();
+        assert!(zen_viewport.height() > normal_viewport.height());
+        assert_navigation_tracks_viewport(&app, &ctx);
+        if size.x > 1000. {
+            assert!(
+                zen[0].right() > normal[0].right() + 100.,
+                "Right control should move into the freed sidebar space"
+            );
+            assert!(
+                zen[1].left() < normal[1].left() - 100.,
+                "Left control should move into the freed sidebar space"
+            );
+        }
+        assert_eq!(app.camera.basis(), camera.basis());
+        assert_eq!(app.camera.pan, camera.pan);
+        assert_eq!(app.camera.zoom, camera.zoom);
+        assert_eq!(app.ui.preferences, preferences);
+        assert_eq!(app.ui.selected, selected);
+        assert_eq!(app.document.geometry_snapshot(), before);
+
+        app.execute_action(Action::Search, &ctx);
+        zen_settle(&mut app, &ctx, size);
+        zen_frame(
+            &mut app,
+            &ctx,
+            size,
+            vec![egui::Event::Text("mesh capacity".into())],
+        );
+        let output = zen_settle(&mut app, &ctx, size);
+        zen_click(&mut app, &ctx, size, text_center(&output, "Show in UI"));
+        assert!(!app.ui.zen_mode);
+        assert!(app.ui.mesh_capacity_open);
+        let output = zen_settle(&mut app, &ctx, size);
+        zen_click(
+            &mut app,
+            &ctx,
+            size,
+            text_center(&output, "Return to workspace"),
+        );
+        zen_settle(&mut app, &ctx, size);
+        assert!(app.ui.zen_mode);
+        assert!(!app.ui.mesh_capacity_open);
+        assert_navigation_tracks_viewport(&app, &ctx);
+        assert_eq!(
+            zen_controls(&ctx),
+            zen,
+            "Return from search must recover expanded Zen anchors"
+        );
+        app.execute_action(Action::ToggleZen, &ctx);
+        zen_settle(&mut app, &ctx, size);
+        assert!(!app.ui.zen_mode);
+        assert_eq!(zen_controls(&ctx), normal);
+        assert_eq!(app.ui.preferences, preferences);
+    }
 }
 
 #[test]
