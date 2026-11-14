@@ -274,7 +274,7 @@ Shifted numbers use the physical number-row key, so `!` can bind as Shift+1. Oth
 | Lower / higher subdivision level | Shift+D / D |
 | Remesh in dynamic mode | Ctrl+R |
 
-The mask/visibility menu now defaults to X; its previous stock W binding upgrades to X and stock symmetry moves to Shift+X. Wireframe returns to W when that key is free. Custom assignments and explicit unbindings are preserved. If a custom action already uses X, E or T, a newly introduced action for that key starts unbound; an existing menu binding is kept. All bindings can be changed in Key settings.
+The default **X** swaps paint colours and **Z** opens the Mask / Visibility / Slice chooser. **Shift+X** still toggles symmetry, and the configured Undo/Redo chords take priority over the chooser. Open the chooser before holding Ctrl+Shift; Ctrl+Shift+Z remains Redo. On first load, an unchanged old pair (Z for colours, X for the chooser) moves together to the new defaults. If either action has been rebound or cleared, both saved choices remain intact. **Reset shortcuts** applies the new defaults deliberately. All bindings can be changed in Key settings.
 
 ## Toolbar and brush previews
 
@@ -283,7 +283,3 @@ The toolbar wraps as the window narrows. Brush tiles show the selected brush wit
 ## Related guides
 
 [Navigation](navigation.md) · [Brush settings](sculpting.md) · [Recovery saves](files.md#recovery-saves)
-
-### Updated colour and selection keys
-
-The default **X** swaps paint colours and **Z** opens the Mask / Visibility / Slice chooser. **Shift+X** still toggles symmetry, and the configured Undo/Redo chords take priority over the chooser. Open the chooser before holding Ctrl+Shift; Ctrl+Shift+Z remains Redo. On first load, an unchanged old pair (Z for colours, X for the chooser) moves together to the new defaults. If either action has been rebound or cleared, both saved choices remain intact. **Reset shortcuts** applies the new defaults deliberately.
