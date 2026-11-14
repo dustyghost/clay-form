@@ -35,10 +35,8 @@ impl UiState {
                 .iter()
                 .find(|texture| texture.channel == channel)
         });
-        ui.strong("Paint");
         self.appearance_brush = Some(brush.identity());
-        ui.label(format!("Future stroke inputs: {}", brush.name));
-        ui.weak("Changing these inputs affects the next stroke. Fill and Assign are explicit changes to an existing surface.");
+        ui.weak("Material and colour changes affect future strokes. Use Fill or Assign to change an existing surface.");
         ui.horizontal_wrapped(|ui| {
             for (label, action) in [
                 ("Materials…", Action::OpenMaterials),

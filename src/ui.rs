@@ -964,7 +964,7 @@ impl UiState {
                     });
             }
             Tool::Brush => {
-                ui.strong(&b.name);
+                ui.strong(format!("Active brush: {}", b.name));
                 if b.kind == Kind::Paint {
                     self.paint_controls(ui, b, document, commands);
                     ui.horizontal_wrapped(|ui| {

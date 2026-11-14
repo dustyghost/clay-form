@@ -23,7 +23,7 @@ Choose **Focus Paint workspace** to keep one painting sidebar and give the model
 
 ![Focused Paint workspace with image target and inspection controls](../images/paint-focused-workspace.png)
 
-In **Brush settings**, the Paint target shows the active model and whether strokes update **Vertices** or an image. Image targets show their dimensions and precision, including **32-bit float**, independently of export format. **Set up texture painting…** creates an image workflow; **UV / image view** opens the linked UV editor. Switching to a model without the selected image returns the target to Vertices.
+In **Brush settings**, **Active brush: Paint** identifies the selected brush preset. The Paint target shows the active model and whether strokes update **Vertices** or an image. Image targets show their dimensions and precision, including **32-bit float**, independently of export format. **Set up texture painting…** creates an image workflow; **UV / image view** opens the linked UV editor. Switching to a model without the selected image returns the target to Vertices.
 
 The **Tool controls** menu (formerly Brush controls) shows the selected stroke material’s preview and name alongside the brush settings, even while another sculpting brush is selected. Click the preview to open Materials. Primary, Secondary and Swap live in this same menu, including its **S** popup; there is no separate appearance row above the main toolbar. The expanded UV editor also keeps these controls in its sidebar.
 
