@@ -9,7 +9,7 @@ impl UiState {
         commands: &mut Vec<Command>,
     ) {
         egui::CollapsingHeader::new("Hold to mask").open(search::requested_section(ui.ctx(), "mask_hold")).show(ui, |ui| {
-            ui.label(format!("Shared selection hold: {} (choose Mask in the X menu)", self.preferences.visibility_hold.label()));
+            ui.label(format!("Shared selection hold: {} (choose Mask in the Mask / visibility menu)", self.preferences.visibility_hold.label()));
             if ui.button("Configure hold and menu keys…").clicked() {
                 self.settings_open = true;
             }
@@ -51,7 +51,7 @@ impl UiState {
         let visibility = &self.preferences.visibility_hold;
         if visibility.enabled() {
             conflicts.push(format!(
-                "If {} and {} are both held, the shared selection hold follows the X menu.",
+                "If {} and {} are both held, the shared selection hold follows the Mask / visibility menu.",
                 hold.label(),
                 visibility.label()
             ));

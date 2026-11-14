@@ -570,3 +570,167 @@ fn tab_toggles_zen_only_with_viewport_focus() {
     assert!(!app.ui.zen_mode, "Tab in a text field must navigate focus");
     assert!(ctx.memory(|memory| memory.focused().is_some()));
 }
+
+#[test]
+fn brush_switch_dialog_buttons_keep_then_apply_path_edits() {
+    use crate::{
+        command::PathCommand,
+        sculpt::{
+            Vec3,
+            paths::{PathMode, PathPoint},
+        },
+    };
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let id = app
+        .document
+        .create_path(
+            "Original".into(),
+            PathMode::Free,
+            [Vec3(-0.2, 0., 0.), Vec3(0.2, 0., 0.)]
+                .into_iter()
+                .map(|position| PathPoint {
+                    position,
+                    normal: Vec3(0., 0., 1.),
+                })
+                .collect(),
+            false,
+            0.,
+        )
+        .unwrap();
+    app.dispatch(Command::Path(PathCommand::Open), &ctx);
+    app.dispatch(Command::Path(PathCommand::Select(id)), &ctx);
+    app.viewport.paths.draft.as_mut().unwrap().name = "Keep this edit".into();
+    let action = Action::SelectBrush(app.document.brushes()[1].identity());
+    app.dispatch(Command::Action(action.clone()), &ctx);
+    let output = settle(&mut app, &ctx);
+    click(&mut app, &ctx, text_center(&output, "Keep editing"));
+    assert!(app.ui.tool_change.is_none());
+    assert!(app.viewport.paths.active);
+    assert_eq!(
+        app.viewport.paths.draft.as_ref().unwrap().name,
+        "Keep this edit"
+    );
+    assert_eq!(app.document.path(id).unwrap().name, "Original");
+    app.dispatch(Command::Action(action), &ctx);
+    let output = settle(&mut app, &ctx);
+    click(&mut app, &ctx, text_center(&output, "Apply and switch"));
+    assert!(!app.viewport.paths.active);
+    assert!(app.ui.tool_change.is_none());
+    assert_eq!(app.document.path(id).unwrap().name, "Keep this edit");
+    assert_eq!(app.ui.selected, 1);
+    assert!(
+        app.viewport.session.gesture.is_none(),
+        "dialog click must not begin a sculpt stroke"
+    );
+}
+
+#[test]
+fn x_swaps_once_z_opens_chooser_and_text_focus_keeps_both_keys() {
+    let mut app = App::default();
+    let ctx = egui::Context::default();
+    let index = app
+        .document
+        .brushes()
+        .iter()
+        .position(|b| b.kind == crate::sculpt::Kind::Paint)
+        .unwrap();
+    app.ui.select_brush(index, &app.document);
+    let mut brush = app.document.brushes()[index].clone();
+    brush.material.base_color = [0.1, 0.2, 0.3];
+    brush.secondary_colour = [0.8, 0.7, 0.6];
+    app.document.update_brush(index, brush.clone()).unwrap();
+    settle(&mut app, &ctx);
+    frame(
+        &mut app,
+        &ctx,
+        vec![key(egui::Key::X, true, egui::Modifiers::NONE)],
+    );
+    assert_eq!(
+        app.document.brushes()[index].material.base_color,
+        brush.secondary_colour
+    );
+    let swapped = app.document.brushes()[index].clone();
+    let mut repeated = key(egui::Key::X, true, egui::Modifiers::NONE);
+    if let egui::Event::Key { repeat, .. } = &mut repeated {
+        *repeat = true;
+    }
+    frame(&mut app, &ctx, vec![repeated]);
+    assert!(app.document.brushes()[index] == swapped);
+    frame(
+        &mut app,
+        &ctx,
+        vec![key(egui::Key::X, false, egui::Modifiers::NONE)],
+    );
+    press(&mut app, &ctx, egui::Key::Z, egui::Modifiers::NONE);
+    assert!(app.ui.viewport_menu.context.is_some());
+    press(&mut app, &ctx, egui::Key::Escape, egui::Modifiers::NONE);
+    let mut text = String::new();
+    for events in [
+        vec![],
+        vec![
+            key(egui::Key::X, true, egui::Modifiers::NONE),
+            key(egui::Key::Z, true, egui::Modifiers::NONE),
+            egui::Event::Text("xz".into()),
+        ],
+    ] {
+        let _ = ctx.run(
+            egui::RawInput {
+                events,
+                ..Default::default()
+            },
+            |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.text_edit_singleline(&mut text).request_focus();
+                });
+                app.shortcuts(ctx);
+            },
+        );
+    }
+    assert_eq!(text, "xz");
+    assert!(app.ui.viewport_menu.context.is_none());
+    assert!(app.document.brushes()[index] == swapped);
+}
+
+#[test]
+fn history_chords_win_over_shared_selection_menu_and_keep_custom_bindings() {
+    for command in [false, true] {
+        let mut app = App::default();
+        let ctx = egui::Context::default();
+        let modifier = if command {
+            egui::Modifiers::MAC_CMD
+        } else {
+            egui::Modifiers::CTRL
+        };
+        if command {
+            app.ui
+                .preferences
+                .bind(
+                    Action::Undo,
+                    preferences::Shortcut::new(egui::Key::Z, modifier),
+                )
+                .unwrap();
+            app.ui
+                .preferences
+                .bind(
+                    Action::Redo,
+                    preferences::Shortcut::new(egui::Key::Z, modifier | egui::Modifiers::SHIFT),
+                )
+                .unwrap();
+        }
+        let before = app.document.geometry_snapshot();
+        app.document.invert_mask().unwrap();
+        let edited = app.document.geometry_snapshot();
+        settle(&mut app, &ctx);
+        press(&mut app, &ctx, egui::Key::Z, modifier);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        press(
+            &mut app,
+            &ctx,
+            egui::Key::Z,
+            modifier | egui::Modifiers::SHIFT,
+        );
+        assert_eq!(app.document.geometry_snapshot(), edited);
+        assert!(app.ui.viewport_menu.context.is_none());
+    }
+}

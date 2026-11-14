@@ -215,11 +215,7 @@ pub(crate) fn show(
     });
     }
     if !open || !open_panel {
-        if editor.brush.is_some() {
-            editor.panel = false;
-        } else {
-            commands.push(Command::Path(PathCommand::Close));
-        }
+        commands.push(Command::Action(Action::Sculpt));
     }
     if let Some(id) = editor.confirm_delete
         && let Some(path) = document.path(id)

@@ -331,7 +331,8 @@ fn action_destination(action: &Action) -> Destination {
             Destination::Menu(BuiltinMenu::Wireframe)
         }
         FlatShading | PolygroupColors | Backfaces => Destination::Menu(BuiltinMenu::View),
-        Slice => Destination::Menu(BuiltinMenu::Slice),
+        Slice | SliceGroups | SliceTrim | SliceSeparate | SliceLine | SlicePath | SliceCap
+        | SliceFlip => Destination::Menu(BuiltinMenu::Slice),
         Primitive | ConvertPrimitive => Destination::Menu(BuiltinMenu::Primitive),
         OpenTextures => Destination::Uv(true),
         OpenUv => Destination::Uv(false),
@@ -398,7 +399,7 @@ fn action_destination(action: &Action) -> Destination {
         | CreatePathAssembly
         | ApplyThickness
         | TemporaryThickness => Destination::Panel(Tool::Submodels),
-        SelectBrush(_) | PreviousBrush | NextBrush | DuplicateBrush => {
+        SelectBrush(_) | SelectObjectBrush(_) | PreviousBrush | NextBrush | DuplicateBrush => {
             Destination::Panel(Tool::Library)
         }
         NewBrush(_) => Destination::Menu(BuiltinMenu::Brushes),

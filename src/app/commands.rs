@@ -131,6 +131,18 @@ impl App {
     pub(crate) fn dispatch(&mut self, command: Command, ctx: &egui::Context) {
         self.capture_diagnostic_context(ctx);
         self.sync_path_history_state();
+        match command {
+            Command::Instances(crate::command::InstanceCommand::ChooseBrush(id)) => {
+                self.execute_action(Action::SelectObjectBrush(Some(id)), ctx);
+                return;
+            }
+            Command::Instances(crate::command::InstanceCommand::ChooseShipGreebles) => {
+                self.execute_action(Action::SelectObjectBrush(None), ctx);
+                return;
+            }
+            _ => {}
+        }
+
         if let Err(reason) =
             super::policy::EditorPolicy::new(&self.ui, &self.document).command(&command)
         {

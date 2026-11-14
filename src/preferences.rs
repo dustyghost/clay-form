@@ -20,6 +20,8 @@ pub(crate) use materials::MaterialLibrary;
 #[cfg(test)]
 mod brush_controls_tests;
 mod hold_binding;
+#[cfg(test)]
+mod interaction_shortcuts_tests;
 pub(crate) use hold_binding::HoldBinding;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Shortcut {
@@ -370,10 +372,11 @@ pub(crate) struct ModelingPreset {
     pub name: String,
     pub options: crate::viewport::ModelingOptions,
 }
-/// The shared selection hold follows the mode chosen in the X menu.
+/// The shared selection hold follows the mode chosen in the shared selection menu.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum SelectionMode {
     Mask,
+    Slice,
     #[default]
     Visibility,
 }
@@ -391,6 +394,8 @@ pub(crate) struct Preferences {
     pub paint_shortcuts_version: u32,
     #[serde(default)]
     pub search_shortcuts_version: u32,
+    #[serde(default)]
+    pub interaction_shortcuts_version: u32,
     #[serde(default)]
     pub brush_controls_version: u32,
     pub selection_mode: SelectionMode,
@@ -445,6 +450,7 @@ impl Default for Preferences {
             lighting: Default::default(),
             paint_shortcuts_version: 2,
             search_shortcuts_version: 1,
+            interaction_shortcuts_version: 1,
             brush_controls_version: 3,
             visibility_selection: VisibilitySettings::default(),
             modeling_presets: Vec::new(),
@@ -820,7 +826,10 @@ impl Preferences {
                 {
                     if matches!(
                         action,
-                        Action::OpenMenu(_) | Action::ObjectBrushModels | Action::SwapPaintColours
+                        Action::OpenMenu(_)
+                            | Action::ObjectBrushModels
+                            | Action::SwapPaintColours
+                            | Action::Slice
                     ) && matches!(event, egui::Event::Key { repeat: true, .. })
                     {
                         return false;
@@ -1168,7 +1177,8 @@ pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
         prefs.paint_shortcuts_version = 1;
     }
     if prefs.paint_shortcuts_version < 2 {
-        let shortcut = Action::SwapPaintColours.default_shortcut();
+        // Upgrade this historical default before applying the newer X/Z swap.
+        let shortcut = Some(Shortcut::new(Key::Z, Modifiers::NONE));
         if !prefs.bindings.iter().any(|(_, key)| *key == shortcut)
             && let Some((_, key)) = prefs
                 .bindings
@@ -1255,6 +1265,21 @@ pub(crate) fn load(path: &std::path::Path) -> Result<Preferences, String> {
         {
             *key = Some(wireframe);
         }
+    }
+    if prefs.interaction_shortcuts_version == 0 {
+        let x = Shortcut::new(Key::X, Modifiers::NONE);
+        let z = Shortcut::new(Key::Z, Modifiers::NONE);
+        // Migrate the stock pair atomically. If either was customised or
+        // explicitly cleared, keep both choices and avoid creating a conflict.
+        if prefs.shortcut(&Action::SwapPaintColours) == Some(&z)
+            && prefs.shortcut(&Action::MaskVisibilityMenu) == Some(&x)
+        {
+            prefs.clear_binding(&Action::SwapPaintColours);
+            prefs.clear_binding(&Action::MaskVisibilityMenu);
+            prefs.bind(Action::SwapPaintColours, x)?;
+            prefs.bind(Action::MaskVisibilityMenu, z)?;
+        }
+        prefs.interaction_shortcuts_version = 1;
     }
     // Add newly introduced actions without stealing existing shortcuts or clearing explicit unbindings.
     for action in Action::ALL.iter().cloned() {

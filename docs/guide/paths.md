@@ -84,3 +84,9 @@ Reprojection searches the visible target surface within that distance. It report
 Save the project to preserve paths, their points, corner rounding, smoothing, closure, direction, and seam. Older projects open with an empty path library. Path saves and applied strokes each use one Undo/Redo step; unfinished authoring edits and stroke previews can be cancelled.
 
 A project can contain up to 128 paths, each with up to 2,048 control points. Brush application permits up to 4,096 dabs. Whole-path previews also bound total work for dense meshes; live guidance bounds that work per frame. Use shorter strokes or increase spacing if a route exceeds a limit. These authoring guides do not select mesh edges or create topology automatically.
+
+### Return to a sculpt brush
+
+Choose a brush from the library, a custom control or its shortcut to leave Path Brush or Editable paths. An untouched editor closes immediately. If it contains a draft or stroke preview, choose **Apply and switch**, **Discard and switch**, or **Keep editing**. Apply saves the path or commits the preview with its usual Undo step. Discard cancels private work and keeps the saved scene. Keep editing returns to the same draft.
+
+The Editable paths window’s close control, **Done**, and **Finish paths** use the same decision. While a stroke preview is running, you can wait for it before applying, or discard it and switch immediately. A running whole-path stroke waits for your decision before committing. Other settings windows can stay open while you choose a brush or navigate; typing and shortcut capture keep their keyboard focus.

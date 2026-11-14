@@ -12,6 +12,20 @@ impl App {
             && !self.ui.paths_active
             && !self.ui.arrange_references
     }
+    pub(crate) fn temporary_slice_active(&self, ctx: &egui::Context) -> bool {
+        self.ui.preferences.selection_mode == preferences::SelectionMode::Slice
+            && !self.ui.viewport_menu.suppress_visibility
+            && !ctx.wants_keyboard_input()
+            && ctx.input(|i| i.focused && self.ui.preferences.visibility_hold.active(i))
+            && !self.viewport.paths.active
+            && !self.ui.projection.open
+            && !self.ui.fusion.open
+            && !self.ui.instances.placing
+            && !self.ui.arrange_references
+            && policy::EditorPolicy::new(&self.ui, &self.document)
+                .action(&Action::Slice)
+                .is_ok()
+    }
     pub(crate) fn open_viewport_menu(&mut self, ctx: &egui::Context) {
         self.open_quick_menu(ctx, Action::ViewportContextMenu);
     }
@@ -38,10 +52,13 @@ impl App {
                     ViewportMenuContext::Visibility
                 } else if self.temporary_mask_requested(ctx) {
                     ViewportMenuContext::Mask
+                } else if self.ui.slice_active {
+                    ViewportMenuContext::Slice
                 } else {
                     match self.ui.preferences.selection_mode {
                         preferences::SelectionMode::Mask => ViewportMenuContext::Mask,
                         preferences::SelectionMode::Visibility => ViewportMenuContext::Visibility,
+                        preferences::SelectionMode::Slice => ViewportMenuContext::Slice,
                     }
                 }
             }
@@ -53,17 +70,24 @@ impl App {
             .ui
             .viewport_menu_entries(context, &self.document)
             .iter()
-            .position(|entry| matches!(entry.action, Action::ModelTool(_)))
+            .position(|entry| {
+                if context == ViewportMenuContext::Slice {
+                    entry.selected
+                } else {
+                    matches!(entry.action, Action::ModelTool(_))
+                }
+            })
             .unwrap_or(0);
         self.ui.viewport_menu.just_opened = true;
-        self.ui.viewport_menu.hold =
-            if action == Action::MaskVisibilityMenu && self.temporary_visibility_active(ctx) {
-                Some(self.ui.preferences.visibility_hold.clone())
-            } else if context == ViewportMenuContext::Mask && self.temporary_mask_requested(ctx) {
-                Some(self.temporary_mask_binding(ctx).clone())
-            } else {
-                None
-            };
+        self.ui.viewport_menu.hold = if action == Action::MaskVisibilityMenu
+            && (self.temporary_visibility_active(ctx) || self.temporary_slice_active(ctx))
+        {
+            Some(self.ui.preferences.visibility_hold.clone())
+        } else if context == ViewportMenuContext::Mask && self.temporary_mask_requested(ctx) {
+            Some(self.temporary_mask_binding(ctx).clone())
+        } else {
+            None
+        };
         self.viewport.wait_for_release();
     }
     pub(crate) fn show_viewport_menu(&mut self, ctx: &egui::Context) {
@@ -335,12 +359,20 @@ mod tests {
     #[test]
     fn viewport_menu_focus_loss_release_and_text_entry_are_safe() {
         let (mut app, ctx) = setup();
+        // A custom non-history key can open the menu while the shared hold is down.
+        app.ui
+            .preferences
+            .bind(
+                Action::MaskVisibilityMenu,
+                Shortcut::new(egui::Key::F2, egui::Modifiers::NONE),
+            )
+            .unwrap();
         frame(
             &mut app,
             &ctx,
             egui::Modifiers::CTRL | egui::Modifiers::SHIFT,
             vec![key(
-                egui::Key::X,
+                egui::Key::F2,
                 egui::Modifiers::CTRL | egui::Modifiers::SHIFT,
             )],
         );
@@ -452,7 +484,7 @@ mod tests {
         assert_eq!(old.visibility_hold, HoldBinding::visibility_default());
     }
     #[test]
-    fn quick_menus_route_q_x_e_and_keep_underlying_selection() {
+    fn quick_menus_route_q_z_e_and_keep_underlying_selection() {
         let tap = |code, modifiers| {
             let mut release = key(code, modifiers);
             if let egui::Event::Key { pressed, .. } = &mut release {
@@ -466,12 +498,17 @@ mod tests {
         let hold = egui::Modifiers::CTRL | egui::Modifiers::SHIFT;
         for (key_code, context) in [
             (egui::Key::Q, ViewportMenuContext::Modeling),
-            (egui::Key::X, ViewportMenuContext::Visibility),
+            (egui::Key::Z, ViewportMenuContext::Visibility),
             (egui::Key::E, ViewportMenuContext::Transform),
         ] {
-            frame(&mut app, &ctx, hold, tap(key_code, hold));
+            let modifiers = if key_code == egui::Key::Z {
+                egui::Modifiers::NONE
+            } else {
+                hold
+            };
+            frame(&mut app, &ctx, modifiers, tap(key_code, modifiers));
             assert_eq!(app.ui.viewport_menu.context, Some(context));
-            frame(&mut app, &ctx, hold, tap(egui::Key::Escape, hold));
+            frame(&mut app, &ctx, modifiers, tap(egui::Key::Escape, modifiers));
             assert!(app.ui.modeling.active);
         }
         frame(&mut app, &ctx, egui::Modifiers::NONE, vec![]);
@@ -554,6 +591,14 @@ mod tests {
     #[test]
     fn shared_selection_tabs_control_hold_and_restore_brush_without_edits() {
         let (mut app, ctx) = setup();
+        // A custom non-history key can open the menu while the shared hold is down.
+        app.ui
+            .preferences
+            .bind(
+                Action::MaskVisibilityMenu,
+                Shortcut::new(egui::Key::F2, egui::Modifiers::NONE),
+            )
+            .unwrap();
         let before = app.document.geometry_snapshot();
         let history = app.document.history_counts();
         let selected = app.ui.selected;
@@ -566,7 +611,7 @@ mod tests {
             app.ui.brush_index_for_context(&app.document, &ctx),
             mask_brush
         );
-        frame(&mut app, &ctx, hold, vec![key(egui::Key::X, hold)]);
+        frame(&mut app, &ctx, hold, vec![key(egui::Key::F2, hold)]);
         assert_eq!(
             app.ui.viewport_menu.context,
             Some(ViewportMenuContext::Visibility)
@@ -634,5 +679,142 @@ mod tests {
             preferences::SelectionMode::Mask
         );
         std::fs::remove_file(path).unwrap();
+    }
+    #[test]
+    fn slice_joins_shared_chooser_and_hold_restores_previous_tool() {
+        let (mut app, ctx) = setup();
+        let hold = egui::Modifiers::CTRL | egui::Modifiers::SHIFT;
+        let before = app.document.geometry_snapshot();
+        let history = app.document.history_counts();
+        let p = app.ui.viewport_menu.viewport_rect.unwrap().center();
+        frame(
+            &mut app,
+            &ctx,
+            egui::Modifiers::NONE,
+            vec![key(egui::Key::Z, egui::Modifiers::NONE)],
+        );
+        let output = frame(&mut app, &ctx, egui::Modifiers::NONE, vec![]);
+        let tab = output
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.text() == "Slice" => {
+                    Some(text.pos + text.galley.size() * 0.5)
+                }
+                _ => None,
+            })
+            .expect("Slice tab must be visible beside Mask and Visibility");
+        for pressed in [true, false] {
+            frame(
+                &mut app,
+                &ctx,
+                egui::Modifiers::NONE,
+                vec![
+                    egui::Event::PointerMoved(tab),
+                    egui::Event::PointerButton {
+                        pos: tab,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+        }
+        assert_eq!(
+            app.ui.preferences.selection_mode,
+            preferences::SelectionMode::Slice
+        );
+        let entries = app
+            .ui
+            .viewport_menu_entries(ViewportMenuContext::Slice, &app.document);
+        app.ui.viewport_menu.selected = entries
+            .iter()
+            .position(|entry| entry.action == Action::SliceTrim)
+            .unwrap();
+        frame(
+            &mut app,
+            &ctx,
+            egui::Modifiers::NONE,
+            vec![key(egui::Key::Enter, egui::Modifiers::NONE)],
+        );
+        assert_eq!(app.ui.slice_options.mode, crate::sculpt::SliceMode::Trim);
+        assert!(
+            !app.ui.slice_active,
+            "choosing a hold option must not enter persistent Slice"
+        );
+        assert_eq!(app.document.geometry_snapshot(), before);
+        frame(&mut app, &ctx, hold, vec![egui::Event::PointerMoved(p)]);
+        assert!(app.temporary_slice_active(&ctx));
+        assert!(app.ui.viewport_menu.slice_was_active);
+        assert!(
+            app.ui.modeling.active,
+            "the underlying tool must remain selected"
+        );
+        frame(&mut app, &ctx, egui::Modifiers::NONE, vec![]);
+        assert!(!app.ui.viewport_menu.slice_was_active);
+        assert!(app.ui.modeling.active);
+        assert_eq!(app.document.geometry_snapshot(), before);
+        assert_eq!(app.document.history_counts(), history);
+        assert!(app.ui.preferences.shortcut(&Action::Slice).is_none());
+    }
+
+    #[test]
+    fn temporary_slice_cancels_on_hold_release_and_commits_one_cut_on_pen_release() {
+        for cancel in [true, false] {
+            let (mut app, ctx) = setup();
+            app.ui.preferences.selection_mode = preferences::SelectionMode::Slice;
+            app.ui.slice_options.mode = crate::sculpt::SliceMode::Polygroups;
+            let hold = egui::Modifiers::CTRL | egui::Modifiers::SHIFT;
+            let before = app.document.geometry_snapshot();
+            let history = app.document.history_counts();
+            let p = app.ui.viewport_menu.viewport_rect.unwrap().center();
+            let start = p + egui::vec2(-80., -110.);
+            let end = p + egui::vec2(65., 110.);
+            frame(&mut app, &ctx, hold, vec![egui::Event::PointerMoved(start)]);
+            frame(
+                &mut app,
+                &ctx,
+                hold,
+                vec![egui::Event::PointerButton {
+                    pos: start,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: hold,
+                }],
+            );
+            frame(&mut app, &ctx, hold, vec![egui::Event::PointerMoved(end)]);
+            assert!(app.viewport.session.gesture == Some(crate::viewport::Gesture::Slice));
+            if cancel {
+                frame(&mut app, &ctx, egui::Modifiers::NONE, vec![]);
+            }
+            frame(
+                &mut app,
+                &ctx,
+                if cancel { egui::Modifiers::NONE } else { hold },
+                vec![egui::Event::PointerButton {
+                    pos: end,
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: if cancel { egui::Modifiers::NONE } else { hold },
+                }],
+            );
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            while app.mesh_job.is_some() {
+                app.poll_mesh_job();
+                assert!(std::time::Instant::now() < deadline);
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+            frame(&mut app, &ctx, egui::Modifiers::NONE, vec![]);
+            if cancel {
+                assert_eq!(app.document.geometry_snapshot(), before);
+                assert_eq!(app.document.history_counts(), history);
+            } else {
+                assert_ne!(app.document.geometry_snapshot(), before);
+                assert_eq!(app.document.history_counts().0, history.0 + 1);
+                app.dispatch(Command::Undo, &ctx);
+                assert_eq!(app.document.geometry_snapshot(), before);
+            }
+            assert!(app.ui.modeling.active);
+        }
     }
 }

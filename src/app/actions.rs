@@ -24,7 +24,19 @@ impl App {
             self.viewport.wait_for_release();
             return;
         }
-        if !self.ui.action_enabled(&action, &self.document) {
+        if let Some(reason) = self.ui.action_unavailable(&action, &self.document) {
+            self.ui.status = reason.into();
+            return;
+        }
+        if matches!(
+            action,
+            Action::SelectBrush(_)
+                | Action::SelectObjectBrush(_)
+                | Action::PreviousBrush
+                | Action::NextBrush
+                | Action::Sculpt
+        ) && self.prepare_brush_change(&action)
+        {
             return;
         }
         self.ui.edges.selected = self.viewport.selected_edges(&self.document).to_vec();
@@ -623,6 +635,26 @@ impl App {
             Action::InvertVisibility => Some(Command::InvertVisibility),
             Action::SplitHidden => Some(Command::SplitHidden),
             Action::Slice => Some(Command::SliceTool(!self.ui.slice_active)),
+            Action::SliceGroups
+            | Action::SliceTrim
+            | Action::SliceSeparate
+            | Action::SliceLine
+            | Action::SlicePath
+            | Action::SliceCap
+            | Action::SliceFlip => {
+                use crate::sculpt::SliceMode;
+                match action {
+                    Action::SliceGroups => self.ui.slice_options.mode = SliceMode::Polygroups,
+                    Action::SliceTrim => self.ui.slice_options.mode = SliceMode::Trim,
+                    Action::SliceSeparate => self.ui.slice_options.mode = SliceMode::Separate,
+                    Action::SliceLine => self.ui.slice_path_mode = false,
+                    Action::SlicePath => self.ui.slice_path_mode = true,
+                    Action::SliceCap => self.ui.slice_options.cap = !self.ui.slice_options.cap,
+                    Action::SliceFlip => self.ui.slice_options.flip = !self.ui.slice_options.flip,
+                    _ => unreachable!(),
+                }
+                None
+            }
             Action::Primitive => Some(Command::RequestPrimitive),
             Action::ConvertPrimitive => Some(Command::ConvertPrimitive),
             Action::DuplicateModel => Some(Command::DuplicateModel),
@@ -839,6 +871,16 @@ impl App {
                 self.ui.layout_open = true;
                 None
             }
+            Action::SelectObjectBrush(id) => {
+                let command = id.map_or(
+                    crate::command::InstanceCommand::ChooseShipGreebles,
+                    crate::command::InstanceCommand::ChooseBrush,
+                );
+                if let Err(error) = self.dispatch_instances(command) {
+                    self.ui.status = error;
+                }
+                None
+            }
             Action::SelectBrush(id) => {
                 if let Some(index) = self
                     .document
@@ -846,15 +888,6 @@ impl App {
                     .iter()
                     .position(|b| b.identity() == id)
                 {
-                    if self.ui.path_brush_active {
-                        if self.viewport.paths.has_unfinished(&self.document) {
-                            self.ui.status =
-                                "Complete or cancel the current path before switching brushes"
-                                    .into();
-                            return;
-                        }
-                        let _ = self.dispatch_path(crate::command::PathCommand::Close);
-                    }
                     self.ui.select_brush(index, &self.document);
                 }
                 None

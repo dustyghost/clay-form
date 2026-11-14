@@ -231,6 +231,10 @@ impl PathEditor {
         }
     }
 
+    pub(crate) fn has_suspended_draft(&self) -> bool {
+        self.suspended.is_some()
+    }
+
     pub(crate) fn has_unfinished(&self, document: &Document) -> bool {
         self.suspended.is_some() || self.dirty(document)
     }

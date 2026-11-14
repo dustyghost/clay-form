@@ -29,6 +29,7 @@ mod projection;
 mod recovery;
 mod references;
 pub(crate) mod textures;
+mod tool_change;
 
 pub struct App {
     pub(crate) document: Document,
@@ -210,9 +211,8 @@ impl App {
             || self.ui.diagnostics_open
             || self.ui.viewport_controls.editor_open
             || self.ui.viewport_controls.arranging
-            || self.ui.settings_open
-            || self.ui.mesh_capacity_open
-            || self.ui.layout_open
+            || self.ui.capturing.is_some()
+            || self.ui.tool_change.is_some()
             || self.ui.alphas.draft.is_some()
             || self.ui.alphas.overwrite.is_some()
             || self.ui.icon_capture_open()
@@ -222,7 +222,26 @@ impl App {
         if self.ui.viewport_menu.context.is_some() {
             return;
         }
-        let visibility = self.temporary_visibility_active(ctx);
+        // Exact history chords win over quick-menu matching with hold modifiers
+        // removed: Ctrl+Shift+Z is Redo, even though the chooser defaults to Z.
+        for action in [Action::Undo, Action::Redo] {
+            if let Some(binding) = self.ui.preferences.shortcut(&action).cloned() {
+                let requested = ctx.input_mut(|input| {
+                    let mut pressed = false;
+                    input.events.retain(|event| {
+                        let matches = Shortcut::from_event(event).as_ref() == Some(&binding);
+                        pressed |= matches;
+                        !matches
+                    });
+                    pressed
+                });
+                if requested {
+                    self.execute_action(action, ctx);
+                    return;
+                }
+            }
+        }
+        let visibility = self.temporary_visibility_active(ctx) || self.temporary_slice_active(ctx);
         let masking = self.temporary_mask_requested(ctx);
         let mask_binding = self.temporary_mask_binding(ctx).clone();
         for action in [
@@ -267,7 +286,7 @@ impl App {
                 })
             });
         }
-        if masking {
+        if masking || self.temporary_slice_active(ctx) {
             return;
         }
         for action in self.ui.preferences.actions(ctx) {
@@ -325,13 +344,47 @@ impl App {
             self.viewport.wait_for_release();
         }
         self.ui.viewport_menu.visibility_was_active = temporary_visibility;
+        let mut temporary_slice = self.temporary_slice_active(ui.ctx());
+        if !menu_was_open && temporary_slice && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.ui.viewport_menu.suppress_visibility = true;
+            temporary_slice = false;
+            ui.input_mut(|i| {
+                i.events.retain(|event| {
+                    !matches!(
+                        event,
+                        egui::Event::Key {
+                            key: egui::Key::Escape,
+                            ..
+                        }
+                    )
+                })
+            });
+        }
+        if self.ui.viewport_menu.slice_was_active != temporary_slice {
+            let was_dragging = self.viewport.session.gesture.is_some();
+            self.viewport.cancel(&mut self.document);
+            if was_dragging || (!temporary_slice && ui.input(|i| i.pointer.primary_down())) {
+                self.viewport.wait_for_release();
+            }
+        }
+        self.ui.viewport_menu.slice_was_active = temporary_slice;
+
         self.paths.viewport_size = Some(ui.available_size());
         self.sync_path_brush_radius();
-        self.show_paths(ui.ctx());
-        if self.ui.projection.open && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        self.show_tool_change(ui.ctx());
+        if self.ui.tool_change.is_none() {
+            self.show_paths(ui.ctx());
+        }
+        if self.ui.tool_change.is_none()
+            && self.ui.projection.open
+            && ui.input(|i| i.key_pressed(egui::Key::Escape))
+        {
             self.cancel_projection();
         }
-        if self.ui.fusion.open && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        if self.ui.tool_change.is_none()
+            && self.ui.fusion.open
+            && ui.input(|i| i.key_pressed(egui::Key::Escape))
+        {
             self.cancel_fusion();
         }
         if let Some(id) = self.viewport.session.guided.used_path.take() {
@@ -384,9 +437,8 @@ impl App {
             && !self.ui.recovery_open
             && !self.ui.about_open
             && !self.ui.diagnostics_open
-            && !self.ui.settings_open
-            && !self.ui.mesh_capacity_open
-            && !self.ui.layout_open
+            && self.ui.capturing.is_none()
+            && self.ui.tool_change.is_none()
             && self.mesh_job.is_none();
         if enabled
             && self.ui.arrange_references
@@ -539,8 +591,10 @@ impl App {
         } else {
             Vec::new()
         };
-        self.viewport.session.guided.enabled =
-            self.ui.guide_paths && !self.ui.mask_active && !temporary_visibility;
+        self.viewport.session.guided.enabled = self.ui.guide_paths
+            && !self.ui.mask_active
+            && !temporary_visibility
+            && !temporary_slice;
         self.viewport.session.guided.path_starts_only = self.ui.path_starts_only;
         self.viewport.session.visibility_hold = Some(if !temporary_visibility {
             Default::default()
@@ -627,24 +681,25 @@ impl App {
             &mut self.document,
             &mut self.camera,
             ViewportOptions {
-                instance_editor,
+                instance_editor: instance_editor.filter(|_| !temporary_slice),
                 edge_select: self.ui.edges.selecting
                     && !temporary_visibility
-                    && !self.ui.mask_active,
+                    && !self.ui.mask_active
+                    && !temporary_slice,
                 modeling: self
                     .ui
                     .modeling
                     .active
                     .then_some(self.ui.modeling.options())
-                    .filter(|_| !temporary_visibility && !self.ui.mask_active),
+                    .filter(|_| !temporary_visibility && !self.ui.mask_active && !temporary_slice),
                 arrange_references: self.ui.arrange_references,
                 references_visible: self.ui.references_visible,
-                slice: self
-                    .ui
-                    .slice_active
+                slice: (self.ui.slice_active || temporary_slice)
                     .then_some(self.ui.slice_options)
                     .filter(|_| !temporary_visibility),
-                select: if temporary_visibility {
+                select: if temporary_slice {
+                    None
+                } else if temporary_visibility {
                     Some(self.ui.preferences.visibility_selection.tool())
                 } else if self.ui.mask_active {
                     self.ui.preferences.mask_preset.selection_tool()
@@ -652,7 +707,7 @@ impl App {
                     self.ui.selection_tool
                 },
                 slice_path_mode: self.ui.slice_path_mode,
-                transform_mode: if temporary_visibility {
+                transform_mode: if temporary_visibility || temporary_slice {
                     crate::viewport::TransformMode::Sculpt
                 } else {
                     self.ui.transform_mode
@@ -692,12 +747,12 @@ impl App {
                 } else {
                     self.ui.preferences.reverse
                 },
-                zoom_hold: if self.ui.mask_active {
+                zoom_hold: if self.ui.mask_active || temporary_slice {
                     preferences::Hold::Disabled
                 } else {
                     self.ui.preferences.zoom_hold
                 },
-                pan_hold: if self.ui.mask_active {
+                pan_hold: if self.ui.mask_active || temporary_slice {
                     preferences::Hold::Disabled
                 } else {
                     self.ui.preferences.pan_hold
@@ -861,11 +916,13 @@ impl App {
                 self.dispatch(command, ctx);
             }
         }
-        for command in self.ui.projection_window(ctx, &self.document, &self.camera) {
-            self.dispatch(command, ctx);
-        }
-        for command in self.ui.fusion_window(ctx, &self.document) {
-            self.dispatch(command, ctx);
+        if self.ui.tool_change.is_none() {
+            for command in self.ui.projection_window(ctx, &self.document, &self.camera) {
+                self.dispatch(command, ctx);
+            }
+            for command in self.ui.fusion_window(ctx, &self.document) {
+                self.dispatch(command, ctx);
+            }
         }
         for command in self.ui.uv_window(
             ctx,

@@ -8,6 +8,7 @@ pub(crate) enum ViewportMenuContext {
     Visibility,
     Mask,
     Transform,
+    Slice,
 }
 #[derive(Default)]
 pub(crate) struct ViewportMenuState {
@@ -19,6 +20,7 @@ pub(crate) struct ViewportMenuState {
     pub hold: Option<crate::preferences::HoldBinding>,
     pub suppress_visibility: bool,
     pub visibility_was_active: bool,
+    pub slice_was_active: bool,
 }
 fn consume_menu_key(input: &mut egui::InputState, key: egui::Key) -> bool {
     let pressed = input.key_pressed(key);
@@ -152,7 +154,7 @@ pub(crate) fn hold_binding_editor(
                 *hold = Default::default();
             }
             if ui.button("Reset").clicked() {
-                *hold = if label == "Hold for selection (X menu)" {
+                *hold = if label == "Hold for selection (Mask / visibility)" {
                     crate::preferences::HoldBinding::visibility_default()
                 } else {
                     Default::default()
@@ -281,6 +283,39 @@ impl UiState {
                     action, label: label.into(), selected,
                     enabled: document.primitive().is_none() && document.active_visible(),
                     hint: "Remembered for the next hold. Red faces preview the result; no geometry is cut.".into(),
+                }).collect()
+            }
+            ViewportMenuContext::Slice => {
+                use crate::sculpt::SliceMode;
+                let mut choices = vec![
+                    (Action::SliceLine, "Line", !self.slice_path_mode),
+                    (Action::SlicePath, "Path", self.slice_path_mode),
+                    (
+                        Action::SliceGroups,
+                        "Vertex groups",
+                        self.slice_options.mode == SliceMode::Polygroups,
+                    ),
+                    (
+                        Action::SliceTrim,
+                        "Trim",
+                        self.slice_options.mode == SliceMode::Trim,
+                    ),
+                    (
+                        Action::SliceSeparate,
+                        "Separate",
+                        self.slice_options.mode == SliceMode::Separate,
+                    ),
+                ];
+                if self.slice_options.mode != SliceMode::Polygroups {
+                    choices.push((Action::SliceCap, "Cap cuts", self.slice_options.cap));
+                }
+                if self.slice_options.mode == SliceMode::Trim {
+                    choices.push((Action::SliceFlip, "Flip kept side", self.slice_options.flip));
+                }
+                choices.into_iter().map(|(action, label, selected)| ViewportMenuEntry {
+                    enabled: self.action_enabled(&action, document), action,
+                    label: label.into(), selected,
+                    hint: "Change the next cut; stay in Slice. No geometry changes until you draw and apply a cut.".into(),
                 }).collect()
             }
             ViewportMenuContext::Mask => self.temporary_mask_menu_entries(document),
@@ -442,9 +477,10 @@ impl UiState {
         let mut open = true;
         let response = egui::Window::new(match context {
             ViewportMenuContext::Modeling => "Modeling functions",
-            ViewportMenuContext::Visibility => "Mask / visibility",
-            ViewportMenuContext::Mask => "Mask / visibility",
+            ViewportMenuContext::Visibility => "Mask / visibility / slice",
+            ViewportMenuContext::Mask => "Mask / visibility / slice",
             ViewportMenuContext::Transform => "Transform options",
+            ViewportMenuContext::Slice => "Mask / visibility / slice",
         })
         .id(egui::Id::new("viewport_tool_menu"))
         .open(&mut open)
@@ -463,45 +499,53 @@ impl UiState {
             unavailable_menu_help(ui, &entries);
             if matches!(
                 context,
-                ViewportMenuContext::Mask | ViewportMenuContext::Visibility
+                ViewportMenuContext::Mask
+                    | ViewportMenuContext::Visibility
+                    | ViewportMenuContext::Slice
             ) {
-                ui.strong("Clear");
-                ui.horizontal(|ui| {
-                    for (clear, label, hint) in [
-                        (
-                            Action::ClearMask,
-                            "Clear mask",
-                            "Remove the active model's mask.",
-                        ),
-                        (
-                            Action::ShowAllFaces,
-                            "Show all",
-                            "Clear visibility hiding: show all faces of the active model.",
-                        ),
-                    ] {
-                        if ui
-                            .add_enabled(
-                                self.action_enabled(&clear, document),
-                                egui::Button::new(label),
-                            )
-                            .on_hover_text(hint)
-                            .customize(clear.clone())
-                            .clicked()
-                        {
-                            action = Some(clear);
+                if context != ViewportMenuContext::Slice {
+                    ui.strong("Clear");
+                    ui.horizontal(|ui| {
+                        for (clear, label, hint) in [
+                            (
+                                Action::ClearMask,
+                                "Clear mask",
+                                "Remove the active model's mask.",
+                            ),
+                            (
+                                Action::ShowAllFaces,
+                                "Show all",
+                                "Clear visibility hiding: show all faces of the active model.",
+                            ),
+                        ] {
+                            if ui
+                                .add_enabled(
+                                    self.action_enabled(&clear, document),
+                                    egui::Button::new(label),
+                                )
+                                .on_hover_text(hint)
+                                .customize(clear.clone())
+                                .clicked()
+                            {
+                                action = Some(clear);
+                            }
                         }
-                    }
-                });
-                ui.separator();
+                    });
+                    ui.separator();
+                }
                 ui.horizontal(|ui| {
                     for (choice, label) in [
                         (ViewportMenuContext::Mask, "Mask"),
                         (ViewportMenuContext::Visibility, "Visibility"),
+                        (ViewportMenuContext::Slice, "Slice"),
                     ] {
                         if ui.selectable_label(context == choice, label).clicked() {
                             self.preferences.selection_mode = match choice {
                                 ViewportMenuContext::Mask => {
                                     crate::preferences::SelectionMode::Mask
+                                }
+                                ViewportMenuContext::Slice => {
+                                    crate::preferences::SelectionMode::Slice
                                 }
                                 _ => crate::preferences::SelectionMode::Visibility,
                             };
@@ -512,10 +556,14 @@ impl UiState {
                 });
                 let hold = &self.preferences.visibility_hold;
                 if hold.enabled() {
-                    ui.weak(format!(
-                        "Hold {} to use selected tab · Alt reverses",
-                        hold.label()
-                    ));
+                    ui.weak(if context == ViewportMenuContext::Slice {
+                        format!(
+                            "Hold {} to slice · Release the hold to restore your tool",
+                            hold.label()
+                        )
+                    } else {
+                        format!("Hold {} to use selected tab · Alt reverses", hold.label())
+                    });
                 } else {
                     ui.weak("Assign Hold for selection in Key settings · Alt reverses");
                 }

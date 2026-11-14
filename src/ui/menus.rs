@@ -584,7 +584,7 @@ impl UiState {
                     });
                 ui.separator();
                 ui.label(format!(
-                    "Hold {}: mode chosen in X menu",
+                    "Hold {}: mode chosen in Mask / visibility menu",
                     self.preferences.visibility_hold.label()
                 ));
                 ui.label(format!(

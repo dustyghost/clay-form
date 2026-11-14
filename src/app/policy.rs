@@ -8,6 +8,7 @@ enum Intent {
     Navigate,
     History,
     Brush,
+    SwitchBrush,
     PathGuides,
     Path,
     Projection,
@@ -32,10 +33,17 @@ impl<'a> EditorPolicy<'a> {
     }
     fn available(&self, intent: Intent) -> Result<(), &'static str> {
         let ui = self.ui;
+        if ui.tool_change.is_some() {
+            return Err("Apply, discard or keep editing the pending tool before continuing");
+        }
         if self.document.instance_preview_active()
             && !matches!(
                 intent,
-                Intent::Instances | Intent::Navigate | Intent::History | Intent::Request
+                Intent::Instances
+                    | Intent::Navigate
+                    | Intent::History
+                    | Intent::Request
+                    | Intent::SwitchBrush
             )
         {
             return Err("Apply or cancel the instance preview first");
@@ -61,18 +69,19 @@ impl<'a> EditorPolicy<'a> {
         if ui.icon_capture_open() && intent != Intent::Icon {
             return Err("Finish capturing the brush icon first");
         }
-        if (ui.recovery_open
-            || ui.diagnostics_open
-            || ui.settings_open
-            || ui.mesh_capacity_open
-            || ui.layout_open
-            || ui.viewport_controls.editor_open
-            || ui.viewport_controls.arranging)
-            && !matches!(intent, Intent::Request | Intent::Pending)
+        if (ui.viewport_controls.editor_open || ui.viewport_controls.arranging)
+            && !matches!(
+                intent,
+                Intent::Request | Intent::Pending | Intent::Navigate | Intent::SwitchBrush
+            )
         {
-            return Err("Close the open dialog before editing");
+            return Err("Finish arranging viewport controls before editing");
         }
-        if ui.fusion.open && !matches!(intent, Intent::Fusion | Intent::Navigate | Intent::Request)
+        if ui.fusion.open
+            && !matches!(
+                intent,
+                Intent::Fusion | Intent::Navigate | Intent::Request | Intent::SwitchBrush
+            )
         {
             return Err("Apply or cancel the mesh join before editing the scene");
         }
@@ -82,7 +91,7 @@ impl<'a> EditorPolicy<'a> {
                 && !ui.projection.busy)
             && !matches!(
                 intent,
-                Intent::Projection | Intent::Navigate | Intent::Request
+                Intent::Projection | Intent::Navigate | Intent::Request | Intent::SwitchBrush
             )
         {
             return Err("Apply or cancel the surface preview before editing the scene");
@@ -94,6 +103,7 @@ impl<'a> EditorPolicy<'a> {
                     | Intent::PathGuides
                     | Intent::History
                     | Intent::Brush
+                    | Intent::SwitchBrush
                     | Intent::Navigate
                     | Intent::Request
             ) {
@@ -111,7 +121,11 @@ impl<'a> EditorPolicy<'a> {
         if ui.mesh_busy
             && !matches!(
                 intent,
-                Intent::Navigate | Intent::Brush | Intent::CancelJob | Intent::Request
+                Intent::Navigate
+                    | Intent::Brush
+                    | Intent::SwitchBrush
+                    | Intent::CancelJob
+                    | Intent::Request
             )
         {
             return Err("Wait for the mesh operation, or cancel it first");
@@ -135,7 +149,11 @@ impl<'a> EditorPolicy<'a> {
                 Intent::Navigate
             }
             Action::Undo | Action::Redo => Intent::History,
-            Action::SelectBrush(_) if self.ui.path_brush_active => Intent::Brush,
+            Action::SelectBrush(_)
+            | Action::SelectObjectBrush(_)
+            | Action::PreviousBrush
+            | Action::NextBrush
+            | Action::Sculpt => Intent::SwitchBrush,
             Action::GuidedRetopology if self.ui.path_brush_active => Intent::Path,
             Action::TogglePathGuides | Action::TogglePathOnlyStrokes => Intent::PathGuides,
             _ => Intent::Edit,
@@ -173,6 +191,7 @@ impl<'a> EditorPolicy<'a> {
             Action::Undo => return "Nothing to undo",
             Action::Redo => return "Nothing to redo",
             Action::TemporaryMaskPreset(id) if !document.brushes().iter().any(|brush| brush.kind == Kind::Mask && brush.identity() == *id) => return "This Mask preset no longer exists. Choose a Mask brush in Mask / visibility",
+            Action::SelectObjectBrush(_) => return "This object brush is no longer in the project. Choose a brush from the Brushes panel",
             Action::SelectBrush(_) => return "This brush is no longer in the project. Choose a brush from the Brushes panel",
             Action::OpenMenu(_) => return "This custom menu no longer exists. Open Workspace to create or restore one",
             Action::ModelPreset(_) | Action::ModelDeletePreset(_) => {
@@ -458,6 +477,9 @@ impl<'a> EditorPolicy<'a> {
             Action::Undo => document.can_undo(),
             Action::Redo => document.can_redo(),
             Action::SelectBrush(id) => document.brushes().iter().any(|b| b.identity() == *id),
+            Action::SelectObjectBrush(id) => {
+                id.is_none_or(|id| document.instances().brushes.iter().any(|b| b.id == id))
+            }
             Action::NewBrush(name) => {
                 matches!(name.as_str(), "Alpha Drag" | "Object")
                     || Kind::ALL.iter().any(|k| format!("{k:?}") == *name)
@@ -684,6 +706,13 @@ impl<'a> EditorPolicy<'a> {
             | Action::ShowAllFaces
             | Action::InvertVisibility
             | Action::Slice
+            | Action::SliceGroups
+            | Action::SliceTrim
+            | Action::SliceSeparate
+            | Action::SliceLine
+            | Action::SlicePath
+            | Action::SliceCap
+            | Action::SliceFlip
             | Action::ExtractMasked
             | Action::GroupMasked
             | Action::GroupAll
@@ -814,8 +843,8 @@ mod tests {
                 0 => app.ui.mesh_busy = true,
                 1 => app.ui.projection.open = true,
                 2 => app.viewport.paths.active = true,
-                3 => app.ui.settings_open = true,
-                4 => app.ui.mesh_capacity_open = true,
+                3 => app.ui.viewport_controls.arranging = true,
+                4 => app.ui.tool_change = Some(Action::Sculpt),
                 _ => app.ui.pending = Some(crate::command::PendingAction::New),
             }
             app.sync_path_history_state();

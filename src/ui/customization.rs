@@ -168,6 +168,18 @@ pub(super) fn sidebar_context(response: egui::Response, placement: Placement) {
 impl UiState {
     pub fn action_label(&self, action: &Action, document: &Document) -> String {
         match action {
+            Action::SelectObjectBrush(id) => id
+                .and_then(|id| document.instances().brushes.iter().find(|b| b.id == id))
+                .map_or_else(
+                    || {
+                        if id.is_none() {
+                            "Ship greebles".into()
+                        } else {
+                            "Unavailable object brush".into()
+                        }
+                    },
+                    |b| format!("Object brush: {}", b.name),
+                ),
             Action::SelectBrush(id) => document
                 .brushes()
                 .iter()
@@ -397,6 +409,13 @@ impl UiState {
                 Some(crate::viewport::SelectionTool::MaskLine { flip: true, .. })
             ),
             Action::Slice => self.slice_active,
+            Action::SliceGroups => self.slice_options.mode == crate::sculpt::SliceMode::Polygroups,
+            Action::SliceTrim => self.slice_options.mode == crate::sculpt::SliceMode::Trim,
+            Action::SliceSeparate => self.slice_options.mode == crate::sculpt::SliceMode::Separate,
+            Action::SliceLine => !self.slice_path_mode,
+            Action::SlicePath => self.slice_path_mode,
+            Action::SliceCap => self.slice_options.cap,
+            Action::SliceFlip => self.slice_options.flip,
             Action::Sculpt => self.transform_mode == crate::viewport::TransformMode::Sculpt,
             Action::Transform => self.transform_mode == crate::viewport::TransformMode::World,
             Action::UniversalTransform => {
@@ -906,8 +925,8 @@ impl UiState {
             }
             super::context_menu::hold_binding_editor(ui, "Dedicated mask hold (optional)", &mut self.preferences.mask_hold);
             for conflict in self.mask_binding_conflicts() { ui.colored_label(egui::Color32::YELLOW, conflict); }
-            ui.weak("Alt reverses masking and visibility without changing the saved operation. The shared selection hold follows the X menu and wins overlapping holds. Right/middle drag and wheel remain available.");
-            super::context_menu::hold_binding_editor(ui, "Hold for selection (X menu)", &mut self.preferences.visibility_hold);
+            ui.weak("Alt reverses masking and visibility without changing the saved operation. The shared selection hold follows the Mask / visibility menu and wins overlapping holds. Right/middle drag and wheel remain available.");
+            super::context_menu::hold_binding_editor(ui, "Hold for selection (Mask / visibility)", &mut self.preferences.visibility_hold);
             if self.preferences.visibility_hold.enabled() {
                 let h = &self.preferences.visibility_hold;
                 for (label, hold) in [("Smooth", self.preferences.smooth), ("Reverse", self.preferences.reverse), ("Zoom", self.preferences.zoom_hold), ("Pan", self.preferences.pan_hold)] {
@@ -919,7 +938,7 @@ impl UiState {
                     if let Some(binding) = binding && self.preferences.visibility_hold.key.as_ref() == Some(&binding.key) { ui.colored_label(egui::Color32::YELLOW, format!("Selection hold shares a key with {}. Clear or change one binding.", action.label())); }
                 }
             }
-            ui.weak("Temporary selection takes priority over tool modifiers. Middle/right-button navigation remains available. Zoom takes priority over pan with shared modifiers. Pan starts off the model; on the model, brush modifiers apply. Choose Mask or Visibility in the X menu; the hold uses that mode and its remembered shape.");
+            ui.weak("Temporary selection takes priority over tool modifiers. Middle/right-button navigation remains available. Zoom takes priority over pan with shared modifiers. Pan starts off the model; on the model, brush modifiers apply. Choose Mask or Visibility in the Mask / visibility menu; the hold uses that mode and its remembered shape.");
             if ui.button("Reset keys to defaults…").clicked() {
                 self.customization.keys_reset_confirmation = true;
             }

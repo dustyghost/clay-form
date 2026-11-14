@@ -355,6 +355,12 @@ mod tests {
                 ..Default::default()
             };
             old.clear_binding(&Action::SwapPaintColours);
+            old.clear_binding(&Action::MaskVisibilityMenu);
+            old.bind(
+                Action::MaskVisibilityMenu,
+                Shortcut::new(Key::X, Modifiers::NONE),
+            )
+            .unwrap();
             if mode == 1 {
                 old.bind(Action::Wireframe, Shortcut::new(Key::Z, Modifiers::NONE))
                     .unwrap();
