@@ -193,13 +193,20 @@ mod tests {
         assert!(out.triangles.is_empty());
     }
     #[test]
+    fn move_snap_weld_rejects_pinched_surface_join_without_changing_attributes() {
+        let mesh = panels();
+        let before = mesh.clone();
+        let sym = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
+        // One endpoint joins two disconnected surface fans. Joining both
+        // endpoints instead produces the valid boundary seam tested below.
+        let error = mesh.weld_moved_vertices(&[[1, 4]], true, &sym).unwrap_err();
+        assert!(error.contains("connected surface fan"), "{error}");
+        assert_eq!(mesh, before);
+    }
+    #[test]
     fn move_snap_weld_preserves_uvs_creases_and_stationary_edge() {
         let mesh = panels();
         let sym = ModelingSymmetry::new(&mesh, &Default::default()).unwrap();
-        let (point, indices) = mesh.weld_moved_vertices(&[[1, 4]], true, &sym).unwrap();
-        assert_eq!(point.vertices.len(), 7);
-        assert_eq!(point.vertices[indices[&4]], mesh.vertices[4]);
-        assert_eq!(point.quads.len(), 2);
         let (out, indices) = mesh
             .weld_moved_vertices(&[[1, 4], [2, 7]], true, &sym)
             .unwrap();

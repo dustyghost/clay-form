@@ -841,6 +841,70 @@ mod tests {
         assert!(mean_edge(true) < 0.8 * mean_edge(false));
     }
 
+    fn validation_grid(scale: f64) -> (Surface, Options, Layout) {
+        let mut source = plane(2);
+        for p in &mut source.positions {
+            *p *= 2. * scale;
+        }
+        let layout = Layout {
+            positions: source.positions.clone(),
+            quads: vec![[0, 1, 4, 3], [1, 2, 5, 4], [3, 4, 7, 6], [4, 5, 8, 7]],
+            triangles: source.triangles.clone(),
+            diagnostics: Diagnostics::default(),
+        };
+        let options = Options {
+            target_quads: 4,
+            preserve_sharp: false,
+            ..Options::default()
+        };
+        (source, options, layout)
+    }
+
+    #[test]
+    fn final_layout_validation_checks_output_vertices_without_moving_them() {
+        for scale in [0.1, 1., 10.] {
+            // Area / target gives uniform spacing h = scale. A 1.5h spike
+            // previously passed: its midpoints and centroids stay within h.
+            let (source, options, mut layout) = validation_grid(scale);
+            layout.positions[4].z = 0.75 * scale;
+            let positions = layout.positions.clone();
+            validate_layout(&source, &options, &mut layout, &|| false).unwrap();
+            assert_eq!(layout.positions, positions);
+            assert!((layout.diagnostics.max_surface_error - 0.75 * scale).abs() < 1e-10);
+
+            layout.positions[4].z = 1.5 * scale;
+            let positions = layout.positions.clone();
+            let triangles = layout.triangles.clone();
+            let error_before = layout.diagnostics.max_surface_error;
+            let error = validate_layout(&source, &options, &mut layout, &|| false).unwrap_err();
+            assert!(error.contains("bridges away from the source"), "{error}");
+            assert_eq!(layout.positions, positions);
+            assert_eq!(layout.triangles, triangles);
+            assert_eq!(layout.diagnostics.max_surface_error, error_before);
+        }
+    }
+
+    #[test]
+    fn final_layout_validation_rejects_malformed_candidates_without_panicking() {
+        for case in 0..6 {
+            let (source, options, mut layout) = validation_grid(1.);
+            match case {
+                0 => layout.quads[0][3] = usize::MAX,
+                1 => layout.quads[0][3] = layout.quads[0][0],
+                2 => layout.positions[4].z = f64::NAN,
+                3 => layout.positions[4].z = f64::INFINITY,
+                4 => layout.positions.clear(),
+                5 => layout.quads.clear(),
+                _ => unreachable!(),
+            }
+            let triangles = layout.triangles.clone();
+            assert!(validate_layout(&source, &options, &mut layout, &|| false).is_err());
+            assert_eq!(layout.triangles, triangles);
+            assert_eq!(layout.diagnostics.input_vertices, 0);
+            assert_eq!(layout.diagnostics.max_surface_error, 0.);
+        }
+    }
+
     #[test]
     fn regularized_reconstruction_checks_untouched_source_and_cancels_final_validation() {
         let mut source = sphere(2);

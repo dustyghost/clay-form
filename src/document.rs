@@ -42,6 +42,8 @@ mod texture_library;
 mod thickness;
 mod transform;
 mod uv;
+#[cfg(test)]
+mod visibility_cache_tests;
 pub(crate) use edit::EditKind;
 use edit::EditSession;
 
@@ -70,6 +72,11 @@ pub struct Document {
     references: Vec<crate::reference::ReferenceImage>,
     saved_cameras: Vec<crate::saved_camera::SavedCamera>,
     geometry: Geometry,
+    // Effective visibility of the active source mesh. UI readers share one
+    // scan until the document's existing display invalidation boundary.
+    hidden_face_count: std::sync::OnceLock<usize>,
+    #[cfg(test)]
+    hidden_count_scans: std::sync::atomic::AtomicUsize,
     display_revision: u64,
     geometry_display_revision: u64,
     source_revision: u64,
@@ -109,6 +116,9 @@ impl Default for Document {
             references: Vec::new(),
             saved_cameras: Vec::new(),
             geometry: Geometry::new(Mesh::starting_sphere()),
+            hidden_face_count: Default::default(),
+            #[cfg(test)]
+            hidden_count_scans: Default::default(),
             display_revision: 0,
             geometry_display_revision: 0,
             source_revision: 0,
@@ -148,6 +158,14 @@ impl Document {
     pub(crate) fn display_revision(&self) -> u64 {
         self.display_revision
     }
+    pub(crate) fn hidden_face_count(&self) -> usize {
+        *self.hidden_face_count.get_or_init(|| {
+            #[cfg(test)]
+            self.hidden_count_scans
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.mesh().hidden_face_count()
+        })
+    }
     pub(crate) fn geometry_display_revision(&self) -> u64 {
         self.geometry_display_revision
     }
@@ -157,10 +175,12 @@ impl Document {
     // Invalidate edit tokens and level caches while retaining the current
     // positions, topology and normals (texture edits or preview commitment).
     fn display_changed_preserving_geometry(&mut self) {
+        self.hidden_face_count.take();
         self.display_revision = self.display_revision.wrapping_add(1);
         self.level_content_revision = self.display_revision;
     }
     fn display_changed(&mut self) {
+        self.hidden_face_count.take();
         self.instance_cache.take();
         self.display_revision = self.display_revision.wrapping_add(1);
         self.geometry_display_revision = self.geometry_display_revision.wrapping_add(1);

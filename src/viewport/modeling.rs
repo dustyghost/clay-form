@@ -6,6 +6,8 @@ mod edit;
 mod extrude_snapping;
 mod move_snapping;
 pub(crate) use move_snapping::MoveSnap;
+#[cfg(test)]
+mod invariant_tests;
 mod selection;
 mod selection_growth;
 mod snapping;

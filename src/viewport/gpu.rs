@@ -242,6 +242,9 @@ impl Renderer {
     ) {
         let gpu = self.gpu.clone();
         let preview = self.preview.clone();
+        // Explicit previews have their own geometry, not this base revision.
+        #[cfg(test)]
+        let revision = geometry.is_none().then_some(self.revision).flatten();
         let geometry = geometry.unwrap_or_else(|| self.render_geometry.as_ref().unwrap().clone());
         let mut params = Params::new(
             rect,
@@ -261,6 +264,8 @@ impl Renderer {
         painter.add(egui_wgpu::Callback::new_paint_callback(
             rect,
             ViewCallback {
+                #[cfg(test)]
+                revision,
                 gpu,
                 preview,
                 geometry,
@@ -340,6 +345,8 @@ mod state;
 use state::{BrushPreview, Params, Preview};
 
 struct ViewCallback {
+    #[cfg(test)]
+    revision: Option<u64>,
     gpu: Arc<Mutex<Gpu>>,
     preview: Arc<Mutex<Preview>>,
     geometry: Arc<DisplayMesh>,
@@ -371,6 +378,10 @@ impl egui_wgpu::CallbackTrait for ViewCallback {
             viewport.height_px.max(1) as u32,
         ];
         let mut gpu = self.gpu.lock().unwrap();
+        #[cfg(test)]
+        super::frame_trace::record(super::frame_trace::Stage::Callback {
+            revision: self.revision,
+        });
         gpu.upload(&self.geometry);
         gpu.encode(
             encoder,

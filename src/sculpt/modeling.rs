@@ -65,7 +65,7 @@ fn normal(mesh: &Mesh, polygon: &Polygon) -> Vec3 {
         .norm()
 }
 
-/// Check orientation, duplicate faces and zero-area faces as well as schema limits.
+/// Check surface fans, orientation, duplicate faces and area as well as schema limits.
 fn manifold(mesh: &Mesh) -> Result<(), String> {
     mesh.validate()?;
     let mut incidence = BTreeMap::<_, Vec<_>>::new();
@@ -91,6 +91,37 @@ fn manifold(mesh: &Mesh) -> Result<(), String> {
         let ac = mesh.vertices[c] - mesh.vertices[a];
         if ab.cross(ac).len() <= (ab.len() * ac.len() * 1e-6).max(1e-12) {
             return Err("This edit would create a zero-area face".into());
+        }
+    }
+    // Edge incidence alone accepts separate sheets joined at a single vertex.
+    // The triangulated link must be one directed cycle (interior) or path
+    // (boundary). Explicit wires and isolated vertices have no surface link.
+    let corners = super::corners::VertexCorners::new(mesh)
+        .ok_or("Mesh is too large to validate modeling surface fans")?;
+    for vertex in 0..mesh.vertices.len() {
+        let mut next = BTreeMap::new();
+        let mut incoming = BTreeSet::new();
+        for &corner in corners.incident(vertex) {
+            let triangle = mesh.triangles[corner as usize / 3];
+            let i = corner as usize % 3;
+            let (a, b) = (triangle[(i + 1) % 3], triangle[(i + 2) % 3]);
+            if next.insert(a, b).is_some() || !incoming.insert(b) {
+                return Err("Modeling requires one connected surface fan at each vertex".into());
+            }
+        }
+        let Some(&first) = next.keys().next() else {
+            continue;
+        };
+        let mut cursor = next
+            .keys()
+            .find(|v| !incoming.contains(*v))
+            .copied()
+            .unwrap_or(first);
+        while let Some(vertex) = next.remove(&cursor) {
+            cursor = vertex;
+        }
+        if !next.is_empty() {
+            return Err("Modeling requires one connected surface fan at each vertex".into());
         }
     }
     Ok(())
@@ -450,6 +481,8 @@ impl Mesh {
     }
 }
 
+#[cfg(test)]
+mod invariant_tests;
 #[cfg(test)]
 mod notes_tests;
 #[cfg(test)]

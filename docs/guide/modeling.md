@@ -375,6 +375,8 @@ Choose **Move → Snap and weld on move**:
 
 Use a free drag or the gizmo center. Hold **Shift** during the drag to bypass welding, and release Shift to restore it. A gold **Weld vertex** or **Weld edge** marker identifies the target before release. Moving away restores the free move; Escape cancels. Each completed weld is one Undo/Redo step, retains the welded target selection, and clears measured Repeat last edit.
 
+Separate surface patches cannot join at only one vertex. Use **Edge** mode to weld compatible borders along a shared edge. An invalid weld candidate is skipped without a gold marker; releasing can still commit the ordinary unwelded move. Vertex welding remains available for loose edges and valid surface joins.
+
 This uses one vertex or edge and its exact symmetry copies on the active mesh. Independent multiple selections, face selections, axis/plane gizmo handles and numeric moves keep their ordinary behaviour. Hidden, occluded or protected targets are skipped. Duplicate faces, collapsed geometry and obstructed joins are rejected. Existing UV corners remain attached to their surviving triangles; creases and hard edges follow the weld. A vertex does not split or attach to the middle of an edge.
 
 The setting defaults to Off and saves in Modeling presets. The separate **Align without welding** source/target picker continues to align geometry without welding.

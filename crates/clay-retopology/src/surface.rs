@@ -603,6 +603,29 @@ pub(crate) fn validate_output(
     quads: &[[usize; 4]],
     cancel: &dyn Fn() -> bool,
 ) -> Result<Fit> {
+    if positions.is_empty() || quads.is_empty() {
+        return Err("Retopology layout needs vertices and quads".into());
+    }
+    for (i, p) in positions.iter().enumerate() {
+        if i % 256 == 0 {
+            check(cancel)?;
+        }
+        if !p.is_finite() {
+            return Err("Retopology layout needs finite vertices".into());
+        }
+    }
+    for (i, quad) in quads.iter().enumerate() {
+        if i % 256 == 0 {
+            check(cancel)?;
+        }
+        if quad
+            .iter()
+            .enumerate()
+            .any(|(k, &v)| v >= positions.len() || quad[..k].contains(&v))
+        {
+            return Err(format!("Invalid retopology quad {i}"));
+        }
+    }
     let original = Bvh::new(source, cancel)?;
     let mut work = 50_000_000;
     let triangles = outward_triangulation(&original, &positions, quads, &mut work, cancel)?;
@@ -631,6 +654,14 @@ fn measure(
 ) -> Result<f64> {
     crate::topology::validate(result)?;
     let mut error = 0f64;
+    // Final callers may have converted coordinates or stitched a mirrored
+    // layout since fitting. Midpoints and centroids cannot bound its vertices.
+    for (i, &p) in result.positions.iter().enumerate() {
+        if i % 256 == 0 {
+            check(cancel)?;
+        }
+        error = error.max(sample_source_error(original, spacing, p, work, cancel)?);
+    }
     for (fi, t) in result.triangles.iter().enumerate() {
         if fi % 256 == 0 {
             check(cancel)?;
@@ -650,18 +681,7 @@ fn measure(
             (b + c) * 0.5,
             (c + a) * 0.5,
         ] {
-            let hit = original.nearest(p, work, cancel)?;
-            let h = source.triangles[hit.face]
-                .iter()
-                .map(|&v| spacing[v])
-                .fold(0., f64::max);
-            error = error.max(hit.distance);
-            if hit.distance > h {
-                return Err(format!(
-                    "Retopology bridges away from the source at {p:?}: error {:.5}, local grid spacing {h:.5}",
-                    hit.distance
-                ));
-            }
+            error = error.max(sample_source_error(original, spacing, p, work, cancel)?);
         }
     }
     let reconstructed = Bvh::new(result, cancel)?;
@@ -699,6 +719,27 @@ fn measure(
         }
     }
     Ok(error)
+}
+
+fn sample_source_error(
+    original: &Bvh<'_>,
+    spacing: &[f64],
+    p: Vec3,
+    work: &mut usize,
+    cancel: &dyn Fn() -> bool,
+) -> Result<f64> {
+    let hit = original.nearest(p, work, cancel)?;
+    let h = original.surface.triangles[hit.face]
+        .iter()
+        .map(|&v| spacing[v])
+        .fold(0., f64::max);
+    if hit.distance > h {
+        return Err(format!(
+            "Retopology bridges away from the source at {p:?}: error {:.5}, local grid spacing {h:.5}",
+            hit.distance
+        ));
+    }
+    Ok(hit.distance)
 }
 
 /// Repair local continuous folds after coincident lattice fans are separated.

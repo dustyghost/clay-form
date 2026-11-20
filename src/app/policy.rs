@@ -697,8 +697,8 @@ impl<'a> EditorPolicy<'a> {
             }
             Action::SplitHidden => {
                 sculpt
-                    && document.mesh().hidden_face_count() > 0
-                    && document.mesh().hidden_face_count() < document.mesh().triangles.len()
+                    && document.hidden_face_count() > 0
+                    && document.hidden_face_count() < document.mesh().triangles.len()
             }
             Action::LowerLevel | Action::DeleteLowerLevels => {
                 sculpt && document.mesh_settings().level() > 1
@@ -731,9 +731,7 @@ impl<'a> EditorPolicy<'a> {
                     && document.mesh().triangles.len() <= 250_000
             }
             Action::Remesh => {
-                sculpt
-                    && document.mesh_settings().dynamic
-                    && document.mesh().hidden_face_count() == 0
+                sculpt && document.mesh_settings().dynamic && document.hidden_face_count() == 0
             }
             Action::SelectVisibilityLine
             | Action::SelectVisibilityPath

@@ -3,6 +3,8 @@ mod boolean;
 mod brush_preview;
 mod cage;
 mod controls;
+#[cfg(test)]
+pub(crate) mod frame_trace;
 
 mod edges;
 mod interaction;
@@ -253,6 +255,8 @@ impl Viewport {
         options: ViewportOptions,
     ) {
         self.completed_slice = None;
+        #[cfg(test)]
+        frame_trace::frame(ui, document.display_revision());
         document.begin_sculpt_frame();
         if (!options.enabled || !ui.input(|i| i.focused)) && ui.input(|i| i.pointer.primary_down())
         {
@@ -306,6 +310,10 @@ impl Viewport {
             Pos2::new(navigation_rect.right() - 146., navigation_rect.top() + 12.),
             Vec2::splat(134.),
         );
+        #[cfg(test)]
+        frame_trace::record(frame_trace::Stage::Scene {
+            revision: document.display_revision(),
+        });
         if let Some(renderer) = &self.renderer {
             renderer.clear_preview();
         }
@@ -1559,8 +1567,16 @@ impl Viewport {
                                 document.mesh().vertices.len(),
                                 document.mesh().triangles.len(),
                             );
+                            #[cfg(test)]
+                            let before_revision = document.display_revision();
                             let deformed =
                                 document.apply_dab_stenciled(&brush, dab, stencil.as_ref());
+                            #[cfg(test)]
+                            frame_trace::record(frame_trace::Stage::Dab {
+                                point: [point.x, point.y],
+                                before: before_revision,
+                                after: document.display_revision(),
+                            });
                             if let Some(status) = document.relax_status.take() {
                                 self.status = Some(status);
                             }
@@ -1595,7 +1611,7 @@ fn draw_mesh_counts(document: &Document, painter: &egui::Painter, rect: egui::Re
             "{} vertices • {} faces • {} hidden triangles",
             document.mesh().vertices.len(),
             document.mesh().triangles.len() - document.mesh().quads.len(),
-            document.mesh().hidden_face_count()
+            document.hidden_face_count()
         ),
         egui::FontId::monospace(12.),
         Color32::GRAY,

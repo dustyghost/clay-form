@@ -10,6 +10,7 @@ mod discoverability;
 mod grouped_path;
 mod instances;
 mod path_transform;
+mod sculpt_frame;
 mod startup;
 mod workspace;
 fn navigation_frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) -> egui::Rect {

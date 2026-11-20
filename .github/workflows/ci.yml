@@ -109,6 +109,7 @@ jobs:
           cargo test --locked --lib viewport_lighting_offscreen_review -- --ignored
           cargo test --locked --lib reference_images_offscreen_preview -- --ignored
           cargo test --locked --lib navigation_and_smooth_offscreen_preview -- --ignored
+          cargo test --locked --lib sculpt_frame_revision_trace_gpu -- --ignored --test-threads=1
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-flatten" cargo test --locked --lib flatten_stroke_offscreen_review -- --ignored
           cargo test --locked --lib perspective_view_offscreen_preview -- --ignored
           CLAY_GUIDE_PREVIEW="$RUNNER_TEMP/clay-cameras" cargo test --locked --lib saved_cameras_offscreen_review -- --ignored --test-threads=1
